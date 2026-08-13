@@ -18,21 +18,30 @@ The orchestrator is the sole writer. Workers execute one phase inside an
 isolated worktree and hand back a single source-delta; the orchestrator imports
 that delta, verifies, and commits. Everything below protects that contract.
 
-## The funnel is driven by an oracle, not by a remembered checklist
+## The funnel record, and when it is the driver
 
-Each phase's position in the funnel (spawned → worker-committed → imported →
-verified → concluded → reaped) is **durable committed state**, not something the
-orchestrator holds in its head or reconstructs from `git log`. So the funnel is
-not a sequence to memorise and it is not something to work out by hand: ask it.
+A phase's position in the funnel (spawned → imported → verified → concluded →
+reaped) can be **durable committed state** rather than something the orchestrator
+holds in its head. When it is, `dispatch next` reads that record and returns
+**exactly one** prescription — a kind, the phase it applies to, and the runnable
+literal in the surface that owns that verb (some verbs exist only as MCP tools,
+some only as CLI lines; they are not interchangeable). Do that one thing, ask
+again, repeat. It is strictly read-only, it never heals anything, and it always
+exits 0 — a "triage this red evidence" answer is information, not a command
+failure.
 
-`dispatch next` reads the committed funnel record and returns **exactly one**
-prescription — a kind, the phase it applies to, and the runnable literal in the
-surface that owns that verb (some verbs exist only as MCP tools, some only as CLI
-lines; they are not interchangeable). Do that one thing, ask again, repeat. It is
-strictly read-only, it never heals anything, and it always exits 0 — a
-"triage this red evidence" answer is information, not a command failure.
+**But the record only exists for a fork bound at creation** — forked with
+`--worker --slice N --phase PHASE-NN` under `<coord>/.worktrees/<name>`. The
+shipped spawn path forks **unbound**, so no row ever lands and `next` sits at
+`spawn`. That is not a stuck funnel and not something to heal: it means the
+main-thread orchestrator is driving, and the main-thread orchestrator applies the
+delta, commits, records the boundary and flips the phase as *separate acts*,
+never consulting the record. Fix which of the two you are before reasoning about
+funnel rows — reading `next`'s prescription as universal is how a reader concludes
+that an unbound drive "cannot verify, conclude or reap", which is false of it.
 
-Two properties matter when several file-disjoint phases are in flight at once:
+Two properties matter when several file-disjoint phases are in flight at once
+under a funnel-driven drive:
 
 - **Red evidence is global.** The verify suite covers the whole coordination
   tree, so red evidence anywhere is a halt for the whole batch. Triage outranks
@@ -68,17 +77,17 @@ implicit HEAD lands on a divergent base: `S.parent != B`, and the net diff
 unrelated commits ride into the wrong slice's delta.
 
 Two belts enforce it, and both are implemented by verbs rather than run by hand:
-- **Worker baseline guard.** The fork's HEAD must be `B` (or a descendant of it,
-  once the worker has self-committed) — checked at creation and again by
-  `worktree verify-worker`.
+- **Creation guard.** `worktree fork --base <B>` lands the fork at `B` by
+  construction and refuses a base that is not a commit; the worker never chooses
+  its own base.
 - **Import guard (trusted side).** The delta's parent must be `B`, checked on the
   orchestrator's side before anything is applied — so a misbased fork is caught
-  even if the worker's own guard never ran.
+  even if creation was not driven by the verb.
 
-Harness trap: some spawn backends build the fork from the session HEAD and give
-no reliable base control (the claude `Agent` tool at `isolation: worktree` is
-one). Where the backend won't honour `B`, spawn a plain agent that self-forks
-from `B` explicitly rather than trusting the backend's isolation.
+Harness trap: some harnesses offer their own worktree isolation, built from the
+session HEAD with no reliable base control. Never spawn a worker into one — fork
+explicitly from `B` first and bind the worker's cwd to that fork, which is what
+the spawn script does.
 
 ## Verify scope: never run the project-wide gate in the funnel
 
@@ -91,41 +100,32 @@ toolchain will smuggle format churn into every slice.
 Scope it: lint + test + a `--check`-only formatter over the touched files. Prove
 the phase, don't reformat the world.
 
-## Two ways a worker returns its delta: gated self-commit vs working-tree diff
+## The worker returns a working tree, not a commit
 
-The worker cannot run raw `git commit` — the linked worktree's `.git` is
-read-only (jail wall). Two arms clear that wall differently:
+The worker cannot run `git commit` at all — the linked worktree's real git dir is
+read-only inside the jail, and there is no sanctioned bypass. It edits, verifies,
+and hands the tree back; the orchestrator captures the **working-tree delta**
+with `worktree import --from-worktree <dir>`. The tree persists after the worker
+process exits, so the delta is not lost if the import is deferred — but until the
+orchestrator's commit lands, that tree is the **sole copy**, which is why a fork
+is never force-removed before its delta has landed.
 
-- **claude arm — gated server-side self-commit.** The worker calls the
-  `worker_commit` MCP tool, passing only its own opaque `agent` id (its worktree
-  name — **never a path**). The *unconfined* server resolves that id to the
-  worker's worktree and lands the commit on its behalf, so the jailed worker never
-  touches `.git` directly. This is a deliberate, single-purpose bypass of the jail
-  wall — therefore the tool's **belts are the security boundary**, not the wall:
-  non-empty pre-fmt delta → two-tier scope (a HARD forbidden-zone that hard-refuses
-  any write under `.doctrine/`, `.claude/`, or the configured
-  `[dispatch].worker-forbidden-writes`, plus a SOFT undeclared-path report) →
-  `HEAD == B` → the `check commit` gate → exactly one non-merge commit `C`
-  (`C^ == B`) on the worker's own `dispatch/<agent>` branch. A spoofed sibling id
-  commits to the *sibling's* branch and leaves its own at `B`.
-- **subprocess (pi) arm — working-tree diff.** The worker cannot self-commit at
-  all; it hands the tree back and the orchestrator captures the working-tree diff
-  (`import --from-worktree`). This is also the fallback when the MCP server is down.
+The import is **non-committing** (next section): the delta is diff-applied onto
+`B` behind the `classify_import` scope belt — a hard refusal for any write under
+`.doctrine/` or `.claude/`, and for a path no design-target selector declares —
+and then the orchestrator commits separately. An unformatted or lint-red delta
+halts the import staged rather than being auto-fixed: land-or-reject, never
+rewrite.
 
-The orchestrator then imports. On the claude arm it imports the **commit**
-(`import --fork <C> --branch dispatch/<agent>`); the `--branch` coherence belt
-binds the import to the branch the orchestrator *armed*, so it promotes nothing of
-a poisoner who committed to a sibling's branch. `verify-worker` accepts the
-post-commit `HEAD` because it tests `merge-base --is-ancestor B HEAD` (a
-descendant), not `HEAD == B`. Either arm's import is **non-committing** (next
-section) — the delta is diff-applied, and the orchestrator commits separately.
+This is why the confinement is the security boundary. There is no in-band channel
+by which a worker can reach the coordination tree, so nothing rests on the worker
+being well-behaved.
 
-Ask `doctrine worktree --help` / `doctrine mcp` for exact flags and the tool's
-refusal tokens.
+Ask `doctrine worktree --help` for exact flags and refusal tokens.
 
 ## The orchestrator's authored writes go through `dispatch commit`
 
-The worker's delta lands through the import/`worker_commit` path above. The
+The worker's delta lands through the import path above. The
 *orchestrator's* own authored coord-tree writes — slice status, memory, audit
 notes, the boundaries/funnel ledgers — are committed with **`doctrine dispatch
 commit --slice N -m <msg> -- <path>…`**, never a raw `git commit`. The verb:
@@ -149,55 +149,31 @@ effective global/local hook. A deliberate act bypasses **both** arms with
 `DOCTRINE_ALLOW_DELETE=1`; the verb never sets it. `doctor` re-checks that every
 live coord worktree carries the hook.
 
-## Mode B — the confined-orchestrator arm drives the funnel through MCP
+## The orchestrator is the main thread, unconfined
 
-Everything above assumes the **main thread** orchestrates: an unconfined driver
-running raw git by hand. **Mode B** is the other arm — a *confined subagent
-orchestrator* whose cwd is jailed to the coordination tree and whose raw `.git`
-is read-only. It cannot run the funnel by hand; it drives the same fork→land
-pipeline entirely through the dispatch MCP tools. Mode B is the capstone of the
-confined-drive posture; the main-thread arm (this doc's default) stays the
-fallback for when the MCP server is down.
+The orchestrator runs on the main thread: unconfined, raw git in the coordination
+tree, applying the delta, committing, recording the boundary and flipping the
+phase as *separate acts*. The confinement in this system is the worker's, not the
+driver's.
 
-**The fork override.** A confined nested `isolation:worktree` spawn would (per
-"The fork base is explicit", above) fork off the session HEAD — no base control.
-Mode B arms the create-fork one-shot with `arm-spawn` *first*, so the worktree
-hook Forks the worker's `dispatch/<name>` branch at the explicit base `B` with
-its jail record provisioned. That provisioning is what makes the worker's
-`worker_commit` resolvable server-side — without the armed base there is no
-branch for the gated self-commit to land on.
+A *confined orchestrator* arm once existed — jailed to the coordination tree with
+a read-only `.git`, driving the same fork→land pipeline entirely through the
+dispatch MCP tools, with the funnel record as its state. It is **retired**: its
+only entry into the funnel machine was an arming verb that no longer exists, and
+an unbound fork lands no row for it to advance. The MCP funnel tools and the
+funnel machine themselves are retained and unchanged.
 
-**The tools fold the beats.** Where the main-thread arm applies a delta, commits
-it, flips the phase, and records the boundary as separate acts, Mode B's MCP tools
-fold each pair into one server-side act:
+Two of their properties are worth knowing wherever a **bound** fork is in play:
+`dispatch_import` applies AND commits server-side (the import folds the commit,
+so there is no separate orchestrator commit step), and
+`dispatch_conclude_phase` flips the disposable phase sheet and lands the committed
+boundary row in one retry-safe act — the sheet is gitignored, so the only fault
+outcome is a flipped sheet with no committed boundary, which a retry re-composes;
+`completed`-WITH-committed-boundary is the only durable success state.
 
-- `dispatch_import` **applies AND commits** the delta server-side — the import
-  folds the commit (no separate orchestrator commit step).
-- `dispatch_conclude_phase` is a **two-tier, retry-safe conclude**. The
-  `completed` flip is a **disposable runtime write** to the gitignored phase sheet
-  (`.doctrine/state/…`) — it never enters committed history, so it can never be a
-  "completed-without-boundary" hazard. The real completion signal is the
-  **committed `(B, coord_tip)` boundary row**, landed by ONE working-tree-free
-  `commit_on_behalf`. The only fault outcome is a flipped (disposable) sheet with
-  **no committed boundary**; because that sheet is disposable, a retry simply
-  re-composes the boundary — `completed`-WITH-committed-boundary is the only
-  durable success state.
-- an **undeclared-scope delta is hard-refused before anything lands** — the scope
-  belt is server-side, not an orchestrator judgement call.
-
-**reads-verb / writes-MCP split.** Funnel state comes from the funnel's own read
-verbs (`next` for the prescription, plus the tree-state / delta / history reads),
-never from a hand-assembled `rev-parse`+`diff` reconstruction. Raw git reads
-remain fine for what the verbs do not cover — inspecting a worker's commit, for
-instance — but every *write* goes through an MCP tool. Mode B never mutates
-`.git` by hand.
-
-**The boundary — report-and-halt, never auto-merge.** Trunk-facing ops
-(`integrate`, `refresh-base`, candidate) write OUTSIDE the coord jail, which is
-read-only to Mode B — so it **report-and-halt**s them to the main thread rather
-than attempting them. The same boundary catches a red worker verify and a hard
-scope refusal: Mode B returns a structured summary and stops. It never
-auto-merges and never self-unblocks a refusal.
+Trunk-facing ops (`integrate`, `refresh-base`, candidate) and any red verify or
+hard scope refusal are **report-and-halt** regardless of who is driving: never
+auto-merged, never self-unblocked.
 
 ## The import severs ancestry — so "did it land?" needs a patch-id oracle
 
@@ -339,40 +315,44 @@ step (`git merge --no-ff phase/<N>-NN`, or the admitted candidate). Retrieve
 `mem.pattern.dispatch.split-lineage-close-conflict-direct-land` for the full
 recovery.
 
-## Worker-spawn identity is accident-fenced, not fail-closed
+## Worker identity is a property of the process, set by the spawn
 
-A `SubagentStart`-style spawn hook that stamps a worker-identity marker runs
-synchronously (the marker is present before the worker's first command *when the
-hook succeeds*) but is **read-only** — it cannot abort the subagent on failure.
-On a stamp failure the worker proceeds unstamped and un-gateable by the hook. So
-worker identity must be fenced by the **import belt + a worker-mode env guard +
-the pre-distilled prompt**, never by the hook's exit status. The only
-fail-closed-capable creation seam is a worktree-creation hook (non-zero exit
-aborts creation), preferable *where the harness exposes it with enough payload to
-act on* — often it does not: a creation hook whose payload lacks the worker's
-type/path can neither scope its check nor identify what to abort, so it stays
-deferred and the belt-plus-guard fence remains the default.
+A worker is a worker because `DOCTRINE_WORKER=1` is set in its process
+environment — nothing else. The spawn sets it inside the confinement namespace,
+so the doctrine guard is armed before the worker's first command and every
+doctrine-mediated authored write refuses. There is no on-disk marker, no
+directory that "is" a worker tree, and therefore no stale-identity class: an
+environment cannot be left behind.
+
+The lesson that produced this shape is worth keeping. Identity was previously
+stamped by a spawn hook, and such a hook is **read-only** — it cannot abort the
+spawn on a stamp failure, so a worker whose stamp failed proceeded unstamped and
+un-gateable. Anything that fences a worker must fail **closed** at a seam that
+can refuse: the spawn itself, the confinement, and the orchestrator's import
+belt — never a hook's exit status.
 
 ## Workers can silently discard their own work
 
 A worker may build a phase correctly (tests green) and then `git reset` /
 `checkout -- ` / `stash` / `clean` the entire delta away — hallucinating a
-"pre-existing WIP", reverting its own edits, and never committing. The fork comes
-back clean (HEAD == B, empty diff). Fence it at the prompt:
+"pre-existing WIP" and reverting its own edits. The fork comes back clean (HEAD
+== B, empty diff), and since the delta lived only in the working tree, it is
+gone. Fence it at the prompt:
 - State the fork is a **clean** checkout with **no** WIP and that the target
   files do not yet exist.
-- Forbid every work-discarding git verb; the only git the worker runs is the
-  final `git add <paths>` + `commit`.
+- Forbid every work-discarding git verb. The worker runs no git at all — it
+  leaves its delta uncommitted for the orchestrator to import.
 - For a red-proof reversion (TDD), instruct it to *edit* the scratch out, never
   to git-discard it.
 
-And never trust the worker's self-reported success — the fork's committed git
-state is the ground truth. Re-read the commit, re-run the suite; distrust the
-handover's own green/failure labels.
+And never trust the worker's self-reported success — the fork's tree is the
+ground truth. Re-read the delta, re-run the suite; distrust the handover's own
+green/failure labels.
 
-## Subprocess-arm RPC hygiene (codex/pi)
+## RPC hygiene, where the harness speaks one
 
-When the worker is a subprocess speaking a line-oriented RPC:
+When the worker subprocess speaks a line-oriented RPC rather than exiting on
+completion:
 - **One compact JSON object per line.** A pretty-printed prompt message emits
   multi-line JSON and every line fails to parse — the prompt never lands and the
   worker sits idle. Build RPC lines compact (single-line).

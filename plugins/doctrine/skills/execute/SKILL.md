@@ -87,19 +87,11 @@ provisioning, the spawn guards, and the green baseline; the **fork branch it
 returns is the deliverable**.
 
 **Assert a clean direct-writer entry.** Solo `/execute` is its own orchestrator —
-worker mode is **never** used here (that is `/dispatch`'s path). Before the TDD
-loop, at the solo→direct-writer transition, run:
-
-```bash
-doctrine worktree status --assert   # non-zero `stale-marker` if a stray marker sits here
-```
-
-A stray worker marker in this worktree would make doctrine-mediated writes refuse
-mid-work and confuse a direct writer. `--assert` is exit 0 on a clean entry and
-non-zero (`stale-marker`) otherwise — clear it with `doctrine worktree marker
---clear --operator` before proceeding (bare `--clear` is refused in a linked
-worktree — the §3 accident-fence). (This is the §3 chokepoint the gate PHASE-05 shipped,
-now actually called.)
+worker mode is **never** used here (that is `/dispatch`'s path). Worker-ness is a
+property of the *process*: if `DOCTRINE_WORKER` is set in this shell, every
+doctrine-mediated authored write refuses mid-work. Confirm it is unset before the
+TDD loop (`doctrine worktree status` prints the resolved mode); if it is set,
+unset it — there is no stale on-disk state to clear.
 
 Carry out the TDD loop (steps 5–12) inside the fork. When green, **land the fork
 onto the coordination branch** — `/execute` is the sole caller of `land`:

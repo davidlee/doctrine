@@ -1,36 +1,32 @@
 ---
 name: dispatch
-description: Use to drive a slice's phases to completion through sub-agent workers in isolated worktrees — you orchestrate and are the sole writer, the workers execute. Workers spawn via `/dispatch-subprocess`. The per-phase funnel is driven by `doctrine dispatch next`, which prescribes exactly one action at a time and is identical on both arms. Default serial (one worker per phase); parallelize file-disjoint phases. Conflicts report-and-halt, never auto-merge.
+description: Use to drive a slice's phases to completion through confined subprocess workers in isolated worktrees — you orchestrate and are the sole writer, the workers execute. Workers spawn via `/dispatch-spawn`, one path for every harness. You drive the landing yourself — import, commit, record, verify, conclude, reap; `doctrine dispatch next` prescribes only for a fork bound at creation, which this path does not mint. Default serial (one worker per phase); parallelize file-disjoint phases. Conflicts report-and-halt, never auto-merge.
 ---
 # Dispatch (router)
-Drive a slice's phases to completion through sub-agent **workers** — you are the
-orchestrator and **sole writer**, they execute.
+Drive a slice's phases to completion through confined subprocess **workers** —
+you are the orchestrator and **sole writer**, they execute.
 
-**Announce at start:** "Using the dispatch skill to run workers under the
-orchestrator funnel."
+**Announce at start:** "Using the dispatch skill to drive phases through confined
+workers."
 
 ## The outer loop
 1. `dispatch setup --slice <N> --dir <path>` — create/resume coordination worktree.
-   On the claude arm `--dir` MUST resolve inside the project root (convention
-   `.dispatch/SL-<n>`); an outside-root dir fails closed (ISS-031 — the pre-spawn
-   `cd` silently reverts under a jail, forking `main` not B).
-2. **Claude arm only:** `cd` into the coordination directory and park Bash cwd
-   there for the full drive loop. The Agent tool's `isolation: worktree` forks off
-   the Bash cwd HEAD — base==B holds only if the cwd is parked at B before the
-   spawn (a mis-parked cwd forks the wrong base). Step out to the session root
-   only for authored writes (slice status, memory, audit). Commit those authored
-   writes with `dispatch commit --slice N -m <msg> -- <path>…` (pathspec-mandatory,
+   Under a Claude harness `--dir` MUST resolve inside the project root (convention
+   `.dispatch/SL-<n>`); an outside-root dir fails closed (ISS-031). Other harnesses
+   keep their enforced outside-root isolation (ADR-008).
+2. Commit the orchestrator's own authored writes (slice status, memory, audit)
+   with `dispatch commit --slice N -m <msg> -- <path>…` (pathspec-mandatory,
    ISS-234-guarded), never a raw `git commit`.
 3. `dispatch plan-next --slice <N>` — find next actionable phase(s); plan parallel batches when file-disjoint
-4. Spawn worker(s) via [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md)
-   (default to the `pi` arm until `preferred-subprocess-harness` selection is
-   wired — IMP-101).
-5. Drive the batch's funnel by `doctrine dispatch next --slice <N>` (below) until it
-   says `all-reaped`
+4. Spawn worker(s) via [`/dispatch-spawn`](../dispatch-spawn/SKILL.md) — one
+   confined subprocess path for every harness (default to the `pi` harness until
+   `preferred-subprocess-harness` selection is wired — IMP-101).
+5. Land each phase yourself — import, commit, record the boundary, verify, flip
+   the phase to `completed`, reap the fork (below)
 6. Conclude: `slice verify-vt <id>` (VT gate, coord tree) → on green
    `dispatch sync --prepare-review` → remove coord worktree → audit
 
-## The funnel (per batch)
+## Per batch
 
 **Base-clean precondition (pre-spawn, NON-mutating).** Before capturing `B` /
 spawning any worker — and on `main` before you branch the coordination fork —
@@ -52,32 +48,42 @@ baseline on the coord tree at `B`:
 doctrine check regression capture --base "$B"     # suite @ B; no-op on cache hit
 ```
 **INV-1 — normalise filter state before BOTH this capture and the verify diff**:
-clear the worker marker (`doctrine worktree marker --clear --operator`) and force a
-real rebuild, so capture and diff run an identical suite invocation + test
-selection. Same tree alone is insufficient — a leaked `DOCTRINE_WORKER`/marker
-changes which tests run and breaks the cancellation property (a fingerprint
-mismatch is then a cache miss → honest re-capture, never a poisoned baseline).
+confirm `DOCTRINE_WORKER` is unset in your own environment and force a real
+rebuild, so capture and diff run an identical suite invocation + test selection.
+Same tree alone is insufficient — a leaked `DOCTRINE_WORKER` changes which tests
+run and breaks the cancellation property (a fingerprint mismatch is then a cache
+miss → honest re-capture, never a poisoned baseline).
 
-Worker self-reports are advisory; trust only the funnel verify beat.
+Worker self-reports are advisory; trust only your own verify beat.
 
-### The oracle drives — there is no remembered sequence
+### Landing a phase: you drive, in this order
 
-Once the workers are spawned, **do not hold an ordered checklist and do not read
-the funnel state out of git by hand.** Ask the funnel:
+The worker hands back an **uncommitted working tree** (it cannot commit — the
+real git dir is read-only inside its jail). You land it: `worktree import
+--from-worktree` → one coordination commit → `slice record-delta --commit <S>` →
+run the phase's verification → `slice phase --status completed` → reap the fork.
+`/dispatch-spawn` carries the mechanics and the refusal semantics of each step;
+the beats below are the ones that belong to the batch rather than to a single
+phase.
 
-```
-doctrine dispatch next --slice <N>          # add --json for the payload
-```
+### The funnel oracle — for a bound fork only
 
-It reads the committed funnel record and prescribes **exactly one** action, with
-the runnable literal in the surface that owns that verb. Do that one thing, then
-ask again. Repeat until it says `all-reaped`. It is read-only, never heals, and
-always exits 0 — a red prescription is information, not a command failure.
+`doctrine dispatch next --slice <N>` reads the **committed funnel record** and
+prescribes exactly one action at a time. It is read-only, never heals, and always
+exits 0. But a funnel row exists only for a fork **bound at creation**
+(`fork --worker --slice N --phase PHASE-NN` under `<coord>/.worktrees/<name>`),
+and the shipped spawn path forks unbound — so on an ordinary drive `next` sits at
+`spawn` and prescribes nothing further. That is expected: you are the main-thread
+orchestrator, and the main-thread orchestrator never consults the funnel record.
+Read `next` as advisory, and drive the order above. Do not "heal" a missing row.
+
+The machinery is retained and unchanged; what it prescribes when a row *does*
+exist:
 
 | `kind` | what it prescribes |
 |---|---|
-| `spawn` | no funnel row yet — route to the arm skill and spawn (arm-specific, so `next` emits no literal) |
-| `await-worker` | the fork is armed; wait for the worker's own commit |
+| `spawn` | no funnel row yet — hand off to `/dispatch-spawn` (a script invocation, so `next` emits no literal) |
+| `await-worker` | the fork is armed; wait for the worker to return |
 | `import` | land the worker delta (`dispatch_import`, MCP-only) |
 | `verify` | run the phase suite and land evidence (`doctrine dispatch verify`, CLI) |
 | `reverify-stale` | the pass evidence no longer describes the tip — re-run the suite |
@@ -100,9 +106,9 @@ status`, which is where `all-reaped` sends you.
 act on it. Do not improvise a repair, do not go digging for the state by hand,
 and do not re-drive around it — a refusal is a defect or a halt, never a detour.
 
-### The beats the oracle cannot emit
+### The batch-level beats
 
-- **Verify's regression half.** At the `verify` prescription also run `doctrine
+- **Verify's regression half.** At the verify beat also run `doctrine
   check regression diff --base "$B"` (suite @ S, the SAME normalised filter state
   as the capture). Exits non-zero on `new ∪ changed` (a slice regression
   regardless of which test binary/env it surfaces under) OR an unobtainable run
@@ -112,22 +118,18 @@ and do not re-drive around it — a refusal is a defect or a halt, never a detou
   laundered as "env". On halt the named `new`/`changed` keys ARE the offenders;
   nothing further needs isolating. (Carry-forward of the green current-set as
   `baseline-<B'>` is a deferred cost optimisation; steady state still re-captures.)
-- **The fallback import's prove gate.** The claude arm's primary path is already
-  commit-gate-green at source (`worker_commit` ran the gate) and
-  `dispatch_import` composes + commits server-side. The CLI
-  `import --from-worktree` fallback is non-committing and runs the
-  **reject-and-halt prove gate** in-process (`doctrine check prove` on the
-  post-import tree): an unformatted OR lint-red delta HALTS the import (staged,
-  NOT committed) and is reported — never auto-fixed (ADR-012 sole-writer:
-  land-or-reject, never rewrite). A red here is a WORKER-delta defect, distinct
-  from the pre-spawn BASE defect above.
-- **The codex/pi arm's registry write.** At the `conclude` prescription that arm
-  additionally runs `doctrine slice record-delta <SL> PHASE-NN --commit <S>` —
-  its commit-scoped `[S^,S]` write into the primary-tree conformance registry
-  (symmetric derive deferred, D6/IMP-171; `/dispatch-subprocess`). On the claude
-  arm `dispatch_conclude_phase` lands the boundary row and flips the phase sheet
-  in one call. Neither is a "remember to also record" hand-step: the Conclude
-  beat's completeness gate halts if a landed phase is missing its row (below).
+- **The import's prove gate.** `worktree import --from-worktree` is
+  non-committing and runs the **reject-and-halt prove gate** in-process
+  (`doctrine check prove` on the post-import tree): an unformatted OR lint-red
+  delta HALTS the import (staged, NOT committed) and is reported — never
+  auto-fixed (ADR-012 sole-writer: land-or-reject, never rewrite). A red here is
+  a WORKER-delta defect, distinct from the pre-spawn BASE defect above.
+- **The registry write.** After the code commit, `doctrine slice record-delta
+  <SL> PHASE-NN --commit <S>` writes the commit-scoped `[S^,S]` row into the
+  primary-tree conformance registry (the symmetric ledger derive is deferred —
+  D6/IMP-171; mechanics in `/dispatch-spawn`). Not a "remember to also record"
+  hand-step: the Conclude beat's completeness gate halts if a landed phase is
+  missing its row (below).
 - **Per-phase review.** Between `import` and `conclude`, weigh a review of the
   landed delta per the code-review skill's `## Cadence`: default on below the
   adherence bar, mandatory on any tripwire (deleted tests, `Deviations: NONE`,
@@ -172,9 +174,9 @@ diff`) into the conclude output and the `/handover` packet — so a gap (incl.
 `UNCHECKABLE` / `WAIVED`, rendered distinctly) is visible at handover, not at audit.
 
 `prepare-review` is the **enforced** conformance beat (ISS-052): before projecting
-refs it commits the boundaries ledger, **derives** the registry from that committed
-ledger on the claude arm (the committed ledger is the source), then runs a completeness
-**gate** that `bail!`s if any completed phase lacks a registry row — both arms. So
+refs it commits the boundaries ledger, **derives** registry rows from that committed
+ledger (every ledger row is upserted into the primary registry — arm-neutral), then
+runs a completeness **gate** that `bail!`s if any completed phase lacks a row. So
 the registry is guaranteed complete by audit; a gap halts here (no refs created),
 the operator commits the ledger / `record-delta`s the gap, and re-runs.
 
@@ -182,14 +184,16 @@ the operator commits the ledger / `record-delta`s the gap, and re-runs.
 IMPORTANT: READ VERY CLOSELY
 
 **Never:** spawn without routing; let a worker write `.doctrine/`/`.claude/`;
-commit per worker; replay fork history; auto-merge conflicts; auto-adapt plan/
+expect a worker to commit (its `.git` is read-only — you import its working
+tree); replay fork history; auto-merge conflicts; auto-adapt plan/
 design (`/consult` forks); drive on session `main`; integrate at conclude; delete
-deliverable refs; bail to inline execution; **hand-sequence the funnel from
-memory, or work the funnel state out of git by hand — ask `dispatch next`**;
-improvise a repair around a refusal (its text IS the procedure).
+deliverable refs; bail to inline execution; **work the landing state out of git
+by hand — the order above is the order**; improvise a repair around a refusal
+(its text IS the procedure); "heal" a missing funnel row (an unbound fork never
+lands one).
 ! NEVER bail to inline execution - if you are about to `/execute`, STOP.
 ! NEVER use git like a drunk with a chainsaw - if you are about to do something potentially risky, STOP.
-**Always:** route to correct arm on confirmed harness; keep context lean
-(capped reports, stat-first diffs); let `dispatch next` set the order and do the
-ONE thing it prescribes; pre-distill self-contained worker prompts; trail
-knowledge after the confirmed commit.
+**Always:** spawn through `/dispatch-spawn`, whatever the harness; keep context
+lean (capped reports, stat-first diffs); land each phase in the documented order
+and finish one phase before starting the next; pre-distill self-contained worker
+prompts; trail knowledge after the confirmed commit.

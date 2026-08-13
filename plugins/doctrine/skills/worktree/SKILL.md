@@ -1,25 +1,23 @@
 ---
 name: worktree
-description: Use when work needs isolation from the current workspace — when /execute (mode=solo) or the /dispatch funnel must run a phase on its own branch without touching the main working tree. Detects existing isolation, creates a fork via `doctrine worktree fork` (the sole creation+provision+mark verb; coordination tier excluded), runs the commit-before-spawn / branch-point / baseline guards, and hands back the fork branch.
+description: Use when work needs isolation from the current workspace — when /execute (mode=solo) or the /dispatch funnel must run a phase on its own branch without touching the main working tree. Detects existing isolation, creates a fork via `doctrine worktree fork` (the sole creation+provision+bind verb; coordination tier excluded), runs the commit-before-spawn / branch-point / baseline guards, and hands back the fork branch.
 ---
 
 # Worktree
 
 Drive the lifecycle of an isolated git worktree: detect existing isolation,
 create a fork through **`doctrine worktree fork`** (the verb that adds the
-worktree, provisions it, and optionally stamps the worker marker — all with
+worktree, provisions it, and binds it to its phase when it can — all with
 compensating rollback; the fork builds into its own in-tree `target/`), run the
 spawn guards, and verify a green baseline before handing off.
 
 **Announce at start:** "Using the worktree skill to set up an isolated workspace."
 
 **This is a sub-skill.** `/execute` (mode=solo) invokes it for opt-in isolation;
-`/dispatch-subprocess` invokes it for codex/pi workers; the `/dispatch` router
-invokes the **coordination** path (`worktree coordinate`, below) for the
-per-run `dispatch/<slice>` tree. (The claude *worker* arm, `/dispatch-agent`, does
-**not** use `fork` — Claude default-creates the worktree and a SubagentStart hook
-stamps it; see that skill.) It is not a `/route` destination — reach it through the
-caller.
+the dispatch spawn script calls `fork` for every worker, whatever the harness;
+the `/dispatch` router invokes the **coordination** path (`worktree coordinate`,
+below) for the per-run `dispatch/<slice>` tree. It is not a `/route` destination
+— reach it through the caller.
 
 ## Mode contract
 
@@ -64,9 +62,10 @@ It creates (or resumes) `dispatch/<slice>` in its own worktree off the **resolve
 trunk** — the funnel's sole write target (design §2; ADR-012). It differs from
 `fork` on every axis that matters:
 
-- **Markerless.** The coordination tree **is** the orchestrator (worker-mode OFF),
-  so — unlike `fork --worker` — it stamps **no** worker marker. Orchestrator-classed,
-  refused under worker-mode like the rest of the verb class.
+- **The orchestrator's own tree.** The coordination tree **is** the orchestrator
+  (worker-mode OFF — worker-ness is a property of the process, carried by
+  `DOCTRINE_WORKER` in the worker's jail, never of a directory).
+  Orchestrator-classed, refused under worker-mode like the rest of the verb class.
 - **Create-or-resume, never a second branch.** A live worktree already on
   `dispatch/<slice>` is **refused** (`coordination-live` — concurrent same-slice
   dispatch is illegitimate). A branch that exists with **no** live worktree
@@ -75,7 +74,7 @@ trunk** — the funnel's sole write target (design §2; ADR-012). It differs fro
 - **Regenerates the runtime phase sheets** from the committed `plan.toml` (the
   SL-056 provision axis), via the sole copier — no coordination-tier copy.
 
-Not a worker delta path: there is no `S`, no import, no marker. Lifecycle is
+Not a worker delta path: there is no `S` and no import. Lifecycle is
 worktree-life < branch-life — the directory is removed at conclude, but
 `dispatch/<slice>` + the projected `review`/`phase` refs are **kept** as deliverables
 (see `/dispatch`). Solo/worker creation below is unchanged.
@@ -116,8 +115,10 @@ compensating rollback (any failure after `git worktree add` triggers a best-effo
    `B` for a worker — the explicit base is *why* this path is controlled.
 2. **provisions** the fork (the sole copier — coordination/runtime tier withheld
    at the copy seam, D9; see [Provisioning](#provisioning-d9)).
-3. with `--worker`, **stamps the worker marker** before any spawn window (solo
-   omits `--worker`).
+3. with `--worker` — plus both `--slice` and `--phase`, and a
+   `<coord>/.worktrees/<name>` dir — **binds the fork** to its `(slice, phase)`.
+   Any of those missing and the fork is simply *unbound*, which downstream verbs
+   report honestly rather than guess around (solo omits `--worker`).
 4. reports **human status to stderr**; stdout stays empty (machine-clean). The fork
    builds into its own in-tree `<dir>/target` — no env contract is emitted (SL-156:
    the platform exited the build-env business).
@@ -129,9 +130,9 @@ forks; the orchestrator/solo, worker-mode OFF, calls it).
 1. **Existing isolation** (detection above) → skip creation, adopt the fork.
 2. **Harness-native creation** if present and invocable **creation-only** (no
    auto-copy) — opportunistic only. (Claude Code's `WorktreeCreate` hook is the
-   instance, but its payload lacks base/path/type so doctrine cannot drive it —
-   the claude arm instead default-creates + SubagentStart-stamps, see
-   `/dispatch-agent`.) **Design around it; never depend on it.**
+   instance, but its payload lacks base/path/type, so doctrine cannot drive it
+   and dispatch does not: it forks explicitly instead.) **Design around it;
+   never depend on it.**
 3. **`doctrine worktree fork`** — the **blessed tested default**. Prefer this.
 4. **Work-in-place** (`solo` only, `allow_work_in_place=true`) on sandbox denial —
    no fork, the trunk path. `worker` aborts instead.
@@ -195,20 +196,18 @@ improvise past it.
 
 ## Worker mode (the funnel half)
 
-`mode=worker` is the path a codex/pi worker runs inside its `fork --worker`
-worktree (claude workers are stamped by the SubagentStart hook instead — see
-`/dispatch-agent`). Creation, provision, and the guards above run first
-**unchanged**; this is what happens *after* a green baseline, in place of solo
-handoff. The worker is a constrained writer: one importable delta, then return,
-never touching the coordination/runtime tier (the fork already withholds it, D9).
+`mode=worker` is the path a dispatch worker runs inside its `fork --worker`
+worktree. Creation, provision, and the guards above run first **unchanged**; this
+is what happens *after* a green baseline, in place of solo handoff. The worker is
+a constrained writer: one importable delta, then return, never touching the
+coordination/runtime tier (the fork already withholds it, D9).
 
-**Self-arm first (D2a, fail-open — C-I).** The worker's first act is `export
-DOCTRINE_WORKER=1`. This arms the doctrine guard so any doctrine-mediated authored
-write (`slice`, `memory record`, `backlog`, minting) **refuses**. Nothing
-*enforces* the line — the `Agent` tool exposes no env seam, so it is a self-armed
-prompt contract that fails **open** if omitted (the orchestrator's import-time
-`.doctrine/`/`.claude/`-reject belt, not this var, is the real protection). Arm it
-regardless.
+**Armed by the jail, not by cooperation.** `DOCTRINE_WORKER=1` is set inside the
+confinement namespace by the spawn script, so the doctrine guard is armed before
+the worker's first command: any doctrine-mediated authored write (`slice`,
+`memory record`, `backlog`, minting) **refuses**. Worker-ness is a property of
+the process, not of the directory. Outside a dispatch spawn — a hand-driven
+worker turn — export it yourself first.
 
 **The constrained loop:**
 
@@ -216,22 +215,23 @@ regardless.
    `.doctrine/` authored trees, runtime state, or memory — an import touching them
    is rejected (report+halt).
 2. **Verify.** Run the **orchestrator-supplied** verify command (passed in the
-   worker prompt — not assumed `doctrine check gate`). A red verify is reported back; the
-   worker does not commit a red delta.
-3. **Commit exactly one `S`.** `git add -A && git commit` — raw git, **not** a
-   doctrine verb (so `DOCTRINE_WORKER=1` does not refuse it, D2a). `S` is the
-   importable unit (the orchestrator imports `B..S`): **exactly one** non-merge
-   commit on top of `B` — no multi-commit, merge, or rebase that re-parents off
-   `B` (each is a contract violation rejected before import). Stay within your
-   declared file set; straying breaks the file-disjoint batch.
+   worker prompt — not assumed `doctrine check gate`). A red verify is reported
+   back; the worker does not hand back a red delta as if it were green.
+3. **Leave the delta uncommitted.** A confined worker **cannot** commit — the
+   linked worktree's real git dir is read-only inside the jail, so there is no
+   self-commit path and none is wanted. The importable unit is the working tree
+   itself, which the orchestrator gathers with `worktree import --from-worktree`.
+   Never `reset`, `checkout --`, `stash` or `clean` your own work away — that
+   destroys the only copy. Stay within your declared file set; straying breaks
+   the file-disjoint batch.
 
 **MUST NOT degrade to work-in-place.** A worker with no real fork is a **hard
 abort**, never a silent in-tree edit (contrast `solo` rung 4). If creation failed,
 report and stop.
 
 **Return** a structured report (held in orchestrator context, never a doctrine
-artifact): what changed, the verify result, memory-worthy notes, plus
-`{ fork_branch, head_sha_after }`. Knowledge trails the orchestrator's confirmed
+artifact): what changed, the verify result, memory-worthy notes, and the fork
+branch. Knowledge trails the orchestrator's confirmed
 commit, not the fork (record-on-trunk, below).
 
 ## Squash-orphan caveat (record-on-trunk)
@@ -261,8 +261,8 @@ check-allowlist`.
 |---|---|
 | `--git-dir` ≠ `--git-common-dir`, not a submodule | Already forked → adopt, skip creation |
 | Submodule (`modules/` gitdir / superproject) | Not isolation → treat as not-forked |
-| Dispatch coordination tree (per run) | `doctrine worktree coordinate --slice <N> --dir <path>` — markerless, create-or-resume, off resolved trunk; NOT a `fork` mode |
-| Default fork (solo or codex/pi worker) | `doctrine worktree fork --base <B> --branch <name> --dir <path> [--worker]` |
+| Dispatch coordination tree (per run) | `doctrine worktree coordinate --slice <N> --dir <path>` — create-or-resume, off resolved trunk; NOT a `fork` mode |
+| Default fork (solo or dispatch worker) | `doctrine worktree fork --base <B> --branch <name> --dir <path> [--worker]` |
 | Worker fork base | `--base <B>` explicit, never the implicit session HEAD (it is not `B`) |
 | Worktree dir not ignored | Add to `.gitignore` + commit before `fork` |
 | Sandbox denies fork, `mode=solo` | Work-in-place (no fork) |

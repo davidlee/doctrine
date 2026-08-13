@@ -35,7 +35,7 @@ mod jail;
 
 // SL-185 PHASE-02: the `jail-prefix` command (command tier). Emits a confinement
 // wrap prefix (NUL-delimited argv terminating in `--`) to `--out` for the
-// subprocess (pi) spawn arm. Rides `jail.rs`'s `wrap_argv` — no re-authored argv.
+// subprocess spawn path. Rides `jail.rs`'s `wrap_argv` — no re-authored argv.
 mod jail_prefix;
 
 mod marker;
@@ -158,7 +158,7 @@ pub(crate) enum WorktreeCommand {
 
     /// Create a worktree fork.
     /// Orchestrator-owned fork off `<base>` on a NEW branch, provisioned,
-    /// optionally worker-stamped. Status to stderr, empty stdout (the fork builds
+    /// optionally phase-bound. Status to stderr, empty stdout (the fork builds
     /// into its own in-tree `<dir>/target`). Orchestrator-classed — refused under
     /// worker-mode. Atomic via compensating rollback.
     Fork {
@@ -175,7 +175,9 @@ pub(crate) enum WorktreeCommand {
         #[arg(long)]
         dir: PathBuf,
 
-        /// Stamp the worker-mode marker so the fork resolves to worker mode.
+        /// Mark this as a dispatch worker fork. Worker MODE itself is a property of
+        /// the worker PROCESS (`DOCTRINE_WORKER`, set by the confining spawn), never
+        /// of the directory — this flag only gates the durable fork binding below.
         #[arg(long)]
         worker: bool,
 
@@ -197,15 +199,14 @@ pub(crate) enum WorktreeCommand {
     },
 
     /// Create a worktree for the claude `WorktreeCreate` hook (stdin payload).
-    /// Reads `{cwd, name}` JSON on stdin; positionally discriminates a dispatch
-    /// worker (cwd IS the arming dir ⇒ fork off the arming `base`, worker-marked)
-    /// from a benign spawn (anywhere else ⇒ detached tree at HEAD, unmarked), both
-    /// provisioned by the sole copier. Prints the created absolute path ALONE on
-    /// stdout. No `-p`: the root is the payload cwd's `--show-toplevel`.
-    /// Orchestrator-classed — fires in the markerless parent coord tree.
+    /// Reads `{cwd, name}` JSON on stdin and creates a benign detached tree at
+    /// HEAD, provisioned by the sole copier. Never a dispatch worker fork — those
+    /// are minted explicitly by `fork` (SL-254). Prints the created absolute path
+    /// ALONE on stdout. No `-p`: the root is the payload cwd's `--show-toplevel`.
+    /// Orchestrator-classed — fires in the parent coord tree.
     CreateFork,
 
-    /// Emit a confinement wrap PREFIX for the subprocess (pi) spawn arm (SL-185).
+    /// Emit a confinement wrap PREFIX for the subprocess spawn path (SL-185).
     /// Resolves a jail backend for `--dir` under an inline policy (`--network`,
     /// `--extra-rw`) and writes its wrap prefix — a NUL-delimited argv terminating
     /// in `--` — to `--out`, so the spawn script can `timeout "${PREFIX[@]}"
@@ -992,9 +993,9 @@ mod tests {
     // --- SL-056 PHASE-10 T6 / VT-4: agent-def `name` ↔ const drift gate ---
     //
     // Reds if `install/agents/claude/dispatch-worker.md` frontmatter `name:`
-    // diverges from `DISPATCH_WORKER_AGENT_TYPE`. The SubagentStart matcher leg
-    // is covered in `src/boot.rs`; the `/dispatch-agent` skill leg is below
-    // (PHASE-13). Together they pin every replica of the literal to the const.
+    // diverges from `DISPATCH_WORKER_AGENT_TYPE`. This is now the SOLE replica
+    // pin: the sibling leg read the `/dispatch-agent` skill's `subagent_type:`
+    // literal, and that skill retired with the in-session arm (SL-254 PHASE-07).
     #[test]
     fn dispatch_worker_agent_def_name_matches_const() {
         let manifest = crate::test_support::repo_root();
@@ -1009,37 +1010,6 @@ mod tests {
         assert_eq!(
             name, DISPATCH_WORKER_AGENT_TYPE,
             "agent-def name must equal DISPATCH_WORKER_AGENT_TYPE"
-        );
-    }
-
-    // --- SL-056 PHASE-13 / VT-1 (τ): `/dispatch-agent` skill `subagent_type` leg ---
-    //
-    // Reds if the `/dispatch-agent` skill's `subagent_type:` literal — the value
-    // the orchestrator passes to the `Agent` tool to spawn a worker — diverges
-    // from `DISPATCH_WORKER_AGENT_TYPE`. A one-character drift fails OPEN (the
-    // SubagentStart matcher never fires ⇒ no stamp ⇒ worker_mode false), so the
-    // literal is PINNED here, not merely documented.
-    #[test]
-    fn dispatch_agent_skill_subagent_type_matches_const() {
-        let manifest = crate::test_support::repo_root();
-        let skill = manifest.join("plugins/doctrine/skills/dispatch-agent/SKILL.md");
-        let text =
-            fs::read_to_string(&skill).unwrap_or_else(|e| panic!("read {}: {e}", skill.display()));
-        let pinned = text
-            .lines()
-            .find_map(|l| l.split_once("subagent_type:").map(|(_, rest)| rest))
-            .map(|rest| {
-                rest.trim()
-                    .trim_start_matches('`')
-                    .split([' ', '`', '#'])
-                    .next()
-                    .unwrap_or("")
-                    .trim()
-            })
-            .unwrap_or_else(|| panic!("no `subagent_type:` line in {}", skill.display()));
-        assert_eq!(
-            pinned, DISPATCH_WORKER_AGENT_TYPE,
-            "/dispatch-agent subagent_type must equal DISPATCH_WORKER_AGENT_TYPE"
         );
     }
 }

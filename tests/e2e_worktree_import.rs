@@ -696,8 +696,8 @@ fn import_from_worktree_refuses_head_moved() {
 }
 
 // F-3: a worker worktree with NO delta must report-and-halt — never launder an empty
-// import green. The `/dispatch-agent` funnel `&&`-gates the `git worktree remove
-// --force` reap on this exit, so a nonzero here LEAVES the tree (no --force data loss).
+// import green. The orchestrator `&&`-gates the fork's reap on this exit, so a nonzero
+// here LEAVES the tree (no data loss — the tree is the sole copy of the delta).
 #[test]
 fn import_from_worktree_no_delta_halts() {
     let src = tempfile::tempdir().unwrap();

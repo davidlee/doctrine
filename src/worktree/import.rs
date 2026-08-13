@@ -413,8 +413,8 @@ fn run_import_fork(
 /// (`.doctrine/`/`.claude/` reject) + `head_at_base` + `tree_clean` — all still run
 /// through the pure core. Gather → pure-classify → act, same shape as the fork arm.
 ///
-/// The caller (`/dispatch-agent` funnel) reaps the worktree with `git worktree remove
-/// --force` ONLY after this returns 0 (F-3): a nonzero exit halts the funnel and LEAVES
+/// The calling orchestrator reaps the worktree ONLY after this returns 0 (F-3): a
+/// nonzero exit halts the drive and LEAVES
 /// the tree, so a failed import never `--force`-destroys the sole copy of the delta.
 fn run_import_from_worktree(
     path: Option<PathBuf>,
