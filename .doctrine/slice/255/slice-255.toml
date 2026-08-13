@@ -47,6 +47,12 @@ label = "references"
 role = "concerns"
 target = "IDE-024"
 
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "worker_commit's six-belt census and the belt-vs-transport separation, preserved for the clone provisioning this slice lands"
+target = "DEC-204"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload

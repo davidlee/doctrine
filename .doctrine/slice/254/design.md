@@ -732,19 +732,34 @@ exception — it is tracked, and `doctrine install` reconciles it against
 <!-- doctrine:section sec-10 -->
 ## 6. Open Questions & Unknowns
 
-None of these blocks drafting; each is a bounded fact an implementer can settle,
-and each is stated so that settling it changes a line rather than a design.
+`OQ-1` is settled below. The rest are bounded facts an implementer can settle,
+none of them blocking, each stated so that settling it changes a line rather
+than a design.
 
-**`OQ-1` — the generalised spawn script must bind the fork it creates.**
-`fork.rs:216-246` binds a fork to its `(slice, phase)` only when `--worker`,
-both `--slice` and `--phase`, **and** a `dir` under `<coord>/.worktrees/<name>`
-all hold; otherwise `require_binding` yields the typed `unprovable-fork`
-refusal. Today `scripts/pi-spawn-confined.sh:56` passes neither flag and takes
-`$D` from its caller. Since the collapsed arm inherits this script as its only
-spawn path, the script must either pass both flags and constrain `$D`, or the
-design must say explicitly that the collapsed arm's forks are unbound and which
-funnel verbs that forecloses. **Settle before the spawn phase**; it is a
-precondition of the `VA` leg, not a follow-up.
+**`OQ-1` — settled: the collapsed arm's forks stay unbound.** `fork.rs:216-246`
+binds a fork to its `(slice, phase)` only when `--worker`, both `--slice` and
+`--phase`, **and** a `dir` under `<coord>/.worktrees/<name>` all hold — and
+`bind_dispatch_record` is the sole production writer of a `DispatchRecord`, so
+an unbound fork leaves **no record at all**, not an incomplete one.
+`scripts/pi-spawn-confined.sh:56` passes `--worker` alone, so unbound forks are
+already the surviving arm's production posture; the collapse inherits it rather
+than adopting something new.
+
+What that forecloses is exactly the two readers of the binding, and this slice
+removes or orphans both on independent grounds: `worker_commit` (deleted,
+`DEC-204`) and MCP `dispatch_import` (`mcp_server/dispatch.rs:303`, which
+additionally requires `ForkExpect::Advanced` — a committed fork tip the
+collapsed arm cannot produce; that is `OQ-2`). Nothing on the retained path
+reads it: `worktree import` never touches `dispatch_record`, `slice
+record-delta` (`slice.rs:3043`) takes `PHASE-NN` as an explicit argument, and
+`reap_fork` / `gc` tolerate a missing record. The funnel row is named by the
+orchestrator, not by the binding.
+
+*Alternative declined:* have the generalised spawn script pass both flags and
+constrain `$D`. It would write a durable record for a consumer this slice
+deliberately leaves without a producer, and it would move the production pi
+arm's runtime behaviour — records where none existed — against §9.1's gate. The
+binding belongs with the transport, and the transport is `SL-255`'s surface.
 
 **`OQ-2` — `dispatch_import` loses its producer.** The MCP funnel import
 requires a *committed* fork tip. A bwrap-confined worker cannot commit, so after
@@ -991,9 +1006,10 @@ path works; nothing in the unit suites exercises a real `claude -p` under bwrap.
 gitignored scratchpad. A `VA` criterion over runtime state leaves nothing an
 audit can re-derive (`DEC-212`, `mem_019fd1d862887d42b7a1f88c28fd28a7`).
 
-`OQ-1` is a precondition of this leg: an unbound fork cannot be named by the
-funnel, so the binding question must be settled before the run rather than
-diagnosed during it.
+The fork binding is **not** a precondition of this leg (§6 `OQ-1`): the fork
+stays unbound as the pi arm's already are, the funnel row is named by the
+orchestrator's explicit `PHASE-NN`, and no reader on the retained path consults
+the binding.
 
 ### 9.4 By human (`VH`)
 
@@ -1020,11 +1036,12 @@ Where a reviewer's attention is worth most, in order.
    `verify-worker` or the `Spawn`-row recorder has a consumer on the surviving
    path, the boundary is wrong and the phase count changes.
 
-2. **`OQ-1`, the fork binding.** The strongest single objection available to
-   this design is that it collapses onto a spawn script which does not bind the
-   forks it creates, and that the funnel's provability therefore rests on a
-   precondition nobody has checked. It is stated rather than assumed, but stating
-   it is not settling it.
+2. **`OQ-1`, the fork binding.** Settled at drafting rather than carried:
+   the collapsed arm's forks stay unbound, exactly as the pi arm's already are,
+   because the binding's only readers are the two surfaces this slice deletes
+   (`worker_commit`) or leaves without a producer (`dispatch_import`). The claim
+   worth attacking is the census, not the conclusion — a third reader of
+   `require_binding` reachable on the retained path reopens it.
 
 3. **`OQ-2`, `dispatch_import` without a producer.** Retaining an unreachable
    tool is a deliberate choice with a governance argument behind it (`DEC-211`
