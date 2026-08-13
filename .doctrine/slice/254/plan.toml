@@ -118,7 +118,15 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "the spawn gate and its allowlist are gone from the jail leaf, and resolve_target no longer takes a nomination argument", test_file = "src/worktree/jail.rs", keywords = ["fn resolve_target", "cwd_is_project_worktree"], waived = false },
-  { id = "VT-2", expects = "the finding taxonomy lost the check-#10 category cleanly, ordinals renumbered", test_file = "src/finding.rs", keywords = ["CATEGORY_ORDER"], waived = false },
+  # VT-2 CORRECTED at execution (SL-254 PHASE-03, 2026-08-13). The mandate named
+  # `CATEGORY_ORDER`, which has never existed in this codebase — the symbol is
+  # `CATEGORIES_BY_ORDINAL`, a fixed-length array whose length is the count. As
+  # authored the mandate could only ever FAIL, while looking well-formed: the
+  # same defect class the plan's own critical pass caught in PHASE-06/VT-2 and
+  # missed here. The id is immutable and the CLAIM is unchanged; the keywords now
+  # name the real symbol, and `[Category; 11]` makes the mandate prove the
+  # renumbering rather than merely witness the file.
+  { id = "VT-2", expects = "the finding taxonomy lost the check-#10 category cleanly, ordinals renumbered", test_file = "src/finding.rs", keywords = ["CATEGORIES_BY_ORDINAL", "[Category; 11]"], waived = false },
   { id = "VA-1", expects = "`doctrine doctor` runs and reports a coherent check set with #10 absent and no gap in the numbering presented to the user." },
 ]
 specs        = []
