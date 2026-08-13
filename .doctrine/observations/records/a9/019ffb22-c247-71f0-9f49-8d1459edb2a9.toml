@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffb22-c247-71f0-9f49-8d1459edb2a9"
+recorded_at = "2026-08-13T12:39:47.015263388Z"
+kind = "friction"
+summary = "/phase-plan: 'check the research advisory' minted a research baseline on a slice that never ran /research"
+detail = "SL-254 has no research artefact (design was authored without the /research round). The /phase-plan skill step 4 says to check the advisory with 'doctrine slice research <id>'. On a slice with no research/ dir that verb MINTS the dir and stamps baseline.toml against the current design/plan hashes rather than reporting 'no research artefact — nothing to be stale against'. A read-intent instruction produced a write, and the stamp asserts a baseline that no research round ever stood behind, so a later /research would read as un-drifted. Removed the stub by hand (gitignored, so invisible to git status too). Wanted: a no-op advisory when the dir is absent, with minting reserved for /research itself or an explicit --init."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -415,7 +415,14 @@ control before finding anything new.
 `sandbox_exec_argv` is reached from `jail_prefix.rs:168` via `Seatbelt::wrap_argv`,
 not from the dying wall, so the census does not undercut it. And `DEC-206`'s
 re-homing set is provably complete: `jail_prefix.rs` imports exactly those four
-primitives from `pretooluse.rs` and nothing else. No fifth primitive is hiding.
+primitives from `pretooluse.rs` and nothing else. ~~No fifth primitive is
+hiding.~~ — **qualified 2026-08-13 at `/phase-plan` PHASE-01.** True of
+`jail_prefix.rs`'s *import list*, which is what it was derived from. The
+**move's** closure is wider: `have_bwrap` reads two private `pretooluse` consts,
+`BWRAP_BIN` (`:71`) and `ENV_PATH` (`:77`), and `BWRAP_BIN` is an `STD-001`
+duplicate of a constant `jail.rs` already owns (`:73`, `const BWRAP`). Not a
+design defect — a scope-of-claim correction, and the ninth time a survey here
+has read low.
 
 **Method limits, recorded so the plan phase inherits them.** A negative grep is
 worthless without a positive control — `e2e_priority_golden.rs`'s three
@@ -427,3 +434,130 @@ the `spec-*.toml` source anchors) needs a separate literal-string sweep.
 **Probe 3 (the macOS/Darwin census) is still untouched** and remains the sharpest
 open probe for a second adversarial pass. This sweep touched the Darwin path only
 where it intersected the orphan question.
+
+## Execution environment and standing directions (implementation sessions)
+
+Established by the user at `/phase-plan` PHASE-01, 2026-08-13. These are facts
+about *where this slice is being built*, not about what it builds — but several
+of them invert assumptions the design and the skills would otherwise apply.
+
+**This is a microVM capsule holding a separate checkout.** Consequences, each of
+which switches off machinery the repo's standing guidance would otherwise
+demand:
+
+- **No dispatch, no worktree, no fork.** No main-worktree contention to isolate
+  from, so `/worktree` and `/dispatch` are not in play — work happens directly
+  in this checkout. The `edge`/`main` promotion ritual and the
+  "never checkout the primary tree" rule are about the host repo, not here.
+- **No confinement hooks.** The `PreToolUse` wall, the worker marker and the
+  `DOCTRINE_WORKER` env leg are all *subjects* of this slice here, never active
+  constraints on the session doing the work. A confinement behaviour observed —
+  or not observed — in this capsule is evidence about nothing.
+- **Transient state is not visible from the host.** Anything the host session
+  would have seen in `.doctrine/state/` is absent or divergent here. Do not
+  reason from its absence.
+- **Claude is available two ways** — `claude -p` and in-session subagents. `pi`
+  is installed but has **no API keys and no egress route configured**, so
+  `./scripts/pi-scout` / `pi-research` will not work until the user sets that
+  up. Research that needs them has to wait or route through claude.
+
+**Entity-id collision risk — flag every minted id.** Ids minted in this capsule
+(`DEC-`, `RV-`, `IMP-`, `ISS-`, `EVD-`, …) can collide with ids minted
+concurrently on the host, because the reservation surfaces are not shared.
+**Memories and observations are exempt** — those are uid-keyed, not counter-keyed.
+Standing rule for the rest: **any id minted during implementation gets called out
+explicitly in the phase sheet and in the commit message**, so reconciliation can
+find and re-key them. Prefer not minting at all where a phase-sheet note or a
+`notes.md` entry carries the same weight.
+
+**Adapt the plan; keep receipts.** User direction, verbatim in substance: given
+the choice between following the plan slavishly and doing the thing properly,
+choose properly — and record the divergence. Two immediate applications:
+
+1. **`PHASE-01`/`VA-1`'s byte-identity leg is relaxed.** The authored criterion
+   asks that the two relocated `write_seatbelt_profile` unit tests be diffed
+   line-by-line and be "identical but for the module they sit in". The user is
+   not uptight about existing tests holding at the byte level. **What survives
+   is the substance**: a relocated test whose *assertions* changed means the move
+   was not behaviour-preserving and the phase has failed. Import-form and
+   symbol-reference churn (`fs::` qualification, `BWRAP_BIN` → `jail::BWRAP`) is
+   not a failure. `EX-4`'s `git diff --stat tests/` leg is **untouched** and
+   still binds — that is about the e2e suites, which are the real
+   behaviour-preservation proof.
+2. **`PHASE-01`/`D1` is settled on the collapse** — see below.
+
+**macOS is acknowledged and deferred.** `jail_prefix.rs:45`/`:47` are
+`cfg(target_os = "macos")` and are not compiled in this capsule, so the
+re-pointed imports there pass a green gate unverified. The user will sweep the
+Darwin path in a later phase on AARCH64. This is `OQ-5`'s residual and design
+§9.5's "deliberately not verified here", arriving one phase earlier than the
+design anticipated; `PHASE-09`/`VA-2` (probe 3, the Darwin census) is where it
+lands.
+
+### Follow-up: `jail.rs`'s ADR-001 posture
+
+**The finding.** `.doctrine/adr/001/layering.toml:138` classifies
+`"worktree::jail" = "leaf"` with the comment *"pure jail core — no
+disk/git/clock/rng"*, and `jail.rs`'s own module doc opens *"PURE leaf: no clock
+/ git / disk / rng"*. Two of `DEC-206`'s four re-homed primitives are impure:
+`have_bwrap` stats the filesystem (`dir.join(BWRAP).is_file()`) and reads the
+environment; `write_seatbelt_profile` calls `fs::write`. The design does not
+mention purity, ADR-001, or the leaf classification anywhere — the re-homing set
+was derived from `jail_prefix.rs`'s imports, and the question of whether the
+destination could hold them was never asked.
+
+**Why PHASE-01 proceeds anyway.** The stated contract is already not the real
+one. `jail.rs` houses `impl ResolveEnv for RealEnv` (`:865-916`), which shells
+`getconf` and makes three `std::fs` calls. The module's genuine invariant is
+*"impurity behind the injected `ResolveEnv` seam, so the pure surface stays
+`FakeEnv`-testable"* — not "no I/O". The two arrivals are **unseamed free
+functions**, which is new for the module, but routing them through `ResolveEnv`
+would change `jail_prefix.rs`'s call sites, and PHASE-01 is defined by not doing
+that. So: move verbatim per `DEC-206`, record here.
+
+**Nothing mechanical catches this.** `tests/architecture_layering.rs` parses
+crate-module `use` edges and checks tier direction; it has no notion of
+`std::fs`. The gate is green either way — which is the reason to write this down
+rather than the reason to let it go.
+
+**What to do about it, in order of preference.**
+
+1. **`PHASE-08` candidate target.** That phase re-derives the governance `REV`
+   target set from `.doctrine/adr` against the corpus as it then stands (`EX-1`,
+   `VH-2`), and design §5.6's six-entity table does not name `ADR-001`. This is
+   exactly the "any entity or region beyond the six is **recorded, not
+   absorbed**" case. At minimum `layering.toml:138`'s comment wants correcting to
+   describe the seam rather than assert an absence that has not held since
+   SL-183.
+2. **If `PHASE-08` declines it**, a backlog card: seam `have_bwrap` and
+   `write_seatbelt_profile` behind `ResolveEnv`, or split them out to a
+   `worktree::jail_io` command-tier sibling. Either restores the stated contract;
+   neither belongs inside a behaviour-preserving re-home.
+
+**Standing caution for the rest of the slice.** `PHASE-04` deletes ~300 lines of
+`jail.rs`'s pure decision layer and about half its unit tests. What is left is
+disproportionately the impure remainder plus the argv builders. The leaf
+classification deserves a deliberate look at that point rather than an inherited
+one — the module that emerges is not the module ADR-001 classified.
+
+### PHASE-01 `D1` — settled: collapse `BWRAP_BIN` onto `jail::BWRAP`
+
+Once `have_bwrap` moves out, `BWRAP_BIN` (`pretooluse.rs:71`) has exactly one
+remaining reference — a unit test at `:516` — so it is dead under
+`cfg(not(test))`, and `Cargo.toml:206`'s `warnings = "deny"` makes that a hard
+compile error rather than a lint.
+
+**Chosen:** delete `BWRAP_BIN`, promote `jail.rs:73`'s existing
+`const BWRAP: &str = "bwrap"` to `pub(crate)`, point the moved `have_bwrap` at
+it, and retarget the one test reference. **Rejected:** keep `BWRAP_BIN` alive
+under a broadened `#[cfg_attr(not(test), expect(dead_code, …))]`.
+
+The only argument for the rejected route was preserving a staying test's text
+byte-for-byte, and the user has released that constraint. What remains is
+one-sided: the collapse **removes** a live `STD-001` duplicate of the literal
+`"bwrap"` across two modules of one subsystem, where the annotation route spends
+an `expect(dead_code)` to **keep** it — and keeps it only until `PHASE-04`
+deletes `pretooluse.rs` whole, at which point the duplicate would have gone
+anyway. Paying a lint suppression for three phases of duplication is the worse
+trade in every dimension. The test's assertion is untouched; only the symbol it
+names changes.
