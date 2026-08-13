@@ -70,7 +70,10 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 // ---- bwrap flag vocabulary (STD-001: single-sourced, no inline literals) --------
-const BWRAP: &str = "bwrap";
+/// `pub(crate)` since SL-254 PHASE-01: the SINGLE source of the `bwrap` binary
+/// name for the whole subsystem. `pretooluse.rs` carried a duplicate (`BWRAP_BIN`)
+/// that died with [`have_bwrap`]'s re-home; STD-001 wants one, and this is it.
+pub(crate) const BWRAP: &str = "bwrap";
 const FLAG_RO_BIND: &str = "--ro-bind";
 const FLAG_DEV: &str = "--dev";
 const FLAG_PROC: &str = "--proc";
@@ -144,6 +147,46 @@ const REASON_MAC_POLICY_MISSING: &str = "seatbelt-policy-missing";
 /// (f) policy present but malformed / schema-invalid (covers the network ambiguity,
 /// F-B6). A malformed policy DENIES — it never silently defaults network open.
 const REASON_MAC_POLICY_MALFORMED: &str = "seatbelt-policy-malformed";
+
+// ---- SL-254 PHASE-01: host-capability + profile-write vocabulary, re-homed from
+//      `pretooluse.rs` ahead of that module's deletion (DEC-206). These four items
+//      (with `have_bwrap` and `write_seatbelt_profile` below) are the ONLY things
+//      `jail_prefix.rs` — the surviving consumer — needed from the dying wall, so
+//      they move first, while the change is behaviour-preserving and the existing
+//      suite is its proof (design §9.1). ---------------------------------------------
+/// The per-arm `Backend::Deny` reason when the Linux host has no `bwrap`.
+/// Unreferenced on macOS prod (the arm probes Seatbelt instead) but named by the
+/// arm-neutral `decide()` tests — hence always-compiled with dead-code allowed there.
+#[cfg_attr(
+    all(target_os = "macos", not(test)),
+    expect(dead_code, reason = "Linux prod arm + arm-neutral decide() tests only")
+)]
+pub(crate) const REASON_NO_BWRAP: &str = "bwrap-unavailable";
+/// Fail-closed reason (F-B4) when the macOS Seatbelt profile body cannot be written
+/// to `resolved.profile_path`: the arm DENIES rather than emit an allow+wrap whose
+/// `sandbox-exec -f <profile>` points at a missing/partial floor. A wrap we cannot
+/// back with a real profile is strictly worse than a deny.
+pub(crate) const REASON_PROFILE_WRITE_FAILED: &str = "seatbelt-profile-write-failed";
+/// The `PATH` environment variable, read by the Linux-only [`have_bwrap`] probe.
+#[cfg(not(target_os = "macos"))]
+const ENV_PATH: &str = "PATH";
+
+/// Whether `bwrap` resolves on `PATH` (the `command -v bwrap` the probe ran).
+/// Capability is DATA: absence ⇒ `Backend::Deny` ⇒ the leaf denies with the
+/// per-arm reason, never an unconfined pass-through (fail-closed). Linux arm only.
+///
+/// Reads `PATH` and stats the filesystem, so it is impurity arriving in a module
+/// ADR-001 classifies `leaf`. It joins existing impurity here (`RealEnv`), but
+/// UNSEAMED — not behind [`ResolveEnv`]. Deliberate and recorded: seaming it would
+/// change `jail_prefix.rs`'s call sites, which is exactly what this
+/// behaviour-preserving re-home must not do. See `SL-254` `notes.md`.
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn have_bwrap() -> bool {
+    let Some(path) = std::env::var_os(ENV_PATH) else {
+        return false;
+    };
+    std::env::split_paths(&path).any(|dir| dir.join(BWRAP).is_file())
+}
 
 /// The `.git` directory name — an `extra_rw` touching it is rejected (INV-3).
 const GIT_DIR: &str = ".git";
@@ -618,6 +661,21 @@ pub(crate) fn seatbelt_profile(resolved: &ResolvedMac) -> String {
     lines.join("\n")
 }
 
+/// The SINGLE profile writer (SL-183 EX-3): write `seatbelt_profile(resolved)` to
+/// `resolved.profile_path`. The `.sb` profile is a runtime/derived artifact under the
+/// worktree's gitignored `<wt>/.tmp` — regenerated each wrap, never an authored entity
+/// — so a plain `fs::write` is the sanctioned form (clippy policy: authored writes
+/// route through `fsutil::write_atomic`, runtime/derived sites carry an explicit
+/// `#[expect]`).
+///
+/// Re-homed from `pretooluse.rs` by SL-254 PHASE-01 (DEC-206), unchanged. Like
+/// [`have_bwrap`] it is UNSEAMED impurity in an ADR-001 `leaf` — see that function's
+/// note and `SL-254` `notes.md`.
+pub(crate) fn write_seatbelt_profile(resolved: &ResolvedMac) -> std::io::Result<()> {
+    #[expect(clippy::disallowed_methods, reason = "runtime seatbelt profile")]
+    std::fs::write(&resolved.profile_path, seatbelt_profile(resolved))
+}
+
 /// Build the `sandbox-exec` launcher argv PREFIX (§5.1, SL-183 PHASE-02). PURE:
 /// resolved paths in, `Vec<OsString>` out. Binds realpath'd `-D` params (paths ride
 /// argv, NEVER the profile body — F-A footgun, INV-M2), points `-f` at the
@@ -982,6 +1040,9 @@ pub(crate) fn decide_write(target: &Target, real: Option<&Path>, policy: &JailPo
 #[cfg(test)]
 mod tests {
     use super::*;
+    // SL-254 PHASE-01: the two relocated `write_seatbelt_profile` tests say `fs::`.
+    // Imported rather than qualified so their bodies stay verbatim (VA-1).
+    use std::fs;
 
     fn pb(s: &str) -> PathBuf {
         PathBuf::from(s)
@@ -2213,6 +2274,62 @@ mod tests {
         assert!(
             matches!(err, ResolveDeny::PolicyMalformed(_)),
             ".git extra_rw must be rejected via validate_policy"
+        );
+    }
+
+    // ---- SL-254 PHASE-01: relocated from `pretooluse.rs` with their subject -----
+    // Moved verbatim (DEC-206, design §9.1) — a changed ASSERTION here would mean
+    // the re-home was not behaviour-preserving. `resolved_at` is COPIED, not moved:
+    // `pretooluse`'s `materialize_seatbelt_profile` tests still use it and both
+    // copies die with that module in PHASE-04.
+
+    /// A `ResolvedMac` whose `.tmp` exists and whose `profile_path` sits under it —
+    /// the shape `resolve_inputs` produces (`<wt>/.tmp/jail.sb`).
+    fn resolved_at(tmp_dir: &Path) -> ResolvedMac {
+        ResolvedMac {
+            wt: tmp_dir.parent().unwrap().to_path_buf(),
+            tmp: tmp_dir.to_path_buf(),
+            dutmp: PathBuf::from("/private/var/folders/x/T"),
+            extra_rw: vec![],
+            network: false,
+            profile_path: tmp_dir.join("jail.sb"),
+        }
+    }
+
+    // ── VT-3 (EX-3): write_seatbelt_profile is the single profile writer ────────
+    // `write_seatbelt_profile(resolved)` writes exactly `seatbelt_profile(resolved)`
+    // to `resolved.profile_path`; an io error (unwritable path) returns `Err`.
+    // Pure `fs::write`, no `sandbox-exec`.
+
+    #[test]
+    fn write_seatbelt_profile_writes_exact_body_to_profile_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dot_tmp = fs::canonicalize(tmp.path()).unwrap().join(".tmp");
+        fs::create_dir_all(&dot_tmp).unwrap();
+        let resolved = resolved_at(&dot_tmp);
+
+        write_seatbelt_profile(&resolved).expect("write succeeds");
+
+        let body = fs::read_to_string(&resolved.profile_path).expect("profile written");
+        assert_eq!(
+            body,
+            seatbelt_profile(&resolved),
+            "write_seatbelt_profile writes exactly seatbelt_profile(resolved)"
+        );
+    }
+
+    #[test]
+    fn write_seatbelt_profile_io_error_returns_err() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        let mut resolved = resolved_at(&root.join(".tmp"));
+        // profile_path under a directory that does not exist ⇒ fs::write fails.
+        resolved.profile_path = root.join("nonexistent-dir").join("jail.sb");
+
+        let result = write_seatbelt_profile(&resolved);
+        assert!(
+            result.is_err(),
+            "write_seatbelt_profile must return Err on io error"
         );
     }
 }

@@ -1,7 +1,7 @@
 id = 254
 slug = "collapse-dispatch-onto-one-subprocess-arm"
 title = "Collapse dispatch onto one subprocess arm"
-status = "ready"
+status = "started"
 created = "2026-08-12"
 updated = "2026-08-13"
 tags = ["area:dispatch", "area:worktree", "cluster:capsule", "harness:claude"]

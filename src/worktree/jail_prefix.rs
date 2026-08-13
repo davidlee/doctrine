@@ -37,16 +37,16 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "macos")]
+use super::jail::REASON_PROFILE_WRITE_FAILED;
+#[cfg(target_os = "macos")]
 use super::jail::resolve_with_policy;
 #[cfg(not(target_os = "macos"))]
 use super::jail::validate_policy;
+#[cfg(target_os = "macos")]
+use super::jail::write_seatbelt_profile;
 use super::jail::{Backend, JailPolicy, RealEnv, ResolveEnv, select_jailer};
-#[cfg(target_os = "macos")]
-use super::pretooluse::REASON_PROFILE_WRITE_FAILED;
-#[cfg(target_os = "macos")]
-use super::pretooluse::write_seatbelt_profile;
 #[cfg(not(target_os = "macos"))]
-use super::pretooluse::{REASON_NO_BWRAP, have_bwrap};
+use super::jail::{REASON_NO_BWRAP, have_bwrap};
 
 // ---- vocabulary (STD-001: single-sourced, no inline literals) ------------------
 /// The command name, prefixed onto every fail-closed reason surfaced to stderr.

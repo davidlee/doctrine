@@ -30,9 +30,12 @@ use anyhow::Context;
 use serde::Deserialize;
 
 use super::create::{JAIL_SUBPATH, WORKTREES_SUBDIR};
+#[cfg(not(target_os = "macos"))]
+use super::jail::have_bwrap;
 use super::jail::{
-    Backend, Decision, JailPolicy, ResolvedMac, decide_agent, decide_bash, decide_workflow,
-    decide_write, resolve_target, seatbelt_profile, validate_policy,
+    Backend, Decision, JailPolicy, REASON_NO_BWRAP, REASON_PROFILE_WRITE_FAILED, decide_agent,
+    decide_bash, decide_workflow, decide_write, resolve_target, validate_policy,
+    write_seatbelt_profile,
 };
 #[cfg(target_os = "macos")]
 use super::jail::{RealEnv, resolve_inputs, seatbelt_backend};
@@ -58,37 +61,16 @@ const DECISION_ALLOW: &str = "allow";
 const REASON_PREFIX: &str = "worktree-jail: ";
 
 // ---- host capability probe vocabulary (STD-001) --------------------------------
-// `bwrap` capability vocabulary. `BWRAP_BIN` / `REASON_NO_BWRAP` back the Linux
-// prod arm AND the arm-neutral `decide()` tests (which drive `Backend::Bwrap` as
-// the representative wrap backend on any host). On macOS prod they are unreferenced
-// (the arm probes Seatbelt instead) but the tests still need them — hence
-// always-compiled with dead-code allowed on macOS. The PATH probe (`have_bwrap` /
-// `ENV_PATH`) is Linux-exclusive and fully gated.
-#[cfg_attr(
-    all(target_os = "macos", not(test)),
-    expect(dead_code, reason = "Linux prod arm + arm-neutral decide() tests only")
-)]
-const BWRAP_BIN: &str = "bwrap";
+// The `bwrap` capability vocabulary moved to `jail.rs` with `have_bwrap` (SL-254
+// PHASE-01, DEC-206). `BWRAP_BIN` did NOT move — it was a duplicate of `jail.rs`'s
+// own `BWRAP`, which is now the subsystem's single source (STD-001).
 const REALPATH_BIN: &str = "realpath";
 /// `realpath -m` — canonicalize a possibly-missing path (a write target need not
 /// exist yet). Matches the proven probe (`pretooluse-pathcheck.sh`).
 const REALPATH_MISSING_FLAG: &str = "-m";
-#[cfg(not(target_os = "macos"))]
-const ENV_PATH: &str = "PATH";
-/// The per-arm `Backend::Deny` reason when the Linux host has no `bwrap`.
-#[cfg_attr(
-    all(target_os = "macos", not(test)),
-    expect(dead_code, reason = "Linux prod arm + arm-neutral decide() tests only")
-)]
-pub(crate) const REASON_NO_BWRAP: &str = "bwrap-unavailable";
 /// Placeholder backend reason for the Edit/Write path, where the backend is never
 /// read (`decide_write` walls on `pathcheck`). Never surfaced to a user.
 const REASON_BACKEND_UNUSED: &str = "backend-unused-on-write-path";
-/// Fail-closed reason (F-B4) when the macOS Seatbelt profile body cannot be written
-/// to `resolved.profile_path`: the arm DENIES rather than emit an allow+wrap whose
-/// `sandbox-exec -f <profile>` points at a missing/partial floor. A wrap we cannot
-/// back with a real profile is strictly worse than a deny.
-pub(crate) const REASON_PROFILE_WRITE_FAILED: &str = "seatbelt-profile-write-failed";
 
 /// The `PreToolUse` stdin subset consumed (design §5.2). Every field is optional
 /// so a malformed / partial payload folds to `Default` — fail-closed: a subagent
@@ -307,16 +289,8 @@ fn load_policy(main_root: &Path, name: &str) -> JailPolicy {
     policy
 }
 
-/// Whether `bwrap` resolves on `PATH` (the `command -v bwrap` the probe ran).
-/// Capability is DATA: absence ⇒ `Backend::Deny` ⇒ the leaf denies with the
-/// per-arm reason, never an unconfined pass-through (fail-closed). Linux arm only.
-#[cfg(not(target_os = "macos"))]
-pub(crate) fn have_bwrap() -> bool {
-    let Some(path) = std::env::var_os(ENV_PATH) else {
-        return false;
-    };
-    std::env::split_paths(&path).any(|dir| dir.join(BWRAP_BIN).is_file())
-}
+// `have_bwrap` moved to `jail.rs` (SL-254 PHASE-01, DEC-206) — `jail_prefix.rs` is
+// its surviving consumer; `probe_backend` below imports it back for now.
 
 /// Resolve the host capability descriptor (RV-202 — capability-as-data), per host
 /// arm (ADR-011 per-harness altitude; SL-183 D-mac2). `cfg`-split, not runtime:
@@ -352,16 +326,8 @@ fn probe_backend(cwd: &Path) -> Backend {
     seatbelt_backend(resolve_inputs(cwd, &env.main_root, &env))
 }
 
-/// The SINGLE profile writer (EX-3): write `seatbelt_profile(resolved)` to
-/// `resolved.profile_path`. The `.sb` profile is a runtime/derived artifact under the
-/// worktree's gitignored `<wt>/.tmp` — regenerated each wrap, never an authored entity
-/// — so a plain `fs::write` is the sanctioned form (clippy policy: authored writes
-/// route through `fsutil::write_atomic`, runtime/derived sites carry an explicit
-/// `#[expect]`).
-pub(crate) fn write_seatbelt_profile(resolved: &ResolvedMac) -> io::Result<()> {
-    #[expect(clippy::disallowed_methods, reason = "runtime seatbelt profile")]
-    fs::write(&resolved.profile_path, seatbelt_profile(resolved))
-}
+// `write_seatbelt_profile` moved to `jail.rs` (SL-254 PHASE-01, DEC-206), where its
+// two collaborators `ResolvedMac` and `seatbelt_profile` already live.
 
 /// Materialize the macOS Seatbelt `.sb` profile on the wrap path — the impure
 /// command-tier IO the pure `decide`/`sandbox_exec_argv` cannot do (INV-M2 keeps the
@@ -467,6 +433,9 @@ pub(crate) fn run_pretooluse() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // SL-254 PHASE-01: `BWRAP_BIN` collapsed onto `jail.rs`'s `BWRAP` (STD-001 —
+    // one source of the binary name for the subsystem). Assertion unchanged.
+    use crate::worktree::jail::BWRAP;
 
     const WT: &str = "/home/u/proj/.worktrees/agent-abc";
 
@@ -513,7 +482,7 @@ mod tests {
             .expect("command string");
         // The original command is opaquely wrapped in a nested bwrap jail bound to
         // the worktree — never echoed verbatim (INV-5 / opaque_wrap).
-        assert!(wrapped.contains(BWRAP_BIN), "wrapped in bwrap: {wrapped}");
+        assert!(wrapped.contains(BWRAP), "wrapped in bwrap: {wrapped}");
         assert!(
             wrapped.contains(WT),
             "jail bound to the worktree: {wrapped}"
@@ -980,7 +949,9 @@ mod tests {
     // the wrapped command, or sandbox-exec aborts and the floor never engages. This
     // is command-tier IO (mirrors the T3a wiring); the leaf stays pure.
 
-    use crate::worktree::jail::ResolvedMac;
+    // `ResolvedMac` / `seatbelt_profile` are test-only here since SL-254 PHASE-01
+    // moved `write_seatbelt_profile` — the last prod consumer — out to `jail.rs`.
+    use crate::worktree::jail::{ResolvedMac, seatbelt_profile};
 
     /// A `ResolvedMac` whose `.tmp` exists and whose `profile_path` sits under it —
     /// the shape `resolve_inputs` produces (`<wt>/.tmp/jail.sb`).
@@ -1075,39 +1046,8 @@ mod tests {
     }
 
     // ── VT-3 (EX-3): write_seatbelt_profile is the single profile writer ────────
-    // `write_seatbelt_profile(resolved)` writes exactly `seatbelt_profile(resolved)`
-    // to `resolved.profile_path`; an io error (unwritable path) returns `Err`.
-    // Pure `fs::write`, no `sandbox-exec`.
-
-    #[test]
-    fn write_seatbelt_profile_writes_exact_body_to_profile_path() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dot_tmp = fs::canonicalize(tmp.path()).unwrap().join(".tmp");
-        fs::create_dir_all(&dot_tmp).unwrap();
-        let resolved = resolved_at(&dot_tmp);
-
-        write_seatbelt_profile(&resolved).expect("write succeeds");
-
-        let body = fs::read_to_string(&resolved.profile_path).expect("profile written");
-        assert_eq!(
-            body,
-            seatbelt_profile(&resolved),
-            "write_seatbelt_profile writes exactly seatbelt_profile(resolved)"
-        );
-    }
-
-    #[test]
-    fn write_seatbelt_profile_io_error_returns_err() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = fs::canonicalize(tmp.path()).unwrap();
-        let mut resolved = resolved_at(&root.join(".tmp"));
-        // profile_path under a directory that does not exist ⇒ fs::write fails.
-        resolved.profile_path = root.join("nonexistent-dir").join("jail.sb");
-
-        let result = write_seatbelt_profile(&resolved);
-        assert!(
-            result.is_err(),
-            "write_seatbelt_profile must return Err on io error"
-        );
-    }
+    // The two tests that proved this moved to `jail.rs` with their subject
+    // (SL-254 PHASE-01, DEC-206), verbatim. `resolved_at` above stays — the
+    // `materialize_seatbelt_profile` tests still use it, and it dies with this
+    // module in PHASE-04.
 }
