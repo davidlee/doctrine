@@ -17,11 +17,13 @@ fresh-as-of: 2026-08-13 · PHASE-01 complete (1/9) · ef59ad0f5
 - design locked and nine phases materialised (caf7f2a21)
 - minted across scope + design: DEC-202..DEC-218, EVD-023, QUE-214, QUE-215,
   ISS-347, ISS-349, IMP-428, IMP-429, CHR-062, and SL-255 (the clone half)
-- **`research/` is GONE.** The pre-design round's `research.md` was runtime-tier
-  and did not survive a state wipe — exactly the loss the first harvest warned of.
-  Its conclusions live on only where they were lifted into `design.md` and the
-  `DEC` records. Do not cite `research.md`; it cannot be read
-- the design run `dr-019ff653` snapshot is likewise gone (runtime loss, not a
+- ~~**`research/` is GONE**~~ — **RESTORED by the user 2026-08-13**, same session.
+  It had been absent when this capsule started (runtime tier, gitignored, so the
+  checkout carried no copy). `research.md` reads intact and its baseline pins
+  exactly to `5a68bfd9e`. **`raw/` did NOT come across** — the five per-thread
+  agent outputs the header cites (`raw/governance.md` …) are still missing, and
+  they exist nowhere durable
+- the design run `dr-019ff653` snapshot is still gone (runtime loss, not a
   missing run). Authored `design.md` + `plan.toml` stand; `design show` refuses
 - 11 friction observations recorded, all committed
 - `.doctrine` changes committed promptly throughout, and PHASE-01's code went out
