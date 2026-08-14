@@ -518,13 +518,31 @@ was to be about. Carried in *Follow-Ups*.
 
 ## Follow-Ups
 
+> **All three discharged 2026-08-14**, the first two *after* the slice went
+> `done` — see the note at the end of this section.
+
 - **At reconcile — contribute the post-capsule finding to `RFC-025`.** Inherited
   from `SL-247` (`inq-7`, user 2026-08-06), which was abandoned before its
   reconcile could discharge it. Deliberately deferred to reconcile for the same
   reason as before: until the arm is actually gone the finding is a prediction.
+  **Discharged 2026-08-14** — `RFC-025` § *The subagent residue (2026-08-14)*.
+  It answers `SL-247`'s aim (2) as a measurement: the three post-deletion
+  subagent populations, the fact that *capsules replace dispatch* does not entail
+  *capsules replace subagent confinement* (there is nothing left to replace), the
+  census caveat that now needs correcting, and the sequencing lesson from
+  `DEC-154` — accepted, priced, never built, its surface deleted underneath it.
 - **At reconcile — disposition the five plausibly-dissolved backlog items**
   (`OQ-2`): `IMP-269`, `IMP-342`, `IMP-334`, `IMP-337`, `IMP-407`, plus
   `IMP-401` and `IDE-024` themselves. Confirm; do not close by assumption.
+  **Discharged 2026-08-14.** Four dissolved (`IMP-269`, `IMP-342`, `IMP-334`,
+  `IMP-337` → `resolved`/`obsolete`) on the deletion of `pretooluse.rs` and
+  `subagent.rs`, which is `DEC-152`'s ruling delivered by removal. Three did not:
+  `IMP-407` stays **open** (it is about hook activation as a diagnosis problem,
+  from `SL-250`, not about the hooks this slice removed); `IDE-024` →
+  `resolved`/`promoted`, because `SL-255` is its mechanism in full and
+  `worker_commit`'s deletion made its problem *universal* rather than moot; and
+  `IMP-401` → `resolved`/`fixed` on leg 2 only, with leg 1's lost enforcement
+  rehomed as `RSK-232` rather than closed silently.
 - **At reconcile — sweep the memory corpus for deleted claude-arm mechanisms.**
   Surfaced at design (`explore.memory`), not at scoping. At least 25 memories
   describe mechanisms this slice removes — `SubagentStart` stamping, `PreToolUse`
@@ -536,3 +554,15 @@ was to be about. Carried in *Follow-Ups*.
   snapshot, so the staleness reaches every session. Route through
   `/reviewing-memory`; retire or re-anchor rather than editing in place where the
   memory's whole subject is gone. Triage detail in `notes.md`.
+  **Discharged 2026-08-14** — rehomed as `CHR-063`, carrying the measurement
+  (104 live project-local memories, 0 shipped), the already-done retraction of
+  `mem.signpost.doctrine.dispatch-claude-arm-wrong-base` — the only one indexed
+  in the boot snapshot — and three per-item dispositions.
+
+**A note on how these were discharged, because it is the point.** Two of the
+three were still outstanding when this slice went `done`. Nothing refused the
+transition, nothing reported them, and they were recovered in a post-close
+conversation by accident. The third survived only because someone chose to mint a
+card for it. That is `ISS-354` — *slice follow-ups have no mechanical discharge
+gate* — whose provenance is this section, and whose sibling is `IMP-418` (the
+same defect one ledger over, on phase-sheet findings).
