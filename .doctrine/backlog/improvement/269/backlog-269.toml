@@ -5,10 +5,10 @@ id = 269
 slug = "fork-subagents-rejected-from-writing-outside-worktree-jail"
 title = "Fork subagents rejected from writing outside worktree jail"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "obsolete"
 created = "2026-07-05"
-updated = "2026-07-20"
+updated = "2026-08-14"
 tags = ["area:dispatch", "area:worktree"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

@@ -9,3 +9,18 @@ When `isolation: worktree` is omitted from a dispatch-worker Agent call, the age
 
 ## Suggested Fix
 `dispatch arm-spawn` (or a pre-spawn lint) should emit a reminder that the next Agent spawn MUST carry `isolation: worktree`. A cheap invariant: on any "worker in coord tree" symptom, FIRST confirm the flag was present.
+
+## Resolution — obsolete (2026-08-14, `SL-254` reconcile)
+
+Both halves of this item's subject are gone. `SL-254` collapsed dispatch onto a
+single confined-subprocess arm (`DEC-202`), so there is no in-session `Agent`
+dispatch-worker spawn to omit `isolation: worktree` from; and `arm-spawn` —
+the verb this item proposed hanging the pre-spawn lint on — has zero references
+in `src/`.
+
+A worker is now launched by `./scripts/spawn-confined.sh`, which creates the
+worktree itself. The failure mode this item costs out (~3–5 wasted spawns per
+occurrence, ~50–100k tokens each) is structurally unreachable: there is no flag
+to forget.
+
+Provenance: `SL-254` Follow-Ups `OQ-2` · `DEC-202`.

@@ -5,10 +5,10 @@ id = 342
 slug = "subagent-worktree-jail-hook-blocks-read-only-cli-reads-from-delegated-research-subagents"
 title = "Subagent worktree-jail hook blocks read-only CLI reads from delegated research subagents"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "obsolete"
 created = "2026-07-28"
-updated = "2026-07-28"
+updated = "2026-08-14"
 tags = ["area:cli", "area:dispatch", "area:worktree"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

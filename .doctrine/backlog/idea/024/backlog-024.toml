@@ -5,10 +5,10 @@ id = 24
 slug = "confined-claude-clone-cherrypick"
 title = "Confined claude worker via standalone clone: worker self-commits, orchestrator cherry-picks"
 kind = "idea"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "promoted"
 created = "2026-06-30"
-updated = "2026-07-03"
+updated = "2026-08-14"
 tags = ["area:dispatch", "harness:claude"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

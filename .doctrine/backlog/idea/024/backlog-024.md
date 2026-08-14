@@ -59,3 +59,34 @@ that point.
 Refs: SL-182 (Path L, the chosen close), RSK-014 (the risk), ADR-006/008/012
 (worktree topology), `case-notes.md` SL-171 (pi self-commit / hollow-green
 evidence).
+
+## Resolution — promoted (2026-08-14, `SL-254` reconcile)
+
+Promoted to **`SL-255` — *Provision dispatch workers as clones*** (`proposed`,
+`after SL-254`), which is this idea's mechanism in full: a clone's writable
+`.git` inside the rw bind, worker self-commit, orchestrator harvest. `SL-255`
+says so in its own Context — *"`IDE-024` (2026-06-30) reached the same shape
+independently, including the self-commit consequence"* — and carries
+`references(concerns): IDE-024`. `RFC-025` schedules it as capsule roadmap step 3
+("raw-clone provisioning").
+
+`SL-255` also supplies what this idea asked for and never had: a **stated
+verification obligation** rather than a plausible-sounding mechanism. Its `A1`
+is *clone self-commit*, to be verified before anything downstream is built —
+"if it fails, this slice's objectives 2 and 3 fail with it".
+
+### What changed under it, and why that does not reopen it
+
+`SL-254` deleted the gated `worker_commit` MCP tool (`DEC-204` / `DEC-213`), so
+after that slice **no** arm self-commits — the orchestrator imports a
+working-tree diff on every arm. This idea's problem therefore became *universal*
+rather than dissolved, which raises its value rather than retiring it. Its stated
+value axis was never commit aesthetics: it is that a worker which cannot commit
+cannot run a commit-gated self-verify, so the whole verification burden falls on
+an orchestrator that must re-run the suite because it cannot trust a
+self-reported green.
+
+Closed `promoted`, not `obsolete`: the work is scheduled, not abandoned.
+
+Provenance: `SL-254` Follow-Ups `OQ-2` · `DEC-213` · `SL-255` `A1` · `RFC-025`
+capsule roadmap step 3.

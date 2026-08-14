@@ -101,3 +101,21 @@ blinded check but the un-policed drift Leg 2 addresses.
 - `doctor` has no governing spec (research thread 2, open governance question 2):
   SL-168 built the verb and check legs accreted without one. A pre-existing gap
   this item inherits rather than creates.
+
+## Reviewed at `SL-254`'s reconcile (2026-08-14) — stays open
+
+`SL-254` listed this item among the five it thought its deletions might dissolve
+(`OQ-2`, *"confirm; do not close by assumption"*). Confirmed: it does not.
+
+The overlap is superficial. `SL-254` deleted two hooks — the `SubagentStart`
+stamp and the `worktree pretooluse` matchers — but this item is not about those
+hooks. It came out of `SL-250` (*Retire the Claude plugin delivery channel*) and
+is about **hook activation as a diagnosis problem**: `SessionStart` hooks still
+exist, an inert install still fails silently, and nothing names the blocking
+layer. Removing two hook consumers does not remove that.
+
+If anything the case is marginally stronger — with fewer hooks registered, an
+install where none fire is harder to notice by symptom.
+
+Unchanged: `references(originates_from) IMP-400`, `references(concerns) RFC-018`,
+`after SL-250`.

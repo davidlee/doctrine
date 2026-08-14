@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 334
-slug = "claude-arm-isolationworktree-omission-costs-a-full-worker-cycle-add-pre-spawn-check"
-title = "Claude arm isolation:worktree omission costs a full worker cycle — add pre-spawn check"
-kind = "improvement"
-status = "resolved"
-resolution = "obsolete"
-created = "2026-07-28"
+id = 354
+slug = "slice-follow-ups-have-no-mechanical-discharge-gate"
+title = "Slice follow-ups have no mechanical discharge gate"
+kind = "issue"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-08-14"
 updated = "2026-08-14"
-tags = ["area:dispatch", "area:skills", "footgun", "harness:claude"]
+tags = ["area:lifecycle", "audit", "close", "reconcile", "tooling"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -20,3 +20,17 @@ tags = ["area:dispatch", "area:skills", "footgun", "harness:claude"]
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "SL-254"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "ADR-009"
+
+[[relation]]
+label = "related"
+target = "IMP-418"

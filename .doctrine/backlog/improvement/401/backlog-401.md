@@ -152,3 +152,37 @@ and the card should not be scoped as though it does.
 - IMP-400: retire the Claude plugin channel — shares the hook-activation seam.
 - RSK-014: the probe series that established the confinement mechanism.
 - ADR-011, ADR-020: incumbent and successor authority.
+
+## Resolution — fixed, one leg of two (2026-08-14, `SL-254` reconcile)
+
+This item set two goals. They did not land the same way, and closing it without
+saying so would record a dropped guarantee as a delivered one.
+
+**Leg 2 — *subagents not in a worktree work at all* — shipped.** The acute
+defect is gone. `SL-254` deleted `src/worktree/pretooluse.rs` and
+`src/worktree/subagent.rs` whole; `jail.rs`'s module doc records that the
+`PreToolUse` per-tool-call decision layer is gone and *"what remains is the
+WRAP-PREFIX core"*. An ordinary subagent is unmediated, which is exactly what
+`DEC-152` ruled on 2026-08-05. `IMP-269` and `IMP-342` — the two items this leg
+was the general case of — are resolved `obsolete` on the same evidence.
+
+**Leg 1 — *worktree-isolated subagents stay in their worktree* — lost its
+enforcement.** `DEC-152` granted the pass-through while explicitly preserving
+the other arm: *"`Jail(wt)` behaviour is unchanged and stays proven by the
+existing suites."* `SL-247` was to build that split and was abandoned; `SL-254`
+reached `DEC-152`'s effect by deleting the whole surface instead, which removes
+both arms. Dispatch workers are strictly better off — bwrap in place of a
+fail-open hook — but a **solo** `/worktree` subagent now has a worktree and no
+boundary.
+
+That is not fixed and it is not obsolete, so it does not close here. It is
+tracked as **`RSK-232`** (*Worktree subagent write-confinement is unenforced*),
+which carries the evidence, the `DEC-152` contradiction, and three fix
+directions.
+
+Closed `fixed` on leg 2, which was the item's stated acute defect and the reason
+it was cut. It was also declared *"explicitly interim and deletable — it should
+not accrete anything the capsule cutover then has to unpick"*; leaving it open
+as a shell around one residual would be exactly that accretion.
+
+Provenance: `SL-254` Follow-Ups `OQ-2` · `DEC-152` · `DEC-202` · `RSK-232`.
