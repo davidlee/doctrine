@@ -21,6 +21,43 @@ choreography. The mechanism census records **15 primary DELETE rows**, alongside
 13 transformations, 17 keeps, and one row scoped to solo worktrees. It does not
 authorize deleting present-tense governance before an implementation exists.
 
+> **Restated at `SL-254`'s reconcile (2026-08-14 — `RV-356` `F-11`, owner ruling
+> of the same date).** The list above was drafted against the pre-`SL-254`
+> baseline and no longer describes what ships. `SL-254` collapsed dispatch onto
+> one confined-subprocess arm — *before* any capsule adoption and explicitly not
+> as one (`DEC-203`) — and in doing so deleted four of the mechanisms enumerated
+> as unnecessary: the disk worker marker, the `SubagentStart` stamp, the gated
+> `worker_commit` exception, and per-harness arm routing and altitude (with its
+> `worktree pretooluse` wall). They were not retired *by* this Revision, and
+> their disposal is not evidence for it.
+>
+> **`DOCTRINE_WORKER` moved the other way and comes off the list.** It is no
+> longer a cooperative flag a worker could assert for itself: it is set by the
+> same confining argv that establishes the kernel write floor, so on the dispatch
+> path it cannot be claimed by a process that is not confined. It is now the
+> incumbent identity mechanism, not one the target renders redundant. The capsule
+> target still replaces it — with an OS boundary in place of an env contract —
+> but that is a *substitution*, not the removal of a redundancy, and it must be
+> argued as one.
+>
+> **What survives on the list is the load-bearing remainder:** base-by-placement,
+> coordination-worktree placement, patch import, and the nominated-unjailed
+> orchestrator choreography. That is the incumbent complexity the capsule case
+> now actually rests on, and it is the pair of brittlenesses `ADR-020`'s Context
+> retains after `REV-053`'s amendment — a shared Git object store between
+> coordination and untrusted work, and a trusted orchestrator replaying a large
+> worktree/import choreography.
+>
+> **The gates below are unchanged.** Nothing `SL-254` shipped is evidence for the
+> capsule authority model, and nothing it deleted discharges a cutover gate. What
+> moved is the baseline this Revision argues *from*, not the debt it argues
+> *for*. Restating the premises is the whole point of this note: a case that
+> still counts already-deleted mechanisms among its motivating costs over-claims,
+> and an over-claimed case is harder to re-examine honestly at the cutover it
+> exists to gate. The census's 15 DELETE rows stand unrestated — they are a
+> faithful record of `RFC-025`'s reading at the time it was taken, not a
+> present-tense inventory.
+
 This Revision therefore stages **target-state revise intent** while preserving
 the incumbent/target distinction. It remains `proposed`, unapplied, and
 unapproved until the gates below clear. ADR-011 and the existing dispatch specs
@@ -174,21 +211,39 @@ is that canonical mutation belongs to the control plane.
 
 Preserve the independently useful in-tree build target, no-mid-dispatch-install
 fact, and deferred cache posture. Recast bwrap from a codex/pi enhancement into
-the measured Linux capsule backend. Retire the nominated-unjailed orchestrator
-mechanism and ADR-008's `worker_commit` note only at capsule cutover. Do not state
-or imply that macOS Seatbelt is already selected or measured.
+the measured Linux capsule backend. Do not state or imply that macOS Seatbelt is
+already selected or measured.
+
+> **Restated (`RV-356` `F-11`).** As drafted, this row deferred two further
+> retirements to cutover — the nominated-unjailed orchestrator mechanism, and
+> `ADR-008`'s `worker_commit` note. **Both are already discharged**, and neither
+> is this Revision's to land. `SL-254` retired `D-B6` whole (`adr-008.md:26-30`:
+> `subagent.rs` and `pretooluse.rs` deleted entire, Mode B retired with them,
+> `DEC-217`), and deleted the `worker_commit` tool, whose note `REV-052` swept
+> (`N1`, `:446-465`). What this row still asks for is the confinement-machinery
+> recast, nothing more — and note that `SL-254` moved bwrap from enhancement to
+> floor ahead of it (`:20-21`), so the recast now starts from a nearer baseline
+> than the sentence above implies.
 
 Egress allowlisting and non-Git build-input provisioning do **not** land here;
 DEC-129 and IMP-397 own that separate follow-on.
 
 ### ADR-011 — incumbent until cutover, then superseded for dispatch (`modify`)
 
-ADR-011 remains present-tense authority while the Claude arm uses an in-session
-`Agent`, disk marker, hook stamp, and gated worker commit. The target capsule ADR
-will replace its dispatch authority with uniform headless subprocess launch and
-OS-boundary identity. Add the eventual supersession/status row only when that
-target ADR exists and the implementation cutover is ready; scoping does not make
-shipped history false early.
+ADR-011 remains present-tense authority for the incumbent dispatch spawn
+interface. ADR-020 will replace its dispatch authority with uniform headless
+subprocess launch and OS-boundary identity. Add the eventual
+supersession/status row only when the implementation cutover is ready; scoping
+does not make shipped history false early.
+
+> **Restated (`RV-356` `F-11`).** As drafted, this row grounded that authority in
+> the Claude arm's in-session `Agent`, disk marker, hook stamp, and gated worker
+> commit. All four are gone: `SL-254` deleted them and amended `ADR-011` in place
+> rather than superseding it, so ADR-011's present-tense authority now rests on
+> the single confined-subprocess arm it describes. The conjunction gating the
+> supersession row also lost half its force — the target ADR now *does* exist
+> (`ADR-020`, accepted) — leaving implementation-cutover readiness as the sole
+> live condition.
 
 ### ADR-012 — keep admission and CAS, replace coordination topology (`modify`)
 
@@ -216,6 +271,14 @@ Before this Revision may be approved or applied:
 4. The implementation names the exact compatibility/cutover point at which no
    dispatch run can still depend on marker, hook, `worker_commit`, worktree
    import, or coordination-worktree mechanisms.
+   > **Note (`RV-356` `F-11`, 2026-08-14).** Three of these five — marker, hook,
+   > `worker_commit` — no dispatch run can depend on already; `SL-254` deleted
+   > them. The gate is **not** relaxed: it still binds worktree import and
+   > coordination-worktree placement, which is where its force always lay, and
+   > naming a discharged dependency costs nothing. `DOCTRINE_WORKER` is
+   > deliberately absent from this list and stays absent — it is the incumbent
+   > identity mechanism the cutover *substitutes*, not a compatibility residue
+   > the cutover must first shed.
 5. Every current requirement listed above receives an explicit keep, transform,
    retire, or solo-scoped disposition; no mechanism is retired solely because a
    census row says DELETE.

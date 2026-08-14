@@ -302,3 +302,220 @@ dissolved backlog items (`IMP-269`, `IMP-342`, `IMP-334`, `IMP-337`, `IMP-407`,
 keeps its tier `pending` as a contract. Also open, and recorded rather than taken:
 no `[[source]]` anchor points at `scripts/spawn-confined.sh`, now the central
 shipped mechanism — adding one is a spec-boundary decision.
+
+## Reconciliation Outcome
+
+Reconciled 2026-08-14 on `audit/SL-254`. Every brief item is resolved. All 15
+findings remain `verified` — remediation is recorded here, never by mutating a
+finding's disposition.
+
+### Direct edits applied
+
+- **`design.md` §5.2.1 opening** (`F-2`) — the parity claim *"everything
+  harness-specific reduces to two facts: the config directory to bind, and the
+  exec line"* is retired, not repaired. Replaced by an enumeration on **two axes**:
+  a harness table (config dir, exec line, completion signal, host credential
+  precondition) and a platform table (`DOCTRINE_WORKER`, `TMPDIR`, network,
+  capability probe). Both are prefixed by a `> **Reconciled (RV-356 F-2)**`
+  blockquote stating that each list is a **floor**, not a closed set — the count
+  was never the defect.
+- **`design.md` §5.1 diagram and `D4` (§7.2)** (`F-2`) — §5.1's
+  `PREFIX resolution (harness parameterises ONE token pair)` line now cites the
+  enumerated asymmetry sets instead. `D4` now reads *"The decision holds; its
+  stated ground does not. Harness does **not** reduce to two tokens…"* — the
+  decision is preserved and its false premise withdrawn, which is the honest
+  shape for a decision that turned out right for a wrong reason.
+- **`design.md` §5.2.1 claude exec snippet + flag table** (`F-10`) — `--verbose`
+  added to the quoted command (`claude -p --output-format stream-json --verbose \`)
+  and a matching flag-table row citing `DEC-215`,
+  `claude_arm_stream_json_carries_verbose` in `jail.rs`, and
+  `spawn-confined.sh:236-245`. As printed the design's command hard-refused in
+  1.4s.
+- **`design.md:557` and `design.md:895` (§5.6)** (`F-3`) — `:557`'s
+  `worktree/import.rs` row now reads **untouched**: `classify_import` remains the
+  enforcing caller of the two hard-coded scope-belt floors (`.doctrine/**`,
+  `.claude/**`), never read `worker-forbidden-writes`, and does not start now.
+  `:895` strikes the false claim through and records the key as *a declaration
+  with no production reader*, routing the enforcing reader to `SL-255` / `IDE-051`.
+- **`design.md` §5.5 — the `land` edge case** (`F-13`) — retargeted from the
+  drafted `shared.rs:77` / `classify_worktree_role` (which would have refused
+  every `land`) onto the shipped `shared.rs::is_dispatch_fork_branch` (`:112`):
+  `dispatch/` prefix **and** a non-numeric suffix. A paragraph explains the
+  failure the drafted mechanism would have caused; intent and the
+  "strictly stronger" claim are unchanged.
+- **`design.md` §5.5 — the `--verbose` edge case** (`F-10`) — settled as
+  mandatory, not build-dependent.
+- **`design.md` §5.6** (`F-8`) — a
+  `**Reconciled: the table was still a floor, and the registry is the
+  load-bearing copy**` paragraph enumerating the 51 declared selectors, plus a
+  standing-lesson paragraph. The mirror is updated **as well as**, not instead of,
+  the registry.
+- **`notes.md`** (`F-15` residual) — new
+  `## Reconcile — the source-delta registry, and where it physically lives`:
+  the authentic `provenance = "solo"` registry rode the capsule sideband
+  (`refs/capsule/a/state/implementation`) into
+  `.worktrees/SL-254-audit/.doctrine/state/slice/254/boundaries.toml`, was copied
+  to the primary tree, is **runtime tier** so it does not land with the branch,
+  and `ISS-350` owns the resolver question.
+
+### Selector registry (the load-bearing fix, `F-8`)
+
+51 selectors declared into `slice-254.toml` via `doctrine slice selector add
+--intent design-target`, in three batches. `slice conformance` moved:
+
+| | before | after |
+|---|---|---|
+| undeclared | 96 | **45** |
+| conformant | 40 | **91** |
+| undelivered | 0 | 0 |
+
+Every remaining undeclared path is the governance-entity class the brief excludes.
+`crates/doctrine-control/src/backend/bubblewrap.rs` was declared rather than
+noted — a one-line doc-comment rename is still reach.
+
+### Knowledge-record corrections
+
+Each landed on the prose tier via `doctrine knowledge edit <ID> --body-mode
+append`, as a dated `## Correction at reconcile (2026-08-14, RV-356 F-N)` section.
+The structured `--consequences` flag was **not** used: it is comma-separated and
+would have split the existing comma-bearing sentences destructively.
+
+- **`DEC-204`, `DEC-213`** (`F-3`) — both named `classify_import` as
+  `worker-forbidden-writes`'s surviving enforcing reader. True of the two
+  hard-coded floors, false of the config key. `worker_commit` is deleted and
+  nothing replaced it.
+- **`DEC-210`** (`F-9`) — binding `$CFG_DIR` **carries** a subscription credential
+  into the jail; it does not **create** one. Records the unstated host
+  precondition: a materialised `~/.claude/.credentials.json`, or
+  `CLAUDE_CODE_OAUTH_TOKEN` in the environment.
+
+### REVs completed
+
+- **`REV-053`** (`reconcile-sl-254`) — **done**. Two `modify` rows, both
+  descriptions that stopped being true; no decision in either ADR changes.
+  - `ADR-001` `layering.toml:138` (`F-6`) — the `worktree::jail` row restated from
+    *"pure jail core — no disk/git/clock/rng"* to **impurity behind the injected
+    `ResolveEnv` seam**, the module's genuine invariant since `SL-183`. The twin
+    source comments (`src/worktree/jail.rs:5` and `:19`) landed **in the same
+    change**, as the row required — they are the copy a reader of the module
+    actually meets. Recorded in the REV that nothing mechanical catches this:
+    `tests/architecture_layering.rs` parses crate-module `use` edges and has no
+    notion of `std::fs`, so the gate is green either way.
+  - `ADR-020` Context (`F-11`) — an `**Amended by REV-053**` paragraph recording
+    that `SL-254` discharged two of the four incumbent brittlenesses the capsule
+    case argues from (cooperative marker identity; harness-specific spawn paths)
+    while the load-bearing pair survives. The decision is unaffected. `:86-88`'s
+    authority clause was left untouched per the brief — it stays literally true.
+  - Rationale and before/after excerpts in `revision-053.md`.
+
+### `REV-046` — restated, by owner ruling
+
+Owner ruling of 2026-08-14: **the rationale is what predates the slice, and it
+should be updated** — the gates' debt is unchanged. `REV-046` is
+`proposed · approval=none`, a live draft rather than authored governance truth, so
+this landed as a **direct prose edit** to `revision-046.md`, not as a row in
+`REV-053`. Four restatement notes:
+
+1. **Rationale ¶2** — four of the mechanisms enumerated as *"unnecessary"* are
+   already gone, deleted by `SL-254`, a slice explicitly **not** a capsule
+   adoption (`DEC-203`): the disk marker, the `SubagentStart` stamp, the gated
+   `worker_commit` exception, and per-harness arm routing and altitude. They were
+   not retired *by* `REV-046` and their disposal is not evidence for it.
+   **`DOCTRINE_WORKER` moves the other way and comes off the list** — it is now
+   the incumbent identity mechanism, set by the confining argv; the capsule target
+   *substitutes* it rather than removing a redundancy, and must argue it as one.
+   The surviving remainder (base-by-placement, coordination-worktree placement,
+   patch import, nominated-unjailed choreography) is what the case now rests on.
+   `RFC-025`'s 15 DELETE rows stand unrestated as a faithful record of their
+   moment.
+2. **The `ADR-011` row** — its grounding clause (*"while the Claude arm uses an
+   in-session `Agent`, disk marker, hook stamp, and gated worker commit"*) named
+   four deleted things. Restated onto the single confined-subprocess arm
+   `ADR-011` now describes; the supersession conjunction also lost half its force,
+   since `ADR-020` now exists.
+3. **The `ADR-008` row** — both deferrals it carried are **already discharged**:
+   `SL-254` retired `D-B6` whole (`adr-008.md:26-30`, `DEC-217`) and deleted
+   `worker_commit`, whose note `REV-052` swept (`N1`). What remains is the
+   confinement-machinery recast, from a nearer baseline than drafted — `SL-254`
+   moved bwrap from enhancement to floor ahead of it.
+4. **Cutover gate 4** — a note, not a relaxation. Three of its five named
+   mechanisms (marker, hook, `worker_commit`) already have no dispatch-run
+   dependents; the gate still binds worktree import and coordination-worktree
+   placement, which is where its force always lay.
+
+`REV-046`'s cutover debt is unchanged, and it remains `proposed · approval=none`.
+
+### Cards minted
+
+- **`ISS-351`** (`F-4`) — `scripts/pi-spawn.sh` asserts worker identity with zero
+  `bwrap`: `:27` forks, `:53` sets `DOCTRINE_WORKER=1`, `grep -c bwrap` is 0.
+  Delete or bring under the confinement prefix — a decision, not a fix.
+- **`CHR-063`** (`F-5`) — sweep the 104 live project-local memories that still
+  assert retired mechanisms. See the corpus-hygiene disposition below.
+- **`CHR-064`** — drop the `base64` dependency `SL-254` orphaned. Verified
+  2026-08-14: zero references in `src/`, `tests/`, `crates/`; the two
+  `tests/mcp-bridge.test.ts` hits are a TypeScript string literal. Its declaring
+  comment (`Cargo.toml:166-168`) names `SL-182 PHASE-02` — whose module `SL-254`
+  deleted whole. Cargo does not warn on an unused dep, so no gate sees it.
+- **`ISS-350`** (`F-15`) — pre-existing, minted during the audit. Confirmed to
+  exist, not re-derived: `boundaries_path()` pins to `primary_worktree(cwd)`
+  (`state.rs:943`) while `phases_dir()` joins the local `project_root` (`:135`),
+  so an adopted worktree reports `10/10` phases and zero source deltas at once.
+
+`IMP-429` (Darwin arm) was **extended, not minted**: a new
+`## What a mac-equipped session should actually test` section folds in `H1`–`H4`
+verbatim in substance.
+
+### Handed back rather than written
+
+- **`PHASE-09`'s `VA-2` intent** (`F-2`). The brief asked to re-word it from
+  *"check Darwin against Linux"* to *"enumerate every asymmetry"*. `VA-2` is a
+  `plan.toml` criterion (`:377`) and criteria ids are **immutable-append** — not a
+  reconcile surface. The corrected intent was routed to `IMP-429`'s `H4` instead,
+  with the reasoning stated in place. No plan file was touched.
+
+### Corpus hygiene — one retraction now, the rest carded
+
+- **Done in this pass**: `mem.signpost.doctrine.dispatch-claude-arm-wrong-base`
+  (`mem_019ee28ee9ee7d608a22dba762fdcc26`) **retracted**, not edited — its whole
+  subject, the `/dispatch-agent` in-session arm, was deleted by `SL-254`. It was
+  the only one of the 105 **indexed in the boot snapshot**, so every agent met it
+  on every boot without retrieving anything, which is why it was handled first.
+  `doctrine boot` re-run and its absence from the snapshot's Memory index
+  confirmed.
+- **Deferred to `CHR-063`** by owner ruling: the remaining **104 live** items
+  (105 files match, one of which is now the retracted one above). A
+  `/reviewing-memory` sweep is per-item retract / re-anchor / leave judgement —
+  a different shape of work from reconcile, and folding it in would hold the close
+  open on unrelated calls. Not urgent; nothing gates on it.
+- **Shipped corpus (`memory/`) confirmed clean at zero.** Nothing `doctrine
+  install` seeds into a client project carries a retired mechanism. The exposure
+  is local to this repo.
+
+### Deferred to close
+
+- **Re-run `doctrine boot` on the landing tree** (`F-1` residual). The fix is
+  committed at `1185a631d`, but each tree's snapshot is gitignored runtime state
+  and regenerates locally — so this is a close-time action on the tree the branch
+  lands on, not something a reconcile commit can carry.
+
+### Withdrawn / tolerated
+
+- **`F-7`** — withdrawn during the audit itself, superseded by `F-14` and then
+  corrected by `F-15`. There was no missing-source-delta gap: all ten phases
+  recorded automatically, the capsule sideband delivered the registry, and the
+  apparent emptiness was `boundaries_path()` reading the wrong tree. Its
+  replacement card is `ISS-350`. Confirmed at reconcile: `slice conformance`
+  resolves and reports, because `F-15`'s copy-across had already been applied and
+  this audit worktree is a linked worktree of the same repo.
+- **`F-1`, `F-12`** — fixed inside the audit; only `F-1` left a residual (above).
+  `F-12`'s `----- worker commit -----` transcript banner needed no reconcile
+  surface.
+
+### Gate
+
+`doctrine check gate` — exit 0, 117 `test result: ok` blocks, zero
+`test result: FAILED`, zero clippy warnings. Run after the `src/worktree/jail.rs`
+comment edit, the only source change in this pass.
+
+Reconcile pass complete — handoff to `/close`.

@@ -97,3 +97,11 @@ That is a live question requiring separate debate, not a description fix. Per th
 split rule it is deliberately **not** a row in this REV, so a stuck row cannot
 block `SL-254`'s close. Its disposition is recorded in `RV-356`'s
 `## Reconciliation Outcome`.
+
+**Settled 2026-08-14 — the rationale, not the gates.** The owner ruled that the
+assumptions written into `REV-046` predate `SL-254` and should be updated.
+`REV-046` is `proposed · approval=none` — a live draft, not authored governance
+truth — so this landed as a direct prose edit to `revision-046.md`, not as a row
+here: four restatement notes (the Rationale's mechanism list, the `ADR-011` and
+`ADR-008` rows, and cutover gate 4). The gates themselves are untouched in
+substance; `REV-046`'s cutover debt is unchanged.
