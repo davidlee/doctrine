@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 221
+slug = "drift-pin-splits-enums-generated-struct-fields-literal-pinned"
+title = "Drift pin splits: enums generated, struct fields literal-pinned"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-14"
+updated = "2026-08-14"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-219 made enum token vocabularies and serde tagging part of the act contract, so the drift pin has to cover two different kinds of thing. A struct's field set is reachable from one serialised value; an enum's variant set is not. The repo holds both mechanisms already — SL-249's `I9` (serde-key-set equality against an exhaustive no-`..` literal) and SL-244's `condition_vocabulary!` (single-source generation) — and SL-244's macro doc comment argues explicitly against hand-written `ALL` arrays."
+choice = "Split the mechanism by what it pins. Enum vocabularies are generated on `condition_vocabulary!`'s pattern, one literal serving both `as_str` and the serde token. Struct field sets are pinned by serde-key-set equality against an exhaustive no-`..` literal, on `I9`'s pattern. Neither existing precedent is displaced."
+alternatives = ["Tier 2 throughout — authored tables plus per-type exhaustive literals plus hand-written `ALL` arrays. Rejected: it inherits the `ALL` weakness on exactly the half DEC-219 made load-bearing. `ActKind::ALL` (8 members) and `Advance::ALL` (4) are hand-written with no completeness pin today, so a new variant would render a contract silently omitting itself.", "Tier 3 throughout — a macro generating the payload structs, their serde attributes and the contract table. Rejected on blast radius, not on principle: clippy does not lint tokens a macro body wrote (`gate.rs:459-462`, measured), and here that blindness would cover most of `submission.rs` rather than one enum, for a slice scoped as a documentation surface."]
+rationale = "Each mechanism goes where its cost is lowest and its oracle actually exists. Generation is confined to small closed enum definitions, which is where tier 2 has no oracle at all; the exhaustive literal covers struct fields, which is where tier 2 already has a compile-error oracle and generation would buy nothing but lint blindness."
+consequences = ["Two mechanisms rather than one, so inq-6's totality argument runs twice — once over acts, once over variants.", "The clippy tax is confined to the generated enum definitions.", "HELD LOOSELY, at the user's explicit direction: this is type-design detail the implementing agent is better placed to navigate, and later findings may overturn it. Revisit without ceremony if the enum set proves small and stable enough that per-enum generation costs more than it saves, or if the count of nested payload types makes per-type `fully_populated` literals the dominant cost. Superseding this record is expected, not exceptional."]
+decided_by = "user"
+decided_on = "2026-08-14"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-251"

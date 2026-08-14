@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffb44-9150-7a43-8bd3-d186a4b1bfc6"
+recorded_at = "2026-08-13T13:16:42.704271249Z"
+kind = "friction"
+summary = "/design: agent_declaration's act is externally tagged, and nothing says so"
+detail = """Submitting the blocking set, I wrote {"act":{"act":"blocking-set-declared","blocking":[...]}} by analogy with DelegationAct (internally tagged, tag="act") and CheckpointActDeclaration (act: ActKind). AgentAct is externally tagged, so the correct spelling is {"act":{"blocking-set-declared":{"blocking":[...]}}}. Cost: one refused apply plus a source read of src/design_run/attestation.rs:664-683. Three sibling act types, three different taggings, no fetchable contract — this is SL-251's own thesis biting during SL-251's design run."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

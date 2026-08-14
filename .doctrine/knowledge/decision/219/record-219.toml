@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 219
+slug = "act-contract-carries-wire-shape-and-engine-semantics-not-narrative"
+title = "Act contract carries wire shape and engine semantics, not narrative"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-13"
+updated = "2026-08-13"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-251 makes `design apply`'s payload contract fetchable. The register it should join was open: `Declaration::WIRE_KEYS` carries a key's home kind, and SL-244's `CONTRACTS` carries derivation, reach and prose. So a contract row could be shape only, shape plus engine semantics, or shape plus a sealed narrative asset per act on DEC-122's pattern."
+choice = "Rows carry wire shape and engine semantics: key, type, required/optional, owning act, and the token vocabulary of every enum a key admits — including how each act type is serde-tagged. No per-act narrative asset."
+alternatives = ["Shape only — key, type, required/optional, owning act. Rejected: knowing `traversal` exists says nothing about `posture` admitting only `breadth|depth`, and the measured cost was exactly that class of lookup.", "Shape plus semantics plus a sealed narrative asset per act, on DEC-122's pattern. Deferred, not rejected: it buys a second asset family and pulls the sealing question and IMP-372's override seam into this slice for value no evidence yet demands."]
+rationale = """The 15 payload-shape lookups RFC-026 E8.7 measured were shape questions, not comprehension questions. Two independent failures during this slice's own design run were the same class: `AgentAct` is externally tagged while its sibling `DelegationAct` is internally tagged (`tag = "act"`) and `checkpoint_act` takes a bare enum — three taggings across three sibling types, discoverable only from source. Narrative would have prevented neither. DEC-123 also records that the const table is the one place where adding structure later is free (compile-time data, never serialised, no wire version, no override seam), so the deferred narrative stays cheap to add if a client project ever demonstrates it is needed."""
+consequences = ["The contract must enumerate enum token vocabularies and tagging style, not just field types — so the drift pin's oracle is a question about more than the top-level serde key set (inq-5 inherits this).", "A client project with no source gets shape and semantics but no narrative. If that proves insufficient, DEC-122's asset pattern is the recorded remedy.", "IMP-372's override seam stays out of this slice, as it did for SL-244."]
+decided_by = "user"
+decided_on = "2026-08-14"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-251"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fff48-34e1-71b3-8700-336457c5dcf4"
+recorded_at = "2026-08-14T07:59:10.049646609Z"
+kind = "friction"
+summary = "backlog id in an authored design doc went stale under concurrent allocation"
+detail = "While closing ISS-350 (informal small-item flow, no skill), the design.md I had read cited ISS-351 for a spun-off issue. A concurrent agent in the same tree then allocated ISS-351 to an unrelated issue (pi-spawn confinement) and the provisioning issue became ISS-352; someone corrected the design doc between my two reads. Cost: a confused re-read plus an ls to work out which id was real, and a stale citation would have shipped silently had I not re-read the tail. Shared id namespace + shared worktree means an authored cross-reference can rot between writing it and committing it, with no signal."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
