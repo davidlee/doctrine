@@ -95,5 +95,61 @@ is taken.
 - `DEC-154` — the unbuilt discriminator, and the spawn-time alternative.
 - `SL-254` — the slice that deleted the surface.
 - `RSK-225` — the pre-existing hole that already limited what the wall claimed.
-- `RFC-025` § *What subagents look like once dispatch is gone* — the post-capsule
-  finding this is the executable half of.
+- `RFC-025` § *The subagent residue (2026-08-14)* — the post-capsule finding
+  this is the executable half of.
+
+## Owner assessment, 2026-08-14 — marginal, with a known dissolution
+
+> Truly *solo* agents are under direct supervision, so marginal risk here.
+> Nothing stops using subprocess agents under a bwrap guard (or indeed a
+> sub-orchestrator driving orchestrators driving such agents) in a local
+> worktree — which is really dispatch under a different hat, and would dissolve
+> this risk for local worktree workers, at the cost of still leaving open the
+> question of how git access would best work (if at all) and how it feeds into
+> the audit machinery.
+
+This lowers the priority and narrows the population, so both are restated here
+rather than left to be re-derived.
+
+**The exposed population is smaller than § *What is and is not exposed*
+implies.** A solo worktree subagent is by definition working beside a human who
+is watching it. That is a live control, not an absent one, and it is the same
+premise `DEC-152`'s decisive leg already rests on — the wall as a guard-rail
+against mostly-accidental holes, not adversarial containment. Combined with
+`RSK-225` (the wall never mediated `mcp__*` anyway) and the outer bubblewrap
+jail, the residual is an unsupervised accidental write in a supervised session.
+Marginal is the right word.
+
+**The dissolution is fix direction 3, and it is already built.** Spawning
+worktree subagents as confined subprocesses under the bwrap prefix is not new
+work — `./scripts/spawn-confined.sh` is that mechanism, in production, on every
+arm after `SL-254`. Using it for a local worktree is *dispatch under a different
+hat*: the same confinement, the same one-arm spawn, without the coordination
+topology. Nesting composes too — a sub-orchestrator driving orchestrators
+driving confined workers is the same primitive applied twice, since the prefix
+is what confines and it does not care how deep the tree is.
+
+So the cost of dissolving this is not building a boundary. It is deciding what
+the *non-dispatch* case does with the two things dispatch supplies around the
+boundary:
+
+* **Git access — whether at all.** The standing trade is that a linked
+  worktree's `.git` is outside the rw bind, so the worker cannot self-commit and
+  the orchestrator imports a working-tree diff. `SL-255` is testing whether a
+  clone dissolves that (`A1`); `IDE-024` is its provenance. A solo worktree
+  worker inherits the same three-way choice — no git at all (hand back a diff),
+  the incumbent import, or a clone — and the answer need not match dispatch's.
+* **How it feeds the audit machinery.** Dispatch has a funnel: `classify_import`
+  and the `.doctrine/` / `.claude/` authored-state write floor, single-sourced
+  at `import.rs:24` precisely so a second caller cannot drift from the first
+  (`DEC-204`). A solo worktree worker returning a diff either rides that funnel —
+  making it the second caller `DEC-204` warns about — or bypasses it, which is
+  how an unaudited change reaches the primary tree. This is the sharper of the
+  two questions and it should be settled before, not after.
+
+**Consequence for this record.** It stays open and stays low. The
+*restate-or-accept* floor in § *Fix directions* is still worth doing on its own
+— `DEC-152` asserts a preservation clause that no longer holds, and correcting
+that is a `DEC` regardless of whether anything is rebuilt. The rebuild, if it
+happens, is not this card: it is a solo-worktree confined-worker capability whose
+real content is the two open questions above, and it wants its own slice.

@@ -12,10 +12,10 @@ updated = "2026-08-14"
 tags = ["area:dispatch", "area:worktree", "cluster:capsule", "confinement", "harness:claude"]
 
 [facet]                         # risk only — every field typed; seeded empty
-likelihood = "medium"
+likelihood = "low"
 impact = "low"
 origin = "guard-rail removed as collateral of SL-254's wall deletion"
-controls = ["outer bubblewrap jail; git makes an errant write recoverable; DEC-152's guard-rail-not-containment framing"]
+controls = ["direct human supervision of solo worktree sessions (owner, 2026-08-14); outer bubblewrap jail; git makes an errant write recoverable; DEC-152's guard-rail-not-containment framing"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -44,3 +44,7 @@ target = "DEC-152"
 [[relation]]
 label = "related"
 target = "DEC-154"
+
+[[relation]]
+label = "related"
+target = "SL-255"

@@ -47,9 +47,13 @@ volunteered it; one (the memory sweep) became `CHR-063`. That last is the
 pattern that works — and it works because someone chose to mint a card, not
 because anything required it.
 
-## For consideration — the owner's proposal (2026-08-14)
+## For consideration — the owner's first proposal (2026-08-14)
 
-Not a decision; recorded as the starting shape for design:
+Not a decision; recorded as the starting shape for design. **Superseded the same
+day** by § *The likely home — obligations*, which keeps the discharge rule and
+drops the new lifecycle state. Kept because the three positions weighed below
+still bound the design space, and because the reasoning that moved off a new
+terminal state is worth having in the record. As first put:
 
 > Maybe we need a terminal state like `done` which is *after* `closed` — and
 > maybe `closed` should be demoted to non-terminal — with a condition that all
@@ -113,3 +117,70 @@ same verb. Design them together.
 state machine) · `ADR-003` §7 (the audit → reconcile → close seam) · `/close`
 skill, step 1 (the harvest conscious-rejection gate — the precedent) ·
 `CHR-063` (a follow-up that was rehomed correctly, by choice).
+
+## The likely home — obligations (`RFC-027`), owner 2026-08-14
+
+> They might best be represented as **obligations** — the outcomes a slice must
+> discharge — and gated at **audit** (either done, deferred, or abandoned).
+> Obligations don't yet exist, but once they do, that would feel appropriate.
+
+This is the better shape than anything sketched above, and it also answers the
+§ *parsing problem*: an obligation is a first-class thing with a status, so the
+gate is a status query rather than a Markdown scrape. It does not need a new
+lifecycle state either — the transition already refuses on unresolved RV
+blockers, and this is the same seam.
+
+**Audit is the right gate, not close.** Audit is where the reconciliation brief
+is assembled — the existing act of *enumerating what this slice owes* — so the
+sweep rides work that already happens. `IMP-418` independently reached the same
+placement for the sibling ledger (*"run at audit or close while the sheets still
+exist"*), which is corroboration rather than coincidence: both are accounting
+over things that stop being readable once the slice ends.
+
+### It does not reopen `H9`, and the distinction has to be stated
+
+`RFC-027` retains *"`H9`'s obligation-graph rejection"* explicitly. `H9` tested
+**obligations as the smallest actionability unit** — sub-phase nodes inside
+phase envelopes carrying their own `needs`/`after` edges, to expose parallelism
+— and the study killed it on two legs that survive:
+
+* **fact ownership** — seven of eight candidate obligation fields restate facts
+  already owned by `EX-N`, `EX-N.text`, the per-phase `requirements` array,
+  `REQ-442`, `REQ-443`, and `compute_next_phases()`;
+* **an unchanged frontier** — obligation granularity moved the actionable
+  frontier on none of `SL-233`, `SL-057`, `SL-229`.
+
+Neither leg reaches this proposal, because it is a different construct wearing
+the same word. **`H9`'s obligations are a scheduling primitive; these are an
+accounting one.** A follow-up is by definition the thing that *no* `EX-N` owns —
+that is what makes it lose-able — so the fact-ownership objection inverts into
+an argument for it. And this makes no claim about parallelism or the actionable
+frontier at all, so the frontier measurement is silent on it.
+
+Do not enter this against `H9`'s reopening condition (*"a named consumer for
+which obligation granularity moves the actionable frontier"*). It is not that
+consumer and should not be presented as one, or a tested disposition gets
+relitigated on evidence that does not bear on it.
+
+### Naming hazard — the word is taken twice already
+
+`H9`'s third finding already flagged *"a naming collision with the shipped
+runbook obligation"*. There is a second: `src/design_run/run.rs` uses
+`obligation` throughout for a **delegation** obligation — an inquiry node
+handed out and owed back, with `outstanding_for` tracking the debt. A third
+sense needs either a distinct word or a mandatory qualifier, decided before any
+schema, not after.
+
+### Two things the three-valued disposition must pin down
+
+* **`deferred` has to mean *deferred onto something durable*** — a backlog item,
+  a slice, an RFC section — not "still prose, later". Otherwise it is today's
+  failure mode with a label on it. `CHR-063` is the worked example of `deferred`
+  done right; `SL-247`'s `inq-7` is the same value with no durable home, and it
+  is why this issue exists.
+* **`abandoned` slices skip audit too.** An audit-time gate does not cover the
+  case that started this — `SL-247` reached a terminal status without ever
+  reaching audit, and its obligation survived only because a later slice's
+  author happened to read it. Abandonment needs its own rule: force the sweep,
+  or require each obligation be explicitly dropped or rehomed as part of
+  abandoning.

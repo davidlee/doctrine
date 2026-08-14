@@ -32,5 +32,10 @@ role = "concerns"
 target = "ADR-009"
 
 [[relation]]
+label = "references"
+role = "concerns"
+target = "RFC-027"
+
+[[relation]]
 label = "related"
 target = "IMP-418"
