@@ -963,6 +963,76 @@ mod tests {
     }
 
     #[test]
+    fn claude_arm_stream_json_carries_verbose() {
+        // SL-254 PHASE-09 — found by the live fire, not by reasoning. The CLI
+        // REFUSES `-p --output-format stream-json` unless `--verbose` rides with
+        // it ("When using --print, --output-format=stream-json requires
+        // --verbose"): the worker exits 1 in ~1s having run nothing. Nothing
+        // asserted this exec line — `spawn_core_tokens` stops at the PREFIX
+        // array's `)` and never reaches the harness exec — so the claude arm
+        // shipped inert, and PHASE-09's spawn was the first time it had ever
+        // been run. Same script-is-source-of-truth technique as the core-flag
+        // parity test: a shell cannot import a Rust constant, so the coupling is
+        // CHECKED here rather than left to a comment (STD-001).
+        let raw = spawn_script_text();
+        // Comments quote `claude -p` several times over; anchor on CODE only.
+        let code = raw
+            .lines()
+            .filter(|l| !l.trim_start().starts_with('#'))
+            .collect::<Vec<_>>()
+            .join("\n")
+            .replace("\\\n", " ");
+        let exec = code.find("claude -p").expect("the claude exec site");
+        let tail = &code[exec..];
+        let end = tail
+            .find("<\"$PF\"")
+            .expect("the claude exec's prompt-file redirect terminates its argv");
+        let argv = &tail[..end];
+        assert!(
+            argv.contains("--output-format stream-json"),
+            "the claude arm requests the stream-json event stream (pi RPC parity)"
+        );
+        assert!(
+            argv.contains("--verbose"),
+            "`-p --output-format stream-json` REQUIRES `--verbose`; without it the \
+             CLI refuses and the worker never starts. argv was: {argv}"
+        );
+    }
+
+    #[test]
+    fn linux_prefix_repoints_tmpdir_inside_the_jail() {
+        // SL-254 PHASE-09 — also found by the live fire. An INHERITED TMPDIR
+        // names an orchestrator-side path that `--ro-bind / /` leaves read-only,
+        // and a harness that mkdirs a per-session scratch dir under it then
+        // fails on EVERY tool call (observed: a confined claude worker whose
+        // Bash tool returned `EROFS … mkdir '$TMPDIR/claude-<uid>/<slug>'`
+        // before any command ran). The macOS arm has always set TMPDIR
+        // (`ENV_TMPDIR`); this asserts Linux does too, and points it at the
+        // `--tmpfs` — never inside `$D`, which would leak harness scratch files
+        // into the working-tree delta the orchestrator imports.
+        let raw = spawn_script_text();
+        let code = raw
+            .lines()
+            .filter(|l| !l.trim_start().starts_with('#'))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let open = code
+            .find("PREFIX=( bwrap")
+            .expect("the Linux inline PREFIX array");
+        let tail = &code[open..];
+        let end = tail.find(')').expect("the PREFIX array close");
+        let array = &tail[..end];
+        assert!(
+            array.contains(&format!("--setenv {ENV_TMPDIR} {PATH_TMP}")),
+            "the Linux jail must repoint {ENV_TMPDIR} at the {PATH_TMP} tmpfs. array was: {array}"
+        );
+        assert!(
+            array.contains(&format!("{FLAG_TMPFS} {PATH_TMP}")),
+            "…and that target must be the tmpfs the jail actually mounts"
+        );
+    }
+
+    #[test]
     fn sandbox_exec_argv_env_token_carries_worker_identity() {
         // VT-1 / design VT-10 (RV-355 F-2): the macOS prefix must establish worker
         // identity, because `DEC-207` deletes the disk marker that carried it there.

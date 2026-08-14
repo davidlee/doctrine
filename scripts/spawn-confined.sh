@@ -180,7 +180,24 @@ case "$(uname)" in
       --bind "$D" "$D"
       --chdir "$D"
       --die-with-parent
-      --setenv DOCTRINE_WORKER 1 )
+      --setenv DOCTRINE_WORKER 1
+      # TMPDIR must point INSIDE the jail's writable set. Inherited, it names an
+      # orchestrator-side path (`/work/tmp`, `/tmp/...`) that `--ro-bind / /`
+      # leaves read-only, and a harness that mkdirs a per-session scratch dir
+      # under TMPDIR then fails on EVERY tool call. Observed live at SL-254
+      # PHASE-09: a confined `claude` worker's Bash tool returned `EROFS:
+      # read-only file system, mkdir '$TMPDIR/claude-<uid>/<slug>'` before any
+      # command ran — it could Read/Edit but could not execute one thing, so
+      # the role band's own "verify as you go" contract was unsatisfiable. `pi`
+      # never surfaced it (no TMPDIR scratch dir on tool startup), which is why
+      # it survived the generalisation. `/tmp` is the `--tmpfs` mounted three
+      # lines up: writable, and destroyed with the namespace. The macOS arm has
+      # always set TMPDIR (`ENV_TMPDIR`, D-mac3) — this is Linux catching up,
+      # inverting §5.2.1's "Darwin is the arm that needs the extra token".
+      # NOTE deliberately `/tmp`, not `$D/.tmp`: a TMPDIR inside the worktree
+      # would land harness scratch files in the working-tree delta the
+      # orchestrator imports.
+      --setenv TMPDIR /tmp )
     ;;
 esac
 # Fail-closed guard: an empty confinement PREFIX must never fall through to an
@@ -216,8 +233,18 @@ else
   #                               in-agent prompt buys nothing (DEC-208, DEC-216)
   # Deliberately unspent: --json-schema (nothing consumes a shaped hand-back) and
   # ANTHROPIC_API_KEY / --bare (forfeits the subscription billing, DEC-210).
+  #   --verbose                   MANDATORY companion to `-p
+  #                               --output-format stream-json`: the CLI hard-
+  #                               refuses the pair without it ("When using
+  #                               --print, --output-format=stream-json requires
+  #                               --verbose") and spawns nothing. Found by
+  #                               SL-254 PHASE-09's live fire — the claude arm
+  #                               had never been run, and no test asserted this
+  #                               exec line, so the arm shipped inert. Guarded
+  #                               now by `claude_arm_stream_json_carries_verbose`
+  #                               in `jail.rs`.
   timeout "$BACKSTOP" "${PREFIX[@]}" \
-    claude -p --output-format stream-json \
+    claude -p --output-format stream-json --verbose \
     --strict-mcp-config \
     --permission-mode bypassPermissions \
     <"$PF" >"$OUT" 2>&1
@@ -230,3 +257,12 @@ tail -40 "$OUT"
 echo "----- worker commit -----"
 git -C "$D" log --oneline -1 2>&1
 git -C "$D" rev-parse HEAD 2>&1
+
+# Propagate the worker's exit status (SL-254 PHASE-09). Previously the script
+# ended on `git rev-parse`, so a worker that never started — the `--verbose`
+# refusal above exited 1 in 1.4s — still exited the SCRIPT 0. An orchestrator
+# that checks the spawn's status saw success and went looking for a delta that
+# was never written. The failure is reported on stderr AND in the status now.
+# `pi_await_and_reap` leaves RC unset on the pi arm (it reaps and reports
+# itself), so default to 0 there rather than inventing a verdict for it.
+exit "${RC:-0}"
