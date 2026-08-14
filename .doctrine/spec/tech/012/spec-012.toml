@@ -15,8 +15,9 @@ responsibilities = [
   "Provision a worktree fork through `worktree provision` as the sole copy path: a pure `select_copies` core copies only allowlisted (`.worktreeinclude`) gitignored files and physically drops every coordination/runtime-tier path even under a broad `**` glob.",
   "Classify the withheld coordination/runtime tier (the five `Tier` variants — `.doctrine/state/`, the `phases` symlink, `handover.md`, inquisition scratch, and memory caches) in `is_withheld`, and back the static `check-allowlist` smell test with `allowlist_violations` — a green result is never completeness, `select_copies` remains the guarantee.",
   "Assert HEAD-stationarity at the batch-commit boundary via `worktree branch-point-check --base B` — a ref-equality compare (`matches`) of coordination HEAD against the orchestrator's pre-spawn base, exit 1 ⇒ re-dispatch; never a merge-base computation.",
-  "Carry the funnel as an `Orchestrator`-classed verb family — `fork` (create + provision + stamp + emit per-wt env, compensating rollback), `import` (the belted dispatch funnel), `land` (solo's non-squash coordination merge), `gc` (durable-patch-id-gated reap) — refused under `worker_mode`, each a pure classifier over an impure git shell.",
-  "Enforce the worker-sole-writer invariant in the CLI via a disk-marker-primary, fail-closed-on-ambiguity guard: `worker_mode = (is_linked_worktree && marker_present) OR env DOCTRINE_WORKER`; a marker-absent linked worktree is refused, `DOCTRINE_WORKER` is the codex/pi worker-on-main optimisation, and an exhaustive `write_class` match bails on authored/Orchestrator/Hook-mint writes while leaving reads and the fork-side read verbs open.",
+  "Carry the funnel as an `Orchestrator`-classed verb family — `fork` (create + provision, compensating rollback; it stamps nothing and emits no per-worktree env — SL-254 `DEC-207`), `import` (the dispatch funnel, belted by exactly two hard-coded floors `.doctrine/**` and `.claude/**` plus the `--slice`-scoped `undeclared-scope` check; the worker cannot commit, so `--from-worktree` gathers the uncommitted delta), `land` (solo's non-squash coordination merge, its dispatch-fork refusal keyed on `shared::is_dispatch_fork_branch`), `gc` (durable-patch-id-gated reap) — refused under `worker_mode`, each a pure classifier over an impure git shell.",
+  "Enforce the worker-sole-writer invariant in the CLI via a process-identity guard: `worker_mode = (env DOCTRINE_WORKER == \"1\")` and nothing else (SL-254 `DEC-207`) — identity belongs to the worker PROCESS, set by the confining spawn argv, so there is no stale class, no cure verb, and no tree-topology conjunct; an exhaustive `write_class` match (`Read`/`Write`/`Orchestrator`, no wildcard arm) bails on authored and Orchestrator writes while leaving reads and the fork-side read verbs open.",
+  "Confine every worker exec below the CLI via the jail seam (`jail.rs`/`jail_prefix.rs`, the `worktree jail-prefix` verb): a bwrap (Linux) or `sandbox-exec` (macOS) wrap whose `--ro-bind / /` makes the filesystem read-only and whose sole write floor is the fork worktree, setting `DOCTRINE_WORKER` in the same argv. Fail-closed and named — a missing backend refuses (`bwrap-unavailable`) rather than spawning unconfined; there is no degraded-altitude rung (SL-254 `DEC-208`).",
   "Capture the impure born frame for memory anchoring in the `git.rs` seam — `forget.remote.v1` remote normalization and `forget.checkout.v1` checkout-state hashing reproduced byte-for-byte — confining all git, disk, and process impurity to one shell module.",
   "Defend the tier merge-safety invariant by construction: the coordination/runtime tier's absence in the fork (not a copied-then-trusted phase sheet) is what makes worker-sole-writer free; the orchestrator pre-distills the withheld state into the worker prompt.",
 ]
@@ -25,9 +26,11 @@ responsibilities = [
 language = "rust"
 identifier = "src/worktree/mod.rs"
 module = "doctrine::worktree"
-# directory module; siblings: allowlist.rs, coordinate.rs, create.rs, dispatch_record.rs,
-# fork.rs, gc.rs, import.rs, inventory.rs, jail.rs, jail_prefix.rs, land.rs, marker.rs,
-# pretooluse.rs, provision.rs, shared.rs, subagent.rs, test_helpers.rs
+# directory module; siblings: allowlist.rs, claim_lock.rs, coordinate.rs, create.rs,
+# dispatch_record.rs, fork.rs, gc.rs, import.rs, inventory.rs, jail.rs, jail_prefix.rs,
+# land.rs, marker.rs, provision.rs, shared.rs, test_helpers.rs
+# (SL-254 deleted pretooluse.rs and subagent.rs whole; marker.rs survives as the
+#  env-only `DOCTRINE_WORKER` identity leg.)
 
 [[source]]
 language = "rust"
@@ -42,3 +45,10 @@ module = "doctrine"
 [[source]]
 language = "markdown"
 identifier = "plugins/doctrine/skills/dispatch/SKILL.md"
+
+# SL-254 note: the one shipped spawn path is `plugins/doctrine/skills/dispatch-spawn/SKILL.md`
+# (the per-harness `/dispatch-agent` / `/dispatch-subprocess` router skills were merged into
+# it) driving `scripts/spawn-confined.sh`. Neither is anchored HERE: `SPEC-021` already
+# anchors the merged skill, and `spawn-confined.sh` is anchored nowhere in the corpus — a
+# genuine coverage gap, but adding an anchor is a spec-boundary decision, not a correction
+# of falsified text, so `REV-052` records it for `/reconcile` rather than taking it.

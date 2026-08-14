@@ -23,8 +23,10 @@ down so future slices touching dispatch stop rediscovering the same ambiguities.
 
 **Boundary with its siblings.** SPEC-012 owns the *verb mechanism* (provision / fork /
 import / land / gc, the worker-mode guard, the born-frame git seam) and SPEC-021 owns
-the *process that wields them* (the funnel cadence, routing, the per-harness altitude,
-the operational gotchas). This spec owns neither. It owns the **git-level contracts
+the *process that wields them* (the funnel cadence, routing, the confined-spawn
+contract, the operational gotchas — "the per-harness altitude" amended SL-254: there is
+one confined-subprocess spawn path and one enforcement floor for every harness). This
+spec owns neither. It owns the **git-level contracts
 those layers both depend on**: which refs exist and what each one *is*, which are
 mutable and which are immutable evidence, how a projection provably and crash-safely
 reaches trunk, and why the candidate layer is shaped the way it is. Verb internals are
@@ -208,6 +210,20 @@ projected but was never integrated (SL-126).
   tree-read returns empty and `prepare-review` projects **0 phase cuts**. This is a
   funnel implementation gap, not a model defect; the model's constraint is stated here so
   the funnel can be held to it. Tracked as ISS-039.
+
+  > **AMENDED — NO LONGER LIVE (SL-254, 2026-08-14).** The model constraint stands;
+  > the operational gap described above does not. `ISS-039` was closed **fixed on
+  > 2026-07-03**, and the "claude arm" it was scoped to no longer exists — SL-254
+  > collapsed dispatch onto one confined subprocess arm for every harness. The
+  > constraint is now met structurally rather than by holding a funnel to it: the
+  > boundary row is landed **into the `dispatch/<N>` object db directly**
+  > (`compose_boundary_tree` / `land_boundary_row` splice `boundaries.toml` into the
+  > branch tip's tree and commit under CAS, working-tree-free), so there is no
+  > worktree-only copy to be left behind; and `prepare-review` carries a
+  > projection-source guard that **fails closed** — it bails naming the missing
+  > phases when the committed ledger lacks a phase the primary registry records as
+  > funnel-owned, instead of silently projecting zero cuts. The paragraph above is
+  > retained as the record of the concern and why the constraint is stated here.
 - **The repair→integrate propagation burden is the operator's (see D1).** The most
   common way to lose a fix is to repair the review-surface candidate and then create the
   close-target from `review/<N>`.

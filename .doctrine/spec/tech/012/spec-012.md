@@ -3,52 +3,75 @@
 <!-- Reference forms: entity ids padded (SPEC-007, ADR-004); doc-local refs bare
      (D1 decision, OQ-1 open question). See .doctrine/glossary.md § reference forms. -->
 
+> **AMENDED — SL-254 (2026-08-14).** SL-254 re-shaped this container in two moves:
+> it collapsed dispatch's **two spawn arms** (an in-session claude `Agent`-tool arm
+> and a codex/pi subprocess arm) onto **one confined subprocess arm** — every harness
+> is spawned by `scripts/spawn-confined.sh <harness>` inside a kernel-level jail
+> (`DEC-208`, `DEC-217`) — and it replaced the **disk worker marker** with
+> process-scoped `DOCTRINE_WORKER` identity (`DEC-207`). Sections that are
+> present-tense *description of shipped mechanism* (Overview, Responsibilities, the
+> mechanism sections) have been **rewritten** to describe what ships. Sections that
+> are *records of reasoning* (Concerns, Hypotheses, Decisions) keep their historical
+> bodies and carry per-item amendment banners. Requirement bodies are amended
+> separately and are not restated here.
+
 ## Overview
 
 Dispatch & worktree is the isolation-and-coordination container for concurrent
 work. It sits beneath the whole-system root (SPEC-003) and carries **no descent**:
 no PRD owns it — ADR-006 (worktree posture: policy-agnostic framework,
 orchestrator-sole-writer dispatch, amended SL-056 G2) and ADR-011 (harness-agnostic
-orchestrator spawn interface and per-harness capability altitude) are its governing
-decisions.
+orchestrator spawn interface and per-harness capability altitude — its
+*per-harness-altitude* half retired by SL-254 `DEC-208`; the harness-agnostic spawn
+interface half stands, now realised as one confined arm) are its governing decisions.
 
 The container's keystone is that **the orchestrator funnel is enforced CLI
 mechanism, not prose an LLM may skip** (ADR-011 context — "mechanism in prose is the
-design smell"). Worker-sole-writer rides a **disk marker the orchestrator stamps
-before the worker runs** — disk is the one identity medium every harness has, an env
-channel is not (ADR-011 D1). The create-or-mark + provision + per-worktree env
-emission core is **harness-identical and golden-testable**; the verbs that carry the
-funnel — `fork`, `import`, `land`, `gc` — are CLI verbs, refused under `worker_mode`,
-not a discipline carried in skill text. What stays prose is only the per-harness
-*spawn* line (subprocess vs in-session `Agent` tool), selected by the `/dispatch-*`
-router.
+design smell"). Worker-sole-writer rides the **`DOCTRINE_WORKER` environment
+variable, and nothing else** (SL-254 `DEC-207`): identity is a property of the worker
+**process**, set by the same confinement argv that establishes its write floor, and
+it dies with the process. The provision core is **harness-identical and
+golden-testable**; the verbs that carry the funnel — `fork`, `import`, `land`, `gc` —
+are CLI verbs, refused under `worker_mode`, not a discipline carried in skill text.
+The spawn line is no longer prose either: `scripts/spawn-confined.sh <harness>` is
+the **sole** spawn path for every harness, and a harness-specific command (for claude,
+`claude -p --output-format stream-json`) is now a **required element of that shipped
+path** rather than the disqualifying smell ADR-011 D3 treated it as. There is no
+`/dispatch-*` router and no second arm to select between.
 
 It owns these mechanisms specific to isolation: **fork provisioning** with a
 two-layer tier exclusion the copy physically cannot leak; the **orchestrator verb
 family** (`fork`/`import`/`land`/`gc`) that creates, funnels, and reaps forks under
-the worker-mode guard; the **worker-mode guard** — disk-marker-primary, fail-closed
-on a marker-absent linked worktree; the **branch-point guard**, a HEAD-stationarity
-assertion at the batch-commit boundary; and the **born-frame git seam** that confines
-all git/disk/process impurity to one shell. Shared substrate — identity, the atomic
+the worker-mode guard; the **worker-mode guard** — one signal, `DOCTRINE_WORKER` set
+on the worker process; the **confinement seam** (`jail.rs`/`jail_prefix.rs`, the
+`worktree jail-prefix` verb) that wraps every worker exec in a bwrap (Linux) or
+`sandbox-exec` (macOS) jail whose write floor is the fork worktree, and that **fails
+closed by name** when no backend is available; the **branch-point guard**, a
+HEAD-stationarity assertion at the batch-commit boundary; and the **born-frame git
+seam** that confines all git/disk/process impurity to one shell. Shared substrate — identity, the atomic
 claim, id allocation, the scaffold/render pipeline, the storage rule and the
 pure/imperative split as system-wide principles — lives in the parent (SPEC-003) and
 the entity-engine container (SPEC-004) and is not restated here. Trunk-side id minting
 and the reseat verb that resolves offline collisions (ADR-006 D3/D8) belong to the
 id-lifecycle container; this container provides the isolation those acts run beneath.
 
-> **Posture.** The funnel-verb family (`fork`/`import`/`land`/`gc`), the marker
-> guard, and the per-harness spawn paths are **forward-intent** — authored downstream
-> of the locked ADR-006 amendment and ADR-011 (SL-056), landing as code across SL-056
-> PHASE-05+. The three read verbs (`provision`/`check-allowlist`/`branch-point-check`)
-> and the born-frame git seam are **shipped**. Requirements stay `pending`; coverage
-> is reconciled, never inferred.
+> **Posture (rewritten SL-254).** The forward-intent posture SL-056 recorded here is
+> **discharged**: the funnel-verb family (`fork`/`import`/`land`/`gc`), the worker-mode
+> guard, the three read verbs (`provision`/`check-allowlist`/`branch-point-check`), the
+> born-frame git seam, and the confinement seam (`jail-prefix` + `spawn-confined.sh`)
+> are all **shipped**. What was forward-intent and did *not* ship in this shape is the
+> **marker** guard and the **per-harness spawn paths** — both retired at SL-254
+> (`DEC-207`, `DEC-208`). Coverage is reconciled, never inferred.
 
 ## Responsibilities
 
 Mirrors the structured `responsibilities` list: provision a fork as the sole copier
 with guaranteed tier exclusion; carry the funnel as an orchestrator verb family
 (`fork`/`import`/`land`/`gc`) refused under the worker-mode guard; enforce
-worker-sole-writer via a disk-marker-primary, fail-closed-on-ambiguity guard; assert
+worker-sole-writer via a **process-identity guard keyed on `DOCTRINE_WORKER`**
+(amended SL-254 — it was a disk-marker-primary, fail-closed-on-ambiguity guard);
+**confine every worker exec in a kernel-level jail whose write floor is the fork
+worktree, refusing by name rather than spawning unconfined**; assert
 HEAD-stationarity at the batch boundary; capture the impure born frame for anchoring;
 and defend tier merge-safety by the tier's absence in the fork.
 
@@ -65,9 +88,12 @@ allowlist would otherwise admit it, so the copy physically cannot leak the tier;
 `allowlist_violations` behind `check-allowlist` is a static *smell test* whose green
 result is explicitly **not** completeness. The withheld tier — the five `Tier`
 variants: `.doctrine/state/`, the relative `phases` symlink, `handover.md`,
-inquisition scratch, and memory caches — is classified in `is_withheld` by `Tier`;
-the worker marker (`.doctrine/state/dispatch/worker`) inherits every withheld-tier
-exclusion with no new tier logic. As a fail-fast convenience, provision aborts before
+inquisition scratch, and memory caches — is classified in `is_withheld` by `Tier`.
+(The worker marker at `.doctrine/state/dispatch/worker` used to be named here as a
+path that inherited every withheld-tier exclusion with no new tier logic; that file no
+longer exists — worker identity is process-scoped, SL-254 `DEC-207` — so the clause is
+moot, not merely stale. Everything else under `.doctrine/state/dispatch/` is still
+withheld by the same `Tier`.) As a fail-fast convenience, provision aborts before
 copying if any `.worktreeinclude` pattern names a withheld tier — the same smell test,
 not a substitute for the copy-time `select_copies` guarantee that runs regardless —
 and `verify_sibling_worktree` refuses to provision the source tree onto itself.
@@ -79,28 +105,51 @@ The funnel is four `Orchestrator`-classed verbs, each refused under `worker_mode
 reap dirs; classifying them `Read` because they spare the authored TOML corpus would
 be a category error, ADR-006 D2/D2a).
 
-- **`fork --base <B> --branch <name> --dir <path> [--worker]`** (codex/pi
-  orchestrator-owned creation): one act — `git worktree add -b <branch> <dir> <B>`,
-  then `provision` (sole copier, withheld excluded), then (if `--worker`) stamp the
-  marker **before any spawn window**, then emit the per-worktree env contract on
-  stdout. It is **compensating cleanup, not a transaction** — git mutations are not
+- **`fork --base <B> --branch <name> --dir <path> [--worker] [--slice N --phase PHASE-NN]`**
+  (orchestrator-owned creation, one path for every harness — amended SL-254): one act —
+  `git worktree add -b <branch> <dir> <B>`, then `provision` (sole copier, withheld
+  excluded). It stamps **nothing**: worker mode is a property of the worker *process*
+  (`DOCTRINE_WORKER`, set by the confining spawn), never of the directory, so `--worker`
+  now only gates the **durable fork binding** — with `--slice`/`--phase` the fork is
+  bound to `(slice, phase)` at creation; without them it is minted **unbound**, which is
+  what the SL-254 spawn path does (`OQ-1`), leaving the funnel row named by the
+  orchestrator's explicit `PHASE-NN`. Status goes to **stderr and stdout stays empty** —
+  the per-worktree env contract it once emitted on stdout went out with the shared
+  `CARGO_TARGET_DIR` redirect; each fork builds into its own in-tree `<dir>/target`
+  (ADR-008 D-B1). It is **compensating cleanup, not a transaction** — git mutations are not
   atomic, so any failure after `git worktree add` triggers a best-effort rollback
   (`git worktree remove --force` + `git branch -D` + reap dir); a rollback that
   itself fails **names the leftover and exits non-zero**.
-- **`import --base <B> --fork <branch>`** — the dispatch funnel (single distilled
-  worker commit, ancestry severed). v1 is the stationary-head case, each step a hard
-  refusal, no auto-merge: precond `HEAD == B` (`branch-point-check`) **and** a clean
-  tree (tracked+staged only); `S^ == B` (single non-merge delta); the **belt** rejects
-  if the `B..S` tracked name-only diff touches `.doctrine/` (`doctrine-touch`) or
-  `.claude/` (`claude-touch`); then `git apply --3way --index` (non-committing — the
-  orchestrator commits **separately**, ADR-006 D7 cadence). **No runtime receipt is
-  stamped** — a flag born before the commit would survive a crash and lie "landed" to
-  `gc`.
+- **`import --base <B> (--from-worktree <dir> | --fork <branch>) [--slice N]`** — the
+  dispatch funnel (single distilled delta, ancestry severed). Since SL-254 the worker
+  **cannot commit** — it is confined to a jail whose git metadata it may not write — so
+  `--from-worktree` (gather the *uncommitted* working-tree delta from the worker's
+  persisted fork dir) is the shipped dispatch source; `--fork <branch>` survives for the
+  already-committed-fork case (amended SL-254). v1 is the stationary-head case, each step
+  a hard refusal, no auto-merge: precond `HEAD == B` (`branch-point-check`) **and** a
+  clean coordination tree (tracked+staged only); for the `--fork` source, `S^ == B`
+  (single non-merge delta); then the **belt**, then `git apply --3way --index`
+  (non-committing — the orchestrator commits **separately**, ADR-006 D7 cadence). **No
+  runtime receipt is stamped** — a flag born before the commit would survive a crash and
+  lie "landed" to `gc`.
+  The belt rejects on exactly three grounds: the tracked name-only delta touches
+  `.doctrine/` (`doctrine-touch`) or `.claude/` (`claude-touch`) — **two hard-coded
+  floors, and nothing else** — plus, when `--slice` is given, a path no design-target
+  selector declares (`undeclared-scope`, SL-180). It has **never** enforced the
+  configurable `worker-forbidden-writes` list (amended SL-254; see Concerns).
 - **`land --fork <branch>`** — solo `/execute`'s analog (multi-commit branch, ancestry
   preserved): `git merge --no-ff <branch>`, **structurally non-squash** (see D7). It
-  refuses a marker-bearing fork (`dispatch-fork` — that delta must funnel through the
-  belted `import`) and a worktree-gone fork (`worktree-gone` — the marker is
-  unreachable, so provenance cannot be verified); a conflicted merge is **aborted
+  refuses a **dispatch-shaped fork branch** (`dispatch-fork` — that delta must funnel
+  through the belted `import`) and a worktree-gone fork (`worktree-gone` — there is
+  nothing live to land from, so the dispatch-fork test would be answering about a
+  corpse). The dispatch-fork test is `src/worktree/shared.rs::is_dispatch_fork_branch`
+  — branch **shape**, `dispatch/<name>` with a non-numeric suffix, which excludes both
+  the coordination branch `dispatch/<NNN>` and solo `/worktree` isolation branches
+  (amended SL-254 `DEC-207`; it was a cross-tree read of the other tree's marker, which
+  the process-scoped env leg cannot do, and it is **strictly stronger** — it fires
+  whether or not a fork was ever stamped). It is *not* `classify_worktree_role`
+  returning `"fork"`: that returns `"fork"` for every linked non-coord worktree,
+  including the solo branches `land` exists to land. A conflicted merge is **aborted
   before** the refusal (a half-merge wedges the tree against the verb's own re-entry
   guard).
 - **`gc --fork <branch> [--superseded-head <SHA>] [--force] [--dry-run]`** — reaps
@@ -112,46 +161,67 @@ be a category error, ADR-006 D2/D2a).
   <SHA>` reaps a re-dispatched (spent-but-never-landed) fork iff `<SHA>` matches the
   branch head (a TOCTOU movement-guard, not a landing proof).
 
-### The worker-mode guard — disk-marker-primary, fail-closed on ambiguity
+### The worker-mode guard — one signal, a property of the process
 
-Worker-sole-writer is enforced in the CLI by a guard in `run()`, before dispatching a
-write-classed **or** `Orchestrator`/`Hook-mint`-classed `Command` (ADR-006 D2a,
-ADR-011 D1):
+> **REWRITTEN — SL-254 (2026-08-14).** This section formerly described a
+> disk-marker-primary, fail-closed-on-ambiguity guard: `worker_mode = (is_linked_worktree
+> && marker_present) OR env DOCTRINE_WORKER`, an eight-row `Cause` truth table, a
+> `marker --stamp-subagent` mint exempt by verb identity, and a `marker --clear
+> --operator` self-brick escape. **All of it is gone** (`DEC-207`). The reasoning that
+> produced it is retained as a record in D3 below; what follows is the shipped
+> mechanism.
+
+Worker-sole-writer is enforced in the CLI by a guard in `run()`
+(`src/commands/guard.rs::worker_guard`), before dispatching a `Write`- **or**
+`Orchestrator`-classed `Command` (ADR-006 D2a, ADR-011 D1 as amended):
 
 ```
-worker_mode(root) := (is_linked_worktree(root) && marker_present(root))  // PRIMARY, agnostic
-                     OR env DOCTRINE_WORKER set                          // codex/pi worker-on-main catch
-if worker_mode(root): refuse(verb)   // names the verb
+worker_mode := env DOCTRINE_WORKER == "1"   // the whole truth (SL-254 DEC-207)
+if worker_mode: refuse(verb)                // names the verb
 ```
 
-The **disk marker is primary and harness-agnostic** (presence-only, no contents, at
-the withheld-tier path `.doctrine/state/dispatch/worker`); `DOCTRINE_WORKER` is a
-**codex/pi optimisation, not the identity** — its one job is to catch the
-*worker-on-main* hazard (a harness that drops the worker on the coordination root,
-where no marker exists). **Critically, a linked worktree whose marker is *absent* is
-treated fail-CLOSED** — the Orchestrator/Hook-mint/write classes are *refused* there,
-not trusted as the orchestrator. This closes two fail-opens at once: the SubagentStart
-stamp-failure case on claude (a worker whose stamp hook errored runs
-`marker_present == false`, and SubagentStart is a read-only event that cannot abort
-it — SL-056 PHASE-02/03), and the deliberate marker self-clear (clearing now *refuses*
-the privileged verbs rather than enabling them). The legitimate orchestrator is
-unaffected — it runs at the coordination root (`!is_linked_worktree`); the sole
-marker-minting verb (`marker --stamp-subagent`) is exempt **by verb identity**, not by
-location. `write_class` is an **exhaustive** match over every `Command` variant with
-no wildcard arm — a future verb is a compile error, never a silently-permitted write
-(design X4). Reads stay open, and `provision`/`check-allowlist`/`branch-point-check`/
-`status` are deliberately `Read` (they write *fork* files, not the doctrine state the
-guard protects). `marker --clear --operator` is a bespoke fifth class — refused by
-env-set, cwd-not-tree-root, and the linked-worktree `--operator` accident-fence, but
-**never by the marker conjunct itself** (locking the marker's only remover behind the
-marker is the self-brick). `worktree status [--assert]` derives the resolved mode and
-its cause from one `describe_mode` core — the human line and the `--assert` exit never
-disagree — and names the `marker --clear --operator` remedy on a `stale-marker`.
+Identity is a property of the **process**, not of a tree. `DOCTRINE_WORKER` is set by
+the same confinement argv that establishes the worker's write floor (`jail.rs`'s
+`bwrap_argv` / `sandbox_exec_argv`, driven by `scripts/spawn-confined.sh`), and it dies
+with the process — so there is no stale class to detect, no cure verb to gate, and no
+tree-topology conjunct to disambiguate. The predicate that *observes* identity and the
+argv that *establishes* it share the same two constants (`jail::ENV_DOCTRINE_WORKER`,
+`jail::ENV_WORKER_ON`) so they cannot drift (STD-001). `marker.rs` survives only as the
+env leg: `describe_mode(env_set) -> StatusLine` is a **two-row** truth table where
+SL-056's was eight rows over three inputs, and it remains the single source for both
+the `worktree status` human line and the guard's refusal (the anti-parallel-implementation
+property). Because the signal cannot go stale, `worktree status --assert`, `marker
+--stamp-subagent`, `marker --clear --operator`, and the `Cause` truth table all retired
+with the marker — the `marker` verb family no longer exists.
+
+`write_class` is an **exhaustive** match over every `Command` variant with no wildcard
+arm — a future verb is a compile error, never a silently-permitted write (design X4).
+It has three classes: `Read`, `Write(verb)`, and `Orchestrator(verb)` — the funnel
+verbs plus the human-in-the-loop admission family; the `Hook-mint` class retired with
+the hook family it minted for. `Write` and `Orchestrator` are refused by the same
+branch. Reads stay open, and `provision`/`check-allowlist`/`branch-point-check`/`status`
+are deliberately `Read` (they write *fork* files, not the doctrine state the guard
+protects). Observation writes carry a capability-aware refusal that routes a confined
+claude worker to the `observation_record` MCP broker instead of a local capture.
+
+The legitimate orchestrator is unaffected because it is simply not a worker process —
+no root resolution, no cwd-shaped failure path, and no ambiguity about the tree it
+happens to be standing in.
 
 Raw-tree confinement (a worker hand-editing a file or running a bare `git commit`) is
-**not** CLI-stoppable (ADR-006 D2b) and is honestly deferred to sandbox/harness work
-(ADR-008), contained on the dispatch funnel by `import`'s `.doctrine/`/`.claude/`
-belt — not papered over here.
+still **not** CLI-stoppable (ADR-006 D2b) — but it is no longer deferred. It is
+enforced **below** the CLI by the confinement seam (ADR-008, ADR-020): every worker
+exec is wrapped in a kernel-level jail — bwrap on Linux, `sandbox-exec` on macOS —
+whose `--ro-bind / /` makes the whole filesystem read-only and whose sole write floor
+is the fork worktree. Git metadata is read-only inside it, which is *why* the worker
+cannot commit and hands back an uncommitted working tree. The prefix is minted by
+`worktree jail-prefix` (fail-closed: any resolve/validate/write error ⇒ nonzero exit,
+a named reason on stderr, and no partial output file). When no backend is available the
+spawn script **probes first and refuses by name** — `bwrap-unavailable`
+(`jail.rs::REASON_NO_BWRAP`) — minting no fork and spawning nothing. There is **no
+unconfined fallback and no reduced-enforcement rung** (SL-254 `DEC-208`). The
+`import` belt remains as the funnel-side containment, but it is now the second line,
+not the only one.
 
 ### The branch-point guard — HEAD-stationarity, not merge-base
 
@@ -185,57 +255,88 @@ pre-distilled worker prompt (ADR-006 D6) substitutes for the withheld coordinati
 state; provisioning substitutes for the absent execution environment. No central index
 or counter exists to reintroduce a conflict.
 
-### Per-harness altitude — uniform contract, honest non-uniform reach
+### One confined spawn arm — uniform contract, uniform floor
 
-The create-or-mark + provision + marker + per-worktree-env-*emission* core is
-harness-identical (ADR-011 D2); the reachable *altitude* is not (ADR-011 D3). The
-contract states honestly what each harness can and cannot enforce — no uniform-altitude
-lie, and no harness-specific command (`claude -p`) is ever a required element.
+> **REWRITTEN — FALSIFIED (SL-254, 2026-08-14).** This section formerly described
+> **two arms at two altitudes**: a codex/pi subprocess arm (`/dispatch-subprocess`,
+> marker + env identity, explicit base, bwrap) and a first-class in-session claude arm
+> (`/dispatch-agent`, the `Agent` tool at `isolation: worktree`, `SubagentStart`-hook
+> marker stamping, an opaque Claude-chosen base, no bwrap). SL-254 collapsed the two
+> onto **one** confined subprocess arm and abolished the altitude axis itself
+> (`DEC-208`, `DEC-217`). The historical two-arm analysis is preserved in ADR-011 D3/D5/D6
+> and in D6 below, both amended there; it is not restated here, because a spec section
+> is a description of shipped mechanism and this one described mechanism that no longer
+> exists.
 
-- **codex/pi (`/dispatch-subprocess`).** Subprocess spawn (`codex exec`/pi) binds the
-  worker cwd to the fork via `env -C "$D"` / bwrap `--chdir`. Identity = disk marker
-  (primary) **+** `DOCTRINE_WORKER` env (optimisation, catching worker-on-main). Marker
-  writer = the orchestrator-owned `fork --worker`. Base is **explicitly pinned**
-  (`fork --base <B>`). Per-worktree build isolation via `CARGO_TARGET_DIR` (ADR-008
-  D-B1, a project-local consumer of the env contract — never a framework primitive);
-  nested bwrap is the OS floor (ADR-008 D-B3, spike-contingent). The orchestrator owns
-  `fork`, so it **baseline-verifies** the fork before handoff.
-- **claude (`/dispatch-agent`).** In-session `Agent` tool, `isolation: worktree` — a
-  **first-class** backend, not a degraded rung. Identity = **disk marker only** (no env
-  channel). Marker writer = a **matcher-scoped, sync-blocking `SubagentStart` hook**
-  running `marker --stamp-subagent`: Claude performs its own default worktree creation,
-  and the hook then provisions and stamps the marker into the payload `cwd`. Because the
-  hook blocks the worker until it exits, the marker is present before the worker's first
-  command **on hook success**. The create-replacing `WorktreeCreate` `create-fork`
-  one-act path is **deferred** — the deployed payload carries no `agent_type`/
-  `worktree_path`/base (SL-056 PHASE-02). Two altitude concessions, named not papered:
-  (1) **not fail-closable** — `SubagentStart` is a read-only event, so a stamp-failure
-  leaves an *unstamped* worker, contained by the marker-absent fail-closed privilege
-  rule above, not by the hook; (2) **the pre-dispatch baseline-verify guarantee does
-  not hold** (accepted weaker class) — Claude creates the worktree at spawn with no
-  pre-spawn orchestrator moment, so an unbuildable fork is caught **late, at the
-  funnel's `import → verify`**, at the cost of a wasted worker run. The **base is opaque
-  and Claude-chosen** (ADR-011 D5/M1) — not orchestrator-controlled, so a
-  clean-applying-but-semantically-wrong import is possible (not merely a wasted run); the
-  closing import-time content-base assertion is deferred to IMP-043. No per-worktree
-  target, no bwrap; worker-on-main is **not** caught (the deferred D2b residual,
-  mitigated by always-isolating + the hook-stamped marker).
+There is one arm. `scripts/spawn-confined.sh <harness>` forks the worktree, resolves a
+confinement prefix through `worktree jail-prefix`, and execs the harness inside it —
+claude included. Consequences, all uniform across harnesses:
+
+- **Identity** is `DOCTRINE_WORKER`, set by the confining argv. No marker, no
+  per-harness identity medium, no worker-on-main hazard to catch (the variable travels
+  with the process, not the directory).
+- **Base is explicitly pinned** for every harness — the orchestrator owns `fork --base
+  <B>`, so the opaque Claude-chosen base is gone along with the
+  clean-applying-but-semantically-wrong import it admitted.
+- **Pre-dispatch baseline-verify holds** for every harness, because the orchestrator
+  creates and provisions the fork before any spawn window.
+- **Confinement is the floor, not an enhancement.** No bwrap (and no `sandbox-exec` on
+  macOS) ⇒ a named refusal and no spawn. There is no degraded rung to fall to.
+- **A harness-specific command is now a required element** of the shipped path — the
+  claude leg execs `claude -p --output-format stream-json --strict-mcp-config
+  --permission-mode bypassPermissions`. ADR-011 D3 treated that as a disqualifying
+  smell; SL-254 accepted it as the price of one uniform floor. Per-harness argv is
+  contained in one script, not spread across router skills.
+- **Build isolation** is per-worktree by cargo default (each fork builds into its own
+  in-tree `target/`), not by a `CARGO_TARGET_DIR` redirect (ADR-008 D-B1).
+- **The worker cannot commit.** Git metadata is read-only inside the jail, so the
+  worker hands back an uncommitted working tree and the orchestrator imports the
+  working-tree diff (`import --from-worktree`). The gated `worker_commit` MCP tool that
+  once let the claude arm self-commit is deleted (`DEC-204`).
 
 ## Concerns
 
-- **Raw-tree confinement is the deferred residual, not the funnel.** The funnel
-  itself is enforced CLI mechanism (the `Orchestrator` verbs + the worker-mode guard).
-  What the CLI *cannot* stop is a worker hand-editing a file or running a bare
-  `git commit` (ADR-006 D2b); the harness does not confine workers to their worktree.
-  This is a known live risk, deferred to sandbox/harness work (ADR-008), and contained
-  on the dispatch funnel by `import`'s `.doctrine/`/`.claude/` belt — not papered over.
-- **The claude altitude is weaker, and that is stated, not hidden.** SubagentStart-stamp
-  is **not fail-closable** (read-only event); the stamp-failure case is contained by
-  the marker-absent fail-closed privilege rule, claude has **no pre-dispatch
-  baseline-verify** (caught late at `import → verify`), and its **base is opaque**
-  (a clean-applying-semantically-wrong import is possible, IMP-043 deferred). codex/pi
-  keep the explicit base and pre-dispatch gate.
-- **The import belt's scope is honest and narrow.** The `.doctrine/`/`.claude/`
+- **Raw-tree confinement is no longer the deferred residual (amended SL-254).** The
+  funnel is enforced CLI mechanism (the `Orchestrator` verbs + the worker-mode guard),
+  and what the CLI *cannot* stop — a worker hand-editing a file or running a bare
+  `git commit` (ADR-006 D2b) — is now stopped **below** it: the harness *does* confine
+  workers to their worktree, by a kernel-level jail wrapping every worker exec, with a
+  named fail-closed refusal when no backend exists (`DEC-208`). The ADR-008 deferral
+  this concern recorded is **discharged**. The `import` belt remains as the funnel-side
+  second line.
+  > **Retained for the record (the pre-SL-254 text):** "Raw-tree confinement is the
+  > deferred residual, not the funnel. … the harness does not confine workers to their
+  > worktree. This is a known live risk, deferred to sandbox/harness work (ADR-008), and
+  > contained on the dispatch funnel by `import`'s `.doctrine/`/`.claude/` belt."
+- **The residual is now the unenforced configurable forbidden-writes tail (SL-254).**
+  `DispatchConfig::worker_forbidden_writes` (the `worker-forbidden-writes` key) parses
+  and compiles, but its **only production reader was the `worker_commit` MCP tool**,
+  which SL-254 deleted (`DEC-204`). The import belt never read it — see the next
+  concern. So the configurable tail (`.agents/**`, `install/agents/**`, `flake.nix`, …)
+  currently enforces **nothing**. The gap is carried forward to SL-255 (`IDE-051`),
+  whose intended fix is read-only bwrap binds at *spawn* time rather than a post-import
+  belt.
+- **The claude altitude is weaker, and that is stated, not hidden.**
+  > **AMENDED — FALSIFIED (SL-254, 2026-08-14).** There is no per-harness altitude
+  > axis any more, and no in-session claude arm to be weaker: every harness is spawned
+  > by the one confined subprocess path, with a pinned base, a pre-dispatch
+  > baseline-verified fork, and `DOCTRINE_WORKER` identity (`DEC-208`, `DEC-217`). Each
+  > named concession below is thereby dissolved rather than mitigated: no
+  > `SubagentStart` stamp exists to fail, no late-only baseline verify, no opaque base.
+  > The historical concern is retained for the record.
+
+  *(Historical body.)* SubagentStart-stamp is **not fail-closable** (read-only event);
+  the stamp-failure case is contained by the marker-absent fail-closed privilege rule,
+  claude has **no pre-dispatch baseline-verify** (caught late at `import → verify`), and
+  its **base is opaque** (a clean-applying-semantically-wrong import is possible,
+  IMP-043 deferred). codex/pi keep the explicit base and pre-dispatch gate.
+- **The import belt's scope is honest and narrow — and narrower than once claimed.**
+  It enforces exactly **two hard-coded floors**, `.doctrine/**` and `.claude/**` (plus
+  the `--slice`-scoped `undeclared-scope` check, SL-180); it has **never** consulted
+  the configurable `worker-forbidden-writes` list, and `DEC-204`/`DEC-213`'s premise
+  that `classify_import` was `worker_commit`'s surviving enforcement replacement for
+  that list is **false** — verified in code at SL-254 PHASE-06 (amended SL-254). The
+  `.doctrine/`/`.claude/`
   rejection belt is the **dispatch/import-path** containment, not an unconditional
   all-funnel guard — solo's `land` is a second, **beltless** sanctioned funnel (a
   trusted self-orchestrator legitimately lands doctrine). Because the diff is
@@ -269,8 +370,20 @@ lie, and no harness-specific command (`claude -p`) is ever a required element.
   because disk is the one medium every harness has; an env channel is not (claude's
   `Agent` tool has none). `DOCTRINE_WORKER` is an optimisation of the marker, never the
   identity.
+  > **AMENDED — FALSIFIED (SL-254, 2026-08-14).** Inverted. `DOCTRINE_WORKER` **is** the
+  > identity and the marker is gone (`DEC-207`). The hypothesis' premise — that no env
+  > channel reaches claude — was true only of the in-session `Agent` tool; once every
+  > harness is spawned as a confined subprocess, the env channel is universal, and it is
+  > strictly better than disk: it describes the **process** (so it cannot go stale, be
+  > self-cleared, or be inherited by an unrelated tree) and it is set by the same argv
+  > that establishes the write floor.
 - **Fail-closed on ambiguity.** A linked worktree with no marker is refused, not
   trusted — so a stamp-failure or a self-clear *loses* privilege rather than gaining it.
+  > **AMENDED — FALSIFIED (SL-254, 2026-08-14).** There is no ambiguity left to fail
+  > closed on: one signal, present or absent, and neither a stamp-failure nor a
+  > self-clear exists to be defended against (`DEC-207`). The fail-closed instinct
+  > survives one level down, at spawn: a missing confinement backend refuses by name
+  > rather than spawning unconfined (`DEC-208`).
 - **Exclude by construction, not by trust.** Withholding the coordination/runtime tier
   from the fork outright is preferred over copying it and trusting workers not to mutate
   it — the tier's *absence* is what makes worker-sole-writer free.
@@ -291,7 +404,19 @@ lie, and no harness-specific command (`claude -p`) is ever a required element.
   coordination HEAD still equals the pre-spawn base `B`; a mismatch means an external
   mover ⇒ re-dispatch, never auto-merge.
 - **D3 — worker-mode is enforced in the CLI by a disk-marker-primary, fail-closed
-  guard.** `worker_mode = (is_linked_worktree && marker_present) OR env
+  guard.**
+  > **AMENDED — FALSIFIED (SL-254, 2026-08-14).** Superseded by:
+  > `worker_mode := env DOCTRINE_WORKER == "1"`, and nothing else (`DEC-207`). The
+  > marker file, the `is_linked_worktree` conjunct, the fail-closed-on-marker-absent
+  > rule, the `Hook-mint` class, and the marker-minting verb's identity exemption are
+  > **all gone** — the two fail-opens the fail-closed rule existed to close (the
+  > `SubagentStart` stamp-failure and the deliberate self-clear) cannot occur when
+  > identity is a property of the process. What survives verbatim: the guard sits in
+  > `run()` before dispatch, refuses `Write`- and `Orchestrator`-classed verbs by name,
+  > and `write_class` is still a wildcard-free exhaustive match. The historical decision
+  > is retained below for the record.
+
+  *(Historical body.)* `worker_mode = (is_linked_worktree && marker_present) OR env
   DOCTRINE_WORKER`; the marker is the harness-agnostic primary, env a codex/pi
   worker-on-main optimisation. A **marker-absent linked worktree is fail-CLOSED** — the
   write/`Orchestrator`/`Hook-mint` classes are refused there (closing both the
@@ -306,17 +431,35 @@ lie, and no harness-specific command (`claude -p`) is ever a required element.
   `import`, `land`, `gc` are `Orchestrator`-classed CLI verbs (refused under
   `worker_mode`) that carry creation, the dispatch funnel, the solo merge, and reaping
   — each a pure classifier (`classify_import`/`classify_land`/`classify_gc`) over an
-  impure git shell. The trust-bearing core (create-or-mark + provision + marker + per-wt
-  env *emission*) is harness-identical and golden-testable (ADR-011 D2/D5).
+  impure git shell. The trust-bearing core is **create + provision + confine**
+  (amended SL-254 — it read "create-or-mark + provision + marker + per-wt env
+  *emission*"; the mark/marker legs went with `DEC-207` and the env emission with the
+  per-worktree `CARGO_TARGET_DIR` redirect), and it is harness-identical and
+  golden-testable (ADR-011 D2/D5).
 - **D6 — per-harness altitude is a uniform contract with honest non-uniform reach.**
-  codex/pi reach the full mechanism floor (explicit base-pinning, env-arm, per-wt env
+  > **AMENDED — FALSIFIED (SL-254, 2026-08-14).** The altitude axis is abolished, not
+  > levelled up: there is one confined subprocess arm for every harness (`DEC-208`,
+  > `DEC-217`), so every harness reaches the same floor — explicit base-pinning,
+  > pre-dispatch baseline-verify, `DOCTRINE_WORKER` identity, kernel-level confinement,
+  > and no unconfined fallback. Two of this decision's clauses invert rather than
+  > merely lapse: the claude concessions (`O3-red` SubagentStart stamp, late-only
+  > baseline verify, opaque base) are **dissolved**, and "no harness-specific command
+  > is a required element" is **no longer true** — `claude -p --output-format
+  > stream-json` is a required element of the shipped spawn path, contained in one
+  > script. The historical decision is retained below for the record.
+
+  *(Historical body.)* codex/pi reach the full mechanism floor (explicit base-pinning,
+  env-arm, per-wt env
   delivery, pre-dispatch baseline-verify, bwrap); claude reaches an **O3-red
   SubagentStart-stamp** altitude — marker-only, **not fail-closable** (contained by the
   marker-absent rule), **no pre-dispatch baseline-verify** (caught late at import), and
   an **opaque Claude-chosen base** (a confessed residual, not parity — IMP-043). No
   harness-specific command is a required element (ADR-011 D3/D5/D6).
 - **D7 — the funnel's honest scope: belt narrow, solo non-squash, import quiescent.**
-  (a) The `.doctrine/`/`.claude/` belt is the import/dispatch-path containment only; the
+  (a) The `.doctrine/`/`.claude/` belt is the import/dispatch-path containment only —
+  and it is exactly those **two hard-coded floors**, plus the `--slice`-scoped
+  `undeclared-scope` check; it never consulted the configurable `worker-forbidden-writes`
+  list (amended SL-254). The
   `.claude/` leg contains exactly **force-add injection** (the rest of `.claude/` is
   gitignored and invisible to the tracked-files diff); solo's `land` is a second,
   beltless sanctioned funnel. (b) Solo **must** land via the **structurally non-squash**

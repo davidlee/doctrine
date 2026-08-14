@@ -13,6 +13,6 @@ responsibilities = [
   "Guarantee that no isolated worker writes doctrine-authored state, and that the coordination/runtime tier never leaks across the isolation boundary.",
   "Produce reviewable, individually-integrable surfaces for each phase and slice, and gate integration on audit — never auto-publishing to trunk.",
   "Make progress crash-safe: durable coordination state means a crash is equivalent to a resume, with no lost reasoning about what landed.",
-  "Stay harness-agnostic: the capability works across orchestrating harnesses, requiring no harness-specific command, and states honestly what each harness can enforce.",
+  "Stay harness-agnostic: the capability works across orchestrating harnesses under one uniform enforcement floor, and states honestly what it enforces. (Amended SL-254: the original 'requiring no harness-specific command' clause is falsified — the sole spawn path execs a harness-specific command per harness; see §3 and §4 of the body.)",
   "Stay policy-agnostic: name the coordination roles and guarantees, bind no branching policy — the consuming project chooses the topology (ADR-006).",
 ]

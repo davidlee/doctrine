@@ -30,7 +30,10 @@ are ADR-006 (worktree posture), ADR-011 (harness-agnostic spawn), and ADR-012
 to durable coordination state; non-leakage of the coordination/runtime tier across the
 isolation boundary; reviewable per-phase and per-slice surfaces; audit-gated, opt-in,
 non-destructive integration; crash-recovery from durable coordination state;
-harness-agnostic spawn with an honestly-stated per-harness enforcement altitude.
+harness-agnostic spawn under a uniform, honestly-stated enforcement floor (amended
+SL-254 — enforcement is now the same kernel-level jail on every harness, so there is
+no *per-harness* altitude left to state; the honesty obligation survives and is met
+by construction, see §5 and §7).
 
 **Out of scope.** The branching/topology *policy* a project adopts (named roles only,
 ADR-006 — bound by the consumer). The mechanism internals of each coordination verb
@@ -61,6 +64,20 @@ how that unit is isolated, returned, funneled, reviewed, and integrated.
 - **No harness is privileged or required.** The capability states honestly what each
   harness can enforce and degrades visibly, never silently excluding a harness or
   requiring a harness-specific command.
+
+  > **AMENDED — PARTLY FALSIFIED (SL-254, 2026-08-14).** Two of the three clauses
+  > no longer hold as written, and the principle's *intent* is now met differently.
+  > (a) *"degrades visibly"* — there is no degraded rung: when confinement is
+  > unavailable, spawn **refuses with a named reason and launches nothing**
+  > (SL-254 `DEC-208`). Visibility is preserved and strengthened; graceful
+  > degradation is not. (b) *"never … requiring a harness-specific command"* — this
+  > is now **false**: the sole spawn path execs a harness-specific command per
+  > harness (`claude -p --output-format stream-json`; `pi --mode rpc …`), and there
+  > is no in-session, command-free backend left. (c) *"no harness is privileged"*
+  > **holds, and holds more strongly than before** — every harness takes the same
+  > confined-subprocess path with the same enforcement floor, where previously
+  > claude alone had a distinct in-session arm. The honesty obligation survives and
+  > is met here.
 - **Policy-agnostic.** The capability names coordination roles and guarantees; the
   consuming project binds the branching topology (ADR-006).
 
@@ -76,6 +93,19 @@ Constraints:
 - The capability must require **no harness-specific command** as a mandatory element
   (e.g. an API-billed subprocess); at least one isolation+spawn path must exist for a
   harness with no worker environment channel (ADR-011).
+
+  > **AMENDED — FALSIFIED (SL-254, 2026-08-14).** This constraint is **no longer
+  > satisfied, deliberately.** Both halves are dead. (a) A harness-specific command
+  > **is** now a mandatory element: `scripts/spawn-confined.sh <harness>` is the sole
+  > spawn path and execs `claude -p --output-format stream-json` on the claude leg
+  > and `pi --mode rpc …` on the pi leg. (b) The "harness with no worker environment
+  > channel" case no longer exists to be served: every worker is a confined
+  > subprocess whose environment is set by the jail argv itself (`bwrap --setenv
+  > DOCTRINE_WORKER 1`), so every harness has an environment channel by construction.
+  > ADR-011, which this constraint descends from, is amended in place to the same
+  > effect. What was traded for it is the uniform kernel-level enforcement floor and
+  > the single spawn path; the constraint is retained above as the record of what was
+  > originally required, not as a live obligation.
 - The capability must **not bind a branching policy**; it names roles and guarantees
   only, leaving topology to the consumer (ADR-006).
 - Integration to trunk must be **opt-in, fast-forward-only, and expected-tip-guarded**;
@@ -110,6 +140,16 @@ Invariants:
 - **Harness parity of guarantee, honesty of altitude** — the same isolation+funnel
   guarantee holds on every supported harness, and any per-harness shortfall in
   enforcement altitude is stated, not hidden.
+
+  > **AMENDED — SATISFIED BY CONSTRUCTION (SL-254, 2026-08-14).** The measure
+  > survives; what changed is that it is now trivially met. Parity is no longer a
+  > property to be measured across differing arms — there is one confined-subprocess
+  > arm and one enforcement floor (a kernel-level `bwrap` / `sandbox-exec` jail with
+  > `--ro-bind / /` and the fork's worktree as the sole write floor), so the set of
+  > *per-harness* shortfalls in enforcement altitude is **empty** and the honesty
+  > obligation has nothing left to disclose. The measure's remaining bite is that the
+  > floor either holds or spawn refuses by name (`DEC-208`): there is no silent
+  > shortfall available.
 - **Non-destructive integration** — across all integrations, no force-push and no
   auto-resolution occurs; every moved/non-ff target is reported.
 
@@ -126,10 +166,17 @@ trunk, opt-in and non-destructively.
 one's result, the coordinator advances its baseline to the integrated tip before
 dispatching the next, so the dependency is present in the next unit's isolation.
 
-**Alternate flow — degraded harness.** On a harness with no worker environment channel
-or no pre-dispatch verification moment, the capability still isolates and funnels; the
-reduced enforcement altitude is stated, and shortfalls are caught later at the funnel
-(at a bounded cost) rather than silently.
+**Alternate flow — confinement unavailable (rewritten SL-254).** There is no degraded
+mode. Every harness is isolated the same way, and if the isolation cannot be
+established — the kernel-level sandbox is missing on the host — the capability
+**refuses to dispatch, naming the reason, and launches nothing**. No unconfined or
+reduced-enforcement worker is ever started, and no work proceeds under a weaker
+guarantee than the one this capability states.
+
+*(This replaces the former "degraded harness" flow, which described a harness that
+still isolated and funneled at a reduced, honestly-stated enforcement altitude with
+shortfalls caught later at the funnel. SL-254 `DEC-208` abolished that rung: spawn
+fails closed instead. The honesty obligation it carried is met by the named refusal.)*
 
 **Edge cases & guards.**
 - A worker that returns more than a single non-merge delta, or touches authored state,
@@ -163,9 +210,12 @@ integration cannot precede a passing audit.
 Coverage of the functional and quality obligations is tracked against the requirement
 entities (the `REQ-NNN` members synthesized below), not restated here. Where a check
 cites a specific obligation it references the durable requirement entity, never its
-mobile membership label. The per-harness enforcement altitude is itself a verification
-obligation: each harness's reachable altitude is stated and the shortfalls named, so a
-reviewer can confirm the guarantee holds and the honesty is kept.
+mobile membership label. The enforcement floor is itself a verification obligation
+(rewritten SL-254): because the floor is now uniform across harnesses rather than
+per-harness, what must be proven is that it is *established or refused* — that a worker
+is never launched outside the sandbox, and that an unavailable sandbox produces a named
+refusal at spawn rather than a silent fallback. A reviewer confirms the guarantee holds
+by confirming there is no unconfined path, not by reading a per-harness altitude table.
 
 ## 8. Open Questions
 
@@ -174,6 +224,24 @@ reviewer can confirm the guarantee holds and the honesty is kept.
   worker; the funnel + jail are defence-in-depth, not a coverage proof for the full
   coordinator verb class. A positive coordination marker (IMP-065) is the real close.
   Blocks: a provable, rather than fenced, sole-writer identity.
+
+  > **AMENDED — PREMISE FALSIFIED (SL-254, 2026-08-14).** Neither the problem nor
+  > the proposed close survives as stated. **What actually happened:** the positive
+  > coordination marker (`IMP-065`) was never built — it was closed **obsolete on
+  > 2026-07-02** under **REV-018**, on the finding that a cooperative flag is not a
+  > boundary and that the genuine close is enforcement (RSK-014; RV-199 `F-1`).
+  > SL-254 then deleted the disk marker itself (`DEC-207`). Worker identity is now
+  > the `DOCTRINE_WORKER` environment variable and nothing else, set by the **same
+  > confinement argv that establishes the write floor**, so the *unstamped worker* —
+  > a worker that is a worker but was never stamped — is not a state that can arise:
+  > a process is confined and marked by one act, or it was never launched
+  > (`DEC-208`: an unavailable sandbox is a named refusal). The sole-writer property
+  > therefore rests on a kernel-level read-only filesystem, not on a marker
+  > convention.
+  >
+  > Left open: this question is recorded as unresolved above and is **not struck
+  > here** — whether it should now be closed outright is a governance call for
+  > reconciliation, not a drafting one.
 - **OQ-2 — In-coordinator re-anchor onto a moved baseline.** Re-anchoring a delta onto a
   moved baseline is today an out-of-band, proof-gated coordinator act; folding it into
   the funnel with a content-base assertion (IMP-043) would make parallel *landing*

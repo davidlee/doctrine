@@ -40,6 +40,8 @@ module = "doctrine::ledger"
 language = "rust"
 identifier = "src/worktree/mod.rs"
 module = "doctrine::worktree"
-# directory module; siblings: allowlist.rs, coordinate.rs, create.rs, dispatch_record.rs,
-# fork.rs, gc.rs, import.rs, inventory.rs, jail.rs, jail_prefix.rs, land.rs, marker.rs,
-# pretooluse.rs, provision.rs, shared.rs, subagent.rs, test_helpers.rs
+# directory module; siblings: allowlist.rs, claim_lock.rs, coordinate.rs, create.rs,
+# dispatch_record.rs, fork.rs, gc.rs, import.rs, inventory.rs, jail.rs, jail_prefix.rs,
+# land.rs, marker.rs, provision.rs, shared.rs, test_helpers.rs
+# (amended SL-254 — pretooluse.rs and subagent.rs were deleted with the in-session
+#  claude arm; claim_lock.rs was missing from this list.)

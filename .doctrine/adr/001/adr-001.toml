@@ -6,7 +6,7 @@ slug = "module-layering"
 title = "Module layering: leaf ← engine ← command, no cycles"
 status = "accepted"
 created = "2026-06-05"
-updated = "2026-06-27"
+updated = "2026-08-14"
 tags = []
 
 [relationships]

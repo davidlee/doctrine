@@ -923,3 +923,51 @@ own framing ("make sure it's left in a consistent state") is broader than the
 blocking question this escalation raised, so `/reconcile` should re-read
 `ADR-020` fresh against the shipped result, not just re-check this escalation's
 narrow two readings. Do not let this fall out of the reconciliation brief.
+
+### PHASE-08 `EX-12` — the `ADR-020` consistency assessment, for `/reconcile`
+
+*`ADR-020` was READ end to end at PHASE-08 and NOT edited, per the owner ruling
+above. This is the assessment that ruling deferred. It is written here, not into
+`ADR-020`, so `/reconcile` picks it up as input rather than re-deriving it.*
+
+**Verdict: `ADR-020`'s DECISION is unaffected by SL-254; its CONTEXT now
+over-counts the defects it argues from.** Three findings, in descending weight.
+
+1. **The Context's present-tense defect list is partly discharged** (`:5-10`).
+   It argues the incumbent is brittle because dispatch isolates workers with
+   *"Git worktrees, cooperative identity markers, harness-specific spawn paths,
+   and a trusted coordination worktree"*, and (`:8-9`) that *"worker identity and
+   capability vary by harness"*. SL-254 removed **two of those four**: identity is
+   no longer a cooperative marker (it is `DOCTRINE_WORKER`, set by the same
+   confining argv that establishes the kernel write floor — not cooperative, and
+   not forgeable by a worker that never had authority to set it), and there is no
+   longer a harness-specific spawn path (one confined subprocess arm). Worker
+   identity and capability no longer vary by harness at all. The two that SURVIVE
+   — a shared Git object store between coordination and untrusted work, and a
+   trusted orchestrator replaying a large worktree/import choreography — are
+   untouched by SL-254 and remain live motivation. So `ADR-020` still argues for
+   the right thing, from a premise list that is now half stale.
+2. **`:86-88`'s authority clause is still literally true, and that is the
+   subtlety.** *"ADR-011 and the incumbent worktree dispatch remain authoritative
+   until REV-046's cutover gates are met."* SL-254 amended `ADR-011` in place
+   rather than superseding it, so `ADR-011` does remain authoritative — but what
+   it now says is substantially different from what it said when `ADR-020` wrote
+   that sentence. Nothing to correct; something to be aware of. A reader who takes
+   `:86-88` as a promise that the incumbent is *unchanged* will be wrong.
+3. **The coupled `REV-046` question is NOT resolved by this phase and must not be
+   read as resolved.** `REV-046`'s rationale enumerates precisely the mechanisms
+   SL-254 has now deleted — *"worktree marker identity, `DOCTRINE_WORKER`,
+   SubagentStart stamping, base-by-placement, the gated `worker_commit` exception,
+   per-harness arm routing and altitude"* — and describes them as
+   unimplemented-target work awaiting a cutover. Several have now **shipped as
+   deletions** under a slice that is explicitly *not* a capsule adoption
+   (`DEC-203`). `REV-046` is `proposed · approval=none`. Either its rationale
+   needs restating against the post-SL-254 baseline, or its gates do. This phase
+   deliberately took no position and edited neither `ADR-020` nor `REV-046`.
+
+**What `/reconcile` should therefore do** — beyond re-reading `ADR-020` fresh as
+the standing follow-up above already requires: decide whether `ADR-020`'s Context
+is amended to acknowledge the two discharged defects (recommended — it is cheap,
+and leaving it makes the capsule case look stronger than it now is), and put
+`REV-046`'s stale rationale on the table as a real question rather than a
+footnote. Neither is blocking for `SL-254`'s close.

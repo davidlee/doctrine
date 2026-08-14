@@ -158,13 +158,22 @@ and proceeds; invalid explicit data fails before creation. Harness, model, role,
 arm, stage, skill, and run correlation are absent unless explicitly supplied or
 known by a trusted adapter. General environment inspection is excluded.
 
-Dogfood guidance is capability-aware: primary-tree agents use CLI, confined
-Claude workers use MCP, and workers without a broker do not write
-`.doctrine/**` in their fork; an orchestrator may proxy their reported friction.
-The existing worker-mode guard classifies record, supersede, and retract as
-Write, and show, list, and search as Read. A solo agent in a marked worktree
-defers the signal through its runtime phase sheet or handoff and records it
-after returning to the coordination tree.
+Dogfood guidance is capability-aware, and the capability that decides it is
+**whether the agent's process holds a broker**, not which harness it runs
+(amended SL-254). Primary-tree agents use the CLI. A confined worker whose spawn
+profile grants it the MCP broker uses `observation_record`. A confined worker
+with neither broker does not write `.doctrine/**` in its fork at all; it reports
+the signal in its hand-back and an orchestrator may proxy it. That third row is
+the shipped default today: the sole spawn path deliberately withholds MCP from
+the worker (`--strict-mcp-config` with no `--mcp-config` on the claude leg,
+`--no-extensions` on the pi leg), so every privileged act remains the
+orchestrator's. The existing worker-mode guard classifies record, supersede, and
+retract as Write, and show, list, and search as Read; it resolves worker identity
+from the `DOCTRINE_WORKER` environment variable — a property of the process, set
+by the same confinement argv that establishes the write floor — and not from any
+property of the tree the process stands in. A solo agent running as a worker and
+holding no broker defers the signal through its runtime phase sheet or handoff
+and records it after returning to the coordination tree.
 
 ## Concerns
 
