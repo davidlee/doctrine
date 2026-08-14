@@ -2,9 +2,10 @@
 //! Pure jail core — SL-182 PHASE-02 (leaf tier, ADR-001).
 //!
 //! Graduates the proven bwrap flag set + path logic (RSK-014 probe-h1) into a
-//! PURE leaf: no clock / git / disk / rng — every impure input is passed in as
-//! data by its command-tier caller. Behavioural reference: the harvested probe
-//! scripts at `.doctrine/slice/182/probe-evidence/scripts/`.
+//! leaf whose invariant is **impurity behind the injected `ResolveEnv` seam** —
+//! no clock / git / rng, and every impure input the argv builders consume is
+//! passed in as data by its command-tier caller. Behavioural reference: the
+//! harvested probe scripts at `.doctrine/slice/182/probe-evidence/scripts/`.
 //!
 //! ## What survives here (SL-254 PHASE-04, DEC-206)
 //! The `PreToolUse` wall — the per-tool-call decision layer (`Decision`,
@@ -15,8 +16,17 @@
 //! `jail-prefix` command tier rides: policy parse + validation, the backend
 //! seam, and the two per-arm argv/profile builders.
 //!
-//! ## Purity contract (leaf, ADR-001 — no clock/git/disk/rng)
-//! Classified `"worktree::jail" = "leaf"`. `worktree::shared` (which owns
+//! ## Purity contract (leaf, ADR-001 — impurity behind the `ResolveEnv` seam)
+//! Amended by `REV-053` (`RV-356` `F-6`). This module's contract is **not** "no
+//! disk": `impl ResolveEnv for RealEnv` (below) shells `getconf` and makes several
+//! `std::fs` calls, and has since SL-183. `SL-254`/`DEC-206` re-homed two further
+//! impure primitives here that are **not** behind that seam — `have_bwrap` (env
+//! read + `is_file()`) and `write_seatbelt_profile` (`std::fs::write`) — which is
+//! the part worth naming, because the layering gate cannot see it: it parses
+//! crate-module `use` edges and has no notion of `std::fs`.
+//!
+//! What still holds absolutely: **no clock, no git, no rng**, and the pure argv /
+//! path surface below takes every impure input as data. `worktree::shared` (which owns
 //! `is_linked_worktree`, a git read) is **engine** — a leaf cannot import engine,
 //! so git-topology recognition CANNOT live here. The layering gate enforces the
 //! pure/imperative split: the command tier performs the git-topology check + the

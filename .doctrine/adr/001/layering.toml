@@ -135,7 +135,7 @@ regression_run = "command"  # SL-170 S1 impure shell → coverage_store, git, re
 "status::run_status" = "command"  # the run_* CLI entry — reaches backlog, boot, priority
 "worktree::shared" = "engine"     # cross-machine helpers; imports git (leaf)
 "worktree::allowlist" = "leaf"    # pure tier-classification core; imports glob (external) only — no domain, disk, git, clock, or rng (D4)
-"worktree::jail" = "leaf"         # SL-182: pure jail core — no disk/git/clock/rng; topology+capability+policy-read done by the shell, passed in as data (R1)
+"worktree::jail" = "leaf"         # SL-182 as amended by REV-053 (RV-356 F-6): the jail core's invariant is IMPURITY BEHIND THE INJECTED `ResolveEnv` SEAM, not an absence of I/O — `RealEnv` has shelled `getconf` and touched `std::fs` since SL-183, and SL-254/DEC-206 re-homed `have_bwrap` (env read + `is_file()`) and `write_seatbelt_profile` (`std::fs::write`) here NOT behind that seam. Topology + capability + policy-read are still the shell's, passed in as data (R1). No git/clock/rng. The layering gate parses `use` edges only and cannot see `std::fs`, so this row is the contract
 # SL-254: `worktree::pretooluse` DELETED — the PreToolUse hook wall retired with
 # the in-session arm; confinement is now the kernel-level bwrap/sandbox-exec jail
 # established at spawn (`scripts/spawn-confined.sh`), not a hook.
