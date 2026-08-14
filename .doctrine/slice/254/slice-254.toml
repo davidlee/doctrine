@@ -218,6 +218,261 @@ selector = "scripts/spawn-confined.sh"
 intent = "design-target"
 note = "the generalised spawn script the pi one is renamed to (design §5.6, DEC-209)"
 
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "src/commands/doctor.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "src/doctor_checks.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "src/finding.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "src/install.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "src/mcp_server/dispatch.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "src/worktree/allowlist.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "src/worktree/claim_lock.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "src/worktree/dispatch_record.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "justfile"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "plugins/doctrine/hooks/hooks.json"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "plugins/doctrine/skills/execute/SKILL.md"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch-spawn/SKILL.md"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "install/hymns/role/orchestrator.md"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "install/hymns/role/worker.md"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = ".doctrine/hymns/role/worker.md"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "install/agents/claude/dispatch-orchestrator.md"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "install/agents/claude/dispatch-probe.md"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "install/agents/claude/dispatch-worker.md"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "install/workflows/drive-slice.js"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = ".doctrine/workflows/drive-slice.js"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "install/manifest.toml"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "publication/manifest.toml"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = ".doctrine/governance.md"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "tests/common/mod.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "tests/e2e_worker_confinement.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "tests/e2e_dispatch_arm_spawn.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "tests/e2e_worker_guard.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "tests/e2e_worker_guard_explicit_root.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "tests/e2e_worker_gate_skip.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "tests/e2e_dispatch_h1_integration.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "tests/e2e_mcp_server.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "tests/e2e_prompt_resolve_golden.rs"
+intent = "design-target"
+note = "RV-356 F-8: real surface the design §5.6 table missed; declared at reconcile so conformance reads the truth"
+
+[[selector]]
+selector = "crates/doctrine-control/src/backend/bubblewrap.rs"
+intent = "design-target"
+note = "RV-356 F-8(c): deliberate incidental reach — one doc-comment rename (pi-spawn-confined.sh -> spawn-confined.sh) in a byte-parity note; the collapse touched the capsule crate at all, which is worth recording"
+
+[[selector]]
+selector = "scripts/pi-agent"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "scripts/pi-respawn-nofork.sh"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "scripts/pi-review.sh"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "tests/e2e_compare_inference.rs"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "tests/e2e_dispatch_candidate.rs"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "tests/e2e_dispatch_sync.rs"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "tests/e2e_observation.rs"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "tests/e2e_value_claims.rs"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "tests/e2e_worktree_coordinate.rs"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "tests/e2e_worktree_fork.rs"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "tests/e2e_worktree_gc.rs"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "tests/e2e_worktree_import.rs"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "tests/e2e_worktree_jail_prefix.rs"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "tests/e2e_worktree_land.rs"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "tests/e2e_worktree_list.rs"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
+[[selector]]
+selector = "tests/spawn_cwd_convention.rs"
+intent = "design-target"
+note = "RV-356 F-8(b): the 'eleven further retargeted tests/e2e_*' plus the three pi spawn siblings the marker/fork changes reached"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-011"
