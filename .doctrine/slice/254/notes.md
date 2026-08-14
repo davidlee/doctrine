@@ -6,9 +6,25 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-14 · PHASE-09 complete (10/10) · **implementation complete** — next is `/audit` → `/reconcile` → `/close` · see git log
+fresh-as-of: 2026-08-14 · audit complete (`RV-356`, 13 findings, no blockers) · next is `/reconcile` → `/close` · see git log
 
 ### Produced
+- **`/audit` done — `RV-356`, 13 findings, zero blockers, ledger `done ·
+  await=none`.** Reviewed `audit/SL-254` @ `3aee9dc7d` (the capsule work tip; no
+  `/dispatch` candidate branch exists for this slice). Evidence: `just gate`
+  exit 0, all 14 unwaived `VT` mandates pass and both waivers are structural and
+  re-landed as `VA`, `spec validate` / `publication validate` / `prompt check` /
+  `boot --check` clean, and an independent sweep of all **86** live `[[source]]`
+  anchors found zero dangling (re-deriving `PHASE-08`'s `VH-1` rather than
+  trusting it). The source-delta registry was **empty** — bootstrapped from the
+  phase commits, yielding undeclared 96 / undelivered 0 / conformant 40.
+  Three findings fixed inside the audit (commit `1185a631d`): the boot
+  snapshot's authored source still said the claude arm self-commits via
+  `worker_commit` (`F-1` — `.doctrine/governance.md` is outside `PHASE-10/EX-5`'s
+  sweep scope, the same directory-list class as the twelfth undercount), the
+  registry bootstrap (`F-7`), and a stale `----- worker commit -----` label in
+  `spawn-confined.sh` (`F-12`). The other ten are in `RV-356`'s
+  `## Reconciliation Brief`. **Ids minted (collision risk): `RV-356`.**
 - PHASE-09 done — **the live fire, and the claude arm did not work.** One real
   dispatch phase driven end to end on the claude harness through the collapsed
   subprocess arm, concluding with the incumbent import. Full evidence in
