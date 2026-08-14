@@ -910,3 +910,16 @@ now a **supersession**? `EX-2` was written when the count was 11.
 **State at escalation: nothing authored.** No governance file edited, no REV minted,
 no id minted, tree clean but for a pre-existing `skills-lock.json` modification that
 is not this session's. `just gate` untouched and green as PHASE-10 left it.
+
+**Owner ruling, 2026-08-14.** Route **(C)**: proceed with PHASE-08's REV now, over
+the re-derived nine-entity target set, on the self-scoping reading — `ADR-020`
+is NOT edited in this phase. `ADR-011` is amended in place (not superseded),
+matching how the other eight entities are handled and keeping the decision
+history in one document despite the scale.
+
+**Standing follow-up, explicitly carried to `/reconcile`, not this phase:**
+review `ADR-020` for consistency once SL-254's REV has landed — the owner's
+own framing ("make sure it's left in a consistent state") is broader than the
+blocking question this escalation raised, so `/reconcile` should re-read
+`ADR-020` fresh against the shipped result, not just re-check this escalation's
+narrow two readings. Do not let this fall out of the reconciliation brief.

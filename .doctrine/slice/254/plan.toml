@@ -331,10 +331,24 @@ exit_criteria = [
   { id = "EX-7", text = "`SPEC-021` — `REQ-288` retire (mooting ISS-347), `REQ-291` rewrite carrying §5.2.5's enforcement-altitude change, `REQ-384`/`387` narrow, responsibility lines 16 and 19a." },
   { id = "EX-8", text = "Anchor sweep by hand: `spec-021.toml` has TWO dangling `[[source]]` anchors, not one — `:30` at `plugins/doctrine/skills/dispatch-agent/SKILL.md` AND `:34` at `…/dispatch-subprocess/SKILL.md`, both resolving by deletion. R7 named only the first; that is under-count #8. `spec-012.toml:30` and `spec-022.toml:45` are comment lists naming `pretooluse.rs` and `subagent.rs`." },
   { id = "EX-9", text = "`doctrine boot` re-run after the governance edits; `doctrine boot --check` clean." },
+  # SETTLED after a first execution attempt re-derived the target set and
+  # escalated one governance-scope question before authoring anything
+  # (2026-08-13/14; see notes.md "PHASE-08 re-derivation" and "ESCALATION,
+  # PHASE-08"). EX-2..EX-8 above are the DESIGN-TIME FLOOR (six entities, ~46
+  # regions) — the re-derivation found NINE entities, ~191 regions, the
+  # eleventh undercount. Owner ruling, 2026-08-14: proceed now (route C, the
+  # self-scoping reading of ADR-020's REV-046 clause — ADR-020 is NOT edited
+  # in this phase; a consistency review of it is carried to /reconcile
+  # instead, not this phase). ADR-011 is amended in place, not superseded,
+  # despite being ~56 of ~70 regions falsified (including its own VA-2
+  # verification criterion, now directly contradicted by shipped code).
+  { id = "EX-10", text = "Three entities beyond the design-time six: `ADR-001` (`layering.toml` still registers the deleted `worktree::pretooluse`/`worktree::subagent` leaves), `PRD-015` (a 'degraded harness' alternate flow `DEC-208` abolished, plus an open question resting on the deleted marker), `SPEC-022` (a live prose claim about 'the funnel (claude arm)', not merely a sibling comment)." },
+  { id = "EX-11", text = "`ADR-011` region count is ~56, not 11 (title's 'per-harness capability altitude' half is dead; VA-2's 'no harness-specific command (`claude -p`) appears as a required element' is now directly false — `scripts/spawn-confined.sh` execs it). `ADR-008` ~35, not 7 (`D-B6` entire and `N1` entire are void). `ADR-006` ~23, not 9. `SPEC-012` ~44, not 10. `SPEC-021` ~16, not 6, PLUS a third dangling `[[source]]` anchor for `dispatch-spawn/SKILL.md` (EX-8's `EN-2` cross-reference). `ADR-012` ~7, not 3. Exact final counts are whatever the authored REV actually lands — these are the re-derivation's floor, not a ceiling to stop at." },
+  { id = "EX-12", text = "`ADR-020` is READ and its consistency assessed but NOT edited in this phase (owner ruling). A pointer to that assessment and the open consistency question is written into notes.md for `/reconcile` to pick up — not absorbed here, not dropped." },
 ]
 verification = [
-  { id = "VH-1", expects = "design VH-1 — `ADR-011`'s corrected text and the `SPEC-012`/`SPEC-021` requirement dispositions accurately describe the SHIPPED arm, and no `[[source]]` anchor points at a deleted file. `spec validate` does NOT catch a dangling anchor (R7), so this leg is the only thing standing between the corpus and a silent regression." },
-  { id = "VH-2", expects = "design VH-2 — the REV's target set was re-derived from the entities AT THIS PHASE, not read off §3.1's table. The sweep was re-run against the corpus as it then stood, every hit read in context, and any entity or region beyond the six recorded rather than absorbed (DEC-218, R8)." },
+  { id = "VH-1", expects = "design VH-1 — `ADR-011`'s corrected text and the `SPEC-012`/`SPEC-021` requirement dispositions accurately describe the SHIPPED arm, and no `[[source]]` anchor points at a deleted file (THREE anchors now, not two — EX-8/EN-2). `spec validate` does NOT catch a dangling anchor (R7), so this leg is the only thing standing between the corpus and a silent regression." },
+  { id = "VH-2", expects = "design VH-2 — the REV's target set was re-derived from the entities AT THIS PHASE, not read off §3.1's table or copied from the design-time floor in EX-2..EX-8. The method is documented (R8, DEC-218): sweep the deleted mechanisms against the corpus, read every hit in context, record anything beyond the floor rather than absorb it silently." },
 ]
 specs        = []
 requirements = []
