@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffe64-221e-76b0-ad2f-a7c26cbcf66b"
+recorded_at = "2026-08-14T03:50:03.038821591Z"
+kind = "friction"
+summary = "/audit: `just gate` in a fresh worktree false-reds on missing web/map/dist (RustEmbed folder), unrelated to the change under audit"
+detail = """A fresh worktree has no `web/map/dist` (gitignored vite output). `src/map_server/assets.rs` derives RustEmbed over `#[folder = "web/map/dist/"]`, and with the folder absent the derive produces a struct with no `get`, so `cargo clippy` fails with three E0599/E0433 errors in map_server. The failure looks like a code defect in the tree under audit and costs a full cold `cargo clippy` cycle (~minutes) before the real cause is visible. Worked around by copying the primary tree's `web/map/dist` into the worktree (it is gitignored, so harmless). `just gate` should either depend on the dist stage or fail early with a named "run `just web-build` first" diagnostic, rather than surfacing as a compile error in an unrelated module."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

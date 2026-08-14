@@ -1,0 +1,387 @@
+id    = 356
+slug  = "sl-254-implementation-audit-dispatch-collapsed-onto-one-subprocess-arm"
+title = "SL-254 implementation audit — dispatch collapsed onto one subprocess arm"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-254"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Expected: no surface tells an agent to use `worker_commit`. Observed: `.doctrine/governance.md` still says the claude arm self-commits through it, and rides the boot snapshot into every session"
+detail = """
+`.doctrine/governance.md:102-108` (tracked, and the authored source of `.doctrine/state/boot.md`, which `CLAUDE.md`/`AGENTS.md` `@`-import into every agent's context) reads:
+
+    note: on the **subprocess (pi) arm** the worker CANNOT self-commit (ro .git for
+    linked worktrees) -> orchestrator imports the working-tree diff. Worthwhile trade.
+    (The **claude arm** now self-commits via the gated `worker_commit` MCP tool —
+    generic mechanics in the shipped `dispatch-mechanics.md`.)
+
+PHASE-06 deleted `worker_commit` outright (`src/mcp_server/worker_commit.rs`, 1495 lines). PHASE-02 edited this very paragraph — the first three lines name `scripts/spawn-confined.sh` and cite "SL-254 PHASE-02" — and left the clause below it untouched. `doctrine boot --check` in the audit worktree reports the snapshot stale, so the false clause is live in that tree's agent context right now.
+
+The whole paragraph is stale, not just the parenthetical: "on the **subprocess (pi) arm**" presupposes a second arm that no longer exists.
+
+Why it escaped: PHASE-10/EX-5's sweep enumerates `install/`, `plugins/`, `.claude/`, `docs/`. `.doctrine/governance.md` is in none of them. This is exactly the class PHASE-08 named as its twelfth undercount — "a sweep scope expressed as a directory list is itself a claim about where truth lives, and that claim needs its own check".
+
+Evidence: `git grep -nE "worker_commit|arm-spawn|dispatch-agent|SubagentStart|stamp-subagent|worktree pretooluse|drive-slice"` over `install/ plugins/ docs/ .claude/ memory/` returns exactly one hit — `install/doctrine.toml.example:114`, which deliberately names `worker_commit` as the *retired* reader. The shipped surface is clean; the project-local governance source is not."""
+disposition = "fix-now"
+response = """
+Fixed inside the audit, commit `1185a631d`. `.doctrine/governance.md`'s orchestration section now states one arm for every harness, that the worker cannot self-commit on any profile (read-only `.git` on a linked worktree), and that `worker_commit` was deleted with nothing replacing it. The DOCTRINE_BIN section's premise was de-staled in the same pass — it explained the fork-gate skip in terms of "the `worker_commit` commit gate", which no longer exists; the skip keys on `DOCTRINE_DISPATCH_GATE` / `DOCTRINE_WORKER=1` alone (`justfile:41`), and the section's conclusion is unchanged and now stronger. `doctrine boot` re-run, `boot --check` clean, `just gate` exit 0.
+
+Fixed here rather than deferred because `.doctrine/governance.md` is not a governance *entity* — no REV can target it — and it is resolved live into every agent's context, so every session before reconcile would have read a false instruction naming a deleted tool. The reconciliation brief carries the residual: reconcile must re-run `doctrine boot` after the branch lands so the primary tree's snapshot picks this up."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected: the collapsed arm works on both supported platforms. Observed: the Darwin claude arm is network-denied by construction and cannot reach the API"
+detail = """
+Confirmed at the code level (no mac available, so `VA-2` correctly records UNVERIFIED on hardware per `DEC-212` rather than letting silence read as verified):
+
+1. `worktree jail-prefix`'s `--network` flag defaults to deny (`src/worktree/mod.rs:230` — "Allow network inside the jail (default: deny)").
+2. `scripts/spawn-confined.sh`'s Darwin arm calls `jail-prefix` **without** `--network`, so `network == false`.
+3. `network == false` appends `(deny network*)` to the Seatbelt profile (`src/worktree/jail.rs:238`, `:488`).
+4. Therefore a macOS `claude -p` worker cannot reach the Anthropic API at all.
+
+The Linux arm's inline `PREFIX` array carries no `--unshare-net`, so it is network-open — which is why the live fire succeeded on Linux. The asymmetry is real and load-bearing.
+
+Two further Darwin residuals of the same class:
+
+- **No `sandbox-exec` presence probe.** `RV-355` `F-6`'s named-refusal fix (`command -v bwrap` -> `REASON_NO_BWRAP`, PHASE-02/EX-5) landed on Linux only. A missing macOS backend still fails *unnamed*, and only after a fork has been minted.
+- **Darwin points `TMPDIR` at `<wt>/.tmp`** — inside the worktree whose working-tree delta the orchestrator imports. Benign in this repo only because `.gitignore:14` (`*.tmp`) happens to match; a client project without that line would leak harness scratch into every imported delta. PHASE-09 deliberately used `/tmp` (tmpfs) on Linux to avoid the class.
+
+Design §5.2.1 presents the two profiles as differing in exactly two facts (config dir + exec line) and §5.1/D4 restates it. That claim is now falsified in **both** directions — `DOCTRINE_WORKER` (Darwin lacked it, `RV-355` `F-2`) and `TMPDIR` (Linux lacked it, found live at PHASE-09). It should be retired, not patched."""
+disposition = "verified"
+response = """
+Observation confirmed; remediation is not audit's to write, and is partly not this project's to perform yet.
+
+**The engineering half is tolerated, with a real rationale.** No mac is reachable from this capsule, so the Darwin arm cannot be fixed-and-proved here. Crucially, `DEC-212`'s honesty requirement was met rather than dodged: `PHASE-09`/`VA-2` records the arm as UNVERIFIED on hardware instead of letting a green Linux suite read as platform parity, and the code-level chain (`--network` defaults deny -> Darwin arm passes no `--network` -> `(deny network*)` in the Seatbelt profile) is evidenced from both ends with four named hypotheses (`H1`–`H4`) for whoever next has mac access. `IMP-429` already holds the macOS-parity work.
+
+**The documentation half goes to `/reconcile`** — see the brief. design §5.2.1's "everything harness-specific reduces to two facts", §5.1 and `D4`'s restatement of it, and `DEC-215`/`DEC-209`'s parity framing all describe a symmetry that has now been falsified in both directions. The right correction is to *retire* the parity claim, not repair its count: `VA-2`'s census should read "enumerate every asymmetry", not "check Darwin against Linux".
+
+Not raised to blocker: Darwin dispatch is not in production use, no shipped claim asserts it works today, and the slice's own verification record says so plainly."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected: `worker-forbidden-writes` keeps an enforcing reader after `worker_commit` retires. Observed: its configurable tail enforces nothing, and design §5.6 still names `classify_import` as that reader"
+detail = """
+`DispatchConfig::worker_forbidden_writes`'s only production reader was `worker_commit`, deleted in PHASE-06. `classify_import` (`src/worktree/import.rs`) — which `DEC-204`/`DEC-213` and design §5.6 name as its surviving enforcing reader — never read the config at all; it only ever enforced the two hard-coded code floors, `.doctrine/**` and `.claude/**`. So the configurable tail (`.agents/**`, `install/agents/**`, `flake.nix` — "the highest security leverage in the repo" per the shipped example) now enforces nothing for any project that sets it.
+
+Found and escalated during execution (notes.md "Escalation, PHASE-06"); owner decision 2026-08-13 accepted the gap for SL-254's scope and routed the fix to `SL-255`, refined so the fix is kernel-level extra `--ro-bind` paths at spawn rather than a post-import Rust belt (which would be strictly weaker than this slice's own `PHASE-02/VT-3` standard, "refused by the KERNEL not a hook"). Captured as `IDE-051`.
+
+The code and the shipped example were both corrected honestly — `src/dispatch_config.rs:93-95` now reads "As of SL-254 PHASE-06 this key has no production reader", and `install/doctrine.toml.example:113-115` marks the tail "a DECLARATION of intent, not an enforced fence". No live exposure: no config in this repo sets the key.
+
+What is **not** corrected is the design and the decision records that still assert the opposite:
+- `design.md:895` (§5.6) — "the key itself **stays**, with `classify_import` as its enforcing reader (`DEC-204`, `DEC-213`)";
+- `design.md:557` — "`classify_import` remains the scope belt's enforcing caller" (true of the floors, misleading of the key);
+- `DEC-204` and `DEC-213`'s own consequence text.
+
+`INV-2` as worded survives: it is a claim about the *floors*, and the floors are intact."""
+disposition = "verified"
+response = """
+Observation confirmed. Two halves, routed apart.
+
+**The enforcement gap is owner-tolerated and already homed.** Owner decision 2026-08-13 accepted it for SL-254's scope and routed the fix to `SL-255`, which is building the replacement commit/import machinery and can add a reader without contradicting `PHASE-06/VT-1` ("the import belt is UNTOUCHED") — a criterion this slice has already closed. The owner further refined the shape: not a post-import Rust belt (strictly weaker than `PHASE-02/VT-3`'s "refused by the KERNEL not a hook") but extra `--ro-bind` paths on the confinement prefix, so the config gets the same kernel-level enforcement the worktree boundary already has. Captured as `IDE-051`, linked `originates_from SL-254` / `concerns SL-255`. No live exposure: no config in this repo sets the key, and both code floors are intact. Marking it honestly (`expect(dead_code)` naming the gap, plus the corrected `dispatch_config.rs` and `doctrine.toml.example` comments) is the right treatment for a declared-but-unenforced tier.
+
+**The false text goes to `/reconcile`** — see the brief. `design.md:895` and the `DEC-204`/`DEC-213` consequence text still assert `classify_import` is the key's enforcing reader, which it never was. Left alone, that is a source a future slice re-seeds the error from — exactly what the PHASE-09 worker was tasked to prevent in the code comment.
+
+`INV-2` survives unamended: it is a claim about the two code floors, and the floors did not move."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Expected: one worker-spawn shape, a confined subprocess, on every harness. Observed: `scripts/pi-spawn.sh` still ships a real, unconfined dispatch worker spawn"
+detail = """
+`scripts/pi-spawn.sh` (66 lines, still present at the slice tip) is not a stub or a doc: it runs `doctrine worktree fork --base --branch --dir --worker` (`:27`) and then `timeout "$BACKSTOP" env -C "$D" DOCTRINE_WORKER=1 …` (`:53`) — a genuine dispatch worker, with worker identity set, and **zero `bwrap`** (`grep -c bwrap` = 0). It was maintained after the confinement work landed and survives the collapse untouched.
+
+It is not a *fallback* — nothing degrades into it, so `DEC-208`'s "no unconfined rung" holds as a statement about `/dispatch`'s own path. But it falsifies the slice's Scope & Objectives headline — "dispatch has one worker-spawn shape — a confined subprocess — on every harness" — read as a property of the repository rather than of the skill.
+
+Surfaced by the PHASE-08 orchestrator (notes.md, Open (PHASE-08)) and correctly judged not phase-local: delete-or-keep is a decision, not a criterion.
+
+Contrast controls run at audit: `scripts/spawn-confined.sh` and `scripts/pi-respawn-nofork.sh` both carry `bwrap`; `scripts/pi-agent`, `pi-scout`, `pi-research` carry neither `bwrap` nor worker identity (they are research/agent helpers, not dispatch spawns). `pi-spawn.sh` is the only script that asserts worker identity without confinement."""
+disposition = "verified"
+response = """
+Observation confirmed and re-checked at the slice tip: `scripts/pi-spawn.sh` runs a real `worktree fork --worker` and sets `DOCTRINE_WORKER=1` with zero `bwrap`.
+
+Not disposed `fix-now`, and deliberately not deleted inside the audit. Delete-or-keep is a decision with a cost either way — the script is live dev tooling that someone may still be using, and deleting a working spawn path during an audit is the kind of unilateral scope widening `/audit` is not the place for. It is also not a defect in what SL-254 built: `/dispatch` routes through `scripts/spawn-confined.sh`, `DEC-208`'s "no unconfined rung" is a claim about that path, and nothing degrades into `pi-spawn.sh`.
+
+What it *is*: the one live counterexample to the slice's Scope & Objectives headline read as a property of the repository — "dispatch has one worker-spawn shape — a confined subprocess — on every harness". An agent that finds `pi-spawn.sh` before it finds `spawn-confined.sh` gets an unconfined worker with worker identity asserted.
+
+Routed to `/reconcile` for the decision plus a backlog card — see the brief. The `AGENTS.md` / `.doctrine/governance.md` orchestration section now names `spawn-confined.sh` unambiguously (F-1's fix), which reduces the discovery risk in the meantime but does not settle it."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Expected: no retrievable knowledge describes a deleted mechanism as live. Observed: 105 project-local memory items do, one of them indexed in the boot snapshot"
+detail = """
+`grep -rlE "SubagentStart|stamp-subagent|dispatch-agent|worker_commit|arm-spawn|pretooluse" .doctrine/memory/items/` returns **105** items at the slice tip. The same grep over the shipped corpus `memory/` returns **0** — `POL-002` held, and that is worth stating as a positive result.
+
+This is worse than falsified ADR prose, because memories are retrieved *on purpose*: a stale-but-plausible memory describing `SubagentStart` stamping, `PreToolUse` jail behaviour, marker identity, or `worker_commit` resolution will be surfaced to an agent as current fact and acted on. `mem.signpost.doctrine.dispatch-claude-arm-wrong-base` is indexed in the boot snapshot's Memory section, so the staleness reaches every session before any deliberate retrieval.
+
+Anticipated at scoping (`slice-254.md` Follow-Ups, "sweep the memory corpus for deleted claude-arm mechanisms", estimated "at least 25") and re-confirmed at PHASE-08 (estimated 75). The measured figure with the full retired-mechanism vocabulary is 105.
+
+Correctly left out of PHASE-08: memory is a separate corpus with its own maintenance skill, and an unbounded cluster is not a phase-local fix. It is a reconcile obligation, and the slice's own scope names the route — `/reviewing-memory`, retiring or re-anchoring rather than editing in place where a memory's whole subject is gone."""
+disposition = "verified"
+response = """
+Observation confirmed and the count measured independently at 105 (the slice's own estimates ran 25 at scoping, 75 at PHASE-08 — under-counted twice more, consistent with `R8`). Shipped corpus clean at zero, which is a `POL-002` result worth carrying into the synthesis rather than only the brief.
+
+Not fixed in the audit and not fixable phase-locally: 105 items is an unbounded triage with its own maintenance skill, and the correct treatment differs per item — a memory whose whole subject is gone must be **retired or re-anchored**, not edited in place, which is a judgement call per record rather than a sweep.
+
+Routed to `/reconcile` — see the brief. This is not a new obligation: `slice-254.md`'s Follow-Ups already carry "At reconcile — sweep the memory corpus for deleted claude-arm mechanisms" and name `/reviewing-memory` as the route. The audit's contribution is the measured figure and the confirmation that `mem.signpost.doctrine.dispatch-claude-arm-wrong-base` sits in the boot snapshot's Memory index, so the staleness reaches every session before any deliberate retrieval — which is what makes this the highest-leverage item in the brief's non-blocking set."""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = """Expected: `ADR-001`'s leaf classification describes `worktree::jail` truthfully after the re-home. Observed: `layering.toml:138` and `jail.rs`'s module doc both still assert "no disk", and PHASE-08 opened `ADR-001` without correcting them"""
+detail = """
+`DEC-206`/PHASE-01 moved four primitives into `src/worktree/jail.rs`. Two are impure and unseamed: `have_bwrap` reads the environment and stats the filesystem (`jail.rs:152`, `dir.join(BWRAP).is_file()`), and `write_seatbelt_profile` calls `std::fs::write` (`jail.rs:507`).
+
+Both statements of the module's contract still deny this:
+- `.doctrine/adr/001/layering.toml:138` — `"worktree::jail" = "leaf"  # SL-182: pure jail core — no disk/git/clock/rng; …`
+- `src/worktree/jail.rs:5` — "PURE leaf: no clock / git / disk / rng", and `:19` "## Purity contract (leaf, ADR-001 — no clock/git/disk/rng)".
+
+Nothing mechanical catches it: `tests/architecture_layering.rs` parses crate-module `use` edges and checks tier direction; it has no notion of `std::fs`. The gate is green either way.
+
+Partly pre-existing — `impl ResolveEnv for RealEnv` in the same module already shells `getconf` and makes several `std::fs` calls (`jail.rs:729-771`), so the module's genuine invariant has long been "impurity behind the injected `ResolveEnv` seam", not "no I/O". What SL-254 added is impurity that is **not** behind that seam.
+
+The slice diagnosed this itself (notes.md, "Follow-up: `jail.rs`'s ADR-001 posture") and nominated it as PHASE-08's preferred route: "At minimum `layering.toml:138`'s comment wants correcting to describe the seam rather than assert an absence that has not held since SL-183." PHASE-08 did open `ADR-001` — `EX-10` names it, and the two deleted-module rows plus `marker.rs`'s comment were corrected — but this region was not reached. The nomination fell between the two passes."""
+disposition = "verified"
+response = """
+Observation confirmed at both sites (`layering.toml:138`, `jail.rs:5` and `:19`) against the two impure arrivals (`jail.rs:152` `is_file()`, `jail.rs:507` `std::fs::write`).
+
+Not `fix-now`: `ADR-001` is an accepted governance entity, and audit does not edit governance. Correcting only `jail.rs`'s module doc while leaving the ADR's registry comment would make the two disagree, which is worse than the present state where they agree and are both wrong.
+
+Routed to `/reconcile` as a REV item — see the brief. The right correction is the one the slice's own notes proposed: restate the comment as *"impurity behind the injected `ResolveEnv` seam"*, which is the module's genuine invariant and has been since SL-183, rather than an absence of I/O that the module has not honoured for two slices. The alternative — seaming `have_bwrap` and `write_seatbelt_profile` behind `ResolveEnv`, or splitting them to a `worktree::jail_io` command-tier sibling — is a real option but is a code change beyond reconcile's surface and belongs on a card if the prose correction is judged insufficient.
+
+Severity held at minor: it is a false statement in a comment, partly pre-existing, with no behavioural consequence and no mechanical check that could have caught it."""
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Expected: `slice conformance` yields a mechanical drift signal at audit. Observed: the source-delta registry was empty after ten completed phases — `conformance unavailable`"
+detail = """
+`doctrine slice conformance 254` reported `conformance unavailable — no recorded source deltas`. Ten phases landed across 31 commits and not one recorded a row, so the audit's mechanical undeclared/undelivered algebra was unavailable at the moment it is meant to be read. Per `/audit`'s own instruction, an empty registry is itself a finding: a partial registry must never be read as clean.
+
+Bootstrapped during this audit from the phase commits — `--commit` mode for the eight single-commit code phases (`ef59ad0f5`, `c66cd2c65`, `7064bca41`, `e2b1a4954`, `b2bd24ea8`, `e662d26d5`, `c4a596774`, `dc7347152`) and `--start/--end` for the two multi-commit phases (PHASE-08 `d349fe678..e270f0468`, PHASE-09 `0f86ff0d2..5a8efdcec`). Knowledge/harvest/plan commits were deliberately excluded so `.doctrine/` trailing edits do not inflate the undeclared cell.
+
+Two mechanical notes for whoever lands this branch:
+
+1. `slice record-delta` resolves to the **primary tree's** registry even when run from a linked worktree, so the ten rows are now in `edge`'s `.doctrine/slice/254/slice-254.toml`, not on `audit/SL-254`. The two copies of that file have diverged (audit/SL-254 carries `status = "started"`; edge carries the rows). The landing merge must keep both.
+2. `slice conformance` reads phase *completion* from runtime state. The primary tree had no `.doctrine/state/slice/254/phases/`, so the phase sheets were copied across from the audit worktree before the algebra would compute; a fresh `--commit`-less bootstrap elsewhere will hit the same `incomplete — partial coverage` wall."""
+disposition = "fix-now"
+response = """
+Bootstrapped inside the audit. Ten rows recorded (`--commit` for the eight single-commit code phases, `--start/--end` for PHASE-08 and PHASE-09), and `slice conformance` now computes — see F-8 for the algebra it produced.
+
+Two residuals carried to the reconciliation brief rather than closed here, because both are landing mechanics rather than audit findings:
+1. `record-delta` resolves to the primary tree's registry, so the rows are on `edge`'s `.doctrine/slice/254/slice-254.toml` while `audit/SL-254`'s copy carries `status = "started"`. The landing merge must keep both sides.
+2. `slice conformance` reads phase completion from runtime state; the phase sheets were copied from the audit worktree into the primary tree to make the algebra compute. That copy is disposable and needs no preservation, but anyone re-running conformance elsewhere will hit the same `incomplete — partial coverage` wall first.
+
+The underlying process gap — ten phases landing without a row — is not fixed by this bootstrap and is not SL-254's to fix; it is recorded here so the next dispatched slice's audit does not rediscover it."""
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "Expected: the `design-target` selector registry describes the surface the slice actually touched. Observed: 96 undeclared paths against 40 conformant — the twelve recorded under-counts never reached the registry"
+detail = """
+With the registry bootstrapped (F-7), `doctrine slice conformance 254` reports **undeclared 96 / undelivered 0 / conformant 40**. Undelivered zero is a genuinely good result: every declared selector was delivered, so nothing was promised and dropped.
+
+The undeclared cell splits three ways.
+
+**(a) Legitimately outside a code-surface selector list** — the PHASE-08 governance target set (`.doctrine/adr/{001,006,008,011,012}`, `.doctrine/spec/{tech/012,tech/021,tech/022,tech/028,product/015}`, 14 `.doctrine/requirement/…`), the newly minted `REV-052` and `REC-114`, observation records, and the slice's own `notes.md`/`plan.toml`/`slice-254.toml`. Selectors are seeded at `/slice` and `/design` against a *code* surface; a governance REV's targets are not naturally selector material. No action beyond noting the shape.
+
+**(b) Real code paths the design's §5.6 table missed, each one a recorded under-count that never propagated back to the registry** — `src/commands/guard.rs`, `src/commands/doctor.rs`, `src/commands/cli.rs`, `src/doctor_checks.rs`, `src/finding.rs`, `src/install.rs`, `src/mcp_server/dispatch.rs`, `src/worktree/{allowlist,claim_lock,dispatch_record}.rs`, `justfile`, `plugins/doctrine/hooks/hooks.json`, `plugins/doctrine/skills/execute/SKILL.md`, the new `plugins/doctrine/skills/dispatch-spawn/SKILL.md`, the deleted `install/hymns/role/orchestrator.md`, `install/agents/claude/{dispatch-orchestrator,dispatch-probe}.md`, `install/workflows/drive-slice.js`, `.doctrine/workflows/drive-slice.js`, `install/manifest.toml`, `publication/manifest.toml`, `tests/common/mod.rs`, `tests/e2e_dispatch_arm_spawn.rs` (deleted), the new `tests/e2e_worker_confinement.rs`, and eleven further retargeted `tests/e2e_*`. Several are named explicitly in plan criteria (`guard.rs`, `doctor_checks.rs`, `finding.rs`, `install.rs`, `justfile`) — so the plan knew, and the registry never learned.
+
+**(c) One path outside the slice's declared blast radius entirely** — `crates/doctrine-control/src/backend/bubblewrap.rs`, touched by `c66cd2c65` (PHASE-02). Inspected: a one-line doc-comment update, `pi-spawn-confined.sh` -> `spawn-confined.sh`, in a byte-parity note. Correct and in-spirit; worth recording that the collapse reached the capsule crate at all.
+
+Per `/audit`'s guardrail this is fixed by the **selector registry** (`doctrine slice selector add`), which is what `slice conformance` reads, not by editing design §5.6's prose — a prose-only correction leaves conformance red."""
+disposition = "verified"
+response = """
+Observation confirmed; the algebra is now on record (undeclared 96 / undelivered 0 / conformant 40) and the three-way split in the finding is the audit's read of it.
+
+Not `fix-now`: adding ~25 selectors is a registry write that changes what every future conformance run and every `review prime` sees for this slice, and the judgement of which category-(a) governance paths deserve a selector at all is a scoping call, not an audit call.
+
+Routed to `/reconcile` — see the brief, which names `doctrine slice selector add` as the load-bearing change and design §5.6 as its human mirror, per `/audit`'s own guardrail: a prose-only correction leaves conformance red because `slice conformance` reads `slice-254.toml`, not `design.md`.
+
+Two things worth stating as positive results rather than defects. **`undelivered` is zero** — every `design-target` selector was actually delivered, so nothing was declared and dropped, which is the cell that would indicate real scope loss. And **category (c) is benign**: `crates/doctrine-control/src/backend/bubblewrap.rs` was inspected line-by-line and is a one-line doc-comment rename in a byte-parity note, correct and in-spirit."""
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "Expected: `DEC-210`'s wholesale `$CFG_DIR` bind is sufficient to authorise the claude worker. Observed: the arm also requires a materialised on-disk credential the host may not have"
+detail = """
+`DEC-210` binds `$HOME/.claude` wholesale, rw, specifically to carry the subscription credential into the jail, and design §5.2.1/§5.5 read as though that bind is the whole of the authorisation story.
+
+PHASE-09's live fire falsified it. In the capsule there is no `~/.claude/.credentials.json` at all — the session authenticates as a child session over a unix socket — so a headless `claude -p` reports `Not logged in`, `apiKeySource: "none"`, `duration_api_ms: 0`. This was run #2 of five, and it was verified **not** to be a confinement defect: `claude -p` fails identically unconfined on the same host. The bind carries a credential; it does not create one.
+
+Bridged for the live fire by exporting `CLAUDE_CODE_OAUTH_TOKEN` (the subscription OAuth token, not an API key — `DEC-210`'s billing posture and `EVD-023`'s authorisation are both preserved). Deliberately **not** written into the shipped script, which is the right call: over-fitting a shipped spawn path to one capsule's auth shape is worse than recording the dependency.
+
+But the dependency is currently recorded only in `notes.md`. `DEC-210` itself still reads as sufficient, so the next operator on a host without a materialised credential meets a `Not logged in` from inside a jail and has no reason to suspect the host rather than the confinement — which is exactly the diagnosis cost PHASE-09 paid."""
+disposition = "verified"
+response = """
+Observation confirmed, and confirmed to be a host fact rather than a confinement defect — PHASE-09 probed `claude -p` unconfined on the same host and it failed identically, which is the control that makes this attributable.
+
+Not `fix-now`, and the shipped script correctly does **not** carry the workaround: exporting `CLAUDE_CODE_OAUTH_TOKEN` inside `spawn-confined.sh` would over-fit a shipped spawn path to one capsule's auth shape. That judgement stands.
+
+Routed to `/reconcile` — see the brief. `DEC-210` is a knowledge record (`doctrine knowledge edit`), and the correction is small and precise: binding `$CFG_DIR` **carries** a credential into the jail, it does not **create** one; the arm has an unstated host precondition that a materialised subscription credential exists (`~/.claude/.credentials.json`, or `CLAUDE_CODE_OAUTH_TOKEN` in the environment). Design §5.5's authorisation story inherits the same gap.
+
+The cost of leaving it is concrete and already measured: the next operator on a credential-less host meets `Not logged in` from inside a bwrap jail and has no reason to suspect the host over the confinement — one of the three diagnosis cycles PHASE-09 paid for."""
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "Expected: design §5.2.1's quoted claude exec line matches what ships. Observed: it omits `--verbose`, without which `claude -p --output-format stream-json` hard-refuses"
+detail = '''
+design.md §5.2.1 prints the two profiles' exec lines "side by side — the only other harness-specific tokens", and the claude one reads:
+
+    claude -p --output-format stream-json \
+       --strict-mcp-config \
+       --permission-mode bypassPermissions \
+       <"$PF" >"$OUT" 2>&1
+
+That command cannot run. PHASE-09 run #1 died in 1.4s on `Error: When using --print, --output-format=stream-json requires --verbose`. The shipped script (`scripts/spawn-confined.sh:247`) now carries `--verbose`, pinned by the regression test `claude_arm_stream_json_carries_verbose` in `jail.rs`, with the reason documented inline at `:236-245`.
+
+The flag-by-flag justification table below the snippet likewise has a `--output-format stream-json` row citing `DEC-215` and no `--verbose` row, so `DEC-215`'s own account of the typed hand-back is incomplete in the same way.
+
+Small, but this is the region a future reader consults to know what the arm execs, and the design's version of it is a command that fails closed in 1.4 seconds.'''
+disposition = "verified"
+response = """
+Observation confirmed against both sides: design §5.2.1's quoted claude exec line has no `--verbose`; `scripts/spawn-confined.sh:247` does, pinned by `claude_arm_stream_json_carries_verbose` in `jail.rs` with the reason documented inline at `:236-245`.
+
+Routed to `/reconcile` as a per-slice direct edit — see the brief. Two edits, not one: the snippet gains `--verbose`, and the flag-by-flag justification table gains a row for it, because that table is where `DEC-215` records what the typed hand-back actually costs in argv and it currently reads as though `--output-format stream-json` stands alone.
+
+Kept as a separate finding from F-2 rather than folded into it: F-2 is about a parity *claim* that should be retired, this is a concrete command that does not run. They land in the same section of design.md but they are different corrections, and folding them risks the smaller one being lost inside the larger."""
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "minor"
+title = "Expected: `ADR-020`'s consistency against the shipped result is settled or explicitly carried. Observed: it is carried in notes.md only, and `REV-046`'s rationale now describes shipped deletions as unimplemented target work"
+detail = """
+PHASE-08 escalated before authoring anything: `ADR-020` (accepted) reserves `ADR-006`, `ADR-008`, `ADR-011` and `ADR-012` to be "revised only at cutover through `REV-046`" (`:145-146`), and `:86-88` states the incumbent "remains authoritative until `REV-046`'s cutover gates are met". Owner ruling 2026-08-14 was route **(C)** — proceed on the self-scoping reading, do not edit `ADR-020` — with a standing follow-up explicitly addressed to `/reconcile`.
+
+Two live residuals, both currently held only in `notes.md`:
+
+1. **`ADR-020`'s Context over-counts the defects it argues from** (`:5-10`, `:8-9`). It motivates capsules from four incumbent brittlenesses; SL-254 discharged two of them — worker identity is no longer a cooperative marker (it is `DOCTRINE_WORKER`, set by the same confining argv that establishes the kernel write floor), and there is no longer a harness-specific spawn path. The two that survive (a shared Git object store between coordination and untrusted work; a trusted orchestrator replaying a large worktree/import choreography) remain live motivation. The decision is unaffected; the argument is half stale, and leaving it makes the capsule case read stronger than it now is.
+2. **`REV-046` is now arguably stale in the other direction.** Its rationale enumerates precisely the mechanisms SL-254 deleted — "worktree marker identity, `DOCTRINE_WORKER`, SubagentStart stamping, base-by-placement, the gated `worker_commit` exception, per-harness arm routing and altitude" — and describes them as unimplemented target work awaiting a cutover. Several have now shipped as deletions, under a slice explicitly *not* a capsule adoption (`DEC-203`). `REV-046` is `proposed · approval=none`. Either its rationale needs restating against the post-SL-254 baseline or its gates do.
+
+PHASE-08 took no position on either and edited neither, correctly. Neither blocks SL-254's close; both are lost if they stay in a slice's notes."""
+disposition = "verified"
+response = """
+Observation confirmed; both residuals re-read against `ADR-020` and `REV-046` at audit.
+
+PHASE-08 handled the blocking half correctly: it escalated *before* authoring anything (nothing edited, no id minted, tree clean), put the ambiguity to the owner as two defensible readings rather than picking one, and executed the ruling — route (C), self-scoping reading, `ADR-020` untouched, `ADR-011` amended in place. `EX-12` then wrote the deferred consistency assessment into `notes.md` explicitly addressed to `/reconcile`. That is the process working, not failing.
+
+The finding is about *durability*, not correctness. Both residuals currently live only in a slice's `notes.md`, which is the artefact least likely to be read again once the slice closes — and one of them (`REV-046`'s rationale describing shipped deletions as unimplemented target work) is a live inconsistency in a `proposed` revision that gates the capsule cutover, so it will be read as current by whoever picks that programme up.
+
+Routed to `/reconcile` — see the brief, which carries both as REV/entity items with the assessment's own recommendation: amend `ADR-020`'s Context to acknowledge the two discharged defects (cheap, and leaving it makes the capsule case read stronger than it now is), and put `REV-046`'s stale rationale on the table as a question rather than a footnote. Neither blocks SL-254's close, which is `EX-12`'s own verdict and this audit agrees with it."""
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "nit"
+title = "Expected: the spawn transcript describes a hand-back. Observed: `spawn-confined.sh` still prints `----- worker commit -----` on an arm whose worker by contract never commits"
+detail = """
+`scripts/spawn-confined.sh` closes with
+
+    echo "----- worker commit -----"
+    git -C "$D" log --oneline -1 2>&1
+    git -C "$D" rev-parse HEAD 2>&1
+
+inherited verbatim from `pi-spawn.sh`. Under the collapsed arm the worker hands back an **uncommitted** tree by contract (design §5.2.2, `DEC-213`), and the fork's `.git` is read-only, so the label names an event that cannot occur on either profile.
+
+The two commands themselves are worth keeping — printing the fork's tip is how an orchestrator confirms HEAD is still the base, i.e. that the worker did *not* commit. Only the label is wrong, and it is wrong in the direction the slice spent six phases removing: a transcript line that implies a self-commit path."""
+disposition = "fix-now"
+response = "Fixed inside the audit, commit `1185a631d`. The label now reads `----- fork tip (expect base; the worker does not commit) -----`, with a comment naming design §5.2.2 / `DEC-213` and stating why the two git commands stay. The `PREFIX=(` array is untouched, so the Rust text-consumers (`jail.rs`'s `spawn_core_tokens` parity test and `tests/e2e_worker_confinement.rs`'s token extractor) are unaffected; `just gate` exit 0 confirms."
+
+[[finding]]
+id = "F-13"
+status = "verified"
+severity = "minor"
+title = "Expected: design §5.2.3's `land` prescription matches what shipped. Observed: it still names a classifier that would refuse every `land`, and the correction was mis-routed to the REV"
+detail = """
+design.md §5.2.3's "Edge case: `land.rs:173`'s cross-tree marker read" still says to "Substitute the branch-shape role classifier (`shared.rs:77`) returning `"fork"`" for `bears_marker`.
+
+Taken literally that bricks the verb. `classify_worktree_role` returns `"fork"` for **every** linked non-coordination worktree, and `land` only ever operates on a linked worktree (`WorktreeGone` refuses otherwise) — so the substitution refuses every `land`, including the solo TDD branches the verb exists to serve.
+
+PHASE-05 caught it and shipped the right thing instead: `shared.rs::is_dispatch_fork_branch` (`:112`), the `dispatch/` prefix **and** a non-numeric suffix — exactly what the funnel mints and what `coord_branch_suffix` already knows. The design's *intent* and its "strictly stronger than a marker read" claim are both unchanged and still hold. The retargeting pass also found that `land_refuses_dispatch_fork` had been using a `solo-df` branch plus a stamp, so it would have gone green while `land` merged a fork it should have refused; it now uses `dispatch/agent-df`, with a new negative (`land_permits_a_solo_fork_that_is_not_a_dispatch_branch`) pinning the conjunct.
+
+The divergence is recorded in `notes.md` — but routed as "should be corrected in the REV". `design.md` is a per-slice artefact and is **not** a REV target, so as written that item would stall at reconcile with no surface to write. Correcting the routing is the point of raising this separately."""
+disposition = "verified"
+response = """
+Observation confirmed at both ends: design §5.2.3 still carries the wrong prescription; `shared.rs:112` ships `is_dispatch_fork_branch` with the two-conjunct test at `:242`.
+
+The code is right and needs nothing. Only the design text is wrong, which makes this a per-slice direct edit — routed to the brief's "Per-slice (direct edit)" section, correcting `notes.md`'s own routing of it to "the REV".
+
+Worth stating as a positive: this is the design being *caught* by execution rather than followed off a cliff, and the phase went further than the fix — it found a test that would have gone green while `land` merged a fork it should have refused, and pinned the conjunct with a new negative case. That is the behaviour-preservation posture working on a phase that was not itself behaviour-preserving."""
+
+[[finding]]
+id = "F-14"
+status = "verified"
+severity = "minor"
+title = "Correction to `F-7`, and the structural point it was hiding: the source-delta registry is runtime state, so a capsule-exported slice cannot carry its conformance signal at all"
+detail = """
+`F-7`'s response asserted the bootstrapped rows land in the primary tree's authored `.doctrine/slice/254/slice-254.toml` and must survive the landing merge. That is wrong. `doctrine slice record-delta` writes `.doctrine/state/slice/254/boundaries.toml` — the **runtime** tier: gitignored, disposable, `rm -rf`-able. `git status` on the primary tree shows `slice-254.toml` unmodified after ten `record-delta` calls, which is the control.
+
+The correction removes one brief item (there is no merge hazard) and exposes a better finding underneath it.
+
+**The conformance signal cannot cross a branch export.** `SL-254` was built in a microVM capsule holding a separate checkout and delivered as `refs/capsule/a/heads/work`. Source-delta rows are runtime state, so they do not ride a branch — they stayed in the capsule and died with it. The same is true of phase completion status, which is why `slice conformance` first reported `incomplete — partial coverage` here until the phase sheets were copied across by hand.
+
+So for any slice whose implementation reaches the auditor as a *branch* rather than as a live tree — a capsule export, a bare fetch, a fresh clone, a colleague's push — `slice conformance` is structurally unavailable, and the auditor's only route is to re-derive the rows from the commit graph, as this audit did. That reconstruction is possible only because the commit messages happen to name their phases; a slice with less disciplined commit hygiene would leave an auditor with no way to rebuild the registry at all.
+
+This is not `SL-254`'s defect and nothing here should change for it. It is a platform observation worth a card: either the registry belongs in the authored tier, or the export/handoff path needs to carry it, or `/audit` needs a documented reconstruction step instead of an ad-hoc one."""
+disposition = "verified"
+response = """
+Correction accepted and the brief amended: `F-7`'s "the landing merge must keep both sides" item is withdrawn — there is no merge hazard, because the rows never entered the authored tier.
+
+The structural half is routed to the brief as a backlog card, not as `SL-254` work. It is a platform question about which tier the source-delta registry belongs in, and it is only visible from an audit that met the implementation as a branch rather than as a tree — which is exactly what the capsule handoff made this one.
+
+Nothing about `SL-254`'s own conformance result changes: the ten rows were reconstructed from the commit graph, the algebra ran, and `F-8` records what it found."""
+
+[[finding]]
+id = "F-15"
+status = "verified"
+severity = "major"
+title = "Supersedes `F-14`: the registry was never empty. The capsule recorded all ten boundaries and the sideband delivered them — `boundaries_path()` resolves to the primary worktree and read the wrong tree's file"
+detail = """
+`F-14` claimed the source-delta rows "stayed in the capsule and died with it". That is false, and so is `F-7`'s framing of an empty registry. Both are superseded by this finding.
+
+**What actually happened.** `.worktrees/SL-254-audit/.doctrine/state/slice/254/boundaries.toml` holds **ten rows, one per phase, `provenance = "solo"`** — the automatic solo phase-binding recorded every boundary as the phases landed. The capsule sideband (`microvm-spike` ledger item 32) delivered them: `refs/capsule/a/state/implementation`, fetched atomically alongside the code ref so "nobody observes a result commit without the capsule state that goes with it". The state was recorded, it travelled, and it was sitting in the audit worktree at the correct relative path the entire time.
+
+**Why `slice conformance` reported `unavailable` anyway.** `state::boundaries_path()` (`src/state.rs:943-949`) resolves `git::primary_worktree(cwd)` — on read *and* on write. `.worktrees/SL-254-audit` is a linked worktree of this repo, so its primary is `/workspace/doctrine`, which had no `254` registry. Conformance read an absent file and `read_registry` correctly returns an empty registry for a missing path.
+
+**The sharp edge is that its sibling resolves differently.** `phases_dir()` (`:135`) joins `project_root` directly — local to the tree you are standing in. So `registry_completeness(cwd, project_root, id)` (`:1208-1219`) reads the **registry from the primary tree** and **completed phases from the local tree**, in one function, for two files that live in the same directory. That is why `slice status 254` reported `10/10` from the audit worktree while `slice conformance 254` reported no deltas at all — and why, after I hand-recorded rows into the primary, it flipped to `incomplete — partial coverage` (primary registry, primary phase state = none) rather than resolving.
+
+**The primary-pinned write is a second hazard.** `record-delta` accepted ten writes into a primary tree that had never built this slice, silently shadowing an authoritative `provenance = "solo"` registry with a hand-reconstructed `provenance = "manual"` one. Nothing warned. A tree can accumulate registry rows for slices whose work it does not contain.
+
+**Nothing downstream changes.** Both registries produce identical algebra — undeclared 96 / undelivered 0 / conformant 40 — verified by swapping the files and re-running. `F-8` stands as written. The authentic capsule registry has been restored as the primary's copy.
+
+**Why the pinning exists, and where its boundary really is.** `primary_worktree()` is correct when the linked worktree is a *worker fork of this repo* — a fork must not keep its own registry, or the orchestrator's conformance view fragments. It is wrong when the linked worktree is an *adopted foreign checkout* whose history was developed elsewhere and whose runtime state arrived with it. Doctrine cannot currently tell those two apart, and the capsule workflow makes the second case routine rather than exotic."""
+disposition = "verified"
+response = """
+Confirmed by reading the resolver rather than inferring from behaviour: `boundaries_path` -> `primary_worktree(cwd)` (`state.rs:943`), `phases_dir` -> `project_root` (`state.rs:135`), both consumed by `registry_completeness` (`:1208`). The empirical control is the swap test — authentic `provenance = "solo"` registry and hand-reconstructed `provenance = "manual"` registry give byte-identical conformance output.
+
+Not `SL-254`'s defect in any part, and nothing in the slice changes. Routed to the brief as a **platform** item with the diagnosis attached, replacing `F-14`'s (wrong) framing and superseding `F-7`'s "the registry was empty" premise — `F-7`'s bootstrap was unnecessary work caused by a misread, not a gap it filled.
+
+The remediation question worth putting to whoever picks this up: `primary_worktree()` pinning is right for a worker fork and wrong for an adopted foreign checkout, and doctrine has no predicate distinguishing them. The cheapest honest fix may be neither — a linked worktree that carries its own `.doctrine/state/slice/<id>/` for a slice the primary does not know could simply be read locally, which is a rule expressible without a new concept. That is a design call, not an audit call.
+
+Recorded as an audit self-correction: this is the second restatement of the same point, and the ledger keeps all three so the reasoning chain stays legible rather than tidy."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

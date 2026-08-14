@@ -1,0 +1,35 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 24
+slug = "claude-code-oauth-refresh-rotation-fixed-ttl-absolute-expiry"
+title = "Claude Code OAuth refresh: rotation, fixed TTL, absolute expiry"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-13"
+updated = "2026-08-13"
+tags = ["auth", "capsule", "claude", "empirical", "harness", "oauth"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum        = ""
+provenance   = ""               # inspection | experiment | reproduction | citation
+confidence   = ""               # low | medium | high
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "empirically measured OAuth refresh semantics: rotation, fixed 8h TTL, absolute ~5-day refresh-token expiry"
+target = "RFC-018"
+
+[[relation]]
+label = "supports"
+target = "DEC-220"

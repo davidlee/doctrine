@@ -1,0 +1,42 @@
+memory_uid = "mem_019ffbad636e74109ed33da4b0497222"
+memory_key = "mem.fact.claude.oauth-refresh-rotation-single-writer"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Claude Code OAuth: one refresher per credential lineage"
+summary = "Refresh rotates unconditionally; a split home forks the lineage and the losing client zeroes its own credential. Re-login is on a hard ~5-day clock."
+created = "2026-08-13"
+updated = "2026-08-13"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["claude", "oauth", "auth", "harness", "empirical", "dispatch"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3a3b25869289f15c106bb209f97cfefe7807f7bc"
+ref_name = "refs/heads/edge"
+checkout_state_id = "6e851a45413442f70b2299fcdc3a76254825a2224fb310404dce8d2cbc83d0db"
+base_commit = "caf7f2a21ad8c77a0f30623194ab5a95c880c9aa"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
