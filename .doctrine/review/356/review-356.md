@@ -277,21 +277,16 @@ audit and appear below only where they leave a residual.
 - ~~**Phases landing without a source-delta row** (`F-7`)~~ — **withdrawn by
   `F-15`.** There was no such gap: all ten phases recorded automatically. The
   card that replaces it is the resolver item below.
-- **The registry and its sibling resolve by different roots** (`F-15`,
-  superseding `F-14`). `boundaries_path()` pins to `primary_worktree(cwd)` on read
-  and write (`state.rs:943`); `phases_dir()` joins the local `project_root`
-  (`:135`); `registry_completeness()` consumes both (`:1208`). So an adopted
-  worktree carrying its own runtime state reports `10/10` phases and zero source
-  deltas simultaneously. The capsule sideband delivered a complete
-  `provenance = "solo"` registry and doctrine read a different tree's absent file.
-  Primary-pinning is correct for a *worker fork* and wrong for an *adopted foreign
-  checkout*; there is no predicate distinguishing them today. A candidate that
-  needs no new concept: read locally when the linked worktree holds its own
-  `.doctrine/state/slice/<id>/` for a slice the primary does not know.
-- **`record-delta` writes primary-pinned with no warning** (`F-15`). It accepted
-  ten rows into a tree that had never built the slice, shadowing an authoritative
-  registry with a hand-reconstructed one. A tree can silently accumulate rows for
-  slices whose work it does not contain.
+- **`ISS-350` — minted 2026-08-14, so this one is already off the brief** (`F-15`).
+  The registry and its sibling resolve by different roots: `boundaries_path()`
+  pins to `primary_worktree(cwd)` on read and write (`state.rs:943`),
+  `phases_dir()` joins the local `project_root` (`:135`), and
+  `registry_completeness()` consumes both (`:1208`) — so an adopted worktree
+  reports `10/10` phases and zero source deltas at once. Carries the diagnosis,
+  the swap-test evidence, the primary-pinned-write hazard, three fix directions,
+  and the residual that runtime state does not travel with a branch.
+  `references(originates_from) SL-254`, `references(concerns) RV-356`.
+  `/reconcile` need only confirm it exists; it does not need re-deriving.
 - **`base64` is an unused dependency**, verified at PHASE-05 against the current
   tree (zero references in `src/` or `tests/`). Gate-neutral — cargo does not warn
   on an unused dep — which is why it was left rather than touched mid-slice.
