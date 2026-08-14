@@ -50,5 +50,5 @@ guess.
 Run the project's fast check after every edit, and its full pre-commit check
 before handing back your delta. Use the project's own check verbs (for this
 framework: `doctrine check quick` after each edit, `doctrine check commit`
-before the final commit) — never assume a host build tool is present or
+before handing back) — never assume a host build tool is present or
 correct; the declared check verbs are the contract.
