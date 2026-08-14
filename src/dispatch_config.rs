@@ -91,8 +91,8 @@ pub(crate) struct DispatchConfig {
     #[serde(default)]
     pub(crate) authoring_branch: Option<String>,
     /// The HARD scope tier for the dispatch import belt (SL-198 PHASE-02, design
-    /// §5.3 / EX-6; re-aimed at SL-254 PHASE-06 when `worker_commit` retired and
-    /// `classify_import` became its sole enforcing reader — DEC-204/DEC-213).
+    /// §5.3 / EX-6). As of SL-254 PHASE-06 this key has no production reader —
+    /// see the [`ForbiddenWrites`] doc comment for the full explanation.
     /// Gitignore-syntax lines (positive + negative globs, precedence)
     /// compiled into the [`ForbiddenWrites`] matcher: a path in an imported
     /// worker delta matching a forbidden line is hard-refused (`forbidden-zone`).
