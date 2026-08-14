@@ -3,8 +3,8 @@ memory_key = "mem.pattern.doctrine.runtime-state-root-split-reads-false-empty"
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "Runtime state read from primary-pinned root is invisible when work arrives from another tree"
-summary = "boundaries_path() pins to primary_worktree(cwd) while phases_dir() joins the local project_root — same directory, two roots, so an adopted worktree reports 10/10 phases and zero source deltas at once"
+title = "Cross-tree runtime state: the root each side resolves is part of the contract"
+summary = "The boundaries_path/phases_dir root split is FIXED for the registry (ISS-350: local when the local tree owns one, else primary, plus stderr disclosure) — stop hand-copying boundaries.toml. phases_dir stays local-rooted on purpose, so a state-less linked worktree still reads primary rows against an empty local completed-set and conformance says 'partial coverage'. QUE-216 owns which tree should own runtime state."
 created = "2026-08-14"
 updated = "2026-08-14"
 
