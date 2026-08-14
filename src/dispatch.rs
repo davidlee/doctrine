@@ -3281,7 +3281,7 @@ fn prepare_review(root: &Path, slice: u32) -> anyhow::Result<()> {
     // (5) gate: primary-rooted completeness (both the completed-set and the
     //     registry resolve against `primary`) — bail BEFORE projection on any gap.
     if let crate::state::Completeness::Incomplete { gaps } =
-        crate::state::registry_completeness(&primary, &primary, slice)?
+        crate::state::registry_completeness(&primary, slice)?
     {
         let detail = gaps
             .iter()

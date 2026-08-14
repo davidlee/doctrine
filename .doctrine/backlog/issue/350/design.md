@@ -280,3 +280,72 @@ so a fresh worktree has no skills and no shipped memory corpus either — while
 of harness: the claude `SessionStart` hook runs `prompt resolve`, which
 regenerates it in whatever tree the session opens in — late, and only for that
 harness. Filed as `ISS-352`; not this one.
+
+## 11. Outcome — as built
+
+Landed as designed, in `src/state.rs` (the resolver + advisories), `src/slice.rs`
+(the two shells), `src/dispatch.rs` (the collapsed `registry_completeness`
+signature). `just gate` green, clippy zero warnings.
+
+**Resolver.** `resolve_registry_root(local, slice_id) -> RegistryRoot`
+(`Local`/`Primary`), with `registry_file()` as the single place the
+`boundaries.toml` leaf name is spelled. A local registry short-circuits *before*
+git is consulted — cheaper in the common case, and it makes the fork-family
+induction structural: a fork holds none, so the local arm is unreachable there,
+and every write goes through the resolver so no write can create the first local
+file. `boundaries_path`, `read_source_deltas`, `record_source_delta` and
+`forget_source_delta` all route through it; `cwd` renamed to `local` throughout,
+because the probe needs a project root, not any path in the repo.
+
+**Advisories.** `cross_tree_note` (pure, over the resolved enum) and
+`sibling_registries` + `sibling_registry_warning`, both printed by the shells via
+`slice::advise_registry_root` — the resolver stays quiet and both messages stay
+unit-testable. The sibling probe degrades to empty rather than failing: a
+disclosure must never break a write.
+
+**Simplification.** `registry_completeness` collapsed from `(cwd, project_root,
+slice_id)` to `(project_root, slice_id)`. Every caller passed the same value
+twice; the split advertised a seam that only ever mislabelled the bug.
+
+**Tests.** `VT-A` `adopted_worktree_with_local_registry_resolves_local`, `VT-B`
+`local_state_without_a_registry_still_resolves_primary`, `VT-C`
+`completeness_is_complete_in_a_tree_that_owns_both_halves`, plus
+`sibling_registries_names_other_trees_holding_one` and
+`cross_tree_note_fires_only_on_a_primary_resolution`. Red proven by reverting the
+resolver to the old always-primary rule: `VT-A`, `VT-C` and the sibling test all
+fail, the other two stay green. `VT-D`
+(`record_from_linked_worktree_targets_primary_tree`) is unedited and green — the
+fork-family behaviour-preservation proof. Two shared fixtures were extracted
+(`linked_worktree`, `plant_registry`) rather than repeating `git worktree add`
+per case.
+
+`VT-B` is green under both rules by design: it does not test this change, it
+locks out the *rejected* directory-existence predicate (§2) so a later
+refactor cannot substitute the state directory for the registry file as the
+witness.
+
+### Verified against the live trees
+
+    doctrine slice conformance 254 -p .worktrees/SL-254-audit
+    → computes (undeclared 45 / …), no cross-tree note — resolved Local
+
+    doctrine slice conformance 231 -p .worktrees/SL-231-p01
+    → note: source-delta registry resolved to /workspace/doctrine — this tree
+      is a linked worktree holding none of its own
+
+The `RV-356` `F-15` case now resolves rather than reporting `unavailable`, and the
+fork case discloses its root.
+
+That second command also shows the residual in one line: the fork reads four rows
+from the primary and an empty completed-set from its own (absent) phase sheets, so
+conformance reports `incomplete — partial coverage`. Unchanged by this fix and
+out of scope by §6 (`phases_dir` stays local-rooted) — but the note now says the
+registry came from another tree, which is the difference between a confusing
+reading and a legible one.
+
+### Follow-on
+
+`QUE-216` — *which tree owns a slice's source-delta registry* — carries the
+strategic question this fix does not settle (§8): the no-op-in-the-primary
+asymmetry, and one-truth-that-was-wrongly-rooted becoming
+two-truths-that-can-drift. It shapes `RFC-025` and this issue.

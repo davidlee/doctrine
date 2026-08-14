@@ -2893,18 +2893,21 @@ enum ConformanceOutcome {
 /// row's git name-status diff into the `actual` map and run the pure algebra.
 /// Fails closed: an empty registry → `Unavailable`, an incomplete registry →
 /// `Incomplete` (never a misleading clean diff from partial coverage). `root`
-/// resolves both the shared registry (via the primary worktree) and the local
-/// phase-sheet state tree.
+/// resolves the registry (locally when this tree owns one, else the primary —
+/// ISS-350) and the phase-sheet state tree, and discloses that choice when it
+/// crossed trees: an `Unavailable` read from another tree is precisely the
+/// `RV-356` misdiagnosis.
 fn conformance_outcome(root: &Path, id: u32) -> anyhow::Result<ConformanceOutcome> {
     let selectors = selectors(root, id, Some(SelectorIntent::DesignTarget))?;
 
+    advise_registry_root(root, id);
     let rows = crate::state::read_source_deltas(root, id)?;
     if rows.is_empty() {
         return Ok(ConformanceOutcome::Unavailable);
     }
 
     if let crate::state::Completeness::Incomplete { gaps } =
-        crate::state::registry_completeness(root, root, id)?
+        crate::state::registry_completeness(root, id)?
     {
         return Ok(ConformanceOutcome::Incomplete(gaps));
     }
@@ -3036,10 +3039,16 @@ fn run_conformance(
 /// pre-SL-189 behaviour, unchanged — for a multi-commit / bootstrap phase). Both
 /// stamp `Provenance::Manual` (never reclassifies an existing landing path — the
 /// PHASE-01 sticky merge preserves any prior Solo/Funnel/Unknown) and call
-/// [`record_source_delta`] (F-6 guard + upsert), which resolves the one shared
-/// registry file against the PRIMARY tree, so this works from a
+/// [`crate::state::record_source_delta`] (F-6 guard + upsert), which resolves the
+/// registry through [`crate::state::resolve_registry_root`] — locally when this
+/// tree owns one, else the PRIMARY tree — so this works from a
 /// linked/coordination worktree too. The clap arg-group enforces exactly one
 /// mode; the `match` below is defence in depth behind it.
+///
+/// Discloses its root choice (ISS-350). The silent choice is what let `RV-356`
+/// misdiagnose a full registry as an empty one, and what let ten bootstrap rows
+/// shadow an authoritative registry in another tree. Both notes are advisory —
+/// nothing refuses, because a manual correction must stay possible (design D5).
 fn run_record_delta(
     path: Option<PathBuf>,
     id: u32,
@@ -3090,13 +3099,33 @@ fn run_record_delta(
             anyhow::bail!("record-delta: pass exactly one of --commit <S> or --start <a> --end <b>")
         }
     };
+    // Disclose the root BEFORE the write, so the note is attached to the choice
+    // even when the guarded record then fails.
+    advise_registry_root(&root, id);
     crate::state::record_source_delta(&root, id, row)?;
+    if let Ok(siblings) = crate::state::sibling_registries(&root, id)
+        && let Some(warning) = crate::state::sibling_registry_warning(&siblings, id)
+    {
+        let _ignored = writeln!(io::stderr(), "{warning}");
+    }
     writeln!(
         io::stdout(),
         "{}: recorded source delta for {phase}",
         canonical_id(id)
     )?;
     Ok(())
+}
+
+/// Print the cross-tree registry note when resolution left the local tree
+/// (ISS-350). Silent in the primary and in a tree that owns its registry, so the
+/// common cases carry no noise; degrades to silence on an unresolvable root,
+/// because the operation itself reports that error properly.
+fn advise_registry_root(root: &Path, id: u32) {
+    if let Ok(resolved) = crate::state::resolve_registry_root(root, id)
+        && let Some(note) = crate::state::cross_tree_note(&resolved)
+    {
+        let _ignored = writeln!(io::stderr(), "{note}");
+    }
 }
 
 /// Render the three conformance cells (design Data flow step 5): undeclared

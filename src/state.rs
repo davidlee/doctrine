@@ -538,7 +538,7 @@ pub(crate) fn set_phase_status(
     // Primary-completion mirror (ISS-212, generalising IMP-272): a phase driven to
     // `Completed` in a dispatch COORDINATION tree must also read `completed` in the
     // PRIMARY sheet, because `prepare-review`'s completeness gate reads the completed
-    // set from the primary (`registry_completeness(&primary, &primary, …)`). The
+    // set from the primary (`registry_completeness(&primary, …)`). The
     // single writer both the conclude tool and a raw `slice phase --status` funnel
     // through, so the mirror lives here — not per call site (RFC-015: one writer seam
     // is one migration point). A no-op outside the dispatch split; DEGRADING (a mirror
@@ -914,10 +914,13 @@ fn warn_capture(phase_id: &str, detail: &str) {
 // The arm-neutral record of each phase's committed code boundary — the same
 // per-phase `(code_start, code_end)` pair the claude arm writes into its
 // committed dispatch ledger, but for ANY arm and persisted as gitignored
-// runtime state. ONE file per slice, shared across every worktree of the repo:
-// it resolves against the PRIMARY working tree (`crate::git::primary_worktree`),
-// NOT `root::find(cwd)`, so a worker recording from a linked worktree writes the
-// row a later integrator reads from the main tree.
+// runtime state. ONE file per tree that owns one, resolved by
+// [`resolve_registry_root`]: local when this tree already holds a registry,
+// otherwise the PRIMARY working tree (`crate::git::primary_worktree`), never
+// `root::find(cwd)`. So a dispatch worker recording from a linked fork still
+// writes the row a later integrator reads from the main tree, while a tree that
+// a registry arrived with (a capsule adoption) reads the one describing its own
+// history instead of a tree that never built the slice (ISS-350).
 //
 // Tier: `.doctrine/state/slice/<NNN>/boundaries.toml` — disposable, never
 // authored (mirrors `phases_dir`'s path idiom one level up). No funnel consumer
@@ -935,17 +938,140 @@ pub(crate) struct SourceDeltas {
     pub rows: Vec<BoundaryRow>,
 }
 
-/// Canonical registry path for a slice, resolved against the PRIMARY working
-/// tree so every worktree shares one file:
-/// `<primary>/.doctrine/state/slice/<NNN>/boundaries.toml`. `cwd` may be any
-/// path in the repo (a linked worker worktree is the typical caller). A
-/// bare/not-a-repo `cwd` yields a clean named error via `primary_worktree`.
-pub(crate) fn boundaries_path(cwd: &Path, slice_id: u32) -> anyhow::Result<PathBuf> {
-    let primary = crate::git::primary_worktree(cwd)?;
-    Ok(primary
-        .join(STATE_SLICE_DIR)
+/// The registry file under a given root — the one place the `boundaries.toml`
+/// leaf name is spelled (STD-001), so the resolver, the sibling probe, and the
+/// path accessor cannot drift apart.
+fn registry_file(root: &Path, slice_id: u32) -> PathBuf {
+    root.join(STATE_SLICE_DIR)
         .join(format!("{slice_id:03}"))
-        .join("boundaries.toml"))
+        .join("boundaries.toml")
+}
+
+/// Which tree a slice's source-delta registry resolved to (ISS-350).
+///
+/// The rule, one `exists()` check applied identically to read, write and evict:
+/// **the registry resolves to the local tree when the local tree already holds
+/// one; otherwise to the primary worktree.**
+///
+/// The registry *file* is the witness, not the slice's state directory — that
+/// directory is shared by four artefacts written by different subsystems at
+/// different lifecycle stages (design snapshot, design journal, phase sheets,
+/// registry), and only one of them is the thing being resolved. A slice designed
+/// in the primary and built elsewhere leaves the primary holding three of the
+/// four, so "does the primary know this slice" is the wrong question.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RegistryRoot {
+    /// The local tree owns the registry — the primary (where local *is* primary),
+    /// or a tree a registry arrived with (a capsule adoption, a hand copy).
+    Local(PathBuf),
+    /// This tree holds no registry of its own, so resolution crossed to the
+    /// primary worktree — the dispatch fork-family contract, which must not let
+    /// N forks fragment the orchestrator's conformance view.
+    Primary(PathBuf),
+}
+
+impl RegistryRoot {
+    /// The resolved root, whichever arm was taken.
+    pub(crate) fn root(&self) -> &Path {
+        match self {
+            Self::Local(p) | Self::Primary(p) => p,
+        }
+    }
+}
+
+/// Resolve the tree that owns `slice_id`'s registry from `local` — a project
+/// root, not any path in the repo, since the local-registry probe needs a root.
+///
+/// A local registry short-circuits before git is consulted: the file is right
+/// there, and the fork family can never reach this arm by induction — a fork or
+/// coordination tree is provisioned with `.doctrine/state/**` **withheld**
+/// (`allowlist.rs`), so it starts with no registry and no write can create its
+/// first local one. A bare/not-a-repo `local` with no local registry yields a
+/// clean named error via `primary_worktree`.
+pub(crate) fn resolve_registry_root(local: &Path, slice_id: u32) -> anyhow::Result<RegistryRoot> {
+    // Canonicalise before comparing with `primary_worktree`'s canonical answer,
+    // so a symlinked primary path still reads as the primary (the same idiom
+    // `mirror_completion_into_primary` uses).
+    let here = fs::canonicalize(local).unwrap_or_else(|_| local.to_path_buf());
+    if registry_file(&here, slice_id).exists() {
+        return Ok(RegistryRoot::Local(here));
+    }
+    let primary = crate::git::primary_worktree(local)?;
+    Ok(if primary == here {
+        RegistryRoot::Local(here)
+    } else {
+        RegistryRoot::Primary(primary)
+    })
+}
+
+/// Canonical registry path for a slice:
+/// `<resolved root>/.doctrine/state/slice/<NNN>/boundaries.toml`. A thin call
+/// through [`resolve_registry_root`], so read, write and evict share one
+/// decision point and there is no read/write asymmetry to keep in sync.
+pub(crate) fn boundaries_path(local: &Path, slice_id: u32) -> anyhow::Result<PathBuf> {
+    Ok(registry_file(
+        resolve_registry_root(local, slice_id)?.root(),
+        slice_id,
+    ))
+}
+
+/// The cross-tree disclosure: `Some` message iff resolution left the local tree.
+/// Silent in the primary and silent in a tree that owns its registry — zero noise
+/// in the common cases, and it fires exactly in the case that misled `RV-356`
+/// into three findings about a registry it was reading from the wrong tree.
+/// Pure, so the resolver stays quiet and the message shape stays testable; the
+/// command shells print it.
+pub(crate) fn cross_tree_note(resolved: &RegistryRoot) -> Option<String> {
+    match resolved {
+        RegistryRoot::Local(_) => None,
+        RegistryRoot::Primary(primary) => Some(format!(
+            "note: source-delta registry resolved to {} — this tree is a linked \
+             worktree holding none of its own",
+            primary.display()
+        )),
+    }
+}
+
+/// Every OTHER live worktree that also holds a registry for `slice_id`, sorted
+/// by path. The half [`resolve_registry_root`] does **not** fix: an operator
+/// recording from the primary for a slice built elsewhere still writes locally,
+/// because in the primary the local root *is* the primary — so name the other
+/// tree rather than shadow it silently. Prunable and vanished blocks are skipped
+/// (the same liveness filter `live_worktree_for_ref` applies). Degrades to empty
+/// rather than failing: a disclosure must never break a write.
+pub(crate) fn sibling_registries(local: &Path, slice_id: u32) -> anyhow::Result<Vec<PathBuf>> {
+    let resolved = resolve_registry_root(local, slice_id)?;
+    let Ok(worktrees) = crate::git::list_worktrees(local) else {
+        return Ok(Vec::new());
+    };
+    let mut found: Vec<PathBuf> = worktrees
+        .into_iter()
+        .filter(|w| !w.prunable && !w.bare && w.path.exists())
+        .map(|w| fs::canonicalize(&w.path).unwrap_or(w.path))
+        .filter(|p| p != resolved.root())
+        .map(|p| registry_file(&p, slice_id))
+        .filter(|f| f.exists())
+        .collect();
+    found.sort();
+    Ok(found)
+}
+
+/// The sibling-registry warning for [`sibling_registries`]' answer: `None` when
+/// no other tree holds one. Advisory only — nothing refuses, because a manual
+/// correction and a status transition must both stay possible (design D5).
+pub(crate) fn sibling_registry_warning(siblings: &[PathBuf], slice_id: u32) -> Option<String> {
+    let named = siblings
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    (!siblings.is_empty()).then(|| {
+        format!(
+            "warning: {named} also holds a source-delta registry for {} — \
+             the two trees do not share one",
+            crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice_id)
+        )
+    })
 }
 
 /// Load a slice's registry from `path` (an absent file is an empty registry,
@@ -982,39 +1108,40 @@ fn write_registry(path: &Path, registry: &SourceDeltas) -> anyhow::Result<()> {
 /// Read the recorded source deltas for `slice_id` (empty Vec when the file is
 /// absent or empty — never an error). Mirrors the `read_phase_status`
 /// not-found-is-empty idiom; a present-but-malformed file is a hard error.
-pub(crate) fn read_source_deltas(cwd: &Path, slice_id: u32) -> anyhow::Result<Vec<BoundaryRow>> {
-    Ok(read_registry(&boundaries_path(cwd, slice_id)?)?.rows)
+pub(crate) fn read_source_deltas(local: &Path, slice_id: u32) -> anyhow::Result<Vec<BoundaryRow>> {
+    Ok(read_registry(&boundaries_path(local, slice_id)?)?.rows)
 }
 
 /// Record (UPSERT by phase) one phase's committed source delta into the slice's
 /// registry. The guard runs BEFORE the write: `code_start` must be an ancestor
 /// of `code_end` (a real forward delta, possibly empty when equal) AND
 /// `code_end` must be a non-merge commit (`parents().len() <= 1`) — the boundary
-/// is a single linear code tip, never a merge. A bare/not-a-repo `cwd`, or a
+/// is a single linear code tip, never a merge. A bare/not-a-repo `local`, or a
 /// `code_*` oid git cannot resolve, surfaces as a clean named error (the git
 /// leaf's `CaptureError`), never a panic. Read-modify-write; the dir/file are
 /// created on first write. `row.phase` keys the upsert so a re-record of the
-/// same phase replaces (never duplicates) its row.
+/// same phase replaces (never duplicates) its row. Writes to whichever tree
+/// [`resolve_registry_root`] names, so read and write can never disagree.
 pub(crate) fn record_source_delta(
-    cwd: &Path,
+    local: &Path,
     slice_id: u32,
     row: BoundaryRow,
 ) -> anyhow::Result<()> {
-    if !crate::git::is_ancestor(cwd, &row.code_start_oid, &row.code_end_oid)? {
+    if !crate::git::is_ancestor(local, &row.code_start_oid, &row.code_end_oid)? {
         anyhow::bail!(
             "record_source_delta: code_start {} is not an ancestor of code_end {} (not a forward delta)",
             row.code_start_oid,
             row.code_end_oid
         );
     }
-    if crate::git::parents(cwd, &row.code_end_oid)?.len() > 1 {
+    if crate::git::parents(local, &row.code_end_oid)?.len() > 1 {
         anyhow::bail!(
             "record_source_delta: code_end {} is a merge commit (boundary must be a non-merge code tip)",
             row.code_end_oid
         );
     }
 
-    let path = boundaries_path(cwd, slice_id)?;
+    let path = boundaries_path(local, slice_id)?;
     let mut registry = read_registry(&path)?;
 
     // Sticky provenance merge (design §5.2/§5.3, D12), keyed on the INCOMING row
@@ -1077,12 +1204,17 @@ pub(crate) fn single_commit_boundary(
 /// Evict one phase's row from the slice's registry — the inverse of
 /// [`record_source_delta`] and its reopen-eviction sibling (design D8; the sole
 /// caller is the PHASE-03 completed→non-completed reopen, which must not leave a
-/// stale row behind a cleared start-stamp). Primary-tree-resolved like the
-/// writer. Returns whether a row was removed: an absent registry file or an
-/// absent phase is a no-op `Ok(false)`, never an error. No git guard — a removal
-/// records no range.
-pub(crate) fn forget_source_delta(cwd: &Path, slice_id: u32, phase: &str) -> anyhow::Result<bool> {
-    let path = boundaries_path(cwd, slice_id)?;
+/// stale row behind a cleared start-stamp). Resolved through
+/// [`resolve_registry_root`] like the reader and writer — the same one rule, so an
+/// eviction can never miss the file a record created. Returns whether a row was
+/// removed: an absent registry file or an absent phase is a no-op `Ok(false)`,
+/// never an error. No git guard — a removal records no range.
+pub(crate) fn forget_source_delta(
+    local: &Path,
+    slice_id: u32,
+    phase: &str,
+) -> anyhow::Result<bool> {
+    let path = boundaries_path(local, slice_id)?;
     let mut registry = read_registry(&path)?;
 
     let before = registry.rows.len();
@@ -1200,17 +1332,20 @@ pub(crate) fn completed_phase_ids(
 }
 
 /// IO wrapper over [`check_completeness`] (design F-2): reads the recorded rows
-/// (from the primary-tree registry, via `cwd`) and the completed phase ids (from
-/// the `project_root` state tree), then cross-checks them. The conformance shell
-/// invokes ONLY this — no phase-sheet reading leaks into the command/algebra
-/// layers. `cwd` resolves the shared registry; `project_root` is the local state
-/// tree (they coincide in the primary worktree).
+/// and the completed phase ids from ONE `project_root`, then cross-checks them.
+/// The conformance shell invokes ONLY this — no phase-sheet reading leaks into the
+/// command/algebra layers.
+///
+/// Took two roots until ISS-350: a `cwd` for the registry and a `project_root`
+/// for the phase sheets. No caller ever passed different values — the divergence
+/// happened *inside* `boundaries_path`, and the split advertised a seam that only
+/// ever mislabelled the bug (the two roots "coincide in the primary worktree" was
+/// exactly the confusion). One root, one resolution.
 pub(crate) fn registry_completeness(
-    cwd: &Path,
     project_root: &Path,
     slice_id: u32,
 ) -> anyhow::Result<Completeness> {
-    let recorded: Vec<String> = read_source_deltas(cwd, slice_id)?
+    let recorded: Vec<String> = read_source_deltas(project_root, slice_id)?
         .into_iter()
         .map(|row| row.phase)
         .collect();
@@ -2696,6 +2831,173 @@ mod tests {
         );
     }
 
+    // -----------------------------------------------------------------------
+    // ISS-350: the registry resolves LOCAL when the local tree owns one
+    // -----------------------------------------------------------------------
+
+    /// Add a linked worktree of `primary` at `path` on a fresh branch, returning
+    /// its canonical path. The fixture shared by the fork-family and adopted-tree
+    /// cases — they differ only in what state the tree then carries.
+    fn linked_worktree(primary: &Path, path: &Path, branch: &str) -> PathBuf {
+        git(
+            primary,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                branch,
+                path.to_str().unwrap(),
+            ],
+        );
+        fs::canonicalize(path).unwrap()
+    }
+
+    /// Plant a registry in `tree`'s own state tree the way a capsule adoption
+    /// does — the state tier arrives with the checkout, not through this process.
+    fn plant_registry(tree: &Path, slice: u32, rows: &[BoundaryRow]) {
+        write_registry(
+            &tree
+                .join(STATE_SLICE_DIR)
+                .join(format!("{slice:03}"))
+                .join("boundaries.toml"),
+            &SourceDeltas {
+                rows: rows.to_vec(),
+            },
+        )
+        .unwrap();
+    }
+
+    // VT-A: a tree that CARRIES its own registry reads and writes locally — the
+    // capsule-delivered / hand-copied checkout. The primary's file is never
+    // created, so the adoption is not silently shadowed from the other side.
+    #[test]
+    fn adopted_worktree_with_local_registry_resolves_local() {
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = init_repo(&tmp.path().join("primary"));
+        let head = git(&primary, &["rev-parse", "HEAD"]);
+        let adopted = linked_worktree(&primary, &tmp.path().join("adopted"), "adopted");
+        plant_registry(&adopted, 254, &[row("PHASE-01", &head, &head)]);
+
+        assert_eq!(
+            resolve_registry_root(&adopted, 254).unwrap(),
+            RegistryRoot::Local(adopted.clone())
+        );
+        assert_eq!(
+            read_source_deltas(&adopted, 254).unwrap(),
+            vec![row("PHASE-01", &head, &head)]
+        );
+
+        // A record from that tree lands in ITS file, not the primary's.
+        record_source_delta(&adopted, 254, row("PHASE-02", &head, &head)).unwrap();
+        assert_eq!(
+            read_source_deltas(&adopted, 254)
+                .unwrap()
+                .iter()
+                .map(|r| r.phase.clone())
+                .collect::<Vec<_>>(),
+            vec!["PHASE-01".to_string(), "PHASE-02".to_string()]
+        );
+        assert!(
+            !primary
+                .join(".doctrine/state/slice/254/boundaries.toml")
+                .exists()
+        );
+    }
+
+    // VT-B: local phase sheets and a local design snapshot are NOT the witness —
+    // only the registry file is. This is the case the issue's original
+    // directory-existence predicate got wrong: SL-254 was designed in the primary
+    // and built elsewhere, so "the primary does not know this slice" is false.
+    #[test]
+    fn local_state_without_a_registry_still_resolves_primary() {
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = init_repo(&tmp.path().join("primary"));
+        let head = git(&primary, &["rev-parse", "HEAD"]);
+        let fork = linked_worktree(&primary, &tmp.path().join("fork"), "feat-b");
+
+        // Everything a state-carrying tree might hold EXCEPT a registry.
+        seed_phase_sheet(&fork, 254, "phase-01");
+        fs::write(design_snapshot_path(&fork, 254), "").unwrap();
+
+        assert_eq!(
+            resolve_registry_root(&fork, 254).unwrap(),
+            RegistryRoot::Primary(primary.clone())
+        );
+        record_source_delta(&fork, 254, row("PHASE-01", &head, &head)).unwrap();
+        assert!(
+            primary
+                .join(".doctrine/state/slice/254/boundaries.toml")
+                .exists()
+        );
+        assert!(
+            !fork
+                .join(".doctrine/state/slice/254/boundaries.toml")
+                .exists()
+        );
+    }
+
+    // VT-C: the RV-356 F-15 regression at the level that actually failed — a tree
+    // holding its own phase sheets AND its own registry reports Complete, where it
+    // previously read 10/10 phases locally and zero rows from the primary.
+    #[test]
+    fn completeness_is_complete_in_a_tree_that_owns_both_halves() {
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = init_repo(&tmp.path().join("primary"));
+        let head = git(&primary, &["rev-parse", "HEAD"]);
+        let adopted = linked_worktree(&primary, &tmp.path().join("adopted"), "adopted-c");
+
+        let phases = phases_dir(&adopted, 254);
+        write_phase_toml(&phases, "phase-01", "completed");
+        write_phase_toml(&phases, "phase-02", "completed");
+        plant_registry(
+            &adopted,
+            254,
+            &[row("PHASE-01", &head, &head), row("PHASE-02", &head, &head)],
+        );
+
+        assert_eq!(
+            registry_completeness(&adopted, 254).unwrap(),
+            Completeness::Complete
+        );
+    }
+
+    // The sibling-registry disclosure: the half the resolver does NOT fix. An
+    // operator recording from the primary for a slice built elsewhere still writes
+    // locally (in the primary, local IS primary) — so name the other tree.
+    #[test]
+    fn sibling_registries_names_other_trees_holding_one() {
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = init_repo(&tmp.path().join("primary"));
+        let head = git(&primary, &["rev-parse", "HEAD"]);
+        let adopted = linked_worktree(&primary, &tmp.path().join("adopted"), "adopted-d");
+        plant_registry(&adopted, 254, &[row("PHASE-01", &head, &head)]);
+
+        // From the primary: the adopted tree's registry is a sibling.
+        assert_eq!(
+            sibling_registries(&primary, 254).unwrap(),
+            vec![adopted.join(".doctrine/state/slice/254/boundaries.toml")]
+        );
+        // From the tree that owns it: no sibling (itself is excluded), and none
+        // for a slice no tree holds.
+        assert!(sibling_registries(&adopted, 254).unwrap().is_empty());
+        assert!(sibling_registries(&primary, 999).unwrap().is_empty());
+    }
+
+    // The cross-tree note fires exactly when resolution left the local tree —
+    // silent in the primary and silent in a tree that owns its registry, so the
+    // common cases carry no noise.
+    #[test]
+    fn cross_tree_note_fires_only_on_a_primary_resolution() {
+        let local = PathBuf::from("/repo/fork");
+        assert!(cross_tree_note(&RegistryRoot::Local(local.clone())).is_none());
+        let note = cross_tree_note(&RegistryRoot::Primary(PathBuf::from("/repo"))).unwrap();
+        assert!(
+            note.contains("/repo"),
+            "note names the resolved tree: {note}"
+        );
+    }
+
     // VT-1 guard: a non-ancestor (start NOT before end) range is rejected.
     #[test]
     fn guard_rejects_non_ancestor_range() {
@@ -3248,7 +3550,7 @@ mod tests {
             "no stamped start → no boundary recorded (no garbage row)"
         );
         assert_eq!(
-            registry_completeness(&repo, &repo, 147).unwrap(),
+            registry_completeness(&repo, 147).unwrap(),
             Completeness::Incomplete {
                 gaps: vec![CompletenessGap::Missing {
                     phase: "PHASE-01".to_string()
@@ -3350,7 +3652,7 @@ mod tests {
         write_phase_toml(&phases, "phase-02", "completed");
         record_source_delta(&repo, 147, row("PHASE-01", &head, &head)).unwrap();
 
-        let verdict = registry_completeness(&repo, &repo, 147).unwrap();
+        let verdict = registry_completeness(&repo, 147).unwrap();
         assert_eq!(
             verdict,
             Completeness::Incomplete {
