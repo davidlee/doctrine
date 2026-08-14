@@ -1,0 +1,35 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 216
+slug = "which-tree-owns-a-slices-source-delta-registry"
+title = "Which tree owns a slice's source-delta registry"
+record_kind = "question"
+status = "open"
+created = "2026-08-14"
+updated = "2026-08-14"
+tags = ["area:dispatch", "area:worktree", "cluster:capsule", "storage-tier"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+question = "In the capsule → quarantine → audit → close workflow a slice's source-delta registry can exist in more than one tree at once — the capsule that produced it, the worktree its runtime state was adopted into, and the primary if anyone copied it back or recorded there. Which tree is authoritative, and what keeps the copies from diverging?"
+why_matters = "ISS-350's tactical fix (read locally when the local tree holds a registry, else primary) unblocks conformance in the adoption worktree but is a strict no-op in the primary — the control plane still reports unavailable for a capsule-built slice whose state sits in a sibling worktree. It also converts one wrongly-rooted source of truth into two correctly-rooted ones that can drift: both .doctrine/state/slice/254/boundaries.toml and .worktrees/SL-254-audit/.../254/boundaries.toml hold ten provenance=solo rows today only because RV-356's audit restored the primary's copy by hand. The two candidate answers cost very differently — adoption-into-primary as a ritual is reversible; promoting the registry to the authored tier so it travels with the branch is a tier migration needing its own storage-rule argument. Deciding now would settle it against a tree taxonomy that is mid-change, since dispatch's forks and coordination trees are the only trees that take the primary arm and both go when dispatch does."
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "RFC-025"
+
+[[relation]]
+label = "shapes"
+target = "ISS-350"
