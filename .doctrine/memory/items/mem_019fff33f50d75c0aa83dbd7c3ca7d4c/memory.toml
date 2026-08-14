@@ -1,0 +1,66 @@
+memory_uid = "mem_019fff33f50d75c0aa83dbd7c3ca7d4c"
+memory_key = "mem.pattern.doctrine.runtime-state-root-split-reads-false-empty"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Runtime state read from primary-pinned root is invisible when work arrives from another tree"
+summary = "boundaries_path() pins to primary_worktree(cwd) while phases_dir() joins the local project_root — same directory, two roots, so an adopted worktree reports 10/10 phases and zero source deltas at once"
+created = "2026-08-14"
+updated = "2026-08-14"
+
+[scope]
+paths = ["src/state.rs"]
+globs = []
+commands = []
+tags = ["area:worktree", "area:dispatch", "conformance"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "89f7ab5f070f97b7fa09eea63e8528a54bb56aaa"
+ref_name = "refs/heads/audit/SL-254"
+checkout_state_id = "d4047c2689953a9a639832d2a29d5fd228d27ea01a50ab858fd4c52309999ec8"
+base_commit = "9d5907c5bfc2a4c0a1c415ae5b3c2fabb04012eb"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "major"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-254"
+
+[[source]]
+kind = "review"
+ref = "RV-356"
+
+[[source]]
+kind = "issue"
+ref = "ISS-350"
+
+[[relation]]
+label = "related"
+target = "mem_019f21e80f5a76929c2bb2758c42358c"
+
+[[relation]]
+label = "related"
+target = "mem_019f73cc602f7061a5ac40a9ae0cc299"
+
+[[relation]]
+label = "related"
+target = "mem_019f025ee2027bf281f7d3a013bc9415"
+

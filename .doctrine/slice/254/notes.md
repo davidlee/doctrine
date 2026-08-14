@@ -6,9 +6,27 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-14 · audit complete (`RV-356`, 15 findings, no blockers) · next is `/reconcile` → `/close` · see git log
+fresh-as-of: 2026-08-14 · reconcile complete (`RV-356` `## Reconciliation Outcome`; `REV-053` done) · next is `/close` · see git log
 
 ### Produced
+- **`/reconcile` done.** Per-slice: five `design.md` corrections (§5.2.1 parity
+  claim retired for a two-axis asymmetry enumeration, `--verbose`, `classify_import`
+  at `:557`/`:895`, the `land` classifier, `D4`'s ground) plus the `notes.md`
+  registry-location record. Registry: **51 selectors** declared — conformance
+  undeclared 96→45, conformant 40→91. Governance: `REV-053` done (`ADR-001`
+  `layering.toml:138` + the `jail.rs` twin; `ADR-020` Context). Knowledge:
+  `DEC-204`, `DEC-210`, `DEC-213` corrected in place. `REV-046`'s rationale
+  restated by owner ruling (its gates untouched).
+  **Ids minted (collision risk): `REV-053`, `ISS-351`, `CHR-063`, `CHR-064`,
+  `mem.pattern.doctrine.runtime-state-root-split-reads-false-empty`.**
+  Note `ISS-351` collided with a same-day mint on the primary tree; the primary's
+  was moved to `ISS-352`. The branch sat 44 commits ahead of `edge`, so edge's
+  allocator watermark lagged in five namespaces for the duration — the general
+  hazard of a long-lived close branch, not a doctrine defect.
+- **Harvested one memory, consciously rejected the rest.**
+  `mem.pattern.doctrine.runtime-state-root-split-reads-false-empty` carries `F-15`'s
+  class. Everything else is already correctly homed: the fix in `ISS-350`, the
+  audit story in `RV-356`, the governance deltas in `REV-052`/`REV-053`.
 - **`/audit` done — `RV-356`, 15 findings, zero blockers, ledger `done ·
   await=none`.** Reviewed `audit/SL-254` @ `3aee9dc7d` (the capsule work tip; no
   `/dispatch` candidate branch exists for this slice). Evidence: `just gate`
