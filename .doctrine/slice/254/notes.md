@@ -1321,3 +1321,28 @@ is amended to acknowledge the two discharged defects (recommended — it is chea
 and leaving it makes the capsule case look stronger than it now is), and put
 `REV-046`'s stale rationale on the table as a real question rather than a
 footnote. Neither is blocking for `SL-254`'s close.
+
+## Reconcile — the source-delta registry, and where it physically lives
+
+`RV-356` `F-15` residual, recorded here because it is a **runtime-tier** fact that
+the branch cannot carry.
+
+`SL-254`'s authentic source-delta registry — ten rows, one per phase,
+`provenance = "solo"`, recorded automatically as the phases landed inside the
+capsule — rode the capsule sideband (`refs/capsule/a/state/implementation`,
+fetched atomically alongside the code ref) into
+`.worktrees/SL-254-audit/.doctrine/state/slice/254/boundaries.toml`. It has been
+copied to the primary tree, because `state::boundaries_path()` (`src/state.rs:943`)
+resolves `git::primary_worktree(cwd)` on read *and* write, so `slice conformance`
+run from any linked worktree of this repo reads the **primary's** file. Its sibling
+`phases_dir()` (`:135`) joins the local `project_root` instead, which is why
+`slice status 254` reported `10/10` from the audit worktree while
+`slice conformance 254` reported no deltas at all.
+
+`.doctrine/state/` is gitignored and disposable. **The copy does not land with the
+branch.** Anyone re-running `slice conformance 254` on another tree must copy
+`boundaries.toml` across again until the resolver distinguishes a worker fork of
+this repo (where primary-pinning is correct) from an adopted foreign checkout that
+arrived with its own runtime state (where it is not). That resolver question is
+`ISS-350`, minted 2026-08-14, which carries the diagnosis, the swap-test evidence,
+the primary-pinned-write hazard and three fix directions.

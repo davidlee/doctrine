@@ -513,7 +513,8 @@ ORCHESTRATOR (any harness, coordination worktree — unconfined, sole writer)
    |        => linked worktree at D. NO --slice/--phase: the fork stays
    |           UNBOUND, as the pi arm's already are (§6 OQ-1, DEC-217)
    |
-   +-- PREFIX resolution                          (harness parameterises ONE token pair)
+   +-- PREFIX resolution        (harness + platform each carry an enumerated
+   |                             asymmetry set — §5.2.1, RV-356 F-2)
    |     Linux  : have_bwrap probe -> REASON_NO_BWRAP if absent (D7), then
    |              inline bwrap array
    |              bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp
@@ -554,15 +555,46 @@ ORCHESTRATOR (any harness, coordination worktree — unconfined, sole writer)
 | `worktree/marker.rs` | worker-mode status rendering over **one** signal | collapses to the env predicate + `worktree status`; the marker file, its ops, `Cause`, `is_stale_marker`, `DUAL_CAUSE` and `run_marker_clear` all go |
 | `worktree/create.rs` | provision a benign harness-created worktree | Fork arm deleted; Passthrough arm and `run_provision` survive |
 | `worktree/fork.rs` | the **only** worker-fork writer: create + provision + bind | loses the `write_marker` call |
-| `worktree/import.rs` | the belted import transport | **untouched** — `classify_import` remains the scope belt's enforcing caller |
+| `worktree/import.rs` | the belted import transport | **untouched** — `classify_import` remains the enforcing caller of the two hard-coded scope-belt floors (`.doctrine/**`, `.claude/**`). It never read `worker-forbidden-writes` and does not start now (`RV-356` `F-3`) |
 | `mcp_server/worker_commit.rs` | — | **deleted** (1495 lines) |
 | `scripts/spawn-confined.sh` | the one spawn shape, parameterised by harness | generalised from `pi-spawn-confined.sh` |
 
 ### 5.2 Interfaces & Contracts
 
 **5.2.1 The spawn script contract.** One script, one shape, harness as a
-parameter. Everything harness-specific reduces to two facts: the config
-directory to bind, and the exec line.
+parameter.
+
+> **Reconciled (`RV-356` `F-2`).** Earlier drafts of this section, of §5.1's
+> diagram and of `D4` all asserted that *everything* harness-specific reduces to
+> two facts — the config directory to bind and the exec line. That claim is
+> retired rather than patched: it was falsified in **both** directions, by
+> `DOCTRINE_WORKER` (Darwin lacked it, `RV-355` `F-2`) and by `TMPDIR` (Linux
+> lacked it, found live at `PHASE-09`), and a claim that has been corrected twice
+> by counter-example is not a contract. What the script actually carries is an
+> **enumeration** of asymmetries, on two independent axes. Both lists are floors,
+> not ceilings — the standing obligation (`IMP-429`) is to enumerate every
+> asymmetry, not to re-check one platform against the other.
+
+*Harness axis* — pi vs claude, on either platform:
+
+| asymmetry | pi | claude |
+|---|---|---|
+| config dir to bind | `$HOME/.pi` (a directory; wholesale covers everything pi writes) | `$HOME/.claude`, plus the sibling **file** `~/.claude.json` outside it (`OQ-3`) |
+| exec line | `pi --mode rpc …` | `claude -p …` (below) |
+| completion signal | never self-exits: fifo holds stdin, poll the tail for `agent_settled`/`agent_end` | process exit, with the stream-json result on stdout — no fifo, no keepalive, no `pi_await_and_reap` |
+| host credential precondition | none beyond `$HOME/.pi` | a **materialised** `~/.claude/.credentials.json`, or `CLAUDE_CODE_OAUTH_TOKEN` in the environment. The bind *carries* a subscription credential; it does not *create* one (`F-9`, `DEC-210`) |
+
+*Platform axis* — Linux `bwrap` vs Darwin `sandbox-exec`, on either harness:
+
+| asymmetry | Linux | Darwin |
+|---|---|---|
+| `DOCTRINE_WORKER` | `--setenv` in the inline array | had to be taught to `sandbox_exec_argv`'s trailing `env` token (`RV-355` `F-2`, `VT-10`) |
+| `TMPDIR` | unset by the prefix; `PHASE-09` used `/tmp` (tmpfs) deliberately | `<wt>/.tmp` — **inside the tree whose working-tree delta is imported**. Benign here only because `.gitignore:14` matches `*.tmp` |
+| network | inline array carries no `--unshare-net`, so it is open | `jail-prefix` defaults `--network` to **deny** and the Darwin arm does not pass it, so `(deny network*)` lands in the profile and a `claude -p` worker cannot reach the API at all (`F-2`) |
+| capability probe | `have_bwrap` → `REASON_NO_BWRAP`, a **named** refusal ahead of the fork (`D7`) | no `sandbox-exec` presence probe; still fails closed, but **unnamed**, and only after a fork has been minted |
+
+The config-directory branch remains the one place the script itself switches on
+harness:
 
 ```sh
 # scripts/spawn-confined.sh <harness> <B> <BRANCH> <DIR> <PROMPT_FILE> [BACKSTOP]
@@ -583,7 +615,7 @@ pi --mode rpc --thinking "${PI_THINKING:-off}" --session-dir "$D/.pi-session" \
    <"$PI_FIFO" >"$OUT" 2>&1
 
 # claude (new)
-claude -p --output-format stream-json \
+claude -p --output-format stream-json --verbose \
    --strict-mcp-config \
    --permission-mode bypassPermissions \
    <"$PF" >"$OUT" 2>&1
@@ -595,6 +627,7 @@ Flag-by-flag justification, each tied to a decision rather than to taste:
 |---|---|---|
 | `-p` | headless, non-interactive; the whole premise | `DEC-202` |
 | `--output-format stream-json` | typed completion event stream at parity with pi's RPC `agent_end`; argv-tier, no code | `DEC-215` |
+| `--verbose` | **mandatory companion** to the pair above, not a diagnostic: `claude -p --output-format stream-json` hard-refuses without it and spawns nothing. `PHASE-09` run #1 died on it in 1.4s. Pinned by `claude_arm_stream_json_carries_verbose` (`jail.rs`); reason inline at `spawn-confined.sh:236-245`. `DEC-215`'s account of the typed hand-back is incomplete without this row (`RV-356` `F-10`) | `DEC-215` |
 | *(not)* `--json-schema` | deliberately unspent: nothing consumes a shaped hand-back today; adopting one would be building | `DEC-215` |
 | `--strict-mcp-config` with no `--mcp-config` | no MCP at all in the worker, at parity with pi's `--no-extensions`; the orchestrator performs every privileged act | `DEC-216` |
 | `--permission-mode bypassPermissions` | the analog of pi's `--approve`: inside the confinement the OS floor is the boundary, so an in-agent prompt buys nothing | `DEC-208`, `DEC-216` |
@@ -627,8 +660,12 @@ inline array sets it. macOS worker identity rides the disk marker today, so
 `DEC-207`'s deletion would leave a confined macOS worker with *no* identity signal
 and make `INV-1` false on that platform. The fix is one token: `sandbox_exec_argv`
 sets `DOCTRINE_WORKER=1` in the same trailing `env` run as `TMPDIR`. It is a
-**binary** change, not a script change — the only such asymmetry between the two
-platforms (`RV-355` `F-2`, §6 `OQ-5`, `VT-10`).
+**binary** change, not a script change (`RV-355` `F-2`, §6 `OQ-5`, `VT-10`).
+
+This was drafted as *the only* such asymmetry. It is not — see the platform-axis
+table above, which `PHASE-09` extended with `TMPDIR`, the network default and the
+missing `sandbox-exec` probe (`RV-356` `F-2`). It remains the only one this slice
+fixed.
 
 **5.2.2 `worktree fork --worker` — the binding contract, now on both arms.**
 Unchanged in code, but it becomes the **only** producer of a worker fork, so its
@@ -800,10 +837,24 @@ it rather than on cooperation.
 **Edge case: `land.rs:173`'s cross-tree marker read.** `bears_marker` is the
 only marker read that asks about *another* tree, and it gates
 `LandRefusal::DispatchFork` (`land.rs:127`). Env cannot answer it — env
-describes *this* process. Substitute the branch-shape role classifier
-(`shared.rs:77`) returning `"fork"`. This is **strictly stronger**: it fires
-whether or not the fork was ever stamped, catching the unstamped-worker case
-`ADR-011` `D6`/`M2` confesses (`DEC-207`).
+describes *this* process. Substitute `shared.rs::is_dispatch_fork_branch`
+(`:112`): a `dispatch/` prefix **and** a non-numeric suffix — exactly what the
+funnel mints, and what `coord_branch_suffix` already knows. This is **strictly
+stronger** than the marker read: it fires whether or not the fork was ever
+stamped, catching the unstamped-worker case `ADR-011` `D6`/`M2` confesses
+(`DEC-207`).
+
+Drafted as *"the branch-shape role classifier (`shared.rs:77`) returning
+`"fork"`"*, which taken literally bricks the verb — `classify_worktree_role`
+returns `"fork"` for **every** linked non-coordination worktree, and `land` only
+ever operates on a linked worktree, so the substitution would refuse every
+`land`, including the solo TDD branches the verb exists to serve. `PHASE-05`
+caught it and shipped the conjunct above; the retarget also found
+`land_refuses_dispatch_fork` going green on a `solo-df` branch plus a stamp while
+`land` merged a fork it should have refused, now pinned by the new negative
+`land_permits_a_solo_fork_that_is_not_a_dispatch_branch`. Intent and the
+strictly-stronger claim are unchanged; only the mechanism named was wrong
+(`RV-356` `F-13`).
 
 **Edge case: `inventory.rs`.** Dropping the marker column (`:199`) and the
 `Cause` override (`:73`) makes role fall through to branch shape, which
@@ -824,9 +875,11 @@ wholesale covers everything pi writes. Claude also writes `~/.claude.json`, a
 but not writable, so the claude profile likely needs a second bind. Named here
 rather than assumed; carried as `OQ-3`.
 
-**Edge case: `--output-format stream-json` and `--verbose`.** Some `claude`
-builds require `--verbose` alongside `stream-json` under `-p`. Verify against
-the installed binary at execute; it is an argv fact, not a design choice.
+**Edge case: `--output-format stream-json` and `--verbose`.** Drafted as "some
+`claude` builds require `--verbose`… verify at execute". **Settled at `PHASE-09`,
+in the strong direction:** the pair hard-refuses without it and spawns nothing —
+run #1 died in 1.4s. It is mandatory, not build-dependent (§5.2.1, `RV-356`
+`F-10`).
 
 **Assumption `A2` (narrowed to its hand-back leg).** `claude -p` reaches the
 worker's needs. Tool-surface scoping, permission modes and structured output all
@@ -892,7 +945,7 @@ exception — it is tracked, and `doctrine install` reconciles it against
 | `scripts/lib/pi-reap.sh` | sourced only by the pi profile after the merge — the claude profile's completion signal is process exit (§5.2.1, `R4`). **Unchanged**: its `agent_settled`/`agent_end` either-match is correct and must survive the generalisation (`ISS-293`) |
 | `.claude/settings.json` | remove six entries (four `pretooluse`, nominate, denominate) |
 | `.doctrine/doctrine.toml` | remove the commented `claude-force-subprocess-dispatch` example (`:14`) — the only config-file site |
-| `install/doctrine.toml.example` | re-word the `worker-forbidden-writes` doc comment, which names `worker_commit` as the key's consumer (`:100`); the key itself **stays**, with `classify_import` as its enforcing reader (`DEC-204`, `DEC-213`) |
+| `install/doctrine.toml.example` | re-word the `worker-forbidden-writes` doc comment, which names `worker_commit` as the key's consumer (`:100`). ~~the key itself **stays**, with `classify_import` as its enforcing reader~~ — **false, corrected at reconcile** (`RV-356` `F-3`): `classify_import` never read the key, only the two hard-coded floors, which are unaffected. The key stays as a **declaration with no production reader** (`dispatch_config.rs:93-95`, `doctrine.toml.example:113-115` both say so); supplying an enforcing reader — kernel-level extra `--ro-bind` paths at spawn, not a post-import Rust belt — is `SL-255`'s work (`IDE-051`). `DEC-204`/`DEC-213`'s consequence text carried the same error and is corrected with this |
 | `plugins/doctrine/skills/dispatch/SKILL.md` | delete the arm-routing branch (step 4); **correct the front-matter claim that the funnel "is driven by `doctrine dispatch next` … identical on both arms"** — untrue of an arm that never lands a funnel row (`DEC-217`, `F-1`) |
 | `plugins/doctrine/skills/dispatch-agent/SKILL.md` + `…/dispatch-subprocess/SKILL.md` | merge into one spawn skill; promote today's "Fallback (A)" to the primary and only landing path |
 | `plugins/doctrine/skills/worktree/SKILL.md` | drop the `/dispatch-agent` cross-references (`:17-19`, `:134`, `:200`) |
@@ -1179,8 +1232,10 @@ verb has exactly one caller, `/dispatch-agent`, which is being deleted.
 **`D4` — one generalised spawn script, not a claude sibling.** `DEC-209`
 already says the script becomes the sole spawn shape for every harness and that
 renaming it past `pi` is part of the work. A second script would be the parallel
-implementation this slice exists to remove. Harness reduces to two tokens
-(§5.2.1).
+implementation this slice exists to remove. The decision holds; its stated ground
+does not. Harness does **not** reduce to two tokens — §5.2.1 now enumerates four
+harness asymmetries and four platform ones (`RV-356` `F-2`). One script is still
+right, because the alternative is two scripts carrying the same enumeration twice.
 
 **`D5` — `NextKind::Spawn`'s prose loses its arm split.** `dispatch.rs:6702`
 is arm-agnostic by design but currently enumerates two arms; after the collapse
