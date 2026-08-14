@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffe64-0fd7-7912-9db1-abcfa83f67f7"
+recorded_at = "2026-08-14T03:49:58.359068555Z"
+kind = "friction"
+summary = "/audit: SL-254 capsule-exported audit worktree carried a host-path gitdir, unusable inside the jail until `git worktree repair`"
+detail = "The SL-254 audit worktree at .worktrees/SL-254-audit was created outside the bubblewrap jail, so its `.git` file read `gitdir: /home/david/dev/doctrine/.git/worktrees/SL-254-audit`. Inside the jail that path does not exist, so every git command in the worktree failed with `fatal: not a git repository: (null)`. `git worktree list` also showed it `prunable`. Cost: ~4 tool calls to diagnose (cat .git, ls the target, probe with explicit GIT_DIR) before `git worktree repair <path>` from the parent tree fixed it. Anything that hands a worktree across the jail boundary should repair (or emit jail-relative) the gitdir pointer."
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
