@@ -198,11 +198,12 @@ audit and appear below only where they leave a residual.
   "strictly stronger" claim are unchanged; only the mechanism named is wrong.
   Note that `notes.md` routes this to "the REV"; `design.md` is not a REV target,
   so it lands here instead.
-- **`notes.md` residual from `F-7`/`F-14`** — record that the source-delta rows
-  were reconstructed from the commit graph at audit, and that they live in the
-  **runtime** tier (`.doctrine/state/slice/254/boundaries.toml`), so they are
-  disposable and do not travel. No merge hazard; anyone re-running
-  `slice conformance` for this slice elsewhere must re-bootstrap first.
+- **`notes.md` residual from `F-15`** — record that `SL-254`'s authentic
+  `provenance = "solo"` registry rode the capsule sideband into
+  `.worktrees/SL-254-audit/.doctrine/state/slice/254/boundaries.toml`, and has been
+  copied to the primary tree so `slice conformance` can resolve it. Runtime tier,
+  so it is disposable and does not land with the branch — anyone re-running
+  conformance on another tree must copy it across again until the resolver changes.
 - **Re-run `doctrine boot` on the landing tree after the branch lands** (`F-1`
   residual). The fix is committed at `1185a631d`, but each tree's snapshot is
   gitignored runtime state and regenerates locally.
@@ -273,16 +274,24 @@ audit and appear below only where they leave a residual.
 - **Darwin arm defects** (`F-2`) — fold `H1`–`H4` from `notes.md`'s `VA-2`
   section into `IMP-429` so the next mac-equipped session tests hypotheses rather
   than re-running the arm blind.
-- **Phases landing without a source-delta row** (`F-7`) — the process gap the
-  bootstrap papered over. Not SL-254's to fix; capture it so the next dispatched
-  slice's audit does not rediscover an empty registry.
-- **The source-delta registry is runtime state, so it cannot cross a branch
-  export** (`F-14`). For any slice that reaches its auditor as a branch — capsule
-  export, bare fetch, fresh clone, a colleague's push — `slice conformance` is
-  structurally unavailable, and reconstruction from the commit graph works only
-  because the commit messages happen to name their phases. Either the registry
-  belongs in the authored tier, or the handoff path must carry it, or `/audit`
-  needs a documented reconstruction step rather than an ad-hoc one.
+- ~~**Phases landing without a source-delta row** (`F-7`)~~ — **withdrawn by
+  `F-15`.** There was no such gap: all ten phases recorded automatically. The
+  card that replaces it is the resolver item below.
+- **The registry and its sibling resolve by different roots** (`F-15`,
+  superseding `F-14`). `boundaries_path()` pins to `primary_worktree(cwd)` on read
+  and write (`state.rs:943`); `phases_dir()` joins the local `project_root`
+  (`:135`); `registry_completeness()` consumes both (`:1208`). So an adopted
+  worktree carrying its own runtime state reports `10/10` phases and zero source
+  deltas simultaneously. The capsule sideband delivered a complete
+  `provenance = "solo"` registry and doctrine read a different tree's absent file.
+  Primary-pinning is correct for a *worker fork* and wrong for an *adopted foreign
+  checkout*; there is no predicate distinguishing them today. A candidate that
+  needs no new concept: read locally when the linked worktree holds its own
+  `.doctrine/state/slice/<id>/` for a slice the primary does not know.
+- **`record-delta` writes primary-pinned with no warning** (`F-15`). It accepted
+  ten rows into a tree that had never built the slice, shadowing an authoritative
+  registry with a hand-reconstructed one. A tree can silently accumulate rows for
+  slices whose work it does not contain.
 - **`base64` is an unused dependency**, verified at PHASE-05 against the current
   tree (zero references in `src/` or `tests/`). Gate-neutral — cargo does not warn
   on an unused dep — which is why it was left rather than touched mid-slice.

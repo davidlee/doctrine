@@ -354,5 +354,34 @@ The structural half is routed to the brief as a backlog card, not as `SL-254` wo
 
 Nothing about `SL-254`'s own conformance result changes: the ten rows were reconstructed from the commit graph, the algebra ran, and `F-8` records what it found."""
 
+[[finding]]
+id = "F-15"
+status = "verified"
+severity = "major"
+title = "Supersedes `F-14`: the registry was never empty. The capsule recorded all ten boundaries and the sideband delivered them — `boundaries_path()` resolves to the primary worktree and read the wrong tree's file"
+detail = """
+`F-14` claimed the source-delta rows "stayed in the capsule and died with it". That is false, and so is `F-7`'s framing of an empty registry. Both are superseded by this finding.
+
+**What actually happened.** `.worktrees/SL-254-audit/.doctrine/state/slice/254/boundaries.toml` holds **ten rows, one per phase, `provenance = "solo"`** — the automatic solo phase-binding recorded every boundary as the phases landed. The capsule sideband (`microvm-spike` ledger item 32) delivered them: `refs/capsule/a/state/implementation`, fetched atomically alongside the code ref so "nobody observes a result commit without the capsule state that goes with it". The state was recorded, it travelled, and it was sitting in the audit worktree at the correct relative path the entire time.
+
+**Why `slice conformance` reported `unavailable` anyway.** `state::boundaries_path()` (`src/state.rs:943-949`) resolves `git::primary_worktree(cwd)` — on read *and* on write. `.worktrees/SL-254-audit` is a linked worktree of this repo, so its primary is `/workspace/doctrine`, which had no `254` registry. Conformance read an absent file and `read_registry` correctly returns an empty registry for a missing path.
+
+**The sharp edge is that its sibling resolves differently.** `phases_dir()` (`:135`) joins `project_root` directly — local to the tree you are standing in. So `registry_completeness(cwd, project_root, id)` (`:1208-1219`) reads the **registry from the primary tree** and **completed phases from the local tree**, in one function, for two files that live in the same directory. That is why `slice status 254` reported `10/10` from the audit worktree while `slice conformance 254` reported no deltas at all — and why, after I hand-recorded rows into the primary, it flipped to `incomplete — partial coverage` (primary registry, primary phase state = none) rather than resolving.
+
+**The primary-pinned write is a second hazard.** `record-delta` accepted ten writes into a primary tree that had never built this slice, silently shadowing an authoritative `provenance = "solo"` registry with a hand-reconstructed `provenance = "manual"` one. Nothing warned. A tree can accumulate registry rows for slices whose work it does not contain.
+
+**Nothing downstream changes.** Both registries produce identical algebra — undeclared 96 / undelivered 0 / conformant 40 — verified by swapping the files and re-running. `F-8` stands as written. The authentic capsule registry has been restored as the primary's copy.
+
+**Why the pinning exists, and where its boundary really is.** `primary_worktree()` is correct when the linked worktree is a *worker fork of this repo* — a fork must not keep its own registry, or the orchestrator's conformance view fragments. It is wrong when the linked worktree is an *adopted foreign checkout* whose history was developed elsewhere and whose runtime state arrived with it. Doctrine cannot currently tell those two apart, and the capsule workflow makes the second case routine rather than exotic."""
+disposition = "verified"
+response = """
+Confirmed by reading the resolver rather than inferring from behaviour: `boundaries_path` -> `primary_worktree(cwd)` (`state.rs:943`), `phases_dir` -> `project_root` (`state.rs:135`), both consumed by `registry_completeness` (`:1208`). The empirical control is the swap test — authentic `provenance = "solo"` registry and hand-reconstructed `provenance = "manual"` registry give byte-identical conformance output.
+
+Not `SL-254`'s defect in any part, and nothing in the slice changes. Routed to the brief as a **platform** item with the diagnosis attached, replacing `F-14`'s (wrong) framing and superseding `F-7`'s "the registry was empty" premise — `F-7`'s bootstrap was unnecessary work caused by a misread, not a gap it filled.
+
+The remediation question worth putting to whoever picks this up: `primary_worktree()` pinning is right for a worker fork and wrong for an adopted foreign checkout, and doctrine has no predicate distinguishing them. The cheapest honest fix may be neither — a linked worktree that carries its own `.doctrine/state/slice/<id>/` for a slice the primary does not know could simply be read locally, which is a rule expressible without a new concept. That is a design call, not an audit call.
+
+Recorded as an audit self-correction: this is the second restatement of the same point, and the ledger keeps all three so the reasoning chain stays legible rather than tidy."""
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
