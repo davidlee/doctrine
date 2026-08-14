@@ -2,11 +2,11 @@ memory_uid = "mem_019ee28ee9ee7d608a22dba762fdcc26"
 memory_key = "mem.signpost.doctrine.dispatch-claude-arm-wrong-base"
 schema_version = 1
 memory_type = "signpost"
-status = "active"
+status = "retracted"
 title = "Claude dispatch arm wrong-base risk under shared-clone contention"
 summary = "Claude /dispatch arm forks wrong/moving base under shared-clone lock contention — verify worker base==B; see ISS-034"
 created = "2026-06-20"
-updated = "2026-06-20"
+updated = "2026-08-14"
 
 [scope]
 paths = []
