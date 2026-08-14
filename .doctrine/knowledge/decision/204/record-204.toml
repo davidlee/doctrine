@@ -7,7 +7,7 @@ title = "Retire worker_commit's transport, re-home its belts"
 record_kind = "decision"
 status = "proposed"
 created = "2026-08-12"
-updated = "2026-08-12"
+updated = "2026-08-14"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)

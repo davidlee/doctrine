@@ -1033,6 +1033,40 @@ method sees Rust symbols — the `justfile` leg was found by grepping the *strin
 The plan phase should run this census mechanically against the real deletion
 rather than re-reading this table (`R8`).
 
+**Reconciled: the table was still a floor, and the registry is the load-bearing
+copy (`RV-356` `F-8`).** `slice conformance` at audit read undeclared 96 /
+undelivered 0 / conformant 40. Undelivered zero is the good half — nothing was
+promised and dropped. The undeclared cell was the thirteenth under-count: the
+`design-target` selector registry, which is what `conformance` actually reads,
+never learned what this table missed, even where a plan criterion named the path
+explicitly (`guard.rs`, `doctor_checks.rs`, `finding.rs`, `install.rs`,
+`justfile`). Fifty-one selectors were declared at reconcile — the surfaces above
+plus `src/commands/{guard,doctor,cli}.rs`, `src/{doctor_checks,finding,install}.rs`,
+`src/mcp_server/dispatch.rs`, `src/worktree/{allowlist,claim_lock,dispatch_record}.rs`,
+`justfile`, `plugins/doctrine/hooks/hooks.json`,
+`plugins/doctrine/skills/{execute,dispatch-spawn}/SKILL.md`,
+`install/hymns/role/{orchestrator,worker}.md` and its `.doctrine/` twin,
+`install/agents/claude/{dispatch-orchestrator,dispatch-probe,dispatch-worker}.md`,
+`install/workflows/drive-slice.js` and its `.doctrine/` twin,
+`install/manifest.toml`, `publication/manifest.toml`, `.doctrine/governance.md`,
+`scripts/{pi-agent,pi-respawn-nofork.sh,pi-review.sh}`, `tests/common/mod.rs`,
+`tests/e2e_worker_confinement.rs`, `tests/e2e_dispatch_arm_spawn.rs`, and the
+retargeted `tests/e2e_*` set — taking it to undeclared 45 / undelivered 0 /
+conformant 91, with every remaining undeclared path in the governance-entity
+class a code-surface selector list is not meant to hold.
+
+One path sits outside the declared blast radius and is declared as deliberate
+incidental reach: `crates/doctrine-control/src/backend/bubblewrap.rs`, a one-line
+doc-comment rename in a byte-parity note (`PHASE-02`, `c66cd2c65`). The collapse
+reached the capsule crate, which is worth recording even though it changed
+nothing.
+
+**The standing lesson, for the next slice rather than for this one.** A prose
+table and a machine-read registry are two copies of the same claim, and this
+slice under-counted the prose one twelve times before the registry made the
+thirteenth mechanical. Prose corrections do not propagate: correcting §5.6 alone
+would have left conformance red. The registry is the load-bearing copy.
+
 
 <!-- doctrine:section sec-10 -->
 ## 6. Open Questions & Unknowns
