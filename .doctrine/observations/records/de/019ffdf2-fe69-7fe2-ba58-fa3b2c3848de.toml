@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffdf2-fe69-7fe2-ba58-fa3b2c3848de"
+recorded_at = "2026-08-14T01:46:28.329485384Z"
+kind = "friction"
+summary = "dispatch/live-fire: worktree import's tree-unclean precondition is whole-tree with no scoping escape"
+detail = "SL-254 PHASE-09. 'doctrine worktree import --from-worktree' refuses 'import-refused: tree-unclean' on ANY tracked dirt anywhere in the tree (import.rs:53 — git status --porcelain --untracked-files=no). AGENTS.md tells every agent to assume co-resident agents in the same tree; one unrelated dirty file (here a pre-existing skills-lock.json modification that was explicitly not mine to commit) blocks every dispatch import, and there is no --pathspec to narrow it to the delta's own paths. Cost: two refused imports plus a back-up/restore/replace maneuver on a file I had been told not to touch, to get the phase's single required import through."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

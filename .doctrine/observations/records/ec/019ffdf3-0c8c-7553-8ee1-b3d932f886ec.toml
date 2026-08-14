@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffdf3-0c8c-7553-8ee1-b3d932f886ec"
+recorded_at = "2026-08-14T01:46:31.948661595Z"
+kind = "friction"
+summary = "install: 'doctrine install' prompts interactively and 'yes |' hangs it past a 120s timeout"
+detail = "SL-254 PHASE-09 pre-flight. 'doctrine install' prompts 'Proceed? [y/N]' and aborts on a bare non-tty stdin. The reflex workaround 'yes | doctrine install' did NOT work — it ran past a 120s tool timeout into the background and had to be pkill'd, costing a background-task round trip. The -y/--yes flag is the right answer and is documented in --help, but nothing in the abort message names it; the abort just says 'Aborted.' Naming -y in the abort path would have saved the whole detour."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
