@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 429
-slug = "give-the-confinement-prefix-a-home-and-macos-parity-with-it"
-title = "Give the confinement prefix a home, and macOS parity with it"
-kind = "improvement"
+id = 351
+slug = "pi-spawnsh-spawns-a-dispatch-worker-with-no-confinement"
+title = "pi-spawn.sh spawns a dispatch worker with no confinement"
+kind = "issue"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
-created = "2026-08-13"
-updated = "2026-08-13"
-tags = []
+created = "2026-08-14"
+updated = "2026-08-14"
+tags = ["area:dispatch", "area:worktree", "confinement"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -23,14 +23,11 @@ triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
 label = "references"
-role = "concerns"
-descriptor = "F-2 — the Darwin arm is network-denied by construction; H1-H4 folded in"
-target = "RV-356"
-
-[[relation]]
-label = "related"
+role = "originates_from"
 target = "SL-254"
 
 [[relation]]
-label = "related"
-target = "IMP-428"
+label = "references"
+role = "concerns"
+descriptor = "F-4 — the only script in the repo asserting worker identity with zero bwrap"
+target = "RV-356"
