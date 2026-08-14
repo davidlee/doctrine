@@ -24,8 +24,9 @@ legal-transition table. A future transport (a new harness posture, a remote
 executor) inherits the same authority by construction.
 
 The title's closing clause, "per-transport altitude reconciles with REQ-291 and
-REQ-335", is superseded: REQ-291 as amended states a single uniform kernel-level
-altitude for all harnesses, and REQ-335's tier is retired. There is no
+REQ-335", is superseded: REQ-291 as amended states a single kernel-level altitude
+uniform across all harnesses (uniform across *platforms* only in intent and
+write-fencing — see REQ-291 clause 5), and REQ-335's tier is retired. There is no
 per-transport altitude left to reconcile.
 
 ## Rationale

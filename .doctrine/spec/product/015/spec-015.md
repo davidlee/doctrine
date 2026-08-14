@@ -144,12 +144,29 @@ Invariants:
   > **AMENDED — SATISFIED BY CONSTRUCTION (SL-254, 2026-08-14).** The measure
   > survives; what changed is that it is now trivially met. Parity is no longer a
   > property to be measured across differing arms — there is one confined-subprocess
-  > arm and one enforcement floor (a kernel-level `bwrap` / `sandbox-exec` jail with
-  > `--ro-bind / /` and the fork's worktree as the sole write floor), so the set of
+  > arm and one enforcement floor: a kernel-level `bwrap` (Linux) / `sandbox-exec`
+  > (macOS) jail whose writable set is the fork's worktree **plus the harness config
+  > dir** (`~/.claude` / `~/.pi`), fenced by `--ro-bind / /` on Linux and by an SBPL
+  > `(deny file-write*)` floor on macOS. So the set of
   > *per-harness* shortfalls in enforcement altitude is **empty** and the honesty
-  > obligation has nothing left to disclose. The measure's remaining bite is that the
-  > floor either holds or spawn refuses by name (`DEC-208`): there is no silent
-  > shortfall available.
+  > obligation has nothing left to disclose *on that axis*. Two disclosures the
+  > honesty obligation still owns (corrected SL-254, since this measure is precisely
+  > about not hiding shortfalls):
+  >
+  > 1. **The floor is not uniform across platforms.** It is uniform in intent and in
+  >    write-fencing, but the Linux and Darwin argv differ — Darwin denies network,
+  >    the Linux inline bwrap array carries no `--unshare-net` and so leaves the
+  >    worker fully networked; and `--die-with-parent` has no Seatbelt analog.
+  > 2. **The harness config dir is a writable carve-out.** A confined claude worker
+  >    can write `~/.claude`'s `settings.json`, hooks and agent definitions — the
+  >    orchestrator's own harness configuration. Granted deliberately (`DEC-210`),
+  >    but it is a shortfall against "the fork worktree and nothing else" and is
+  >    disclosed here rather than hidden.
+  >
+  > The measure's remaining bite is that the
+  > floor either holds or spawn refuses (`DEC-208`) — *by name* on Linux, unnamed on
+  > macOS, which has no backend-presence probe: there is no silent
+  > shortfall available, though the macOS refusal is a less legible one.
 - **Non-destructive integration** — across all integrations, no force-push and no
   auto-resolution occurs; every moved/non-ff target is reported.
 
@@ -176,7 +193,9 @@ guarantee than the one this capability states.
 *(This replaces the former "degraded harness" flow, which described a harness that
 still isolated and funneled at a reduced, honestly-stated enforcement altitude with
 shortfalls caught later at the funnel. SL-254 `DEC-208` abolished that rung: spawn
-fails closed instead. The honesty obligation it carried is met by the named refusal.)*
+fails closed instead. The honesty obligation it carried is met by that refusal —
+*named* on Linux, and on macOS closed but unnamed for want of a `sandbox-exec`
+presence probe, which is itself disclosed above rather than glossed.)*
 
 **Edge cases & guards.**
 - A worker that returns more than a single non-merge delta, or touches authored state,
@@ -213,8 +232,10 @@ cites a specific obligation it references the durable requirement entity, never 
 mobile membership label. The enforcement floor is itself a verification obligation
 (rewritten SL-254): because the floor is now uniform across harnesses rather than
 per-harness, what must be proven is that it is *established or refused* — that a worker
-is never launched outside the sandbox, and that an unavailable sandbox produces a named
-refusal at spawn rather than a silent fallback. A reviewer confirms the guarantee holds
+is never launched outside the sandbox, and that an unavailable sandbox produces a
+refusal at spawn rather than a silent fallback — *named* on Linux
+(`bwrap-unavailable`), and on macOS merely closed, since no `sandbox-exec`
+presence probe exists to name it. A reviewer confirms the guarantee holds
 by confirming there is no unconfined path, not by reading a per-harness altitude table.
 
 ## 8. Open Questions
@@ -235,9 +256,12 @@ by confirming there is no unconfined path, not by reading a per-harness altitude
   > confinement argv that establishes the write floor**, so the *unstamped worker* —
   > a worker that is a worker but was never stamped — is not a state that can arise:
   > a process is confined and marked by one act, or it was never launched
-  > (`DEC-208`: an unavailable sandbox is a named refusal). The sole-writer property
-  > therefore rests on a kernel-level read-only filesystem, not on a marker
-  > convention.
+  > (`DEC-208`: an unavailable sandbox refuses — by name on Linux, unnamed on macOS).
+  > The sole-writer property
+  > therefore rests on a kernel-level write floor (a read-only filesystem on Linux, a
+  > `(deny file-write*)` Seatbelt floor on macOS) rather than on a marker
+  > convention — with the harness config dir a deliberate writable carve-out inside
+  > it (`DEC-210`).
   >
   > Left open: this question is recorded as unresolved above and is **not struck
   > here** — whether it should now be closed outright is a governance call for

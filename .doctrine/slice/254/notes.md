@@ -6,9 +6,21 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · PHASE-10 complete (8/10) · PHASE-08 ESCALATED pre-authoring · see git log
+fresh-as-of: 2026-08-14 · PHASE-08 complete (9/10) · only PHASE-09 (live dispatch) remains · see git log
 
 ### Produced
+- PHASE-08 done — `REV-052` ("Dispatch collapses onto one confined subprocess
+  arm"), the governance half, over **eleven** entities: `ADR-001` `ADR-006`
+  `ADR-008` `ADR-011` `ADR-012` `SPEC-012` `SPEC-021` `SPEC-022` `SPEC-028`
+  `PRD-015` plus **14 requirement entities** (`REQ-192/248/250/252/288/290/291/
+  303/304/335/384/387/410/413`). Amended in place per the house idiom; `ADR-011`
+  amended not superseded despite ~56/70 regions falsified. `REQ-288` retired via
+  the REV's typed `status` row (auto-minting `REC-114`). Anchor sweep by hand:
+  two dangling `[[source]]` rows in `spec-021.toml` collapsed onto the merged
+  `dispatch-spawn/SKILL.md` (−2/+1); all 86 live anchors in the corpus re-checked
+  against disk, zero dangling. `just gate` green, `spec validate` clean,
+  `doctrine boot` re-run and `--check` clean (`EX-9`). Commit `cd6308bf1`.
+  **Ids minted (collision risk): `REV-052`, `REC-114`.**
 - PHASE-10 done — Mode B's shipped implementation surface is gone (F-7). Four
   files deleted whole, one edited. Deleted: `install/hymns/role/orchestrator.md`
   (the live session-start role band; Mode B end to end — THE WALL, `arm-spawn`,
@@ -24,6 +36,79 @@ fresh-as-of: 2026-08-13 · PHASE-10 complete (8/10) · PHASE-08 ESCALATED pre-au
   count-free). `just gate` exit 0, `publication validate` clean (90 entries),
   `boot --check` clean, `prompt check` OK, `doctrine install` re-run and
   resurrected nothing
+
+### Learned (PHASE-08)
+- **The twelfth undercount was a defect in the criterion, not a miscount.** `EX-1`
+  names the sweep scope as `.doctrine/adr`, `.doctrine/spec`, `.doctrine/policy`,
+  `.doctrine/standard`. Requirement prose bodies live in **none** of those — they
+  live under `.doctrine/requirement/NNN/`. So every sweep including the
+  re-derivation was *structurally incapable* of seeing 14 falsified requirement
+  entities, 7 of which no plan criterion ever named. Class: **a sweep scope
+  expressed as a directory list is itself a claim about where truth lives, and
+  that claim needs its own check.** The entity kinds a corpus contains are not the
+  directories a governance sweep names. This is why the count moved again after a
+  re-derivation that had already quadrupled the design's floor.
+- **A clean-room adversarial review earns its cost on a prose phase, not just a
+  code one.** codex MCP is unavailable in this capsule, so the substitute was a
+  fresh agent given the commit and the source tree and explicitly *denied* this
+  slice's `notes.md`/`design.md`/scratchpad — otherwise it launders the authors'
+  own claims back as confirmation. It returned 14 findings, 3 blocking, all
+  re-verified by hand before action. The most valuable one was a **security-relevant
+  over-claim**: eight entities had been given "the fork worktree is the sole write
+  floor", when `spawn-confined.sh:179` rw-binds `$CFG_DIR` (`~/.claude`) too — so a
+  confined claude worker can write the orchestrator's hooks and agent defs. The
+  shipped skill had it right; the amendments had introduced a contradiction *with
+  shipped truth*. Prose review against prose would never have caught it.
+- **Amending is not a uniform instrument, and picking per region matters.** A
+  recorded *decision* wants a dated blockquote over a retained body (the visible
+  who-changed-what-when chain is the value). Present-tense *description of shipped
+  mechanism* — most of a tech spec, most of a requirement statement — wants
+  rewriting, because layering an amendment note over a false description leaves the
+  false description as the thing a reader reads first. Structured registry data is
+  neither: it is deleted.
+- **`spec validate` reported `corpus clean` the entire time two `[[source]]`
+  anchors dangled.** Empirical proof, not assertion, that `VH-1`'s hand sweep is the
+  only thing standing between the corpus and a silent regression. All 86 live
+  anchors were re-checked against disk.
+
+### Open (PHASE-08)
+- **75 project-local memory items reference the retired mechanisms**
+  (`SubagentStart`, `stamp-subagent`, `dispatch-agent`, `worker_commit`,
+  `arm-spawn`, `pretooluse`) under `.doctrine/memory/items/`. The **shipped**
+  corpus (`memory/`) has **zero** — POL-002 held. Not touched in PHASE-08: memory is
+  a separate corpus with its own maintenance skill, and an unbounded cluster is not
+  a phase-local fix. But it is arguably a *worse* defect than falsified ADR prose,
+  because memories are retrieved on purpose. `/reviewing-memory` or `/dreaming`
+  before close.
+- **`scripts/pi-spawn.sh` ships an UNCONFINED dispatch worker spawn** — real
+  `worktree fork --worker`, `DOCTRINE_WORKER=1`, zero `bwrap`, maintained after the
+  confinement work landed. Not a *fallback* (nothing degrades into it, so `DEC-208`
+  stands), but it falsifies "one spawn path" read as a property of the repo rather
+  than of `/dispatch`. Delete-or-keep is a decision, not a phase-local call.
+- **The Darwin claude arm looks non-functional, not merely unverified.** The Linux
+  array carries no `--unshare-net`; the Darwin path resolves `network=false` and
+  emits `(deny network*)`, so a macOS `claude -p` worker is network-denied and
+  cannot reach the API. Also no `sandbox-exec` presence probe exists on Darwin, so a
+  missing backend fails *unnamed* — the `RV-355` `F-6` class, fixed on Linux, never
+  carried across. **`PHASE-09`/`VA-2` should treat this as a hypothesis to test, not
+  a box to tick.**
+- **`.doctrine/agents/dispatch-worker.md` is stale and self-contradictory** — both
+  "Do NOT commit — you cannot" (`:21`) and "the only git verb you run … is the final
+  commit" (`:46`). The shipped template is correct; the materialised copy was not
+  regenerated after PHASE-06, and `boot --check` does not cover agent
+  materialisation. A live worker gets contradictory instructions today.
+- **`src/dispatch_config.rs:94-95` still asserts the premise this REV corrects** —
+  that `classify_import` became `worker_forbidden_writes`'s sole enforcing reader.
+  Left to re-seed the error from a source comment. `DispatchConfig`'s default
+  harness is also `Codex`, which `spawn-confined.sh` refuses to spawn.
+- **`REQ-335` was NOT retired, deliberately** — two drafting passes recommended it;
+  design `§6` `OQ-2` says its tier *"stays `pending` as a contract"*, and retiring it
+  would assert the tier will never be built. Declined as beyond this slice's
+  `DEC-2xx` set. `/reconcile` may revisit.
+- **No `[[source]]` anchor points at `scripts/spawn-confined.sh`** anywhere in the
+  corpus, though it is now the central shipped mechanism. Adding one is a
+  spec-boundary decision, not a correction of falsified text, so it was recorded
+  rather than taken.
 
 ### Learned (PHASE-10)
 - **A tenth undercount, and the one that mattered most.** `EX-8` named the

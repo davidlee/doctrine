@@ -17,11 +17,16 @@ the **invocation**.
 1. **The guarantee is uniform.** The isolation+funnel guarantee — a private
    worktree per unit of work, the coordination/runtime tier absent by
    construction, and every delta landing through the orchestrator's funnel —
-   holds identically for every orchestrated harness, and is enforced identically:
-   a kernel-level bwrap/`sandbox-exec` jail whose `--ro-bind / /` no harness can
-   decline, plus a NAMED fail-closed refusal when that jail cannot be
-   established. No harness enjoys a weaker altitude, and none is trusted to
-   cooperate.
+   holds identically for every orchestrated **harness**, and is enforced
+   identically across harnesses: a kernel-level bwrap/`sandbox-exec` jail no
+   harness can decline (write-fenced by `--ro-bind / /` on Linux and by an SBPL
+   `(deny file-write*)` floor on macOS, its writable set being the fork worktree
+   **plus the harness config dir**), plus a fail-closed refusal when that jail
+   cannot be established — *named* on Linux (`bwrap-unavailable`), unnamed on
+   macOS, which runs no backend-presence probe. No harness enjoys a weaker
+   altitude, and none is trusted to cooperate. **Uniformity is a claim about
+   harnesses, not platforms** (corrected SL-254): the Linux and Darwin argv differ
+   on network and on process lifetime — see REQ-291 clause 5.
 2. **The invocation is harness-specific, and that is the accepted cost.** One
    spawn script, `scripts/spawn-confined.sh <harness>`, owns the per-harness
    argv (headless flags, output format) behind a single uniform interface. Adding

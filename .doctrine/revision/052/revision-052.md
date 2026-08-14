@@ -191,6 +191,98 @@ the corpus does not keep repeating a premise that was checked and found false:
    written; `src/worktree/shared.rs::is_dispatch_fork_branch` was implemented
    instead. The corrected substitute is what the corpus now names.
 
+## Adversarial review, and what it caught
+
+The slice's own design was locked only after `RV-355` put seven real findings
+through it. This revision got the same treatment. The project's default external
+reviewer is the codex MCP server; it is **not available in this capsule** (no
+`codex` binary, and `.mcp.json` configures only the doctrine server), so the
+substitute was a **clean-room agent review**: a fresh reviewer given the commit and
+the source tree, and explicitly denied this slice's `notes.md`, `design.md` and the
+authoring scratchpad, so that it could not launder the authors' own claims back as
+confirmation. Its evidence was the code.
+
+It returned **fourteen findings, three of them blocking**, and it was right about
+the ones that mattered. Every finding was re-verified against the code by hand
+before being actioned — the reviewer's report was treated as a lead, not a verdict.
+
+**The three that changed the corpus materially:**
+
+- **The "sole write floor" claim was false, and false in a security-relevant
+  direction.** Eight entities had been given the sentence *"the fork worktree is
+  the sole write floor / nothing outside it is writable."*
+  `scripts/spawn-confined.sh:179` read-write binds `$CFG_DIR` — `$HOME/.claude` or
+  `$HOME/.pi` — alongside the worktree, and Darwin passes the same grant through
+  `--extra-rw`. So a confined claude worker can write the orchestrator's own
+  harness configuration: `settings.json`, hooks, agent definitions. The shipped
+  skill (`dispatch-spawn/SKILL.md:12-14`) had this right all along, so the
+  amendments had introduced a contradiction *with shipped truth*, in the one
+  direction where over-claiming is worst. Corrected everywhere, with the carve-out
+  named rather than smoothed over.
+- **"Uniform confinement" is not uniform across platforms.** The Linux inline array
+  carries no `--unshare-net`, while the Darwin path resolves `network=false` and
+  emits `(deny network*)`. Beyond the wording, this has a sharp consequence the
+  sweep had not drawn: a macOS `claude -p` worker would be **network-denied and
+  unable to reach the API at all**. That is a live question for `PHASE-09`'s Darwin
+  census (`VA-2`), not a documentation nicety. Also: macOS fences writes only
+  (`(deny file-write*)`), so reads and exec are unrestricted there — `--ro-bind / /`
+  was being attributed to a platform that has no such flag.
+- **Nothing probes for `sandbox-exec` on macOS.** The Linux `bwrap` probe produces
+  the named `bwrap-unavailable` refusal that `DEC-208` rests on; the Darwin arm has
+  no backend-presence probe at all, so a mac without `sandbox-exec` fails *unnamed*
+  at exec — the same class of defect `RV-355` `F-6` fixed on the Linux side and
+  which was never carried across.
+
+**Also landed:** `bwrap_argv` does not set `DOCTRINE_WORKER` (only the shell's
+inline array and `sandbox_exec_argv` do), so three entities cited the wrong
+mechanism for worker identity; the import belt has a third rejection leg
+(`undeclared-scope`) that four ADRs stated as a two-item exhaustive list; the
+worker-mode predicate is `== "1"`, not merely *set*; and `SPEC-012` had canonised
+an MCP-broker route for confined workers that the shipped spawn line forecloses
+(`--strict-mcp-config` with no `--mcp-config`) and that `SPEC-028` — amended in the
+same commit — described correctly, an internal contradiction.
+
+**What the review CONFIRMED, which is worth as much:** the load-bearing claim that
+`worker_forbidden_writes` has no enforcing production reader was re-checked
+exhaustively and holds — every surviving reference is behind
+`expect(dead_code)`. `land`'s substitute really is `is_dispatch_fork_branch`, and
+`classify_worktree_role` really does still exist serving other callers, so
+`REQ-250`'s careful wording is right. Forks really are minted unbound. And the
+funnel machine's `worker-committed` position is *transited, never durably
+occupied* — `REQ-384`'s phrasing survived scrutiny that a flat "unreachable" would
+not have.
+
+## Residuals recorded, not fixed here
+
+Found by the review, outside a revision that corrects falsified description. Each
+is carried to `/reconcile` rather than absorbed:
+
+- **`scripts/pi-spawn.sh` still ships and spawns an UNCONFINED dispatch worker** —
+  it mints a real worker fork and runs `env -C "$D" DOCTRINE_WORKER=1 pi …` with
+  zero `bwrap`, and it was maintained after the confinement work landed. It is not
+  a *fallback* — nothing degrades into it, so `DEC-208`'s fail-closed claim stands
+  — but it does falsify any reading of "one spawn path" as a property of the
+  repository rather than of `/dispatch`. Whether it should be deleted is a decision.
+- **`.doctrine/agents/dispatch-worker.md` is stale and self-contradictory** — it
+  says both *"Do NOT commit — you cannot"* (`:21`) and *"the only git verb you run
+  … is the final commit"* (`:46`). The shipped template
+  (`install/hymns/role/worker.md`) is correct, so this is a materialised copy that
+  was not regenerated after `PHASE-06`. `doctrine boot --check` does not cover
+  agent materialisation, so nothing caught it. A live worker reading its own
+  definition today gets contradictory instructions.
+- **`DispatchConfig`'s default harness is `Codex`**, which `spawn-confined.sh` does
+  not accept — the declared default cannot be spawned.
+- **`src/dispatch_config.rs:94-95` still states the falsified premise** that
+  `classify_import` became `worker_forbidden_writes`'s sole enforcing reader — the
+  exact error this revision corrects in prose, left to re-seed itself from a source
+  comment.
+- **The in-session *surface* survives even though the routing is gone** —
+  `DISPATCH_WORKER_AGENT_TYPE`, a drift test pinning an agent def whose frontmatter
+  still carries `isolation: worktree`, and a `create-fork` CLI verb with no
+  production caller.
+
 ## Before / after — by entity
 
-<!-- Populated per entity as each amendment lands. -->
+<!-- The per-entity before/after lives in the entities' own dated amendment
+     blockquotes, which are diffable in commit `cd6308bf1` and its follow-up.
+     Duplicating them here would create a second copy to drift (storage rule). -->

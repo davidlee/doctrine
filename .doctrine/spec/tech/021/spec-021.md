@@ -102,24 +102,49 @@ amended SL-254, `DEC-208`/`DEC-213`). There is no arm selection: every harness i
 spawned as a confined subprocess by `scripts/spawn-confined.sh <harness>`, which owns
 the whole pre-spawn sequence itself —
 
-1. **capability probe** — Linux asserts `bwrap`, macOS takes its named refusal from
-   `worktree jail-prefix`. An unresolvable jail **aborts the spawn**; there is **no
+1. **capability probe — Linux only** (corrected SL-254). `spawn-confined.sh:61` probes
+   `command -v bwrap` and refuses by name (`bwrap-unavailable`) before minting a fork.
+   The Darwin arm **skips the probe entirely** and there is no `sandbox-exec`
+   presence check anywhere: `have_bwrap` is `#[cfg(not(target_os = "macos"))]`
+   (`jail.rs:147`) with no Darwin sibling, and `jail_prefix.rs`'s macOS arm
+   (`:150-169`) fails only on topology, policy, or profile-write errors. So a macOS
+   host without `sandbox-exec` gets a *successful* prefix write and then an
+   **unnamed** exec failure. Still fail-closed — nothing spawns unconfined — but the
+   named-refusal half of `DEC-208` is a Linux property, and its absence on macOS is a
+   gap, not a design choice. An unresolvable jail **aborts the spawn**; there is **no
    unconfined fallback and no degraded/reduced-enforcement rung** (`DEC-208`).
 2. **fork** — `worktree fork --base <B> --branch <BRANCH> --dir <DIR> --worker`,
    orchestrator-classed, from the project root before any confinement. The fork is
    deliberately **unbound** (no `--slice`/`--phase`), so no funnel row lands and
    `dispatch next` is advisory on this drive, not the driver.
-3. **confine + exec** — `timeout <BACKSTOP> <jail prefix> <harness exec>`. The jail
-   rw-binds the fork dir and the harness config dir, ro-binds everything else, and
-   sets `DOCTRINE_WORKER=1` inside the namespace — the same argv that establishes the
-   write floor establishes worker identity, and both die with the process
-   (`DEC-207`).
+3. **confine + exec** — `timeout <BACKSTOP> <jail prefix> <harness exec>`. The writable
+   set is the fork dir **and the harness config dir** (`~/.claude` / `~/.pi`), plus a
+   private `/tmp` and the device sinks; on Linux everything else is read-only under
+   `--ro-bind / /`, on macOS everything else is write-denied by the SBPL
+   `(deny file-write*)` floor while reads and exec stay open. `DOCTRINE_WORKER=1` rides
+   the same argv — the same argv that establishes the write floor establishes worker
+   identity, and both die with the process on Linux (`--die-with-parent`; Seatbelt has
+   no analog) (`DEC-207`).
+   **The config-dir grant is a real carve-out, not an implementation detail:**
+   `~/.claude` holds `settings.json`, hooks and agent definitions, so a confined claude
+   worker can write the orchestrator's own harness configuration. It is granted
+   deliberately — claude needs it for the subscription credential (`DEC-210`) and pi
+   writes it at runtime — and the narrowed mount set remains a known, untaken
+   refinement.
 
 The only surviving per-harness difference is the exec line, the config dir, and the
 completion signal (`claude -p` exits when its turn ends; `pi --mode rpc` never
 self-exits, so that profile holds stdin open on a fifo and polls for a typed settle
-event). The default harness is `pi` until a preferred-harness selection is wired
-(IMP-101) — a *preference*, not a routing decision, and never a different mechanism.
+event). **The spawn path accepts exactly two harnesses — `pi` and `claude`** — and
+hard-exits on anything else (`spawn-confined.sh:35-42`); it has no default of its own,
+the harness is the script's first argument (corrected SL-254 — this paragraph
+previously said the default harness is `pi`, which no code establishes). Note the live
+mismatch: `DispatchConfig`'s `SubprocessHarness` still defaults to `Codex`
+(`src/dispatch_config.rs:39-45`, echoed by `install/doctrine.toml.example:84`), so the
+**declared default harness cannot be spawned through the shipped path at all**. That is
+a code defect, not a spec position; it is carried out of this phase as a backlog
+candidate rather than repaired here. Harness choice remains a *preference*, not a
+routing decision, and never a different mechanism (IMP-101).
 
 **Serial vs parallel** — `plan-next` plans **parallel batches only when file-disjoint**;
 default serial (one worker per phase). The asymmetry is load-bearing: parallel
@@ -157,10 +182,17 @@ DD-6).
 > claude included — is spawned as a confined subprocess by
 > `scripts/spawn-confined.sh <harness>`, so **every** harness reaches the same
 > floor: explicit `fork --base B`, kernel-level bwrap/`sandbox-exec` confinement
-> with the fork's worktree as the sole write floor, `DOCTRINE_WORKER` set by that
-> same confining argv, and a fail-closed named refusal (`bwrap-unavailable`) when
-> the jail cannot be established (`DEC-208`). The reach is now uniform *and*
-> non-negotiable rather than uniform-in-contract and unequal-in-reach. The
+> whose writable set is the fork's worktree **plus the harness config dir**,
+> `DOCTRINE_WORKER=1` set by that same confining argv, and a fail-closed refusal —
+> *named* on Linux (`bwrap-unavailable`), unnamed on macOS for want of a backend
+> probe — when the jail cannot be established (`DEC-208`). The reach is now uniform
+> across **harnesses** *and* non-negotiable rather than uniform-in-contract and
+> unequal-in-reach. It is **not** uniform across **platforms**: the floor is uniform
+> in intent and in write-fencing, but the Linux and Darwin argv differ on network
+> (Darwin denies it, the Linux inline bwrap array carries no `--unshare-net` and so
+> leaves the worker fully networked) and on process lifetime (`--die-with-parent` has
+> no Seatbelt analog) — see SPEC-012's spawn-arm section for the enumerated
+> divergences. The
 > historical two-arm table below is retained for the record; it no longer describes
 > the shipped posture, and every claude-column cell in it names something deleted
 > (the `Agent`-tool spawn, the disk marker, the `SubagentStart` stamp,
@@ -178,8 +210,9 @@ a worker that cannot be confined is never spawned. One residual is **new** and
 must not be read out of the table: `worker_commit` was the only production reader
 of `DispatchConfig::worker_forbidden_writes`, so with it retired (`DEC-204`) the
 *configurable* tail of that list (`.agents/**`, `install/agents/**`, `flake.nix`)
-now enforces nothing; the import belt only ever enforced its two hard-coded floors
-(`.doctrine/**`, `.claude/**`). Closing that gap at spawn time via read-only binds
+now enforces nothing; the import belt only ever enforced its two hard-coded prefix
+floors (`.doctrine/**`, `.claude/**`) plus the `--slice`-scoped `undeclared-scope`
+leg (`import.rs:136-152`) — never the configurable tail. Closing that gap at spawn time via read-only binds
 is carried forward to SL-255 (IDE-051).
 
 *Historical (pre-SL-254 two-arm altitude table), retained for the record:*
@@ -395,8 +428,11 @@ durable constraint, not a single run's accident. See **Concerns** for the catalo
   > **AMENDED — FALSIFIED (SL-254, 2026-08-14).** The reach is now uniform *and* the
   > contract is fail-closed, so there are no confessed residuals to be honest about:
   > every harness is a confined subprocess with an explicit `fork --base B`, the OS jail
-  > as its write floor, `DOCTRINE_WORKER` as its whole identity, and a named refusal
-  > (`bwrap-unavailable`) instead of a lesser rung (`DEC-207`, `DEC-208`). The claude
+  > as its write floor (writable set: the fork worktree **plus the harness config dir**),
+  > `DOCTRINE_WORKER == "1"` as its whole identity, and a fail-closed refusal —
+  > *named* on Linux (`bwrap-unavailable`), unnamed on macOS for want of a backend
+  > probe — instead of a lesser rung (`DEC-207`, `DEC-208`). Uniform across harnesses;
+  > **not** byte-uniform across platforms (network and process lifetime differ). The claude
   > half of this decision names four deleted things: the `Agent`-tool spawn, the disk
   > marker, the `SubagentStart` stamp, and `verify-worker`. `REQ-291` is rewritten by
   > SL-254 to state the uniform confined contract; the one **new** residual — the

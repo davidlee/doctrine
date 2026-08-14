@@ -27,7 +27,10 @@ a confined subprocess by `scripts/spawn-confined.sh <harness>`. Specifically:
 What survives of this requirement's INTENT — that dispatch never guesses its
 execution posture — is now discharged structurally rather than by a routing
 predicate: there is one path, and a missing `bwrap` is a NAMED refusal that fails
-closed at spawn (`jail.rs::REASON_NO_BWRAP`), with no unconfined fallback.
+closed at spawn on Linux (`jail.rs::REASON_NO_BWRAP`), with no unconfined
+fallback. On macOS the naming does not hold — there is no `sandbox-exec`
+presence probe (corrected SL-254) — so a missing backend there fails closed
+unnamed, at exec.
 
 ## Rationale
 

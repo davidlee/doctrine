@@ -13,11 +13,17 @@ The worker-sole-writer guard (`src/commands/guard.rs::worker_guard`) refuses
 every Write- and Orchestrator-classed verb when this PROCESS is in worker mode,
 and passes Read-classed verbs through.
 
-1. **Worker mode is `env DOCTRINE_WORKER == 1`, and nothing else.** Identity is a
+1. **Worker mode is `env DOCTRINE_WORKER == "1"`, and nothing else.** It is a
+   VALUE compare against `jail::ENV_WORKER_ON`, not a presence test
+   (`marker.rs:44-50`): `DOCTRINE_WORKER=0` — or any value but `1` — is *set* and
+   is **not** worker mode. Identity is a
    property of the process, not of a tree: it is set by the same confinement
-   argv that establishes the write floor
-   (`scripts/spawn-confined.sh`, `jail.rs`'s `bwrap_argv` / `sandbox_exec_argv`)
-   and it dies with the process. `marker::describe_mode(env_set)` is a two-row
+   argv that establishes the write floor — on Linux `--setenv DOCTRINE_WORKER 1`
+   in `scripts/spawn-confined.sh:183`'s inline bwrap array, on macOS the trailing
+   `env DOCTRINE_WORKER=1` token `jail.rs::sandbox_exec_argv` appends.
+   `jail.rs::bwrap_argv` sets **no** env (corrected SL-254 — it was cited here as a
+   setter and is not one); the Linux env leg lives in the shell, not the Rust argv
+   builder. Identity dies with the process. `marker::describe_mode(env_set)` is a two-row
    truth table; SL-056's was eight rows over three inputs.
 2. **Topology does not participate.** A linked worktree without the variable is
    NOT in worker mode and is NOT refused; a primary tree WITH the variable IS.
@@ -36,6 +42,7 @@ carried by the process the jail creates, so the thing that ESTABLISHES the write
 floor and the predicate that OBSERVES it are the same two constants and cannot
 drift (STD-001). Fail-closed-on-ambiguity was the SL-056 answer to a signal that
 could be absent; with a single unambiguous signal there is no ambiguity to fail
-closed on. Kernel-level confinement (`--ro-bind / /`) is now the primary
+closed on. Kernel-level confinement (`--ro-bind / /` on Linux; an SBPL
+`(deny file-write*)` floor on macOS, which has no `--ro-bind`) is now the primary
 enforcement; this guard is the cooperative second belt that produces a NAMED
 refusal instead of an opaque EROFS.

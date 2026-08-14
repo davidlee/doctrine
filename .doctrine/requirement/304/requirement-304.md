@@ -15,11 +15,14 @@ Isolation integrity rests on two properties.
    unchanged in substance, and now doubled. Provisioning is the sole copier and
    admits only allowlisted paths, so the coordination/runtime tier is ABSENT from
    a fork rather than present-and-forbidden (REQ-189, REQ-296). SL-254 adds a
-   second, independent construction: the worker runs under a kernel jail whose
-   `--ro-bind / /` makes everything outside the fork's worktree read-only, so
-   even a path that were present could not be written.
+   second, independent construction: the worker runs under a kernel jail
+   (`--ro-bind / /` on Linux; an SBPL `(deny file-write*)` floor on macOS) whose
+   writable set is the fork's worktree **plus the harness config dir**
+   (`~/.claude` / `~/.pi` — a deliberate carve-out under `DEC-210`, corrected
+   SL-254), so a coordination/runtime path that were present could not be written.
 2. **The sole-writer guard is unambiguous rather than fail-closed-on-ambiguity.**
-   Worker mode is `DOCTRINE_WORKER == 1` and nothing else (REQ-192). The variable
+   Worker mode is `DOCTRINE_WORKER == "1"` and nothing else (REQ-192) — a value
+   compare, so a bare-set non-`1` value is not worker mode. The variable
    is set by the same confinement argv that establishes the write floor, so it
    cannot be absent where confinement is present. There is no third state to be
    ambiguous about: a linked worktree without the variable is an ORDINARY
@@ -32,7 +35,9 @@ was insurance against a stamp that never happened. SL-254 removes the failure
 mode instead of insuring against it: identity is created by the act of
 confinement, so "confined but unidentified" is unreachable. Fail-closed
 behaviour survives where a failure is still possible — at SPAWN, where a missing
-`bwrap` is a named refusal with no unconfined fallback.
+`bwrap` is a named refusal on Linux with no unconfined fallback (on macOS the
+refusal is still fail-closed but unnamed: there is no `sandbox-exec` presence
+probe).
 
 ## Rationale
 

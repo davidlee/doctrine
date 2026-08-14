@@ -139,7 +139,7 @@ regression_run = "command"  # SL-170 S1 impure shell → coverage_store, git, re
 # SL-254: `worktree::pretooluse` DELETED — the PreToolUse hook wall retired with
 # the in-session arm; confinement is now the kernel-level bwrap/sandbox-exec jail
 # established at spawn (`scripts/spawn-confined.sh`), not a hook.
-"worktree::marker" = "engine"     # SL-254: worker identity is the `DOCTRINE_WORKER` env leg and nothing else; imports root (leaf) only — NO file I/O (the disk marker is gone)
+"worktree::marker" = "engine"     # SL-254: worker identity is the `DOCTRINE_WORKER` env leg and nothing else; imports root (leaf) only — no MARKER file I/O (the disk marker is gone), though `run_status` still resolves a root via `root::find` (a filesystem stat) and writes stdout
 "worktree::provision" = "engine"   # provision is impure shell; imports engine + leaf
 "worktree::import" = "engine"      # import classify+run; imports engine + leaf
 "worktree::land" = "engine"        # land classify+run; imports engine + leaf

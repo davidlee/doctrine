@@ -42,11 +42,12 @@ path** rather than the disqualifying smell ADR-011 D3 treated it as. There is no
 It owns these mechanisms specific to isolation: **fork provisioning** with a
 two-layer tier exclusion the copy physically cannot leak; the **orchestrator verb
 family** (`fork`/`import`/`land`/`gc`) that creates, funnels, and reaps forks under
-the worker-mode guard; the **worker-mode guard** — one signal, `DOCTRINE_WORKER` set
+the worker-mode guard; the **worker-mode guard** — one signal, `DOCTRINE_WORKER == "1"`
 on the worker process; the **confinement seam** (`jail.rs`/`jail_prefix.rs`, the
 `worktree jail-prefix` verb) that wraps every worker exec in a bwrap (Linux) or
-`sandbox-exec` (macOS) jail whose write floor is the fork worktree, and that **fails
-closed by name** when no backend is available; the **branch-point guard**, a
+`sandbox-exec` (macOS) jail whose writable set is the fork worktree **plus the
+harness config dir**, and that **fails closed by name on Linux** when `bwrap` is
+absent (macOS has no equivalent backend-presence probe — see Concerns); the **branch-point guard**, a
 HEAD-stationarity assertion at the batch-commit boundary; and the **born-frame git
 seam** that confines all git/disk/process impurity to one shell. Shared substrate — identity, the atomic
 claim, id allocation, the scaffold/render pipeline, the storage rule and the
@@ -70,8 +71,8 @@ with guaranteed tier exclusion; carry the funnel as an orchestrator verb family
 (`fork`/`import`/`land`/`gc`) refused under the worker-mode guard; enforce
 worker-sole-writer via a **process-identity guard keyed on `DOCTRINE_WORKER`**
 (amended SL-254 — it was a disk-marker-primary, fail-closed-on-ambiguity guard);
-**confine every worker exec in a kernel-level jail whose write floor is the fork
-worktree, refusing by name rather than spawning unconfined**; assert
+**confine every worker exec in a kernel-level jail whose writable set is the fork
+worktree plus the harness config dir, refusing rather than spawning unconfined**; assert
 HEAD-stationarity at the batch boundary; capture the impure born frame for anchoring;
 and defend tier merge-safety by the tier's absence in the fork.
 
@@ -180,9 +181,18 @@ worker_mode := env DOCTRINE_WORKER == "1"   // the whole truth (SL-254 DEC-207)
 if worker_mode: refuse(verb)                // names the verb
 ```
 
+The predicate is a **value** compare, not a presence test (`marker.rs::env_worker_set`
+against `jail::ENV_WORKER_ON`): `DOCTRINE_WORKER=0` — or any value other than `1` — is
+*set* but is **not** worker mode. Only the literal `1` the confining argv writes turns
+the guard on.
+
 Identity is a property of the **process**, not of a tree. `DOCTRINE_WORKER` is set by
-the same confinement argv that establishes the worker's write floor (`jail.rs`'s
-`bwrap_argv` / `sandbox_exec_argv`, driven by `scripts/spawn-confined.sh`), and it dies
+the same confinement argv that establishes the worker's write floor — on Linux by
+`--setenv DOCTRINE_WORKER 1` in `scripts/spawn-confined.sh`'s inline bwrap array
+(`:183`), on macOS by the trailing `env DOCTRINE_WORKER=1` token
+`jail.rs::sandbox_exec_argv` appends. `jail.rs::bwrap_argv` sets **no** env: the
+Linux env leg lives in the shell, not in the Rust argv builder (amended SL-254 —
+this section formerly cited `bwrap_argv` as a setter). It dies
 with the process — so there is no stale class to detect, no cure verb to gate, and no
 tree-topology conjunct to disambiguate. The predicate that *observes* identity and the
 argv that *establishes* it share the same two constants (`jail::ENV_DOCTRINE_WORKER`,
@@ -201,8 +211,16 @@ verbs plus the human-in-the-loop admission family; the `Hook-mint` class retired
 the hook family it minted for. `Write` and `Orchestrator` are refused by the same
 branch. Reads stay open, and `provision`/`check-allowlist`/`branch-point-check`/`status`
 are deliberately `Read` (they write *fork* files, not the doctrine state the guard
-protects). Observation writes carry a capability-aware refusal that routes a confined
-claude worker to the `observation_record` MCP broker instead of a local capture.
+protects). Observation writes carry a capability-aware refusal whose text still offers
+a confined claude worker the `observation_record` MCP broker
+(`src/commands/guard.rs:460-465`) — but that is a **dead branch on the shipped path**
+(amended SL-254, agreeing with SPEC-028): `scripts/spawn-confined.sh:221` execs
+`claude -p` with `--strict-mcp-config` and **no** `--mcp-config`, so no MCP server is
+reachable and `install/agents/claude/dispatch-worker.md` tells the worker it has no MCP
+tools (`DEC-216`). The operative row of that refusal is the other one — report the
+friction signal in the hand-back for orchestrator-side capture. The guard string is
+retained, not relied on; it becomes live again only if a spawn profile ever grants a
+worker MCP.
 
 The legitimate orchestrator is unaffected because it is simply not a worker process —
 no root resolution, no cwd-shaped failure path, and no ambiguity about the tree it
@@ -211,14 +229,42 @@ happens to be standing in.
 Raw-tree confinement (a worker hand-editing a file or running a bare `git commit`) is
 still **not** CLI-stoppable (ADR-006 D2b) — but it is no longer deferred. It is
 enforced **below** the CLI by the confinement seam (ADR-008, ADR-020): every worker
-exec is wrapped in a kernel-level jail — bwrap on Linux, `sandbox-exec` on macOS —
-whose `--ro-bind / /` makes the whole filesystem read-only and whose sole write floor
-is the fork worktree. Git metadata is read-only inside it, which is *why* the worker
+exec is wrapped in a kernel-level jail — bwrap on Linux, `sandbox-exec` on macOS. The
+two backends fence writes by different means and must not be conflated (amended SL-254):
+
+- **Linux (bwrap).** `--ro-bind / /` makes the whole filesystem read-only, then the
+  writable set is re-opened by explicit binds — the fork worktree (`--bind "$D" "$D"`),
+  the harness config dir (`--bind "$CFG_DIR" "$CFG_DIR"`), a private `/tmp` tmpfs, and
+  `/dev`. Reads and exec are otherwise open; writes outside that set are kernel-denied.
+- **macOS (Seatbelt).** There is no `--ro-bind`. The profile is `(allow default)` plus a
+  coarse `(deny file-write*)` floor (`jail.rs:208-209`), re-opened by
+  `(allow file-write* (subpath …))` for the worktree, its `.tmp`, the device sinks, and
+  one `RW0…RWn` allow per `--extra-rw` grant — the harness config dir rides `RW0`
+  (`spawn-confined.sh:159`, `jail.rs:482-486`). So on macOS **only writes are fenced**;
+  reads and exec are unrestricted.
+
+**The harness config dir is a writable carve-out on both platforms, and it is
+security-relevant.** `$HOME/.claude` (claude) / `$HOME/.pi` (pi) is bound read-write
+into the jail — deliberately, because claude needs it for the subscription credential
+(`DEC-210`) and pi writes it at runtime — so a confined worker **can write the
+orchestrator's own harness configuration**: `settings.json`, hooks, agent definitions.
+The narrowed mount set is a known, deliberately-untaken refinement
+(`spawn-confined.sh:30-34`). The shipped `dispatch-spawn` skill states this correctly
+and this spec now agrees with it: the writable set is *the fork worktree and the
+harness config dir*, not the fork worktree alone.
+
+Git metadata is read-only inside the jail, which is *why* the worker
 cannot commit and hands back an uncommitted working tree. The prefix is minted by
 `worktree jail-prefix` (fail-closed: any resolve/validate/write error ⇒ nonzero exit,
-a named reason on stderr, and no partial output file). When no backend is available the
-spawn script **probes first and refuses by name** — `bwrap-unavailable`
-(`jail.rs::REASON_NO_BWRAP`) — minting no fork and spawning nothing. There is **no
+a named reason on stderr, and no partial output file). **On Linux** the spawn script
+**probes first and refuses by name** — `bwrap-unavailable`
+(`jail.rs::REASON_NO_BWRAP`) — minting no fork and spawning nothing. **On macOS there
+is no backend-presence probe at all** (amended SL-254): `have_bwrap` is
+`#[cfg(not(target_os = "macos"))]` with no Darwin sibling, `spawn-confined.sh:61` skips
+the probe on Darwin, and `jail_prefix.rs`'s macOS arm fails only on topology, policy, or
+profile-write errors. A macOS host lacking `sandbox-exec` therefore gets a *successful*
+prefix write followed by an **unnamed** exec failure — still fail-closed, but not named.
+That is a gap in `DEC-208`'s named-refusal guarantee, not a property of it. There is **no
 unconfined fallback and no reduced-enforcement rung** (SL-254 `DEC-208`). The
 `import` belt remains as the funnel-side containment, but it is now the second line,
 not the only one.
@@ -255,7 +301,7 @@ pre-distilled worker prompt (ADR-006 D6) substitutes for the withheld coordinati
 state; provisioning substitutes for the absent execution environment. No central index
 or counter exists to reintroduce a conflict.
 
-### One confined spawn arm — uniform contract, uniform floor
+### One confined spawn arm — uniform across harnesses, NOT uniform across platforms
 
 > **REWRITTEN — FALSIFIED (SL-254, 2026-08-14).** This section formerly described
 > **two arms at two altitudes**: a codex/pi subprocess arm (`/dispatch-subprocess`,
@@ -270,7 +316,10 @@ or counter exists to reintroduce a conflict.
 
 There is one arm. `scripts/spawn-confined.sh <harness>` forks the worktree, resolves a
 confinement prefix through `worktree jail-prefix`, and execs the harness inside it —
-claude included. Consequences, all uniform across harnesses:
+claude included. Consequences, all uniform across **harnesses** — the axis SL-254
+collapsed. Uniformity across **platforms** is a separate and weaker claim: the floor is
+uniform *in intent and in write-fencing*, but the Linux and Darwin argv differ, and that
+divergence is stated in its own bullet below rather than folded into the word "uniform".
 
 - **Identity** is `DOCTRINE_WORKER`, set by the confining argv. No marker, no
   per-harness identity medium, no worker-on-main hazard to catch (the variable travels
@@ -280,8 +329,29 @@ claude included. Consequences, all uniform across harnesses:
   clean-applying-but-semantically-wrong import it admitted.
 - **Pre-dispatch baseline-verify holds** for every harness, because the orchestrator
   creates and provisions the fork before any spawn window.
-- **Confinement is the floor, not an enhancement.** No bwrap (and no `sandbox-exec` on
-  macOS) ⇒ a named refusal and no spawn. There is no degraded rung to fall to.
+- **Confinement is the floor, not an enhancement.** On Linux, no bwrap ⇒ a *named*
+  refusal (`bwrap-unavailable`) and no spawn. On macOS there is no backend-presence
+  probe, so a missing `sandbox-exec` fails closed *unnamed*, at exec (amended SL-254 —
+  the previous text claimed a named refusal on both). Either way there is no degraded
+  rung to fall to.
+- **The two platform argv are NOT byte-parallel (amended SL-254 — "uniform" over-claimed
+  here).** Three live divergences, all verified in shipped code:
+  1. **Network.** `JailPolicy::network` defaults false (`src/worktree/mod.rs:230-232`)
+     and the Darwin arm calls `jail-prefix` without `--network`
+     (`spawn-confined.sh:158-159`), so the Seatbelt profile emits `(deny network*)`
+     (`jail.rs:487-490`). The **Linux inline bwrap array carries no `--unshare-net`**
+     (`spawn-confined.sh:176-183`), so a Linux worker has **full network**. The
+     `--unshare-net` leg exists only in `jail.rs::bwrap_argv`, which the Linux spawn
+     path does not use.
+     **Sharp consequence, unresolved:** a macOS `claude -p` worker is network-denied and
+     so could not reach the API at all — the Darwin claude arm *as wired* appears
+     non-functional. This is a live question for SL-254 `PHASE-09`/`VA-2`'s Darwin
+     census, not a documentation nicety.
+  2. **Process lifetime.** `--die-with-parent` (`jail.rs:428`) has no Seatbelt analog, so
+     reap semantics differ between the platforms.
+  3. **Read/exec surface.** Linux is `--ro-bind / /` (reads open, writes denied by the
+     bind topology); macOS is `(allow default)` + `(deny file-write*)`, so reads and
+     exec are unrestricted and only writes are fenced.
 - **A harness-specific command is now a required element** of the shipped path — the
   claude leg execs `claude -p --output-format stream-json --strict-mcp-config
   --permission-mode bypassPermissions`. ADR-011 D3 treated that as a disqualifying
