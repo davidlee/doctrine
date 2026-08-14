@@ -6,9 +6,18 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-14 · PHASE-08 complete (9/10) · only PHASE-09 (live dispatch) remains · see git log
+fresh-as-of: 2026-08-14 · PHASE-09 complete (10/10) · **implementation complete** — next is `/audit` → `/reconcile` → `/close` · see git log
 
 ### Produced
+- PHASE-09 done — **the live fire, and the claude arm did not work.** One real
+  dispatch phase driven end to end on the claude harness through the collapsed
+  subprocess arm, concluding with the incumbent import. Full evidence in
+  `## PHASE-09 live fire` below (commands, timings, per-run outcomes, the diff,
+  the import). Three commits: `cd4baec75` (pre-flight — the worker role band was
+  telling a live worker to commit), `8831090bd` (two fatal defects in the claude
+  arm + two regression tests), `5a8efdcec` (the worker's own payload, landed
+  through `worktree import`, scoped to `dispatch_config` not to this slice).
+  **Ids minted: none.** `just gate` exit 0.
 - PHASE-08 done — `REV-052` ("Dispatch collapses onto one confined subprocess
   arm"), the governance half, over **eleven** entities: `ADR-001` `ADR-006`
   `ADR-008` `ADR-011` `ADR-012` `SPEC-012` `SPEC-021` `SPEC-022` `SPEC-028`
@@ -36,6 +45,77 @@ fresh-as-of: 2026-08-14 · PHASE-08 complete (9/10) · only PHASE-09 (live dispa
   count-free). `just gate` exit 0, `publication validate` clean (90 entries),
   `boot --check` clean, `prompt check` OK, `doctrine install` re-run and
   resurrected nothing
+
+### Learned (PHASE-09)
+- **The arm had never been run, and it did not work.** Two independent fatal
+  defects, both in the shipped exec path, both invisible to every suite: `claude
+  -p --output-format stream-json` is hard-refused without `--verbose`, and an
+  inherited `TMPDIR` pointing outside the jail's writable set made EVERY Bash
+  tool call fail `EROFS` before any command ran. Class: **`/dispatch`'s spawn
+  path is the one thing in this slice that no unit test can reach, and it is
+  exactly where the slice's premise lived.** Six phases of careful symbol-level
+  work collapsed the arm onto a script that had never once been executed. The
+  design's §9.3 instinct — that a live phase is the *only* evidence here — is
+  now empirically vindicated rather than merely argued.
+- **The parity story ran the wrong way.** §5.2.1 casts Darwin as the arm needing
+  a token Linux does not (`DOCTRINE_WORKER`, `RV-355` `F-2`). On `TMPDIR` it is
+  the reverse: macOS has always set it (`ENV_TMPDIR`, D-mac3) and Linux never
+  did. "Parity holds by construction" has now been falsified in BOTH directions,
+  which retires the phrase rather than patching it — `VA-2`'s census should be
+  read as "enumerate every asymmetry", not "check Darwin against Linux".
+- **`pi` was a bad witness for `claude`.** Both defects are claude-specific:
+  `pi --mode rpc` needs no `--verbose`, and pi mkdirs no `TMPDIR` scratch dir on
+  tool startup. The generalisation from `pi-spawn-confined.sh` (DEC-209) reduced
+  the harness difference to "the config dir and the exec line" and was right
+  about the *shape* — but a green pi arm carries no signal whatsoever about the
+  claude arm, and the collapse's whole value is the claude arm. Class: **when one
+  profile is the incumbent and the other is new, the incumbent passing is not
+  evidence; only running the new one is.**
+- **A swallowed exit code is how a dead arm stays dead.** `spawn-confined.sh`
+  ended on `git rev-parse`, so a worker that exited 1 in 1.4s still exited the
+  SCRIPT 0. Any orchestrator checking the spawn's status would have seen success
+  and gone hunting for a delta that was never written. The failure WAS reported —
+  on stderr, where a scripted caller never looks.
+- **The confinement is sound; it was never the problem.** Once `TMPDIR` pointed
+  at the jail's own `--tmpfs /tmp`, the confined worker ran `cargo check` clean
+  in 16.65s against a READ-ONLY `~/.cargo` (cached registry, writes confined to
+  the fork's in-tree `target/`), ran its own `git status`/`git diff`, edited only
+  its declared file, and handed back uncommitted. Zero tool errors on the final
+  two runs. Every defect found here was in the *plumbing around* the jail.
+- **`worker_commit`'s removal is load-bearing and it holds.** The worker was
+  never tempted to commit: the corrected role band told it not to, and the
+  fork's `.git` is read-only anyway. Belt and braces both engaged, and the
+  hand-back-uncommitted contract (design §5.2.2) worked exactly as specified.
+
+### Open (PHASE-09)
+- **`worktree import`'s cleanliness precondition is whole-tree, with no scoping
+  escape.** It is `git status --porcelain --untracked-files=no` over the entire
+  tracked tree (`import.rs:53`, `:131`). In a tree shared with any other agent —
+  which `AGENTS.md` tells every agent to assume — one unrelated dirty file blocks
+  every dispatch import, and there is no `--pathspec` to narrow it. Hit for real
+  here: a co-resident `skills-lock.json` modification, present before this
+  session began and explicitly not this orchestrator's to commit, refused the
+  import twice. Worked around by backing the file up, restoring it to HEAD for
+  the duration of the import, and putting it back byte-for-byte (sha256 verified
+  identical either side). That maneuver should not be the answer. Either the
+  precondition wants scoping to the delta's paths, or the funnel wants a
+  documented "park the tree" verb. **Not fixed here — it is a behaviour change to
+  a shared belt, not a phase-local call.**
+- **The Darwin claude arm is non-functional, and that is now a code-level finding
+  rather than a suspicion** — see `VA-2` below. Carried to `/reconcile`.
+- **The claude arm depends on an on-disk credential that a child-session host may
+  not have.** `DEC-210` binds `$CFG_DIR` (`~/.claude`) rw specifically to carry
+  the SUBSCRIPTION credential into the jail. In this capsule there is no
+  `~/.claude/.credentials.json` at all — the session authenticates as a child
+  session over a unix socket — so a headless `claude -p` reports `Not logged in`
+  (`apiKeySource: "none"`), **confined or not**: it fails identically outside the
+  jail, so this is the host, not the confinement. Bridged for the live fire by
+  exporting `CLAUDE_CODE_OAUTH_TOKEN` (the subscription OAuth token, NOT an API
+  key — `DEC-210`'s billing posture and `EVD-023`'s authorisation are preserved).
+  Deliberately NOT written into the script: over-fitting a shipped spawn path to
+  one capsule's auth shape is worse than recording the dependency. But `DEC-210`
+  currently reads as though binding `$CFG_DIR` is sufficient, and it is not — the
+  arm has an unstated precondition that the host holds a materialised credential.
 
 ### Learned (PHASE-08)
 - **The twelfth undercount was a defect in the criterion, not a miscount.** `EX-1`
@@ -648,6 +728,163 @@ the `spec-*.toml` source anchors) needs a separate literal-string sweep.
 **Probe 3 (the macOS/Darwin census) is still untouched** and remains the sharpest
 open probe for a second adversarial pass. This sweep touched the Darwin path only
 where it intersected the orphan question.
+
+## PHASE-09 live fire — the evidence (`EX-1`, `EX-2`, `EX-3`, `VA-1`)
+
+`EX-3` requires this in an authored sink, not the gitignored scratchpad, because
+a `VA` criterion over runtime state leaves an audit nothing to re-derive
+(`DEC-212`). It lives here rather than in a minted `EVD` per the capsule's
+id-collision standing rule.
+
+**Host `bwrap` availability, stated either way (`EN-2`, `VA-1`):** AVAILABLE —
+`/nix/store/x4m5ja2330if46sw08lgwwa57bqw9adm-bubblewrap-0.11.2/bin/bwrap`. So
+this phase did NOT skip vacuously; it ran, five times.
+
+**Date:** 2026-08-14, ~01:29–01:40 UTC. Primary checkout `/work/doctrine`,
+branch `work`. `DOCTRINE_BIN=/work/doctrine/target/debug/doctrine`.
+
+### Pre-flight — the worker was being told to commit
+
+`.doctrine/agents/dispatch-worker.md` carried both "Do NOT commit — you cannot"
+(`:21`) and "the only git verb you run … is the final commit" (`:46`). PHASE-08's
+notes diagnosed this as a stale MATERIALISATION curable by `doctrine install`.
+That diagnosis was wrong, and `doctrine install` alone does NOT fix it. The
+materialised def resolves `{{ prompt resolve --role worker }}` against this
+repo's **tracked local twin** `.doctrine/hymns/role/worker.md`, which overrides
+the shipped band. PHASE-06 rewrote the clause; PHASE-10 rewrote it only in the
+shipped `install/hymns/role/worker.md` and explicitly cleared both local twins as
+"arm-agnostic prose" — a clearance falsified for the worker twin, which held the
+rewritten clause verbatim. **A project-local hymn twin is a THIRD site**, distinct
+from the shipped source and the materialised copy; `install` reads it rather than
+healing it, and `boot --check` does not cover it. Realigned to shipped (now
+byte-identical), plus one further residual in both ("`doctrine check commit`
+before the final commit" → "before handing back"). Commit `cd4baec75`.
+
+### The five runs
+
+| # | base | what happened | wall |
+|---|---|---|---|
+| 1 | `cd4baec75` | **FAIL** — `Error: When using --print, --output-format=stream-json requires --verbose`. Worker exited 1; **script exited 0**. | 1.4s |
+| 2 | `cd4baec75` | **FAIL** — claude starts, session inits, hooks fire, then `"Not logged in · Please run /login"`, `apiKeySource: "none"`, `duration_api_ms: 0`. | 1.4s |
+| 3 | `cd4baec75` | **PARTIAL** — correct delta produced, but EVERY Bash call failed `EROFS: read-only file system, mkdir '/work/tmp/claude-1000/…'`. No `cargo check`, no `git status`. 3 tool errors, 7 turns, $0.29. | 51.2s |
+| 4 | `cd4baec75` | **PASS** — zero tool errors, `cargo check` clean **inside the jail** in 16.65s, `git status`/`git diff` ran. 6 turns, $0.23. | 44.4s |
+| 5 | `8831090bd` | **PASS → IMPORTED.** Definitive run from a clean base with both fixes committed. Zero tool errors, 6 turns, $0.21. | 41.8s |
+
+Diagnosis between runs: #1 → the exec line omitted `--verbose`. #2 → **not a jail
+defect**: `claude -p` fails identically UNCONFINED in this capsule (probed
+directly), because there is no `~/.claude/.credentials.json` here; bridged with
+`CLAUDE_CODE_OAUTH_TOKEN` (subscription OAuth, not an API key — `DEC-210` intact).
+#3 → inherited `TMPDIR=/work/tmp` is outside the jail's rw set; repointed at the
+`--tmpfs /tmp` the jail already mounts.
+
+### The exact command (run 5)
+
+```
+export DOCTRINE_BIN=/work/doctrine/target/debug/doctrine
+export CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_API_TOKEN"
+./scripts/spawn-confined.sh claude 8831090bd23a7fe0c6090eff75ae18d9251bfafd \
+  sl254/live-fire-final .worktrees/sl254-live-fire-final <prompt-file> 900
+```
+
+`EX-2` — **the fork stayed UNBOUND**, and by construction, not by care: the fork
+is minted by `spawn-confined.sh:93` as `worktree fork --base --branch --dir
+--worker` with **no `--slice` and no `--phase`**. The funnel row is named by this
+orchestrator's explicit `PHASE-09`; no reader on the retained path consulted a
+binding, and the import verb used (`worktree import --from-worktree`) takes no
+slice/phase at all. This is `OQ-1`'s settlement holding in practice — and it is
+precisely why `dispatch_import`/`drive-slice.js` could not have landed this
+delta (`require_binding`; see Learned (PHASE-10)).
+
+### What the worker did
+
+Task: correct one stale doc comment on `DispatchConfig::worker_forbidden_writes`
+in `src/dispatch_config.rs`, which asserted `classify_import` "became its sole
+enforcing reader" — contradicted by the `ForbiddenWrites` doc comment forty lines
+below in the same file. Chosen as real, small, low-risk, and touching neither
+`.doctrine/` nor `.claude/` nor governance (those paths are what `classify_import`
+refuses, so a delta there would have tested the belt's refusal, not the path).
+
+The worker read the file, read `ForbiddenWrites` for the authoritative account,
+made one Edit, ran `cargo check` (clean), ran `git status --porcelain` and
+`git diff` to confirm its own blast radius, and stopped **without committing** —
+correctly, and without being tempted: the corrected role band says so and the
+fork's `.git` is read-only regardless. Delta as handed back:
+
+```diff
+     /// The HARD scope tier for the dispatch import belt (SL-198 PHASE-02, design
+-    /// §5.3 / EX-6; re-aimed at SL-254 PHASE-06 when `worker_commit` retired and
+-    /// `classify_import` became its sole enforcing reader — DEC-204/DEC-213).
++    /// §5.3 / EX-6). As of SL-254 PHASE-06 this key has no production reader —
++    /// see the [`ForbiddenWrites`] doc comment for the full explanation.
+```
+
+One file, comment-only, zero behaviour change — exactly the declared scope.
+
+### The import (`EX-1`'s conclusion)
+
+```
+doctrine worktree import --base 8831090bd23a7fe0c6090eff75ae18d9251bfafd \
+  --from-worktree /work/doctrine/.worktrees/sl254-live-fire-final
+→ cargo fmt --check / cargo clippy / Finished dev profile in 10.75s
+→ imported worktree …/sl254-live-fire-final: delta staged (uncommitted)   [exit 0]
+```
+
+Non-committing as specified (ADR-006 D7): the delta lands **staged**, and the
+orchestrator commits it. `--slice` deliberately omitted — the design-target scope
+belt belongs to SL-254, and this delta is not SL-254 work; `classify_import`'s
+`.doctrine/`/`.claude/` floor still applied and passed. Committed path-limited as
+`5a8efdcec`, scoped `fix(dispatch_config:)` not `fix(SL-254:)` per the payload's
+independence. All five forks then reaped with `worktree gc --fork <br> --force`;
+`git worktree list` is back to the primary tree alone.
+
+**Two refused imports before that one**, both correct and both worth keeping: the
+belt rejected `tree-unclean` while this orchestrator's own uncommitted fixes sat
+in the tree (the commit-before-spawn discipline biting, exactly as `/worktree`
+documents), and again on a co-resident `skills-lock.json` modification — see
+Open (PHASE-09).
+
+### `VA-2` — the Darwin probe: **UNVERIFIED on hardware, but no longer merely untested**
+
+No mac is available in this capsule, so per `DEC-212` this records as UNVERIFIED
+rather than being allowed to read as verified by silence. But PHASE-08's
+hypothesis is now confirmed **at the code level**, which is as far as a Linux host
+can take it:
+
+1. `worktree jail-prefix`'s `--network` flag defaults to **deny**
+   (`worktree/mod.rs:230` — "Allow network inside the jail (default: deny)").
+2. `spawn-confined.sh`'s Darwin arm calls `jail-prefix` **without** `--network`,
+   so `network == false`.
+3. `network == false` appends `(deny network*)` to the Seatbelt profile
+   (`jail.rs:238`, `:488`).
+4. Therefore a macOS `claude -p` worker is network-denied and **cannot reach the
+   API at all**.
+
+The Linux arm's inline `bwrap` array carries no `--unshare-net`, so it is network-
+open — which is why the Linux arm worked here, and run 5 *needed* that network.
+The asymmetry is real, load-bearing, and now evidenced from both ends.
+
+**Specific hypotheses for whoever next has mac access** — test these, don't just
+re-run the arm:
+
+- **H1.** A confined `claude -p` on Darwin fails to reach the API, with a network
+  error rather than the `--verbose`/login errors seen here. Fix is a policy
+  decision (does the Darwin arm pass `--network`?), not a typo.
+- **H2.** Darwin has **no `sandbox-exec` presence probe**. `RV-355` `F-6`'s
+  named-refusal fix landed on Linux only (`command -v bwrap` →
+  `REASON_NO_BWRAP`). A missing macOS backend still fails *unnamed*, after a fork
+  has been minted. Same class, never carried across.
+- **H3.** PHASE-09's own `TMPDIR` finding lands differently there: Darwin points
+  `TMPDIR` at `<wt>/.tmp`, i.e. **inside the worktree**, so harness scratch files
+  are written into the very tree whose working-tree delta the orchestrator
+  imports. Benign in THIS repo only because `.gitignore:14` (`*.tmp`) happens to
+  match `.tmp`; a client project without that line would leak harness scratch
+  into every imported delta. The Linux fix deliberately used `/tmp` (tmpfs) to
+  avoid the whole class.
+- **H4.** §5.1/§5.2.1's "the two profiles differ in exactly two tokens" should be
+  treated as **retired**, not repaired. It has now been falsified in both
+  directions — `DOCTRINE_WORKER` (Darwin lacked it, `RV-355` `F-2`) and `TMPDIR`
+  (Linux lacked it, here). A mac census should enumerate every asymmetry rather
+  than spot-check against a claim of parity.
 
 ## Execution environment and standing directions (implementation sessions)
 
