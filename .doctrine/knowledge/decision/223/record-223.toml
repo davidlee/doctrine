@@ -1,0 +1,41 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 223
+slug = "solo-in-place-and-solo-worktree-execution-remain-trusted-modes"
+title = "Solo in-place and solo worktree execution remain trusted modes"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-14"
+updated = "2026-08-14"
+tags = ["area:dispatch", "area:worktree", "cluster:capsule", "execution", "solo"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "RFC-025"
+
+[[relation]]
+label = "shapes"
+target = "PRD-015"
+
+[[relation]]
+label = "shapes"
+target = "SPEC-012"

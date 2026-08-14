@@ -1,0 +1,43 @@
+memory_uid = "mem_01a0003b49097a71b39457044bf4bef5"
+memory_key = "mem.pattern.doctrine.entity-only-verification"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "Entity-only edits use doctrine validate"
+summary = "Run doctrine validate after authored entity-only edits"
+created = "2026-08-14"
+updated = "2026-08-14"
+
+[scope]
+paths = [".doctrine/**"]
+globs = []
+commands = ["doctrine validate", "doctrine knowledge", "doctrine backlog", "doctrine adr", "doctrine rfc"]
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3f4bce5e083c5e921e606311b6aa82e04b712770"
+ref_name = "refs/heads/edge"
+checkout_state_id = "c616a50bc41b477ab25e2a16d3dce969a26508d10f386bcfa026ee89c7c390e5"
+base_commit = "4abeaaf85604cc609aa3a7aab9836b69813badb2"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "low"
+weight = 0
+
