@@ -99,13 +99,15 @@ local-exclusion tradeoffs.
 
 # orchestration
 
-dispatch under claude code - use: `./scripts/spawn-confined.sh <harness> <B>
-<BRANCH> <DIR> <PROMPT_FILE> [BACKSTOP]`, where `<harness>` is `pi` or `claude`
-(SL-254 PHASE-02 renamed and generalised `pi-spawn-confined.sh`).
-note: on the **subprocess (pi) arm** the worker CANNOT self-commit (ro .git for
-linked worktrees) → orchestrator imports the working-tree diff. Worthwhile trade.
-(The **claude arm** now self-commits via the gated `worker_commit` MCP tool —
-generic mechanics in the shipped `dispatch-mechanics.md`.)
+dispatch - use: `./scripts/spawn-confined.sh <harness> <B> <BRANCH> <DIR>
+<PROMPT_FILE> [BACKSTOP]`, where `<harness>` is `pi` or `claude`. **One arm,
+every harness** (SL-254): a confined subprocess on a linked worktree, under the
+same bwrap prefix. `pi-spawn-confined.sh` and the in-session claude arm are gone.
+note: the worker CANNOT self-commit — a linked worktree's `.git` is read-only, so
+it hands back an uncommitted tree and the orchestrator imports the working-tree
+diff. Worthwhile trade. The gated `worker_commit` MCP tool existed only for the
+retired in-session arm and is **deleted**; nothing replaced it. Generic mechanics
+in the shipped `dispatch-mechanics.md`.
 
 cargo --bin doctrine memory # focused tests; don't use --lib
 
@@ -117,13 +119,16 @@ launches the server via `${DOCTRINE_BIN:-doctrine}`). This binary is built from
 `dispatch/<slice>` source, so it carries earlier phases' not-yet-promoted
 binary-level rule changes (new role / allowlist / check).
 
-**What this is NOT for anymore (SL-225 #1, DEC-003).** The `worker_commit` commit
-gate's `just validate` no longer shells `doctrine doctor` / `prompt check` in a
-worker fork — it **skips** them: those legs validate coord's *authored* `.doctrine/`
-state, which a worker cannot write, so in a fork they carry no worker-delta signal
-and could only stale-binary false-red (ISS-218). The fork false-red is dissolved at
-the recipe, not by pre-setting the binary. So `DOCTRINE_BIN` is **not** a precondition
-for the fork gate to pass.
+**What this is NOT for anymore (SL-225 #1, DEC-003).** `just validate` does not
+shell `doctrine doctor` / `prompt check` in a worker fork — it **skips** them on
+`DOCTRINE_DISPATCH_GATE` or `DOCTRINE_WORKER=1` (`justfile:41`): those legs
+validate coord's *authored* `.doctrine/` state, which a worker cannot write, so in
+a fork they carry no worker-delta signal and could only stale-binary false-red
+(ISS-218). The fork false-red is dissolved at the recipe, not by pre-setting the
+binary. So `DOCTRINE_BIN` is **not** a precondition for the fork gate to pass.
+(This was written when the worker ran that gate itself through the `worker_commit`
+MCP tool. SL-254 deleted `worker_commit` and nothing replaced it — there is no
+worker-side gate left at all, which makes the conclusion stronger, not weaker.)
 
 **What it IS for.** The coord-side **close-time** build that closes the fork-skip's
 one residual: a phase that changes `doctor`/`prompt check`'s *own logic* must have

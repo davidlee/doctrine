@@ -254,7 +254,10 @@ fi
 
 echo "----- worker tail -----"
 tail -40 "$OUT"
-echo "----- worker commit -----"
+# The worker hands back UNCOMMITTED (design §5.2.2, DEC-213) and the fork's
+# `.git` is read-only, so this tip should still be the base `$B` — printing it is
+# how the orchestrator confirms that, not a report of a commit the worker made.
+echo "----- fork tip (expect base; the worker does not commit) -----"
 git -C "$D" log --oneline -1 2>&1
 git -C "$D" rev-parse HEAD 2>&1
 
