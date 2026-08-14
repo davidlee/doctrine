@@ -6,25 +6,37 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-14 · audit complete (`RV-356`, 14 findings, no blockers) · next is `/reconcile` → `/close` · see git log
+fresh-as-of: 2026-08-14 · audit complete (`RV-356`, 15 findings, no blockers) · next is `/reconcile` → `/close` · see git log
 
 ### Produced
-- **`/audit` done — `RV-356`, 14 findings, zero blockers, ledger `done ·
+- **`/audit` done — `RV-356`, 15 findings, zero blockers, ledger `done ·
   await=none`.** Reviewed `audit/SL-254` @ `3aee9dc7d` (the capsule work tip; no
   `/dispatch` candidate branch exists for this slice). Evidence: `just gate`
   exit 0, all 14 unwaived `VT` mandates pass and both waivers are structural and
   re-landed as `VA`, `spec validate` / `publication validate` / `prompt check` /
   `boot --check` clean, and an independent sweep of all **86** live `[[source]]`
   anchors found zero dangling (re-deriving `PHASE-08`'s `VH-1` rather than
-  trusting it). The source-delta registry was **empty** — bootstrapped from the
-  phase commits, yielding undeclared 96 / undelivered 0 / conformant 40.
-  Three findings fixed inside the audit (commit `1185a631d`): the boot
+  trusting it). Conformance: undeclared 96 / undelivered 0 / conformant 40.
+  Two findings fixed inside the audit (commit `1185a631d`): the boot
   snapshot's authored source still said the claude arm self-commits via
   `worker_commit` (`F-1` — `.doctrine/governance.md` is outside `PHASE-10/EX-5`'s
-  sweep scope, the same directory-list class as the twelfth undercount), the
-  registry bootstrap (`F-7`), and a stale `----- worker commit -----` label in
-  `spawn-confined.sh` (`F-12`). The other eleven are in `RV-356`'s
-  `## Reconciliation Brief`. **Ids minted (collision risk): `RV-356`.**
+  sweep scope, the same directory-list class as the twelfth undercount), and a
+  stale `----- worker commit -----` label in `spawn-confined.sh` (`F-12`). The
+  rest are in `RV-356`'s `## Reconciliation Brief`.
+  **Ids minted (collision risk): `RV-356`.**
+- **The audit's own biggest finding was about doctrine, not `SL-254` (`F-15`).**
+  `slice conformance` reported no source deltas, and two successive audit
+  findings (`F-7`, `F-14`) mis-diagnosed that before the third got it right. The
+  registry was never empty: this slice's phases recorded **all ten** boundaries
+  automatically (`provenance = "solo"`) and the capsule sideband delivered them
+  into the audit worktree. But `state::boundaries_path()` resolves
+  `primary_worktree(cwd)` while its sibling `phases_dir()` joins the local
+  `project_root`, so an adopted worktree reports `10/10` phases and zero deltas at
+  once — same directory, two roots, one function (`registry_completeness`).
+  Class: **a runtime artefact whose reader is pinned to a different tree than its
+  writer's neighbour is invisible exactly when the work arrives from elsewhere**,
+  which the capsule workflow makes routine. Nothing in `SL-254` changes; the
+  algebra is identical from either registry.
 - PHASE-09 done — **the live fire, and the claude arm did not work.** One real
   dispatch phase driven end to end on the claude harness through the collapsed
   subprocess arm, concluding with the incumbent import. Full evidence in
