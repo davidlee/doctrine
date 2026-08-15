@@ -1,0 +1,22 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00450-dcd6-7e43-934e-03d5d72077cf"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00450-dcd6-7e43-934e-03ee1a0d91d3"
+seq = 0
+a = "ISS-361"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 3.0
+supersedes = "01a00449-2502-7160-ac20-4d3a1517245e"
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "Code reading shows a top-level parse failure returns before admit, and admit is pure. The reported combination cannot occur at the parse site. Reduces to a probable SubmissionReplayed refusal that does not name its remedy, plus an unreproduced tail."
+date = "2026-08-15"
+basis = "obs 019fec3e-cf4e; src/commands/design.rs:1495-1507; src/design_run/run.rs:207-242"
