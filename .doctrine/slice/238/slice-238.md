@@ -1,247 +1,267 @@
-# Cross-kind backlog ordering admission and override footer
+# Cross-kind dep/seq edges: disclose, check, and clear
+
+> **Rewritten 2026-08-15** at the `inquire.scope` gate, against the five
+> decisions this design accepted (`DEC-231`…`DEC-235`). The original scope
+> centred on *admission* — making a cross-kind edge order the backlog work
+> order. `DEC-231` withdrew that objective and moved the slice's centre of
+> gravity to *disclosure*. What follows is the current scope; the superseded
+> framing survives in `DEC-230` (superseded) and in this file's git history.
 
 ## Context
 
 `doctrine backlog list --by sequence` (the default) trails an `overrides:`
-honest-record footer that today reports ten lines of the form:
+honest-record footer. Until `74b773690` it reported lines of the form:
 
 ```
   ISS-028 → SL-182 dropped (dangling: SL-182 absent)
 ```
 
-Every one of those claims is **false**. All ten slices exist; all ten are `done`.
+Every one of those claims was **false**. All the slices named exist.
 
-The lines come from the `AbsentDrop` leg of `render_overrides`
-(`src/backlog.rs:2285`), not the adapter-override leg. `backlog::project`
+The lines came from the `AbsentDrop` leg of `render_overrides`
+(`src/backlog.rs:2299`), not the adapter-override leg. `backlog::project`
 (`src/backlog.rs:745`) resolves each `needs`/`after` reference with `parse_ref`
 (`src/backlog.rs:1346`), which knows only the five backlog prefixes
-(`ISS/IMP/CHR/RSK/IDE`). Any other prefix falls into `AbsentDrop`, and the footer
-hardcodes the word `absent`.
+(`ISS/IMP/CHR/RSK/IDE`). Any other prefix fell into `AbsentDrop`, and the footer
+hardcoded the word `absent`. `74b773690` silenced those lines as an interim —
+the footer is now empty repo-wide — which removed the lie without supplying the
+truth.
 
-Three consequences, escalating past cosmetics:
+Measured on the corpus, 2026-08-15: **30 authored cross-kind `needs`/`after`
+edges**. Five hang off already-terminal dependents, which `project` never admits
+as nodes, so **25 reach the footer** — 10 with a non-terminal target, 15 with a
+terminal one. Twenty-one of the thirty are on the `needs` axis.
 
-1. **The footer lies.** `absent` means "not a backlog item", rendered as "does not
-   exist". The author cannot judge staleness from it.
-2. **The edge is silently discarded.** A cross-kind reference contributes no
-   ordering edge at all — so `IMP-321 needs SL-228` would fail to gate IMP-321 in
-   `list --by sequence` even with SL-228 live. Cross-kind `needs` is *legal*
-   authored data: `run_needs` validates via `kinds::ensure_ref_resolves`, and
-   `run_needs_accepts_cross_kind_slice_prereq` (`src/backlog.rs:4667`) locks that
-   in. No visible harm in today's corpus only because all ten targets happen to be
-   `done`.
-3. **Two disagreeing classifiers.** `backlog after --prune`
-   (`src/backlog.rs:2013-2031`) already resolves cross-kind refs via
-   `kinds::parse_canonical_ref` and reads the target's status — but tests
-   `resolved`/`closed`, which is *backlog* vocabulary. Slice terminal is
-   `done`/`abandoned` (ADR-009). So `--prune` calls SL-182 live and declines to
-   clear it, while `list` calls it absent. The edge is unclearable by either verb:
-   `--remove` rejects the `SL` prefix outright.
+Four defects, of which the first is the one that survives `DEC-231`:
 
-This slice fulfils **IMP-099** (triaged), which named all three shortfalls at
-SL-105 reconcile (RV-084) and deferred them as needing their own design. It also
-subsumes **IDE-019** (open) — the `--verbose`/`--explain` gate for footer noise —
-because the truth fix changes *what belongs in* the footer, so gating and content
-cannot be settled independently on one output surface.
+1. **The edge is invisible.** `ISS-327 needs QUE-219` and `QUE-219` is `open`,
+   but nothing on the `--by sequence` screen says a prerequisite exists — where
+   `ISS-X needs ISS-Y` at least renders Y above X. `next` and `blockers` gate on
+   it correctly through `priority/graph.rs`; only this view says nothing.
+2. **Nothing re-checks the refs after authoring.** `doctrine validate` is
+   id-integrity only, and `relation_graph::validate_relations` consumes
+   `[[relation]]` rows, not `[relationships] needs`/`after`. Probed: a fixture
+   carrying `needs = ["not-a-ref", "ISS-999", "QUE-219", "SL-9999"]` yields
+   `doctor: corpus clean` on all four.
+3. **The footer states one relation in two directions.** `AbsentDrop.from` is the
+   *authoring* item (`src/backlog.rs:702`) while `Override::from` is documented
+   as uniformly the *predecessor* (`src/backlog_order.rs:111-116`), so the same
+   fact renders `ISS-001 → not-a-ref` beside `ISS-999 → ISS-001`.
+4. **The terminality probe is wrong, in four copies.** `src/backlog.rs:2013-2064`
+   and `src/commands/dep_seq.rs:196+` are near-verbatim duplicates of each other,
+   and each doubles its own read-parse-status block internally. All four hardcode
+   `resolved`/`closed` — *backlog* vocabulary. Slice terminal is `done` (ADR-009).
+   Probed: `SL-154` is `done`, the edge is present, and `after IMP-172 --prune`
+   reports `nothing to prune`.
+
+And one gap that is not cross-kind-specific at all: **the `needs` axis has no
+removal verb.** `doctrine unlink` operates on tier-1 `[[relation]]` rows;
+`dep_seq::remove` is `remove_after` only. A `needs` edge is append-only for every
+kind.
+
+This slice fulfils **IMP-099** (triaged), which named the footer, admission, and
+clearing shortfalls at SL-105 reconcile (RV-084). It also subsumes **IDE-019**
+(open) — the `--verbose`/`--explain` gate for footer noise — because the truth
+fix changes *what belongs in* the footer, so gating and content cannot be settled
+independently on one output surface. **Two divergences from IDE-019's proposal
+must be recorded at reconcile** (see Follow-Ups).
 
 ### What already exists (ride these seams, do not rebuild)
 
 - **`src/priority/partition.rs::status_class(kind, status)`** — the kind-aware
-  terminal/workable/gating classifier, already covering slice, ADR, spec,
-  requirement, backlog, review, revision, and knowledge vocabularies. This is the
-  classifier `classify_dangling` and `--prune`'s probe should consume. No new
-  terminal-status table.
-- **`src/priority/graph.rs`** — already admits cross-kind `needs`/`after` onto the
-  dep/seq overlays (`slice_needs_lands_on_dep_overlay_cross_kind`,
-  `slice_after_lands_on_seq_overlay_with_rank_and_array_index_age`). The
-  actionability graph is correct; `backlog_order.rs` is the holdout.
-- **`src/priority/order.rs`** — the extracted ordering primitives
-  (`surviving_seq_predecessors`, `frontier_order`) shared by `next` and the
-  interestingness detectors.
-
-So the repo carries **two cordage consumers**: `src/backlog_order.rs` (backlog-only
-vocabulary, feeds `list --by sequence`, SL-039/SL-051) and `src/priority/graph.rs`
-(cross-kind, feeds `next`/`blockers`/`survey`/`explain`, SL-060/IMP-033). The
-backlog-only one predates cross-kind admission. Whether this slice *widens* that
-adapter or *retires* it in favour of the graph is the central open question below —
-and per POL-002/DRY it is the question worth resolving properly, not routing
-around.
+  terminal/workable/gating classifier. The sole classifier for every terminality
+  question this slice touches. No new terminal-status table.
+- **`src/kinds/resolve.rs`** — `parse_canonical_ref` / `ensure_ref_resolves`.
+  Leaf, `out=0`; for a canonical ref, resolution is a **directory stat with no
+  file read** (`:68-78`).
+- **`src/meta.rs::read_meta`** — engine tier, one parse per entity: the status
+  half of the probe.
+- **`src/commands/dep_seq.rs`** — the **kind-neutral** dep/seq shell, gated by
+  `resolve_dep_seq_src` over `parse_resolvable_ref`. `doctrine after <SRC> <TGT>
+  --remove` already clears a cross-kind edge today; `backlog after` is its
+  backlog-only duplicate.
+- **`backlog inspect <ID>`** — already prints both dep/seq axes in full and
+  undeduped; it lacks only the target's status.
 
 ## Scope & Objectives
 
-One coherent change: make `backlog list --by sequence` tell the truth about
-cross-kind dep/seq edges, and make those edges clearable.
+One coherent change: make the backlog work order **disclose** the cross-kind
+edges it cannot order, give ref-integrity failures a home that can report them,
+and make the edges clearable on both axes.
 
-1. **Admission.** A `needs`/`after` reference to a non-backlog entity resolves
-   against the real corpus and is classified by *its own* kind's status
-   vocabulary via `priority::partition::status_class` — not shunted into
-   `AbsentDrop`. A live cross-kind prerequisite orders; a terminal one is a
-   satisfied prerequisite; a genuinely non-resolving ref is the only thing that
-   earns the word `absent`.
-2. **Honest footer.** The `overrides:` block reports cross-kind drops with the
-   target's real status/resolution (the shape `classify_dangling` already produces
-   for backlog targets: `closed/wont-do`), and collapses duplicate
-   `(from, to, reason)` lines. `IMP-172` carries `SL-154` in *both* `needs` and
-   `after` (`backlog-172.toml:19-20`) — two real edges, but one line's worth of
-   information for the reader.
-3. **Default quiet, opt-in loud (IDE-019).** Terminal-target drops are suppressed
-   by default; an explicit flag reveals the full record. This extends the
-   suppression already present for adapter-level `Dangling`s with a terminal
-   from-endpoint (`src/backlog.rs:2294-2304`, which cites IDE-019) to the leg that
-   never got it.
-4. **Clearable.** `backlog after --prune`'s terminality probe consumes the same
-   kind-aware classifier instead of its inline `resolved`/`closed` string test, and
-   `--remove` accepts a cross-kind target ref. The `IMP-095 → SL-095` edge that
-   IMP-099 names as the standing instance becomes clearable — deliberately
-   retained, but by choice rather than by tooling inability.
+1. **Disclosure, not admission** (`DEC-231`, `DEC-232`). A cross-kind
+   `needs`/`after` edge contributes **no ordering effect on either axis** and is
+   never used to withhold a dependent. `backlog_order.rs`, `ItemId`, and the
+   cordage adapter are untouched. Where the target is **non-terminal**, the edge
+   is disclosed in a new `boundary:` block naming the dependent, the relation
+   word, the target and its status — `ISS-327 needs QUE-219 (open)` —
+   dependent-first, no arrow, deduplicated per `(dependent, target)` with the
+   axes joined. Where the target is terminal, nothing is printed.
+2. **The footer's contract** (`DEC-232`). The footer states **only what is needed
+   to understand the rendered content**. `overrides:` keeps evicted and
+   contradicted `after` edges — authored edges that could have ordered and did
+   not. `boundary:` carries edges that were never in this order's universe. The
+   project-level `AbsentDrop` leg is **removed from the footer**, which dissolves
+   defect 3 by deletion rather than by choosing a direction.
+3. **Ref integrity moves to `doctor`** (`DEC-232`). A malformed ref, a dangling
+   edge onto an absent backlog id, and a well-formed cross-kind ref that does not
+   resolve all become `doctor` findings under the existing `RelationIntegrity`
+   (Error) category, routed through `kinds::ensure_ref_resolves` — the same
+   function `run_needs` uses at authoring time, so authoring and health agree by
+   construction.
+4. **The probe** (`DEC-233`). Resolution is leaf (`kinds`, a stat); status is
+   engine (`meta::read_meta`, one parse per *distinct* target — ~15 in the live
+   corpus, ~8ms against a 190ms baseline). `catalog::scan` is **not** reached:
+   it is command-tier and reaches `backlog`, so the back-edge closes an ADR-001
+   cycle. The shell returns `Some(status)` / `None` / `Unavailable`; the pure
+   layer classifies through `status_class`.
+5. **No reveal flag** (`DEC-234`). The footer's shape is invocation-independent.
+   `-a/--all` keeps its single row-hide-set meaning. The full authored record is
+   reached through `backlog inspect <ID>`, which gains a status annotation on each
+   cross-kind target from the same probe.
+6. **Clearable, on both axes** (`DEC-235`). `backlog after`'s `--remove` and
+   `--prune` stop being a second implementation and route to the kind-neutral
+   shell; `doctrine needs <SRC> <TGT> --remove` is added, backed by a new
+   `dep_seq::remove_needs` leaf beside `remove_after`; and all four copies of the
+   terminality probe collapse onto objective 4's, so `done` and `answered` are
+   recognised as terminal. `backlog::parse_ref` is **not** widened — its five
+   other hard-failing callers keep their contract.
 
 ## Non-Goals
 
+- **No admission.** Withdrawn by `DEC-231`. No phantom node, no `ItemId`
+  widening, no withheld-partition machinery, no change to membership or to
+  backlog-internal dependency order.
 - **No change to relation vocabulary.** No new `RelationLabel`, no new dep/seq
   axis, no widening of the dep/seq *source* gate (records still cannot author
-  dep/seq — ADR-017, SL-158 D2).
-- **No change to `src/priority/graph.rs`'s cross-kind semantics.** It is already
-  correct; this slice makes the backlog ordering view agree with it, not the
-  reverse.
-- **No corpus edit as the fix.** The ten authored cross-kind refs are legal data.
-  Rewriting them to silence the footer would hide the defect. Clearing individual
-  spent edges *after* the tooling can do so honestly is a separate judgement call.
-- **No new terminal-status table.** `partition.rs` is the single source; a second
-  one would reproduce exactly the bug being fixed.
-- **Not the slice/spec ordering *product* model.** IMP-099 notes non-backlog
-  entities "do not reuse item→item `after` semantics verbatim". Where that bites
-  beyond making `list` honest, it goes to a follow-up.
-- **No `doctor` / integrity check for cross-kind dep refs.** Adjacent, separable.
+  dep/seq — ADR-017, SL-158 D2). `doctrine unlink` stays tier-1-relation-only.
+- **No change to `src/priority/graph.rs`'s cross-kind semantics**, and no new
+  `channels` accessor. It is already correct.
+- **No `needs --prune`.** A satisfied *hard* prerequisite is meaningful history;
+  auto-dropping it is a judgement the tool should not make unasked (`DEC-235`).
+- **No corpus edit as the fix.** The authored cross-kind refs are legal data.
+  Clearing individual spent edges *after* the tooling can do so honestly is a
+  separate judgement call.
+- **No new terminal-status table.** `partition.rs` is the single source.
+- **No fix for `RV`'s unreachable derived status.** Handled as a loud, pinned
+  degradation; the real fix is `IMP-433`.
+- **Not the slice/spec ordering *product* model.** Where IMP-099's "non-backlog
+  entities do not reuse item→item `after` semantics verbatim" bites beyond this,
+  it goes to a follow-up.
 
 ## Affected surface
 
-- `src/backlog.rs` — `project`, `AbsentDrop`, `render_overrides`,
-  `classify_dangling`, `compose`, `run_after`'s `--prune`/`--remove` legs,
-  `parse_ref`'s callers, `list` flag surface.
-- `src/backlog_order.rs` — the adapter's `ItemId` vocabulary is backlog-only;
-  cross-kind admission touches it, or retires it (open question OQ-1).
-- `src/priority/partition.rs` — read-only consumer seam; expected unchanged.
-- `src/kinds.rs` — `parse_canonical_ref` / `ensure_ref_resolves`, the existing
-  cross-kind resolution primitives.
-- Footer goldens / `backlog list` test fixtures in `src/backlog.rs`'s test module.
+- `src/backlog.rs` — `render_overrides` (the `AbsentDrop` leg removed, the
+  `boundary:` block added), `classify_dangling` (becomes a classifier, stops
+  returning a display string), `list_rows` (the probe call site), `run_after`'s
+  `--prune`/`--remove` legs (routed to the kind-neutral shell), `inspect`'s
+  relationship rendering.
+- `src/commands/dep_seq.rs` — `run_after_prune`'s probe replaced; `needs
+  --remove` shell added.
+- `src/dep_seq.rs` — new `remove_needs` leaf beside `remove_after`.
+- `src/relation_graph.rs` / `src/commands/doctor.rs` — the ref-integrity check
+  under `RelationIntegrity`.
+- `src/cli.rs` — `--remove` on the `needs` verb.
+- `src/kinds/resolve.rs`, `src/meta.rs`, `src/priority/partition.rs` — read-only
+  consumer seams; expected unchanged.
+- Footer goldens and `backlog list` fixtures in `src/backlog.rs`'s test module.
+- **Not** `src/backlog_order.rs`, and **not** `src/priority/`.
 
 ## Risks & assumptions
 
-- **R1 — ordering-semantics divergence.** `backlog_order.rs` composes with a
-  `created`/`exposure` comparator; `priority::order::frontier_order` is
-  score-aware. If OQ-1 resolves toward retiring the adapter, `list --by sequence`
-  row order changes for reasons unrelated to this slice's intent. Behaviour
-  preservation on the existing suites is the gate (AGENTS.md).
-- **R2 — golden churn.** The footer is asserted by name in several tests
-  (`src/backlog.rs:5094`, `:5115`, `:5224`, `:5262`). Suppression-by-default flips
-  the sense of "no drops, no footer" assertions; the risk is a test relaxed to fit
-  the new behaviour rather than re-expressing intent.
-- **A1** — `status_class` covers every kind reachable as a cross-kind dep target.
-  Its per-kind vocabulary tests suggest yes; verify, don't assume.
-- **A2** — no non-backlog entity currently authors a `needs`/`after` edge whose
-  *target* is a backlog item in a way this slice would newly order. Unverified.
+- **R1 — ordering divergence. Dissolved** by `DEC-231`: no node admission, no
+  comparator change, no adapter change. Row order is untouched, so the
+  behaviour-preservation gate on the `backlog_order` and `priority` suites should
+  hold with no intentional golden change.
+- **R2 — golden churn. Realised, not hypothetical.** `74b773690` shipped
+  suppression-by-default and locked it with two tests (`src/backlog.rs:5301`,
+  `:5332`) asserting cross-kind drops are *silent*. Both must be **superseded
+  deliberately, not relaxed** — and `:5301` on a second count, since it asserts a
+  malformed ref is named *in the footer*, which `DEC-232` moves to `doctor`.
+- **R3 — untested leg.** `--prune` has **no test coverage at all, in either
+  copy**. Characterisation tests precede the probe change. And the prune fix is a
+  deliberate *behaviour* change (an edge onto a `done` slice becomes prunable),
+  which must be tested as one rather than smuggled through the de-duplication.
+- **R4 — soft-axis over-reach.** An `after` edge onto an unrecognised-status
+  target must not withhold or order. The conservative blocker rule is implemented
+  over `dep_overlay` only (`src/priority/channels.rs:58`, `:66`); treating status
+  uncertainty as a gate would silently harden a preference into a blocker.
+- **R5 — surface growth.** Scope grew three times, each owner-accepted: the
+  `doctor` check, the probe's loudness rules, and `needs --remove` plus the
+  duplicate-path collapse. Each is a counterpart the previous decision required,
+  but the phase plan is larger than "make the footer honest" implies.
+- **A1 — resolved** (`DEC-233`). The gap is upstream of `status_class`: `RV`'s
+  status is derived at command tier, so no engine-side reader can obtain it.
+  Handled as an explicit `Unavailable` arm off a pinned kind set. `REC` is not a
+  gap — `status_class(kind, None)` defines it as Terminal.
+- **A2 — still unverified.** Whether any non-backlog entity authors a
+  `needs`/`after` edge whose *target* is a backlog item. Nothing in this scope
+  depends on the answer, since no ordering effect is added either way.
 
 ## Open questions
 
-- **OQ-1 (the fork).** Widen `backlog_order.rs` to cross-kind ids, or retire it and
-  compose `list --by sequence` from `priority/graph.rs` + `priority/order.rs`?
-  Retiring kills a parallel implementation (the stronger DRY answer) but changes
-  row order (R1) and pulls scoring into a view that has none today. Widening is
-  contained but keeps two cordage consumers alive. `/design` decides.
+All four are closed. Retained with their resolutions so an inbound reference
+finds the answer rather than a dead end.
 
-  **A third candidate, appended 2026-08-15: suppress rather than represent.**
-  Neither horn above is forced, because the ordering adapter does not have to
-  hold the cross-kind target at all. `project` could resolve a cross-kind
-  reference's status through `partition::status_class` and, where the target is
-  non-terminal, **withhold the dependent from the ordered output** — no
-  `OrderInput` edge, no `ItemId` for the target, no adapter change.
-
-  Its case rests on a fact this scope did not have when it was written:
-  **`next` and `blockers` already gate correctly, and only this one view
-  disagrees.** Measured 2026-08-15 on the `cluster:design-run` batch — `QUE-218`
-  gates `IMP-386`/`387`/`388`/`389` and `QUE-219` gates
-  `ISS-290`/`327`/`328`/`333`/`346` out of `doctrine next`'s 378 actionable rows,
-  and `doctrine blockers ISS-327` names `QUE-219` as the blocker. So `list --by
-  sequence`'s job is narrower than the fork assumes: it must stop **contradicting**
-  the gate, not re-derive it. Gating is already owned elsewhere; this view only
-  renders.
-
-  What it buys: **R1 dissolves** — row order is untouched because no scoring is
-  pulled in and no comparator changes; the change is contained to `project` and
-  the footer; and `status_class` becomes the sole classifier on this leg too,
-  which is what the `VA` criterion below asks for regardless of the horn chosen.
-
-  What it costs: **transitive ordering through a cross-kind node is not
-  recovered.** Two items that both `needs` a live `QUE` are each withheld, but
-  their order relative to one another falls back to the existing
-  `created`/`exposure` comparator rather than being derived through the shared
-  prerequisite. Nothing in the corpus uses that today; whether it is wanted later
-  is the question `/design` should put to this candidate, and it is the cheapest
-  of the three to reverse if the answer is yes.
-
-  It is **not** an answer to the DRY objection. `backlog_order.rs` survives as a
-  second cordage consumer, so the parallel-implementation debt the retire horn
-  would clear stays on the books and should be recorded as such rather than
-  quietly dropped.
-
-  Note this candidate is orthogonal to the footer's honesty defect: the
-  `AbsentDrop` leg hardcodes the word `absent` for what is really *not a backlog
-  prefix*, and correcting that wording needs no horn settled at all.
-
-  **Interim landed 2026-08-15 (`74b773690`), and it moves this slice's ground.**
-  The false lines are silenced rather than reworded: `render_overrides` skips an
-  `AbsentDrop` whose ref satisfies `kinds::parse_canonical_ref`, so a well-formed
-  cross-kind ref produces no line and a ref of no known kind still reports
-  `absent`. `project` is untouched — the honest record stays total, so the reveal
-  flag this slice designs still has something to reveal. All 25 lines in the
-  corpus were of the suppressed class; the footer is now empty repo-wide.
-
-  Three consequences for `/design`:
-
-  - **R2 is realised, not hypothetical.** Suppression-by-default now ships on one
-    leg. The two new tests
-    (`list_sequence_stays_silent_on_a_cross_kind_drop_but_names_a_malformed_ref`,
-    `list_sequence_emits_no_footer_when_every_drop_is_cross_kind`) are the
-    behaviour to preserve or deliberately supersede, not goldens to relax.
-  - **OQ-3 is partly pre-empted on this leg and should be re-put deliberately.**
-    A cross-kind prerequisite is now silent regardless of the target's status,
-    which is a stronger default than OQ-3 contemplates (it asks only about
-    *terminal* ones). Whether a *live* cross-kind prerequisite deserves a
-    default-visible line once the edge is admitted is now an open choice, not an
-    inherited one.
-  - **The narrow rule's cost is a known hole.** `SL-9999` — well-formed, resolves
-    to nothing — goes quiet too, because distinguishing it needs a disk probe and
-    that leg is pure. `VT-2` below ("a genuinely unresolvable ref still reports
-    `absent`") is therefore **currently failing by construction** and is one of
-    the things this slice restores.
-- **OQ-2.** Flag naming and shape for the reveal: `--explain` vs `--verbose`
-  (IDE-019 leaves it open), and whether the footer belongs on stdout with the table
-  or on stderr as an advisory (the cycle warning already goes to stderr —
-  `ListOutput`, `src/backlog.rs:1177`).
-- **OQ-3.** Is a *terminal* cross-kind prerequisite silently satisfied (no edge, no
-  line by default), or is a spent edge worth one suppressed-by-default line? Bears
-  directly on whether `IMP-095 → SL-095` still reads as the reminder IMP-099
-  intends it to be.
-- **OQ-4.** Does `--remove` gain cross-kind target resolution, or does a cross-kind
-  edge route through a kind-neutral `doctrine unlink`-shaped verb? IMP-099 offers
-  both.
+- **OQ-1 (the fork) — closed by `DEC-231`.** Neither widen nor retire
+  `backlog_order.rs`: `--by sequence` is a backlog-induced **work order**, not an
+  actionability surface, so a cross-kind edge is diagnosed and never ordered. The
+  adapter is untouched, and the parallel-implementation debt against
+  `priority/graph.rs` stays on the books rather than being cleared here.
+- **OQ-2 (flag naming and stream) — closed by `DEC-234`.** No flag. `-a/--all` is
+  already taken, and a footer flag would exist only to defeat the contract
+  `DEC-232` gives the footer. The record lives on `backlog inspect`.
+- **OQ-3 (is a spent edge worth a suppressed line?) — closed by `DEC-232`.** No,
+  not on this surface: a satisfied prerequisite explains nothing about where a row
+  landed. The default-quiet rule is now a consequence of the footer's contract
+  rather than a noise heuristic. `IMP-095 → SL-095` remains readable as IMP-099's
+  reminder via `inspect`.
+- **OQ-4 (`--remove` vs a kind-neutral verb) — closed by `DEC-235`.** Neither.
+  The kind-neutral verb already exists; `backlog after` is its duplicate and is
+  routed to it. The genuinely missing capability was `needs --remove`.
 
 ## Verification / closure intent
 
-- **VT** — a cross-kind `needs` on a *live* slice orders the dependent item;
-  the same on a `done` slice does not, and neither emits the word `absent`.
-- **VT** — a genuinely unresolvable ref (`SL-9999`) still reports `absent`; the
-  word retains its meaning.
-- **VT** — the default footer is empty for today's corpus shape; the reveal flag
-  prints one line per drop, deduplicated across the `needs`/`after` pair.
-- **VT** — `after --prune` clears a cross-kind edge whose target is terminal under
-  *its own* vocabulary (`done`), and declines a live one.
-- **VA** — no second terminal-status vocabulary is introduced; `grep` shows the
-  inline `resolved`/`closed` probe in `run_after` gone, and `status_class` the sole
-  classifier on both legs.
-- **VA** — existing `backlog`, `backlog_order`, and `priority` suites green
-  unchanged where behaviour is preserved; every intentional golden change named in
-  the reconciliation brief with its reason.
+- **VT** — a cross-kind `needs` on a **non-terminal** target emits one
+  `boundary:` line naming the target and its status; on a terminal target it
+  emits nothing; neither emits the word `absent`.
+- **VT** — a `(dependent, target)` pair carried on **both** axes emits one
+  `boundary:` line, not two.
+- **VT** — a malformed ref, an absent backlog id, and an unresolvable cross-kind
+  ref each raise a `doctor` `RelationIntegrity` finding and appear **nowhere** in
+  `backlog list` output.
+- **VT** — an `RV` target renders a named `Unavailable` token, is never
+  suppressed, and never classifies Terminal; the derived-status kind set is
+  pinned so a new derived-status kind fails a test.
+- **VT** — `after --prune` clears an edge whose target is terminal under *its
+  own* vocabulary (`done`, `answered`) and declines a live one; `backlog after
+  --remove` accepts a cross-kind target; `needs --remove` clears a `needs` edge.
+- **VT** — characterisation tests for `--prune`'s current behaviour land **before**
+  the probe is replaced (R3).
+- **VA** — no second terminal-status vocabulary survives: `grep` shows every
+  inline `resolved`/`closed` probe gone from `src/backlog.rs` and
+  `src/commands/dep_seq.rs`, with `status_class` the sole classifier.
+- **VA** — `backlog_order` and `priority` suites green **unchanged**; every
+  intentional golden change named in the reconciliation brief with its reason,
+  including the two `74b773690` tests superseded rather than relaxed.
 
 ## Summary
 
 ## Follow-Ups
+
+- **`IMP-432`** — `doctrine next` lacks kind/tag/status filters. The complement
+  that makes `DEC-231`'s three-surface split whole; the pressure to make `--by
+  sequence` gate came from "the actionable backlog" not being expressible.
+- **`IMP-433`** — lift `RV`'s derived status to a tier engine-side readers can
+  reach, retiring `DEC-233`'s `Unavailable` arm.
+- **`IDE-019` divergences, for reconcile.** It asked for the absent-ref case to be
+  *surfaced in the footer* (`DEC-232` routes it to `doctor`) and for a
+  `--verbose`/`--explain` flag on `backlog list` (`DEC-234` declines the flag and
+  sites the record on `inspect`). Both deliver its intent; neither its mechanism.
+  `IDE-019` must close against what was built.
+- **Parallel-implementation debt.** `backlog_order.rs` survives as a second
+  cordage consumer beside `priority/graph.rs`. `DEC-231` declined to clear it
+  here (removal needs a SPEC-015 REV — `REQ-218` names `backlog_order` in the
+  requirement itself). Recorded, not quietly dropped.
+- **Measured aside, out of scope.** `doctor` at 10.8s and `validate` at 3.6s on a
+  ~4,400-entity corpus are slow enough to deserve their own item.
