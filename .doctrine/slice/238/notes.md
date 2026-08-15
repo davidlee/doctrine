@@ -114,10 +114,45 @@ two of which (`QUE-218`, `QUE-219`) are `open` and gate nine live items that
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-08-15 · design/exploring (run `dr-01a00475`, rev 17) · f700a541b
 
 ### Produced
 
+- `DEC-231` — the settled fork. Supersedes `DEC-230`.
+- `DEC-230` — superseded; retained because the reversal is instructive.
+- `IMP-432` — `next` lacks kind/tag/status filters; the complement that makes
+  the split whole.
+- `research/research.md` (runtime tier, gitignored) — two threads plus corpus
+  measurement and the ✓/✗ verification pass.
+
 ### Learned
 
+- Records cannot author dep/seq, so a `QUE` node has zero *incoming* dep/seq
+  edges and can never sit mid-chain (`src/commands/dep_seq.rs:50-56`).
+- Cordage assigns longest-path **levels** before `NodeId`
+  (`crates/cordage/src/resolve.rs:635`), so a phantom cross-kind node imposes a
+  broad level demotion, not a local `after` statement. No neutral fallback
+  attribute exists.
+- `REQ-218` names `backlog_order` in the requirement *title* and carries no
+  statement body and no acceptance criteria — so retiring the adapter needs a
+  SPEC-015 REV, but widening it would falsify nothing.
+- SPEC-015's "a grouping, never a priority claim" attaches to the `ordinal`
+  grouping (`--by id`), **not** to `--by sequence`, which it separately calls
+  "priority order". The governance research conflated them.
+- `run_after --prune` has no test coverage at all, and its disk-read-and-parse
+  block is duplicated within one function (`src/backlog.rs:2014-2060`).
+- Withholding needs no new machinery — `pos.get(…).unwrap_or(usize::MAX)`
+  (`src/backlog.rs:1241`) already tails unplaced rows. Not used, but the seam is
+  known.
+
 ### Open
+
+- `inq-5` — where the cross-kind status probe lives, and its cost.
+- `inq-6` (cursor) — what the footer discloses; edge direction; dedup.
+- `inq-7` — reveal flag name and stream.
+- `inq-8` — cross-kind clearing (`--prune` / `--remove`).
+- **A2 unverified** — whether any non-backlog entity authors a `needs`/`after`
+  edge whose *target* is a backlog item.
+- Slice scope (`slice-238.md`) is now **stale against `DEC-231`**: its objective
+  1 (admission) is withdrawn, and its `OQ-1` still presents the widen/retire
+  fork. Reconcile at close, or sooner if it misleads.
