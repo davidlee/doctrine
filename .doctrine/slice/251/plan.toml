@@ -110,9 +110,9 @@ waived = false
 
 [[phase.verification]]
 id = "VT-2"
-expects = "The fully_populated literals sit beside their types in submission.rs and are reachable from the pin."
-test_file = "src/design_run/submission.rs"
-keywords = ["fully_populated"]
+expects = "The closure's attestation-side fixtures sit beside their types in attestation.rs — a file that carries no fully_populated today, so the keyword is signal rather than an incumbent."
+test_file = "src/design_run/attestation.rs"
+keywords = ["fully_populated", "CheckpointActDeclaration"]
 waived = false
 
 [[phase.verification]]
@@ -140,8 +140,9 @@ exit_criteria = [
   { id = "EX-4", text = "The coverage equality carries its positive control: empty one fixture's Seq and assert the equality FAILS, before asserting it holds on the real set (sec-8, oracle discipline)." },
   { id = "EX-5", text = "Pin 3 lands: null-set equality on an all-Null Sparse fixture for `Declaration` and `TraversalDeclaration`, and a per-key removal probe on the READ path — never serialization — whose refusing set equals the Required rows." },
   { id = "EX-6", text = "The variant-payload arm carries requiredness only: the removal probe over pin 4's per-variant samples, skipping the tag under Internal and applying to the wrapped object under External. Key sets and wire types are the descent's and are not restated." },
-  { id = "EX-7", text = "Declaration::fully_populated's `needs: Sparse::Value(Vec::new())` and the doc sentence explaining it are updated in the one place I9 and this ladder share the literal (src/design_run/tests.rs)." },
+  { id = "EX-7", text = "Declaration::fully_populated's `needs: Sparse::Value(Vec::new())` and its doc sentence — 'the values are arbitrary, only each key's presence is observed' — are corrected where the fixture is defined (src/design_run/submission.rs); I9's consumer, the_wire_key_table_holds_exactly_a_populated_declarations_serde_keys, stays green over the amended fixture." },
   { id = "EX-8", text = "`doctrine check gate` is green." },
+  { id = "EX-9", text = "Amending PHASE-02's fixtures to satisfy the coverage equality is expected work of this phase, not rework of the last: the equality is what tells us which sites no input reaches, and that cannot be known before it runs." },
 ]
 specs        = []
 requirements = []
@@ -239,7 +240,7 @@ waived = false
 id = "VT-2"
 expects = "sec-8 pin 10 — no repo-private id reaches a shipped surface, over artifact.rs's existing citation detector, with the positive control asserted first on a known-bad input."
 test_file = "src/design_run/payload_contract.rs"
-keywords = ["render_document", "render_prompt", "cites_no_repo_private"]
+keywords = ["render_document", "render_prompt", "repo_private"]
 waived = false
 
 [[phase.verification]]
@@ -310,6 +311,7 @@ exit_criteria = [
   { id = "EX-5", text = "DEC-228: the envelope's worked declaration example is corrected in place to carry `cursor` — the omission that cost fifteen source reads." },
   { id = "EX-6", text = "The library document's address is not a fourth push point, and resume's contract_section channel is not used (DEC-225, OQ-B)." },
   { id = "EX-7", text = "`doctrine check gate` is green." },
+  { id = "EX-8", text = "The blast radius of the new TurnEnvelope field is accounted for: `design show --format json` serialises the struct, so every snapshot or assertion over that output is updated deliberately rather than discovered by a red test — and none of them is loosened to accommodate the field." },
 ]
 specs        = []
 requirements = []

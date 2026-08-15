@@ -116,3 +116,22 @@ the scope note at its head, not the title.
 `..` away from useless, and a test cannot see the difference. PHASE-02/VA-1 is
 the review point that stands in for a pin, and it is the criterion most worth
 not waving through.
+
+**PHASE-02 is the oversized one, and it is not split.** Twelve exhaustive
+literals plus the whole `PAYLOAD` table is roughly twice any other phase. The
+seams that would divide it all leave a worse intermediate: splitting the table
+from its literals ships rows with no compile barrier under them, splitting the
+literals by defining module gives `attestation.rs` a phase of about forty lines,
+and splitting structs from enums leaves a root that references half a closure.
+`DEC-227` accepted twelve literals as the dominant mechanical cost when it chose
+the full closure over top-level-only; the size is the decision's, and hiding it
+behind a phase boundary would not make it smaller.
+
+**Where PHASE-02 and PHASE-03 will feel like rework and are not.** The coverage
+equality is the thing that tells us which declaration sites no fixture reaches,
+and it cannot say so until it runs. So PHASE-03 is expected to go back and put
+elements in containers PHASE-02 left empty. PHASE-03/EX-9 says this in the plan
+so a reader does not score it as PHASE-02 having been done badly — under the
+design's rev-72 rework, *fully populated* keeps exactly one obligation (the
+no-`..` literal), and container non-emptiness stopped being a fixture rule at
+all when it became a pin.

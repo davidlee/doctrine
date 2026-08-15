@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a004ed-4422-71c2-bc4d-d4880384fb6e"
+recorded_at = "2026-08-15T10:17:33.474828476Z"
+kind = "friction"
+summary = "/plan: verify-vt's UNATTRIBUTABLE message asserts a keyword match it never performed"
+detail = "src/vtgate.rs:124 formats 'keyword present but <path> not modified by this slice', but the attribution check at step (4) returns before step (5) runs the keyword loop. Authoring SL-251's plan, the message made me believe a deliberately-fresh keyword (fully_populated in attestation.rs, absent today) was already an incumbent, and I spent a grep disproving the tool's own claim. Costs a read per misleading row."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
