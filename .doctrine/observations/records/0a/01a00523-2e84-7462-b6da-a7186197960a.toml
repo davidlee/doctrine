@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00523-2e84-7462-b6da-a7186197960a"
+recorded_at = "2026-08-15T11:16:26.884536915Z"
+kind = "friction"
+summary = "design (SL-238): rtk output filter rewrote source identifiers in rg results"
+detail = "While verifying design claims, rg output through the rtk proxy substituted the identifier 'title_for' with 'n' in matched lines (e.g. 'fn status_and_title_for' rendered as 'fn status_and_n'). The mangling is silent and looks like real source text, so a claim about a function's name/arity read from that output would be wrong. Had to re-derive the fact from an unmangled sed range. Cost: one wasted verification round plus the tokens to notice."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
