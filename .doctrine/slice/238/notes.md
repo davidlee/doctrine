@@ -32,12 +32,15 @@ ADR-013/014, ADR-015 (except on the retire horn), ADR-019, ADR-020. Reasons in
   get no ordering effect on either axis and are **disclosed**, never used to
   order or withhold. `backlog_order.rs` is untouched. Supersedes `DEC-230`,
   which had ruled the opposite (see *Reversal* below).
-- **D-B. Where the status probe lives — OPEN (`inq-5`).** Still live: the footer
-  must say `QUE-219 (open)`, so the impure shell (`list_rows`) must resolve refs
-  and classify via `partition::status_class`, then pass results into pure
-  `project`/`render_overrides`. Targeted per-ref through
-  `catalog::scan::status_and_title_for` (~16 reads, currently private) vs the
-  full 24-kind `scan_entities` walk is the cost decision.
+- **D-B. Where the status probe lives — SETTLED, `DEC-233`.** Both horns the
+  node posed are dead: the full `scan_entities` walk is a ~20x regression on a
+  0.19s command, and `catalog::scan` is command-tier and *reaches* `backlog`, so
+  calling into it closes an ADR-001 cycle. The probe instead composes two
+  downward seams — `kinds` (leaf) for resolution, a stat with no file read; and
+  `meta::read_meta` (engine) for status, ~15 distinct targets ≈ 8ms. No new
+  module; the footer shell and the doctor check each call both directly. Shell
+  returns a three-way (`Some` / `None` / `Unavailable`), pure layer classifies
+  via `partition::status_class`.
 - **D-C. Footer content, direction, dedup — SETTLED, `DEC-232`.** The footer's
   contract is *only what is needed to understand the rendered content*.
   Cross-kind edges with a live target go to a separate `boundary:` block
@@ -55,7 +58,8 @@ ADR-013/014, ADR-015 (except on the retire horn), ADR-019, ADR-020. Reasons in
 
 Resolved: `inq-1` → `DEC-230` (superseded), `inq-2` → `DEC-231`, `inq-3`
 (non-durable, moot), `inq-4` (non-durable, ADR-001 paydown falls away with the
-widen horn), `inq-6` → `DEC-232`. Open: `inq-5` (cursor), `inq-7`, `inq-8`.
+widen horn), `inq-6` → `DEC-232`, `inq-5` → `DEC-233`. Open: `inq-7` (cursor),
+`inq-8`.
 
 ### The reversal — read this before re-opening the fork
 
@@ -110,10 +114,12 @@ re-derived:
 
 ### Assumptions
 
-- **A1** — `status_class` covers every kind reachable as a cross-kind dep target.
-  Partially verified: the `PARTITION` table covers slice, ADR, policy, standard,
-  PRD/SPEC, requirement, review, revision, backlog, and the knowledge kinds.
-  Unrecognised is a defined fallback class, so the failure mode is conservative.
+- ~~**A1**~~ — *resolved by `DEC-233`.* `status_class` covers the kinds, but the
+  gap is upstream of it: `RV`'s status is **derived** at command tier
+  (`review::derived_status_string`), so no engine-side reader can obtain it.
+  Handled as an explicit `Unavailable` arm keyed off a pinned kind set, never a
+  silent Terminal. `REC` is not a gap — `status_class(kind, None)` defines it as
+  Terminal. Follow-up: `IMP-433`.
 - **A2** — no non-backlog entity authors a `needs`/`after` edge whose *target* is
   a backlog item in a way this slice would newly order. **Still unverified.**
 - **A3** — the corpus's cross-kind edges were authored through `doctrine needs`
@@ -130,10 +136,14 @@ two of which (`QUE-218`, `QUE-219`) are `open` and gate nine live items that
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-15 · design/exploring (run `dr-01a00475`, rev 18) · 0611055c9
+fresh-as-of: 2026-08-15 · design/exploring (run `dr-01a00475`, rev 19) · 02c9b8951
 
 ### Produced
 
+- `DEC-233` — the status probe's seams, its cost, and the loudness rules on its
+  one degradation.
+- `IMP-433` — lift `RV`'s derived status to a tier engine-side readers reach;
+  the follow-up that lets `DEC-233`'s `Unavailable` arm retire.
 - `DEC-232` — the footer's contract, and the doctor counterpart it requires.
 - `DEC-231` — the settled fork. Supersedes `DEC-230`.
 - `DEC-230` — superseded; retained because the reversal is instructive.
@@ -164,6 +174,18 @@ fresh-as-of: 2026-08-15 · design/exploring (run `dr-01a00475`, rev 18) · 06110
   carrying `needs = ["not-a-ref", "ISS-999", "QUE-219", "SL-9999"]` gets
   `doctor: corpus clean` on all four, while `list --by sequence` renders two of
   them with opposite arrows in one block.
+- **Measured cost, this corpus (~4,400 numbered-entity tomls):**
+  `backlog list --by sequence` 0.19s · `doctrine validate` (id scan alone) 3.6s ·
+  `doctrine doctor` 10.8s. Any full-corpus scan on the listing path is a ~20x
+  regression. The last two are slow enough to deserve their own item — noted,
+  not raised, out of this slice's scope.
+- `catalog::scan` is **command**-tier and *reaches* `backlog`
+  (`.doctrine/adr/001/layering.toml:128`), so `backlog → catalog::scan` closes a
+  cycle. Any "just make it `pub(crate)`" reach into the cross-kind scanner from
+  a kind module is refused by the ratchet, not merely untidy.
+- `kinds::parse_resolvable_ref` on a *canonical* ref is a **directory stat, no
+  file read** (`src/kinds/resolve.rs:68-78`) — so ref-resolution and
+  status-reading have genuinely different costs and can be sited separately.
 - `Override::from()` is documented as **uniformly the predecessor** across all
   three adapter reasons (`src/backlog_order.rs:111-116`); the evicted arms take
   it from `evicted.edge().src()` (`:312`) and the `Dangling` arms push
@@ -174,9 +196,8 @@ fresh-as-of: 2026-08-15 · design/exploring (run `dr-01a00475`, rev 18) · 06110
 
 ### Open
 
-- `inq-5` (cursor) — where the cross-kind status probe lives, and its cost.
-  `DEC-232` makes it load-bearing for **both** consumers, not footer-only.
-- `inq-7` — reveal flag name and stream.
+- `inq-7` (cursor) — reveal flag name and stream. Narrowed by `DEC-232` to one
+  class: suppressed-but-render-relevant rows, never validation errors.
 - `inq-8` — cross-kind clearing (`--prune` / `--remove`).
 - **A2 unverified** — whether any non-backlog entity authors a `needs`/`after`
   edge whose *target* is a backlog item.

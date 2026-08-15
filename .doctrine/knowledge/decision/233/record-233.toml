@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 233
+slug = "cross-kind-status-probe-is-leaf-resolution-plus-engine-status-read-never-catalog"
+title = "Cross-kind status probe is leaf resolution plus engine status read, never catalog"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-15"
+updated = "2026-08-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-232 made the cross-kind status probe load-bearing for two consumers - the `boundary:` footer needs the target's status to render it, and the suppression rule needs its class - so inq-5 stopped being a footer-only cost question. The node framed a fork between a targeted probe through `catalog::scan::status_and_title_for` (private, ~16 reads) and the full 24-kind `scan_entities` walk. Measured 2026-08-15 on a ~4,400-entity corpus: `backlog list --by sequence` costs 0.19s reading ~400 backlog tomls, `doctrine validate` (the id-integrity scan alone) 3.6s, `doctrine doctor` 10.8s. So the full-walk horn is a ~20x regression on the default listing command. The targeted horn is refused by governance rather than cost: `.doctrine/adr/001/layering.toml:128` classifies `catalog::scan` as `command` and records that it reaches `backlog`, so a `backlog -> catalog::scan` edge closes a command-tier cycle the ADR-001 ratchet rejects. Both named horns are dead."
+choice = "The probe is composed from two seams `backlog` already reaches DOWNWARD, and touches `catalog` not at all. Resolution is leaf: `kinds::parse_canonical_ref` / `ensure_ref_resolves`, which for a canonical ref is a directory stat with no file read (src/kinds/resolve.rs:68-78) - that is exactly DEC-232's doctor check, one stat per ref. Status is engine: `meta::read_meta`, one toml parse per DISTINCT target, ~15 in the live corpus, ~8ms against a 190ms baseline. Both the footer shell and the doctor check call `kinds` directly; no shared probe module is introduced. The impure shell returns a three-way result and the pure layer classifies via `partition::status_class(kind, status)`, keeping IO in the shell and per-kind terminality policy where REQ-238 puts it. The three-way is `Some(status)` (read), `None` (the kind is genuinely status-less - REC, which `status_class` already defines as Terminal), and `Unavailable` (the kind's status is DERIVED above the tier the probe can reach). `Unavailable` is detected STATICALLY from the parsed kind, not inferred from a read failure - the derived-status set is `{RV}`, whose status comes from `review::derived_status_string`, and `review` is a command module no engine-tier reader may call."
+alternatives = ["Widen `catalog::scan::status_and_title_for` to `pub(crate)` and call it from the backlog shell. Rejected - `catalog::scan` is command-tier and reaches `backlog`, so the back-edge closes a cycle the ADR-001 layering ratchet refuses. Not a tidiness objection.", "Run the full `scan_entities` walk on the listing path. Rejected on measured cost - a ~20x regression on a 0.19s command.", "Lift RV's derived status to a tier the probe can reach, so no degradation exists. Rejected for now - `review::derived_status_string` reads a finding ledger at command tier, no backlog item references an RV or REC target today, and DEC-232 already grew this slice once. Raised as follow-up work instead.", "Report an unreadable status as a `TomlParse` or `RelationIntegrity` doctor finding. Rejected for the RV case - an RV that authors no top-level `status` is CORRECTLY authored, so the finding would fire on a healthy corpus. It is a tooling limit, not a corpus defect, and the two must not share a channel."]
+rationale = "Decomposing the probe by what each half actually needs dissolves the layering problem instead of working around it: resolution needs only the kinds table and a stat, status needs only a meta read, and neither needs the cross-kind scanner whose command-tier position was the whole obstacle. The three-way return exists so the two failure modes stay distinguishable, which is what the owner's acceptance was conditioned on. A status that cannot be read must never be silently classed Terminal, because Terminal is the ONE class the footer suppresses - that is the precise path by which an open prerequisite would disappear from a work order, and it is the failure this design is here to remove rather than relocate."
+consequences = ["LOUD RULE 1 - `Unavailable` never suppresses. It classifies `Unrecognised`, which the default-quiet rule does not hide, so the edge is always disclosed. The rendered token names the tooling gap rather than occupying the status slot, so a scanning reader cannot mistake it for an authored status.", "LOUD RULE 2 - the derived-status set is pinned by a test. `Unavailable` is keyed off a statically known kind set (`{RV}`); a future kind that derives its status and is not added to that set must fail a test, not degrade quietly.", "LOUD RULE 3 - a genuine read failure is a DIFFERENT trip from `Unavailable`, and is a corpus defect: the entity directory resolves but its toml is missing or unparseable. That is doctor's business and keeps its existing channel; it is never rendered as a status and never silently dropped.", "REC is not a trip. `status_class(kind, None)` already returns Terminal by its own documented rule, and a status-less context record IS a satisfied prerequisite for ordering purposes.", "No new module and no new shared abstraction: the footer shell and the doctor check each call `kinds` and `meta` directly. Inventing a probe module would add a seam neither consumer needs.", "Follow-up raised for lifting RV's derived status to a reachable tier, so the degradation can retire without a second slice-scope growth here.", "Measured aside, out of scope and not acted on: `doctor` at 10.8s and `validate` at 3.6s on this corpus are slow enough to be worth their own item."]
+decided_by = "owner"
+decided_on = "2026-08-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-238"
