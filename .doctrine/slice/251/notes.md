@@ -144,6 +144,20 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 61) · e08856ca5
   `MapKey`, `TokenSource` and `ExternRegion`, and **lost** `Tagging::Bare` and
   `Tagging::NotTagged` (both derivable; `tagging` moved inside `TypeForm::Enum`).
   `R5` retired as measured rather than carried.
+- **Third self-review pass integrated at rev 62–63** — `fnd-21`..`fnd-26` raised
+  and all dispositioned; every section but `sec-1` revised. `sec-3`'s extern
+  region stopped being a `TypeContract` and became a `SelectorTable`;
+  `UnknownKeys` gained `StoredThenFlagged`; `WireType::Id` gained its admissible
+  `IdKind` set; `sec-8` pin 1 split eleven-by-contract from the twelfth by
+  root composition. `Cow` **removed** from the model entirely, along with its two
+  `const fn` constructors and the `Box::leak` / const-fn-assembly alternatives.
+  `A3` retired as false-premised. Ids only; the run holds the text.
+- **`ISS-362` put to the run and answered in `sec-3`** — the contract states that
+  it is total over the payload and silent on stage admissibility, and names the
+  state machine as where that lives. Not a stage column: `CONTRACTS` is keyed by
+  `ActKind` (the eight attestation acts), a disjoint vocabulary from the ten
+  payload act fields, so there is no map to render and authoring one would
+  promise refusal at a seam that fails open.
 
 ### Learned
 
@@ -172,14 +186,43 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 61) · e08856ca5
   `Dispose` is internally tagged with a **newtype** variant, so `CreateRecord`'s
   keys inline beside `form`. `DesignId` (`ids.rs:132`) and `ReviewRef`
   (`attestation.rs:475`) serialise as scalars and are not struct rows.
+- **`IdKind` has eight members** (`ids.rs:30-52`), and `declare` admits **five**
+  of them as a subject — inquiry, section, attestation, finding, checkpoint —
+  refusing `dlg-` / `cpa-` / `agd-` as engine-allocated (`run.rs:1139-1150`).
+- **clap's derive does take an expression** — `compare.rs:75` passes
+  `clap::ArgGroup::new(…)` into `#[command(group = …)]`; of eighty `#[command]`
+  attributes, 46 are `subcommand`, 30 `flatten`, and 4 others. What blocks
+  single-sourcing the `--help` pointer is that `long_about` *replaces* a doc
+  comment and `concat!` cannot splice a `const &str` — a cost, not a limit.
+- **`design_run` const tables tolerate a `Named` graph over drop-glue types** —
+  compiled as a probe rather than assumed, when the `Cow` question was live.
+- **Adopting hand-edited design prose**: `sha256` of the text between marker
+  lines, less the trailing newline, reproduces a section's stored fingerprint
+  (validated with a positive control against an unchanged section). No verb
+  reports the observed digests — captured as a friction observation.
 
 ### Open
 
 
-- **Section attestations remain the only open obligation.** All nine outstanding;
-  human review is the v1 default (`reviewing.md`) and the run will not lock
-  without them. Every section but `sec-1` and `sec-6` was revised at rev 52–61,
+- **Two obligations open, both the user's** — section attestations (all nine
+  outstanding; human review is the v1 default per `reviewing.md`) and the review
+  pass disposition. Every section but `sec-1` has now been revised at rev 52–63,
   so nothing carried over from before is reusable.
+- **`RV-357` still cannot be named as conducted** — empty, minted by the stage
+  move rather than by a review, and now stale against two more revisions. Three
+  self-review passes have each found real defects and each found its predecessor's
+  blind spot; the probe none has reached is a governance re-read (`ADR-001`,
+  `STD-001`, `POL-002`) against the finished artefact, which is what an external
+  adversarial pass is best at. Priming it stays the recommendation; waiving is the
+  honest alternative.
+- **`sec-8` pin 1's premise is still unexercised** — whether
+  `assert_keys_described` can stay one generic body across eleven types with
+  different `Serialize` shapes is argued, not proven. A `/plan` or
+  implementation-time discovery, not a design defect, but a reviewer who reads
+  `sec-8` as fully exercised will be wrong.
+- **`ISS-362` is now load-bearing on `sec-3`** — the design states the bound and
+  defers the repair. If `ISS-362` lands a payload-act-to-stage guard as data, the
+  stage column becomes derivable and `sec-3`'s subsection should be revisited.
 - ~~`DEC-228`'s pin is not achievable as recorded~~ — corrected 2026-08-15 at
   source: the pin parses the constant's JSON arm alone after placeholder
   substitution, keeping `concat!(JSON_ARM, PROSE)` so the length assertion still

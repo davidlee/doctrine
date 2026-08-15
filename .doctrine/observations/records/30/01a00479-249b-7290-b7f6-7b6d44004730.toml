@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00479-249b-7290-b7f6-7b6d44004730"
+recorded_at = "2026-08-15T08:10:43.227223106Z"
+kind = "friction"
+summary = "/design: adopt_authored's per-section digests are not reported by any verb"
+detail = "Integrating a self-review pass meant hand-editing design.md and re-adopting. adopt_authored requires the document fingerprint plus every section's digest, but no verb reports the observed values: 'design show' prints the run's STORED fingerprints (which are what you are about to replace), and the AdoptionMarkersInvalid refusal names only the mismatched ids, not the digests it observed. Reproducing them meant reading document::parse to learn how a section body is bounded (text between marker lines, less the trailing newline, after per_line unescape) and validating the derivation with a positive control against an unchanged section. That worked, but it is a source read to discover a payload value - the same class of cost SL-251 exists to remove, one level up from the payload shape it is fixing. A --dry-run or an AdoptionStale-style refusal carrying observed per-section digests would close it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
