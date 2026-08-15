@@ -186,6 +186,33 @@ cross-kind dep/seq edges, and make those edges clearable.
   Note this candidate is orthogonal to the footer's honesty defect: the
   `AbsentDrop` leg hardcodes the word `absent` for what is really *not a backlog
   prefix*, and correcting that wording needs no horn settled at all.
+
+  **Interim landed 2026-08-15 (`74b773690`), and it moves this slice's ground.**
+  The false lines are silenced rather than reworded: `render_overrides` skips an
+  `AbsentDrop` whose ref satisfies `kinds::parse_canonical_ref`, so a well-formed
+  cross-kind ref produces no line and a ref of no known kind still reports
+  `absent`. `project` is untouched — the honest record stays total, so the reveal
+  flag this slice designs still has something to reveal. All 25 lines in the
+  corpus were of the suppressed class; the footer is now empty repo-wide.
+
+  Three consequences for `/design`:
+
+  - **R2 is realised, not hypothetical.** Suppression-by-default now ships on one
+    leg. The two new tests
+    (`list_sequence_stays_silent_on_a_cross_kind_drop_but_names_a_malformed_ref`,
+    `list_sequence_emits_no_footer_when_every_drop_is_cross_kind`) are the
+    behaviour to preserve or deliberately supersede, not goldens to relax.
+  - **OQ-3 is partly pre-empted on this leg and should be re-put deliberately.**
+    A cross-kind prerequisite is now silent regardless of the target's status,
+    which is a stronger default than OQ-3 contemplates (it asks only about
+    *terminal* ones). Whether a *live* cross-kind prerequisite deserves a
+    default-visible line once the edge is admitted is now an open choice, not an
+    inherited one.
+  - **The narrow rule's cost is a known hole.** `SL-9999` — well-formed, resolves
+    to nothing — goes quiet too, because distinguishing it needs a disk probe and
+    that leg is pure. `VT-2` below ("a genuinely unresolvable ref still reports
+    `absent`") is therefore **currently failing by construction** and is one of
+    the things this slice restores.
 - **OQ-2.** Flag naming and shape for the reveal: `--explain` vs `--verbose`
   (IDE-019 leaves it open), and whether the footer belongs on stdout with the table
   or on stderr as an advisory (the cycle warning already goes to stderr —
