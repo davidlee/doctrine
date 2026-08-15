@@ -1,0 +1,42 @@
+memory_uid = "mem_01a004d882d37b31b9cb2b67307db698"
+memory_key = "mem.pattern.review.general-rule-must-absorb-what-it-subsumes"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Close a defect class with an exhaustive match, then sweep what it subsumed"
+summary = "A rule written to close a class must replace the specific statements it subsumes, not sit beside them"
+created = "2026-08-15"
+updated = "2026-08-15"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["review", "defect-class", "design", "verification", "oracle"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "968468a4855f256d8723a16ec35c6511867f92f5"
+tree = "809361237cef6674d68f025b8ede4f5505c20556"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "968468a4855f256d8723a16ec35c6511867f92f5"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
