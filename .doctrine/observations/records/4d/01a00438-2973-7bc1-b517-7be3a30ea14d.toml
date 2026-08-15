@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00438-2973-7bc1-b517-7be3a30ea14d"
+recorded_at = "2026-08-15T06:59:44.627542959Z"
+kind = "friction"
+summary = "/preflight + skill-creator: zero-match search short-circuited validation"
+detail = "A chained rg stale-phrase search returned the expected exit 1 for no matches, so the following doctrine check quick never ran. Validation commands with expected-zero searches should be separate invocations."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
