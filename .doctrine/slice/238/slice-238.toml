@@ -12,19 +12,15 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/backlog.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/backlog_order.rs"
 intent = "scope-relevant"
 
 [[selector]]
-selector = "src/kinds.rs"
-intent = "scope-relevant"
-
-[[selector]]
 selector = "src/priority/partition.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/priority/order.rs"
@@ -33,6 +29,34 @@ intent = "scope-relevant"
 [[selector]]
 selector = "src/priority/graph.rs"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/dep_seq.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/doctor.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/dep_seq.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/kinds/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/meta.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/catalog/scan.rs"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"
