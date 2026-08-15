@@ -1064,13 +1064,14 @@ accepted it explicitly when it chose the full closure over top-level-only.
 
 Three regions, all named rather than discovered later.
 
-**Nominal identity of a `Named` edge.** `sec-8` pin 2 compares an edge against
-its target's key set, which is structural. Two closure types sharing an identical
-key set would stay exchangeable; none do today, so the pin is total over the
-current closure by a property of the closure rather than by construction. The
-escalation — a `payload_struct!` mirroring the enum instrument, binding each
-field to its declared `WireType` at the definition — is recorded in `sec-8` and
-not taken.
+**Nominal identity of a `Named` edge.** `sec-8` pin 2 tells targets apart
+structurally — struct targets by their key sets, enum targets by their token
+sets. Two closure types presenting identically would stay exchangeable; none do
+today (eleven distinct key-name sets, thirteen distinct token sets, and one
+untagged type told apart by shape), so the pin is total over the current closure
+by a property of the closure rather than by construction. The escalation — a
+`payload_struct!` mirroring the enum instrument, binding each field to its
+declared `WireType` at the definition — is recorded in `sec-8` and not taken.
 
 **The injected sub-contract, and only part of it.** `sec-3`'s region is supplied
 by the command tier at render time, so no pin *inside* `design_run` can see its
@@ -1837,9 +1838,9 @@ pattern (`artifact.rs:360-370`) — assert the detector fires on a known-bad inp
 then assert the real input is clean.
 
 **And an input a pin never reaches is a declaration that stops being tested
-without anything failing.** This is the discipline's second half, and it took four review
-rounds to state, because each round repaired the *assertion* and left its *input*
-alone. `Declaration::fully_populated` sets `needs: Sparse::Value(Vec::new())`
+without anything failing.** This is the discipline's second half, and it took
+four review rounds to state, because each round repaired the *assertion* and left
+its *input* alone. `Declaration::fully_populated` sets `needs: Sparse::Value(Vec::new())`
 (`submission.rs:657`), and its doc says the values are arbitrary because `I9`
 observed each key's *presence* alone — true of `I9`, false of this ladder, since
 pin 2 reads element types **through the value**. An empty `Seq` proves "array"
@@ -1864,13 +1865,20 @@ model, and the same no-wildcard match that defines the descent defines what it
 can visit.
 
 The descent records each site as it arrives; the right-hand side is read off the
-table directly, so the two sides derive independently and a broken extraction
-fails the equality rather than passing it. Every way an input can silently stop
-testing is then the same failure — a site never arrived at — including the ways
-not yet thought of. Nothing has to enumerate container kinds, and *fully
-populated* keeps its single obligation: the no-`..` literal. `Declaration`'s
-`Vec::new()` and the doc sentence explaining it change with this, in the one
-place `I9` and this ladder share the literal (`tests.rs:2908`).
+table directly. Every way an input can silently stop testing is then the same
+failure — a site never arrived at — including the ways not yet thought of.
+Nothing has to enumerate container kinds, and *fully populated* keeps its single
+obligation: the no-`..` literal. `Declaration`'s `Vec::new()` and the doc
+sentence explaining it change with this, in the one place `I9` and this ladder
+share the literal (`tests.rs:2908`).
+
+**And being a set-equality, it takes the clause above rather than an argument for
+exemption.** The two sides are meant to derive independently, but an
+implementation that recorded sites from the table instead of from arrival would
+satisfy both at once and pass on any input at all — the one way this pin could
+end up restating its own oracle, and not a thing prose can rule out. So the
+positive control is concrete: empty one fixture's `Seq` and assert the equality
+**fails**, before asserting it holds on the real set.
 
 Pin 3's all-`Null` `Sparse` fixture is deliberately *not* covered by this
 equality — it exists to make containers absent, which is the assertion rather
@@ -1926,15 +1934,26 @@ by construction rather than exception.
 
 ## 2 — Wire types: one walk, no new fixtures
 
-Serialise the same `fully_populated` value and compare each key's JSON kind
-against its declared `WireType`: string against `Text` / `Id` / `Token`, number
-against `Integer`, bool against `Boolean`, array against `Seq`, object against
-`Named` / `Map`.
+At the leaves this is a kind comparison: serialise the same `fully_populated`
+value and check each JSON kind against its declared `WireType` — string against
+`Text` / `Id` / `Token`, number against `Integer`, bool against `Boolean`, array
+against `Seq`, object against `Named` / `Map`.
 
-**The walk is a recursive descent over the whole value, defined by exhaustive
-match on the model rather than by a list of the cases anyone has noticed.** It
-holds a JSON value and the declaration that describes it, and descends by the
-shape of the *declaration*:
+**A JSON kind alone is too coarse for two of the eight `WireType`s, and an
+earlier draft stopped there.** It conceded that `Text`, `Id` and `Token` are all
+strings and pointed at the fixture's `DesignId::parse` and at pin 4 — but parsing
+the fixture's *value* as a `DesignId` says the value is an id, not that the row
+chose `Id` over `Text`, nor that the `IdKind` slice it advertises is the set the
+engine actually admits. And every `Named` target serialises as an object, so
+swapping `ApplyRequest.traversal` and `stage` between `TraversalDeclaration` and
+`StageDeclaration` (`submission.rs:926-932`) leaves the JSON kinds identical, pin
+1's key sets identical, and pin 9's names resolving and reachable. A materially
+false machine-readable contract stayed green under all of them.
+
+So the walk is not a pass over top-level keys against a kind table. **It is a
+recursive descent, defined by exhaustive match on the model rather than by a list
+of the cases anyone has noticed.** It holds a JSON value and the declaration that
+describes it, and descends by the shape of the *declaration*:
 
 | declaration | descent |
 |---|---|
@@ -1957,64 +1976,55 @@ being checked. That is what makes this total over `sec-2`'s model by constructio
 the property four review rounds of case-by-case repair could not reach, each
 having closed the case it was shown and left the model's other arms open.
 
-Three consequences worth naming, because each was a live false green:
-`declare`'s `Seq(Named(Declaration))` said only "array" until the walk descended
-into elements; `Declaration.provenance`'s `Named(Provenance)` had no defined
-check at all, since the stated rule compared an edge against its target's *keys*
-and an enum target has variants instead; and `WireFacetValue::List(vec![])`
-satisfied `Shape(Seq(Integer))` as readily as `Shape(Seq(Text))`. Variant
-selection is **read from pin 4's table rather than restated**, so the tagging
-claim has exactly one statement in this design. Under `Untagged` there is no
-token to select by, so the walk asserts the value matches **exactly one**
-declared `Shape` — which is also the well-formedness the untagged model needs.
+Three of its rows were live false greens under the earlier statement: `declare`'s
+`Seq(Named(Declaration))` said only "array" until the descent reached elements;
+`Declaration.provenance`'s `Named(Provenance)` had no defined check **at all**,
+because the rule compared an edge against its target's *keys* and an enum target
+has variants instead; and `WireFacetValue::List(vec![])` satisfied
+`Shape(Seq(Integer))` as readily as `Shape(Seq(Text))`. The `traversal`/`stage`
+swap fails at the `Named`/`Struct` row, because `TraversalDeclaration`'s four keys
+are not `StageDeclaration`'s two — pin 1's assertion applied at the edge rather
+than at the type, costing a call and no new fixture.
 
-A `Map` row is now two claims rather than one, because `sec-2` gave the key a
+**Variant selection is read from pin 4's table rather than restated**, so the
+tagging claim has exactly one statement in this design. Under `Untagged` there is
+no token to select by, so the descent asserts the value matches **exactly one**
+declared `Shape`, which is also the well-formedness the untagged model needs.
+
+**It is a structural check, not a nominal one, and the difference is the
+residue.** Two closure types that present identically stay exchangeable under it,
+and what tells them apart differs by form:
+
+- **struct targets**, by their key sets — the eleven contract-bearing structs
+  have eleven distinct key-name sets;
+- **enum targets**, by their token sets — the thirteen tokened enums have
+  thirteen distinct ones, and the fourteenth, `WireFacetValue`, is untagged and
+  told apart by shape.
+
+Neither collides today, so the pin is total over the current closure — but by a
+property of the closure rather than by construction, and a future type mirroring
+another's keys or tokens would reopen it. Closing it properly means a
+`payload_struct!` mirroring `sec-4`'s enum instrument, binding each field to its
+declared `WireType` at the definition so the row is compile-pinned. That is real
+machinery for a hazard that is currently theoretical, so it is recorded here as
+the escalation and not taken.
+
+**`Id` rows are checked against `IdKind::declarable`** (`ids.rs:70-90`) where the
+engine's admissible set is already computed, rather than against a slice the
+table asserts about itself. `declare` admits five of the eight and
+`AdoptAuthored.sections` admits `sec-` alone (`sec-2`), and those are the two
+claims worth failing on.
+
+A `Map` row is two claims rather than one, because `sec-2` gave the key a
 description: the object's **values** match the declared value type, and its
 **keys** match `MapKey`. Under `MapKey::Of(Id)` — `AdoptAuthored.sections` — every
 key parses as a `DesignId`. Under `MapKey::Extern` the keys are checked by pin 5,
-not here, because the fixture cannot know which kind was selected.
+not here, because the fixture cannot know which kind was selected. `Token` stays
+pin 4's, which reads the tagging and payload together.
 
 Catches the commonest table defect — a row whose `ty` was copied from the row
-above it.
-
-**A JSON kind alone is too coarse for two of the eight `WireType`s, and an
-earlier draft stopped there.** It conceded that `Text`, `Id` and `Token` are all
-strings and pointed at the fixture's `DesignId::parse` and at pin 4 — but parsing
-the fixture's *value* as a `DesignId` says the value is an id, not that the row
-chose `Id` over `Text`, nor that the `IdKind` slice it advertises is the set the
-engine actually admits. And every `Named` target serialises as an object, so
-swapping `ApplyRequest.traversal` and `stage` between `TraversalDeclaration` and
-`StageDeclaration` (`submission.rs:926-932`) leaves the JSON kinds identical, pin
-1's key sets identical, and pin 9's names resolving and reachable. A materially
-false machine-readable contract stayed green under all of them.
-
-Two additions close it, both riding oracles already in the tree.
-
-- **A `Named` edge is checked against the target's key set**, not merely against
-  the name table: the walk recurses into the object and compares its keys with
-  the target `TypeContract`'s rows. The `traversal`/`stage` swap then fails,
-  because `TraversalDeclaration`'s four keys are not `StageDeclaration`'s two.
-  This is pin 1's assertion applied at the edge rather than at the type, so it
-  costs a call and no new fixture.
-
-  **It is a structural check, not a nominal one, and the difference is the
-  residue.** Two closure types with *identical* key sets would remain
-  exchangeable under it. None are today — the eleven contract-bearing structs
-  have eleven distinct key-name sets — so the pin is total over the current
-  closure, but it is total by a property of the closure rather than by
-  construction, and a future type that happens to mirror another's keys would
-  reopen it. Closing it properly means a `payload_struct!` mirroring `sec-4`'s
-  enum instrument, binding each field to its declared `WireType` at the
-  definition so the row is compile-pinned. That is real machinery for a hazard
-  that is currently theoretical, so it is recorded here as the escalation and not
-  taken.
-- **`Id` rows are checked against `IdKind::declarable`** (`ids.rs:70-90`) where
-  the engine's admissible set is already computed, rather than against a slice
-  the table asserts about itself. `declare` admits five of the eight and
-  `AdoptAuthored.sections` admits `sec-` alone (`sec-2`), and those are the two
-  claims worth failing on.
-
-`Token` stays pin 4's, which reads the tagging and payload together.
+above it — and, now that the descent reaches them, the same defect anywhere below
+the root.
 
 ## 3 — Presence: the all-null fixture
 
