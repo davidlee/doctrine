@@ -113,7 +113,7 @@ integration is in the sections themselves. Ids only — the run holds the text.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-15 · design/reviewing (run rev 67) · e5c868ea0
+fresh-as-of: 2026-08-15 · design/reviewing (run rev 72) · 9b4cb418e
 
 ### Produced
 
@@ -164,13 +164,22 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 67) · e5c868ea0
   the missing row is not a signal and the disclosure has to ride the contract
   rather than the response); `sec-6` records that `DEC-225`'s parse site is clean.
   Neither is a scope change.
-- **`RV-357` conducted — external adversarial pass, two rounds, 14 findings, all
-  dispositioned.** Round 1 raised `F-1`..`F-12` (integrated at rev 66); round 2
-  verified eight, contested `F-3` `F-5` `F-6` `F-12` and raised `F-13` `F-14`
-  (integrated at rev 67). Every finding was checked against source before
-  disposition; none was confabulated, and every round-2 point was a defect in the
-  round-1 *integration* rather than in the reviewed design. Ids only; the ledger
-  holds the text and the responses.
+- **`RV-357` concluded — external adversarial pass, five rounds, 14 findings, all
+  verified (`done · await=none`).** Round 1 raised `F-1`..`F-12` (rev 66); round 2
+  verified eight, contested four and raised `F-13` `F-14` (rev 67); round 3
+  verified five and contested `F-6` (rev 68); rounds 4 and 5 contested `F-6` again
+  (revs 69, 70). Every finding was checked against source before disposition; none
+  was confabulated, and every point after round 1 was a defect in the *integration*
+  rather than in the reviewed design. Ids only; the ledger holds the text.
+  - **`F-6` alone took five rounds and four repairs**, each closing the case it
+    was shown: the assertion's direction, then its domain, then empty containers,
+    then an untagged `Shape` no key led to. Reworked at rev 71 as a class fix and
+    reconciled at rev 72 — see Learned.
+- Revs 68–72 landed on `sec-4` `sec-7` `sec-8` `sec-9`; `sec-1`..`sec-3`, `sec-5`,
+  `sec-6` untouched since rev 67.
+- `mem.pattern.review.general-rule-must-absorb-what-it-subsumes`
+  (`mem_01a004d882d37b31b9cb2b67307db698`) — the generalise-then-sweep pattern,
+  recorded from `F-6`.
   - `F-1` deleted `UnknownKeys::StoredThenFlagged` — the design had the facet
     write seam backwards. `sec-8` gained pin 10 (`F-4`, no repo-private id in
     shipped output) and lost pin 7's drift role (`F-3`, the pointer is
@@ -249,18 +258,32 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 67) · e5c868ea0
   `Named` edge against its target's keys catches every swap the current closure
   can express — the eleven contract-bearing structs have eleven distinct
   key-name sets — but it is total by a property of the closure, not by
-  construction (`RV-357` `F-5`).
+  construction (`RV-357` `F-5`). Extended at rev 72: an enum target is told apart
+  by its **token** set instead, and the thirteen tokened enums have thirteen
+  distinct ones; `WireFacetValue` is untagged and told apart by shape.
+- **A repair written as a *case* buys one round.** `F-6`'s four repairs were each
+  correct about what they were shown and each reopened somewhere else, because
+  each named the places a property currently appears rather than where the model
+  *declares* it. What ended it was a change of instrument — an exhaustive match on
+  `sec-2`'s model with no wildcard arm, plus one coverage equality — and the
+  self-check that found the largest hole (`Named` edges to **enum** targets had no
+  defined check at all) came from reading the repair against the model's own
+  enumerations, not from a sixth review round. Full pattern, including the
+  follow-on sweep a generalisation owes the text it subsumes:
+  [[mem.pattern.review.general-rule-must-absorb-what-it-subsumes]].
 - **The run's revision moves when review findings land**, not only when a payload
   is applied: `RV-357`'s twelve raises took the run 64 → 65 with `changes: none
   since revision 64` and a new `review_outstanding` line. An `adopt_authored`
   built against the pre-review revision is refused as a conflict; re-read and
   resubmit.
 - **Adopting hand-edited design prose, last section included**: the whole-file
-  `sha256` is the run's watermark, and each section's fingerprint is the
-  `sha256` of the bytes between its marker and the next, less exactly one
-  trailing newline. For the final section that means dropping the file's own
-  trailing newline — the uniform rule reproduces all nine (positive-controlled
-  against the unchanged `sec-1`).
+  `sha256` is the run's watermark, and each section's fingerprint is the `sha256`
+  of the bytes **after its marker line** — not from the marker itself — up to the
+  next marker, less exactly one trailing newline. For the final section that means
+  dropping the file's own trailing newline. Positive-control the recipe against an
+  **unchanged** section every time before submitting: the marker-inclusive reading
+  of this same sentence reproduces nothing, and it cost a round trip to notice.
+  No verb reports the observed digests — captured as a friction observation.
 - **`design_run` const tables tolerate a `Named` graph over drop-glue types** —
   compiled as a probe rather than assumed, when the `Cow` question was live.
 - **`ISS-361`'s reported mechanism is not at the parse site** — verified against
@@ -271,25 +294,24 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 67) · e5c868ea0
   `submission_id` meeting `Refusal::SubmissionReplayed` (`run.rs:222-226`). The
   residual defect — that refusal naming no remedy — is `IMP-390`'s fourth
   candidate and a Non-Goal here. `DEC-225` inherits no bug.
-- **Adopting hand-edited design prose**: `sha256` of the text between marker
-  lines, less the trailing newline, reproduces a section's stored fingerprint
-  (validated with a positive control against an unchanged section). No verb
-  reports the observed digests — captured as a friction observation.
 
 ### Open
 
 
 - **Two obligations open, both the user's** — section attestations (all nine
   outstanding; human review is the v1 default per `reviewing.md`) and the review
-  pass disposition. Every section but `sec-1` has been revised at rev 52–67, so
-  nothing carried over from before is reusable. `sec-1` alone has been untouched
-  since rev 52 and is still outstanding for that earlier reason.
-- **`RV-357` is now conductable but not yet terminal** — 14 findings, all
-  dispositioned, `await=raiser`. Round 2's verifications stand; the four contests
-  and two new findings were re-dispositioned at rev 67 and have **not** been
-  re-verified. A third raiser round closes them, after which the pass can honestly
-  be named *conducted* rather than waived. The codex thread carrying rounds 1 and
-  2 is `01a0048a-b948-7bf1-9ee6-f5d3fbc93fa1`.
+  pass disposition, which `RV-357`'s terminal ledger now makes nameable as
+  *conducted* rather than waived (but read the rev 71–72 caveat below first).
+  Every section but `sec-1` has been revised at rev 52–72, so nothing carried over
+  from before is reusable. `sec-1` alone has been untouched since rev 52 and is
+  still outstanding for that earlier reason.
+- **Revs 71–72 post-date the review pass.** `RV-357` is terminal (14/14 verified),
+  but `F-6` was verified against **rev 70**; the class rework and its
+  reconciliation landed after. The run reports this itself as
+  `review_pass STALE`. The rework is self-checked against `sec-2`'s enumerations
+  and no reviewer has seen it — weigh before disposing the pass as *conducted*.
+  The codex thread carrying all five rounds is
+  `01a0048a-b948-7bf1-9ee6-f5d3fbc93fa1`.
 - **`sec-8` pin 1's premise is still unexercised** — whether
   `assert_keys_described` can stay one generic body across eleven types with
   different `Serialize` shapes is argued, not proven, and it now also carries the
@@ -300,12 +322,13 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 67) · e5c868ea0
   it** (`knowledge.rs:60-68` vs `159-169`; the incumbent test iterates `ALL`, so
   it is green over a stale one). Out of scope here — `sec-3` states the barrier at
   its real strength and `sec-8` pin 5 takes its oracle from an exhaustive match
-  instead. Deriving `ALL` from the enum is the knowledge tier's repair and wants a
+  instead. Deriving `ALL` from the enum is the knowledge tier's repair, captured as
   `ISS-364`.
 - **The nominal-identity residue on `Named` edges** — `sec-8` pin 2 is structural,
-  total over today's closure only because no two structs share a key-name set. The
-  recorded escalation is a `payload_struct!` mirroring `sec-4`'s enum instrument;
-  not taken.
+  total over today's closure only because no two targets present identically
+  (eleven distinct key-name sets, thirteen distinct token sets, one untagged type
+  told apart by shape). The recorded escalation is a `payload_struct!` mirroring
+  `sec-4`'s enum instrument; not taken.
 - **`ISS-362` is now load-bearing on `sec-3`** — the design states the bound and
   defers the repair. If `ISS-362` lands a payload-act-to-stage guard as data, the
   stage column becomes derivable and `sec-3`'s subsection should be revisited.
