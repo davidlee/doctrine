@@ -53,6 +53,17 @@ reading (2) is untested until the map is put in front of an agent, and building
 under reading (1) before that is answering `RFC-026`'s meaning-tier gap with more
 machinery instead of more use.
 
+**A second confound landed with the 2026-08-15 friction sweep.** `ISS-360` — batch
+declare refuses an in-batch parent chain two levels deep — means the natural way to
+author a tree (declare it top-down in one submission) is **mechanically refused**.
+The workaround is one submission per level, costing a revision each, and it is not
+discoverable. So E8.3's zero-edge measurement is not clean evidence of disuse: at
+least part of it is an obstacle in front of the feature rather than indifference to
+it. Reading (2) — *under-surfaced* — now has two distinct mechanisms behind it
+(`ISS-299` nothing points at the map; `ISS-360` the map resists being built), and
+both must clear before a re-measurement means anything. `CHR-065` carries that
+re-measurement.
+
 ## What turns on it
 
 `IMP-386`, `IMP-387`, `IMP-388` and `IMP-389` all carry `needs QUE-218`. They are
