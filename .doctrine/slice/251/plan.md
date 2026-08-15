@@ -224,6 +224,41 @@ because the barrier is unavailable rather than merely inconvenient, and `EX-9`
 records the difference instead of hiding it. `/reconcile` owes `sec-4` the
 correction, alongside the three it already owes.
 
+## PHASE-02 execution, 2026-08-15 — two criteria appended, one VT retired
+
+**The closure has no attestation side.** `sec-7`'s touch table and `sec-8` pin 1
+both allocate fixtures to `attestation.rs`, and `PHASE-02/EX-5` and `VT-2`
+inherited that. It is wrong: all twelve closure structs are defined in
+`submission.rs` — `CheckpointActDeclaration` at 825 and `AgentActDeclaration` at
+855, the two the design names as attestation-side — and `attestation.rs`
+contributes enums plus `ReviewRef` and nothing else. The design contradicts
+itself one section apart, since `sec-3` already says "`submission.rs` (every wire
+struct)" at design.md:600-601.
+
+`VT-2` is therefore not merely hard, it is **void on contact**: its `test_file`
+is a file no closure struct lives in and its own keyword,
+`CheckpointActDeclaration`, names a `submission.rs` type. The only way to make it
+green would be to site a fixture away from its type, which is the opposite of
+what it asks for. So it is retired — the id is spent — and `VT-4` carries the
+obligation it was really after (a fixture sits beside its type, where a new field
+is a compile error in the reader's line of sight) at the file where the types
+are. `EX-10` records the whole disposition; `/reconcile` owes the design the
+correction.
+
+**Two criteria would have shipped a false row if read literally.** `EX-3`'s
+"Presence is Sparse exactly on the Sparse<T> fields, Optional on Option,
+Required otherwise" reads presence off the Rust *spelling*. Five keys are
+omissible on the wire while being neither — `ApplyRequest.traversal` and
+`.declare`, `AdoptAuthored.sections`, `CreateRecord.facet`, and
+`DelegationAct::Propose.declare` all carry `#[serde(default)]` — so a literal
+reading calls five omissible keys Required, which is exactly the class of wrong
+answer this contract exists to stop. `render-sample.md` already renders four of
+them optional. And `EX-4`'s five-kind `Id` row is on the wrong key:
+`run.rs:1137-1155` routes on `declaration.subject().kind()`, so the five kinds
+belong to `Declaration.subject`, while `ApplyRequest.declare` is
+`Seq(Named(Declaration))` and carries no id at all. `EX-11` settles both against
+the source.
+
 **What this owes the design.** Three of the nine originate upstream rather than
 in the plan, and `/reconcile` should carry them back: `sec-6`'s *fifth variant*
 is the sixth; `sec-4`'s "pin 4 covers all fourteen uniformly" reads against

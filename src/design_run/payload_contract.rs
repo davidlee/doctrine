@@ -584,6 +584,930 @@ impl ExternContracts {
 }
 
 // ---------------------------------------------------------------------------
+// The closure, described (sec-3)
+// ---------------------------------------------------------------------------
+//
+// `sec-3` bounds the closure at **twelve struct types** and fourteen enums, and
+// every one of the twelve structs is declared in [`super::submission`].
+//
+// Eleven of the twelve carry a [`TypeContract`] of their own below —
+// [`PAYLOAD`] itself being `ApplyRequest`'s. `SubmissionEnvelope` carries none,
+// and that is not an omission: `#[serde(flatten)]` renders its three keys at the
+// root, so it participates through `PAYLOAD`'s composition and has no key
+// surface of its own to describe. Its pin is the disjoint union in the §9.1
+// suite rather than a contract here.
+//
+// That split is also why the `unknown_keys` census reads 3 + 8 below while
+// `sec-2` reads 3 + 9: three closure structs carry `deny_unknown_fields`
+// (`Declaration`, `CheckpointActDeclaration`, `AgentActDeclaration`) and the
+// other **nine** do not, but the ninth of those nine is `SubmissionEnvelope`,
+// which has no contract to state it on. Eight contracts say `SilentlyDropped`;
+// the envelope's keys inherit the root's, which is the same answer.
+//
+// **Every row below is a claim about the wire, and the claims are pinned rather
+// than trusted.** `sec-8` pin 1 holds each struct contract's key set against a
+// fully populated value's serde output and its `name` against the Rust type's
+// own; pin 4 holds the enum vocabularies against serde's renames. A variant's
+// `token` is therefore written here as a literal on purpose — it is the
+// contract's claim, checked against `VARIANTS` and serde, not a second spelling
+// of an authority already in scope. The type names are not written twice at all:
+// the enums take theirs from [`payload_variants!`]'s `TYPE_NAME` (STD-001).
+//
+// **Written out rather than generated**, and the eight all-bare enums are where
+// that costs most visibly. A second macro over them would have to be handed the
+// same token list [`payload_variants!`] is already handed, in the same file —
+// which is duplication introduced in the name of removing it — and `const` has no
+// way to map `VARIANTS` into a `&'static [VariantContract]` without one. So the
+// rows stay explicit, where clippy lints them and a reviewer can read them.
+
+// --- The enums (sec-3): fourteen, each `Tagging` read off `sec-4`'s barrier. --
+
+/// `Stage`, externally tagged with no payload anywhere — a bare string.
+pub(crate) static STAGE: TypeContract = TypeContract {
+    name: Stage::TYPE_NAME,
+    form: TypeForm::Enum {
+        tagging: Tagging::External,
+        variants: &[
+            VariantContract {
+                token: Some("exploring"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("inquiring"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("drafting"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("reviewing"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("locked"),
+                payload: VariantPayload::Absent,
+            },
+        ],
+    },
+};
+
+/// `ActKind` — the eight checkpoint acts, each a bare string.
+pub(crate) static ACT_KIND: TypeContract = TypeContract {
+    name: ActKind::TYPE_NAME,
+    form: TypeForm::Enum {
+        tagging: Tagging::External,
+        variants: &[
+            VariantContract {
+                token: Some("governance-confirmed"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("graph-reviewed"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("blocking-set-declared"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("sufficiency-accepted"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("drafting-ready"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("section-reviewed"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("review-disposed"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("design-accepted"),
+                payload: VariantPayload::Absent,
+            },
+        ],
+    },
+};
+
+/// `ReviewPolicy` — which reviewer lanes a run requires.
+pub(crate) static REVIEW_POLICY: TypeContract = TypeContract {
+    name: ReviewPolicy::TYPE_NAME,
+    form: TypeForm::Enum {
+        tagging: Tagging::External,
+        variants: &[
+            VariantContract {
+                token: Some("human-only"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("adversarial-only"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("human-then-adversarial"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("adversarial-then-human"),
+                payload: VariantPayload::Absent,
+            },
+        ],
+    },
+};
+
+/// `InquiryLifecycle` — a node's non-resolving lifecycle states.
+pub(crate) static INQUIRY_LIFECYCLE: TypeContract = TypeContract {
+    name: InquiryLifecycle::TYPE_NAME,
+    form: TypeForm::Enum {
+        tagging: Tagging::External,
+        variants: &[
+            VariantContract {
+                token: Some("open"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("resolved"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("deferred"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("pruned"),
+                payload: VariantPayload::Absent,
+            },
+        ],
+    },
+};
+
+/// `Reviewer` — who reviewed.
+pub(crate) static REVIEWER: TypeContract = TypeContract {
+    name: Reviewer::TYPE_NAME,
+    form: TypeForm::Enum {
+        tagging: Tagging::External,
+        variants: &[
+            VariantContract {
+                token: Some("human"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("adversarial"),
+                payload: VariantPayload::Absent,
+            },
+        ],
+    },
+};
+
+/// `Posture` — how the map is being walked.
+pub(crate) static POSTURE: TypeContract = TypeContract {
+    name: Posture::TYPE_NAME,
+    form: TypeForm::Enum {
+        tagging: Tagging::External,
+        variants: &[
+            VariantContract {
+                token: Some("breadth"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("depth"),
+                payload: VariantPayload::Absent,
+            },
+        ],
+    },
+};
+
+/// `Authority` — on whose authority a traversal moved.
+pub(crate) static AUTHORITY: TypeContract = TypeContract {
+    name: Authority::TYPE_NAME,
+    form: TypeForm::Enum {
+        tagging: Tagging::External,
+        variants: &[
+            VariantContract {
+                token: Some("agent-proposed"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("user-pinned"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("user-locked"),
+                payload: VariantPayload::Absent,
+            },
+        ],
+    },
+};
+
+/// `DischargeClaim` — what a caller may claim about one runbook step.
+pub(crate) static DISCHARGE_CLAIM: TypeContract = TypeContract {
+    name: DischargeClaim::TYPE_NAME,
+    form: TypeForm::Enum {
+        tagging: Tagging::External,
+        variants: &[
+            VariantContract {
+                token: Some("attested"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("skipped"),
+                payload: VariantPayload::Absent,
+            },
+        ],
+    },
+};
+
+/// `Provenance` — where a node came from, internally tagged so a variant's own
+/// keys sit **beside** the tag rather than under it.
+pub(crate) static PROVENANCE: TypeContract = TypeContract {
+    name: Provenance::TYPE_NAME,
+    form: TypeForm::Enum {
+        tagging: Tagging::Internal("provenance"),
+        variants: &[
+            VariantContract {
+                token: Some("user-directed"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("agent-proposed"),
+                payload: VariantPayload::Absent,
+            },
+            VariantContract {
+                token: Some("shaping-question"),
+                payload: VariantPayload::Keys(&[KeyContract {
+                    key: "record",
+                    ty: WireType::Text,
+                    presence: Presence::Required,
+                }]),
+            },
+            VariantContract {
+                token: Some("imported-prose"),
+                payload: VariantPayload::Keys(&[
+                    KeyContract {
+                        key: "section",
+                        ty: WireType::Id(&[IdKind::Section]),
+                        presence: Presence::Required,
+                    },
+                    KeyContract {
+                        key: "line",
+                        ty: WireType::Integer,
+                        presence: Presence::Required,
+                    },
+                    KeyContract {
+                        key: "label",
+                        ty: WireType::Text,
+                        presence: Presence::Required,
+                    },
+                    KeyContract {
+                        key: "fingerprint",
+                        ty: WireType::Text,
+                        presence: Presence::Required,
+                    },
+                ]),
+            },
+        ],
+    },
+};
+
+/// `ReviewDisposition` — externally tagged, so each variant's keys arrive nested
+/// under its token.
+pub(crate) static REVIEW_DISPOSITION: TypeContract = TypeContract {
+    name: ReviewDisposition::TYPE_NAME,
+    form: TypeForm::Enum {
+        tagging: Tagging::External,
+        variants: &[
+            VariantContract {
+                token: Some("conducted"),
+                payload: VariantPayload::Keys(&[KeyContract {
+                    key: "review",
+                    ty: WireType::Text,
+                    presence: Presence::Required,
+                }]),
+            },
+            VariantContract {
+                token: Some("waived"),
+                payload: VariantPayload::Keys(&[KeyContract {
+                    key: "reason",
+                    ty: WireType::Text,
+                    presence: Presence::Required,
+                }]),
+            },
+        ],
+    },
+};
+
+/// `AgentAct` — the live **mixed** case: externally tagged, one variant nesting
+/// under its token and the other a bare string. The asymmetry is per-variant,
+/// which is why it is read off `payload` rather than off `tagging`.
+pub(crate) static AGENT_ACT: TypeContract = TypeContract {
+    name: AgentAct::TYPE_NAME,
+    form: TypeForm::Enum {
+        tagging: Tagging::External,
+        variants: &[
+            VariantContract {
+                token: Some("blocking-set-declared"),
+                payload: VariantPayload::Keys(&[KeyContract {
+                    key: "blocking",
+                    ty: WireType::Seq(&WireType::Id(&[IdKind::Inquiry])),
+                    presence: Presence::Required,
+                }]),
+            },
+            VariantContract {
+                token: Some("drafting-ready"),
+                payload: VariantPayload::Absent,
+            },
+        ],
+    },
+};
+
+/// `DelegationAct` — internally tagged on `act`, so each variant's keys sit
+/// beside the tag. `propose`'s `declare` is `#[serde(default)]` and therefore
+/// omissible (`PHASE-02/EX-11`).
+pub(crate) static DELEGATION_ACT: TypeContract = TypeContract {
+    name: DelegationAct::TYPE_NAME,
+    form: TypeForm::Enum {
+        tagging: Tagging::Internal("act"),
+        variants: &[
+            VariantContract {
+                token: Some("export"),
+                payload: VariantPayload::Keys(&[
+                    KeyContract {
+                        key: "id",
+                        ty: WireType::Id(&[IdKind::Delegation]),
+                        presence: Presence::Required,
+                    },
+                    KeyContract {
+                        key: "obligation",
+                        ty: WireType::Id(&[IdKind::Inquiry]),
+                        presence: Presence::Required,
+                    },
+                ]),
+            },
+            VariantContract {
+                token: Some("propose"),
+                payload: VariantPayload::Keys(&[
+                    KeyContract {
+                        key: "id",
+                        ty: WireType::Id(&[IdKind::Delegation]),
+                        presence: Presence::Required,
+                    },
+                    KeyContract {
+                        key: "by",
+                        ty: WireType::Text,
+                        presence: Presence::Required,
+                    },
+                    KeyContract {
+                        key: "summary",
+                        ty: WireType::Text,
+                        presence: Presence::Required,
+                    },
+                    KeyContract {
+                        key: "declare",
+                        ty: WireType::Seq(&WireType::Named(&DECLARATION)),
+                        presence: Presence::Optional,
+                    },
+                ]),
+            },
+            VariantContract {
+                token: Some("accept"),
+                payload: VariantPayload::Keys(&[KeyContract {
+                    key: "id",
+                    ty: WireType::Id(&[IdKind::Delegation]),
+                    presence: Presence::Required,
+                }]),
+            },
+            VariantContract {
+                token: Some("refuse"),
+                payload: VariantPayload::Keys(&[
+                    KeyContract {
+                        key: "id",
+                        ty: WireType::Id(&[IdKind::Delegation]),
+                        presence: Presence::Required,
+                    },
+                    KeyContract {
+                        key: "reason",
+                        ty: WireType::Text,
+                        presence: Presence::Required,
+                    },
+                ]),
+            },
+        ],
+    },
+};
+
+/// `Dispose` — internally tagged on `form`. `create` **inlines** `CreateRecord`
+/// by name rather than re-listing its keys, which is what lets a rendering say
+/// which type arrived.
+pub(crate) static DISPOSE: TypeContract = TypeContract {
+    name: Dispose::TYPE_NAME,
+    form: TypeForm::Enum {
+        tagging: Tagging::Internal("form"),
+        variants: &[
+            VariantContract {
+                token: Some("create"),
+                payload: VariantPayload::Inlines(&CREATE_RECORD),
+            },
+            VariantContract {
+                token: Some("adopt"),
+                payload: VariantPayload::Keys(&[KeyContract {
+                    key: "record",
+                    ty: WireType::Text,
+                    presence: Presence::Required,
+                }]),
+            },
+            VariantContract {
+                token: Some("unresolved"),
+                payload: VariantPayload::Keys(&[KeyContract {
+                    key: "note",
+                    ty: WireType::Text,
+                    presence: Presence::Required,
+                }]),
+            },
+            VariantContract {
+                token: Some("non-durable"),
+                payload: VariantPayload::Keys(&[KeyContract {
+                    key: "note",
+                    ty: WireType::Text,
+                    presence: Presence::Required,
+                }]),
+            },
+        ],
+    },
+};
+
+/// `WireFacetValue` — untagged, so each variant is a *shape* and carries no
+/// token at all.
+pub(crate) static WIRE_FACET_VALUE: TypeContract = TypeContract {
+    name: WireFacetValue::TYPE_NAME,
+    form: TypeForm::Enum {
+        tagging: Tagging::Untagged,
+        variants: &[
+            VariantContract {
+                token: None,
+                payload: VariantPayload::Shape(&WireType::Seq(&WireType::Text)),
+            },
+            VariantContract {
+                token: None,
+                payload: VariantPayload::Shape(&WireType::Text),
+            },
+        ],
+    },
+};
+
+// --- The structs (sec-3): eleven contracts, leaves first. --------------------
+
+/// `AcceptanceDeclaration` — the user-acceptance half a caller may supply.
+pub(crate) static ACCEPTANCE_DECLARATION: TypeContract = TypeContract {
+    name: "AcceptanceDeclaration",
+    form: TypeForm::Struct {
+        unknown_keys: UnknownKeys::SilentlyDropped,
+        keys: &[
+            KeyContract {
+                key: "basis",
+                ty: WireType::Text,
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "turn",
+                ty: WireType::Text,
+                presence: Presence::Optional,
+            },
+        ],
+    },
+};
+
+/// `StageDeclaration` — a declared stage move.
+pub(crate) static STAGE_DECLARATION: TypeContract = TypeContract {
+    name: "StageDeclaration",
+    form: TypeForm::Struct {
+        unknown_keys: UnknownKeys::SilentlyDropped,
+        keys: &[
+            KeyContract {
+                key: "to",
+                ty: WireType::Named(&STAGE),
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "reason",
+                ty: WireType::Text,
+                presence: Presence::Optional,
+            },
+        ],
+    },
+};
+
+/// `DischargeDeclaration` — one runbook discharge.
+///
+/// `outcome` is `Named(&DISCHARGE_CLAIM)` and not a `Token`: a Rust enum a
+/// refusal can name is a named type, and the exemplar's `Token(Fixed(…))` row
+/// exists to reach that arm of the model, not to describe this key.
+pub(crate) static DISCHARGE_DECLARATION: TypeContract = TypeContract {
+    name: "DischargeDeclaration",
+    form: TypeForm::Struct {
+        unknown_keys: UnknownKeys::SilentlyDropped,
+        keys: &[
+            KeyContract {
+                key: "step",
+                ty: WireType::Text,
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "outcome",
+                ty: WireType::Named(&DISCHARGE_CLAIM),
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "reason",
+                ty: WireType::Text,
+                presence: Presence::Optional,
+            },
+        ],
+    },
+};
+
+/// `AdoptAuthored` — the sole lawful crossing of an authored-watermark
+/// divergence.
+///
+/// `sections` is `EX-4`'s second row: a map keyed by **section id alone**, which
+/// "map of text" would have lost. It is `#[serde(default)]` and so omissible
+/// (`PHASE-02/EX-11`).
+pub(crate) static ADOPT_AUTHORED: TypeContract = TypeContract {
+    name: "AdoptAuthored",
+    form: TypeForm::Struct {
+        unknown_keys: UnknownKeys::SilentlyDropped,
+        keys: &[
+            KeyContract {
+                key: "fingerprint",
+                ty: WireType::Text,
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "sections",
+                ty: WireType::Map {
+                    key: MapKey::Of(&WireType::Id(&[IdKind::Section])),
+                    value: &WireType::Text,
+                },
+                presence: Presence::Optional,
+            },
+        ],
+    },
+};
+
+/// `TraversalDeclaration` — the two `Sparse<T>` keys of the closure's second
+/// sparse-bearing struct: omitting `pin` persists it, `null` clears it.
+pub(crate) static TRAVERSAL_DECLARATION: TypeContract = TypeContract {
+    name: "TraversalDeclaration",
+    form: TypeForm::Struct {
+        unknown_keys: UnknownKeys::SilentlyDropped,
+        keys: &[
+            KeyContract {
+                key: "pin",
+                ty: WireType::Id(&[IdKind::Inquiry]),
+                presence: Presence::Sparse,
+            },
+            KeyContract {
+                key: "cursor",
+                ty: WireType::Id(&[IdKind::Inquiry]),
+                presence: Presence::Sparse,
+            },
+            KeyContract {
+                key: "posture",
+                ty: WireType::Named(&POSTURE),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "authority",
+                ty: WireType::Named(&AUTHORITY),
+                presence: Presence::Optional,
+            },
+        ],
+    },
+};
+
+/// `CreateRecord` — what a `create` disposition asks Doctrine to materialise,
+/// and the closure's **one externally-sourced region** (`sec-3`, `EX-9`).
+///
+/// `kind` is a `Token` drawn from `knowledge::RecordKind`, and `facet` a `Map`
+/// whose admissible keys are chosen by the value of the sibling `kind`. Neither
+/// is a `Named` edge, and the difference is not cosmetic: there is no Rust type
+/// a refusal could cite for either, so a `Named` pointing at an invented type
+/// would state something false about the wire. The vocabulary itself arrives
+/// through [`ExternRegion`], never by import — this file is ADR-001 leaf tier.
+pub(crate) static CREATE_RECORD: TypeContract = TypeContract {
+    name: "CreateRecord",
+    form: TypeForm::Struct {
+        unknown_keys: UnknownKeys::SilentlyDropped,
+        keys: &[
+            KeyContract {
+                key: "kind",
+                ty: WireType::Token(TokenSource::Extern(ExternRegion::KnowledgeRecord)),
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "title",
+                ty: WireType::Text,
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "slug",
+                ty: WireType::Text,
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "body",
+                ty: WireType::Text,
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "facet",
+                ty: WireType::Map {
+                    key: MapKey::Extern {
+                        region: ExternRegion::KnowledgeRecord,
+                        selector: "kind",
+                    },
+                    value: &WireType::Named(&WIRE_FACET_VALUE),
+                },
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "acceptance",
+                ty: WireType::Named(&ACCEPTANCE_DECLARATION),
+                presence: Presence::Optional,
+            },
+        ],
+    },
+};
+
+/// `ReviewPolicyDeclaration` — a change to the run's review policy.
+///
+/// `acceptance` is **required** here and optional everywhere else it appears:
+/// the policy is mutable on purpose, and what the design buys is visibility
+/// rather than prohibition.
+pub(crate) static REVIEW_POLICY_DECLARATION: TypeContract = TypeContract {
+    name: "ReviewPolicyDeclaration",
+    form: TypeForm::Struct {
+        unknown_keys: UnknownKeys::SilentlyDropped,
+        keys: &[
+            KeyContract {
+                key: "policy",
+                ty: WireType::Named(&REVIEW_POLICY),
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "acceptance",
+                ty: WireType::Named(&ACCEPTANCE_DECLARATION),
+                presence: Presence::Required,
+            },
+        ],
+    },
+};
+
+/// `CheckpointActDeclaration` — a user act at a checkpoint. One of the three
+/// closure structs carrying `deny_unknown_fields`, so a misspelt key is a
+/// refusal rather than a key serde swallows.
+pub(crate) static CHECKPOINT_ACT_DECLARATION: TypeContract = TypeContract {
+    name: "CheckpointActDeclaration",
+    form: TypeForm::Struct {
+        unknown_keys: UnknownKeys::Refused,
+        keys: &[
+            KeyContract {
+                key: "act",
+                ty: WireType::Named(&ACT_KIND),
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "acceptance",
+                ty: WireType::Named(&ACCEPTANCE_DECLARATION),
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "disposition",
+                ty: WireType::Named(&REVIEW_DISPOSITION),
+                presence: Presence::Optional,
+            },
+        ],
+    },
+};
+
+/// `AgentActDeclaration` — an agent's declaration about its own work. The second
+/// of the three structs that refuse unknown keys.
+pub(crate) static AGENT_ACT_DECLARATION: TypeContract = TypeContract {
+    name: "AgentActDeclaration",
+    form: TypeForm::Struct {
+        unknown_keys: UnknownKeys::Refused,
+        keys: &[
+            KeyContract {
+                key: "act",
+                ty: WireType::Named(&AGENT_ACT),
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "basis",
+                ty: WireType::Text,
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "turn",
+                ty: WireType::Text,
+                presence: Presence::Optional,
+            },
+        ],
+    },
+};
+
+/// `Declaration` — the flat per-subject struct, and the third that refuses
+/// unknown keys.
+///
+/// `subject` carries `EX-4`'s five-kind row: `super::run::declare` routes on the
+/// subject's **kind** and admits `inq-`, `sec-`, `att-`, `fnd-` and `cp-`,
+/// refusing the other three of `IdKind`'s eight. The set lives here rather than
+/// on `ApplyRequest.declare`, which is a sequence of these and carries no id of
+/// its own (`PHASE-02/EX-11`).
+///
+/// `resolved_record` is **not** a row, and no exception list says so: it carries
+/// `#[serde(skip)]`, which puts it outside the wire by construction (`EX-6`).
+pub(crate) static DECLARATION: TypeContract = TypeContract {
+    name: "Declaration",
+    form: TypeForm::Struct {
+        unknown_keys: UnknownKeys::Refused,
+        keys: &[
+            KeyContract {
+                key: "subject",
+                ty: WireType::Id(&[
+                    IdKind::Inquiry,
+                    IdKind::Section,
+                    IdKind::Attestation,
+                    IdKind::Finding,
+                    IdKind::Checkpoint,
+                ]),
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "question",
+                ty: WireType::Text,
+                presence: Presence::Sparse,
+            },
+            KeyContract {
+                key: "needs",
+                ty: WireType::Seq(&WireType::Id(&[IdKind::Inquiry])),
+                presence: Presence::Sparse,
+            },
+            KeyContract {
+                key: "parent",
+                ty: WireType::Id(&[IdKind::Inquiry]),
+                presence: Presence::Sparse,
+            },
+            KeyContract {
+                key: "provenance",
+                ty: WireType::Named(&PROVENANCE),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "lifecycle",
+                ty: WireType::Named(&INQUIRY_LIFECYCLE),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "body",
+                ty: WireType::Text,
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "attests",
+                ty: WireType::Id(&[IdKind::Section]),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "reviewer",
+                ty: WireType::Named(&REVIEWER),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "concerns",
+                ty: WireType::Id(&[IdKind::Section]),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "summary",
+                ty: WireType::Text,
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "blocking",
+                ty: WireType::Boolean,
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "resolution",
+                ty: WireType::Text,
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "disposes",
+                ty: WireType::Id(&[IdKind::Inquiry]),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "dispose",
+                ty: WireType::Named(&DISPOSE),
+                presence: Presence::Optional,
+            },
+        ],
+    },
+};
+
+/// The root: one `apply` payload, at one level (`EX-1`).
+///
+/// **Thirteen keys.** Three are `SubmissionEnvelope`'s, flattened here — which is
+/// the whole of how that twelfth closure struct participates — and ten are the
+/// act fields, in the order `ApplyRequest` declares them. Ten, not the nine of
+/// [`super::submission::ApplyRequest::WRITER_ACTS`]: that list correctly omits
+/// `delegation`, whose acts are not all writes, and reading the payload's key
+/// count off it would reproduce the omission this contract exists to close.
+///
+/// `unknown_keys` is `SilentlyDropped` and cannot be anything else:
+/// `#[serde(flatten)]` and `deny_unknown_fields` are mutually exclusive, so a
+/// misspelt top-level key is discarded in silence (`ISS-333`).
+pub(crate) const PAYLOAD: TypeContract = TypeContract {
+    name: "ApplyRequest",
+    form: TypeForm::Struct {
+        unknown_keys: UnknownKeys::SilentlyDropped,
+        keys: &[
+            KeyContract {
+                key: "run_uid",
+                ty: WireType::Text,
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "known_revision",
+                ty: WireType::Integer,
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "submission_id",
+                ty: WireType::Text,
+                presence: Presence::Required,
+            },
+            KeyContract {
+                key: "adopt_authored",
+                ty: WireType::Named(&ADOPT_AUTHORED),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "traversal",
+                ty: WireType::Named(&TRAVERSAL_DECLARATION),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "stage",
+                ty: WireType::Named(&STAGE_DECLARATION),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "acceptance",
+                ty: WireType::Named(&ACCEPTANCE_DECLARATION),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "declare",
+                ty: WireType::Seq(&WireType::Named(&DECLARATION)),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "delegation",
+                ty: WireType::Named(&DELEGATION_ACT),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "discharge",
+                ty: WireType::Named(&DISCHARGE_DECLARATION),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "review_policy",
+                ty: WireType::Named(&REVIEW_POLICY_DECLARATION),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "checkpoint_act",
+                ty: WireType::Named(&CHECKPOINT_ACT_DECLARATION),
+                presence: Presence::Optional,
+            },
+            KeyContract {
+                key: "agent_declaration",
+                ty: WireType::Named(&AGENT_ACT_DECLARATION),
+                presence: Presence::Optional,
+            },
+        ],
+    },
+};
+
+// ---------------------------------------------------------------------------
 // Where the contract is published (sec-6)
 // ---------------------------------------------------------------------------
 

@@ -13,6 +13,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::Serialize;
+
 use super::Stage;
 use super::admission::admit_act;
 use super::attestation::{
@@ -34,13 +36,20 @@ use super::ids::{DesignId, Fingerprint, IdKind};
 use super::inquiry::{
     Disposition, InquiryLifecycle, InquiryMap, InquiryNode, NodeMaterial, Provenance,
 };
+use super::payload_contract::{
+    ACCEPTANCE_DECLARATION, ADOPT_AUTHORED, AGENT_ACT_DECLARATION, CHECKPOINT_ACT_DECLARATION,
+    CREATE_RECORD, DECLARATION, DISCHARGE_DECLARATION, PAYLOAD, REVIEW_POLICY_DECLARATION,
+    STAGE_DECLARATION, TRAVERSAL_DECLARATION, TypeContract, TypeForm,
+};
 use super::prompt::contract_block;
 use super::refusal::{ActFault, Refusal};
 use super::run::{DerivedInput, ObservedReview, declare, live_reviews};
 use super::runbook::{RunbookKey, RunbookStanding};
 use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup, DesignSnapshot};
 use super::submission::{
-    AgentActDeclaration, Batch, CheckpointActDeclaration, Declaration, Sparse,
+    AcceptanceDeclaration, AdoptAuthored, AgentActDeclaration, ApplyRequest, Batch,
+    CheckpointActDeclaration, CreateRecord, Declaration, DischargeDeclaration,
+    ReviewPolicyDeclaration, Sparse, StageDeclaration, SubmissionEnvelope, TraversalDeclaration,
 };
 
 #[test]
@@ -3228,4 +3237,147 @@ fn subject_state(key: &str) -> SubjectState {
         "lifecycle" => SubjectState::Held,
         _ => SubjectState::Absent,
     }
+}
+
+// ── the payload contract's key-set pin (SL-251 PHASE-02, sec-8 pin 1) ───────
+
+/// One contract-bearing closure struct, checked against a value of its own type.
+///
+/// Two assertions, both off arguments the call site already holds: the
+/// serialised key set equals the contract's rows, and the contract's `name` is
+/// the Rust type's own. Together they close the loop the table would otherwise
+/// leave open — a row naming a key no field emits fails here, and a field that
+/// reaches the wire with no row fails equally.
+///
+/// The oracle is a **serialised** value and never a hand-written key list, on
+/// `I9`'s reasoning: a hand-written list is a third spelling, free to agree with
+/// neither the type nor the table.
+fn assert_keys_described<T: Serialize>(value: &T, contract: &TypeContract) {
+    let TypeForm::Struct { keys, .. } = contract.form else {
+        panic!(
+            "{}: a closure struct is described by a struct form",
+            contract.name
+        );
+    };
+
+    let serialised = serde_json::to_value(value).expect("a closure value serialises");
+    let on_the_wire: BTreeSet<&str> = serialised
+        .as_object()
+        .unwrap_or_else(|| panic!("{}: a wire struct serialises to an object", contract.name))
+        .keys()
+        .map(String::as_str)
+        .collect();
+    let described: BTreeSet<&str> = keys.iter().map(|key| key.key).collect();
+    assert_eq!(on_the_wire, described, "{}", contract.name);
+
+    // The Rust type name a refusal cites (`sec-2`, *Naming*), read off the type
+    // rather than retyped beside it. `type_name` returns a path, and none of
+    // these structs is generic, so its final segment is the whole of the name.
+    let path = std::any::type_name::<T>();
+    let bare = path
+        .rsplit("::")
+        .next()
+        .expect("a type path has a final segment");
+    assert!(!bare.contains('<'), "{path}: no closure struct is generic");
+    assert_eq!(contract.name, bare);
+}
+
+/// `sec-8` pin 1 — every contract-bearing closure struct's rows are exactly the
+/// keys serde writes for it, and each contract names the Rust type a refusal
+/// cites.
+///
+/// **Eleven call sites, and the closure holds twelve struct types.** The twelfth
+/// is `SubmissionEnvelope`, which has no `TypeContract` to pass: `#[serde(flatten)]`
+/// renders its three keys at the root, so it participates through `PAYLOAD`'s
+/// composition and its pin is the disjoint union below.
+#[test]
+fn the_payload_table_describes_every_wire_key_of_the_eleven_contract_bearing_structs() {
+    assert_keys_described(&ApplyRequest::fully_populated(), &PAYLOAD);
+    assert_keys_described(&AdoptAuthored::fully_populated(), &ADOPT_AUTHORED);
+    assert_keys_described(
+        &TraversalDeclaration::fully_populated(),
+        &TRAVERSAL_DECLARATION,
+    );
+    assert_keys_described(&StageDeclaration::fully_populated(), &STAGE_DECLARATION);
+    assert_keys_described(
+        &AcceptanceDeclaration::fully_populated(),
+        &ACCEPTANCE_DECLARATION,
+    );
+    assert_keys_described(&Declaration::fully_populated(id("inq-1")), &DECLARATION);
+    assert_keys_described(&CreateRecord::fully_populated(), &CREATE_RECORD);
+    assert_keys_described(
+        &DischargeDeclaration::fully_populated(),
+        &DISCHARGE_DECLARATION,
+    );
+    assert_keys_described(
+        &ReviewPolicyDeclaration::fully_populated(),
+        &REVIEW_POLICY_DECLARATION,
+    );
+    assert_keys_described(
+        &CheckpointActDeclaration::fully_populated(),
+        &CHECKPOINT_ACT_DECLARATION,
+    );
+    assert_keys_described(
+        &AgentActDeclaration::fully_populated(),
+        &AGENT_ACT_DECLARATION,
+    );
+}
+
+/// The keys `SubmissionEnvelope` contributes to the root through its flatten.
+const ENVELOPE_KEYS: usize = 3;
+/// The act fields `ApplyRequest` declares in its own right.
+///
+/// **Ten, not the nine of `ApplyRequest::WRITER_ACTS`**: that list correctly
+/// omits `delegation`, whose acts are not all writes, and counting the payload's
+/// keys off it would reproduce the omission the contract exists to close.
+const ACT_KEYS: usize = 10;
+
+/// `sec-8` pin 1's twelfth member — `SubmissionEnvelope`, pinned through the
+/// root's composition rather than through a contract of its own.
+///
+/// A **disjoint** union, and the disjointness is the point rather than a
+/// formality: the flatten and the act fields share one key namespace, so an act
+/// field named `run_uid` would not be a thirteenth key, it would silently
+/// replace the envelope's. Asserting the two sides are disjoint and that their
+/// sizes still sum to `PAYLOAD`'s row count is what makes that collision a
+/// failure here instead of a table quietly one row longer than the wire.
+#[test]
+fn the_roots_thirteen_rows_are_the_envelopes_keys_disjointly_united_with_the_ten_acts() {
+    let envelope = serde_json::to_value(SubmissionEnvelope::fully_populated())
+        .expect("an envelope serialises");
+    let envelope_keys: BTreeSet<&str> = envelope
+        .as_object()
+        .expect("an envelope serialises to an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+
+    let root = serde_json::to_value(ApplyRequest::fully_populated()).expect("a payload serialises");
+    let root_keys: BTreeSet<&str> = root
+        .as_object()
+        .expect("a payload serialises to an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+
+    assert!(
+        envelope_keys.is_subset(&root_keys),
+        "the flatten puts the envelope's keys at the root"
+    );
+    let act_keys: BTreeSet<&str> = root_keys.difference(&envelope_keys).copied().collect();
+
+    assert!(
+        envelope_keys.is_disjoint(&act_keys),
+        "no act field shares a key with the flattened envelope"
+    );
+    assert_eq!(envelope_keys.len(), ENVELOPE_KEYS);
+    assert_eq!(act_keys.len(), ACT_KEYS);
+
+    let TypeForm::Struct { keys, .. } = PAYLOAD.form else {
+        panic!("the root is a struct");
+    };
+    let described: BTreeSet<&str> = keys.iter().map(|key| key.key).collect();
+    let united: BTreeSet<&str> = envelope_keys.union(&act_keys).copied().collect();
+    assert_eq!(united, described);
+    assert_eq!(described.len(), ENVELOPE_KEYS + ACT_KEYS);
 }

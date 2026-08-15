@@ -98,6 +98,8 @@ exit_criteria = [
   { id = "EX-7", text = "No wire type's definition or behaviour changes — every addition to submission.rs and attestation.rs is #[cfg(test)], and the existing suites stay green unchanged (behaviour-preservation gate)." },
   { id = "EX-8", text = "`doctrine check gate` is green." },
   { id = "EX-9", text = "The two extern-region rows are wired in the table, not left as plain scalars: `CreateRecord.kind` is Token(TokenSource::Extern(KnowledgeRecord)) and `CreateRecord.facet` is Map { key: MapKey::Extern { region: KnowledgeRecord, selector: \"kind\" }, value: Named(WireFacetValue) } (sec-3). Neither is Named — modelling either as a Named edge to an invented type would state something false about the wire. This is what PHASE-04/EN-2 depends on; EX-1 never carried it." },
+  { id = "EX-10", text = "All twelve closure structs are defined in `src/design_run/submission.rs`; `src/design_run/attestation.rs` holds none of them — `CheckpointActDeclaration` is submission.rs:825 and `AgentActDeclaration` submission.rs:855, and attestation.rs contributes enums plus `ReviewRef` alone. So every `fully_populated` sits beside its type in submission.rs, EX-5's `and src/design_run/attestation.rs` clause is void on contact rather than unmet, and VT-2 is retired for pointing at a file that will legitimately never carry the keyword. VT-4 carries VT-2's real obligation — fixtures sit beside their types — at the file where the types are. Appended at PHASE-02 execution, 2026-08-15; sec-7's touch table and sec-8 pin 1's 'those fixtures live in submission.rs and attestation.rs' are a design correction `/reconcile` owes (design.md:600-601 already says 'submission.rs (every wire struct)' and contradicts them)." },
+  { id = "EX-11", text = "Two readings of EX-3 and EX-4 settled against the source, since both would ship a false row if read literally. (a) Presence: `Optional` covers omissibility, not the `Option<T>` spelling — `ApplyRequest.traversal` (submission.rs:928), `ApplyRequest.declare` (939), `AdoptAuthored.sections` (702), `CreateRecord.facet` (301) and `DelegationAct::Propose.declare` (890) are `#[serde(default)]`-omissible while being neither `Sparse<T>` nor `Option<T>`, so EX-3's 'Required otherwise' would call five omissible keys required. `render-sample.md`:113-165 already renders four of them optional. (b) The five-kind `Id` row sits on `Declaration.subject`, not on `ApplyRequest.declare`: `run.rs:1137-1155` routes on `declaration.subject().kind()`, and `declare` is `Seq(Named(Declaration))` with no id of its own. Appended at PHASE-02 execution, 2026-08-15." },
 ]
 specs        = []
 requirements = []
@@ -109,10 +111,23 @@ test_file = "src/design_run/tests.rs"
 keywords = ["assert_keys_described", "fully_populated", "PAYLOAD"]
 waived = false
 
+# VT-2 retired at PHASE-02 execution (2026-08-15): it mandated attestation-side
+# fixtures in a file that holds no closure struct — all twelve are in
+# submission.rs, and its own keyword `CheckpointActDeclaration` names a
+# submission.rs type (825). It could only ever be met by siting a fixture away
+# from its type, which is the opposite of what it asks for. The id is spent;
+# VT-4 carries the obligation at the right file. See PHASE-02/EX-10.
 [[phase.verification]]
 id = "VT-2"
-expects = "The closure's attestation-side fixtures sit beside their types in attestation.rs — a file that carries no fully_populated today, so the keyword is signal rather than an incumbent."
+expects = "RETIRED — void on contact. See PHASE-02/EX-10 and VT-4."
 test_file = "src/design_run/attestation.rs"
+keywords = ["fully_populated", "CheckpointActDeclaration"]
+waived = true
+
+[[phase.verification]]
+id = "VT-4"
+expects = "VT-2's real obligation, at the file where the types are: each closure struct's `fully_populated` sits beside its own definition in submission.rs rather than being collected in tests.rs, so a new field is a compile error at the fixture, in the reader's line of sight. `CheckpointActDeclaration` is the keyword because it is one of the eleven this phase adds — submission.rs carries exactly one `fully_populated` today (`Declaration`), so the rest are signal rather than incumbents."
+test_file = "src/design_run/submission.rs"
 keywords = ["fully_populated", "CheckpointActDeclaration"]
 waived = false
 
