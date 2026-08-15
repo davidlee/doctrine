@@ -72,9 +72,13 @@ fn vt1_resolve_sealed_twin_is_dropped_and_exposed_user_wins() {
 
     let output = stdout(&out);
 
-    // The sealed framework preamble/core.md text must appear.
+    // The sealed framework preamble/core.md text must appear. Anchor on the
+    // phase-sheet naming convention rather than on the preamble's identity
+    // sentence: this assertion only needs evidence that the sealed FRAMEWORK
+    // body won over the user twin, and role/identity copy legitimately churns
+    // (it did when dispatch-specific framing was pruned from the corpus).
     assert!(
-        output.contains("doctrine dispatch worker"),
+        output.contains("phase-NN.md"),
         "preamble framework snippet missing, got: {output}"
     );
 
