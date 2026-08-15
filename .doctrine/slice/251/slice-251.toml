@@ -1,7 +1,7 @@
 id = 251
 slug = "acts-carry-their-own-payload-contract"
 title = "Acts carry their own payload contract"
-status = "ready"
+status = "started"
 created = "2026-08-09"
 updated = "2026-08-15"
 tags = ["area:cli", "area:design", "cluster:design-run"]

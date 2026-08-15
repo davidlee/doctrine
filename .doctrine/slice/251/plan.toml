@@ -50,6 +50,7 @@ exit_criteria = [
   { id = "EX-6", text = "`PAYLOAD_CONTRACT_POINTER` and `PAYLOAD_CONTRACT_PATH` are declared here, each spelled once (STD-001). Nothing yet reads them." },
   { id = "EX-7", text = "payload_contract.rs imports only from within design_run; .doctrine/adr/001/layering.toml is unchanged." },
   { id = "EX-8", text = "`doctrine check gate` is green." },
+  { id = "EX-9", text = "EX-5's `via`-authority arm is met for the four fieldless authority enums (`Stage`, `ActKind`, `ReviewPolicy`, `InquiryLifecycle`). `Provenance` and `ReviewDisposition` take the naming arm instead — a const `VARIANTS` derived from `label()`/`arm()` is impossible for them, not merely awkward: every variant of both carries a field, so the const initialiser must drop a temporary (E0493) and two of the four cannot be constructed from the leaf at all (`DesignId.raw` and `ReviewRef`'s tuple field are private with non-const constructors). The single source is recovered at test time, not abandoned: VT-1's per-variant walk — total over variants by the exhaustiveness barrier — asserts each named token equals the authority's own `label()`/`arm()` for that variant. Appended at PHASE-01 execution, 2026-08-15; sec-4's 'All six are const fn, so the token array stays a const' is a design correction `/reconcile` owes." },
 ]
 specs        = []
 requirements = []

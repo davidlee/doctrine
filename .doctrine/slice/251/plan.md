@@ -200,6 +200,30 @@ immutable — a later append takes the next number, never these):
 - `PHASE-05/EX-6` — restated a choice `sec-5` explicitly leaves to the
   implementer and calls not load-bearing.
 
+## PHASE-01 execution, 2026-08-15 — one criterion appended
+
+`PHASE-01/EX-9`, appended at execution. `sec-4` concludes "All six are `const
+fn`, so the token array stays a const" and `EX-5` turns that into an obligation
+to consume all six authorities. The `const fn` half is true — all six are, at
+the exact lines `sec-4` cites — but the conclusion does not follow for two of
+them. `Provenance` and `ReviewDisposition` have **no fieldless variant between
+them**: `ShapingQuestion { record: String }`, `ImportedProse { section:
+DesignId, … }`, `Conducted { review: ReviewRef }`, `Waived { reason: String }`.
+Calling `label()`/`arm()` in a const initialiser therefore needs a temporary the
+const evaluator must drop (E0493, confirmed by a compiled repro), and two of
+those four cannot be built from the leaf at all — `DesignId`'s `raw` and
+`ReviewRef`'s tuple field are private with non-`const` constructors.
+
+The repair keeps the single source and moves where it is enforced. Those two
+enums take the naming arm, and `VT-1`'s per-variant walk — which the
+exhaustiveness barrier makes total over variants, so it cannot silently lose a
+case — asserts each named token against the authority's own return for that
+variant. That is a *detector* where the other four get a barrier, which is
+exactly the substitution `sec-4` warns against at line 992; it is taken here
+because the barrier is unavailable rather than merely inconvenient, and `EX-9`
+records the difference instead of hiding it. `/reconcile` owes `sec-4` the
+correction, alongside the three it already owes.
+
 **What this owes the design.** Three of the nine originate upstream rather than
 in the plan, and `/reconcile` should carry them back: `sec-6`'s *fifth variant*
 is the sixth; `sec-4`'s "pin 4 covers all fourteen uniformly" reads against
