@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00493-903d-71b0-b0ae-9b9a209eeab2"
+recorded_at = "2026-08-15T08:39:34.717182485Z"
+kind = "friction"
+summary = "rfc show drops authored references relations that inspect renders — the guardrail-blessed read path is lossy"
+detail = "Two 'references --role concerns' rows authored on RFC-026 via 'doctrine link' land correctly in rfc-026.toml and render under 'doctrine inspect RFC-026', but 'doctrine rfc show RFC-026' prints only 'related: RFC-027' in its relationships block. The guardrails tell agents to read entities via '<kind> show', never raw files — so an agent following the rule sees an incomplete relation set and would conclude the links were never authored. The TOML comment in the RFC scaffold reinforces the wrong model: it says RFCs participate in 'related' and names only that verb, though the engine accepts and stores 'references'. Either show should render every authored relation row, or the kind should refuse the labels it will not display. Found while reconciling RFC-026 coherence."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

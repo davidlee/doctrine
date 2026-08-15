@@ -6,13 +6,25 @@ slug = "design-review-response-effectiveness"
 title = "Design review response effectiveness"
 status = "open"
 created = "2026-08-01"
-updated = "2026-08-07"
+updated = "2026-08-15"
 tags = []
 
 [relationships]
 # RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
 # Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
 superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "carries the fork E8.3/E8.5/E8.6 was gathered to decide"
+target = "QUE-218"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "takes E8.7's 15-payload-shape-reads finding into design"
+target = "SL-251"
 
 [[relation]]
 label = "related"
