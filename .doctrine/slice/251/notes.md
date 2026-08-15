@@ -77,14 +77,17 @@ an installed client project with no source to read.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-15 · design/drafting (run rev 32) · b3e64183f
+fresh-as-of: 2026-08-15 · design/drafting (run rev 38) · dabba7175
 
 ### Produced
 
 - `DEC-219` `DEC-221` `DEC-224` `DEC-225` `DEC-226` `DEC-227` `DEC-228` `DEC-229`
   — the inquiry's eight decisions. `DEC-229` partially supersedes `DEC-221`
   (enums only; struct half stands).
-- Run sections `sec-1`..`sec-5` — declared, all 5 outstanding review.
+- Run sections `sec-1`..`sec-9` — declared and materialised, all 9 outstanding
+  review. `sec-2` amended during `sec-7` drafting (`Cow` slices +
+  `WireType::Token`).
+- Eleven `design-target` selectors recorded (`draft.selectors` runbook step).
 - Scope reconciled: `OQ-1` `OQ-2` `OQ-3` `R2` resolved against their records;
   Objective 2's "authored, not derived" contradiction corrected.
 
@@ -107,11 +110,13 @@ fresh-as-of: 2026-08-15 · design/drafting (run rev 32) · b3e64183f
 
 ### Open
 
-- `sec-6`..`sec-9` undrafted (discoverability · code impact · verification ·
-  assumptions). All five declared sections still outstanding review.
-- `sec-3`'s `Extern` soft spot: no compile-time pin that the shell supplies a
-  sub-contract per `Extern`, or that it matches `facet_fields`. `sec-8` owes the
-  two tests.
+- The review pass — all nine sections outstanding, no prior partial state.
+- `DEC-228`'s pin is not achievable as recorded: `DECLARATION_EXAMPLE` is a
+  template (`"known_revision":<n>`) and does not parse. `sec-8` specifies a
+  placeholder substitution before the parse; the record itself still reads as a
+  direct deserialisation.
+- `sec-3`'s `Extern` soft spot is now discharged in design by `sec-8` pin 5 (the
+  two set-equalities); it remains the ladder's only test-only rung.
 - `ISS-346` duplicates `ISS-333` (minted 2026-08-12 vs 2026-08-09) — merge so
   closure lands on one id.
 - `mem.fact.design-run.apply-payload-vocabulary` wrongly claims `Declaration`
