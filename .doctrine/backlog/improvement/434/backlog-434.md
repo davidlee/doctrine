@@ -94,6 +94,33 @@ Mostly frontmatter. Per `docs/claude/subagents.md` the available knobs are
   capsule agent types need equivalent constants (STD-001, no magic strings), or
   are they only ever named by a skill's prose?
 
+## Status — 80/20 SHIPPED 2026-08-16
+
+Landed and live: `install/agents/claude/{capsule-orchestrator,
+capsule-phase-planner,capsule-worker}.md` + `plugins/doctrine/skills/
+capsule-driver/SKILL.md`, registered in `publication/manifest.toml`. Contracts
+are written INLINE in the def bodies, so the 80/20 needed zero Rust changes.
+Also landed ahead of it: the `role/worker.md` + `preamble/core.md` prune.
+
+Two things the 80/20 discovered and resolved differently than planned:
+
+- **No MCP on any def.** `doctrine observation record` and `doctrine memory
+  retrieve` are CLI verbs, and boot.md prescribes exactly those in the primary
+  worktree. Dropping `mcpServers` removes the entanglement with the
+  `doctrine-role` allowlist entirely and cuts capability. Q2 is superseded on
+  this point: the answer is "none of them", not "planner and orchestrator".
+- **`doctrine-role` is MANDATORY and is a privilege class, not a job title.**
+  `doctor` denies by default and accepts only `worker|orchestrator|probe`
+  (`src/doctor_checks.rs:483-489`); the values gate MCP token allowlists. The
+  planner therefore ships as `doctrine-role: worker` with a note in its body
+  explaining why. This RAISES the cost of Q6's `planner` role: it is a
+  security-boundary change, not an enum line.
+
+Still deferred to the slice: the `planner` role, `SubagentStart` role-band
+wiring, name constants + drift tests, and the plural install path (`install`
+still projects exactly one agent def per harness, so the capsule defs are
+published-only and must be copied to `.claude/agents/` by hand to go live).
+
 ## Decisions (working session 2026-08-16)
 
 Harness facts that constrain the answers, all from `docs/claude/subagents.md`:
