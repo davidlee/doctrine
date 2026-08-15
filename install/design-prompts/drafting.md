@@ -10,6 +10,29 @@ and treat what follows as provisional until the foundation is coherent. Do
 targeted research where the design has to fit an implementation surface it has
 not looked at.
 
+Write for a cold human reader and the implementor who follows them. Open with a
+plain-language account of what changes, why it matters, and where the system
+boundary sits. Introduce names before abbreviations or coordinates; identifiers
+support the prose, they do not replace it. A reader should not need the review
+transcript to reconstruct the current design.
+
+## Make the relationships visible
+
+Use diagrams wherever prose would make a reader simulate structure or time in
+their head. A substantial design normally needs at least one; omit them only
+when the design is genuinely linear and say why. Prefer Mermaid in authored
+Markdown. Choose the smallest view that answers the question:
+
+- a context/container/component diagram for ownership and dependencies
+- a sequence diagram for interaction across boundaries
+- a state diagram for lifecycle and refusal paths
+- a flowchart for branching control or data flow
+
+Give each diagram a one-sentence purpose and explain the non-obvious edges in
+prose. Keep names aligned with the surrounding text and implementation surface.
+A decorative box inventory is not a model, and a diagram whose reader must
+decode unexplained identifiers has not improved legibility.
+
 ## The content lens
 
 One lens, not a checklist: hold it over each section as you write it and ask
@@ -27,7 +50,7 @@ beats hand-wavy prose.
 - invariants and boundary conditions
 - samples of critical code and protocols
 - titles and descriptions of the key test cases
-- text C4 diagrams
+- diagrams of the load-bearing structure, flow, or state
 - code-impact summary — paths plus intended changes
 - verification alignment — what evidence must change or be added
 - impact on the design decisions and the remaining open questions
@@ -44,6 +67,10 @@ beats hand-wavy prose.
 - Governance is not optional background reading when the design makes
   architectural or workflow choices. Apply the ADRs, policies and standards you
   loaded to the choice in front of you, at the moment you make it.
+- Keep only current governing meaning in the design. Review chronology,
+  superseded wording, finding-by-finding responses, and revision narration live
+  in the review ledger; durable rulings live in their normative records. Point
+  to those sources when useful, but do not copy their history into the design.
 
 ## What the machine will reject
 

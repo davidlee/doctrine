@@ -45,12 +45,18 @@ not hold on unverified recollection.
 
 ## Procedure
 
-1. **Triage** (batches; a single correction skips to 2). Order by severity ×
-   authority: blocking findings before nits, binding sources before advisory.
-   State the order if it isn't obvious.
+1. **Triage** (batches; a single correction skips to 2). Order first by
+   dependency, then by severity × authority. Group findings that mutate the
+   same declaration. Rule first on anything whose resolution changes another
+   finding's fix site or economics; integrating a flat list independently is a
+   reliable way to rewrite the same block several times. State the order if it
+   isn't obvious.
 2. **Adjudicate each point on the artifact, not on trust.** Re-read what the
    finding actually cites; reviewers confabulate lines, behaviour, and whole
-   defects. Classify:
+   defects. Separate its **observation** (what is wrong) from its
+   **prescription** (what to do): either can be right while the other is wrong.
+   Verify the observation against the incumbent and design the repair on its
+   own merits. Classify:
    - *correct* → integrate;
    - *wrong* → contest, with the verified evidence that shows it;
    - *ambiguous* → clarify before acting;
@@ -62,16 +68,25 @@ not hold on unverified recollection.
    as long as the evidence supports it; against the user, one crisp counter
    carrying your evidence, then defer — noting material dissent rather than
    burying it.
-3. **Generalize.** A cited instance usually marks a class. Sweep the artifact
+3. **Generalize.** Name the defect class in one line, then sweep the artifact
    in scope for siblings and fix them with the instance; class members beyond
-   the scope are captured as follow-up work, not silently expanded into.
+   the scope are captured as follow-up work, not silently expanded into. When
+   the repair changes or withdraws a governing claim, the scope is repo-wide:
+   find the normative owner, inspect both authored tiers through the entity's
+   `show` view, and sweep dependent projections after the repair. A negative
+   search needs a positive control on the same surface.
 4. **Integrate without regression.** Check the rework against previously
    settled decisions. Feedback that conflicts with a settled decision reopens
    that decision *explicitly* — surface it; don't quietly re-litigate it in
-   the course of a fix.
+   the course of a fix. A finding supplies a direction, not a destination: do
+   not turn an overclaim into its unsupported inverse, add machinery the
+   evidence did not justify, or mistake disclosure of a defect for its repair.
 5. **Re-verify against the complaint.** The check is "does this address what
    the source actually raised", not "did something change". Where the finding
-   implies a failing case, make it fail before the fix and pass after.
+   implies a failing case, make it fail before the fix and pass after. Apply a
+   new or corrected rule to its whole population, re-run its evidence (or mark
+   that evidence stale), and re-read the seams and neighbouring claims touched
+   by the correction.
 6. **Close the loop.** Report dispositions point-by-point back to the source:
    integrated (and how), contested (and on what evidence), clarification
    sought, parked (and why). Silence on a point reads as acceptance and hides
@@ -89,6 +104,15 @@ moves, resolution states, close-gates. This skill is the conduct *behind*
 those verbs: adjudicate before disposing, evidence before contesting, no
 disposition chosen to dodge a gate. Don't duplicate the ledger's records in
 prose, and don't bypass its gates. Compatible, not prescriptive.
+
+For design review specifically, the RV is the revision-history surface. Keep
+finding chronology and point-by-point responses there, keep `design.md` as the
+current legible design, and promote accepted durable rulings to the knowledge or
+governance record that owns them. Before handing a revision back, perform a
+read-only self-attack on the corrected passages for factual error, internal
+contradiction, class siblings, stale projections, and regression of earlier
+rulings. Re-check every issue it suggests before acting; this pass discovers
+possible defects and does not certify its own repairs.
 
 ## Guardrails
 
