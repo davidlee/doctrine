@@ -22,6 +22,50 @@ intent = "scope-relevant"
 selector = "install/design-prompts/**"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "src/design_run/payload_contract.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/render/envelope.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/submission.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/attestation.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/tests.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/design.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/design-payload-contract.md"
+intent = "design-target"
+
+[[selector]]
+selector = "publication/manifest.toml"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"
