@@ -217,6 +217,70 @@ roll-up to the driver, so the human sees every one; (c) a `PreToolUse` hook
 matching the `Agent` tool that refuses a `capsule-worker` spawn carrying no
 rationale. Ship (a)+(b); reach for (c) only if drift shows up in practice.
 
+### Q6 — role naming: add `planner`, and split the worker band
+
+The role band is the "Orchestrator vs worker envelope" (`install/hymns/README.md`)
+— an authority binary. Bands are a closed registry, but labels under a band are
+just paths, so the only real constraint on a third role is the Rust enum
+(`parse_role`, `src/install.rs:659`; `hymns::Role`).
+
+**Add `planner`.** Not on taxonomy grounds — on a hard contradiction. The
+shipped `role/worker.md` negative contract says *"Never write to the governing
+project's own authored or runtime state directories"*, and the planner's whole
+job is writing the runtime phase sheet. Overriding a NEGATIVE CONTRACT line from
+a stage band would be fragile in exactly the way negative contracts must not be.
+Cost: one enum variant plus `install/hymns/role/planner.md`.
+
+Mapping: `capsule-orchestrator` → `orchestrator`, `capsule-worker` → `worker`,
+`capsule-phase-planner` → `planner`; all delivered by `SubagentStart` keyed on
+agent type.
+
+**Split `role/worker.md` regardless.** It conflates two things:
+
+- *universal* — the negative contract, hermetic goldens, path-scoping by
+  component. Applies to any constrained implementer, either arm.
+- *dispatch-arm-specific, and FALSE for a capsule worker* — "in an isolated
+  worktree", "hand back a source delta for the orchestrator to import".
+
+Telling a main-worktree agent it sits in an isolated worktree is a correctness
+hazard, not a cosmetic mismatch: it implies its edits are cheap to discard. Move
+the arm mechanics behind a sidecar selector; the universal remainder then serves
+both arms. Worth doing on its own merits.
+
+### Q7 — halt boundary: two boundaries, two homes
+
+- **Orchestrator def body:** "execute exactly the phases in your charter, then
+  hand back; never begin a phase outside it." Charter-overrun is the failure
+  mode that agent actually has.
+- **`/capsule-driver` skill:** owns the do-not-enter-audit boundary. Entering
+  `/audit` is a lifecycle-stage transition, and routing is the seat's job — the
+  seat with a human attached. An orchestrator holding phases 3–5 also cannot
+  reliably know whether it holds the last one.
+
+### Q8 — name binding and the plural install path
+
+Constants are warranted, but for a different reason than `dispatch-worker`'s.
+That one is pinned (`DISPATCH_WORKER_AGENT_TYPE`, `src/worktree/mod.rs:50`, drift
+test at :996) because Rust spawn code names the type. Nothing in Rust spawns a
+capsule agent — a skill's prose does. But the strings still land in three places:
+the def frontmatter `name:`, the `SubagentStart` hook matcher doctrine installs,
+and the skill prose. One of those is machine-matched, and a mismatch means the
+role band silently fails to arrive with no error. STD-001 applies: named
+constants plus a drift test mirroring the existing one.
+
+**The install path must go plural.** `install_agents_for` (`src/install.rs:1783-1793`)
+switches harness → exactly ONE asset (`DISPATCH_WORKER_AGENT_ASSET` /
+`_PI`). It is not a directory sweep. Change it to harness → a slice of assets.
+The capsule defs are claude-only — pi and codex have no nested-subagent model —
+so claude's list becomes four and pi's stays one.
+
+## Sizing
+
+With the `SubagentStart` finding (no need to generalise `WORKER_RESOLVE_MARKER`),
+the work is: 3 agent defs + 1 skill + 1 hymn band + 1 enum variant + a worker-band
+split + plural install + constants/drift tests + hook wiring. That is slice-shaped,
+not quick-sketch-shaped.
+
 ## Gotcha for whoever picks this up
 
 A changed agent def in `install/agents/claude/` does **not** reach the live
