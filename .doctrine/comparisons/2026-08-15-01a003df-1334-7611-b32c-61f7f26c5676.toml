@@ -1,0 +1,14 @@
+schema = "doctrine.comparison-session"
+version = 3
+judgement = []
+
+[session]
+uid = "01a003df-1334-7611-b32c-61f7f26c5676"
+date = "2026-08-15"
+
+[[tombstone]]
+uid = "01a003df-1334-7611-b32c-620cd5f4709d"
+seq = 0
+target = "b795a0c6-107d-4d1c-b258-fef27d231de5"
+date = "2026-08-15"
+note = "2026-08-15 bulk clear: unattributed migrated claim from the 2026-07-17 import; the corpus held no human or pinned value claim, so this tier ranked the backlog on provenance nobody stands behind. Re-elicit with `doctrine compare elicit`."
