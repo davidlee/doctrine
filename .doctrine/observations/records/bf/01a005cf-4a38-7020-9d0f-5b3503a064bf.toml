@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a005cf-4a38-7020-9d0f-5b3503a064bf"
+recorded_at = "2026-08-15T14:24:26.168176149Z"
+kind = "friction"
+summary = "phase-plan (SL-251/PHASE-02): render-sample.md is the phase's authoritative per-key table and is cited nowhere in its plan block"
+detail = ".doctrine/slice/251/render-sample.md lines 108-275 hold the rendered per-key contract for the whole closure — roughly 70 rows. PHASE-02's plan.toml block cites design sections but never this artefact, so any implementer re-derives all of it from source. The slice's own research/design outputs are not reachable from the criteria that consume them."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

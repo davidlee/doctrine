@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a005cf-4a3d-7641-9621-c946ffa50726"
+recorded_at = "2026-08-15T14:24:26.173669414Z"
+kind = "friction"
+summary = "plan (SL-251): VT-2's test_file and keywords were authored from the design's touch table rather than from the tree, and were void on contact"
+detail = "PHASE-02/VT-2 mandated 'fully_populated' + 'CheckpointActDeclaration' in src/design_run/attestation.rs. All twelve closure structs are in submission.rs; CheckpointActDeclaration is submission.rs:825. A single grep at plan time would have caught it. 'doctrine slice verify-vt' can check a VT's keywords against its stated file, but nothing checks at authoring time that the stated file is where the subject actually lives."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a005ac-9290-7030-ba28-3c83cc0b462a"
+recorded_at = "2026-08-15T13:46:30.928704249Z"
+kind = "friction"
+summary = "phase-plan (SL-251/PHASE-01): design.md at 2445 lines has no section-addressed read verb"
+detail = "The phase planner had to read design.md by line range, re-deriving the section map from a grep of headings, because there is no 'doctrine slice show --section sec-4' style addressing. Every phase planner for this slice pays the same re-derivation."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

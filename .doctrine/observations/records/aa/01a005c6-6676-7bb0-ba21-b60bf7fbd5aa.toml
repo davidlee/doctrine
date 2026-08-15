@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a005c6-6676-7bb0-ba21-b60bf7fbd5aa"
+recorded_at = "2026-08-15T14:14:43.574057337Z"
+kind = "friction"
+summary = "execute (SL-251/PHASE-01): check gate red on a stale gitignored projection unrelated to any source change"
+detail = "just check/gate run validate (authored-corpus doctor + agent conformance) ahead of test. .doctrine/agents/dispatch-worker.md is a GITIGNORED projection left stale by SL-254 (still carried mcp__doctrine__worker_commit / observation_record). It presented as a hard phase-gate failure naming a path that is not in git, so 'is this mine?' was expensive to answer for a worker whose file set is source-only. Cleared by 'doctrine install -y', which as a side effect also refreshed the feedback skill hash in skills-lock.json."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

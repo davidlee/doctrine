@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a005f2-7d89-72e2-ae9c-e6841a4cc482"
+recorded_at = "2026-08-15T15:02:53.065451775Z"
+kind = "friction"
+summary = "phase-plan (SL-251/PHASE-03): design.md and plan.toml cite submission.rs line numbers that the slice's own earlier phase displaced"
+detail = "sec-8 and the plan block cite submission.rs:928/939/702/301/890 etc. PHASE-02 added twelve #[cfg(test)] fixtures to that same file and moved every one of them, so the PHASE-03 planner had to re-resolve every cited location by grep before it could trust it. A criterion appended during PHASE-02 execution had stale cites by PHASE-03. Line cites into a file a slice is actively editing decay within the slice."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

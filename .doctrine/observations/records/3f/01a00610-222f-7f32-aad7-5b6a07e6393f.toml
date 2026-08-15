@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00610-222f-7f32-aad7-5b6a07e6393f"
+recorded_at = "2026-08-15T15:35:15.759042377Z"
+kind = "friction"
+summary = "execute (SL-251): python3 is absent in the bwrap jail; bulk text edits fall back to perl"
+detail = "Two workers reached for python3 for bulk source edits and had to fall back to perl. Not blocking, but it is a wasted round trip per worker and nothing in the environment docs says which scripting languages are present."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
