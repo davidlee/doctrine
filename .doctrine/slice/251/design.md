@@ -975,14 +975,19 @@ payload_variants! {
 }
 ```
 
-Three enums sit outside that split and are called out so the table is not read as
-covering them. `WireFacetValue` is `Untagged` and contributes no tokens at all.
-`Reviewer`, `Posture` and `Authority` have no `as_str`, so they take the naming
-arm above. And `Dispose` is the one genuine judgement: its four tokens are
-`DispositionForm::as_str`'s (`inquiry.rs:163`) exactly, but that is a **different
-type** whose vocabulary merely coincides, so consuming it would assert an
-equivalence nothing enforces. `Dispose` names its own four, and `sec-8` pin 4's
-round trip is what keeps them equal to serde's.
+The fourteen divide six / six / two. Six consume an authority, per the table
+above. Six have none and take the naming arm — `DischargeClaim`, `DelegationAct`,
+`AgentAct`, `Reviewer`, `Posture`, `Authority`. Two sit outside both arms and are
+called out so neither is read as covering them:
+
+- **`WireFacetValue`** is `Untagged` and contributes no tokens at all, so it has
+  no vocabulary to take from anywhere. Its two shapes are pin 2's, not pin 4's.
+- **`Dispose`** is the one genuine judgement. Its four tokens are
+  `DispositionForm::as_str`'s (`inquiry.rs:163`) exactly, but that is a
+  **different type** whose vocabulary merely coincides — consuming it would
+  assert an equivalence nothing enforces, and a later divergence between the two
+  types would then be invisible rather than merely undetected. `Dispose` names
+  its own four, and `sec-8` pin 4's round trip keeps them equal to serde's.
 
 An earlier draft of this subsection retyped every vocabulary, including all six
 above, and justified it by the round-trip test — treating a drift *detector* as a
@@ -1057,7 +1062,15 @@ accepted it explicitly when it chose the full closure over top-level-only.
 
 ## Where the pins do not reach
 
-Two regions, both named rather than discovered later.
+Three regions, all named rather than discovered later.
+
+**Nominal identity of a `Named` edge.** `sec-8` pin 2 compares an edge against
+its target's key set, which is structural. Two closure types sharing an identical
+key set would stay exchangeable; none do today, so the pin is total over the
+current closure by a property of the closure rather than by construction. The
+escalation — a `payload_struct!` mirroring the enum instrument, binding each
+field to its declared `WireType` at the definition — is recorded in `sec-8` and
+not taken.
 
 **The injected sub-contract, and only part of it.** `sec-3`'s region is supplied
 by the command tier at render time, so no pin *inside* `design_run` can see its
@@ -1089,8 +1102,9 @@ to it.
 | An enum's `TypeContract::name` | `stringify!` at the macro invocation | compile |
 | A struct's `TypeContract::name` | compared against `T` in the key-set pin | test |
 | Token ↔ serde rename | per-variant round trip | test |
-| Wire type correctness | JSON kind, plus each `Named` edge against its field's type | test |
-| Presence correctness | set-equality both ways, not a superset | test |
+| Wire type correctness | JSON kind, plus each `Named` edge against the target's key set (structural, not nominal — `sec-8` pin 2) | test |
+| `Sparse` vs the rest | null-set equality on an all-`Null` fixture | test |
+| Requiredness | per-key removal probe on the **read** path, never serialization | test |
 | A named extern region is supplied | exhaustive match on `ExternRegion` | compile |
 | The extern facet vocabulary is current | derived from `facet_fields`, never copied | compile |
 | The extern **kind** set is the enum's | exhaustive match over `RecordKind` (`ALL` is hand-maintained) | test |
@@ -1617,17 +1631,16 @@ between two routes to one answer, which is a cost with no matching benefit.
 | `src/design_run/payload_contract.rs` | **new** — the model types (`sec-2`), `payload_variants!` and its per-enum invocations (`sec-4`), the `PAYLOAD` table, the three renderers (`sec-5`), `PAYLOAD_CONTRACT_POINTER` and `PAYLOAD_CONTRACT_PATH` | ~500 table, ~250 renderer |
 | `src/design_run/mod.rs` | one `pub(crate) mod payload_contract;` | 1 |
 | `src/design_run/render/envelope.rs` | `contract_pointer` field, its projection, one pushed line (`sec-6`) | ~10 |
-| `src/commands/design.rs` | `Contract` variant, `ContractArgs`, `ContractFormat`, `run_contract`, `extern_contracts()`, the `Apply` doc-comment pointer, the `map_err` at 1504 | ~70 |
+| `src/commands/design.rs` | `Contract` variant, `ContractArgs`, `ContractFormat`, `run_contract`, `extern_contracts()`, `APPLY_ABOUT` and `Apply`'s `about` / `long_about` attributes carrying the pointer (`sec-6`), the `map_err` at 1504 | ~70 |
 | `src/commands/guard.rs` | `Contract(_) => Read` | 1 |
 | `install/design-payload-contract.md` | **new** — the generated document | rendered |
 | `publication/manifest.toml` | one `[[entry]]` | 7 |
-| `src/design_run/submission.rs` | `#[cfg(test)] fully_populated()` beside each wire struct it defines, plus `payload_variants!` invocations for the enums it owns | ~250 test-only |
-| `src/design_run/attestation.rs` | the same, for the closure members defined here (`AgentAct`, `ActKind`, `ReviewPolicy`, `ReviewDisposition`, `Reviewer`, `ReviewRef`) | ~80 test-only |
-| `src/design_run/inquiry.rs`, `traversal.rs`, `mod.rs` | `payload_variants!` invocations for `Provenance`, `InquiryLifecycle`, `Authority`, `Posture`, `Stage` | ~30 |
+| `src/design_run/submission.rs` | `#[cfg(test)] fully_populated()` beside each wire struct it defines | ~250 test-only |
+| `src/design_run/attestation.rs` | the same, for the closure structs defined here | ~40 test-only |
 | `src/design_run/tests.rs` + in-module tests | the pin ladder (`sec-8`) | ~400 |
 | `src/main.rs` tests | the help-pointer pin and the guard classification row (`sec-8`) | ~15 |
 
-**No wire type's definition or behaviour changes — but four of their files are
+**No wire type's definition or behaviour changes — but two of their files are
 still written.** An earlier draft of this table listed `submission.rs` and
 `attestation.rs` as *read, not written* and omitted them entirely, which
 contradicted `sec-8` pin 1 in the same design: the fixtures it calls for sit
@@ -1636,13 +1649,20 @@ and that precedent is a `#[cfg(test)] pub(super) fn` inside `submission.rs`
 (`submission.rs:653`), not something in `tests.rs`. A plan sequenced off the
 omission would have allocated no work to the files most of the closure lives in.
 
-What is true, and is what the earlier draft was reaching for: every addition to
-those files is `#[cfg(test)]` or a macro invocation that emits a token array and
-a dead match. Not one wire type's definition moves, and no production path
-changes, so the behaviour-preservation gate on shared machinery is vacuous here
-rather than argued — there is no behaviour to preserve because none is touched.
-The distinction the table now draws is *file written* versus *behaviour changed*;
-collapsing them is what lost the rows.
+Every addition to those two files is `#[cfg(test)]`. Not one wire type's
+definition moves and no production path changes, so the behaviour-preservation
+gate on shared machinery is vacuous here rather than argued — there is no
+behaviour to preserve because none is touched. The distinction the table draws is
+*file written* versus *behaviour changed*; collapsing them is what lost the rows.
+
+**Every `payload_variants!` invocation lives in `payload_contract.rs`, and only
+there.** An intermediate draft scattered them across the five modules that define
+the closure's enums, which contradicted the new module's own row and split macro
+ownership across six files. There is no reason to scatter them: the invocation
+needs the type in scope, which an intra-module `use` supplies, and the six
+`as_str` authorities it consumes are `pub(crate)`. Keeping them beside the
+`PAYLOAD` table that reads their output is both simpler and the only arrangement
+that lets a reader find the whole vocabulary in one place.
 
 ## Where the new module sits
 
@@ -1657,9 +1677,10 @@ Not under `render/` either: that tree projects a *run* into a turn envelope, and
 everything in it is keyed to a snapshot. The payload contract has no run — which
 is exactly the property `sec-6` spends on the verb needing no slice and no root.
 
-Out-degree stays inside `design_run`: `submission`, `attestation`, `inquiry`,
-`traversal` and `mod` for the `payload_variants!` match arms and the six `as_str`
-authorities they consume (`sec-4`), and nothing else. `layering.toml:31` keeps
+Out-degree stays inside `design_run`. `payload_contract.rs` `use`s `submission`,
+`attestation`, `inquiry`, `traversal` and `mod` — for the `payload_variants!`
+match arms and the six `as_str` authorities they consume (`sec-4`) — and nothing
+else. `layering.toml:31` keeps
 `design_run = "leaf"  # out=0` unchanged, because an intra-module `use` creates no
 crate-level edge (`ADR-001`).
 
@@ -1713,13 +1734,21 @@ and `unknown_keys: Refused` on the whole table — the facet check rejects an
 unknown key before the mint (`sec-3`). Around 25 lines, no branching beyond that
 three-arm map.
 
-Two properties of those 25 lines are load-bearing rather than incidental, and
-`sec-3` rests on both. It **iterates** `RecordKind::ALL` and calls `facet_fields`
-— it does not restate either, so a new kind or facet field arrives without an edit
-here. And the `FieldShape` map is written **without a wildcard arm**, so a new
-shape is a compile error at this function rather than a silent `Text`. A reviewer
-who "simplifies" either one has removed a compile barrier `sec-8` pin 5 is sized
-against.
+Two properties of those 25 lines are load-bearing rather than incidental. It
+**iterates** `RecordKind::ALL` and calls `facet_fields` rather than restating
+either, so a new *facet field* arrives without an edit here. And the `FieldShape`
+map is written **without a wildcard arm**, so a new shape is a compile error at
+this function rather than a silent `Text`. A reviewer who "simplifies" either one
+has removed a barrier `sec-8` pin 5 is sized against.
+
+**Iterating `ALL` is not itself a barrier, and `sec-3` says why.** `ALL` is
+hand-maintained (`knowledge.rs:159-169`), so a new *kind* does not arrive here
+automatically: it is forced into `facet_fields` by that function's exhaustive
+match and is not forced into `ALL`. This function would then emit a table missing
+it, silently. That residue is carried by `sec-8` pin 5's kind-set equality, whose
+oracle is an exhaustive match over `RecordKind` and never `ALL`. Deriving `ALL`
+from the enum would close it at the source and is the knowledge tier's to make,
+not this slice's.
 
 `run_contract` is then: assemble, dispatch on `ContractFormat` to `render_json` or
 `render_prompt`, `emit`. No root, no snapshot, no I/O (`sec-6`).
@@ -1881,12 +1910,24 @@ false machine-readable contract stayed green under all of them.
 
 Two additions close it, both riding oracles already in the tree.
 
-- **A `Named` edge is checked against the field's real type**, not merely against
-  the name table: the walk recurses into the object and compares its key set with
-  the target `TypeContract`'s rows. A swapped edge then fails because
-  `TraversalDeclaration`'s keys are not `StageDeclaration`'s. This is pin 1's
-  assertion applied at the edge rather than at the type, so it costs a call and
-  no new fixture.
+- **A `Named` edge is checked against the target's key set**, not merely against
+  the name table: the walk recurses into the object and compares its keys with
+  the target `TypeContract`'s rows. The `traversal`/`stage` swap then fails,
+  because `TraversalDeclaration`'s four keys are not `StageDeclaration`'s two.
+  This is pin 1's assertion applied at the edge rather than at the type, so it
+  costs a call and no new fixture.
+
+  **It is a structural check, not a nominal one, and the difference is the
+  residue.** Two closure types with *identical* key sets would remain
+  exchangeable under it. None are today — the eleven contract-bearing structs
+  have eleven distinct key-name sets — so the pin is total over the current
+  closure, but it is total by a property of the closure rather than by
+  construction, and a future type that happens to mirror another's keys would
+  reopen it. Closing it properly means a `payload_struct!` mirroring `sec-4`'s
+  enum instrument, binding each field to its declared `WireType` at the
+  definition so the row is compile-pinned. That is real machinery for a hazard
+  that is currently theoretical, so it is recorded here as the escalation and not
+  taken.
 - **`Id` rows are checked against `IdKind::declarable`** (`ids.rs:70-90`) where
   the engine's admissible set is already computed, rather than against a slice
   the table asserts about itself. `declare` admits five of the eight and
@@ -1904,23 +1945,33 @@ only `Omitted`, while `Option` fields drop on `is_none`. So a fixture with every
 `null` for **exactly** the sparse keys.
 
 - `{keys serialising to null}` == `{keys declared `Sparse`}`
-- `{keys present in a minimal value}` == `{keys declared `Required`}`
+- `{keys whose removal makes the payload fail to deserialise}` ==
+  `{keys declared `Required`}`
 
-**The second is an equality, and an earlier draft had it as `⊇`.** That direction
-catches an optional field falsely declared `Required` and misses the converse
-entirely. `SubmissionEnvelope`'s three fields are the live case: `run_uid`,
-`known_revision` and `submission_id` are plain non-`Option` fields
-(`submission.rs:686-690`), so a minimal `ApplyRequest` emits all three no matter
-what the contract says about them. Re-declare any one as `Optional` and the
-declared-`Required` set merely shrinks — the superset still holds, pin 1 still
-sees the same key inventory, and every pin passes while the contract tells a
-caller they may omit a key the compare-and-swap depends on. The equality is the
-same cost and fails in both directions.
+**The second assertion reads deserialization, and two earlier drafts read
+serialization instead.** The first wrote `{keys present in a minimal value}` ⊇
+`{Required}`, which catches an optional field falsely declared `Required` and
+misses the converse: `SubmissionEnvelope`'s `run_uid`, `known_revision` and
+`submission_id` are plain non-`Option` fields (`submission.rs:686-690`), so a
+minimal `ApplyRequest` emits all three whatever the contract claims — re-declare
+one as `Optional` and the superset still holds while the contract tells a caller
+they may omit the compare-and-swap key. Tightening that to an equality fixed the
+direction and broke the oracle: `ApplyRequest.declare` carries `#[serde(default)]`
+with **no** `skip_serializing_if` (`submission.rs:939-940`), so it serialises as
+`[]` in a minimal value while being genuinely optional on input, and the equality
+would fail on a correct table.
 
-Two fixtures, not twelve: only `Declaration` (`submission.rs:126-133`) and
-`TraversalDeclaration` (`731-736`) carry `Sparse<T>`. The minimal value the
-`Required` equality reads is a third, built by `Default` where the type has one
-and by omitting every non-mandatory field where it does not.
+Serialization was never the right question. *Required* is a property of the
+**read** path — a key is required exactly when omitting it makes `from_value`
+fail — so the pin asks that directly: take the `fully_populated` value's JSON,
+remove one key, attempt the deserialise, and collect the keys whose removal
+refuses. `declare` and every other defaulted field fall out on the correct side
+by construction, because a default is precisely what makes removal succeed. It
+also needs no new fixture and no minimal value.
+
+Two `Sparse` fixtures, not twelve: only `Declaration` (`submission.rs:126-133`)
+and `TraversalDeclaration` (`731-736`) carry `Sparse<T>`, and the removal probe
+reads the same `fully_populated` values every other pin uses.
 
 ## 4 — Tokens against serde's renames, and why the coverage is total
 
