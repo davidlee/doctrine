@@ -101,7 +101,7 @@ are pure: no filesystem, no embed lookup, no `crate::install`. This is not a new
 posture to invent — `design_run::artifact` already renders the published stage
 reference as a pure `render_artifact() -> String`, and `design_run::prompt`
 already names asset *keys* while the shell resolves the bytes and passes them
-back in as a `BTreeMap`. The payload contract follows both.
+back in. The payload contract follows both.
 
 Two tables already describe fragments of this payload and neither is displaced:
 
@@ -114,6 +114,29 @@ Two tables already describe fragments of this payload and neither is displaced:
 
 Neither answers *what may this payload contain*. The new table does, and sits
 beside them.
+
+## What the model has to be able to say
+
+The first draft of this section was written against a remembered payload and then
+run over the real closure (`.doctrine/slice/251/render-sample.md`). Four shapes in
+that closure could not be expressed at all, and every one of them is a shape a
+caller gets wrong unaided. They are listed here because they are the model's
+requirements, not its trivia:
+
+1. **An untagged variant.** `WireFacetValue` has no token and no keys — the
+   variant *is* a shape, a string or a list of strings (`fnd-11`).
+2. **A variant that inlines another named type.** `Dispose::Create(CreateRecord)`
+   puts `CreateRecord`'s keys beside `form`, and a rendering has to be able to
+   *name* `CreateRecord` rather than silently re-listing its keys (`fnd-14`).
+3. **An externally tagged enum whose variants disagree.** `AgentAct` nests one
+   payload under its token and emits the other as a bare string (`fnd-12`).
+4. **A map whose keys are not free.** `AdoptAuthored.sections` is keyed by section
+   id; `CreateRecord.facet`'s legal keys depend on the value of a **sibling**
+   field (`fnd-13`).
+
+The types below are shaped by those four. `DEC-221` holds this level of detail
+loosely — an implementer may spell it differently on evidence — but a spelling
+that cannot state all four is not a different spelling, it is a worse one.
 
 ## The row
 
@@ -132,28 +155,37 @@ pub(crate) struct KeyContract {
 /// A struct or enum on the wire, named so a refusal and the contract agree.
 pub(crate) struct TypeContract {
     pub(crate) name: &'static str,
-    pub(crate) tagging: Tagging,
     pub(crate) unknown_keys: UnknownKeys,
     pub(crate) form: TypeForm,
 }
 
 pub(crate) enum TypeForm {
     Struct(Cow<'static, [KeyContract]>),
-    Enum(Cow<'static, [VariantContract]>),
+    Enum {
+        tagging: Tagging,
+        variants: Cow<'static, [VariantContract]>,
+    },
 }
 
 /// `const fn` constructors, so the table's authoring site never spells `Cow`.
 pub(crate) const fn strukt(rows: &'static [KeyContract]) -> TypeForm { … }
-pub(crate) const fn enumeration(of: &'static [VariantContract]) -> TypeForm { … }
+pub(crate) const fn enumeration(tagging: Tagging, of: &'static [VariantContract]) -> TypeForm { … }
 ```
 
+**`tagging` sits inside `Enum` rather than on `TypeContract`.** The first draft
+put it on the type and gave `Tagging` a `NotTagged` variant for structs. A struct
+has no tagging; `TypeForm::Struct` already says so, and a field whose only job is
+to be meaningless on half its inhabitants is a slot for a wrong answer rather than
+a fact. Moving it removes the variant and the question together.
+
 **Why `Cow` and not `&'static`.** The const table is entirely borrowed and would
-never need it. `sec-3`'s `Extern` region is the reason: the command tier assembles
-that sub-contract from `facet_fields` while the process runs, so its row slice
-cannot be `'static`. Every *string* in an injected contract already is — kind
-tokens, facet names, the `KNOWN` sets — so the borrow-or-own split lands on these
-two slices and nowhere else, and the constructors keep it out of twelve hand-written
-table rows. `sec-7` records the alternatives.
+never need it. `sec-3`'s injected region is the reason: the command tier assembles
+that sub-contract from `facet_fields` while the process runs, so its row slices
+cannot be `'static`. The borrow-or-own split therefore lands on the **three** row
+slices — a struct's keys, an enum's variants, and a variant's payload keys — and
+the constructors keep it out of the hand-written table rows. `sec-7` records the
+alternatives, and should weigh uniform `Cow` on every row slice against tracking
+which three, now that it is three rather than the two the first draft assumed.
 
 `WireType` is the recursion:
 
@@ -164,9 +196,9 @@ pub(crate) enum WireType {
     Boolean,
     Id,                              // DesignId — a run-scoped `inq-N` / `sec-N` / `cp-N`
     Named(&'static TypeContract),    // the closure edge
-    Token(&'static [&'static str]),  // a string field with a closed vocabulary
+    Token(TokenSource),              // a string field with a closed vocabulary
     Seq(&'static WireType),
-    Map(&'static WireType),
+    Map { key: MapKey, value: &'static WireType },
 }
 ```
 
@@ -175,31 +207,94 @@ pub(crate) enum WireType {
 set, with no Rust type name a caller could ever see. `Named` pointing at an
 invented enum would say something false about the payload.
 
+**`Named` stays `&'static` because nothing injected is ever reached through it.**
+The two externally-sourced regions arrive through `TokenSource` and `MapKey`
+instead — see `sec-3` — so the closure edge remains a const reference and the
+acyclicity argument there keeps its mechanical basis.
+
+**The map key is a description, not an afterthought.** `Map` carried only its
+value type in the first draft, which was enough for neither of the closure's two
+maps:
+
+```rust
+pub(crate) enum MapKey {
+    /// Keys are values of this wire type — `AdoptAuthored.sections` is keyed by
+    /// section id, and "map of text" would have lost that.
+    Of(&'static WireType),
+    /// Keys are supplied by a region this tier cannot import, and *which* keys
+    /// are legal is chosen by the value of a sibling field named here.
+    /// `CreateRecord.facet`'s keys are the facet fields of the kind in `kind`.
+    Extern { region: ExternRegion, selector: &'static str },
+}
+```
+
+`selector` is a plain field name — a `&'static str` naming a sibling key, not a
+type from another tier — so it costs `ADR-001` nothing. It is the only place in
+the model where one key's contract depends on another key's *value*, and that
+dependency is real: it is the whole of what makes `facet` discoverable rather than
+an open bag.
+
 ## The variant row, and where a payload actually sits
 
 `TypeForm::Enum` holds these:
 
 ```rust
-/// One enum variant: its token, and the keys its payload carries — empty for a
-/// unit variant.
+/// One enum variant.
 pub(crate) struct VariantContract {
-    pub(crate) token: &'static str,
-    pub(crate) payload: &'static [KeyContract],
+    /// The token a caller writes. `None` only under `Untagged`, where serde emits
+    /// no token at all and printing the Rust variant name would say something
+    /// false.
+    pub(crate) token: Option<&'static str>,
+    pub(crate) payload: VariantPayload,
+}
+
+pub(crate) enum VariantPayload {
+    /// A unit variant.
+    Absent,
+    /// A struct variant's own keys.
+    Keys(Cow<'static, [KeyContract]>),
+    /// A newtype variant over a named type, whose keys arrive in this variant's
+    /// place — `Dispose::Create(CreateRecord)`.
+    Inlines(&'static TypeContract),
+    /// An untagged variant, which is a shape rather than a set of keys —
+    /// `WireFacetValue`'s `[text]` and `text`.
+    Shape(&'static WireType),
 }
 ```
 
-**Where those keys sit on the wire is a function of `Tagging`, not a field of its
-own.** Under `Internal(tag)` serde inlines them *beside* the tag: a `create`
-disposition is `{"form":"create","kind":…,"title":…}`, with `CreateRecord`'s keys
-at the same level as `form` rather than nested under it — `Dispose`
-(`submission.rs:213`) is internally tagged and its `Create(CreateRecord)` is a
-newtype variant. Under `External` the payload nests under the token,
-`{"blocking-set-declared":{"blocking":[…]}}`. Under `Bare` there is no payload.
+**Where those keys sit on the wire is a function of `Tagging` and the payload
+together, and is derived rather than stored.** That is what keeps the two from
+disagreeing, and it is the same discipline `ReviewDisposition` states one tier
+over — a value that says the same thing twice is checkable, so the second saying
+should be a test rather than a field.
 
-Deriving placement from the tagging rather than storing it is what keeps the two
-from disagreeing. The renderer still has to *say* it: a rendering that listed
-`Dispose`'s four tokens and stopped would leave a caller believing `create`'s
-payload nests, which is precisely the class of error this contract exists to end.
+| tagging | payload | on the wire |
+|---|---|---|
+| `Internal(tag)` | `Keys` / `Inlines` | keys sit **beside** the tag: `{"form":"create","kind":…}` |
+| `Internal(tag)` | `Absent` | the tag alone: `{"provenance":"user-directed"}` |
+| `External` | `Keys` | nested under the token: `{"blocking-set-declared":{"blocking":[…]}}` |
+| `External` | `Absent` | **a bare string**: `"drafting-ready"` |
+| `Untagged` | `Shape` | the shape alone, discriminated by JSON form |
+
+**The fourth row is the one that bit.** `AgentAct` is a *mixed* externally tagged
+enum: `BlockingSetDeclared` nests and `DraftingReady` is the bare string
+`"drafting-ready"`, not `{"drafting-ready":{}}`. A first draft that put `Tagging`
+on the type and read "External means the payload nests" would have been wrong for
+half of `AgentAct` — and wrong in the expensive direction, because
+`AgentActDeclaration`'s `deny_unknown_fields` does not reach inside `act`, so the
+object a caller would have sent is discarded in silence.
+
+That row also removes a variant. The first draft carried `Tagging::Bare` for
+"a unit-variant enum". *Bare* is what `External` + `Absent` already produces, for
+every variant of `Stage`, `ActKind`, `Reviewer` and the rest; storing it beside
+the payload gives a `Bare` claim something to contradict. It survives as a word
+the **renderer** prints when an external enum's every payload is `Absent`, which
+is a reading convenience derived from the model rather than a fact held in it.
+
+The renderer still has to *say* all of this. A rendering that listed `Dispose`'s
+four tokens and stopped would leave a caller believing `create`'s payload nests,
+which is precisely the class of error this contract exists to end — and the same
+rendering over `AgentAct` would have a caller wrapping a bare string in an object.
 
 ## The three fields that carry the semantics
 
@@ -211,22 +306,28 @@ failure that actually happened.
 
 ```rust
 pub(crate) enum Tagging {
-    NotTagged,                    // a plain struct
-    Bare,                         // a unit-variant enum: "governance-confirmed"
-    Internal(&'static str),       // { "act": "export", … }   — DelegationAct
-    External,                     // { "blocking-set-declared": { … } } — AgentAct
+    Internal(&'static str),       // { "act": "export", … }   — DelegationAct, Provenance
+    External,                     // { "blocking-set-declared": { … } } — AgentAct, ReviewDisposition
     Untagged,                     // discriminated by shape alone — WireFacetValue
 }
 ```
 
 Three sibling act types spell their discriminant three different ways —
 `DelegationAct` internally on `tag = "act"` (`submission.rs:877`), `AgentAct`
-externally (`attestation.rs:671`), and `CheckpointActDeclaration.act` as a bare
+externally (`attestation.rs:673`), and `CheckpointActDeclaration.act` as a bare
 `ActKind`. A contract stating field types alone would have said nothing useful
 about any of them.
 
-`Untagged` is the fifth and least guessable: `WireFacetValue` (`submission.rs:254`)
-is `#[serde(untagged)]` over `List(Vec<String>)` and `Text(String)`, so a facet
+Each mode has a second live member, and the second is the instructive one.
+`Provenance` (`inquiry.rs:25`) is internally tagged on `tag = "provenance"` and
+carries two payload-bearing variants, `ImportedProse` with four keys — the only
+place `u32` and `Fingerprint` enter the closure. `ReviewDisposition`
+(`attestation.rs:571`) is externally tagged and *uniform*, both arms carrying
+struct payloads, which is what makes `AgentAct`'s asymmetry legible as an
+asymmetry rather than as the rule.
+
+`Untagged` is the least guessable: `WireFacetValue` (`submission.rs:254`) is
+`#[serde(untagged)]` over `List(Vec<String>)` and `Text(String)`, so a facet
 value is discriminated by its JSON shape with no tag anywhere. Nothing in a
 field's name or type hints at this, and there is no refusal that teaches it —
 a wrongly-shaped value simply fails to match any variant.
@@ -309,6 +410,11 @@ scope — can jump straight from a contract row to the definition. That costs
 nothing and is exactly the read the contract is trying to make unnecessary for
 everyone else.
 
+It is also what `VariantPayload::Inlines` carries. `Dispose::Create`'s rendering
+— *`create` → `CreateRecord`'s keys, inlined* — needs the name, and taking it
+from the pointed-at `TypeContract` means the variant row and the type row cannot
+disagree about what the inlined type is called.
+
 ## The root, and what it does not include
 
 ```rust
@@ -325,6 +431,13 @@ presentation detail of the Rust types, not of the wire — a caller sends thirte
 keys at one level — so the contract renders them at one level too, and
 `SubmissionEnvelope` appears in the closure only as the reason the root's
 `unknown_keys` is `SilentlyDropped`.
+
+**So the closure holds twelve struct types and the rendering emits eleven
+blocks**, and no claim in this design may use one number where it means the
+other. `SubmissionEnvelope` is a real member of the closure with a real
+three-key serde surface — a key-set assertion over it is well defined, and
+`sec-8` pin 1 counts twelve for that reason — but it has no block of its own
+because its keys are already rendered at the root (`fnd-16`).
 
 Not in the table: `resolved_record`, which carries `#[serde(skip)]` and is
 therefore not on the wire at all. The closure is over what serde accepts, and a
@@ -354,17 +467,23 @@ field rather than a type row.
 Two of those enums were missing from the first enumeration, and the class matters
 more than the errata: `ReviewPolicy` is reachable only through
 `ReviewPolicyDeclaration.policy` and `Reviewer` only through
-`Declaration.reviewer` — each one hop below a field nobody had walked. That is
-the argument for **deriving the closure mechanically at implementation time and
-diffing it against this list**, rather than trusting either.
+`Declaration.reviewer` — each one hop below a field nobody had walked. That was
+the argument for **deriving the closure mechanically and diffing it against this
+list**, rather than trusting either.
 
-**The closure spans five files**, all inside `design_run`: `submission.rs` (every
-wire struct), `attestation.rs` (`Reviewer`, `ActKind`, `ReviewPolicy`,
-`ReviewDisposition`, `AgentAct`), `inquiry.rs` (`Provenance`,
-`InquiryLifecycle`), `traversal.rs` (`Authority`, `Posture`) and `mod.rs`
-(`Stage`). `design_run` is one leaf-tier module (`layering.toml:31`), so none of
-those crossings creates a module-graph edge — but an implementer walking the
-closure visits all five.
+**That derivation has now been done, ahead of implementation, and this list
+survived it.** `.doctrine/slice/251/render-sample.md` walks `ApplyRequest`'s
+serde surface in source and diffs the result against the list above: the twelve,
+the fourteen, their membership, the refuse/discard split below, the
+thirteen-against-nine asymmetry and the acyclicity argument all hold. The
+commitment stands for implementation anyway — a derivation performed once by hand
+is evidence, not a pin — but the list is no longer the weakest thing in this
+section. What the derivation *did* break was one tier down, in `sec-2`'s model and
+`sec-5`'s renderings, and is carried there.
+
+Twelve is the count of **closure members**, not of rendered blocks; eleven blocks
+render, because `SubmissionEnvelope` is flattened and its keys appear at the root.
+`sec-2` states which number belongs to which claim.
 
 ## What bounds it, and why the bound is a fact rather than an opinion
 
@@ -375,13 +494,15 @@ is the live case. It is excluded because serde does not accept it, not because
 someone judged it internal — which is the same test `DEC-227` used to reject a
 boundary drawn by judgement.
 
-**A type that serialises as a scalar is not a struct row.** `DesignId`
-(`ids.rs:132`) carries `#[serde(try_from = "String", into = "String")]`, and
-`ReviewRef` (`attestation.rs:475`, reached through `ReviewDisposition::Conducted`)
-is a newtype over `String`. Both sit in the *type* closure and neither has wire
-keys, so both render as scalars — `Id` and `Text` — not as types with rows. The
-test is mechanical again: what serde emits, not what the Rust declaration looks
-like.
+**A type that serialises as a scalar is not a struct row.** There are **three**,
+not the two first listed. `DesignId` (`ids.rs:132`) carries
+`#[serde(try_from = "String", into = "String")]`; `ReviewRef`
+(`attestation.rs:475`, reached through `ReviewDisposition::Conducted`) and
+`Fingerprint` (`ids.rs:213`, reached through `Provenance::ImportedProse`) are
+newtypes over `String`, which serde emits transparently. All three sit in the
+*type* closure and none has wire keys, so all three render as scalars — `Id`,
+`Text`, `Text` — not as types with rows. The test is mechanical again: what serde
+emits, not what the Rust declaration looks like.
 
 **`WRITER_ACTS` is not the axis.** It enumerates nine acts and correctly omits
 `delegation`, because it answers *does this payload write* for `EX-2` and the
@@ -405,6 +526,15 @@ This is worth stating in the design rather than discovering at the compiler: if
 a future payload type does introduce a cycle, `&'static TypeContract` stops
 working and the table needs a name-keyed indirection instead. Better to know
 which property the representation depends on.
+
+**The closure spans six files**, all inside `design_run`: `submission.rs` (every
+wire struct), `attestation.rs` (`Reviewer`, `ActKind`, `ReviewPolicy`,
+`ReviewDisposition`, `AgentAct`, `ReviewRef`), `inquiry.rs` (`Provenance`,
+`InquiryLifecycle`), `traversal.rs` (`Authority`, `Posture`), `mod.rs` (`Stage`)
+and `ids.rs` (`DesignId`, `Fingerprint`). `design_run` is one leaf-tier module
+(`layering.toml:31`), so none of those crossings creates a module-graph edge — but
+an implementer walking the closure visits all six, and the two scalars in `ids.rs`
+are exactly the members most easily mistaken for struct rows.
 
 ## The one vocabulary the leaf cannot see
 
@@ -459,7 +589,13 @@ is not a coincidence — both are describing the same wire. `FieldShape::Text` a
 *why* `WireFacetValue` is untagged: a facet value is a string or a list of
 strings because a facet field is `Text` or `List`.
 
-## The resolution: inject a contract, not a token list
+**The two halves are one region, not two.** `kind`'s admissible tokens and
+`facet`'s admissible keys are both functions of `RecordKind`, and the second is
+indexed by the first. Treating them as separate injected vocabularies would create
+two lists free to disagree about which seven kinds exist — the defect this section
+exists to avoid, reintroduced inside the fix.
+
+## The resolution: inject one region, through a closed seam
 
 Three ways to handle the extern region, and the third is the one this design
 takes.
@@ -470,33 +606,99 @@ takes.
 2. **Duplicate the vocabulary in `design_run`.** Forbidden by `ADR-001`, and it
    would be a second list free to drift from `RecordKind` and `facet_fields` —
    the failure `DEC-221` spent the whole inquiry avoiding.
-3. **Have the shell inject a sub-contract.** The leaf declares that a region of
-   the closure is externally supplied; the command tier — which may import both
-   `design_run` and `knowledge` — builds a `TypeContract` from `RecordKind::ALL`
-   and `facet_fields`, and hands it in at render time.
+3. **Have the shell inject it.** The leaf declares that a region of the closure is
+   externally supplied; the command tier — which may import both `design_run` and
+   `knowledge` — builds the description from `RecordKind::ALL` and `facet_fields`,
+   and hands it in at render time.
 
 Option 3 is not a new mechanism. It is precisely how `design_run::prompt` already
-works: that module names an asset *key* and never reads it, and the shell resolves
-the bytes and hands back a `BTreeMap` for `contract_block` to place
+works: that module names what the shell must supply and never reads it, and the
+shell resolves the bytes and hands them back for `contract_block` to place
 (`prompt.rs:185`). The payload renderer takes the same split, with a richer
 payload.
 
-Concretely, `WireType` gains one variant:
+**And it takes the precedent's strength, which the first draft dropped.** That
+matters more than the split does. `prompt` does not key the shell's contribution
+by a string: `contract_block(edge, bodies: &BTreeMap<Condition, String>)` is keyed
+by `Condition`, a **closed leaf-side enum**, and `Fragment` (`prompt.rs:48-63`)
+*derives* its asset key from the variant rather than looking the variant up by
+string. A first draft of this section reached for `Extern(&'static str)` and a
+string-keyed supply map, which is the cited precedent minus the thing that makes
+it safe. So:
 
 ```rust
-/// A region of the closure owned by a tier this one cannot import.
-/// The table names the source; the renderer receives the contract.
-Extern(&'static str),            // e.g. "knowledge::RecordKind"
+/// A region of the closure owned by a tier this one cannot import. Closed, so
+/// naming a region and supplying one are the same act.
+pub(crate) enum ExternRegion {
+    /// `knowledge::RecordKind` and, per kind, `facet_fields`.
+    KnowledgeRecord,
+}
+
+impl ExternRegion {
+    pub(crate) const ALL: [ExternRegion; 1] = [ExternRegion::KnowledgeRecord];
+    /// The source this region names, rendered. One spelling (STD-001).
+    pub(crate) const fn label(self) -> &'static str { … }   // "knowledge::RecordKind"
+}
 ```
 
-and the render entry point takes `&BTreeMap<&'static str, TypeContract>`
-alongside the table. Mapping `FacetFieldRow` into `KeyContract` is mechanical:
-`Text` and `List` become `WireType`s directly, and `Closed(tokens)` becomes an
-enum `TypeContract` whose variants are those tokens.
+One member today. The cardinality is not the point — the *closure* is, exactly as
+it is for `Fragment`'s four and `Stage`'s five.
+
+The supplied description is **one** enum-form `TypeContract`: seven variants, one
+per kind, each variant's token the kind's own token and each variant's payload
+that kind's facet keys. Two consumers read it and neither can disagree with the
+other, because there is only one list:
+
+- `CreateRecord.kind` is `Token(TokenSource::Extern(KnowledgeRecord))` — the
+  variant tokens, and still a `Token` rather than a `Named`, so the contract goes
+  on saying the true thing about a string field.
+- `CreateRecord.facet` is
+  `Map { key: MapKey::Extern { region: KnowledgeRecord, selector: "kind" }, value: Named(WIRE_FACET_VALUE) }`
+  — the payload of whichever variant the sibling `kind` names.
+
+Mapping `FacetFieldRow` into `KeyContract` is mechanical: `Text` and `List` become
+`WireType`s directly, and `Closed(tokens)` becomes `Token(TokenSource::Fixed(tokens))`.
 
 What a caller then gets, for a payload key that today is an undocumented open
 map: the seven kinds, and per kind the facet names it owns, in template order,
 with closed vocabularies enumerated where they exist.
+
+## The seam is drift-proof by construction, except in one narrow place
+
+The first draft of this section conceded the opposite — that nothing at compile
+time forces the shell to supply a contract for every region named, nor forces the
+supplied contract to match `facet_fields`, and that both close by test. Neither
+concession was necessary. Three risks, and the shape of the seam decides which of
+them a compiler can hold.
+
+**A region nobody supplies.** Made unspellable rather than tested. The supply is a
+struct with one field per region and a `const fn` resolving `ExternRegion` to it
+by exhaustive match — so adding a region to `ExternRegion` without supplying it is
+a non-exhaustive-match error, and there is no string key left to typo. This seam
+must in fact be *stricter* than the precedent it borrows from: `contract_block`
+deliberately tolerates an absent body — "an absent body is not placed, and the
+header still rides" — because a caller with a stale receipt must still see what it
+is missing. An absent extern contract has no such reading. It renders the region
+as nothing, silently, which is the discoverability failure itself rather than a
+degraded report of it.
+
+**A vocabulary that has moved.** Not drift, if the builder never copies. Built
+from `RecordKind::ALL` and `facet_fields(kind)` directly, an eighth kind or a new
+facet field flows through with no second list to update; `facet_fields` is a
+`const fn` whose match over `RecordKind` is already exhaustive, so a new kind is a
+compile error *there*, at the source, before it can be a silent omission here. And
+`FieldShape → WireType` written as a match with no wildcard arm makes a new
+`FieldShape` variant a compile error at the mapping.
+
+**A mapping that dropped or reordered something.** This is the residue, and it is
+a test — `sec-8` pin 5. It is a far narrower claim than the one the first draft
+made: not *whether the vocabulary is the same vocabulary*, which the two barriers
+above now settle, but whether a total, compile-checked mapping was also a faithful
+one. That is the kind of thing a set-equality is actually good at.
+
+So the injected region is no longer the ladder's only test-only rung. It carries
+two compile barriers and one narrow fidelity test, which puts it within reach of
+what `DEC-221` buys elsewhere rather than conspicuously below it.
 
 ## One thing the contract must say carefully
 
@@ -508,20 +710,9 @@ about refusal that the write path does not keep.
 
 That distinction is exactly what `sec-2`'s `UnknownKeys` field exists to carry,
 one level up. The two are the same disclosure discipline applied at two depths.
-
-## The cost of this choice, stated
-
-`Extern` is a hole in the single-source guarantee: nothing at compile time forces
-the shell to supply a contract for every `Extern` the table names, nor forces the
-supplied contract to match `facet_fields`.
-
-Both close by test rather than by type, and `sec-8` commits to the pair —
-set-equality between the `Extern` sources the table names and the sources the
-shell resolves, and equality between each injected sub-contract and the
-`facet_fields`/`RecordKind::ALL` it claims to mirror. This is weaker than the
-compile-error pins `DEC-221` buys elsewhere, and the weakness is confined to the
-injected region. Recording it here rather than in a footnote, because a reader
-implementing `sec-5` will otherwise assume the generator is total on its own.
+Note that it survives every strengthening above: making the *description*
+drift-proof says nothing about when the *value* is checked, and conflating the two
+would be a new way to mislead a caller.
 
 <!-- doctrine:section sec-4 -->
 # 4. Pinning the contract against the types
@@ -642,11 +833,16 @@ accepted it explicitly when it chose the full closure over top-level-only.
 
 Two regions, both named rather than discovered later.
 
-**The injected sub-contract.** `sec-3`'s `Extern` region is supplied by the
-command tier at render time, so no compile-time pin in `design_run` can see it.
-It closes by test: set-equality between the `Extern` sources the table names and
-the sources the shell resolves, and equality between each injected sub-contract
-and the `facet_fields` / `RecordKind::ALL` it mirrors.
+**The injected sub-contract, and only part of it.** `sec-3`'s region is supplied
+by the command tier at render time, so no pin *inside* `design_run` can see its
+content. That is a smaller gap than it first looks, because `sec-3` closed the
+seam rather than the content: `ExternRegion` is a closed leaf-side enum resolved
+to its supply by exhaustive match, so *whether a named region is supplied* is a
+compile error above the leaf, and *whether the vocabulary is current* is settled
+by a builder that derives from `RecordKind::ALL` and `facet_fields` instead of
+copying them. What no compiler holds is whether that total mapping was also
+order- and content-preserving, and that is `sec-8` pin 5 — one narrow test, not
+the whole region.
 
 **The published document.** Its pin is `artifact.rs`'s golden test, which
 compares `render_artifact()` against the committed file read **from disk at
@@ -664,7 +860,9 @@ to it.
 | Struct field set | exhaustive no-`..` literal (`I9`) | compile |
 | Token ↔ serde rename | per-variant round trip | test |
 | Type and presence correctness | round trip per key | test |
-| Injected `Extern` region | set-equality against `facet_fields` | test |
+| A named extern region is supplied | exhaustive match on `ExternRegion` | compile |
+| The extern vocabulary is current | derived from `RecordKind::ALL` / `facet_fields`, never copied | compile |
+| The extern mapping is faithful | set-equality against `facet_fields` | test |
 | Published document | golden against disk-source | test |
 | The envelope's worked example | parses as a valid `ApplyRequest` (`DEC-228`) | test |
 
@@ -681,10 +879,10 @@ sits above it in command tier.
 
 This is not a posture to invent. `design_run::artifact` already renders the
 published stage reference as a pure `render_artifact() -> String`
-(`artifact.rs:26`), and `design_run::prompt` already names asset *keys* it never
-reads while the shell resolves bytes and hands back a `BTreeMap` for
-`contract_block` to place (`prompt.rs:13-16, 185`). The payload contract takes the
-same split, with `sec-3`'s injected sub-contracts riding the `bodies` slot.
+(`artifact.rs:26`), and `design_run::prompt` already names what the shell must
+supply while the shell resolves it and hands it back for `contract_block` to place
+(`prompt.rs:13-16, 185`). The payload contract takes the same split, with `sec-3`'s
+injected region riding the same slot.
 
 ```rust
 // design_run::payload_contract — leaf, pure.
@@ -694,7 +892,12 @@ pub(crate) fn render_json(extern_contracts: &ExternContracts) -> String;
 pub(crate) fn render_prompt(extern_contracts: &ExternContracts) -> Vec<String>;
 pub(crate) fn render_document(extern_contracts: &ExternContracts) -> String;
 
-pub(crate) type ExternContracts = BTreeMap<&'static str, TypeContract>;
+/// One field per `ExternRegion`, so omitting a region is a missing-field
+/// compile error rather than a runtime `None` (`sec-3`). Not a string-keyed map:
+/// that was the first draft's weakening of `prompt`'s own typed-key precedent.
+pub(crate) struct ExternContracts {
+    pub(crate) knowledge_record: TypeContract,
+}
 ```
 
 Three entry points rather than one with a format parameter, because the three
@@ -703,7 +906,15 @@ Markdown page — and a single function returning one of three unrelated things
 would be a `match` pretending to be an abstraction. They share the walk over
 `PAYLOAD`, not the emission.
 
-## `--format json`: bespoke, on the turn envelope's precedent
+**The walk is the shared thing, and it is not a naive recursion.** `WireType::Named`
+holds a reference to a whole `TypeContract`, and the closure is a graph rather than
+a tree: `Declaration` is reached from both `ApplyRequest.declare` and
+`DelegationAct::Propose.declare`, and `AcceptanceDeclaration` from five places. So
+the walk collects **types by name into a flat table** and emits each once, with
+every `Named` edge rendered as a name. All three renderings need that; only the
+JSON was ever tempted to skip it.
+
+## `--format json`: bespoke, and a flat table
 
 The residue flagged at the sufficiency gate was that nobody had asked what the
 renderings concretely look like. This is that decision, and the repo settles most
@@ -725,8 +936,30 @@ expression at all, `Presence::Sparse`'s omit-persists / null-clears semantics is
 not `required`/`optional`, and serde tagging style is expressible only by
 encoding it structurally, which loses the fact that it *is* the tagging style.
 
-The JSON is the `sec-2` types serialised, which makes the contract and its
-rendering the same artefact viewed twice rather than two artefacts to reconcile.
+**Nor is it the derived `Serialize` of `PAYLOAD`.** A first draft said the JSON
+*is* the `sec-2` types serialised — "the same artefact viewed twice rather than two
+artefacts to reconcile" — and that does not hold for the reason above.
+`Named(&'static TypeContract)` is the type, not its name, so a derived `Serialize`
+inlines the target at every edge: over the real closure that is `Declaration`
+twice, `CreateRecord` twice beneath those, and `AcceptanceDeclaration` five times.
+The document is fat, but the disqualifying part is that a consumer cannot tell the
+two `Declaration` inlinings are one type — which is the single thing a
+machine-readable contract exists to tell it.
+
+So the JSON is `{schema, version, root, types}` with `types` keyed by name, each
+`Named` edge a name string, and the walk shared with `--format prompt`. The
+worked fragment is in `.doctrine/slice/251/render-sample.md` §3. It carries three
+keys the first draft's model had no way to produce, one per expressibility
+finding: a variant that names the type it `inlines`, a token-less variant carrying
+a bare `shape`, and the marker that an externally tagged unit variant is a bare
+string.
+
+One thing this design deliberately leaves open: the serde spelling of the model's
+own enums. Derived defaults would emit `"Internal": "form"` and
+`"SilentlyDropped"`; kebab-case throughout would match every other closed
+vocabulary in the crate. Either is defensible and neither is load-bearing, so the
+implementer picks — recorded here only so it is not re-derived as though it were
+unsettled by oversight.
 
 ## `--format prompt`: `contract_block`'s line shape
 
@@ -761,15 +994,52 @@ enum Dispose  tagging: internal("form")   variant keys sit BESIDE "form"
   non-durable   note     text   required
 ```
 
-A variant's payload is rendered where it actually lands, which the tagging
-already determines (`sec-2`): inlined beside the tag under `Internal`, nested
-under the token under `External`, absent under `Bare`. A token list alone would
-be the contract making this slice's own mistake.
+Five rules fix the rest of the shape. Each exists because the closure contains a
+case the four lines above do not cover, and every one of them was found by
+rendering the real thing rather than by reasoning about it.
 
-Field order is the commitment, as it is for `contract_line`. The parenthetical on
-`sparse` is the one place the rendering adds words the table does not carry, and
-it is a fixed string per `Presence` variant rather than per key — so it cannot
-drift row by row.
+- **A variant's payload is rendered where it actually lands**, which the tagging
+  and the payload together already determine (`sec-2`'s table): inlined beside the
+  tag under `Internal`, nested under the token under `External`, absent under a
+  unit payload. A token list alone would be the contract making this slice's own
+  mistake.
+- **A multi-key payload indents under its variant line**, one key per line, rather
+  than wrapping. Four variants need it — `DelegationAct::Propose` and
+  `Provenance::ImportedProse` carry four keys each, `Export` and `Refuse` two —
+  and field order is the commitment here as it is for `contract_line`, so this is
+  a rendering decision rather than a formatting preference.
+- **An externally tagged unit variant is marked as a bare string**, because it is
+  one. `AgentAct::DraftingReady` renders as `drafting-ready — a BARE STRING, not
+  an object`; a caller who wraps it in an object has it discarded in silence.
+- **An untagged variant has no token and does not pretend to one.** `WireFacetValue`
+  renders its two shapes with the token column struck out, not with its Rust
+  variant names, which are not on the wire.
+- **`Bare` is a word this renderer prints, not a fact the table holds.** An
+  external enum whose every payload is absent renders `tagging: bare`, derived per
+  `sec-2` rather than stored beside the variants it could contradict.
+
+The parenthetical on `sparse` is the one place the rendering adds words the table
+does not carry, and it is a fixed string per `Presence` variant rather than per
+key — so it cannot drift row by row.
+
+## What the whole thing costs, measured
+
+`R5` asked whether the render is too large to be useful. It is not, and this is no
+longer an estimate: the full closure was rendered ahead of implementation
+(`.doctrine/slice/251/render-sample.md` §2) and comes to **202 lines / 8 826
+bytes** — 66 lines of structs, 70 of enums, 40 of the injected region, 26 blank.
+
+Two things follow. First, it is **~8.6× the 1024-byte cap the turn envelope
+already runs**, which confirms `A1` from a direction the assumption did not have:
+the contract could not ride the envelope even if `DEC-064` were resolved, so
+`sec-6`'s choice to push an *address* rather than the contract is forced rather
+than preferred. Second, there is no case for trimming — the cheapest fifth to cut
+is the injected region, which is the one part a caller cannot recover any other
+way and the only part that is wholly undocumented today.
+
+The one presentational thing the measurement did surface: the root's header line
+runs to 104 columns, over the 100 the rest of the corpus holds to. Shorten the
+parenthetical, not the disclosure.
 
 ## The published document: `artifact.rs`, followed exactly
 
@@ -803,6 +1073,12 @@ prescribed by the existing exemplar rather than designed here.
 or flagged, so the manifest row is a build-gate obligation rather than a step this
 design is asking someone to remember.
 
+`.doctrine/slice/251/render-sample.md` is **not** this document and must not be
+mistaken for its golden. It predates the generator, was written by hand from
+source, and will differ from `render_document()`'s output in whitespace and
+ordering. It is evidence for `R5` and for the findings it raised; the golden is
+`render_document()` against the committed `install/` file, and nothing else.
+
 ## The `--help` pointer is not a fourth rendering
 
 `DEC-224` reduced `design apply --help` to a one-line pointer, and that line is a
@@ -819,9 +1095,10 @@ the generator — which is exactly why `DEC-224` declined the enumerating form.
 
 Four things, all above the leaf:
 
-1. resolving `ExternContracts` from `RecordKind::ALL` and `facet_fields`
-   (`sec-3`), which requires importing both `design_run` and `knowledge` and is
-   therefore only possible here;
+1. building `ExternContracts` from `RecordKind::ALL` and `facet_fields` (`sec-3`),
+   which requires importing both `design_run` and `knowledge` and is therefore
+   only possible here — and building it by derivation rather than by hand, which
+   is what makes two of `sec-3`'s three drift risks compile barriers;
 2. the `DesignCommand::Contract` variant, its clap `Args`, its `dispatch` arm and
    its `guard.rs:430` classification — the last two being compile errors until
    written;
@@ -1062,37 +1339,50 @@ crate-level edge (`ADR-001`).
 `sec-3` has the command tier build a `TypeContract` at render time from
 `RecordKind::ALL` and `facet_fields`. That contract's row slices are assembled
 while the process runs, so they cannot be `&'static [KeyContract]` as first
-drafted. Two positions change, and `sec-2` carries the amended block:
+drafted. `sec-2` carries the amended block; the positions that change are the
+**three** row slices — a struct's keys, an enum's variants, and a variant's
+payload keys, the third being one the first draft did not have because it had no
+`VariantPayload`:
 
 ```rust
 pub(crate) enum TypeForm {
     Struct(Cow<'static, [KeyContract]>),
-    Enum(Cow<'static, [VariantContract]>),
+    Enum {
+        tagging: Tagging,
+        variants: Cow<'static, [VariantContract]>,
+    },
 }
 
 /// `const fn` constructors, so the const table's authoring site never spells `Cow`.
 pub(crate) const fn strukt(rows: &'static [KeyContract]) -> TypeForm { … }
-pub(crate) const fn enumeration(variants: &'static [VariantContract]) -> TypeForm { … }
+pub(crate) const fn enumeration(tagging: Tagging, of: &'static [VariantContract]) -> TypeForm { … }
 ```
 
 Every *string* in an injected contract is already `&'static` — `RecordKind`'s
 tokens, `FacetFieldRow::name`, and the `KNOWN` sets behind `FieldShape::Closed` —
-so `Cow` is needed at the two slice positions and nowhere else. Nothing else in
-the model moves, and `WireType::Named(&'static TypeContract)` still works for the
-const table's closure edges: an injected contract is only ever the *target* of an
-`Extern` lookup, never the target of a `Named`, so it needs no `&'static` address
-of its own.
+so `Cow` is needed at those three slice positions and nowhere else. At three
+rather than two, an implementer should weigh uniform `Cow` on every row slice
+against tracking which three; `DEC-221` leaves that open.
 
-One `WireType` variant is added with it:
+`WireType::Named(&'static TypeContract)` still works for the const table's closure
+edges. An injected contract is never the target of a `Named` — it is reached
+through `TokenSource::Extern` and `MapKey::Extern`, both of which name a region
+rather than address a type — so it needs no `&'static` address of its own, and the
+acyclicity argument in `sec-3` keeps its mechanical basis.
+
+Two `WireType` positions carry the region:
 
 ```rust
-Token(&'static [&'static str]),   // a string field with a closed vocabulary
+Token(TokenSource),                       // a string field with a closed vocabulary
+Map { key: MapKey, value: &'static WireType },
 ```
 
-A facet field's `FieldShape::Closed(tokens)` is precisely that — a plain string on
-the wire whose admissible values are a closed set with no Rust type name visible
-to a caller. Modelling it as `Named` pointing at an invented enum would state
-something false about the wire.
+A facet field's `FieldShape::Closed(tokens)` is a plain string on the wire whose
+admissible values are a closed set with no Rust type name visible to a caller, so
+it is a `Token` with a `Fixed` source. `CreateRecord::kind` is the same shape with
+an `Extern` source, which is what lets the seven kinds reach a caller without
+`design_run` naming an enum it may not import — modelling either as `Named`
+pointing at an invented type would state something false about the wire.
 
 **Two alternatives, both rejected.** `Box::leak` in the command tier keeps the
 model `&'static`-uniform and spends one leaked allocation plus every future
@@ -1108,11 +1398,19 @@ borrowed, sometimes owned*, and the constructors keep it out of the table.
 fn extern_contracts() -> ExternContracts;
 ```
 
-One entry, keyed `"knowledge::RecordKind"`: an enum-form `TypeContract` with one
+One field, `ExternRegion::KnowledgeRecord`: an enum-form `TypeContract` with one
 `VariantContract` per member of `RecordKind::ALL` (`knowledge.rs:161`), each
 carrying that kind's `facet_fields` rows in template order, mapped
-`Text → WireType::Text`, `List → Seq(Text)`, `Closed(tokens) → Token(tokens)`.
+`Text → WireType::Text`, `List → Seq(Text)`, `Closed(tokens) → Token(Fixed(tokens))`.
 Around 25 lines, no branching beyond that three-arm map.
+
+Two properties of those 25 lines are load-bearing rather than incidental, and
+`sec-3` rests on both. It **iterates** `RecordKind::ALL` and calls `facet_fields`
+— it does not restate either, so a new kind or facet field arrives without an edit
+here. And the `FieldShape` map is written **without a wildcard arm**, so a new
+shape is a compile error at this function rather than a silent `Text`. A reviewer
+who "simplifies" either one has removed a compile barrier `sec-8` pin 5 is sized
+against.
 
 `run_contract` is then: assemble, dispatch on `ContractFormat` to `render_json` or
 `render_prompt`, `emit`. No root, no snapshot, no I/O (`sec-6`).
@@ -1169,13 +1467,16 @@ at close.
 This section names the tests, their oracles, and the two places drafting found
 that the ladder as stated does not reach.
 
-## Three things need no test
+## Four things need no test
 
-The compile barriers from `sec-4` and `sec-6`, restated as the evidence they are:
-`payload_variants!`'s dead exhaustive match over each enum; the exhaustive no-`..`
-literals behind the key-set pin; and the `Contract` arms in `commands/design.rs`'s
-dispatch and `guard.rs:430`, both non-exhaustive-match errors until written. None
-is a test, and each fails before one can run.
+The compile barriers from `sec-4`, `sec-5` and `sec-6`, restated as the evidence
+they are: `payload_variants!`'s dead exhaustive match over each enum; the
+exhaustive no-`..` literals behind the key-set pin; the `Contract` arms in
+`commands/design.rs`'s dispatch and `guard.rs:430`, both non-exhaustive-match
+errors until written; and — since `sec-3` closed the extern seam — the
+`ExternRegion` → `ExternContracts` resolution, where naming a region the shell
+does not supply is a missing-field or non-exhaustive-match error rather than a
+runtime `None`. None is a test, and each fails before one can run.
 
 ## The oracle discipline
 
@@ -1200,6 +1501,13 @@ fully_populated()` beside its definition, on `Declaration::fully_populated`'s
 precedent (`submission.rs:653`) — an exhaustive literal with no `..`, so a new
 field is a compile error at the fixture before it can be a missing contract row.
 
+**Twelve here is the closure count, and it is the right one.** The rendering emits
+eleven blocks because `SubmissionEnvelope` is flattened into the root (`sec-2`),
+but its serde surface is a real three-key object and a key-set assertion over it
+is well defined — so it gets a call site like the rest. Any pin or claim in this
+design that counts *blocks* rather than *members* has to say so; this one counts
+members.
+
 **`Declaration`'s fixture is reused, not copied.** `I9`
 (`tests.rs:2908`) and the contract's pin consume the same literal, so the two
 cannot disagree about what a full declaration is. A second literal beside the
@@ -1215,6 +1523,12 @@ Serialise the same `fully_populated` value and compare each key's JSON kind
 against its declared `WireType`: string against `Text` / `Id` / `Token`, number
 against `Integer`, bool against `Boolean`, array against `Seq`, object against
 `Named` / `Map`.
+
+A `Map` row is now two claims rather than one, because `sec-2` gave the key a
+description: the object's **values** match the declared value type, and its
+**keys** match `MapKey`. Under `MapKey::Of(Id)` — `AdoptAuthored.sections` — every
+key parses as a `DesignId`. Under `MapKey::Extern` the keys are checked by pin 5,
+not here, because the fixture cannot know which kind was selected.
 
 Catches the commonest table defect — a row whose `ty` was copied from the row
 above it. It does **not** separate `Text` from `Id` or `Token`, which are all
@@ -1238,11 +1552,24 @@ Two fixtures, not twelve: only `Declaration` (`submission.rs:126-133`) and
 ## 4 — Tokens against serde's renames, and why the coverage is total
 
 Per enum, one sample value per variant. The token is extracted **through the
-table's own `Tagging` claim**: `Bare` reads the JSON string, `External` the sole
-object key, `Internal(tag)` the value at `tag`, `Untagged` contributes no token
-and is skipped.
+table's own claim about that variant** — which since `sec-2` is a claim about the
+tagging *and* the payload together, not about the type alone:
+
+| tagging | payload | extraction |
+|---|---|---|
+| `Internal(tag)` | any | the value at `tag` |
+| `External` | `Keys` / `Inlines` | the sole object key |
+| `External` | `Absent` | **the JSON string itself** |
+| `Untagged` | `Shape` | no token; skipped |
 
 Then `{extracted tokens}` == `VARIANTS`.
+
+**The third row is not a refinement, it is a defect this pin had.** Driving
+extraction off a per-type `External` claim would look for a sole object key in
+`AgentAct::DraftingReady`'s bare string `"drafting-ready"` and find none — the pin
+would fail on a correct table, or worse, be written to tolerate the miss and then
+be blind to a real one. The per-variant reading is what makes the pin total over a
+mixed enum.
 
 Two properties for the price of one assertion, and both matter:
 
@@ -1256,23 +1583,33 @@ Two properties for the price of one assertion, and both matter:
   of a quiet gap.
 
 `WireFacetValue` is `Untagged` and contributes no tokens; its two shapes are
-covered by pin 2's JSON-kind walk.
+covered by pin 2's JSON-kind walk. The rendered `bare` label needs no pin of its
+own — it is derived from `External` + every payload `Absent` (`sec-2`), so this
+pin already covers the facts it is derived from.
 
-## 5 — The injected region: two set-equalities
+## 5 — The injected region: one narrow fidelity test
 
-`sec-3` named this the soft spot and `sec-4` confirmed it closes by test alone.
+`sec-3` used to name this the soft spot and concede it closed by test alone. It no
+longer does, and the pin shrinks accordingly. Two of the three drift risks are
+compile barriers now — a region nobody supplies cannot be spelled, and a
+vocabulary that moved flows through a builder that never copied it — so what is
+left for a test is the one thing a compiler cannot see.
 
-- **Nobody is missing.** `{Extern sources named in PAYLOAD}` == `{keys
-  extern_contracts() returns}`. Catches a table naming a region no one supplies,
-  and a supplier for a region no one names.
 - **The mapping is faithful.** Per kind: the injected variant's facet key set
   equals `facet_fields(kind)`'s names in order, and each `Token` vocabulary equals
   the `KNOWN` set behind that field's `FieldShape::Closed`. The comparison is
   against `knowledge`'s tables directly, not against the builder that read them —
-  what it pins is that the mapping dropped, reordered or retyped nothing.
+  what it pins is that a total, compile-checked mapping was also an order- and
+  content-preserving one.
+- **The variant tokens are the kind tokens.** `{the injected contract's variant
+  tokens}` == `{`RecordKind::ALL`'s tokens}`. One line, and it is what makes
+  `CreateRecord.kind`'s `TokenSource::Extern` and `CreateRecord.facet`'s
+  `MapKey::Extern` provably the same seven kinds rather than two readings of one
+  list.
 
-This is the weakest rung — a test where the rest of the ladder has a compile
-error — and it is confined to the injected region, as `sec-3` records.
+This is still the ladder's weakest rung — a test where the rest has a compile
+error — but it is now weak about a narrow claim rather than about whether the
+region is the region.
 
 ## 6 — The document
 
@@ -1316,13 +1653,33 @@ compile-time length assertion keeps covering exactly what is rendered. The parse
 request must then carry `traversal.cursor` — the omission that cost fifteen source
 reads and the reason `DEC-228` exists.
 
+## 9 — The JSON is a flat table, and every edge lands in it
+
+Appended after the render sample found that the JSON rendering had been specified
+as a derived `Serialize` it cannot be (`sec-5`). Two assertions over
+`render_json`'s output, both cheap and both structural:
+
+- **Every type appears exactly once.** `types` is keyed by name, so the assertion
+  is that the walk emitted no duplicate and did not inline. Without it the failure
+  mode is silent and self-similar — a document that looks right and is
+  quadratically redundant.
+- **Every `Named` edge resolves.** Every type name appearing in a `ty` position is
+  a key of `types`, and every key of `types` is reachable from `root`. The second
+  half is what catches a type dropped from the walk rather than from the table.
+
+The extern region is exercised in the same pass: `CreateRecord.facet`'s `MapKey`
+names `kind` as its selector, and `kind` must be a sibling key of the same type —
+a mis-typed selector is otherwise a promise no consumer can act on and no other
+pin reads.
+
 ## Alignment with the slice's closure intent
 
 | Closure intent | Discharged by |
 |---|---|
 | The contract is reachable from the binary without reading `src/`, `cursor` among it | pin 7 (three surfaces) + pin 1 (the closure includes `TraversalDeclaration`) + pin 8 |
 | A test fails if a payload field is added, removed or renamed without the contract following | pins 1 and 2, over the compile barrier |
-| The surface is total over the payload, not over `WRITER_ACTS` | pin 1 across all twelve types; nothing in the ladder reads `WRITER_ACTS` |
+| The surface is total over the payload, not over `WRITER_ACTS` | pin 1 across all twelve closure members; pin 9 that every one of them reaches the rendering; nothing in the ladder reads `WRITER_ACTS` |
+| `facet` is discoverable rather than an open bag | pin 5's two equalities, over the compile barrier `sec-3` put under them |
 | `ISS-333` option 3 discharged and recorded as such | not a test — a close-time statement, whose shipped half is `sec-2`'s `UnknownKeys::SilentlyDropped` |
 
 ## Not pinned, deliberately
@@ -1331,6 +1688,9 @@ reads and the reason `DEC-228` exists.
   they do not re-test serde.
 - **The document's English.** The golden pins bytes to the renderer, which is a
   drift pin, not a review of the prose.
+- **The render sample.** `.doctrine/slice/251/render-sample.md` is hand-written
+  evidence that predates the generator, not a golden. Pinning the two together
+  would pin the generator to a transcription.
 - **`ISS-333`'s mechanism.** Untouched by design; the contract discloses it.
 - **Whether the contract actually saves anyone reads.** That is `RFC-026`'s
   measurement axis and an observation at close, not an assertion in a test.
@@ -1392,13 +1752,19 @@ type's barrier while every test still passes. There is no pin for this — a tes
 cannot see the difference. It is a review point, and each fixture should carry
 `Declaration::fully_populated`'s doc sentence saying why the `..` is forbidden.
 
-**`R5` (new) — the contract can be correct and still too expensive to read.**
-Thirteen struct types, roughly sixty keys and a dozen enums render as perhaps a
-hundred lines in `--format prompt`. That is one fetch against `RFC-026 E8.7`'s
-measured fifteen source reads, so it is a good trade at session scale — but it is
-not free, and nothing in this design bounds it. If measurement shows the full
-render is what stops agents fetching, the escalation is a filter, not a smaller
-contract.
+**`R5` (new, and now measured) — the contract can be correct and still too
+expensive to read.** No longer an estimate: the full closure was rendered ahead of
+implementation and comes to **202 lines / 8 826 bytes**
+(`.doctrine/slice/251/render-sample.md` §2, and `sec-5` carries the composition).
+That is one fetch against `RFC-026 E8.7`'s measured fifteen source reads, which is
+a good trade at session scale, and it is small enough that no bound is worth
+designing in. The measurement also settled two things the risk could not: the
+render is ~8.6× the turn envelope's 1024-byte cap, which is why `sec-6` pushes an
+address rather than the contract; and the cheapest fifth to cut is the injected
+region, which is the one part a caller cannot recover any other way. So the risk
+is **retired as measured rather than carried** — if later evidence shows the full
+render is what stops agents fetching, the escalation is still a filter (`OQ-A`),
+not a smaller contract.
 
 ## Open questions
 

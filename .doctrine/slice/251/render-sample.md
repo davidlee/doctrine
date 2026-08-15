@@ -14,8 +14,10 @@ that commitment paid early, against source rev `ef47e756b`.
 
 **What it found.** The closure matches `sec-3` exactly — twelve structs, fourteen
 enums, the same members. The disagreements are all one tier down, in the *model*
-and the *renderings*: ten findings, raised on the run as `fnd-10`..`fnd-19`. Four
-of them are shapes the model as written cannot express at all.
+and the *renderings*: eleven findings on the run, `fnd-10`..`fnd-20`, all
+dispositioned at rev 60. Four are shapes the model as written could not express at
+all; one — `fnd-20` — is the root cause under them, and cost `sec-3` its
+concession that the injected region closes by test alone.
 
 ---
 
@@ -438,9 +440,11 @@ The corrected shape, on `TurnEnvelope`'s `schema`/`version` precedent
 }
 ```
 
-Three keys in that fragment do not exist in `sec-2`'s model and are the JSON's
-half of the four expressibility findings: `inlines` (`fnd-14`), the token-less
-variant with a bare `shape` (`fnd-11`), and `bare-string` (`fnd-12`).
+Three keys in that fragment did not exist in `sec-2`'s model when it was written
+— they are the JSON's half of the expressibility findings: `inlines` (`fnd-14`),
+the token-less variant with a bare `shape` (`fnd-11`), and `bare-string`
+(`fnd-12`). All three are now in the model: `VariantPayload::Inlines`, `Shape`,
+and `External` + `Absent`.
 
 Also unspecified by `sec-2`: the serde spelling of the model's own enums.
 Derived defaults would emit `"NotTagged"`, `{"Internal":"form"}`,
@@ -451,10 +455,21 @@ so it is not re-derived.
 
 ---
 
-## 4. Findings raised — `fnd-10`..`fnd-19`
+## 4. Findings raised — `fnd-10`..`fnd-20`
 
-Raised on run `dr-019ffb40` and dispositioned there; the run holds the text. Ids
-and one-line synopses only, per the notes convention.
+Raised on run `dr-019ffb40` and all dispositioned there (rev 60); the run holds
+the text and the resolutions. Ids and one-line synopses only, per the notes
+convention.
+
+**`fnd-19` was withdrawn as mis-framed and superseded by `fnd-20`.** It read
+`sec-2`'s "an invented enum would say something false" as a wording contradiction
+with `sec-3`'s injected contract, and offered a choice between two spellings. What
+that sentence protects against is **drift** between a description of the knowledge
+vocabulary and the vocabulary itself — and read that way there is nothing to
+reconcile, because a contract *derived* from `RecordKind::ALL` and `facet_fields`
+is not a second list at all. The real question is whether the injection is
+drift-proof by construction. `fnd-20` asks it and answers no — avoidably so, and
+`sec-3` now closes it.
 
 Four are **expressibility** — the model as written cannot say what the wire does:
 
@@ -479,7 +494,12 @@ Three are **facts traced against source**:
 |---|---|---|
 | `fnd-15` | `sec-3` | three wire scalars, not two — `Fingerprint` (`ids.rs:213`) via `Provenance::ImportedProse`; and six files, not five — `ids.rs` |
 | `fnd-18` | `sec-2`, `sec-3` | `Provenance` is a second internally-tagged enum (`tag = "provenance"`, two payload variants); `ReviewDisposition` is a second externally-tagged one. `sec-2`'s tagging examples name one of each |
-| `fnd-19` | `sec-2`, `sec-3` | tension: `sec-2` says `Named` at an invented enum "would say something false about the payload", yet `sec-3` resolves the extern region by injecting a `TypeContract` for `knowledge::RecordKind` — a bare string field. Either `kind` takes `Token`, populated from the injection, or the rationale needs qualifying |
+
+And one **root cause**, which is where the exercise paid best:
+
+| id | concerns | what breaks |
+|---|---|---|
+| `fnd-20` | `sec-3`, `sec-5`, `sec-8` | the extern region's drift exposure is not inherent — `sec-3` and `sec-5` cite `design_run::prompt` as their precedent and then drop the thing that makes it safe. `contract_block` keys the shell's contribution by `Condition`, a closed enum, and `Fragment` derives its asset key from the variant; the draft reached for a raw string. Close that, and build the injection by iterating `RecordKind::ALL`/`facet_fields` rather than copying them, and two of the three drift risks become compile errors — leaving one narrow fidelity test where `sec-3` had conceded the whole region |
 
 **What the closure derivation did *not* find.** `sec-3`'s twelve structs,
 fourteen enums, their membership, the three-refuse/nine-discard split, the
@@ -489,7 +509,11 @@ is one tier down, and none of it was reachable without writing the rendering out
 
 ## 5. What this artefact does not do
 
-- It does not amend the design. Every disagreement is a run finding.
+- It did not amend the design. Every disagreement went to the run as a finding
+  and was dispositioned there (rev 60), and the section edits followed from the
+  dispositions rather than from this file. The `‹fnd-N›` markers in §2 are kept as
+  written — they record what the rendering *exposed*, which is the evidence, and
+  editing them out would leave the artefact claiming a model it did not test.
 - It is not a golden. The eventual golden is `sec-5`'s
   `render_document()`-vs-disk comparison; this predates the generator and will
   differ from it in whitespace and ordering.
