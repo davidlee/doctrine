@@ -1,0 +1,333 @@
+# Implementation plan for SL-251 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-251"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable: EN-1 entry, EX-1 exit,
+# and verification by mode — VT-1 test, VA-1 agent check, VH-1 human. The prefix
+# is the only mode marker. Reference a criterion from another phase
+# phase-qualified (PHASE-03/EX-8) — bare EX-8 is ambiguous.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Model, extern seam, and the enum vocabulary barrier"
+objective = """
+Land `src/design_run/payload_contract.rs` carrying sec-2's contract model, \
+sec-3's extern-region seam types, the `payload_variants!` exhaustiveness macro \
+over the closure's fourteen enums, and the two address constants. Leaf, pure, \
+out-degree 0 — no renderer, no table, no CLI. This phase buys the compile \
+barriers everything downstream is pinned against.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked (design run rev 76) and its concrete references resolve against the current tree." },
+  { id = "EN-2", text = "`design_run` is classified leaf, out=0 (.doctrine/adr/001/layering.toml:31), and stays so." },
+  { id = "EN-3", text = "The six token authorities the macro consumes resolve: `Stage::as_str`, `ActKind::as_str`, `ReviewPolicy::as_str`, `ReviewDisposition::arm`, `Provenance::label`, `InquiryLifecycle::as_str`." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/design_run/payload_contract.rs` exists and is registered by one `pub(crate) mod payload_contract;` line in `src/design_run/mod.rs`." },
+  { id = "EX-2", text = "The model carries `KeyContract`, `TypeContract`, `TypeForm` (Struct{unknown_keys,keys} / Enum{tagging,variants}), `WireType` (eight arms), `MapKey`, `VariantContract`, `VariantPayload` (four arms), `Tagging` (three), `Presence` (three), `UnknownKeys` (two), `TokenSource`. Every row slice is &'static; no Cow anywhere (sec-2, sec-7)." },
+  { id = "EX-3", text = "`ExternRegion` is closed with `ALL` and `label()`; `ExternContracts` carries one field per region and resolves a region to it by exhaustive const fn; `SelectorTable` and `SelectedKeys` are defined but not populated (sec-3)." },
+  { id = "EX-4", text = "`payload_variants!` emits, per enum, a VARIANTS &[&str], a stringify!'d type name, and a dead exhaustive match with braced patterns. It is invoked once per closure enum and every invocation lives in payload_contract.rs and nowhere else (sec-4, sec-7)." },
+  { id = "EX-5", text = "The six authority-bearing enums consume their existing as_str/arm/label rather than retyping tokens; the six with no authority name their vocabulary at the invocation; `WireFacetValue` and `Dispose` are handled as sec-4 states — Untagged, and self-named rather than borrowed from `DispositionForm`." },
+  { id = "EX-6", text = "`PAYLOAD_CONTRACT_POINTER` and `PAYLOAD_CONTRACT_PATH` are declared here, each spelled once (STD-001). Nothing yet reads them." },
+  { id = "EX-7", text = "payload_contract.rs imports only from within design_run; .doctrine/adr/001/layering.toml is unchanged." },
+  { id = "EX-8", text = "`doctrine check gate` is green." },
+]
+specs        = []
+requirements = []
+
+[[phase.verification]]
+id = "VT-1"
+expects = "sec-8 pin 4 — for every variant of all fourteen closure enums, serialising a sample value yields the token the contract declares, so the macro's list equals serde's actual renames."
+test_file = "src/design_run/tests.rs"
+keywords = ["payload_contract", "tokens_match_serde_renames"]
+waived = false
+
+[[phase.verification]]
+id = "VT-2"
+expects = "The macro's dead exhaustive match is emitted for every closure enum and each VARIANTS list is non-empty — the barrier exists rather than being asserted only in prose."
+test_file = "src/design_run/payload_contract.rs"
+keywords = ["payload_variants!", "VARIANTS", "stringify!"]
+waived = false
+
+[[phase.verification]]
+id = "VA-1"
+text = "Demonstrate the barrier both ways: add a variant to one closure enum without listing it (non-exhaustive match, build failure), then list a variant that does not exist (unresolved path, build failure). Revert both, and paste the two compiler messages into the phase notes — the evidence is the message, not the claim."
+
+[[phase.verification]]
+id = "VA-2"
+text = "Confirm no Cow reached the model and no payload_variants! invocation was scattered outside payload_contract.rs — the two arrangements sec-7 records as already tried and rejected."
+
+[[phase]]
+id        = "PHASE-02"
+name      = "The PAYLOAD table and the key-set pin"
+objective = """
+Author the `PAYLOAD` const table over sec-3's twelve-struct closure rooted at \
+`ApplyRequest`, and the twelve exhaustive no-`..` `fully_populated()` literals \
+that make it a compile barrier. Pin 1 — key-set equality plus the type-name \
+check — closes the loop between them.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01/EX-8 is met: the model, the extern seam types and the enum barrier are in and green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`PAYLOAD: TypeContract` is a const rooted at `ApplyRequest`, rendering its thirteen top-level wire keys at one level (three flattened from `SubmissionEnvelope`, ten act fields) with unknown_keys = SilentlyDropped (sec-2)." },
+  { id = "EX-2", text = "The closure holds twelve struct types; eleven carry a TypeContract of their own and `SubmissionEnvelope` participates through the root's composition. No claim in the code or its comments uses eleven where it means twelve or the reverse." },
+  { id = "EX-3", text = "Presence is Sparse exactly on the Sparse<T> fields, Optional on Option, Required otherwise; unknown_keys is Refused on exactly the three structs carrying deny_unknown_fields (`Declaration`, `CheckpointActDeclaration`, `AgentActDeclaration`) and SilentlyDropped on the other nine (sec-2)." },
+  { id = "EX-4", text = "Id rows carry their admissible IdKind set per key — five kinds for `declare`, sec- alone for `AdoptAuthored.sections` — rather than a bare id (sec-2)." },
+  { id = "EX-5", text = "A #[cfg(test)] fully_populated() sits beside each closure struct's own definition in src/design_run/submission.rs and src/design_run/attestation.rs, every one an exhaustive literal with no functional-update `..`, each carrying Declaration::fully_populated's doc sentence saying why (sec-7, R4)." },
+  { id = "EX-6", text = "resolved_record is absent from the table, by #[serde(skip)] rather than by an exception list." },
+  { id = "EX-7", text = "No wire type's definition or behaviour changes — every addition to submission.rs and attestation.rs is #[cfg(test)], and the existing suites stay green unchanged (behaviour-preservation gate)." },
+  { id = "EX-8", text = "`doctrine check gate` is green." },
+]
+specs        = []
+requirements = []
+
+[[phase.verification]]
+id = "VT-1"
+expects = "sec-8 pin 1 — for each of the twelve closure structs, the serialised key set of its fully_populated literal equals its KeyContract rows, and TypeContract::name equals the Rust type's own name."
+test_file = "src/design_run/tests.rs"
+keywords = ["assert_keys_described", "fully_populated", "PAYLOAD"]
+waived = false
+
+[[phase.verification]]
+id = "VT-2"
+expects = "The fully_populated literals sit beside their types in submission.rs and are reachable from the pin."
+test_file = "src/design_run/submission.rs"
+keywords = ["fully_populated"]
+waived = false
+
+[[phase.verification]]
+id = "VA-1"
+text = "Read every one of the twelve literals and confirm none carries `..`. R4 records that no test can see the difference, so this is the review point that stands in for one; name each literal checked in the phase notes."
+
+[[phase]]
+id        = "PHASE-03"
+name      = "The value pins — descent, coverage, presence"
+objective = """
+Land the oracle half of the ladder: sec-8 pin 2's recursive descent over \
+sec-2's model with no wildcard arm, the coverage set-equality that makes an \
+unreached declaration site a failure, pin 3's presence and requiredness probes, \
+and the variant-payload requiredness arm. This is the rung four review rounds of \
+case-by-case repair could not reach; it is written as an instrument, not as an \
+inventory of cases.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02/EX-8 is met: the table and the twelve literals are in and pinned by key set." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The descent holds a JSON value and the declaration describing it and matches on the declaration's shape with no wildcard arm, covering every WireType and every VariantPayload arm — so a new arm is a compile error at the walk (sec-8 pin 2)." },
+  { id = "EX-2", text = "Named edges resolve by form: a struct target's keys against its rows, an enum target through pin 4's tagging table; under Untagged the value matches exactly one declared Shape. Variant selection is read from the tagging table rather than restated." },
+  { id = "EX-3", text = "The coverage equality {sites the descent reached} == {every site in PAYLOAD} holds over the union of every fixture and sample, a site being a KeyContract, a VariantContract or a nested WireType. The left side is recorded from arrival, never read off the table." },
+  { id = "EX-4", text = "The coverage equality carries its positive control: empty one fixture's Seq and assert the equality FAILS, before asserting it holds on the real set (sec-8, oracle discipline)." },
+  { id = "EX-5", text = "Pin 3 lands: null-set equality on an all-Null Sparse fixture for `Declaration` and `TraversalDeclaration`, and a per-key removal probe on the READ path — never serialization — whose refusing set equals the Required rows." },
+  { id = "EX-6", text = "The variant-payload arm carries requiredness only: the removal probe over pin 4's per-variant samples, skipping the tag under Internal and applying to the wrapped object under External. Key sets and wire types are the descent's and are not restated." },
+  { id = "EX-7", text = "Declaration::fully_populated's `needs: Sparse::Value(Vec::new())` and the doc sentence explaining it are updated in the one place I9 and this ladder share the literal (src/design_run/tests.rs)." },
+  { id = "EX-8", text = "`doctrine check gate` is green." },
+]
+specs        = []
+requirements = []
+
+[[phase.verification]]
+id = "VT-1"
+expects = "sec-8 pin 2 — the recursive descent checks every declaration site's JSON kind against its declared WireType, resolving Named edges structurally by form."
+test_file = "src/design_run/tests.rs"
+keywords = ["descend", "WireType::Named", "PAYLOAD"]
+waived = false
+
+[[phase.verification]]
+id = "VT-2"
+expects = "The coverage set-equality over reached-versus-declared sites, with its positive control asserting the equality fails on an emptied Seq before asserting it holds."
+test_file = "src/design_run/tests.rs"
+keywords = ["reached", "coverage", "emptied"]
+waived = false
+
+[[phase.verification]]
+id = "VT-3"
+expects = "sec-8 pin 3 — Sparse null-set equality on the all-Null fixture, and the read-path removal probe whose refusing key set equals the Required rows, over structs and over pin 4's per-variant samples."
+test_file = "src/design_run/tests.rs"
+keywords = ["removal", "Presence::Required", "Sparse"]
+waived = false
+
+[[phase.verification]]
+id = "VA-1"
+text = "Confirm the descent's match carries no wildcard arm and that the coverage equality's two sides derive independently — an implementation that recorded sites from the table would satisfy both at once and pass on any input. Disable the positive control and check it actually fails."
+
+[[phase]]
+id        = "PHASE-04"
+name      = "The injected extern region"
+objective = """
+Supply sec-3's one externally-owned region from the command tier — the only \
+place `design_run` and `knowledge` are both in scope — by derivation from \
+`RecordKind::ALL` and `facet_fields`, never by hand. Two pins carry the residue \
+the compiler cannot.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01/EX-3 is met: ExternRegion, ExternContracts, SelectorTable and SelectedKeys exist in the leaf." },
+  { id = "EN-2", text = "PHASE-02/EX-1 is met: CreateRecord.kind and .facet carry TokenSource::Extern and MapKey::Extern in the table." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "extern_contracts() -> ExternContracts lives in src/commands/design.rs, builds one SelectedKeys row per member of RecordKind::ALL by ITERATING it and calling facet_fields, in template order, and sets unknown_keys: Refused on the table (sec-3, sec-7)." },
+  { id = "EX-2", text = "The FieldShape map is written with no wildcard arm — Text→Text, List→Seq(Text), Closed(tokens)→Token(Fixed(tokens)) — so a new shape is a compile error here rather than a silent Text." },
+  { id = "EX-3", text = "Omitting a region is a missing-field compile error and there is no string key anywhere in the seam." },
+  { id = "EX-4", text = "`doctrine check gate` is green." },
+]
+specs        = []
+requirements = []
+
+[[phase.verification]]
+id = "VT-1"
+expects = "sec-8 pin 5 — the kind-set equality (the table's row tokens equal RecordKind's members, with an exhaustive match as the oracle rather than ALL) and the mapping-fidelity equality against facet_fields."
+test_file = "src/design_run/tests.rs"
+keywords = ["extern_contracts", "RecordKind", "facet_fields"]
+waived = false
+
+[[phase.verification]]
+id = "VA-1"
+text = "Confirm the two load-bearing properties of these ~25 lines survived: it iterates ALL and calls facet_fields rather than restating either, and the FieldShape map has no wildcard arm. sec-7 warns that a reviewer who simplifies either has removed a barrier pin 5 is sized against."
+
+[[phase]]
+id        = "PHASE-05"
+name      = "The three renderers"
+objective = """
+One generator, three consumers (sec-5): `render_json`, `render_prompt` and \
+`render_document`, sharing the name-keyed flat-table walk over `PAYLOAD` and \
+differing only in emission. Pure functions in the leaf; nothing embeds, \
+publishes or attaches yet.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03/EX-8 and PHASE-04/EX-4 are met: the table is pinned and the extern region is supplied." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Three entry points — render_json, render_prompt, render_document — each taking &ExternContracts, each pure, all in payload_contract.rs." },
+  { id = "EX-2", text = "The shared walk collects types by name into a flat table and emits each once, with every Named edge rendered as a name — because the closure is a graph, not a tree (Declaration reached twice, AcceptanceDeclaration from five places)." },
+  { id = "EX-3", text = "The JSON is bespoke {schema, version, root, types} with types keyed by name — not JSON Schema and not the derived Serialize of PAYLOAD. It expresses SilentlyDropped, Sparse's omit-persists/null-clears semantics, and serde tagging style as tagging style (sec-5)." },
+  { id = "EX-4", text = "The prompt rendering follows contract_block's line shape, and the root's header line stays within the corpus's 100 columns — shorten the parenthetical, not the disclosure (sec-5)." },
+  { id = "EX-5", text = "The renderer prints `bare` for an external enum whose every payload is Absent, derived from the model rather than stored as a Tagging variant (sec-2)." },
+  { id = "EX-6", text = "The serde spelling of the model's own enums is chosen once and applied throughout — the design leaves this to the implementer and records that it is not load-bearing." },
+  { id = "EX-7", text = "`doctrine check gate` is green." },
+]
+specs        = []
+requirements = []
+
+[[phase.verification]]
+id = "VT-1"
+expects = "sec-8 pin 9 — the JSON is a flat table and every Named edge in the closure lands in it as a name, with no type inlined twice and none missing."
+test_file = "src/design_run/payload_contract.rs"
+keywords = ["render_json", "types", "root"]
+waived = false
+
+[[phase.verification]]
+id = "VT-2"
+expects = "sec-8 pin 10 — no repo-private id reaches a shipped surface, over artifact.rs's existing citation detector, with the positive control asserted first on a known-bad input."
+test_file = "src/design_run/payload_contract.rs"
+keywords = ["render_document", "render_prompt", "cites_no_repo_private"]
+waived = false
+
+[[phase.verification]]
+id = "VA-1"
+text = "Render the full closure and compare against .doctrine/slice/251/render-sample.md §2 for SHAPE AND COMPLETENESS ONLY. It is hand-written evidence that predates the generator and is explicitly not a golden — it will differ in whitespace and ordering, and pinning the two together would pin the generator to a transcription (sec-5, sec-8)."
+
+[[phase]]
+id        = "PHASE-06"
+name      = "The verb, the document, and publication"
+objective = """
+Attach the pull surface: `doctrine design contract [--format json|prompt]` as a \
+fifth Read-classed verb needing no slice and no root, and the generated \
+reference document published into the library sealed customization = "fixed". \
+The asset and its manifest row land as one thing — asset_source.rs makes that a \
+build gate, not a reminder.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05/EX-7 is met: all three renderers are in and green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "DesignCommand::Contract(ContractArgs) is a fifth variant with its dispatch arm and its src/commands/guard.rs classification as Read; both were non-exhaustive-match compile errors until written." },
+  { id = "EX-2", text = "ContractArgs carries --format alone — no positional slice and no -p/--path — and ContractFormat { Prompt, Json } defaults to Prompt rather than reusing ShowFormat (sec-6)." },
+  { id = "EX-3", text = "run_contract assembles extern_contracts(), dispatches on the format, and emits. No root, no snapshot, no I/O — the verb answers in a project with no design run, and outside a doctrine project entirely." },
+  { id = "EX-4", text = "install/design-payload-contract.md is committed as render_document()'s output, and publication/manifest.toml gains one entry with all seven required fields — address = reference/design-payload-contract.md, backing = design-payload-contract.md, kind = reference, customization = fixed (DEC-226) — nothing defaulted." },
+  { id = "EX-5", text = "The golden compares render_document() against the committed file read FROM DISK at runtime via CARGO_MANIFEST_DIR, never from the embed, because install/ is embedded with no rerun-if-changed and an embed comparison would false-green (artifact.rs precedent)." },
+  { id = "EX-6", text = "An #[ignore]d regeneration test writes the file, and the golden's failure message names it." },
+  { id = "EX-7", text = "`doctrine check gate` is green, and assert_unprojected_install_assets_are_published passes without a flag." },
+]
+specs        = []
+requirements = []
+
+[[phase.verification]]
+id = "VT-1"
+expects = "sec-8 pin 6 — the published document golden: render_document() equals the committed install/design-payload-contract.md read from disk, with an #[ignore]d regeneration test named in the failure message."
+test_file = "src/design_run/payload_contract.rs"
+keywords = ["PAYLOAD_CONTRACT_PATH", "CARGO_MANIFEST_DIR", "ignore"]
+waived = false
+
+[[phase.verification]]
+id = "VT-2"
+expects = "The Contract verb is classified Read in the command guard, so a confined worker can fetch the contract."
+test_file = "src/commands/guard.rs"
+keywords = ["Contract", "Read"]
+waived = false
+
+[[phase.verification]]
+id = "VA-1"
+text = "Run `doctrine design contract --format prompt` and `--format json` from a directory that is not a doctrine project and confirm both answer. The no-root property is the design's claim; a test inside the repo cannot see it."
+
+[[phase]]
+id        = "PHASE-07"
+name      = "The pointer's three push points"
+objective = """
+Push the contract's address — never its body — to callers who did not ask: the \
+wrapped payload-parse refusal, an additive `contract_pointer` field on the turn \
+envelope, and `design apply`'s long help. Last, because a pointer naming a verb \
+that does not yet exist is worse than no pointer. DEC-228's correction to the \
+worked example rides here.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06/EX-7 is met: `doctrine design contract --format prompt` is a real invocation." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The payload parse site in src/commands/design.rs becomes one map_err appending PAYLOAD_CONTRACT_POINTER on an indented continuation line, matching Refusal::GateNotCleared's form. Serde's own message survives verbatim — no paraphrase, no filter, no classifier." },
+  { id = "EX-2", text = "TurnEnvelope gains a contract_pointer &'static str field fed by the same const, with one unconditional lines.push after the declare line — outside the omission ladder by construction, needing no no-drop registration. TURN_ENVELOPE_VERSION stays 1 (sec-6, A1)." },
+  { id = "EX-3", text = "The pointer is NOT folded into DECLARATION_EXAMPLE; the 1024-byte assertion on the worked example keeps meaning what it says." },
+  { id = "EX-4", text = "APPLY_ABOUT is a const, and Apply takes about = APPLY_ABOUT with long_about = format!(...) splicing PAYLOAD_CONTRACT_POINTER — the address single-sourced, no second hand-typed copy (STD-001, sec-6)." },
+  { id = "EX-5", text = "DEC-228: the envelope's worked declaration example is corrected in place to carry `cursor` — the omission that cost fifteen source reads." },
+  { id = "EX-6", text = "The library document's address is not a fourth push point, and resume's contract_section channel is not used (DEC-225, OQ-B)." },
+  { id = "EX-7", text = "`doctrine check gate` is green." },
+]
+specs        = []
+requirements = []
+
+[[phase.verification]]
+id = "VT-1"
+expects = "sec-8 pin 7 — the pointer reaches design apply's rendered help via render_subcommand_help, single-sourced from the const."
+test_file = "src/main.rs"
+keywords = ["render_subcommand_help", "PAYLOAD_CONTRACT_POINTER", "apply"]
+waived = false
+
+[[phase.verification]]
+id = "VT-2"
+expects = "sec-8 pin 8 — the envelope pushes the contract pointer line, and DEC-228's corrected worked example carries cursor and parses as a valid ApplyRequest."
+test_file = "src/design_run/render/envelope.rs"
+keywords = ["contract_pointer", "cursor", "DECLARATION_EXAMPLE"]
+waived = false
+
+[[phase.verification]]
+id = "VA-1"
+text = "Submit a payload with a misspelt top-level key and read the refusal as a caller would: serde's message intact, the address on an indented continuation, and the invocation complete enough to paste. This is the failure the slice exists to end; confirm it now ends."

@@ -15,10 +15,6 @@ selector = "src/design_run/**"
 intent = "scope-relevant"
 
 [[selector]]
-selector = "src/command/design*"
-intent = "scope-relevant"
-
-[[selector]]
 selector = "install/design-prompts/**"
 intent = "scope-relevant"
 
