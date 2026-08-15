@@ -62,9 +62,11 @@ an installed client project with no source to read.
 
 - Sealed, not overridable, if prose ships (`DEC-102` + the neighbouring axis's
   `customization = "fixed"` condition assets).
-- The unknown-key hole is exactly one level deep — `deny_unknown_fields` holds at
-  `Declaration`, `CheckpointActDeclaration`, `AgentActDeclaration`. `ISS-333`'s
-  discharge can therefore be stated precisely at close.
+- ~~The unknown-key hole is exactly one level deep~~ — **false, superseded
+  2026-08-15 by the self-review pass (`fnd-8`).** Those three types are the only
+  ones that deny; the other nine wire structs discard silently. `ISS-333`'s
+  discharge can still be stated precisely at close, but it is a statement about
+  three types refusing and nine not.
 
 ### Corrections found while exploring
 
@@ -111,7 +113,7 @@ integration is in the sections themselves. Ids only — the run holds the text.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-15 · design/drafting (run rev 38) · dabba7175
+fresh-as-of: 2026-08-15 · design/reviewing (run rev 49) · ed8bd7453
 
 ### Produced
 
@@ -122,6 +124,12 @@ fresh-as-of: 2026-08-15 · design/drafting (run rev 38) · dabba7175
   review. `sec-2` amended during `sec-7` drafting (`Cow` slices +
   `WireType::Token`).
 - Eleven `design-target` selectors recorded (`draft.selectors` runbook step).
+- Self-review pass: `fnd-1`..`fnd-9` raised and disposed on the run; `sec-1`
+  `sec-2` `sec-3` `sec-4` `sec-5` `sec-6` `sec-8` revised to integrate them.
+  `RV-357` minted by the stage move — empty, and stale against the revised
+  sections.
+- `DEC-228` corrected at source (choice facet + body); the reviewing runbook's
+  three steps discharged.
 - Scope reconciled: `OQ-1` `OQ-2` `OQ-3` `R2` resolved against their records;
   Objective 2's "authored, not derived" contradiction corrected.
 
@@ -141,10 +149,28 @@ fresh-as-of: 2026-08-15 · design/drafting (run rev 38) · dabba7175
 - `artifact.rs:373-375` — a generated-asset golden must read disk-source, never
   the embed (`install/` has no `rerun-if-changed`).
 - `asset_source.rs:132` compels publication of any new `install/` asset.
+- **Payload facts, traced against source rather than recalled** (the self-review
+  pass; each had been stated wrongly in the draft): `ApplyRequest` carries
+  thirteen top-level wire keys — three flattened plus **ten** act fields, against
+  `WRITER_ACTS`'s nine rows. The wire closure is **twelve struct types and
+  fourteen enums**, spanning five files (`submission`, `attestation`, `inquiry`,
+  `traversal`, `mod`). Only **three** structs carry `deny_unknown_fields`
+  (`Declaration` 123, `CheckpointActDeclaration` 824, `AgentActDeclaration` 854);
+  the other nine discard silently, `TraversalDeclaration`/`cursor` included.
+  `Dispose` is internally tagged with a **newtype** variant, so `CreateRecord`'s
+  keys inline beside `form`. `DesignId` (`ids.rs:132`) and `ReviewRef`
+  (`attestation.rs:475`) serialise as scalars and are not struct rows.
 
 ### Open
 
-- The review pass — all nine sections outstanding, no prior partial state.
+- **Section attestations** — all nine outstanding. Human review is the v1
+  default (`reviewing.md`); the run will not lock without them.
+- **Owed artefact: a worked full-closure rendering.** `.doctrine/slice/251/render-sample.md`
+  — `--format prompt` over the real twelve structs and fourteen enums, plus a
+  `--format json` fragment, checked against `sec-2`/`sec-3`/`sec-5` and reporting
+  every disagreement found. It is the evidence `R5` (render size) and the
+  presentation gaps need, and the reference codex and later agents read instead
+  of re-deriving the closure. Not yet started.
 - ~~`DEC-228`'s pin is not achievable as recorded~~ — corrected 2026-08-15 at
   source: the pin parses the constant's JSON arm alone after placeholder
   substitution, keeping `concat!(JSON_ARM, PROSE)` so the length assertion still
