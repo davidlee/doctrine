@@ -113,7 +113,7 @@ integration is in the sections themselves. Ids only — the run holds the text.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-15 · design/reviewing (run rev 61) · 42337c4d3
+fresh-as-of: 2026-08-15 · design/reviewing (run rev 61) · e08856ca5
 
 ### Produced
 
