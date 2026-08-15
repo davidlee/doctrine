@@ -113,9 +113,28 @@ integration is in the sections themselves. Ids only — the run holds the text.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-15 · design/reviewing (run rev 72) · 9b4cb418e
+fresh-as-of: 2026-08-15 · PHASE-03 · 00295be85
 
 ### Produced
+
+**Execution, PHASE-01..03.**
+
+- `b36cd84f1` (PHASE-01), `836662efa` and `8d2845ac5` (PHASE-02 — the second
+  records `VT-2`'s waiver reason), `017c59742` (PHASE-03). `4663ce278` is an
+  incidental `skills-lock.json` hash refresh that falls inside PHASE-02's
+  recorded boundary; `00295be85` carries thirteen friction observations.
+  `doctrine check gate` exit 0 and `doctrine slice verify-vt 251` clean for
+  PHASE-01..03 as of `00295be85`. PHASE-04..07 not started.
+- Six criteria appended and one VT retired **at execution**: `PHASE-01/EX-9`;
+  `PHASE-02/EX-10`, `EX-11`, `VT-4`; `PHASE-03/EX-10`, `EX-11`; `PHASE-02/VT-2`
+  waived. Ids only — the whole rationale for each is authored in `plan.md`'s
+  three per-phase execution headings and in the criterion text in `plan.toml`.
+  Criteria ids are immutable: append, never renumber.
+- The design corrections `/reconcile` owes are enumerated in `plan.md` (the
+  `## Notes` section plus the three execution headings). Not restated here, and
+  not implementation work.
+
+**Design run.**
 
 - `DEC-219` `DEC-221` `DEC-224` `DEC-225` `DEC-226` `DEC-227` `DEC-228` `DEC-229`
   — the inquiry's eight decisions. `DEC-229` partially supersedes `DEC-221`
@@ -136,6 +155,9 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 72) · 9b4cb418e
   Evidence beside the design; no section, no attestation. Closure **derived from
   source** (rev `ef47e756b`) then diffed against `sec-3`, per `sec-3`'s own
   commitment to mechanical derivation. `R5` measured: **202 lines / 8 826 B**.
+  **The plan cites it nowhere**, yet it is the authoritative per-key reference —
+  load-bearing for PHASE-02 (`PHASE-02/EX-11` reads presence off it), and the
+  thing to check before inventing a shape for PHASE-05's renderers.
 - `fnd-10`..`fnd-20` raised from that diff and **all dispositioned** (rev 60);
   `fnd-19` withdrawn as mis-framed and superseded by `fnd-20`. Ids only; the run
   holds the text and the resolutions.
@@ -191,6 +213,56 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 72) · 9b4cb418e
     and requiredness, and added the citation detector.
 
 ### Learned
+
+**Execution, PHASE-01..03 — traps a later phase will otherwise walk into.**
+
+- **`doctrine slice record-delta 251 PHASE-NN --start <sha>^ --end <sha>` after
+  each phase commit is mandatory, not bookkeeping.** `verify-vt` builds its
+  attributable-file set from the source-delta registry and nothing else
+  (`slice.rs:884-899`); with no row for a phase, every VT criterion of that
+  phase reports `UNATTRIBUTABLE` however exactly its keywords and selectors
+  match, because the file-in-delta test precedes the keyword test
+  (`vtgate.rs:120-126`). Nothing in the plan or the skills says so. Recorded as
+  [[mem.pattern.slice.record-delta-before-verify-vt]]. The `<sha>^..<sha>`
+  single-commit form is the common case, not the rule — PHASE-02 spans two
+  commits and its row is `4663ce278..8d2845ac5`.
+- **`WireType::Token(TokenSource::Fixed(_))` has no reachable input yet.** No
+  `Fixed` row exists in the shipped `PAYLOAD` table; every construction site is
+  under `cfg(test)` (`payload_contract.rs:2413` in `EXEMPLAR_ROOT`, and
+  `2649`/`2668` inside `every_extern_region_resolves_to_its_own_supply`).
+  PHASE-04 supplies the first real one. The arm reads as dead code and is
+  **deliberately kept** — `PHASE-01/EX-1` forbids a wildcard — and is commented
+  as such in source. Do not delete it.
+- **`payload_contract.rs`'s `EXEMPLAR_*` set is not the real table.** It
+  declares the root `Refused` and exists as the input to
+  `the_model_states_the_four_shapes_the_closure_forced`
+  (`payload_contract.rs:2539`). It must never be merged into `PAYLOAD`.
+- **The two `#[expect(dead_code)]` on `PAYLOAD_CONTRACT_POINTER` and
+  `PAYLOAD_CONTRACT_PATH` (`payload_contract.rs:1532`, `1540`) must keep
+  firing until PHASE-06/07 read them.** Under `warnings = "deny"` an `expect`
+  that *stops* firing is itself a hard error, so removing each attribute is
+  part of the phase that lands its first reader — not optional tidy-up, and not
+  safe to do early. Each attribute's `reason` names the phase that owes it.
+- **Line citations into `submission.rs` decay *within this slice*.** PHASE-02's
+  fixtures displaced everything `design.md` and `plan.toml` cite by line, and
+  PHASE-03 displaced them again: `PHASE-02/EX-10` cites
+  `CheckpointActDeclaration` at 825 and `AgentActDeclaration` at 855, which are
+  now 1043 and 1095; the `Declaration` / `CheckpointActDeclaration` /
+  `AgentActDeclaration` triple recorded under *Payload facts* below has drifted
+  the same way. Re-resolve every citation by grep. Never trust a cited number
+  in this slice's artefacts, including the ones written to record the drift.
+- **All twelve closure structs are defined in `src/design_run/submission.rs`;
+  `attestation.rs` holds none of them** — `CheckpointActDeclaration` included.
+  `attestation.rs` contributes the closure's *enums* plus `ReviewRef`, and it
+  holds `CheckpointAct`, the near-namesake that makes the mistake easy. `sec-7`'s
+  touch table and `sec-8` pin 1 are wrong about this, which is what made
+  `PHASE-02/VT-2` void on contact rather than merely unmet — the criterion
+  mandated fixtures in `attestation.rs` while naming a `submission.rs` type as
+  its keyword. **Expect the same error to void a PHASE-04+ criterion**; treat it
+  as evidence, adapt, append a criterion recording the disposition, and leave
+  the correction to `/reconcile`.
+
+**Design run.**
 
 - Triage errors corrected in the governance table above: `ADR-001` (`design_run`
   is leaf out-degree 0, not engine) and `ADR-019` (engaged on the publication
@@ -297,6 +369,14 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 72) · 9b4cb418e
 
 ### Open
 
+- **PHASE-04..07 unstarted**, and their criteria are authoritative only as far
+  as the design is — see the `attestation.rs` trap under *Learned*. `PHASE-04`
+  crosses the leaf/command tier boundary (`ADR-001`) and its kind set rides
+  `RecordKind::ALL`, which is hand-maintained (below, and `ISS-364`).
+- **`/reconcile` obligations accumulate at execution.** Every phase so far has
+  added one; `plan.md` is the single place they are enumerated, and the count
+  in any prose that names one is a snapshot. Query `plan.md`, do not carry a
+  number.
 
 - **Two obligations open, both the user's** — section attestations (all nine
   outstanding; human review is the v1 default per `reviewing.md`) and the review
