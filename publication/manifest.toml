@@ -72,6 +72,33 @@ provenance    = "declared"
 customization = "customizable"
 
 [[entry]]
+address       = "integration/agents/claude/capsule-orchestrator.md"
+backing       = "agents/claude/capsule-orchestrator.md"
+kind          = "integration"
+title         = "Claude capsule orchestrator agent"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "integration/agents/claude/capsule-phase-planner.md"
+backing       = "agents/claude/capsule-phase-planner.md"
+kind          = "integration"
+title         = "Claude capsule phase planner agent"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "integration/agents/claude/capsule-worker.md"
+backing       = "agents/claude/capsule-worker.md"
+kind          = "integration"
+title         = "Claude capsule worker agent"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
 address       = "integration/agents/pi/dispatch-worker.md"
 backing       = "agents/pi/dispatch-worker.md"
 kind          = "integration"
