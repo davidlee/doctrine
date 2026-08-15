@@ -1,0 +1,50 @@
+memory_uid = "mem_01a0034d85707a4086c592a611eff14d"
+memory_key = "mem.signpost.design-run.cluster"
+schema_version = 1
+memory_type = "signpost"
+status = "active"
+title = "Design-run cluster: entry point"
+summary = "Where design-run work stands: the cluster, its five batches, the two gates, and what settles each"
+created = "2026-08-15"
+updated = "2026-08-15"
+
+[scope]
+paths = ["src/design_run/", ".doctrine/backlog/"]
+globs = []
+commands = ["doctrine design", "doctrine backlog"]
+tags = ["design-run", "backlog", "entry-point"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "12ed4ef0b0f1833f18f4840ea8240c97c85d4eb3"
+ref_name = "refs/heads/edge"
+checkout_state_id = "83867d1468e47948a1197589b028745b987ec777d3f101e4f9b799ae30f499e7"
+base_commit = "2fef87eea93d7047e2ec2b422a1237642722bb43"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "rfc"
+ref = "RFC-026"
+
+[[source]]
+kind = "spec"
+ref = "SPEC-029"
+
