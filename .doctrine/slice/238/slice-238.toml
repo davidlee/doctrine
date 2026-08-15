@@ -71,6 +71,10 @@ label = "governed_by"
 target = "ADR-017"
 
 [[relation]]
+label = "governed_by"
+target = "STD-003"
+
+[[relation]]
 label = "references"
 role = "implements"
 target = "SPEC-015"
