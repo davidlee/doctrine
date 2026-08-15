@@ -45,9 +45,14 @@ user accepted it on.
 
 `design show --format json` is the standing precedent for a machine-readable
 projection of run state, so a contract verb is not a new idea in this command
-surface. Classification is safe by construction: `guard.rs:477` sorts design
-verbs in an exhaustive per-variant match, so a new variant that fails to declare
-itself a read is a compile error, not something a reviewer has to catch.
+surface. Classification is safe by construction: `guard.rs:430` sorts design
+verbs in an exhaustive per-variant match — `Start`/`Apply`/`Materialise` are
+`Write(<label>)`, `Show`/`Resume` are `Read` — so a new variant that fails to
+declare itself is a compile error there *and* in `dispatch` (`design.rs:240`),
+not something a reviewer has to catch. One caveat to carry into the design: the
+`Write` labels are plain `&'static str` typed only in that arm, with no test
+pinning a label to its verb, so the new verb's label is unguarded prose even
+though its classification is not.
 
 The verb alone discharges the scope's first objective and the cost RFC-026 `E8.7`
 measured. Everything else here is additive.
