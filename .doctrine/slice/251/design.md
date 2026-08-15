@@ -1842,12 +1842,23 @@ this design builds on does not: `Declaration::fully_populated` sets
 `needs: Sparse::Value(Vec::new())` (`submission.rs:657`), and its doc says the
 values are arbitrary because `I9` observed each key's *presence* alone. True of
 `I9`, false of this ladder. So *fully populated* carries a second obligation
-beside the no-`..` literal: **every `Seq` and `Map` key holds at least one
+beside the no-`..` literal: **every `Seq` and `Map` row holds at least one
 element, in every struct fixture and every variant sample**, and the walk
 **asserts** non-emptiness on those rows rather than trusting it — an emptied
 container is then a failure rather than a check that quietly stopped running.
 `Declaration::fully_populated`'s value and its doc sentence both change with it,
 in the one place `I9` and this ladder share the literal (`tests.rs:2908`).
+
+**A *row*, not a key** — the obligation is stated over where a container is
+*declared*, because a container is not always behind a key. `WireFacetValue`'s
+`List` arm is `VariantPayload::Shape(Seq(Text))` (`sec-2`): untagged, so it is a
+shape rather than a set of keys, and pin 4 hands both its shapes to pin 2. A
+key-scoped rule would never reach it, and `WireFacetValue::List(vec![])` would
+satisfy `Shape(Seq(Integer))` exactly as well as `Shape(Seq(Text))`. The rule
+therefore binds every `Seq` and `Map` **wherever it is declared** — a
+`KeyContract`'s `ty`, an untagged variant's `Shape`, or a container nested inside
+either — which closes the case by construction rather than by an inventory of
+today's rows.
 
 ## 1 — Key sets: eleven types one way, the twelfth another
 
@@ -1908,8 +1919,10 @@ against `Integer`, bool against `Boolean`, array against `Seq`, object against
 `Seq(inner)` row checks *every element* against `inner`, and a `Map` row checks
 every value against the declared value type — otherwise `declare`'s
 `Seq(Named(Declaration))` says only "array", and any named target would satisfy
-it. Non-emptiness is what keeps both checks from being vacuous, which is why the
-oracle discipline above makes it a fixture obligation and asserts it.
+it. It recurses the same way into an untagged variant's `Shape`, which is the
+other place a container is declared. Non-emptiness is what keeps all of these
+from being vacuous, which is why the oracle discipline above makes it a fixture
+obligation and asserts it.
 
 A `Map` row is now two claims rather than one, because `sec-2` gave the key a
 description: the object's **values** match the declared value type, and its
