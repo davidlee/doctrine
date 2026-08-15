@@ -230,7 +230,7 @@ requirements = []
 [[phase.verification]]
 id = "VT-1"
 expects = "sec-8 pin 5 — the kind-set equality (the table's row tokens equal RecordKind's members, with an exhaustive match as the oracle rather than ALL) and the mapping-fidelity equality against facet_fields."
-test_file = "src/design_run/tests.rs"
+test_file = "src/commands/design.rs"
 keywords = ["extern_contracts", "RecordKind", "facet_fields"]
 waived = false
 

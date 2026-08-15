@@ -59,6 +59,10 @@ use crate::design_run::attestation::{
 use crate::design_run::delegation::Delegation;
 use crate::design_run::gate::ObservedFact;
 use crate::design_run::ids::{DesignId, Fingerprint, IdKind};
+use crate::design_run::payload_contract::{
+    ExternContracts, ExternRegion, KeyContract, Presence, SelectedKeys, SelectorTable, TokenSource,
+    UnknownKeys, WireType,
+};
 use crate::design_run::render::envelope::{self, Detail, OutstandingBySeverity};
 use crate::design_run::run::{Admission, DerivedInput, ObservedReview, Resolution};
 use crate::design_run::snapshot::{self, CheckpointGroup, DesignSnapshot};
@@ -939,6 +943,74 @@ fn raw_facet(create: &CreateRecord) -> Vec<crate::knowledge::RawEdit<'_>> {
             },
         })
         .collect()
+}
+
+/// The one externally-owned region of the payload closure, supplied from the
+/// only tier where `design_run` and `knowledge` are both in scope (ADR-001,
+/// `sec-3`/`sec-7`).
+///
+/// **Two properties below are barriers, not style, and both are what a
+/// well-meaning simplifier deletes.** It *iterates*
+/// [`crate::knowledge::RecordKind::ALL`] and *calls*
+/// [`crate::knowledge::facet_fields`] rather than restating either, so a new
+/// facet field reaches the contract with no edit in this file at all; and the
+/// [`crate::knowledge::FieldShape`] map is three named arms with **no
+/// wildcard**, so a new shape is a compile error here rather than a silent
+/// [`WireType::Text`] that mis-describes it. A `_ =>` arm, a hand-typed kind
+/// list, or a hand-typed facet-name list removes a barrier `sec-8` pin 5 is
+/// sized against — pin 5 is the ladder's weakest rung *because* these carry the
+/// rest.
+///
+/// Iterating `ALL` is deliberately **not** among them. `ALL` is hand-maintained
+/// (`knowledge.rs:161`), so an eighth kind is forced into `facet_fields` by that
+/// function's exhaustive match yet not into `ALL`, and this function would then
+/// emit a table missing it in silence. That residue is carried by pin 5's
+/// kind-set equality, whose oracle is an exhaustive match over `RecordKind`
+/// written in the test and never `ALL` itself.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-251 PHASE-05 renderers / PHASE-06 run_contract"
+    )
+)]
+pub(crate) fn extern_contracts() -> ExternContracts {
+    use crate::knowledge::FieldShape;
+
+    let rows = crate::knowledge::RecordKind::ALL
+        .into_iter()
+        .map(|kind| SelectedKeys {
+            // `as_str()` is the stored/wire discriminator's own authority
+            // (STD-001) — no kind token is spelled here.
+            token: kind.as_str(),
+            keys: crate::knowledge::facet_fields(kind)
+                .iter()
+                .map(|field| KeyContract {
+                    key: field.name,
+                    ty: match field.shape {
+                        FieldShape::Text => WireType::Text,
+                        FieldShape::List => WireType::Seq(&WireType::Text),
+                        // The row already holds the enum's own `KNOWN` set;
+                        // it reaches the contract unretyped.
+                        FieldShape::Closed(tokens) => WireType::Token(TokenSource::Fixed(tokens)),
+                    },
+                    // Every facet field is omissible: `plan_facet_edits` maps
+                    // over the edits the caller supplied and compels none.
+                    presence: Presence::Optional,
+                })
+                .collect(),
+        })
+        .collect();
+
+    ExternContracts {
+        knowledge_record: SelectorTable {
+            source: ExternRegion::KnowledgeRecord.label(),
+            rows,
+            // An unrecognised facet key is `FacetEditRefusal::UnknownField`
+            // before an id is reserved — refused, not stored, not dropped.
+            unknown_keys: UnknownKeys::Refused,
+        },
+    }
 }
 
 fn plan_checkpoints(
@@ -3417,6 +3489,156 @@ mod tests {
                 manifest.declares_backing(key),
                 "{key} is published by backing, not only addressed"
             );
+        }
+    }
+
+    // --- sec-8 pin 5: the injected extern region ---------------------------
+    //
+    // Sited here and not in `src/design_run/tests.rs` (which `plan.toml`'s
+    // `VT-1` names) for a mechanical reason: the pin cannot be written without
+    // naming `crate::knowledge` *and* `crate::commands::design`, and
+    // `tests/architecture_layering.rs` walks `src/design_run/tests.rs` as
+    // production — its first non-comment line is `#![expect(…)]`, not
+    // `#[cfg(test)]`, so `skip_cfg_test_file` does not skip it. The edge would
+    // be leaf → command. This module is `#[cfg(test)]` and already command
+    // tier, so the collector skips it outright.
+
+    use crate::knowledge::{FieldShape, RecordKind, facet_fields};
+
+    /// One list, two uses: the array the pin enumerates, **and** a match rustc
+    /// must find exhaustive. An eighth [`RecordKind`] is therefore a build
+    /// failure *here* — which comparing against the kinds' hand-maintained
+    /// `ALL` array could never be, because that is the very array
+    /// [`extern_contracts`] itself iterates, so the pin would have agreed with
+    /// the builder about a kind both had dropped (`sec-3`, `sec-8` pin 5).
+    /// Naming that array anywhere in these tests is the failure mode.
+    ///
+    /// The instrument is `payload_variants!`'s `_pin`, transposed onto a
+    /// knowledge-tier enum. `_pin` is never called; its exhaustiveness is the
+    /// whole point, and the leading underscore is what keeps `dead_code` quiet.
+    macro_rules! every_record_kind {
+        ($($variant:ident),+ $(,)?) => {{
+            const fn _pin(kind: RecordKind) {
+                match kind {
+                    $(RecordKind::$variant => ()),+
+                }
+            }
+            [$(RecordKind::$variant),+]
+        }};
+    }
+
+    /// The oracle: every kind `RecordKind` declares, named once.
+    const DECLARED_RECORD_KINDS: [RecordKind; 7] = every_record_kind!(
+        Assumption, Decision, Question, Constraint, Evidence, Hypothesis, Concept,
+    );
+
+    /// `sec-8` pin 5, first equality — the row tokens **are** the kind tokens.
+    ///
+    /// The two count assertions are not decoration: a set equality is blind to a
+    /// duplicated row, and every per-row loop in the sibling test below passes
+    /// vacuously over an empty `rows`. `concept` contributes a legitimate row
+    /// with **zero** keys (`CONCEPT_FACET_FIELDS = &[]`), so "every row has
+    /// keys" would be false and the total-key count is the only non-vacuity
+    /// available.
+    #[test]
+    fn the_selector_tables_rows_are_exactly_the_declared_record_kinds() {
+        let table = extern_contracts().knowledge_record;
+
+        let expected: std::collections::BTreeSet<&str> =
+            DECLARED_RECORD_KINDS.iter().map(|k| k.as_str()).collect();
+        let actual: std::collections::BTreeSet<&str> =
+            table.rows.iter().map(|row| row.token).collect();
+        assert_eq!(
+            actual,
+            expected,
+            "row tokens disagree with the declared kinds: in the table only {:?}, \
+             declared only {:?}",
+            actual.difference(&expected).collect::<Vec<_>>(),
+            expected.difference(&actual).collect::<Vec<_>>(),
+        );
+
+        assert_eq!(
+            table.rows.len(),
+            DECLARED_RECORD_KINDS.len(),
+            "one row per declared kind, no duplicates: {:?}",
+            table.rows.iter().map(|row| row.token).collect::<Vec<_>>(),
+        );
+
+        let declared_keys: usize = DECLARED_RECORD_KINDS
+            .iter()
+            .map(|kind| facet_fields(*kind).len())
+            .sum();
+        let supplied_keys: usize = table.rows.iter().map(|row| row.keys.len()).sum();
+        assert_eq!(
+            supplied_keys, declared_keys,
+            "the table carries every declared facet field — the evidence count \
+             behind the per-row verdicts"
+        );
+    }
+
+    /// `sec-8` pin 5, second equality — mapping fidelity, compared against
+    /// `knowledge`'s tables directly rather than against the builder that read
+    /// them.
+    ///
+    /// The shape/type correspondence is asserted as a match over the **pair**,
+    /// so this test states the mapping independently instead of reconstructing
+    /// it: a `Closed` field that arrived as `Text` falls to the mismatch arm,
+    /// and a `Closed` field whose vocabulary was swapped for another of the same
+    /// length fails the slice equality inside its arm.
+    #[test]
+    fn each_rows_keys_are_that_kinds_facet_fields_in_template_order() {
+        let table = extern_contracts().knowledge_record;
+
+        assert_eq!(
+            table.source,
+            ExternRegion::KnowledgeRecord.label(),
+            "the table names the region it supplies"
+        );
+        assert_eq!(
+            table.unknown_keys,
+            UnknownKeys::Refused,
+            "an unknown facet key is refused before the mint, not stored"
+        );
+
+        for row in &table.rows {
+            let kind = DECLARED_RECORD_KINDS
+                .iter()
+                .find(|kind| kind.as_str() == row.token)
+                .copied()
+                .unwrap_or_else(|| panic!("row token `{}` is not a record kind", row.token));
+            let fields = facet_fields(kind);
+
+            assert_eq!(
+                row.keys.iter().map(|key| key.key).collect::<Vec<_>>(),
+                fields.iter().map(|field| field.name).collect::<Vec<_>>(),
+                "`{}`'s keys are its facet fields, in template order",
+                row.token,
+            );
+
+            for (key, field) in row.keys.iter().zip(fields) {
+                assert_eq!(
+                    key.presence,
+                    Presence::Optional,
+                    "`{}`.`{}` is omissible — no facet field is ever compelled",
+                    row.token,
+                    field.name,
+                );
+                match (field.shape, key.ty) {
+                    (FieldShape::Text, WireType::Text) => {}
+                    (FieldShape::List, WireType::Seq(&WireType::Text)) => {}
+                    (FieldShape::Closed(known), WireType::Token(TokenSource::Fixed(tokens))) => {
+                        assert_eq!(
+                            tokens, known,
+                            "`{}`.`{}` carries that field's own vocabulary, unretyped",
+                            row.token, field.name,
+                        );
+                    }
+                    (shape, ty) => panic!(
+                        "`{}`.`{}`: {shape:?} was mapped to {ty:?}",
+                        row.token, field.name,
+                    ),
+                }
+            }
         }
     }
 }

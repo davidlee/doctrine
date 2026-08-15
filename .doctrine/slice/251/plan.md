@@ -297,3 +297,35 @@ is the sixth; `sec-4`'s "pin 4 covers all fourteen uniformly" reads against
 `sec-8` pin 4's own `Untagged → skipped` row; and `sec-8` pin 1's eleven/twelve
 split is stated correctly but is easy to read as twelve call sites — which is
 how the plan came to say it.
+
+## PHASE-04 planning, 2026-08-15 — VT-1's test_file moved
+
+`PHASE-04/VT-1`'s `test_file` was `src/design_run/tests.rs`; it is now
+`src/commands/design.rs`. The id is unchanged — this is the same move the plan
+review already made once for `PHASE-01/VT-1`, for the same reason, and it is a
+field amendment rather than a new criterion because the obligation did not
+change.
+
+The pin must name `crate::knowledge::{RecordKind, facet_fields}` and
+`crate::commands::design::extern_contracts`, and `src/design_run/tests.rs`
+cannot hold a reference to either. `tests/architecture_layering.rs` skips a file
+only when its *first* non-comment line is `#[cfg(test)]`
+(`skip_cfg_test_file`, :135-160); `src/design_run/tests.rs` opens with SPDX
+comments and then `#![expect(…)]`, so the collector walks it as production and
+visits its `use` trees. `design_run` is `leaf` (`layering.toml:31`) and both
+`knowledge` and `commands` are `command` (`:101`, `:94`), so the pin would land
+a leaf→command edge and red `just check` — remediable only by an
+`[[accepted_violation]]`, which is the wrong instrument for a test siting.
+
+`src/commands/design.rs`'s existing `#[cfg(test)] mod tests` is skipped by the
+collector outright, and all three of `VT-1`'s keywords occur there naturally.
+This is the third instance of one defect class in this slice — `PHASE-01/VT-1`
+moved, `PHASE-03/VT-3` split, now this — which is worth carrying to `/audit` as
+a pattern rather than three incidents: **the plan sites pins by subject matter
+and the layering test sites them by import legality**, and the two disagree
+whenever a leaf-tier subject is pinned against a command-tier oracle.
+
+`EX-1`'s "takes `SelectorTable.source` from `ExternRegion::label()` rather than
+retyping" is discharged by `VA-1` reading, not by a test: an identical retyped
+literal satisfies every assertion a test could make, so the property is
+review-visible only. That is a deliberate routing, not a gap.
