@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a003e2-7c7b-7900-93f8-d3292d9a94a8"
+recorded_at = "2026-08-15T05:26:09.787127159Z"
+kind = "friction"
+summary = "value clear mints one comparison session file per subject — a 185-subject bulk clear wrote 185 near-identical files (2590 lines) for one logical act"
+detail = "Clearing the 2026-07-17 migrated value anchors required 185 separate 'doctrine value clear <ID>' invocations because the verb takes a single <ID>. Each invocation mints a fresh session uid and writes its own .doctrine/comparisons/2026-08-15-<uid>.toml holding exactly one [[tombstone]]. Same-day clears do not coalesce into one session. Result: 185 files / 2590 insertions committed for what is one operator decision with one shared note. Two gaps: (a) no multi-ID or stdin batch form on value/estimate clear; (b) no same-day session reuse. Cost is repo noise and review burden, not correctness — the ledger reads fine."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
