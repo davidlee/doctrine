@@ -711,20 +711,61 @@ impl Declaration {
             })
     }
 
-    /// A declaration carrying **every** wire key, for `I9`.
+    /// A declaration carrying **every** wire key, for `I9` and for `sec-8`.
     ///
     /// An exhaustive struct literal with no `..` update syntax, deliberately:
     /// that is what makes a newly added field a compile error *here*, before it
-    /// can be a silently missing row in [`Declaration::WIRE_KEYS`]. The values
-    /// are arbitrary — only each key's presence on the wire is observed — but
-    /// none may be a value its field's `skip_serializing_if` would drop.
+    /// can be a silently missing row in [`Declaration::WIRE_KEYS`]. No value may
+    /// be one its field's `skip_serializing_if` would drop, **and no container
+    /// may be empty**: `sec-8` pin 2's descent reads element types *through* the
+    /// value, so an empty `needs` would prove `array` and nothing whatever about
+    /// what an element must be (`PHASE-03/EX-7`).
+    ///
+    /// The sentence that stood here — that the values are arbitrary because only
+    /// each key's presence on the wire is observed — was true of `I9`, which
+    /// compares key sets, and false of the ladder that now shares this literal.
     #[cfg(test)]
     pub(super) fn fully_populated(subject: DesignId) -> Declaration {
         Declaration {
             subject,
             question: Sparse::Value("why?".to_owned()),
-            needs: Sparse::Value(Vec::new()),
+            needs: Sparse::Value(vec![DesignId::parse("inq-3").expect("a literal id")]),
             parent: Sparse::Value(DesignId::parse("inq-0").expect("a literal id")),
+            provenance: Some(Provenance::AgentProposed),
+            lifecycle: Some(InquiryLifecycle::Open),
+            body: Some("## a section\n".to_owned()),
+            attests: Some(DesignId::parse("sec-0").expect("a literal id")),
+            reviewer: Some(Reviewer::Human),
+            concerns: Some(DesignId::parse("sec-0").expect("a literal id")),
+            summary: Some("a finding".to_owned()),
+            blocking: Some(true),
+            resolution: Some("disposed".to_owned()),
+            disposes: Some(DesignId::parse("inq-0").expect("a literal id")),
+            dispose: Some(Dispose::Unresolved {
+                note: "retained".to_owned(),
+            }),
+            resolved_record: Some("DEC-000".to_owned()),
+        }
+    }
+
+    /// A declaration whose every `Sparse` field is [`Sparse::Null`] and whose
+    /// every `Option` field is `Some`, for `sec-8` pin 3.
+    ///
+    /// `Sparse` serialises `Omitted` and `Null` identically, and
+    /// `skip_serializing_if` drops only `Omitted` — so this value emits JSON
+    /// `null` for **exactly** the sparse keys, which is the oracle pin 3's
+    /// null-set equality reads. An exhaustive literal with no `..` for
+    /// [`Declaration::fully_populated`]'s reason.
+    ///
+    /// It is deliberately **outside** pin 2's coverage union: it exists to make
+    /// containers absent, which is the assertion rather than a gap.
+    #[cfg(test)]
+    pub(super) fn sparse_nulled(subject: DesignId) -> Declaration {
+        Declaration {
+            subject,
+            question: Sparse::Null,
+            needs: Sparse::Null,
+            parent: Sparse::Null,
             provenance: Some(Provenance::AgentProposed),
             lifecycle: Some(InquiryLifecycle::Open),
             body: Some("## a section\n".to_owned()),
@@ -891,6 +932,20 @@ impl TraversalDeclaration {
         TraversalDeclaration {
             pin: Sparse::Value(DesignId::parse("inq-0").expect("a literal id")),
             cursor: Sparse::Value(DesignId::parse("inq-1").expect("a literal id")),
+            posture: Some(Posture::Depth),
+            authority: Some(Authority::UserPinned),
+        }
+    }
+
+    /// A traversal declaration whose every `Sparse` field is [`Sparse::Null`]
+    /// and whose every `Option` field is `Some`, for `sec-8` pin 3 —
+    /// [`Declaration::sparse_nulled`]'s sibling and its reasoning, including
+    /// that it sits deliberately outside pin 2's coverage union.
+    #[cfg(test)]
+    pub(super) fn sparse_nulled() -> TraversalDeclaration {
+        TraversalDeclaration {
+            pin: Sparse::Null,
+            cursor: Sparse::Null,
             posture: Some(Posture::Depth),
             authority: Some(Authority::UserPinned),
         }

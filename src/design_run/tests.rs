@@ -14,6 +14,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
+use serde::de::DeserializeOwned;
+use serde_json::Value;
 
 use super::Stage;
 use super::admission::admit_act;
@@ -38,8 +40,10 @@ use super::inquiry::{
 };
 use super::payload_contract::{
     ACCEPTANCE_DECLARATION, ADOPT_AUTHORED, AGENT_ACT_DECLARATION, CHECKPOINT_ACT_DECLARATION,
-    CREATE_RECORD, DECLARATION, DISCHARGE_DECLARATION, PAYLOAD, REVIEW_POLICY_DECLARATION,
-    STAGE_DECLARATION, TRAVERSAL_DECLARATION, TypeContract, TypeForm,
+    CREATE_RECORD, DECLARATION, DISCHARGE_DECLARATION, Fields, KeyContract, MapKey, PAYLOAD,
+    Placement, Presence, REVIEW_POLICY_DECLARATION, STAGE_DECLARATION, TRAVERSAL_DECLARATION,
+    Tagging, TokenSource, TypeContract, TypeForm, VariantContract, VariantPayload, WireType,
+    claims, place, required_keys,
 };
 use super::prompt::contract_block;
 use super::refusal::{ActFault, Refusal};
@@ -3380,4 +3384,749 @@ fn the_roots_thirteen_rows_are_the_envelopes_keys_disjointly_united_with_the_ten
     let united: BTreeSet<&str> = envelope_keys.union(&act_keys).copied().collect();
     assert_eq!(united, described);
     assert_eq!(described.len(), ENVELOPE_KEYS + ACT_KEYS);
+}
+
+// ── the payload contract's value pins (SL-251 PHASE-03, sec-8 pins 2-3) ─────
+//
+// Two walks over the same tree, and the whole instrument is that they do not
+// share a derivation. `descend_*` holds a **JSON value** in every frame and
+// records a site at arrival; `declare_*` holds the **table** and has no JSON in
+// scope anywhere. The coverage equality between them is what makes an input a
+// pin never reaches a failure rather than a declaration that quietly stops
+// being tested (design, *The oracle discipline*).
+
+/// The site-id grammar, spelled once (STD-001). Both walks name sites with it —
+/// which is the *naming* and not the derivation; they would be incomparable
+/// otherwise.
+const SITE_KEY: &str = ".";
+/// A variant of a named type.
+const SITE_VARIANT: &str = "::";
+/// A variant with no token to name it by — an untagged arm, by position.
+const SITE_UNTOKENED: &str = "#";
+/// A sequence's element type.
+const SITE_SEQ: &str = "#seq";
+/// A map's key type.
+const SITE_MAP_KEY: &str = "#map-key";
+/// A map's value type.
+const SITE_MAP_VALUE: &str = "#map-value";
+/// An untagged variant's shape.
+const SITE_SHAPE: &str = "#shape";
+
+/// The root's sequence-of-declarations key — the positive control's subject.
+const DECLARE_KEY: &str = "declare";
+/// The row whose admissible kinds are the engine's declarable set.
+const SUBJECT_KEY: &str = "subject";
+/// The row whose map keys admit section ids alone.
+const SECTIONS_KEY: &str = "sections";
+
+/// One key's site, rooted at whatever owns it — a `TypeContract::name` for a
+/// struct's row, a variant's site for a variant's row (`PHASE-03/D2`).
+fn key_site(prefix: &str, key: &str) -> String {
+    format!("{prefix}{SITE_KEY}{key}")
+}
+
+/// One variant's site. An untagged arm has no token, so it is named by position.
+fn variant_site(owner: &str, index: usize, token: Option<&str>) -> String {
+    match token {
+        Some(token) => format!("{owner}{SITE_VARIANT}{token}"),
+        None => format!("{owner}{SITE_VARIANT}{SITE_UNTOKENED}{index}"),
+    }
+}
+
+// ── the right side: every declaration site in the table ─────────────────────
+
+/// Every site the contract tree declares, read off the **table** — no JSON is
+/// reachable from anywhere in this walk, which is half of `EX-3`.
+fn declared_sites(root: TypeContract) -> BTreeSet<String> {
+    let mut sites = BTreeSet::new();
+    let mut walked = BTreeSet::new();
+    declare_type(root, &mut sites, &mut walked);
+    sites
+}
+
+/// Memoised by type name, so the contract graph may become cyclic without this
+/// hanging — and so `Declaration`, which is reached from two places, contributes
+/// one set of sites rather than two spellings of it.
+fn declare_type(
+    contract: TypeContract,
+    sites: &mut BTreeSet<String>,
+    walked: &mut BTreeSet<&'static str>,
+) {
+    if !walked.insert(contract.name) {
+        return;
+    }
+    match contract.form {
+        TypeForm::Struct { keys, .. } => declare_keys(contract.name, keys, sites, walked),
+        TypeForm::Enum { variants, .. } => {
+            for (index, variant) in variants.iter().enumerate() {
+                let site = variant_site(contract.name, index, variant.token);
+                sites.insert(site.clone());
+                declare_payload(variant.payload, &site, sites, walked);
+            }
+        }
+    }
+}
+
+fn declare_payload(
+    payload: VariantPayload,
+    site: &str,
+    sites: &mut BTreeSet<String>,
+    walked: &mut BTreeSet<&'static str>,
+) {
+    match payload {
+        VariantPayload::Absent => {}
+        VariantPayload::Keys(rows) => declare_keys(site, rows, sites, walked),
+        VariantPayload::Inlines(target) => declare_type(*target, sites, walked),
+        VariantPayload::Shape(shape) => {
+            let child = format!("{site}{SITE_SHAPE}");
+            sites.insert(child.clone());
+            declare_wire(*shape, &child, sites, walked);
+        }
+    }
+}
+
+fn declare_keys(
+    prefix: &str,
+    keys: &'static [KeyContract],
+    sites: &mut BTreeSet<String>,
+    walked: &mut BTreeSet<&'static str>,
+) {
+    for key in keys {
+        let site = key_site(prefix, key.key);
+        sites.insert(site.clone());
+        declare_wire(key.ty, &site, sites, walked);
+    }
+}
+
+fn declare_wire(
+    ty: WireType,
+    site: &str,
+    sites: &mut BTreeSet<String>,
+    walked: &mut BTreeSet<&'static str>,
+) {
+    match ty {
+        // A scalar is the site it sits at and declares nothing below it.
+        WireType::Text
+        | WireType::Integer
+        | WireType::Boolean
+        | WireType::Id(_)
+        | WireType::Token(_) => {}
+        // A named edge's sites are rooted at the *target's* name, not at this
+        // one, which is what makes `AcceptanceDeclaration.basis` one site rather
+        // than four (`PHASE-03/D2`).
+        WireType::Named(target) => declare_type(*target, sites, walked),
+        WireType::Seq(inner) => {
+            let child = format!("{site}{SITE_SEQ}");
+            sites.insert(child.clone());
+            declare_wire(*inner, &child, sites, walked);
+        }
+        WireType::Map { key, value } => {
+            match key {
+                MapKey::Of(inner) => {
+                    let child = format!("{site}{SITE_MAP_KEY}");
+                    sites.insert(child.clone());
+                    declare_wire(*inner, &child, sites, walked);
+                }
+                // Pin 5's, and skipped by name rather than by a wildcard: which
+                // keys are legal is chosen by a sibling field's value, which no
+                // fixture can know.
+                MapKey::Extern { .. } => {}
+            }
+            let child = format!("{site}{SITE_MAP_VALUE}");
+            sites.insert(child.clone());
+            declare_wire(*value, &child, sites, walked);
+        }
+    }
+}
+
+// ── the left side: the recursive descent (sec-8 pin 2) ──────────────────────
+
+/// Descend a value against the type that describes it.
+///
+/// Faults accumulate rather than panicking, for two load-bearing reasons: an
+/// untagged enum has to *count* how many declared shapes a value satisfies, and
+/// the coverage left side must be recorded from arrival even on a run that will
+/// fail.
+fn descend_type(
+    value: &Value,
+    contract: TypeContract,
+    seen: &mut BTreeSet<String>,
+    faults: &mut Vec<String>,
+) {
+    match contract.form {
+        TypeForm::Struct { keys, .. } => {
+            let Some(object) = value.as_object() else {
+                faults.push(format!(
+                    "{}: a struct target is a JSON object, got {value}",
+                    contract.name
+                ));
+                return;
+            };
+            descend_keys(contract.name, keys, &Fields::plain(object), seen, faults);
+        }
+        TypeForm::Enum { tagging, variants } => {
+            descend_enum(value, contract, tagging, variants, seen, faults);
+        }
+    }
+}
+
+/// A key surface against its rows: the sets are equal, and each value is
+/// descended against its own row. This is pin 1's assertion applied at the edge
+/// rather than at the type, which is what tells two same-shaped `Named` targets
+/// apart.
+fn descend_keys(
+    prefix: &str,
+    keys: &'static [KeyContract],
+    fields: &Fields<'_>,
+    seen: &mut BTreeSet<String>,
+    faults: &mut Vec<String>,
+) {
+    let on_the_wire = fields.names();
+    let described: BTreeSet<&str> = keys.iter().map(|key| key.key).collect();
+    if on_the_wire != described {
+        faults.push(format!(
+            "{prefix}: the keys on the wire {on_the_wire:?} are not the declared rows {described:?}"
+        ));
+    }
+    for key in keys {
+        if let Some(value) = fields.get(key.key) {
+            let site = key_site(prefix, key.key);
+            seen.insert(site.clone());
+            descend_wire(value, key.ty, &site, seen, faults);
+        }
+    }
+}
+
+/// Select the variant, then descend into it.
+///
+/// Selection is read from the tagging table ([`place`]) and never restated
+/// (`EX-2`). Under `Untagged` there is no token to select by, so the value must
+/// satisfy **exactly one** declared shape — which is also the well-formedness
+/// the untagged model needs.
+fn descend_enum(
+    value: &Value,
+    contract: TypeContract,
+    tagging: Tagging,
+    variants: &'static [VariantContract],
+    seen: &mut BTreeSet<String>,
+    faults: &mut Vec<String>,
+) {
+    let selected: Vec<usize> = match tagging {
+        Tagging::Internal(_) | Tagging::External => variants
+            .iter()
+            .enumerate()
+            .filter(|(_, variant)| {
+                place(contract.name, tagging, variant.payload, value)
+                    .is_ok_and(|placement| placement.token() == variant.token)
+            })
+            .map(|(index, _)| index)
+            .collect(),
+        Tagging::Untagged => variants
+            .iter()
+            .enumerate()
+            .filter(|(index, variant)| {
+                let mut probe_seen = BTreeSet::new();
+                let mut probe_faults = Vec::new();
+                descend_variant(
+                    value,
+                    contract,
+                    tagging,
+                    *index,
+                    variant,
+                    &mut probe_seen,
+                    &mut probe_faults,
+                );
+                probe_faults.is_empty()
+            })
+            .map(|(index, _)| index)
+            .collect(),
+    };
+
+    let [index] = selected[..] else {
+        faults.push(format!(
+            "{}: {value} satisfies {} declared variants, not exactly one",
+            contract.name,
+            selected.len()
+        ));
+        return;
+    };
+    descend_variant(
+        value,
+        contract,
+        tagging,
+        index,
+        &variants[index],
+        seen,
+        faults,
+    );
+}
+
+fn descend_variant(
+    value: &Value,
+    contract: TypeContract,
+    tagging: Tagging,
+    index: usize,
+    variant: &VariantContract,
+    seen: &mut BTreeSet<String>,
+    faults: &mut Vec<String>,
+) {
+    let site = variant_site(contract.name, index, variant.token);
+    seen.insert(site.clone());
+    let placement = match place(contract.name, tagging, variant.payload, value) {
+        Ok(placement) => placement,
+        Err(fault) => {
+            faults.push(fault);
+            return;
+        }
+    };
+    descend_payload(&placement, variant.payload, &site, seen, faults);
+}
+
+/// The four `VariantPayload` arms, **with no wildcard** — a new arm is a compile
+/// error here (`EX-1`).
+fn descend_payload(
+    placement: &Placement<'_>,
+    payload: VariantPayload,
+    site: &str,
+    seen: &mut BTreeSet<String>,
+    faults: &mut Vec<String>,
+) {
+    match payload {
+        VariantPayload::Absent => {
+            let Some(fields) = placement.fields() else {
+                faults.push(format!("{site}: a unit variant is not a shape"));
+                return;
+            };
+            let riding = fields.names();
+            if !riding.is_empty() {
+                faults.push(format!(
+                    "{site}: a unit variant carries no keys, got {riding:?}"
+                ));
+            }
+        }
+        VariantPayload::Keys(rows) => {
+            let Some(fields) = placement.fields() else {
+                faults.push(format!("{site}: a keyed variant is not a shape"));
+                return;
+            };
+            descend_keys(site, rows, &fields, seen, faults);
+        }
+        // The target's keys arrive in the variant's place, so its rows are read
+        // against this placement's key surface and its sites stay rooted at its
+        // own name.
+        VariantPayload::Inlines(target) => {
+            let Some(fields) = placement.fields() else {
+                faults.push(format!("{site}: an inlining variant is not a shape"));
+                return;
+            };
+            match target.form {
+                TypeForm::Struct { keys, .. } => {
+                    descend_keys(target.name, keys, &fields, seen, faults);
+                }
+                TypeForm::Enum { .. } => faults.push(format!(
+                    "{site}: an inlining variant names a struct, and {} is an enum",
+                    target.name
+                )),
+            }
+        }
+        VariantPayload::Shape(shape) => {
+            let Placement::Shape(inner) = placement else {
+                faults.push(format!("{site}: a shape variant is untagged"));
+                return;
+            };
+            let child = format!("{site}{SITE_SHAPE}");
+            seen.insert(child.clone());
+            descend_wire(inner, *shape, &child, seen, faults);
+        }
+    }
+}
+
+/// The eight `WireType` arms, **with no wildcard** — a new arm is a compile
+/// error here (`EX-1`). `site` is this position's site id and is already
+/// recorded; what this adds is the sites nested inside it.
+fn descend_wire(
+    value: &Value,
+    ty: WireType,
+    site: &str,
+    seen: &mut BTreeSet<String>,
+    faults: &mut Vec<String>,
+) {
+    match ty {
+        WireType::Text => {
+            if !value.is_string() {
+                faults.push(format!("{site}: `Text` is a JSON string, got {value}"));
+            }
+        }
+        WireType::Integer => {
+            if !value.is_i64() && !value.is_u64() {
+                faults.push(format!("{site}: `Integer` is a JSON integer, got {value}"));
+            }
+        }
+        WireType::Boolean => {
+            if !value.is_boolean() {
+                faults.push(format!("{site}: `Boolean` is a JSON boolean, got {value}"));
+            }
+        }
+        // Per row and structural: the value parses as an id whose **own** kind is
+        // one this row admits. `IdKind::declarable` is not the rule here — it is
+        // a predicate over declaration *subjects*, and four `Id` rows in
+        // `DELEGATION_ACT` legitimately declare a kind it calls false
+        // (`PHASE-03/EX-10`). The two claims that *are* the engine's are asserted
+        // at their own sites, below.
+        WireType::Id(kinds) => {
+            let Some(raw) = value.as_str() else {
+                faults.push(format!("{site}: an `Id` is a JSON string, got {value}"));
+                return;
+            };
+            match DesignId::parse(raw) {
+                Ok(id) if kinds.contains(&id.kind()) => {}
+                Ok(id) => faults.push(format!(
+                    "{site}: {raw:?} is a {:?} id, which this row does not admit ({kinds:?})",
+                    id.kind()
+                )),
+                Err(_) => faults.push(format!("{site}: {raw:?} does not parse as an id")),
+            }
+        }
+        // The vocabulary is pin 4's (`Fixed`) or pin 5's (`Extern`); what is
+        // this pin's is that a token reaches the wire as a string.
+        //
+        // The `Fixed` arm has **no reachable input** in the real table today —
+        // every `Fixed` row is in the exemplar set, and PHASE-04 supplies the
+        // first real vocabularies. It exists because `EX-1` forbids a wildcard,
+        // and because a site is read off the table rather than off a value, its
+        // being uninhabited costs the coverage equality nothing. Do not delete
+        // it (`PHASE-03/F-5`).
+        WireType::Token(TokenSource::Fixed(_)) | WireType::Token(TokenSource::Extern(_)) => {
+            if !value.is_string() {
+                faults.push(format!("{site}: a `Token` is a JSON string, got {value}"));
+            }
+        }
+        WireType::Named(target) => descend_type(value, *target, seen, faults),
+        WireType::Seq(inner) => {
+            let Some(elements) = value.as_array() else {
+                faults.push(format!("{site}: a `Seq` is a JSON array, got {value}"));
+                return;
+            };
+            let child = format!("{site}{SITE_SEQ}");
+            for element in elements {
+                seen.insert(child.clone());
+                descend_wire(element, *inner, &child, seen, faults);
+            }
+        }
+        WireType::Map { key, value: row } => {
+            let Some(object) = value.as_object() else {
+                faults.push(format!("{site}: a `Map` is a JSON object, got {value}"));
+                return;
+            };
+            match key {
+                MapKey::Of(inner) => {
+                    let child = format!("{site}{SITE_MAP_KEY}");
+                    for name in object.keys() {
+                        seen.insert(child.clone());
+                        descend_wire(&Value::String(name.clone()), *inner, &child, seen, faults);
+                    }
+                }
+                // Pin 5's: which keys are legal is chosen by a sibling field's
+                // value. Skipped by name, never by a wildcard.
+                MapKey::Extern { .. } => {}
+            }
+            let child = format!("{site}{SITE_MAP_VALUE}");
+            for element in object.values() {
+                seen.insert(child.clone());
+                descend_wire(element, *row, &child, seen, faults);
+            }
+        }
+    }
+}
+
+// ── the coverage union, and what the descent made of it ─────────────────────
+
+fn wire<T: Serialize>(value: &T) -> Value {
+    serde_json::to_value(value).expect("a closure value serialises")
+}
+
+/// Every value pin 2 walks, each paired with the contract that describes it.
+///
+/// The eleven contract-bearing fixtures — `SubmissionEnvelope` has no contract,
+/// its three keys being `PAYLOAD`'s rows through the flatten — plus, for each
+/// closure enum, every one of pin 4's per-variant samples paired with that
+/// enum's **real** contract. The samples are not optional: eight enums' variants
+/// are reached by no fixture at all, so without them the equality could not hold
+/// on a correct table (`PHASE-03/F-2`).
+///
+/// The root request is a parameter so the positive control can hand in a
+/// deliberately impoverished one without touching a fixture.
+fn coverage_union(request: &ApplyRequest) -> Vec<(Value, TypeContract)> {
+    let mut roots = vec![
+        (wire(request), PAYLOAD),
+        (wire(&AdoptAuthored::fully_populated()), ADOPT_AUTHORED),
+        (
+            wire(&TraversalDeclaration::fully_populated()),
+            TRAVERSAL_DECLARATION,
+        ),
+        (
+            wire(&StageDeclaration::fully_populated()),
+            STAGE_DECLARATION,
+        ),
+        (
+            wire(&AcceptanceDeclaration::fully_populated()),
+            ACCEPTANCE_DECLARATION,
+        ),
+        (
+            wire(&Declaration::fully_populated(id("inq-1"))),
+            DECLARATION,
+        ),
+        (wire(&CreateRecord::fully_populated()), CREATE_RECORD),
+        (
+            wire(&DischargeDeclaration::fully_populated()),
+            DISCHARGE_DECLARATION,
+        ),
+        (
+            wire(&ReviewPolicyDeclaration::fully_populated()),
+            REVIEW_POLICY_DECLARATION,
+        ),
+        (
+            wire(&CheckpointActDeclaration::fully_populated()),
+            CHECKPOINT_ACT_DECLARATION,
+        ),
+        (
+            wire(&AgentActDeclaration::fully_populated()),
+            AGENT_ACT_DECLARATION,
+        ),
+    ];
+    for claim in claims() {
+        for sample in claim.samples {
+            roots.push((sample.value, *claim.contract));
+        }
+    }
+    roots
+}
+
+/// Run the descent over a union and report **what it arrived at**, with whatever
+/// it faulted on. The site set is recorded from arrival and from nowhere else —
+/// nothing in this function or below it reads the table for the left side.
+fn reached(union: &[(Value, TypeContract)]) -> (BTreeSet<String>, Vec<String>) {
+    let mut seen = BTreeSet::new();
+    let mut faults = Vec::new();
+    for (value, contract) in union {
+        descend_type(value, *contract, &mut seen, &mut faults);
+    }
+    (seen, faults)
+}
+
+/// `sec-8` pin 2 — every declaration site's JSON kind is the kind its declared
+/// [`WireType::Named`] edge or scalar row says it is, resolved structurally.
+///
+/// The walk is an exhaustive match over `sec-2`'s model with no wildcard arm, so
+/// a new `WireType` or `VariantPayload` is a build failure here rather than a
+/// declaration that quietly stops being checked.
+#[test]
+fn the_descent_checks_every_declaration_site_against_its_declared_wire_type() {
+    let (_, faults) = reached(&coverage_union(&ApplyRequest::fully_populated()));
+    assert!(faults.is_empty(), "{faults:#?}");
+}
+
+/// The two claims the generic `Id` arm cannot make, each derived from the
+/// **engine** rather than from a slice the table asserts about itself
+/// (`PHASE-03/EX-10`).
+#[test]
+fn the_declared_id_kinds_are_the_engines_declarable_set() {
+    let TypeForm::Struct { keys, .. } = DECLARATION.form else {
+        panic!("a declaration is a struct");
+    };
+    let subject = keys
+        .iter()
+        .find(|key| key.key == SUBJECT_KEY)
+        .expect("a declaration addresses a subject");
+    let WireType::Id(declared) = subject.ty else {
+        panic!("a subject is an id");
+    };
+    let engine: BTreeSet<IdKind> = IdKind::ALL
+        .into_iter()
+        .filter(|kind| kind.declarable())
+        .collect();
+    assert_eq!(
+        declared.iter().copied().collect::<BTreeSet<IdKind>>(),
+        engine,
+        "`subject` admits exactly the kinds a declaration may address"
+    );
+
+    let TypeForm::Struct { keys, .. } = ADOPT_AUTHORED.form else {
+        panic!("an adopt-authored crossing is a struct");
+    };
+    let sections = keys
+        .iter()
+        .find(|key| key.key == SECTIONS_KEY)
+        .expect("the crossing carries a section map");
+    let WireType::Map {
+        key: MapKey::Of(inner),
+        ..
+    } = sections.ty
+    else {
+        panic!("the section map's keys are described");
+    };
+    assert_eq!(
+        *inner,
+        WireType::Id(&[IdKind::Section]),
+        "the section map admits section ids alone"
+    );
+}
+
+/// `sec-8`'s coverage equality — the set of sites the descent **arrived at** is
+/// the set of sites the table declares (`EX-3`).
+///
+/// The two sides derive independently: the left is recorded from arrival with a
+/// JSON value in hand, the right is read off the table with no JSON in scope.
+/// An implementation that recorded sites from the table would satisfy both at
+/// once and pass on any input at all, which is what the positive control below
+/// exists to catch.
+///
+/// **The control runs first, and it must fail.** One fixture's `Seq` is
+/// `emptied` — `ApplyRequest.declare`, whose element site no other value in the
+/// union reaches — and the equality is asserted to break, naming exactly that
+/// site. Only then is the real union asserted clean.
+#[test]
+fn every_declared_site_is_reached_and_an_emptied_seq_breaks_the_coverage_equality() {
+    let declared = declared_sites(PAYLOAD);
+
+    let mut emptied = ApplyRequest::fully_populated();
+    emptied.declare = Vec::new();
+    let (control, _) = reached(&coverage_union(&emptied));
+    assert_ne!(
+        control, declared,
+        "an emptied `Seq` must break the coverage equality"
+    );
+    let lost: Vec<&String> = declared.difference(&control).collect();
+    let element = format!("{}{SITE_KEY}{DECLARE_KEY}{SITE_SEQ}", PAYLOAD.name);
+    assert_eq!(
+        lost,
+        vec![&element],
+        "an emptied `Seq` loses its element site and nothing else"
+    );
+
+    let (arrived, _) = reached(&coverage_union(&ApplyRequest::fully_populated()));
+    assert_eq!(
+        arrived,
+        declared,
+        "declared but never reached: {:?}\nreached but never declared: {:?}",
+        declared.difference(&arrived).collect::<Vec<_>>(),
+        arrived.difference(&declared).collect::<Vec<_>>()
+    );
+}
+
+// ── pin 3: presence, over the structs ───────────────────────────────────────
+
+/// `{keys serialising to null}` == `{keys the contract declares `Sparse`}`.
+fn assert_sparse_keys_are_null<T: Serialize>(value: &T, contract: &TypeContract) {
+    let TypeForm::Struct { keys, .. } = contract.form else {
+        panic!(
+            "{}: a closure struct is described by a struct form",
+            contract.name
+        );
+    };
+    let serialised = wire(value);
+    let nulled: BTreeSet<&str> = serialised
+        .as_object()
+        .unwrap_or_else(|| panic!("{}: a wire struct serialises to an object", contract.name))
+        .iter()
+        .filter(|(_, value)| value.is_null())
+        .map(|(key, _)| key.as_str())
+        .collect();
+    let sparse: BTreeSet<&str> = keys
+        .iter()
+        .filter(|key| key.presence == Presence::Sparse)
+        .map(|key| key.key)
+        .collect();
+    assert_eq!(nulled, sparse, "{}", contract.name);
+}
+
+/// `{keys whose removal makes the payload fail to deserialise}` ==
+/// `{keys the contract declares `Presence::Required`}`.
+///
+/// The **read** path, and never serialization: *required* is a property of what
+/// `from_value` refuses, and two earlier drafts that read what a minimal value
+/// emits were each wrong — `ApplyRequest.declare` is `#[serde(default)]` with no
+/// `skip_serializing_if`, so it serialises as `[]` while being genuinely
+/// omissible, and the serialization reading fails on a correct table.
+fn assert_removal_refuses_required<T: Serialize + DeserializeOwned>(
+    value: &T,
+    contract: &TypeContract,
+) {
+    let TypeForm::Struct { keys, .. } = contract.form else {
+        panic!(
+            "{}: a closure struct is described by a struct form",
+            contract.name
+        );
+    };
+    let serialised = wire(value);
+    let object = serialised
+        .as_object()
+        .unwrap_or_else(|| panic!("{}: a wire struct serialises to an object", contract.name));
+
+    let mut refusing = BTreeSet::new();
+    for key in object.keys() {
+        let mut probe = object.clone();
+        probe.remove(key);
+        if serde_json::from_value::<T>(Value::Object(probe)).is_err() {
+            refusing.insert(key.as_str());
+        }
+    }
+    assert_eq!(
+        refusing,
+        required_keys(keys),
+        "{}: the keys whose removal refuses are not the declared \
+         `Presence::Required` rows",
+        contract.name
+    );
+}
+
+/// `sec-8` pin 3's first half — a fixture with every `Sparse` field `Null` and
+/// every `Option` field `Some` emits JSON `null` for exactly the sparse keys.
+///
+/// Two fixtures, not twelve: `Declaration` and `TraversalDeclaration` are the
+/// closure's only `Sparse`-bearing structs. Both sit deliberately **outside**
+/// pin 2's coverage union — they exist to make containers absent, which is the
+/// assertion rather than a gap.
+#[test]
+fn sparse_keys_are_exactly_the_keys_that_serialise_to_null() {
+    assert_sparse_keys_are_null(&Declaration::sparse_nulled(id("inq-1")), &DECLARATION);
+    assert_sparse_keys_are_null(
+        &TraversalDeclaration::sparse_nulled(),
+        &TRAVERSAL_DECLARATION,
+    );
+}
+
+/// `sec-8` pin 3's second half — the read-path removal probe over the eleven
+/// contract-bearing fixtures.
+#[test]
+fn the_removal_probe_refuses_exactly_the_required_rows() {
+    assert_removal_refuses_required(&ApplyRequest::fully_populated(), &PAYLOAD);
+    assert_removal_refuses_required(&AdoptAuthored::fully_populated(), &ADOPT_AUTHORED);
+    assert_removal_refuses_required(
+        &TraversalDeclaration::fully_populated(),
+        &TRAVERSAL_DECLARATION,
+    );
+    assert_removal_refuses_required(&StageDeclaration::fully_populated(), &STAGE_DECLARATION);
+    assert_removal_refuses_required(
+        &AcceptanceDeclaration::fully_populated(),
+        &ACCEPTANCE_DECLARATION,
+    );
+    assert_removal_refuses_required(&Declaration::fully_populated(id("inq-1")), &DECLARATION);
+    assert_removal_refuses_required(&CreateRecord::fully_populated(), &CREATE_RECORD);
+    assert_removal_refuses_required(
+        &DischargeDeclaration::fully_populated(),
+        &DISCHARGE_DECLARATION,
+    );
+    assert_removal_refuses_required(
+        &ReviewPolicyDeclaration::fully_populated(),
+        &REVIEW_POLICY_DECLARATION,
+    );
+    assert_removal_refuses_required(
+        &CheckpointActDeclaration::fully_populated(),
+        &CHECKPOINT_ACT_DECLARATION,
+    );
+    assert_removal_refuses_required(
+        &AgentActDeclaration::fully_populated(),
+        &AGENT_ACT_DECLARATION,
+    );
 }

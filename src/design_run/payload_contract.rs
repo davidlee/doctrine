@@ -21,10 +21,26 @@
 //! `PAYLOAD` table itself, the renderer, and the CLI surface are later phases;
 //! nothing here reads a table that does not yet exist.
 
+#[cfg(test)]
+use std::collections::BTreeSet;
+
+#[cfg(test)]
+use serde::{Serialize, de::DeserializeOwned};
+#[cfg(test)]
+use serde_json::{Map, Value};
+
 use super::Stage;
+#[cfg(test)]
+use super::attestation::ReviewRef;
 use super::attestation::{ActKind, AgentAct, ReviewDisposition, ReviewPolicy, Reviewer};
+#[cfg(test)]
+use super::fixture::id;
+#[cfg(test)]
+use super::ids::Fingerprint;
 use super::ids::IdKind;
 use super::inquiry::{InquiryLifecycle, Provenance};
+#[cfg(test)]
+use super::submission::CreateRecord;
 use super::submission::{DelegationAct, DischargeClaim, Dispose, WireFacetValue};
 use super::traversal::{Authority, Posture};
 
@@ -1527,17 +1543,581 @@ pub(crate) const PAYLOAD_CONTRACT_POINTER: &str = "doctrine design contract --fo
 )]
 pub(crate) const PAYLOAD_CONTRACT_PATH: &str = "install/design-payload-contract.md";
 
+// ---------------------------------------------------------------------------
+// The test-time seam (sec-8 pins 2, 3 and 4)
+// ---------------------------------------------------------------------------
+//
+// Everything from here to `mod tests` is `#[cfg(test)]` and ships in nothing.
+// It sits at **module level** rather than inside `mod tests` because the §9.1
+// suite ([`super::tests`]) is where pin 2's recursive descent and its coverage
+// equality live, and a sibling module cannot see a private `mod tests`. Pin 4's
+// per-variant samples are the only inputs that reach most `VariantContract`
+// sites, so the coverage union is unbuildable without them (`PHASE-03/F-2`).
+//
+// **Under `cfg(test)` the crate's blanket `expect(dead_code)` is off**
+// (`super`'s attribute is `cfg_attr(not(test), …)`), so anything here that no
+// test consumes is a `warnings = "deny"` build error rather than a quiet
+// addition. That is the intended pressure.
+
+/// Where one enum variant's token and its keys sit on the wire — `sec-2`'s
+/// tagging × payload table, resolved against a value.
+///
+/// The table has **one** implementation ([`place`]) and three consumers: pin 4's
+/// [`serde_token`], pin 2's variant selection, and pin 3's variant removal
+/// probe. None of the three restates it (`PHASE-03/EX-2`, `EX-6`).
+#[cfg(test)]
+#[derive(Debug)]
+pub(super) enum Placement<'a> {
+    /// [`Tagging::External`] + [`VariantPayload::Absent`] — the JSON string is
+    /// the token, and nothing rides with it.
+    Bare(&'a str),
+    /// [`Tagging::Internal`] — the token is the value at `tag`, and the
+    /// payload's keys sit **beside** it in the same object.
+    Beside {
+        /// The token serde actually wrote.
+        token: &'a str,
+        /// The tag key, which is pin 4's and not a payload row.
+        tag: &'static str,
+        /// The whole object, tag included.
+        object: &'a Map<String, Value>,
+    },
+    /// [`Tagging::External`] + a payload — the token is the sole object key and
+    /// the payload is the value under it.
+    Nested {
+        /// The sole key.
+        token: &'a str,
+        /// What it wraps.
+        value: &'a Value,
+    },
+    /// [`Tagging::Untagged`] — no token anywhere; the variant is a shape.
+    Shape(&'a Value),
+}
+
+/// The key surface a variant's payload arrived on, wherever [`Placement`] put
+/// it — a struct's own object, an internally tagged object minus its tag, or an
+/// externally tagged wrapper's contents.
+///
+/// One reading for all three is what lets pin 2's key-set equality and pin 3's
+/// removal probe be written once each rather than once per tagging.
+#[cfg(test)]
+pub(super) struct Fields<'a> {
+    object: Option<&'a Map<String, Value>>,
+    tag: Option<&'a str>,
+}
+
+#[cfg(test)]
+impl<'a> Fields<'a> {
+    /// A plain object with no tag in it — a struct target's own keys.
+    pub(super) const fn plain(object: &'a Map<String, Value>) -> Fields<'a> {
+        Fields {
+            object: Some(object),
+            tag: None,
+        }
+    }
+
+    /// The payload keys, tag excluded.
+    pub(super) fn names(&self) -> BTreeSet<&'a str> {
+        self.object.map_or_else(BTreeSet::new, |object| {
+            object
+                .keys()
+                .map(String::as_str)
+                .filter(|key| Some(*key) != self.tag)
+                .collect()
+        })
+    }
+
+    /// The value under one payload key. The tag is not a row, so it reads as
+    /// absent (`sec-8`, *The tag is not a row*).
+    pub(super) fn get(&self, key: &str) -> Option<&'a Value> {
+        if Some(key) == self.tag {
+            return None;
+        }
+        self.object.and_then(|object| object.get(key))
+    }
+}
+
+#[cfg(test)]
+impl<'a> Placement<'a> {
+    /// The token serde wrote, or `None` where the placement carries none.
+    pub(super) fn token(&self) -> Option<&'a str> {
+        match *self {
+            Placement::Bare(token)
+            | Placement::Beside { token, .. }
+            | Placement::Nested { token, .. } => Some(token),
+            Placement::Shape(_) => None,
+        }
+    }
+
+    /// The payload's key surface, or `None` where there is none to read — an
+    /// untagged shape is a value rather than a set of keys.
+    pub(super) fn fields(&self) -> Option<Fields<'a>> {
+        match *self {
+            Placement::Bare(_) => Some(Fields {
+                object: None,
+                tag: None,
+            }),
+            Placement::Beside { tag, object, .. } => Some(Fields {
+                object: Some(object),
+                tag: Some(tag),
+            }),
+            Placement::Nested { value, .. } => Some(Fields {
+                object: value.as_object(),
+                tag: None,
+            }),
+            Placement::Shape(_) => None,
+        }
+    }
+
+    /// The whole value again with one payload key removed, rewrapped exactly
+    /// where it came from — pin 3's variant removal probe rebuilds its subject
+    /// through this rather than restating where the keys sat.
+    pub(super) fn without(&self, key: &str) -> Option<Value> {
+        match *self {
+            Placement::Bare(_) | Placement::Shape(_) => None,
+            Placement::Beside { object, .. } => {
+                let mut object = object.clone();
+                object.remove(key);
+                Some(Value::Object(object))
+            }
+            Placement::Nested { token, value } => {
+                let mut inner = value.as_object()?.clone();
+                inner.remove(key);
+                let mut wrapper = Map::new();
+                wrapper.insert(token.to_owned(), Value::Object(inner));
+                Some(Value::Object(wrapper))
+            }
+        }
+    }
+}
+
+/// `sec-2`'s tagging × payload table, written **once**.
+///
+/// A `Result` rather than a panic because pin 2's descent has to be able to try
+/// a candidate variant and be told *no*: under a tagged enum the selection is
+/// "the variant whose declared token is the one this placement extracted", and
+/// an inapplicable candidate must fail rather than abort the walk.
+///
+/// The two `_` here are the table's own *any* rows (design `sec-8` pin 4's
+/// extraction table: `Internal(tag)` × any, `Untagged` × any) and not a
+/// wildcard over the model — pin 2's own matches, which are what `EX-1` binds,
+/// name every arm.
+#[cfg(test)]
+pub(super) fn place<'a>(
+    type_name: &str,
+    tagging: Tagging,
+    payload: VariantPayload,
+    value: &'a Value,
+) -> Result<Placement<'a>, String> {
+    match (tagging, payload) {
+        (Tagging::Internal(tag), _) => {
+            let token = value
+                .get(tag)
+                .and_then(Value::as_str)
+                .ok_or_else(|| format!("{type_name}: no string at the tag {tag:?} in {value}"))?;
+            let object = value.as_object().ok_or_else(|| {
+                format!("{type_name}: an internally tagged variant is an object, got {value}")
+            })?;
+            Ok(Placement::Beside { token, tag, object })
+        }
+        (Tagging::External, VariantPayload::Absent) => {
+            value.as_str().map(Placement::Bare).ok_or_else(|| {
+                format!(
+                    "{type_name}: an external absent-payload variant is a bare string, got {value}"
+                )
+            })
+        }
+        (Tagging::External, VariantPayload::Keys(_) | VariantPayload::Inlines(_)) => {
+            let object = value.as_object().ok_or_else(|| {
+                format!(
+                    "{type_name}: an external payload variant nests under its token, got {value}"
+                )
+            })?;
+            if object.len() != 1 {
+                return Err(format!(
+                    "{type_name}: an externally tagged payload has exactly one key, got {value}"
+                ));
+            }
+            let (token, inner) = object
+                .iter()
+                .next()
+                .ok_or_else(|| format!("{type_name}: an object of length one has a key"))?;
+            Ok(Placement::Nested {
+                token,
+                value: inner,
+            })
+        }
+        (Tagging::External, VariantPayload::Shape(_)) => {
+            Err(format!("{type_name}: {value} carries no token to read"))
+        }
+        (Tagging::Untagged, _) => Ok(Placement::Shape(value)),
+    }
+}
+
+/// The rows a key list declares [`Presence::Required`]. Shared by pin 3's two
+/// removal probes — the struct one in `super::tests` and the variant one below
+/// — so requiredness has one reading (STD-001).
+#[cfg(test)]
+pub(super) fn required_keys(rows: &'static [KeyContract]) -> BTreeSet<&'static str> {
+    rows.iter()
+        .filter(|row| row.presence == Presence::Required)
+        .map(|row| row.key)
+        .collect()
+}
+
+/// The rows a **variant** declares required, read off the real
+/// [`VariantContract`] — never off a sample's own `payload` field, which is a
+/// placement claim and not a contract (`PHASE-03/EX-11`).
+///
+/// An exhaustive match with no wildcard arm, like every other walk over the
+/// model in this slice.
+#[cfg(test)]
+fn required_variant_keys(payload: VariantPayload) -> BTreeSet<&'static str> {
+    match payload {
+        // A unit variant has no keys; an untagged shape has a value rather than
+        // keys, so neither can require one.
+        VariantPayload::Absent | VariantPayload::Shape(_) => BTreeSet::new(),
+        VariantPayload::Keys(rows) => required_keys(rows),
+        VariantPayload::Inlines(target) => match target.form {
+            TypeForm::Struct { keys, .. } => required_keys(keys),
+            TypeForm::Enum { .. } => {
+                panic!("{}: an inlining variant names a struct", target.name)
+            }
+        },
+    }
+}
+
+/// One variant of one closure enum, as the contract claims it.
+///
+/// Deliberately carries **no token literal**: the token is what the walk
+/// derives from serde, and `VARIANTS` is what it is compared against. A
+/// third spelling here would be the drift the macro exists to remove.
+#[cfg(test)]
+pub(super) struct VariantSample {
+    /// Where this variant's payload sits, as the contract claims it. With the
+    /// enum's [`Tagging`] this decides where the token sits — and it is read
+    /// *per variant*, never per type: `AgentAct::DraftingReady` is the live
+    /// mixed case and a per-type reading fails on a correct table.
+    ///
+    /// **A placement claim, not a contract.** It is fed to [`place`] and to
+    /// nothing else: `CARRIES_KEYS` is an empty-row stand-in, so a walk that
+    /// read this as a variant's rows would assert nothing and pass on any input
+    /// (`PHASE-03/EX-11`). Rows come from [`EnumClaim::contract`].
+    pub(super) payload: VariantPayload,
+    /// A sample of this variant, serialised.
+    pub(super) value: Value,
+    /// This variant's token according to the type's **own** authority, where
+    /// one exists. `PHASE-01/EX-9`: `Provenance` and `ReviewDisposition`
+    /// cannot take the macro's `via` arm, so the single source is recovered
+    /// here instead — the walk is total over variants by the barrier, so
+    /// this cannot silently lose a case.
+    pub(super) authority: Option<&'static str>,
+    /// The read path back into the Rust type. A [`Value`] has lost its type, and
+    /// pin 3's removal probe needs one to `from_value` into.
+    pub(super) parse: fn(Value) -> Result<(), String>,
+}
+
+/// One closure enum's claim.
+#[cfg(test)]
+pub(super) struct EnumClaim {
+    pub(super) type_name: &'static str,
+    pub(super) variants: &'static [&'static str],
+    pub(super) tagging: Tagging,
+    /// The **real** contract for this enum — [`STAGE`], [`DISPOSE`], … Pin 2's
+    /// descent and pin 3's variant probe read their rows from here
+    /// (`PHASE-03/EX-11`).
+    pub(super) contract: &'static TypeContract,
+    pub(super) samples: Vec<VariantSample>,
+}
+
+#[cfg(test)]
+fn json(value: &impl Serialize) -> Value {
+    serde_json::to_value(value).expect("a closure value serialises")
+}
+
+/// The read path for one concrete closure type, as a plain function pointer.
+#[cfg(test)]
+fn parse_of<T: DeserializeOwned>() -> fn(Value) -> Result<(), String> {
+    |value| {
+        serde_json::from_value::<T>(value)
+            .map(|_| ())
+            .map_err(|refusal| refusal.to_string())
+    }
+}
+
+#[cfg(test)]
+fn sample<T: Serialize + DeserializeOwned>(payload: VariantPayload, value: &T) -> VariantSample {
+    VariantSample {
+        payload,
+        value: json(value),
+        authority: None,
+        parse: parse_of::<T>(),
+    }
+}
+
+/// A [`Provenance`] sample, pinned to `Provenance::label` (EX-9).
+#[cfg(test)]
+fn provenance(payload: VariantPayload, value: Provenance) -> VariantSample {
+    VariantSample {
+        payload,
+        authority: Some(value.label()),
+        value: json(&value),
+        parse: parse_of::<Provenance>(),
+    }
+}
+
+/// A [`ReviewDisposition`] sample, pinned to `ReviewDisposition::arm` (EX-9).
+#[cfg(test)]
+fn disposition(payload: VariantPayload, value: ReviewDisposition) -> VariantSample {
+    VariantSample {
+        payload,
+        authority: Some(value.arm()),
+        value: json(&value),
+        parse: parse_of::<ReviewDisposition>(),
+    }
+}
+
+/// A `Keys` payload. The rows are irrelevant to pin 4 — only *that* the
+/// variant carries a payload is, since that is what decides where the token
+/// sits. The rows themselves are `sec-8` pin 1's, in PHASE-02.
+#[cfg(test)]
+const CARRIES_KEYS: VariantPayload = VariantPayload::Keys(&[]);
+
+/// Every closure enum, its declared vocabulary, its **real** contract, and one
+/// sample per variant.
+///
+/// Named rather than inlined into the assertion because `PHASE-03`'s `VT-2`,
+/// `VT-4` and the coverage union all consume the same samples.
+#[cfg(test)]
+pub(super) fn claims() -> Vec<EnumClaim> {
+    vec![
+        EnumClaim {
+            type_name: Stage::TYPE_NAME,
+            variants: Stage::VARIANTS,
+            tagging: Tagging::External,
+            contract: &STAGE,
+            samples: vec![
+                sample(VariantPayload::Absent, &Stage::Exploring),
+                sample(VariantPayload::Absent, &Stage::Inquiring),
+                sample(VariantPayload::Absent, &Stage::Drafting),
+                sample(VariantPayload::Absent, &Stage::Reviewing),
+                sample(VariantPayload::Absent, &Stage::Locked),
+            ],
+        },
+        EnumClaim {
+            type_name: ActKind::TYPE_NAME,
+            variants: ActKind::VARIANTS,
+            tagging: Tagging::External,
+            contract: &ACT_KIND,
+            samples: ActKind::ALL
+                .iter()
+                .map(|act| sample(VariantPayload::Absent, act))
+                .collect(),
+        },
+        EnumClaim {
+            type_name: ReviewPolicy::TYPE_NAME,
+            variants: ReviewPolicy::VARIANTS,
+            tagging: Tagging::External,
+            contract: &REVIEW_POLICY,
+            samples: ReviewPolicy::ALL
+                .iter()
+                .map(|policy| sample(VariantPayload::Absent, policy))
+                .collect(),
+        },
+        EnumClaim {
+            type_name: InquiryLifecycle::TYPE_NAME,
+            variants: InquiryLifecycle::VARIANTS,
+            tagging: Tagging::External,
+            contract: &INQUIRY_LIFECYCLE,
+            samples: vec![
+                sample(VariantPayload::Absent, &InquiryLifecycle::Open),
+                sample(VariantPayload::Absent, &InquiryLifecycle::Resolved),
+                sample(VariantPayload::Absent, &InquiryLifecycle::Deferred),
+                sample(VariantPayload::Absent, &InquiryLifecycle::Pruned),
+            ],
+        },
+        EnumClaim {
+            type_name: Provenance::TYPE_NAME,
+            variants: Provenance::VARIANTS,
+            tagging: Tagging::Internal("provenance"),
+            contract: &PROVENANCE,
+            samples: vec![
+                provenance(VariantPayload::Absent, Provenance::UserDirected),
+                provenance(VariantPayload::Absent, Provenance::AgentProposed),
+                provenance(
+                    CARRIES_KEYS,
+                    Provenance::ShapingQuestion {
+                        record: "QUE-001".to_owned(),
+                    },
+                ),
+                provenance(
+                    CARRIES_KEYS,
+                    Provenance::ImportedProse {
+                        section: id("sec-1"),
+                        line: 12,
+                        label: "OQ-1".to_owned(),
+                        fingerprint: Fingerprint::new("sha256:seed"),
+                    },
+                ),
+            ],
+        },
+        EnumClaim {
+            type_name: ReviewDisposition::TYPE_NAME,
+            variants: ReviewDisposition::VARIANTS,
+            tagging: Tagging::External,
+            contract: &REVIEW_DISPOSITION,
+            samples: vec![
+                disposition(
+                    CARRIES_KEYS,
+                    ReviewDisposition::Conducted {
+                        review: ReviewRef::new("RV-001"),
+                    },
+                ),
+                disposition(
+                    CARRIES_KEYS,
+                    ReviewDisposition::Waived {
+                        reason: "out of budget".to_owned(),
+                    },
+                ),
+            ],
+        },
+        EnumClaim {
+            type_name: DischargeClaim::TYPE_NAME,
+            variants: DischargeClaim::VARIANTS,
+            tagging: Tagging::External,
+            contract: &DISCHARGE_CLAIM,
+            samples: vec![
+                sample(VariantPayload::Absent, &DischargeClaim::Attested),
+                sample(VariantPayload::Absent, &DischargeClaim::Skipped),
+            ],
+        },
+        EnumClaim {
+            type_name: DelegationAct::TYPE_NAME,
+            variants: DelegationAct::VARIANTS,
+            tagging: Tagging::Internal("act"),
+            contract: &DELEGATION_ACT,
+            samples: vec![
+                sample(
+                    CARRIES_KEYS,
+                    &DelegationAct::Export {
+                        id: id("dlg-1"),
+                        obligation: id("inq-1"),
+                    },
+                ),
+                sample(
+                    CARRIES_KEYS,
+                    &DelegationAct::Propose {
+                        id: id("dlg-1"),
+                        by: "a delegate".to_owned(),
+                        summary: "what it concluded".to_owned(),
+                        declare: Vec::new(),
+                    },
+                ),
+                sample(CARRIES_KEYS, &DelegationAct::Accept { id: id("dlg-1") }),
+                sample(
+                    CARRIES_KEYS,
+                    &DelegationAct::Refuse {
+                        id: id("dlg-1"),
+                        reason: "not the obligation cut".to_owned(),
+                    },
+                ),
+            ],
+        },
+        EnumClaim {
+            type_name: AgentAct::TYPE_NAME,
+            variants: AgentAct::VARIANTS,
+            tagging: Tagging::External,
+            contract: &AGENT_ACT,
+            samples: vec![
+                sample(
+                    CARRIES_KEYS,
+                    &AgentAct::BlockingSetDeclared {
+                        blocking: BTreeSet::from([id("inq-1")]),
+                    },
+                ),
+                // The mixed case: externally tagged, and a *bare string*.
+                sample(VariantPayload::Absent, &AgentAct::DraftingReady),
+            ],
+        },
+        EnumClaim {
+            type_name: Reviewer::TYPE_NAME,
+            variants: Reviewer::VARIANTS,
+            tagging: Tagging::External,
+            contract: &REVIEWER,
+            samples: vec![
+                sample(VariantPayload::Absent, &Reviewer::Human),
+                sample(VariantPayload::Absent, &Reviewer::Adversarial),
+            ],
+        },
+        EnumClaim {
+            type_name: Posture::TYPE_NAME,
+            variants: Posture::VARIANTS,
+            tagging: Tagging::External,
+            contract: &POSTURE,
+            samples: vec![
+                sample(VariantPayload::Absent, &Posture::Breadth),
+                sample(VariantPayload::Absent, &Posture::Depth),
+            ],
+        },
+        EnumClaim {
+            type_name: Authority::TYPE_NAME,
+            variants: Authority::VARIANTS,
+            tagging: Tagging::External,
+            contract: &AUTHORITY,
+            samples: vec![
+                sample(VariantPayload::Absent, &Authority::AgentProposed),
+                sample(VariantPayload::Absent, &Authority::UserPinned),
+                sample(VariantPayload::Absent, &Authority::UserLocked),
+            ],
+        },
+        EnumClaim {
+            type_name: Dispose::TYPE_NAME,
+            variants: Dispose::VARIANTS,
+            tagging: Tagging::Internal("form"),
+            contract: &DISPOSE,
+            samples: vec![
+                // `&CREATE_RECORD` and the real fixture, not the exemplar
+                // contract and a hand-thinned record: the exemplar reference
+                // was gratuitous (its placement class is identical) and both
+                // were traps a walk could read as a declaration
+                // (`PHASE-03/EX-11`, STD-001).
+                sample(
+                    VariantPayload::Inlines(&CREATE_RECORD),
+                    &Dispose::Create(CreateRecord::fully_populated()),
+                ),
+                sample(
+                    CARRIES_KEYS,
+                    &Dispose::Adopt {
+                        record: "DEC-001".to_owned(),
+                    },
+                ),
+                sample(
+                    CARRIES_KEYS,
+                    &Dispose::Unresolved {
+                        note: "still open".to_owned(),
+                    },
+                ),
+                sample(
+                    CARRIES_KEYS,
+                    &Dispose::NonDurable {
+                        note: "discussed only".to_owned(),
+                    },
+                ),
+            ],
+        },
+        // Untagged: no token reaches the wire, so it contributes nothing to
+        // pin 4. Its two shapes are pin 2's, in PHASE-03.
+        EnumClaim {
+            type_name: WireFacetValue::TYPE_NAME,
+            variants: WireFacetValue::VARIANTS,
+            tagging: Tagging::Untagged,
+            contract: &WIRE_FACET_VALUE,
+            samples: Vec::new(),
+        },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
-
-    use serde::Serialize;
-    use serde_json::Value;
-
-    use super::super::attestation::ReviewRef;
-    use super::super::fixture::id;
-    use super::super::ids::Fingerprint;
-    use super::super::submission::CreateRecord;
     use super::*;
 
     // -----------------------------------------------------------------------
@@ -1545,330 +2125,19 @@ mod tests {
     // (sec-8 pin 4), and EX-9's authority pin rides the same walk.
     // -----------------------------------------------------------------------
 
-    /// One variant of one closure enum, as the contract claims it.
-    ///
-    /// Deliberately carries **no token literal**: the token is what the walk
-    /// derives from serde, and `VARIANTS` is what it is compared against. A
-    /// third spelling here would be the drift the macro exists to remove.
-    struct VariantSample {
-        /// The payload shape the contract claims. With the enum's [`Tagging`]
-        /// this decides where the token sits — and it is read *per variant*,
-        /// never per type: `AgentAct::DraftingReady` is the live mixed case and
-        /// a per-type reading fails on a correct table.
-        payload: VariantPayload,
-        /// A sample of this variant, serialised.
-        value: Value,
-        /// This variant's token according to the type's **own** authority, where
-        /// one exists. `PHASE-01/EX-9`: `Provenance` and `ReviewDisposition`
-        /// cannot take the macro's `via` arm, so the single source is recovered
-        /// here instead — the walk is total over variants by the barrier, so
-        /// this cannot silently lose a case.
-        authority: Option<&'static str>,
-    }
-
-    /// One closure enum's claim.
-    struct EnumClaim {
-        type_name: &'static str,
-        variants: &'static [&'static str],
-        tagging: Tagging,
-        samples: Vec<VariantSample>,
-    }
-
-    fn json(value: &impl Serialize) -> Value {
-        serde_json::to_value(value).expect("a closure value serialises")
-    }
-
-    fn sample(payload: VariantPayload, value: &impl Serialize) -> VariantSample {
-        VariantSample {
-            payload,
-            value: json(value),
-            authority: None,
-        }
-    }
-
-    /// A [`Provenance`] sample, pinned to `Provenance::label` (EX-9).
-    fn provenance(payload: VariantPayload, value: Provenance) -> VariantSample {
-        VariantSample {
-            payload,
-            authority: Some(value.label()),
-            value: json(&value),
-        }
-    }
-
-    /// A [`ReviewDisposition`] sample, pinned to `ReviewDisposition::arm` (EX-9).
-    fn disposition(payload: VariantPayload, value: ReviewDisposition) -> VariantSample {
-        VariantSample {
-            payload,
-            authority: Some(value.arm()),
-            value: json(&value),
-        }
-    }
-
-    /// A `Keys` payload. The rows are irrelevant to pin 4 — only *that* the
-    /// variant carries a payload is, since that is what decides where the token
-    /// sits. The rows themselves are `sec-8` pin 1's, in PHASE-02.
-    const CARRIES_KEYS: VariantPayload = VariantPayload::Keys(&[]);
-
-    /// A sample `CreateRecord`, for `Dispose::Create`'s inlining variant.
-    fn create_record() -> CreateRecord {
-        CreateRecord {
-            kind: "decision".to_owned(),
-            title: "A sample record".to_owned(),
-            slug: None,
-            body: None,
-            facet: BTreeMap::new(),
-            acceptance: None,
-        }
-    }
-
-    /// Every closure enum, its declared vocabulary, and one sample per variant.
-    ///
-    /// Named rather than inlined into the assertion because `PHASE-03`'s
-    /// `VT-4` consumes the same samples.
-    fn claims() -> Vec<EnumClaim> {
-        vec![
-            EnumClaim {
-                type_name: Stage::TYPE_NAME,
-                variants: Stage::VARIANTS,
-                tagging: Tagging::External,
-                samples: vec![
-                    sample(VariantPayload::Absent, &Stage::Exploring),
-                    sample(VariantPayload::Absent, &Stage::Inquiring),
-                    sample(VariantPayload::Absent, &Stage::Drafting),
-                    sample(VariantPayload::Absent, &Stage::Reviewing),
-                    sample(VariantPayload::Absent, &Stage::Locked),
-                ],
-            },
-            EnumClaim {
-                type_name: ActKind::TYPE_NAME,
-                variants: ActKind::VARIANTS,
-                tagging: Tagging::External,
-                samples: ActKind::ALL
-                    .iter()
-                    .map(|act| sample(VariantPayload::Absent, act))
-                    .collect(),
-            },
-            EnumClaim {
-                type_name: ReviewPolicy::TYPE_NAME,
-                variants: ReviewPolicy::VARIANTS,
-                tagging: Tagging::External,
-                samples: ReviewPolicy::ALL
-                    .iter()
-                    .map(|policy| sample(VariantPayload::Absent, policy))
-                    .collect(),
-            },
-            EnumClaim {
-                type_name: InquiryLifecycle::TYPE_NAME,
-                variants: InquiryLifecycle::VARIANTS,
-                tagging: Tagging::External,
-                samples: vec![
-                    sample(VariantPayload::Absent, &InquiryLifecycle::Open),
-                    sample(VariantPayload::Absent, &InquiryLifecycle::Resolved),
-                    sample(VariantPayload::Absent, &InquiryLifecycle::Deferred),
-                    sample(VariantPayload::Absent, &InquiryLifecycle::Pruned),
-                ],
-            },
-            EnumClaim {
-                type_name: Provenance::TYPE_NAME,
-                variants: Provenance::VARIANTS,
-                tagging: Tagging::Internal("provenance"),
-                samples: vec![
-                    provenance(VariantPayload::Absent, Provenance::UserDirected),
-                    provenance(VariantPayload::Absent, Provenance::AgentProposed),
-                    provenance(
-                        CARRIES_KEYS,
-                        Provenance::ShapingQuestion {
-                            record: "QUE-001".to_owned(),
-                        },
-                    ),
-                    provenance(
-                        CARRIES_KEYS,
-                        Provenance::ImportedProse {
-                            section: id("sec-1"),
-                            line: 12,
-                            label: "OQ-1".to_owned(),
-                            fingerprint: Fingerprint::new("sha256:seed"),
-                        },
-                    ),
-                ],
-            },
-            EnumClaim {
-                type_name: ReviewDisposition::TYPE_NAME,
-                variants: ReviewDisposition::VARIANTS,
-                tagging: Tagging::External,
-                samples: vec![
-                    disposition(
-                        CARRIES_KEYS,
-                        ReviewDisposition::Conducted {
-                            review: ReviewRef::new("RV-001"),
-                        },
-                    ),
-                    disposition(
-                        CARRIES_KEYS,
-                        ReviewDisposition::Waived {
-                            reason: "out of budget".to_owned(),
-                        },
-                    ),
-                ],
-            },
-            EnumClaim {
-                type_name: DischargeClaim::TYPE_NAME,
-                variants: DischargeClaim::VARIANTS,
-                tagging: Tagging::External,
-                samples: vec![
-                    sample(VariantPayload::Absent, &DischargeClaim::Attested),
-                    sample(VariantPayload::Absent, &DischargeClaim::Skipped),
-                ],
-            },
-            EnumClaim {
-                type_name: DelegationAct::TYPE_NAME,
-                variants: DelegationAct::VARIANTS,
-                tagging: Tagging::Internal("act"),
-                samples: vec![
-                    sample(
-                        CARRIES_KEYS,
-                        &DelegationAct::Export {
-                            id: id("dlg-1"),
-                            obligation: id("inq-1"),
-                        },
-                    ),
-                    sample(
-                        CARRIES_KEYS,
-                        &DelegationAct::Propose {
-                            id: id("dlg-1"),
-                            by: "a delegate".to_owned(),
-                            summary: "what it concluded".to_owned(),
-                            declare: Vec::new(),
-                        },
-                    ),
-                    sample(CARRIES_KEYS, &DelegationAct::Accept { id: id("dlg-1") }),
-                    sample(
-                        CARRIES_KEYS,
-                        &DelegationAct::Refuse {
-                            id: id("dlg-1"),
-                            reason: "not the obligation cut".to_owned(),
-                        },
-                    ),
-                ],
-            },
-            EnumClaim {
-                type_name: AgentAct::TYPE_NAME,
-                variants: AgentAct::VARIANTS,
-                tagging: Tagging::External,
-                samples: vec![
-                    sample(
-                        CARRIES_KEYS,
-                        &AgentAct::BlockingSetDeclared {
-                            blocking: BTreeSet::from([id("inq-1")]),
-                        },
-                    ),
-                    // The mixed case: externally tagged, and a *bare string*.
-                    sample(VariantPayload::Absent, &AgentAct::DraftingReady),
-                ],
-            },
-            EnumClaim {
-                type_name: Reviewer::TYPE_NAME,
-                variants: Reviewer::VARIANTS,
-                tagging: Tagging::External,
-                samples: vec![
-                    sample(VariantPayload::Absent, &Reviewer::Human),
-                    sample(VariantPayload::Absent, &Reviewer::Adversarial),
-                ],
-            },
-            EnumClaim {
-                type_name: Posture::TYPE_NAME,
-                variants: Posture::VARIANTS,
-                tagging: Tagging::External,
-                samples: vec![
-                    sample(VariantPayload::Absent, &Posture::Breadth),
-                    sample(VariantPayload::Absent, &Posture::Depth),
-                ],
-            },
-            EnumClaim {
-                type_name: Authority::TYPE_NAME,
-                variants: Authority::VARIANTS,
-                tagging: Tagging::External,
-                samples: vec![
-                    sample(VariantPayload::Absent, &Authority::AgentProposed),
-                    sample(VariantPayload::Absent, &Authority::UserPinned),
-                    sample(VariantPayload::Absent, &Authority::UserLocked),
-                ],
-            },
-            EnumClaim {
-                type_name: Dispose::TYPE_NAME,
-                variants: Dispose::VARIANTS,
-                tagging: Tagging::Internal("form"),
-                samples: vec![
-                    sample(
-                        VariantPayload::Inlines(&EXEMPLAR_CREATE_RECORD),
-                        &Dispose::Create(create_record()),
-                    ),
-                    sample(
-                        CARRIES_KEYS,
-                        &Dispose::Adopt {
-                            record: "DEC-001".to_owned(),
-                        },
-                    ),
-                    sample(
-                        CARRIES_KEYS,
-                        &Dispose::Unresolved {
-                            note: "still open".to_owned(),
-                        },
-                    ),
-                    sample(
-                        CARRIES_KEYS,
-                        &Dispose::NonDurable {
-                            note: "discussed only".to_owned(),
-                        },
-                    ),
-                ],
-            },
-            // Untagged: no token reaches the wire, so it contributes nothing to
-            // pin 4. Its two shapes are pin 2's, in PHASE-03.
-            EnumClaim {
-                type_name: WireFacetValue::TYPE_NAME,
-                variants: WireFacetValue::VARIANTS,
-                tagging: Tagging::Untagged,
-                samples: Vec::new(),
-            },
-        ]
-    }
-
     /// The token serde actually wrote, read through the contract's **own**
     /// per-variant claim (`sec-8` pin 4).
+    ///
+    /// A thin wrapper over [`place`], which is where the tagging × payload table
+    /// now lives — one implementation, three consumers (`PHASE-03/D1`). The
+    /// refusal messages are `place`'s and are unchanged.
     fn serde_token(type_name: &str, tagging: Tagging, sample: &VariantSample) -> String {
         let value = &sample.value;
-        match (tagging, sample.payload) {
-            (Tagging::Internal(tag), _) => value
-                .get(tag)
-                .and_then(Value::as_str)
-                .unwrap_or_else(|| panic!("{type_name}: no string at the tag {tag:?} in {value}"))
-                .to_owned(),
-            (Tagging::External, VariantPayload::Absent) => value
-                .as_str()
-                .unwrap_or_else(|| {
-                    panic!("{type_name}: an external absent-payload variant is a bare string, got {value}")
-                })
-                .to_owned(),
-            (Tagging::External, VariantPayload::Keys(_) | VariantPayload::Inlines(_)) => {
-                let object = value.as_object().unwrap_or_else(|| {
-                    panic!("{type_name}: an external payload variant nests under its token, got {value}")
-                });
-                assert_eq!(
-                    object.len(),
-                    1,
-                    "{type_name}: an externally tagged payload has exactly one key, got {value}"
-                );
-                object
-                    .keys()
-                    .next()
-                    .expect("an object of length one has a key")
-                    .clone()
-            }
-            (Tagging::External, VariantPayload::Shape(_)) | (Tagging::Untagged, _) => {
-                panic!("{type_name}: {value} carries no token to read")
-            }
-        }
+        place(type_name, tagging, sample.payload, value)
+            .unwrap_or_else(|fault| panic!("{fault}"))
+            .token()
+            .unwrap_or_else(|| panic!("{type_name}: {value} carries no token to read"))
+            .to_owned()
     }
 
     /// `sec-8` pin 4 — every token the contract declares is the token serde
@@ -1929,6 +2198,81 @@ mod tests {
                 assert_eq!(
                     attested, declared,
                     "{}: the named tokens are not the type's own authority",
+                    claim.type_name
+                );
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // VT-4 — pin 3's variant arm (sec-8, "Where the variant payloads are
+    // pinned"). Here rather than in `super::tests` because the probe needs a
+    // *type* to deserialise into, and pin 4's samples are the only place one
+    // sits beside each variant.
+    // -----------------------------------------------------------------------
+
+    /// `sec-8` pin 3, over the variant payloads — removing one key from a
+    /// variant's sample refuses **exactly** the rows that variant declares
+    /// [`Presence::Required`].
+    ///
+    /// **Requiredness only.** Key sets and wire types are pin 2's descent's, and
+    /// restating them here is the duplication this slice exists to remove
+    /// (`PHASE-03/EX-6`). Where the keys sit is [`place`]'s — the tag is skipped
+    /// under [`Tagging::Internal`] and the wrapped object is the subject under
+    /// [`Tagging::External`] — and the rows are read off the real
+    /// [`VariantContract`], never off the sample's own [`VariantPayload`]
+    /// (`PHASE-03/EX-11`).
+    ///
+    /// The presence half is not decoration: without it the equality could be
+    /// satisfied by a sample that simply omits a required key, since a key that
+    /// is not there cannot be removed.
+    #[test]
+    fn the_removal_probe_over_variant_payloads_refuses_exactly_the_required_rows() {
+        for claim in claims() {
+            let TypeForm::Enum { tagging, variants } = claim.contract.form else {
+                panic!(
+                    "{}: a closure enum is described by an enum form",
+                    claim.type_name
+                );
+            };
+
+            for sample in &claim.samples {
+                let token = serde_token(claim.type_name, claim.tagging, sample);
+                let variant = variants
+                    .iter()
+                    .find(|variant| variant.token == Some(token.as_str()))
+                    .unwrap_or_else(|| {
+                        panic!("{}: no variant declares {token:?}", claim.type_name)
+                    });
+
+                let placement = place(claim.contract.name, tagging, variant.payload, &sample.value)
+                    .unwrap_or_else(|fault| panic!("{fault}"));
+                let Some(fields) = placement.fields() else {
+                    continue;
+                };
+
+                let required = required_variant_keys(variant.payload);
+                for key in &required {
+                    assert!(
+                        fields.get(key).is_some(),
+                        "{}::{token}: the sample omits the required row `{key}`",
+                        claim.type_name
+                    );
+                }
+
+                let mut refusing = BTreeSet::new();
+                for key in fields.names() {
+                    let Some(candidate) = placement.without(key) else {
+                        continue;
+                    };
+                    if (sample.parse)(candidate).is_err() {
+                        refusing.insert(key);
+                    }
+                }
+                assert_eq!(
+                    refusing, required,
+                    "{}::{token}: the keys whose removal refuses are not the declared \
+                     `Presence::Required` rows",
                     claim.type_name
                 );
             }

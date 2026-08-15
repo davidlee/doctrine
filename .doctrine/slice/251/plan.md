@@ -259,6 +259,38 @@ belong to `Declaration.subject`, while `ApplyRequest.declare` is
 `Seq(Named(Declaration))` and carries no id at all. `EX-11` settles both against
 the source.
 
+## PHASE-03 execution, 2026-08-15 — two criteria appended
+
+**`IdKind::declarable` answers a different question than `sec-8` asks it.**
+`sec-8`:2012-2016 says `Id` rows are checked against `IdKind::declarable`
+"where the engine's admissible set is already computed". It is not a set; it is
+a `const fn -> bool` predicate over **declaration subjects** (`ids.rs:82-91`),
+and it says `false` for `dlg-`. `DelegationAct`'s variants each carry an `id`
+key that legitimately holds a `dlg-` id, so the rule as written fails four
+correct rows in `PAYLOAD` — the contract would be marked wrong for describing
+the wire accurately. `EX-10` splits the claim in two: the descent's generic
+arm checks a value's own kind against that row's admissible set, and the two
+engine-derived claims `sec-8` actually cares about — the declaration subject's
+five kinds, and `sec-` alone for `AdoptAuthored.sections` — are asserted at
+their sites, where `declarable` is the right oracle.
+
+**The oracle could have restated itself one field over.** `EX-3` insists the
+coverage equality's two sides derive independently, and the plan review already
+named the way that fails: recording sites from the table rather than from
+arrival. Planning found a second route to the same vacuity. Pin 4's per-variant
+samples each carry a `payload` field, which is a *placeholder* — one variant's
+sample points at the exemplar contract rather than the real `CREATE_RECORD`, and
+an empty `Keys(&[])` stands in wherever a variant's rows are not the sample's
+business. A descent that read `sample.payload` as its declaration would assert
+nothing and pass on any input, exactly as a table-sourced left side would.
+`EX-11` bars it: variant selection comes from the tagging table and a variant's
+rows from the real `TypeContract`, which is what `EX-2` already meant.
+
+**What planning did not have to fix.** `EX-9` anticipated going back to fill
+containers `PHASE-02` left empty. There is one — `Declaration::fully_populated`'s
+`needs`, which is `EX-7`'s anyway. The other empty containers are in pin 4's
+samples, where the fixtures already reach the same sites.
+
 **What this owes the design.** Three of the nine originate upstream rather than
 in the plan, and `/reconcile` should carry them back: `sec-6`'s *fifth variant*
 is the sixth; `sec-4`'s "pin 4 covers all fourteen uniformly" reads against
