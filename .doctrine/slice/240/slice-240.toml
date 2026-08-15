@@ -1,9 +1,9 @@
 id = 240
 slug = "forward-sync-live-checkouts-on-ref-advance"
 title = "Forward-sync live checkouts on ref advance"
-status = "proposed"
+status = "abandoned"
 created = "2026-07-29"
-updated = "2026-07-29"
+updated = "2026-08-15"
 tags = ["area:correctness", "area:dispatch", "area:worktree", "cluster:dispatch-funnel"]
 
 [relationships]

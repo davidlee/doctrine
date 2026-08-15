@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 220
+slug = "does-capsule-control-plane-cas-integration-advance-a-checked-out-ref-sl-240s-class"
+title = "Does capsule control-plane CAS integration advance a checked-out ref (SL-240's class)?"
+record_kind = "question"
+status = "open"
+created = "2026-08-15"
+updated = "2026-08-15"
+tags = ["area:correctness", "area:dispatch", "cluster:capsule"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+question = "Does the capsule control plane's CAS-gated integration ever advance a canonical ref that a live worktree has checked out — and if so, does it sync-or-refuse first?"
+why_matters = "SL-240 scoped the phantom-staged-reversal defect class (commit_on_behalf → update_ref_cas landing under a live checkout) and was abandoned with the dispatch funnel, which that mechanism was exclusive to. RFC-025 migration step 4 retains one CAS ref advance in the trusted control plane; if that advance targets a checked-out ref (e.g. main/trunk), ISS-038's class re-emerges inside the control plane. Answering this decides whether the capsule cutover needs a forward-sync guard or is out of the class by construction."
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "whether capsule control-plane CAS integration reintroduces SL-240's checked-out-ref advance class"
+target = "RFC-025"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the abandoned slice whose underlying invariant this question carries forward"
+target = "SL-240"
