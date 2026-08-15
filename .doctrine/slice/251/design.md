@@ -396,6 +396,14 @@ key and discard it. A misspelt `cursor` therefore behaves exactly like a misspel
 top-level act: the revision bumps, a receipt is written, no change row prints,
 and the command exits 0.
 
+**And the missing change row is not a signal, which is why the disclosure has to
+be in the contract rather than in the response.** A *correct* submission prints
+no change row either (`ISS-355`), so the caller has no observable that separates
+*landed* from *discarded*. That is the whole reason this slice buys
+discoverability before submission instead of a better report afterwards: after
+the fact there is nothing to read. Repairing the response is `ISS-355`'s, and
+this design does not touch it.
+
 Two causes sit under that one behaviour, and the difference decides what happens
 next rather than what a caller sees. `ApplyRequest` **cannot** deny —
 `serde(flatten)` forbids it, which is `ISS-333`'s actual mechanism. The other
@@ -1256,6 +1264,19 @@ let request: ApplyRequest = serde_json::from_str(payload).map_err(|error| {
 })?;
 ```
 
+**The site itself is clean, and this was checked rather than assumed.** The parse
+runs before `design_run::run::admit` and before anything writes, and `admit`
+(`run.rs:207`) is pure — it reads `prior.receipts` and returns. A top-level parse
+failure therefore mints no receipt and bumps no revision, and wrapping its
+refusal carries no state concern with it. Worth stating because `ISS-361` reads
+as though an unparseable submission had been applied and receipt-locked here,
+which cannot happen at this site. The behaviour that fits is a parse that
+*succeeded* through `ISS-333`'s hole, followed by a corrected resubmission
+reusing its `submission_id` and meeting `Refusal::SubmissionReplayed`
+(`run.rs:222-226`) — the idempotency guard working as designed. That refusal
+naming no remedy is a real defect and stays with `IMP-390`'s fourth candidate,
+which this slice explicitly does not take.
+
 Three properties, each deliberate.
 
 **The serde message survives verbatim.** It already carries the most specific
@@ -1781,6 +1802,7 @@ pin reads.
 | The surface is total over the payload, not over `WRITER_ACTS` | pin 1 across all twelve closure members — eleven by contract, `SubmissionEnvelope` by the root's composition; pin 9 that every one of them reaches the rendering; nothing in the ladder reads `WRITER_ACTS` |
 | `facet` is discoverable rather than an open bag | pin 5's two equalities, over the compile barrier `sec-3` put under them |
 | `ISS-333` option 3 discharged and recorded as such | not a test — a close-time statement, whose shipped half is `sec-2`'s `UnknownKeys::SilentlyDropped` |
+| `ISS-355` — a correct submission prints no change row either | not a test and not repaired here; recorded in `sec-2` as the reason the disclosure has to ride the contract rather than the response |
 
 ## Not pinned, deliberately
 

@@ -159,6 +159,12 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 61) · e08856ca5
   payload act fields, so there is no map to render and authoring one would
   promise refusal at a seam that fails open.
 
+- **Neighbouring items folded in as closure statements at rev 64** — `sec-2` and
+  `sec-8` record `ISS-355` (a *correct* submission prints no change row either, so
+  the missing row is not a signal and the disclosure has to ride the contract
+  rather than the response); `sec-6` records that `DEC-225`'s parse site is clean.
+  Neither is a scope change.
+
 ### Learned
 
 - Triage errors corrected in the governance table above: `ADR-001` (`design_run`
@@ -196,6 +202,14 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 61) · e08856ca5
   comment and `concat!` cannot splice a `const &str` — a cost, not a limit.
 - **`design_run` const tables tolerate a `Named` graph over drop-glue types** —
   compiled as a probe rather than assumed, when the `Cow` question was live.
+- **`ISS-361`'s reported mechanism is not at the parse site** — verified against
+  source: `apply` parses with `?` before `admit` (`design.rs:1503-1504`) and
+  `admit` (`run.rs:207`) is pure, so a top-level parse failure mints no receipt
+  and bumps no revision. The fitting reconstruction is a parse that *succeeded*
+  through `ISS-333`'s hole, then a corrected resubmission reusing its
+  `submission_id` meeting `Refusal::SubmissionReplayed` (`run.rs:222-226`). The
+  residual defect — that refusal naming no remedy — is `IMP-390`'s fourth
+  candidate and a Non-Goal here. `DEC-225` inherits no bug.
 - **Adopting hand-edited design prose**: `sha256` of the text between marker
   lines, less the trailing newline, reproduces a section's stored fingerprint
   (validated with a positive control against an unchanged section). No verb
