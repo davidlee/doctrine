@@ -1,0 +1,106 @@
+id    = 358
+slug  = "design-review-of-sl-238"
+title = "design review of SL-238"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-238"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "backlog delegation creates an unaccounted command cycle"
+detail = "Observation: design section 3 at design.md:552-570 claims every new edge is downward and the command tangle remains 76, while section 6 at design.md:986-1000 requires backlog::run_after to call commands::dep_seq. The edge table omits that required backlog -> commands edge. Source verification: src/commands/cli.rs:495 and :1705 already establish commands -> backlog; src/backlog.rs contains no production commands edge today; tests/architecture_layering.rs:162-171 extracts top-level crate-module edges; .doctrine/adr/001/layering.toml:91 and :94 classify both modules as command and :190 freezes the tangle at 76. Adding the reverse edge closes a new command-tier cycle, so section 7 at design.md:1186-1190 cannot pass as specified and the design is not lockable as written. Suggestion: place the reusable operation below both command shells or otherwise redesign the delegation, then measure the gate rather than asserting an unchanged baseline."
+disposition = "fixed-differently"
+response = "Contest upheld and the first repair WITHDRAWN. Verified: priority = command (layering.toml:109), and the --prune probe classifies through partition::authored_class, so an engine-tier dep_seq_ops calling it would be an UPWARD edge — a worse violation than the cycle it removed, and one no sub-classification row launders, for the same top-level-granularity reason the original finding turned on. The second objection (CLI shells misclassified as engine) is the same defect seen from the cohesion side and is also accepted. Repair replaced with dependency inversion: cli.rs already depends on backlog downward, so it supplies the three operations as an AfterOps struct of fn pointers and backlog gains no import. Nothing moves, commands::dep_seq stays at command tier where its partition and knowledge edges are legal, and the record-kind message is untouched — which also dissolves F-10. This is an established idiom in the same file (BacklogTableFn, backlog.rs:1636-1643) and a recorded pattern (mem.pattern.lint.back-edge-tangle-inject-fnptr). sec-6 keeps the withdrawn module option as a named rejected alternative with this reasoning, because it settles the cohesion question rather than dodging it: these operations legitimately consume command-tier terminality policy, so command tier is where they belong. sec-1's narrative now draws the general rule — relocate a seam that sits above its natural tier, invert the dependency when it does not. Revised sec-1, sec-3, sec-6, sec-7, sec-8, sec-9 item 10; src/dep_seq_ops.rs removed from the selector set."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "the new root module is missing from the code-impact set"
+detail = "Observation: design section 3 at design.md:380 introduces src/authored_status.rs and section 8 at design.md:1228-1246 commits to the complete change set, but src/main.rs is absent. Source verification: src/main.rs:3-19 explains that the binary owns its own module tree, and src/main.rs:20-114 contains the root mod declarations with no authored_status declaration. Calls to crate::authored_status cannot resolve until that root is changed, so the implementation and design-target set are incomplete. Suggestion: include the explicit src/main.rs module declaration in section 8 and its verification selectors."
+disposition = "fixed"
+response = "Upheld. Verified: src/main.rs:3-19 states the binary owns its own module tree and the file carries 95 mod declarations, none of them authored_status. Integrated: sec-8's change table gains a src/main.rs row for two declarations — authored_status and dep_seq_ops, the second added by F-1's repair — and src/main.rs joins the design-target selector set, which is now recorded."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "major"
+title = "one probe contract cannot serve both listing and inspect"
+detail = "Observation: design section 4 at design.md:632-679 defines probe_boundary(root, &[AbsentDrop]) to consume only projection drops and to discard terminal and unresolvable targets. The same section at design.md:724-756 then requires run_show_inspect to use the same probe while retaining terminal targets and rendering unresolvable targets. Source verification: src/backlog.rs:1639-1684 starts show/inspect from one BacklogItem and never produces the list projection AbsentDrop input. The stated function has neither the input domain nor the output cases required by that caller, forcing planning to invent an unrecorded second seam or mode. Suggestion: specify a lower-level per-reference probe and two explicit projections, or give the probe a mode whose retention rules are fully stated."
+disposition = "fixed"
+response = "Contest upheld — the flattened RefState was lossy in exactly the two ways named. Verified: authored_class(kind, &AuthoredStatus) needs the kind because 'done' is not terminal for every kind, so a bare status string leaves probe_boundary unable to drop terminal targets; and a status-less REC has no representable state, since AuthoredStatus::Absent is how sec-3 says 'this kind has no status field'. RefState now wraps rather than replaces: Resolved { kind, status: AuthoredStatus } plus Unreadable and Unresolved, the two outcomes that are not statuses at all. Projections call authored_class themselves. sec-4 states the rendering per pair, including that Absent prints no parenthesis — a status-less kind has no status to state, and inventing a word for it is the invention DEC-233 refused. sec-7's fixture is widened from 'all four cases' to every case including a status-less REC target and a Resolved pair whose kind decides terminality."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "the doctor walk does not establish STD-003 tolerance"
+detail = "Observation: design section 5 at design.md:799-875 says dep_seq_ref_findings covers every backlog item and turns a corpus read failure into a finding, while section 7 at design.md:1144-1149 verifies only that a failed corpus read is non-empty. Source verification: src/backlog.rs:1012-1017 read_all delegates to read_kind, and src/backlog.rs:912-917 aborts that whole walk on the first read_item error. Merely replacing the empty result with one failure finding still lets one malformed entity deny every later entity and every broken ref, contrary to the tolerate half of STD-003. The design never specifies an item-by-item tolerant scan or evidence that healthy siblings are still checked. Suggestion: define the per-entity error accumulation seam and add a fixture proving one unreadable item is named while findings from readable siblings are preserved."
+disposition = "fixed"
+response = "Upheld. Verified read_kind at backlog.rs:915 does items.push(read_item(..)?) — the ? abandons the walk on the first unparseable item, and read_all propagates it. Replacing the empty Vec with a single finding satisfies STD-003's disclose and fails its tolerate, and the design had only specified the first. Integrated in sec-5: a named diagnostic reader read_all_tolerant(root) -> (Vec<BacklogItem>, Vec<ReadFailure>) that never abandons the walk, stated explicitly as a SECOND reader rather than a change to read_all — fail-fast is correct for the mutating verbs (never write against a corpus you could not fully read) and wrong for a report. A missing tree stays the empty set (entity::scan_ids C2 tolerance) so a virgin repo stays clean. sec-7 pins it with the fixture the finding asked for, plus the ordering detail that makes it fail for the right reason: the unreadable item is authored with the LOWER id, so a fail-fast walk aborts before reaching the readable sibling's broken ref."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "major"
+title = "Unavailable is reachable through the backlog needs CLI"
+detail = "Observation: design sections 2 and 3 at design.md:334-342 and :507-514, plus section 7 at :1129-1131, claim RV and REC targets can reach listing only through hand-edited or legacy TOML because the authoring gate refuses them. Source verification: src/backlog.rs:1955-1977 implements backlog needs with only kinds::ensure_ref_resolves at :1963-1964 and never applies ADMISSIBLE_DEP_TARGETS; unlike src/commands/dep_seq.rs:81-97, it accepts any resolvable kind. Section 6 at design.md:1002-1006 deliberately leaves that append path unrouted. A resolvable RV or REC can therefore be authored through the CLI, invalidating the reachability statement and the mandated hand-authored-only fixture strategy. Suggestion: either govern and change that authoring path or document and test the real CLI-reachable case."
+disposition = "fixed"
+response = "Contest upheld — an incomplete sweep, which is the failure mode worth naming. The claim was corrected in sec-2 and sec-3 and left standing in sec-9's 'Facts found in drafting' list, so the design contradicted itself across sections. sec-9's bullet now states the true position: the arm IS reachable through the CLI today because backlog needs never applies ADMISSIBLE_DEP_TARGETS (backlog.rs:1963-1964), item 11 is the repair, and it is separately not defensive in catalog::scan. Swept the remaining sections for the same claim; no other instance survives."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "class_of is an unlisted departure from DEC-233"
+detail = "Observation: accepted DEC-233 says classification uses the existing partition::status_class and explicitly says no new shared abstraction. Design section 3 at design.md:516-532 instead adds shared partition::class_of, and source verification at src/priority/partition.rs:243-260 shows only status_class exists today. Section 9 at design.md:1291-1346 claims to enumerate every place drafting changed an accepted decision mechanism, but it lists the new reader module and catalog overlay without listing this second new abstraction. That leaves a direct decision departure undisclosed even though section 9 makes completeness load-bearing for design lock. Suggestion: record class_of as its own departure and obtain an explicit disposition, or retain direct status_class composition."
+disposition = "fixed"
+response = "Upheld, and sharper than raised. DEC-233's consequences say verbatim: 'No new module and no new shared abstraction: the footer shell and the doctor check each call kinds and meta directly.' The design departs on BOTH counts — the new reader module and class_of — and sec-9 disclosed only the first. Verified partition.rs:243-260 carries status_class alone today. Integrated as sec-9 item 9, which states the departure, and gives the reason it is not merely a slip: once the reader returns a three-way AuthoredStatus, something must map that onto StatusClass, and inlining it at each consumer would put the Unavailable rule in as many places as there are callers — the outcome DEC-233's own loud rule 1 exists to prevent. sec-3's class_of subsection now names it as a new shared abstraction in the sentence that introduces it, so the disclosure is where a reader meets the thing."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "the advisory dedup key cannot count both axes twice"
+detail = "Observation: design section 2 at design.md:308-310, BoundaryProbe at :655-660, and section 7 at :1102-1103 define the count over distinct (dependent, ref) pairs yet require the same ref on needs and after to count twice. Those requirements are mathematically incompatible because the axis is absent from the key. Source verification: src/backlog.rs:628-635 stores needs and after as separate authored axes, so an occurrence identity must retain the axis to distinguish them. DEC-236 repeats the same incompatible pair definition at .doctrine/knowledge/decision/236/record-236.md:29-30. Suggestion: define the key as (dependent, axis, ref), or state that the count is over authored axis occurrences."
+disposition = "fixed"
+response = "Upheld — a genuine internal contradiction, not a wording quibble. The key was stated as (dependent, ref) in three places while sec-2 and sec-7 both required the same ref on both axes to count twice, which that key cannot express; backlog.rs:628-635 stores needs and after as separate authored arrays, so the axis is a real discriminant. Integrated as (dependent, axis, ref) occurrences in sec-2, in BoundaryProbe's field doc in sec-4, and in sec-7 — where the test name now says occurrences and the prose notes that under the old key the case it asserts is unreachable, so the test is what forces the key. The finding also propagates into governance: DEC-236's accepted record carried the same impossible pair, and its body is corrected with a note that the intent was always the two-repair count and only the key was mis-spelled. The decision itself is unchanged, so this is a correction, not a reopening."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "section 9 is stale about accepted DEC-236"
+detail = "Observation: design section 9 at design.md:1293-1296 scopes its accepted-decision reconciliation to DEC-231 through DEC-235, and item 6 at :1335-1339 says no decision covers the count-only signpost. Source verification: .doctrine/knowledge/decision/236/record-236.toml:4-8 is accepted, and record-236.md:10-16 specifies exactly that signpost. The mechanism agrees, but the design falsely presents it as an uncovered overrun and gives a reviewer no trace to the accepted authority the prompt requires applying. Suggestion: cite DEC-236 in item 6 and distinguish the historical drafting overrun from its now-accepted disposition."
+disposition = "fixed"
+response = "Upheld. Verified DEC-236 is accepted and its record specifies exactly the count-only signpost sec-9 item 6 described as uncovered — true when written, false once the decision was minted. Integrated: item 6 now cites DEC-236 as the authority for the three properties sec-2 states, and distinguishes the historical drafting overrun from its accepted disposition. The section preamble's range is corrected from DEC-231..DEC-235 to DEC-230..DEC-236, and it now says plainly that the list is meant to be complete and that items 9-12 were added after this review."
+
+[[finding]]
+id = "F-9"
+status = "answered"
+severity = "minor"
+title = "the status classification omits its governing ADR"
+detail = "Observation: ADR-017 governs this slice and defines Gating as a known unsettled record status in src/priority/partition.rs, yet design.md never cites ADR-017. Section 3 at design.md:516-538 chooses Unavailable -> Unrecognised and explains only why it must not become Terminal; it does not ground why Gating is also the wrong class. Source verification: src/priority/partition.rs:243-260 implements the four-way class table whose Gating branch this design extends around, and ADR-017 names that file as the sole engine delta for actionability gating. The chosen mapping is conservative, but its governance reasoning is incomplete and must be reconstructed from outside the design. Suggestion: cite ADR-017 at class_of and state that Gating denotes a known authored unsettled status, whereas Unavailable proves no such status."
+disposition = "fixed"
+response = "Contest upheld on the stated consequence; the conclusion stands on a corrected rationale. Verified: channels.rs:37 defines its OWN local class_of over the raw status via status_class(attr.kind, attr.status.as_deref()), and the conservative blocker rule at :69 and :116 runs through that — so next and blockers never call the new partition::authored_class and a Gating mapping would withhold no work. sec-3 now says so explicitly, names the earlier draft's claim as wrong, and rests the choice on the honest ground: Gating asserts unsettledness nobody observed, whereas Unrecognised says the tool could not place it, which is what happened. The weaker consequence is stated as weaker — the class is what a future consumer inherits, which is why it belongs in one function. Separately, your contest surfaced a naming collision the review did not raise: channels.rs already has a private class_of, so the new function is renamed partition::authored_class throughout, pairing with status_class."
+
+[[finding]]
+id = "F-10"
+status = "answered"
+severity = "minor"
+title = "record vocabulary equality proof is self-referential"
+detail = "Observation: SL-238 section 6 at design.md:1207-1209 and section 7 at :1475-1477 claim is_record_predicate_matches_kinds_record proves the old knowledge::RecordKind::ALL vocabulary and replacement kinds::RECORD vocabulary are set-equal, making the substitution membership-preserving. Source verification: src/commands/dep_seq.rs:293-302 builds from_pred by calling is_record; is_record at :25-26 delegates to kinds::is_record; kinds::is_record at kinds/mod.rs:96-97 directly tests kinds::RECORD. The test therefore compares a predicate backed by kinds::RECORD with kinds::RECORD itself and never references RecordKind::ALL. The two source sets happen to contain the same seven kinds today, but the cited test neither proves that nor catches drift between them. Add an explicit equality against RecordKind::ALL prefixes or correct the verification claim and provide another enforceable proof."
+disposition = "fixed"
+response = "Upheld — the evidentiary claim was mine and it was false. is_record_predicate_matches_kinds_record compares KINDS.filter(is_record) against kinds::RECORD, and is_record IS RECORD.contains(prefix) (kinds/mod.rs:96-98), so the assertion is self-referential and never mentions RecordKind::ALL. It could not have proven the substitution membership-preserving. Moot as of F-1's revised repair: injection leaves commands::dep_seq at command tier, so record_kind_list_slash keeps reading knowledge::RecordKind::ALL, no vocabulary is substituted, and no equality proof is owed. The sec-7 bullet asserting it and the sec-9 item about the message spelling are both removed rather than reworded, since the change they described no longer happens."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

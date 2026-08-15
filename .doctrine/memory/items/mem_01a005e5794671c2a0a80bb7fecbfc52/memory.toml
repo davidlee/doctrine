@@ -1,0 +1,46 @@
+memory_uid = "mem_01a005e5794671c2a0a80bb7fecbfc52"
+memory_key = "mem.fact.rtk.output-filter-rewrites-identifiers"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "rtk-proxied grep output can silently rewrite source identifiers"
+summary = "Identifiers in rg/grep results came back substituted (title_for rendered as n) with no marker — a claim read from that output is wrong and looks right."
+created = "2026-08-15"
+updated = "2026-08-15"
+
+[scope]
+paths = []
+globs = []
+commands = ["rg", "grep"]
+tags = ["rtk", "tooling", "footgun", "verification"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "73d68cd211406faf88d24bbcb773edaa4c68d700"
+ref_name = "refs/heads/edge"
+checkout_state_id = "47704951285d86b1cec76b5fc2d8d3edebc9d1874f37f91c6d8ebdadb8c3fbca"
+base_commit = "582300f142daf1f19166a8ad7e6dc0b128ef5ee5"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-238"
+

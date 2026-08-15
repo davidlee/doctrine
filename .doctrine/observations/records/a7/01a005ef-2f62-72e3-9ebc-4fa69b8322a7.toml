@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a005ef-2f62-72e3-9ebc-4fa69b8322a7"
+recorded_at = "2026-08-15T14:59:16.450785754Z"
+kind = "friction"
+summary = "design apply silently accepts unknown payload keys and bumps the revision"
+detail = """In /design on SL-238, probing the apply payload shape with an unknown key ({"run_uid":...,"bogus_key":1}) returned 'revision 42 stage drafting' — accepted, no refusal, revision consumed. ApplyRequest deliberately omits serde deny_unknown_fields because it carries a #[serde(flatten)] envelope (documented at src/design_run/submission.rs:923); Declaration does deny unknown fields. Consequence: a misspelled run-level key ('stag' for 'stage', 'discharg' for 'discharge') is a silent no-op that prints a success line indistinguishable from the intended write, and the agent must diff the envelope to notice. Cost this session: one wasted revision plus a source read to establish the payload schema, because the schema is not printed by --help or by design show (whose 'declare' template only covers inquiry declarations)."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

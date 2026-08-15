@@ -37,10 +37,16 @@ ADR-013/014, ADR-015 (except on the retire horn), ADR-019, ADR-020. Reasons in
   0.19s command, and `catalog::scan` is command-tier and *reaches* `backlog`, so
   calling into it closes an ADR-001 cycle. The probe instead composes two
   downward seams — `kinds` (leaf) for resolution, a stat with no file read; and
-  `meta::read_meta` (engine) for status, ~15 distinct targets ≈ 8ms. No new
-  module; the footer shell and the doctor check each call both directly. Shell
+  `meta::read_meta` (engine) for status, ~15 distinct targets ≈ 8ms. Shell
   returns a three-way (`Some` / `None` / `Unavailable`), pure layer classifies
   via `partition::status_class`.
+  **Siting refined at drafting — read `design.md` §3, not this clause.**
+  ~~"No new module; the footer shell and the doctor check each call both
+  directly."~~ That would have left `catalog::scan::status_and_title_for` as a
+  second per-kind reader disagreeing on `RV`. The read moves into a new engine
+  module `src/authored_status.rs` and `catalog::scan` becomes its command-tier
+  overlay. `DEC-233` is refined, not superseded: its seams, cost and loudness
+  rules all stand.
 - **D-C. Footer content, direction, dedup — SETTLED, `DEC-232`.** The footer's
   contract is *only what is needed to understand the rendered content*.
   Cross-kind edges with a live target go to a separate `boundary:` block
@@ -143,111 +149,158 @@ re-derived:
 `done`"*~~ — **this section is spent.** The scope was rewritten at the
 `inquire.scope` gate (`037b98b06`) and now carries the corrected measurement
 itself: 30 authored cross-kind edges, 25 reaching the footer, 10 with a
-non-terminal target. Nothing here contradicts the scope any more; read
-`slice-238.md`.
+non-terminal target.
+
+**Two residual errors in the scope, found at drafting (2026-08-16).** A full
+re-scan reproduces every figure above exactly, but `slice-238.md` still carries
+(1) *"Twenty-one of the thirty are on the `needs` axis"* — it is **16 `needs` /
+14 `after`** — and (2) `src/cli.rs` under Affected surface, which does not exist;
+the file is `src/commands/cli.rs`. `design.md` §1 and §8 are correct on both.
+Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-15 · design/**drafting** (run `dr-01a00475`, rev 28) · 037b98b06
+fresh-as-of: 2026-08-16 · design/**reviewing** (run `dr-01a00475`, rev 53; `RV-358` ten findings all dispositioned; runbook 3/3 discharged; gate to `locked` holds on three USER acts) · 582300f14 + uncommitted
 
 ### Produced
 
-- `DEC-235` — clearing rides the existing kind-neutral verb; `needs --remove`
-  added; four probe copies collapse.
-- `DEC-234` — no reveal flag; the full record is `backlog inspect`.
-- `DEC-233` — the status probe's seams, its cost, and the loudness rules on its
-  one degradation.
-- `IMP-433` — lift `RV`'s derived status to a tier engine-side readers reach;
-  the follow-up that lets `DEC-233`'s `Unavailable` arm retire.
-- `DEC-232` — the footer's contract, and the doctor counterpart it requires.
-- `DEC-231` — the settled fork. Supersedes `DEC-230`.
-- `DEC-230` — superseded; retained because the reversal is instructive.
-- `IMP-432` — `next` lacks kind/tag/status filters; the complement that makes
-  the split whole.
-- `research/research.md` (runtime tier, gitignored) — two threads plus corpus
-  measurement and the ✓/✗ verification pass.
+- `design.md` — all nine sections rewritten against a nine-finding critical read,
+  then **all nine revised again** against `RV-358`'s nine findings. Materialised at
+  rev 48. All of it **uncommitted** by owner request (git provisioning under test).
+- `RV-358` — external adversarial design review (codex/GPT-5.5), **two rounds**.
+  Round 1 raised nine findings (1 blocker, 5 major, 3 minor); all nine verified
+  correct against source and integrated. Round 2 verified five and **contested
+  four**, plus raised `F-10`; all five of those verified correct too, and three of
+  them were defects introduced by the round-1 integration. Ten findings, all
+  dispositioned, none withdrawn or deferred.
+- **`F-1` twice over — the design's central layering result.** Routing
+  `backlog::run_after` into `commands::dep_seq` closes a command-tier cycle, and
+  because the two modules are in different SCCs it merges two clusters. The first
+  repair (a new engine module `src/dep_seq_ops.rs`) was **withdrawn**: `--prune`
+  classifies through `partition::authored_class` and `priority` is command tier
+  (`layering.toml:109`), so an engine-tier module calling it is an *upward* edge —
+  worse than the cycle. Final repair is dependency inversion: `cli.rs` injects the
+  three operations as `AfterOps` fn-pointers, precedented by `BacklogTableFn`
+  (`backlog.rs:1636`) and by `mem.pattern.lint.back-edge-tangle-inject-fnptr`.
+  Nothing moves. §6 keeps the withdrawn option as a named rejected alternative.
+- `partition::class_of` renamed **`authored_class`** — `channels.rs:37` already
+  has a private `class_of`, found while adjudicating `F-9`.
+- `DEC-236` body amended (`F-7`): the signpost's count key was authored as
+  `(dependent, ref)` pairs while also requiring the both-axes case to count twice —
+  incompatible. Now `(dependent, axis, ref)` occurrences. Decision unchanged;
+  only the key was mis-spelled.
+- `ISS-366` — an empty review ledger derives `done · await=none`
+  (`src/review.rs:1103`), contradicting the seed template's own `ADR-007` D-C8
+  comment. Found because `RV-358` read `done` before anyone had raised anything.
+  Adjacent to `IMP-433`; out of this slice's blast radius.
+- `STD-003` — *No silent skip: a degraded read is disclosed.* `required`. Minted
+  from this slice; `SL-238` and `RSK-013` are `governed_by` it. Commit `35e19a5af`.
+- `DEC-236` — the count-only stderr signpost for unresolvable refs; `shapes`
+  `SL-238`. The one drafting overrun no accepted decision covered.
+- `DEC-230`…`DEC-235` — unchanged from the prior pass; `DEC-233`'s siting is
+  refined by `sec-3`, not superseded.
+- `IMP-432`, `IMP-433` — unchanged follow-ups.
+- Selector set reconciled to §8 twice: `+src/authored_status.rs`, `src/meta.rs`
+  demoted to `scope-relevant`, then `+src/dep_seq_ops.rs` and `+src/main.rs` after
+  `RV-358`. Eleven design-targets now.
+- Two friction observations under `.doctrine/observations/records/` (rtk output
+  mangling; `design apply` payload-shape lookup — the latter is live evidence for
+  `RFC-026` `E8.7`).
+- **No code written. `doctrine check gate` not run and not owed** — this pass
+  touched only `.doctrine/` prose.
 
 ### Learned
 
-- Records cannot author dep/seq, so a `QUE` node has zero *incoming* dep/seq
-  edges and can never sit mid-chain (`src/commands/dep_seq.rs:50-56`).
-- Cordage assigns longest-path **levels** before `NodeId`
-  (`crates/cordage/src/resolve.rs:635`), so a phantom cross-kind node imposes a
-  broad level demotion, not a local `after` statement. No neutral fallback
-  attribute exists.
-- `REQ-218` names `backlog_order` in the requirement *title* and carries no
-  statement body and no acceptance criteria — so retiring the adapter needs a
-  SPEC-015 REV, but widening it would falsify nothing.
-- SPEC-015's "a grouping, never a priority claim" attaches to the `ordinal`
-  grouping (`--by id`), **not** to `--by sequence`, which it separately calls
-  "priority order". The governance research conflated them.
-- `run_after --prune` has no test coverage at all, and its disk-read-and-parse
-  block is duplicated within one function (`src/backlog.rs:2014-2060`) — **and
-  the whole function is duplicated again** in `src/commands/dep_seq.rs:196+`.
-  Four copies of one terminality probe, all hardcoding `resolved`/`closed`.
-- **The kind-neutral clearing verb already exists.** Proved: `doctrine after
-  IMP-172 SL-154 --remove` succeeds; `doctrine backlog after IMP-172 SL-154
-  --remove` fails with `unknown backlog prefix SL`. The top-level dep/seq shell
-  gates through `kinds::parse_resolvable_ref`; `backlog after` is the duplicate.
-- **The `needs` axis is append-only for every kind.** `unlink` is
-  tier-1-`[[relation]]`-only and refuses `needs`; `dep_seq::remove` is
-  `remove_after` only. No verb anywhere clears a `needs` edge.
-- **`--prune` misses `done`.** Proved: `SL-154` is `done`, the edge is present,
-  `after IMP-172 --prune` reports `nothing to prune` — the ADR-009 vocabulary
-  bug, live.
-- `backlog inspect <ID>` already prints both dep/seq axes undeduped; it lacks
-  only the target's status.
-- `doctrine explain <ID>` already prints `blocked by:` for a **live** cross-kind
-  prerequisite (`channels::blocked_by` filters to non-terminal,
-  `src/priority/surface.rs:319`), so only the *satisfied* case is unshown.
-- **Nothing re-checks `[relationships] needs`/`after` after authoring time.**
-  `doctrine validate` is id-integrity only; `relation_graph::validate_relations`
-  consumes `Catalog.edges`, built from `[[relation]]` rows. Probed: a fixture
-  carrying `needs = ["not-a-ref", "ISS-999", "QUE-219", "SL-9999"]` gets
-  `doctor: corpus clean` on all four, while `list --by sequence` renders two of
-  them with opposite arrows in one block.
-- **Measured cost, this corpus (~4,400 numbered-entity tomls):**
-  `backlog list --by sequence` 0.19s · `doctrine validate` (id scan alone) 3.6s ·
-  `doctrine doctor` 10.8s. Any full-corpus scan on the listing path is a ~20x
-  regression. The last two are slow enough to deserve their own item — noted,
-  not raised, out of this slice's scope.
-- `catalog::scan` is **command**-tier and *reaches* `backlog`
-  (`.doctrine/adr/001/layering.toml:128`), so `backlog → catalog::scan` closes a
-  cycle. Any "just make it `pub(crate)`" reach into the cross-kind scanner from
-  a kind module is refused by the ratchet, not merely untidy.
-- `kinds::parse_resolvable_ref` on a *canonical* ref is a **directory stat, no
-  file read** (`src/kinds/resolve.rs:68-78`) — so ref-resolution and
-  status-reading have genuinely different costs and can be sited separately.
-- `Override::from()` is documented as **uniformly the predecessor** across all
-  three adapter reasons (`src/backlog_order.rs:111-116`); the evicted arms take
-  it from `evicted.edge().src()` (`:312`) and the `Dangling` arms push
-  `from: *dep` (`:228`, `:248`). Only `AbsentDrop` (`:702`) is dependent-first.
-- Withholding needs no new machinery — `pos.get(…).unwrap_or(usize::MAX)`
-  (`src/backlog.rs:1241`) already tails unplaced rows. Not used, but the seam is
-  known.
+- `mem.pattern.layering.direction-is-not-cohesion` — a gate-clean downward edge
+  can still be the wrong siting; read the target module's charter.
+- `mem.fact.rtk.output-filter-rewrites-identifiers` — proxied grep silently
+  substituted identifiers; never take a name's spelling from that output.
+- `mem.fact.layering.gate-measures-top-level-modules` — the ADR-001 gate extracts
+  edges at top-level-module granularity and `discover_units` admits only top-level
+  names, so a `"a::b" = "engine"` sub-classification row is recorded but never
+  participates in the tangle count. Reaching a new *function* in a module you
+  already import is free; reaching into a module you do not import is a new edge no
+  matter how deep the target sits, and no sub-row rescues it.
+- The same siting error was made twice in this design, at two different seams
+  (`meta` for the status read, `commands` for the dep/seq ops), and `mem.pattern.
+  layering.direction-is-not-cohesion` caught only the first. The generalisation now
+  in `sec-1`: a seam two modules share goes **below both**, never beside whichever
+  one wrote it first.
+- `catalog::scan::status_and_title_for` (`scan.rs:410-430`) is already the
+  per-kind status reader `DEC-233` describes — the ADR-001 refusal is about the
+  *call*, not the code, so the answer is to move it down, not to write a second.
+- `src/meta.rs`'s charter is **zero per-kind knowledge** (`meta.rs:3-13`), with
+  ~17 consumers resting on it. `src/integrity.rs:19-20` already carries
+  `engine → {kinds, meta, entity}`, so a new engine module adds no module edge.
+- `ensure_ref_resolves` returns `Result<()>` (`kinds/resolve.rs:33`);
+  `parse_resolvable_ref` (`:63`) is the pair-returning delegate, and it accepts
+  the **bare** id form as well as canonical.
+- `parse_resolvable_ref`'s dangling message interpolates `dir.display()`
+  (`:74-77`) — an absolute path, unusable verbatim in a golden-tested finding.
+- `doctor` leg **#7 TomlParse** exists (`doctor.rs:50-51`) at *Warning*, while
+  ref integrity is *Error* — a corrupt toml is reported more quietly than a
+  malformed ref naming it.
+- `render_overrides`'s `corpus` param and `compose`'s `cmap` build are read
+  **only** by the `Dangling` arm (`backlog.rs:2316`, `:2338`); both die with it.
+- **Corpus re-measured 2026-08-16** — 30 cross-kind edges, 5 off terminal
+  dependents, 25 reaching the footer, 10 boundary lines, 15 silent, 15 distinct
+  targets, and **zero unresolvable authored refs**. Every prior figure reproduces
+  except the axis split, which is **16 `needs` / 14 `after`**, not 21/9.
+- `doctrine design apply` ignores unknown payload keys silently, so a wrong key
+  burns a revision and looks like success; the schema is only in
+  `src/design_run/submission.rs:687` and `:124`.
+- (Carried, still live) four `--prune` probe copies hardcode `resolved`/`closed`
+  **and** launder a failed read into an empty status word; `--prune` has no test
+  coverage in either copy; the kind-neutral clearing verb already exists and
+  `backlog after` is its duplicate; nothing re-checks dep/seq refs after
+  authoring.
+
+### What a further review pass would probe
+
+Written 2026-08-16, after `RV-358`'s verification round — the last pass conducted.
+Two adversarial passes ran: the raise round (9 findings) and the verification round
+(4 contests + `F-10`). Every finding is dispositioned; none was withdrawn or
+deferred, and all ten were verified correct against source before integration.
+
+A third pass is **not** owed for coverage, and is worth running only if the owner
+wants the second repair adversarially tested the way the first one was. What it
+should probe, in priority order:
+
+1. **The injection repair itself, which no reviewer has seen.** `F-1`'s first
+   repair was contested and withdrawn; its replacement (`AfterOps` fn-pointer
+   injection, §6) was authored after the verification round and has had no
+   adversarial read. It is the highest-value target by construction — the same
+   position the withdrawn repair occupied when it looked fine.
+2. **`RefState`'s rendering table** (§4) — the `Absent` → no-parenthesis rule is
+   new and interacts with `inspect`'s "annotate every cross-kind target" rule.
+   Is a `REC` target distinguishable from an un-annotated one?
+3. **Cross-section drift from three rewrites.** Nine sections have now been
+   declared three times. `F-5` was exactly this failure — a claim corrected in two
+   sections and left standing in a third.
+4. **§7's evidence claims**, since `F-10` found one that was simply false. Every
+   "this existing test already proves X" assertion deserves the same check.
 
 ### Open
 
-- **Inquiry map fully dispositioned and the run is at `drafting`** (revision 28).
-  Blocking set declared, graph reviewed, governance confirmed, sufficiency
-  accepted; both `inquiring` runbook steps discharged. Nothing about the *design*
-  is open — what remains is authoring `design.md` from five settled decisions.
-- ~~Slice scope stale against `DEC-231`~~ — **closed** at the `inquire.scope`
-  gate (`037b98b06`). `slice-238.md` is rewritten against `DEC-231`…`DEC-235`,
-  all four OQs carry their resolutions, and the title now matches the content.
-  The slug symlink deliberately still reads `…admission-and-override-footer`;
-  the id is identity (AGENTS.md), so it was left alone.
-- **`IDE-019` divergences (2), for reconcile.** It asked for the absent-ref case
-  to be *surfaced in the footer* (`DEC-232` routes it to `doctor`) and for a
-  `--verbose`/`--explain` flag on `backlog list` (`DEC-234` declines the flag and
-  sites the record on `inspect`). Both deliver its intent; neither its mechanism.
-  `IDE-019` must close against what was built.
-- **Scope grew three times**, each owner-accepted: the `doctor` check
-  (`DEC-232`), the probe's loudness rules (`DEC-233`), and `needs --remove` plus
-  the duplicate-clearing-path collapse (`DEC-235`).
-- `inq-8` — cross-kind clearing (`--prune` / `--remove`).
+- **Run at `drafting`, all 9 sections `review=outstanding`** — the next stage is
+  `reviewing`. The `draft.selectors` runbook step is discharged and
+  `drafting-ready` is declared; the one gate still shut is
+  `governing-context-recorded`, because linking `STD-003` moved the slice's
+  `governance-edges` fingerprint and expired the earlier `governance-confirmed`.
+  It needs a **user** act. Query the run, not this line:
+  `doctrine design resume 238`.
+- ~~**`slice-238.md` carries two known errors**~~ — **closed 2026-08-16.** The
+  21/9 axis split now reads 16/14 with the miscount named, and `src/cli.rs`
+  is now `src/commands/cli.rs`. Direct edits, outside the design run.
+- `DEC-236` — accepted, but folded into `design.md` §9 as an overrun; confirm the
+  reviewer reads it as covered rather than as an uncovered divergence.
+- **`IDE-019` divergences (2), for reconcile** — footer-vs-`doctor` siting, and
+  the declined `--verbose`/`--explain` flag. Both deliver its intent, neither its
+  mechanism.
+- **`RSK-013` and `catalog::scan:243/246`, `:289/292`** — live `STD-003`
+  violations outside this slice's surfaces.
 - **A2 unverified** — whether any non-backlog entity authors a `needs`/`after`
-  edge whose *target* is a backlog item.
-- Slice scope (`slice-238.md`) is now **stale against `DEC-231`**: its objective
-  1 (admission) is withdrawn, and its `OQ-1` still presents the widen/retire
-  fork. Reconcile at close, or sooner if it misleads.
+  edge whose *target* is a backlog item. Inert either way.
+- **Scope grew five times now** — the three owner-accepted at inquiry, plus the
+  `catalog::scan` collapse and the two stderr notices. Phase plan should be built
+  against §8's file list, not "make the footer honest".

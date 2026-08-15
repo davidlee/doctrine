@@ -1,0 +1,46 @@
+memory_uid = "mem_01a005e51e7d7232876e7de6cf8f53f6"
+memory_key = "mem.pattern.layering.direction-is-not-cohesion"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A downward layering edge can still be a cohesion violation"
+summary = "The layering gate checks tier direction; it cannot check whether a module should own the thing. Read the target module's charter."
+created = "2026-08-15"
+updated = "2026-08-15"
+
+[scope]
+paths = ["src/", ".doctrine/adr/001/"]
+globs = []
+commands = []
+tags = ["layering", "cohesion", "adr-001"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "73d68cd211406faf88d24bbcb773edaa4c68d700"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d7a4632e3b96130ff728676b7383e9c06d49781867cc0624c1e65f6caaf42beb"
+base_commit = "582300f142daf1f19166a8ad7e6dc0b128ef5ee5"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-238"
+

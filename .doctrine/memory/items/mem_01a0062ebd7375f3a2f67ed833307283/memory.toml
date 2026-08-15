@@ -1,0 +1,50 @@
+memory_uid = "mem_01a0062ebd7375f3a2f67ed833307283"
+memory_key = "mem.fact.layering.gate-measures-top-level-modules"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Layering gate measures top-level modules, not sub-units"
+summary = "ADR-001's layering gate extracts edges between top-level modules; a sub-classification row never affects the tangle count."
+created = "2026-08-15"
+updated = "2026-08-15"
+
+[scope]
+paths = ["tests/architecture_layering.rs", ".doctrine/adr/001/layering.toml"]
+globs = []
+commands = []
+tags = ["layering", "adr-001", "architecture-tests"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "71b8e03128160b946d5964328a7511a9550dc91d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "e3ad5e01d378a2cdfa7a9640da627e5c3c5e436c16c15c2b3d8451d79eeae177"
+base_commit = "9a2ba5fd316a03c7ededf31be44dae80a3d940f7"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-238"
+
+[[source]]
+kind = "review"
+ref = "RV-358"
+

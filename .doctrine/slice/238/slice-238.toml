@@ -52,10 +52,18 @@ intent = "design-target"
 
 [[selector]]
 selector = "src/meta.rs"
-intent = "design-target"
+intent = "scope-relevant"
 
 [[selector]]
 selector = "src/catalog/scan.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/authored_status.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/main.rs"
 intent = "design-target"
 
 [[relation]]

@@ -30,7 +30,8 @@ truth.
 Measured on the corpus, 2026-08-15: **30 authored cross-kind `needs`/`after`
 edges**. Five hang off already-terminal dependents, which `project` never admits
 as nodes, so **25 reach the footer** — 10 with a non-terminal target, 15 with a
-terminal one. Twenty-one of the thirty are on the `needs` axis.
+terminal one. Sixteen of the thirty are on the `needs` axis, fourteen on `after`
+(re-counted 2026-08-16; an earlier 21/9 split was a miscount).
 
 Four defects, of which the first is the one that survives `DEC-231`:
 
@@ -151,21 +152,30 @@ and make the edges clearable on both axes.
 
 ## Affected surface
 
+Reconciled against the locked design's §8, which is authoritative; this list is
+the scope-level summary.
+
 - `src/backlog.rs` — `render_overrides` (the `AbsentDrop` leg removed, the
-  `boundary:` block added), `classify_dangling` (becomes a classifier, stops
-  returning a display string), `list_rows` (the probe call site), `run_after`'s
-  `--prune`/`--remove` legs (routed to the kind-neutral shell), `inspect`'s
-  relationship rendering.
-- `src/commands/dep_seq.rs` — `run_after_prune`'s probe replaced; `needs
-  --remove` shell added.
+  `boundary:` block added), `classify_dangling` deleted, the ref probe and its two
+  projections, the stderr advisory, the tolerant diagnostic read, `run_after`'s
+  three legs (running injected operations), `run_needs`'s target gate, and
+  `inspect`/`show` relationship rendering.
+- `src/authored_status.rs` — **new engine module**: the sole per-kind status reader.
+- `src/priority/partition.rs` — `authored_class` over the existing `status_class`.
+- `src/catalog/scan.rs` — `status_and_title_for` becomes the command-tier overlay.
+- `src/kinds/mod.rs` — the status-kind constants and the `AuthoredStatus` three-way.
+- `src/commands/dep_seq.rs` — `run_after_prune`'s probe replaced; `needs --remove`
+  added. Stays at command tier.
 - `src/dep_seq.rs` — new `remove_needs` leaf beside `remove_after`.
-- `src/relation_graph.rs` / `src/commands/doctor.rs` — the ref-integrity check
-  under `RelationIntegrity`.
-- `src/cli.rs` — `--remove` on the `needs` verb.
-- `src/kinds/resolve.rs`, `src/meta.rs`, `src/priority/partition.rs` — read-only
-  consumer seams; expected unchanged.
+- `src/commands/doctor.rs` — the ref-integrity check under `RelationIntegrity`.
+- `src/commands/cli.rs` — `--remove` on the `needs` verb; supplies the injected
+  dep/seq operations to `backlog`.
+- `src/main.rs` — the new module declaration.
 - Footer goldens and `backlog list` fixtures in `src/backlog.rs`'s test module.
-- **Not** `src/backlog_order.rs`, and **not** `src/priority/`.
+- **Not** `src/backlog_order.rs`, **not** `src/priority/{graph,order,channels}.rs`,
+  **not** `src/meta.rs`, **not** `src/knowledge.rs`, **not** `src/relation_graph.rs`
+  — the last because the check consumes authored `[relationships]` refs, not tier-1
+  `[[relation]]` rows.
 
 ## Risks & assumptions
 
