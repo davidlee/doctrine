@@ -49,17 +49,25 @@ ADR-013/014, ADR-015 (except on the retire horn), ADR-019, ADR-020. Reasons in
   the footer for `doctrine doctor`**, which takes the project-level `AbsentDrop`
   leg with it — so the direction clash dissolves by deletion, not by flipping.
   The doctor check is **folded into this slice**.
-- **D-D. Reveal flag shape — OPEN (`inq-7`).** Name and stream. Narrowed by
-  `DEC-232`: it gates exactly one class (suppressed-but-render-relevant rows),
-  never validation errors.
-- **D-E. Cross-kind clearing — OPEN (`inq-8`).**
+- **D-D. Reveal flag shape — SETTLED, `DEC-234`.** No flag. `-a/--all` is
+  already taken (row hide-set) and a footer flag would exist to defeat the rule
+  `DEC-232` just gave the footer. `backlog inspect <ID>` already prints the full
+  record on both axes; it gains only a target status annotation from `DEC-233`'s
+  probe. Footer shape is invocation-independent.
+- **D-E. Cross-kind clearing — SETTLED, `DEC-235`.** Neither horn. The
+  kind-neutral verb already exists — top-level `doctrine after <SRC> <TGT>
+  --remove` clears a cross-kind edge today; `backlog after` is a backlog-only
+  duplicate that refuses what its twin accepts. So: route `backlog after`'s
+  remove/prune to the kind-neutral shell, add `doctrine needs --remove` (new
+  `dep_seq::remove_needs` leaf), and collapse **four** copies of the terminality
+  probe onto `DEC-233`'s + `status_class`. `parse_ref` untouched.
 
 ### Inquiry map (design run `dr-01a00475`)
 
 Resolved: `inq-1` → `DEC-230` (superseded), `inq-2` → `DEC-231`, `inq-3`
 (non-durable, moot), `inq-4` (non-durable, ADR-001 paydown falls away with the
-widen horn), `inq-6` → `DEC-232`, `inq-5` → `DEC-233`. Open: `inq-7` (cursor),
-`inq-8`.
+widen horn), `inq-6` → `DEC-232`, `inq-5` → `DEC-233`, `inq-7` → `DEC-234`,
+`inq-8` → `DEC-235`. **Open: none — 8 of 8 resolved at revision 21.**
 
 ### The reversal — read this before re-opening the fork
 
@@ -104,8 +112,11 @@ re-derived:
   tests. Guard against it pulling further scope — the check is
   `ensure_ref_resolves` over each item's `needs`/`after` under the existing
   `RelationIntegrity` category, nothing wider.
-- **R3 — untested leg.** `run_after --prune` has no test coverage at all.
-  Characterisation tests precede any probe change there.
+- **R3 — untested leg.** `run_after --prune` has no test coverage at all, in
+  **either** copy. Characterisation tests precede any probe change there. And
+  the prune fix is a deliberate *behaviour* change (an edge onto a `done` slice
+  becomes prunable), not a refactor — it must be tested as one, never smuggled
+  through the duplication cleanup (`DEC-235`).
 - **R4 — soft-axis over-reach.** An `after` edge onto an unrecognised-status
   target must not withhold or order. The conservative blocker rule is
   implemented over `dep_overlay` only (`src/priority/channels.rs:58`, `:66`);
@@ -136,10 +147,13 @@ two of which (`QUE-218`, `QUE-219`) are `open` and gate nine live items that
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-15 · design/exploring (run `dr-01a00475`, rev 19) · 02c9b8951
+fresh-as-of: 2026-08-15 · design/exploring (run `dr-01a00475`, rev 21) · 20ecb2296
 
 ### Produced
 
+- `DEC-235` — clearing rides the existing kind-neutral verb; `needs --remove`
+  added; four probe copies collapse.
+- `DEC-234` — no reveal flag; the full record is `backlog inspect`.
 - `DEC-233` — the status probe's seams, its cost, and the loudness rules on its
   one degradation.
 - `IMP-433` — lift `RV`'s derived status to a tier engine-side readers reach;
@@ -167,7 +181,24 @@ fresh-as-of: 2026-08-15 · design/exploring (run `dr-01a00475`, rev 19) · 02c9b
   grouping (`--by id`), **not** to `--by sequence`, which it separately calls
   "priority order". The governance research conflated them.
 - `run_after --prune` has no test coverage at all, and its disk-read-and-parse
-  block is duplicated within one function (`src/backlog.rs:2014-2060`).
+  block is duplicated within one function (`src/backlog.rs:2014-2060`) — **and
+  the whole function is duplicated again** in `src/commands/dep_seq.rs:196+`.
+  Four copies of one terminality probe, all hardcoding `resolved`/`closed`.
+- **The kind-neutral clearing verb already exists.** Proved: `doctrine after
+  IMP-172 SL-154 --remove` succeeds; `doctrine backlog after IMP-172 SL-154
+  --remove` fails with `unknown backlog prefix SL`. The top-level dep/seq shell
+  gates through `kinds::parse_resolvable_ref`; `backlog after` is the duplicate.
+- **The `needs` axis is append-only for every kind.** `unlink` is
+  tier-1-`[[relation]]`-only and refuses `needs`; `dep_seq::remove` is
+  `remove_after` only. No verb anywhere clears a `needs` edge.
+- **`--prune` misses `done`.** Proved: `SL-154` is `done`, the edge is present,
+  `after IMP-172 --prune` reports `nothing to prune` — the ADR-009 vocabulary
+  bug, live.
+- `backlog inspect <ID>` already prints both dep/seq axes undeduped; it lacks
+  only the target's status.
+- `doctrine explain <ID>` already prints `blocked by:` for a **live** cross-kind
+  prerequisite (`channels::blocked_by` filters to non-terminal,
+  `src/priority/surface.rs:319`), so only the *satisfied* case is unshown.
 - **Nothing re-checks `[relationships] needs`/`after` after authoring time.**
   `doctrine validate` is id-integrity only; `relation_graph::validate_relations`
   consumes `Catalog.edges`, built from `[[relation]]` rows. Probed: a fixture
@@ -196,8 +227,16 @@ fresh-as-of: 2026-08-15 · design/exploring (run `dr-01a00475`, rev 19) · 02c9b
 
 ### Open
 
-- `inq-7` (cursor) — reveal flag name and stream. Narrowed by `DEC-232` to one
-  class: suppressed-but-render-relevant rows, never validation errors.
+- **Inquiry map is fully dispositioned** (8/8 at revision 21). What remains is
+  the stage gate, not a question.
+- **`IDE-019` divergences (2), for reconcile.** It asked for the absent-ref case
+  to be *surfaced in the footer* (`DEC-232` routes it to `doctor`) and for a
+  `--verbose`/`--explain` flag on `backlog list` (`DEC-234` declines the flag and
+  sites the record on `inspect`). Both deliver its intent; neither its mechanism.
+  `IDE-019` must close against what was built.
+- **Scope grew three times**, each owner-accepted: the `doctor` check
+  (`DEC-232`), the probe's loudness rules (`DEC-233`), and `needs --remove` plus
+  the duplicate-clearing-path collapse (`DEC-235`).
 - `inq-8` — cross-kind clearing (`--prune` / `--remove`).
 - **A2 unverified** — whether any non-backlog entity authors a `needs`/`after`
   edge whose *target* is a backlog item.

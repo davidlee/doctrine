@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 234
+slug = "no-reveal-flag-on-backlog-list-the-full-record-is-backlog-inspect"
+title = "No reveal flag on backlog list; the full record is backlog inspect"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-15"
+updated = "2026-08-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-232 narrowed inq-7 to one class - suppressed-but-render-relevant rows, never validation errors - leaving the flag's name and stream. Probing the surrounding surfaces reshaped the question. `-a/--all` is ALREADY taken on `backlog list` and means `show every state, including the kind's terminal hide-set`: a row-MEMBERSHIP flag. `backlog inspect IMP-172` already prints the full authored record, both axes and undeduped (`needs: SL-154` / `after: SL-154`); the only thing it lacks is the target's status, which is exactly what DEC-233's probe returns. `doctrine explain ISS-327` already prints `blocked by: QUE-219`, so the LIVE cross-kind case is visible on the actionability surface. What is visible nowhere is a SATISFIED cross-kind prerequisite - the whole suppressed class, 15 edges in the live corpus."
+choice = "No reveal flag is added to `backlog list`. The footer never changes shape by flag: it renders what DEC-232's contract admits, and nothing else, in every invocation. The full authored record is reached through `backlog inspect <ID>`, which already prints both axes and gains only a status/class annotation on each cross-kind target, supplied by DEC-233's probe - the same leaf-plus-engine seams, no `priority` reach, no new `ListArgs` plumbing, no seventeenth flag. Four surfaces answer four questions: `list --by sequence` says where work sits, `inspect <ID>` says what an item declares and the state of what it declares, `doctor` says what is broken, and `after --prune` says what can be cleared."
+alternatives = ["Extend the existing `-a/--all` to the footer. Rejected - it couples footer detail to row membership, so learning why one row sits where it does costs ~400 extra terminal rows, and it still admits lines to the footer that explain nothing about the render.", "Add a dedicated `--verbose`/`--explain` footer flag, IDE-019's literal proposal. Rejected - the flag's only job would be to add lines the footer contract just excluded, so it contradicts DEC-232 by construction rather than by accident.", "Annotate `doctrine explain` instead of `backlog inspect`. Rejected - `channels::blocked_by` filters to non-terminal by design (src/priority/surface.rs:319), so satisfied prerequisites would need a new non-filtering accessor inside `priority`, which this slice's Non-Goals guard and DEC-231 declared already correct."]
+rationale = "A reveal flag on the listing surface would exist to defeat the rule that surface was just given, which is a sign the capability belongs elsewhere. It does: the per-item record is already printed by `inspect`, in full and on both axes, so the gap was never a missing view but a missing annotation. Siting it there also keeps each surface's question intact instead of making one surface answer two, which is the same reasoning DEC-231 used to refuse making `--by sequence` a worse `next`."
+consequences = ["IDE-019 divergence #2 - it asks for `a --verbose (or --explain) flag on doctrine backlog list`, and this delivers its INTENT (gate the noise, keep the record reachable) while declining its mechanism. With DEC-232's routing of absent refs to `doctor` against IDE-019's wish to surface them in the footer, that is two divergences to record at reconcile so IDE-019 closes against what was built.", "There is no corpus-wide `every spent cross-kind edge` view. That is a cleanup question, and cleanup is `after --prune`'s - inq-8's territory, not the listing surface's.", "DEC-233's `Unavailable` arm renders on `inspect` too, on the same terms: named, never silently omitted.", "`inspect` is NOT deduplicated and must not be - it prints the authored record, where `needs: SL-154` and `after: SL-154` are two authored facts under two labels. DEC-232's dedup rule is a FOOTER rule only, where one line's worth of information is the point. Anyone tidying `inspect` to match the footer would be deleting authored truth.", "`backlog list`'s flag surface is unchanged; `-a/--all` keeps its single row-membership meaning.", "The footer's shape is now invocation-independent, so its golden tests need no flag matrix - one shape, tested once."]
+decided_by = "owner"
+decided_on = "2026-08-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-238"

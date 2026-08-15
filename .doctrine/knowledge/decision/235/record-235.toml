@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 235
+slug = "clearing-rides-the-existing-kind-neutral-depseq-verb-needs-gains-remove"
+title = "Clearing rides the existing kind-neutral dep/seq verb; needs gains --remove"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-15"
+updated = "2026-08-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = """The node framed a fork between widening `backlog::parse_ref` - a chokepoint five other hard-failing callers depend on - and inventing a kind-neutral unlink-shaped verb. Probed on a scratch corpus carrying the real SL-154, IMP-172 and QUE-219: `doctrine after IMP-172 SL-154 --remove` SUCCEEDS and clears the cross-kind edge, while `doctrine backlog after IMP-172 SL-154 --remove` fails with `unknown backlog prefix SL`. So the kind-neutral verb already exists (`src/commands/dep_seq.rs`, gated by `resolve_dep_seq_src` over `kinds::parse_resolvable_ref`), and `backlog after` is a backlog-only DUPLICATE that refuses what its twin accepts. Two further facts fell out of the same probe. With SL-154 at `status = "done"` and the edge present, `doctrine after IMP-172 --prune` reports `nothing to prune`: the hardcoded `status == "resolved" || status == "closed"` misses ADR-009's slice vocabulary, and that probe exists in FOUR copies - `src/backlog.rs:2013-2064` and `src/commands/dep_seq.rs:196+` are near-verbatim duplicates of each other, and each doubles its own read-parse-status block internally. And `doctrine unlink IMP-172 needs SL-154` refuses with `needs is not a relation label`: `unlink` operates on tier-1 `[[relation]]` rows, a different storage, and `dep_seq::remove` is `remove_after` only. The `needs` axis is therefore APPEND-ONLY for every kind, not merely for cross-kind targets - and 21 of the 30 authored cross-kind edges are `needs`."""
+choice = "Neither horn. Nothing is widened and no verb is invented; the existing kind-neutral dep/seq shell becomes the single implementation, and the one genuinely missing capability is added to it. Three moves. (1) `doctrine needs <SRC> <TGT> --remove` is added, backed by a new `dep_seq::remove_needs` leaf beside `remove_after` - the `needs` array is a plain string array, simpler than the inline-table walk - wired through the SAME `resolve_dep_seq_src` gate and shell as `after --remove`. (2) `backlog after`'s `--remove` and `--prune` stop being a second implementation and route to the kind-neutral shell, so the backlog-scoped verb accepts exactly what the top-level one does. (3) All four copies of the terminality probe collapse into DEC-233's probe classified by `partition::status_class`, so `done` and `answered` are recognised as terminal and the STD-001 duplicated-table violation and the REQ-238 routing breach close together. `backlog::parse_ref` is NOT touched, so its five other hard-failing callers are unaffected."
+alternatives = ["Widen `backlog::parse_ref` to cross-kind ids. Rejected - five other callers depend on it hard-failing on a non-backlog prefix, and the capability it would unlock already exists one verb over.", "Invent a kind-neutral unlink-shaped verb for dep/seq. Rejected - `doctrine after --remove` IS that verb and it already works cross-kind; a second one would be the parallel implementation this decision is removing.", "Fix the `after` axis only and raise `needs` removal separately. Rejected - DEC-232 adds a doctor check that reports an unresolvable `needs` ref at Error severity, so this slice would ship an error finding with no CLI verb able to fix it, hand-editing the toml being the only path. The gap is latent by construction rather than by luck.", "Also add `needs --prune`, mirroring `after --prune`. Rejected deliberately - a satisfied HARD prerequisite is meaningful history, and auto-dropping it is a judgement the tool should not make unasked. `--remove` is explicit and sufficient."]
+rationale = "Every horn the node posed assumed the clearing capability was missing; it was only missing from ONE of two verbs that do the same job. Once the duplicate is seen as a duplicate, the work is subtraction plus one small addition rather than a widening with a five-caller blast radius. The same subtraction fixes `--prune` everywhere at once: four copies of a hand-rolled terminality test collapse onto the classifier REQ-238 already designates, which is why the vocabulary bug could exist in the first place. Adding `needs --remove` is not scope opportunism - it is the counterpart that keeps DEC-232's doctor check coherent, since a check that reports what cannot be repaired converts a silent defect into a loud one without closing it."
+consequences = ["This is the slice's third scope growth, accepted by the owner: the doctor check (DEC-232), then the probe's loudness rules (DEC-233), now the `needs --remove` verb and the collapse of the duplicated clearing path.", "Characterisation tests come FIRST. `run_after --prune` has no test coverage at all in either copy (R3), so the current behaviour is pinned before the probe is replaced - otherwise the collapse cannot be shown to be behaviour-preserving where it should be, or intentional where it should not.", "The prune fix is a deliberate BEHAVIOUR change, not a refactor: an `after` edge onto a `done` slice or an `answered` question becomes prunable where today it is not. It must be tested as a change, not smuggled through a duplication cleanup.", "`backlog::parse_ref` is untouched and its five hard-failing callers keep their contract.", "The `IMP-095 -> SL-095` edge IMP-099 names as the standing instance is an `after` edge, so it becomes clearable via move (2); the five spent cross-kind `needs` edges (onto QUE-212, SL-138, SL-154, SL-176, SL-189) become clearable via move (1).", "Clearing remains a judgement call, never automatic. Nothing in this slice edits the corpus; DEC-231's non-goal that the ten authored refs are legal data still holds.", "`doctrine unlink` is unchanged and stays tier-1-relation-only. The dep/seq axes are not folded into it."]
+decided_by = "owner"
+decided_on = "2026-08-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-238"
