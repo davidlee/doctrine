@@ -4,6 +4,16 @@
      fields live in the sister `record-NNN.toml`; this prose is free-form and is
      never structurally parsed (the storage rule). -->
 
+> **Partially superseded by `DEC-229` (2026-08-15) — read this title with care.**
+> The **enum** half is superseded: the pin is an exhaustiveness barrier generated
+> *over* the existing enums, not a regenerated type. `DEC-229` explains why the
+> `condition_vocabulary!` route is unavailable here and why separating the
+> guarantee from type ownership is strictly cheaper. The **struct** half below —
+> serde-key-set equality against an exhaustive no-`..` literal, on `SL-249`'s
+> `I9` — stands unchanged and still carries `DEC-227`'s thirteen struct types.
+> This record is kept `accepted` because half of it is still in force, and
+> because the reasoning it works through is what `DEC-229` builds on.
+
 ## Two things to pin, and they are not alike
 
 `DEC-219` made enum token vocabularies and serde tagging part of the contract, so

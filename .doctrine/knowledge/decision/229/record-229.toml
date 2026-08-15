@@ -1,0 +1,38 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 229
+slug = "enum-pin-is-an-exhaustiveness-barrier-not-a-generated-type"
+title = "Enum pin is an exhaustiveness barrier, not a generated type"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-15"
+updated = "2026-08-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-221 settled that enum token vocabularies are generated on SL-244's condition_vocabulary! pattern. Drafting SL-251's sec-4 found that pattern is not available here and that a strictly better instrument exists in the same family. condition_vocabulary! OWNS the Condition type — it emits the enum definition, ALL, as_str, the serde renames and CONTRACTS from one row list — which SL-244 could do because SL-244 introduced Condition. The enums in DEC-227's closure (Dispose, DelegationAct, AgentAct, ActKind, Stage, Posture, Authority and the rest) already exist, carry data on their variants, and sit under the behaviour-preservation gate as shared machinery."
+choice = "Pin each enum's variant set with a generated exhaustiveness barrier rather than a generated type. A payload_variants! macro emits the token list used by the contract table plus a dead exhaustive match over the real enum, using the braced pattern Dispose::Create { .. } — verified against the compiler as uniform across unit / tuple / struct variants. No existing type definition moves."
+alternatives = ["DEC-221's literal reading — regenerate each enum definition through a macro so one row list serves the type / its ALL array / its as_str / its serde token. Rejected on blast radius: it rewrites shared machinery under a behaviour-preservation gate for a slice scoped as a documentation surface; and R3's clippy blindness would then cover real logic rather than an empty match.",
+  "Hand-written token lists checked by assertion against ALL arrays. Rejected for the reason SL-244's macro doc already gives: add a variant / give it an as_str arm / leave it out of ALL — and every assertion still passes. ActKind::ALL and Advance::ALL demonstrate the failure live."]
+rationale = "condition_vocabulary!'s real guarantee is not that it writes the type — it is that an omission makes a generated match non-exhaustive, which is a build failure. That guarantee is separable from type ownership. Taking the guarantee without the ownership keeps the compile-time pin in both directions while removing the cost that made generation contentious."
+consequences = ["Pins both directions at compile time: a variant added to the enum but not the list makes the match non-exhaustive; a variant listed but absent from the enum is an unresolved path.",
+  "The generated region is a token array and a match with no bodies — so R3's clippy blindness covers nothing that could hold a bug.",
+  "The behaviour-preservation gate on shared machinery is satisfied by construction rather than by argument since no type definition moves.",
+  "It does not pin token strings against serde's actual renames; a rename_all change could drift a literal. That is a per-variant round-trip test — and the exhaustiveness barrier is what guarantees the test has a case for every variant.",
+  "Supersedes DEC-221's mechanism clause for enums only. DEC-221's struct half — serde-key-set equality against an exhaustive no-.. literal on I9's pattern — stands unchanged."]
+decided_by = "user"
+decided_on = "2026-08-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = ["DEC-221"]   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-251"
