@@ -1102,11 +1102,12 @@ to it.
 | An enum's `TypeContract::name` | `stringify!` at the macro invocation | compile |
 | A struct's `TypeContract::name` | compared against `T` in the key-set pin | test |
 | Token ↔ serde rename | per-variant round trip | test |
-| Wire type correctness | JSON kind, plus each `Named` edge against the target's key set (structural, not nominal — `sec-8` pin 2) | test |
+| Wire type correctness | a recursive descent matching on `sec-2`'s model with no wildcard arm — JSON kind at the leaves, each `Named` struct edge against the target's key set (structural, not nominal), each `Named` enum edge through its variant (`sec-8` pin 2) | compile + test |
+| That every declaration site was actually *reached* | `{sites the descent reached} == {every site in PAYLOAD}`, a site being a `KeyContract`, a `VariantContract` or a nested `WireType` (`sec-8`'s oracle discipline) | test |
 | `Sparse` vs the rest | null-set equality on an all-`Null` fixture | test |
 | Requiredness | per-key removal probe on the **read** path, never serialization | test |
-| A variant payload's field set | exhaustive variant literal (no functional-update form), plus set-equality against the variant's rows | compile + test |
-| A variant payload's wire types and requiredness | pins 2 and 3 re-run over pin 4's per-variant samples (`sec-8`, "Pins 1–3 have a second arm") | test |
+| A variant payload's field set and wire types | exhaustive variant literal (no functional-update form), then the same descent, which reaches a variant payload as it reaches a struct's keys | compile + test |
+| A variant payload's requiredness | the removal probe over pin 4's per-variant samples, which is the one thing needing a type rather than a point in the descent (`sec-8`, "Where the variant payloads are pinned") | test |
 | A named extern region is supplied | exhaustive match on `ExternRegion` | compile |
 | The extern facet vocabulary is current | derived from `facet_fields`, never copied | compile |
 | The extern **kind** set is the enum's | exhaustive match over `RecordKind` (`ALL` is hand-maintained) | test |
@@ -1835,30 +1836,45 @@ broke, it carries a positive control first, on `the_artefact_cites_no_repo_priva
 pattern (`artifact.rs:360-370`) — assert the detector fires on a known-bad input,
 then assert the real input is clean.
 
-**And a fixture that leaves a container empty stops testing without failing.**
-Pin 2 reads element types *through the value*, so a `Seq(inner)` or `Map` row is
-exercised only where the fixture actually put something in it — and the precedent
-this design builds on does not: `Declaration::fully_populated` sets
-`needs: Sparse::Value(Vec::new())` (`submission.rs:657`), and its doc says the
-values are arbitrary because `I9` observed each key's *presence* alone. True of
-`I9`, false of this ladder. So *fully populated* carries a second obligation
-beside the no-`..` literal: **every `Seq` and `Map` row holds at least one
-element, in every struct fixture and every variant sample**, and the walk
-**asserts** non-emptiness on those rows rather than trusting it — an emptied
-container is then a failure rather than a check that quietly stopped running.
-`Declaration::fully_populated`'s value and its doc sentence both change with it,
-in the one place `I9` and this ladder share the literal (`tests.rs:2908`).
+**And an input a pin never reaches is a declaration that stops being tested
+without anything failing.** This is the discipline's second half, and it took four review
+rounds to state, because each round repaired the *assertion* and left its *input*
+alone. `Declaration::fully_populated` sets `needs: Sparse::Value(Vec::new())`
+(`submission.rs:657`), and its doc says the values are arbitrary because `I9`
+observed each key's *presence* alone — true of `I9`, false of this ladder, since
+pin 2 reads element types **through the value**. An empty `Seq` proves "array"
+and nothing about `inner`. So does an empty `Map`, an `Option` left `None`, a
+variant with no sample, and an untagged `Shape` nothing inhabits.
 
-**A *row*, not a key** — the obligation is stated over where a container is
-*declared*, because a container is not always behind a key. `WireFacetValue`'s
-`List` arm is `VariantPayload::Shape(Seq(Text))` (`sec-2`): untagged, so it is a
-shape rather than a set of keys, and pin 4 hands both its shapes to pin 2. A
-key-scoped rule would never reach it, and `WireFacetValue::List(vec![])` would
-satisfy `Shape(Seq(Integer))` exactly as well as `Shape(Seq(Text))`. The rule
-therefore binds every `Seq` and `Map` **wherever it is declared** — a
-`KeyContract`'s `ty`, an untagged variant's `Shape`, or a container nested inside
-either — which closes the case by construction rather than by an inventory of
-today's rows.
+Those are five instances of one thing, and enumerating them is what failed. The
+obligation is therefore stated as **coverage**, and asserted as a set-equality
+like every other pin here — over the union of every fixture and sample, since one
+value inhabits one variant and no single value could reach the whole tree:
+
+```
+{declaration sites pin 2's descent reached} == {every declaration site in PAYLOAD}
+```
+
+A **site** is any node of the contract tree the descent can stand on — a
+`KeyContract`, a `VariantContract`, or a `WireType` nested inside either. Naming
+them that way rather than as *rows* is deliberate: `WireFacetValue`'s `List` arm
+is a `Shape`, not a row, and a row-scoped equality would have walked past it
+exactly as a key-scoped one did. The tree is enumerable because it is `sec-2`'s
+model, and the same no-wildcard match that defines the descent defines what it
+can visit.
+
+The descent records each site as it arrives; the right-hand side is read off the
+table directly, so the two sides derive independently and a broken extraction
+fails the equality rather than passing it. Every way an input can silently stop
+testing is then the same failure — a site never arrived at — including the ways
+not yet thought of. Nothing has to enumerate container kinds, and *fully
+populated* keeps its single obligation: the no-`..` literal. `Declaration`'s
+`Vec::new()` and the doc sentence explaining it change with this, in the one
+place `I9` and this ladder share the literal (`tests.rs:2908`).
+
+Pin 3's all-`Null` `Sparse` fixture is deliberately *not* covered by this
+equality — it exists to make containers absent, which is the assertion rather
+than a gap. The coverage claim is over the values pin 2 walks.
 
 ## 1 — Key sets: eleven types one way, the twelfth another
 
@@ -1915,14 +1931,42 @@ against its declared `WireType`: string against `Text` / `Id` / `Token`, number
 against `Integer`, bool against `Boolean`, array against `Seq`, object against
 `Named` / `Map`.
 
-**The walk is recursive over the value, not a pass over its top-level keys.** A
-`Seq(inner)` row checks *every element* against `inner`, and a `Map` row checks
-every value against the declared value type — otherwise `declare`'s
-`Seq(Named(Declaration))` says only "array", and any named target would satisfy
-it. It recurses the same way into an untagged variant's `Shape`, which is the
-other place a container is declared. Non-emptiness is what keeps all of these
-from being vacuous, which is why the oracle discipline above makes it a fixture
-obligation and asserts it.
+**The walk is a recursive descent over the whole value, defined by exhaustive
+match on the model rather than by a list of the cases anyone has noticed.** It
+holds a JSON value and the declaration that describes it, and descends by the
+shape of the *declaration*:
+
+| declaration | descent |
+|---|---|
+| `Text` / `Integer` / `Boolean` | the JSON kind |
+| `Id(kinds)` | string, and `kinds` against `IdKind::declarable` |
+| `Token(_)` | string; the vocabulary is pin 4's (`Fixed`) or pin 5's (`Extern`) |
+| `Seq(inner)` | array; **every element** against `inner` |
+| `Map { key, value }` | object; keys against `key`, every value against `value` |
+| `Named(t)`, `t.form` = `Struct` | object; its keys == `t`'s rows, each value against its row |
+| `Named(t)`, `t.form` = `Enum` | select the variant through pin 4's tagging table, then descend into its payload |
+| `VariantPayload::Keys(rows)` | its keys == `rows`, each value against its row |
+| `VariantPayload::Inlines(t)` | descend into `t`, in the variant's place |
+| `VariantPayload::Shape(w)` | descend into `w` |
+| `VariantPayload::Absent` | nothing to descend into |
+
+**Written as a match with no wildcard arm**, on the instrument `sec-3` already
+uses for `FieldShape → WireType`: a new `WireType` or `VariantPayload` variant is
+then a compile error at the walk rather than a declaration that quietly stops
+being checked. That is what makes this total over `sec-2`'s model by construction —
+the property four review rounds of case-by-case repair could not reach, each
+having closed the case it was shown and left the model's other arms open.
+
+Three consequences worth naming, because each was a live false green:
+`declare`'s `Seq(Named(Declaration))` said only "array" until the walk descended
+into elements; `Declaration.provenance`'s `Named(Provenance)` had no defined
+check at all, since the stated rule compared an edge against its target's *keys*
+and an enum target has variants instead; and `WireFacetValue::List(vec![])`
+satisfied `Shape(Seq(Integer))` as readily as `Shape(Seq(Text))`. Variant
+selection is **read from pin 4's table rather than restated**, so the tagging
+claim has exactly one statement in this design. Under `Untagged` there is no
+token to select by, so the walk asserts the value matches **exactly one**
+declared `Shape` — which is also the well-formedness the untagged model needs.
 
 A `Map` row is now two claims rather than one, because `sec-2` gave the key a
 description: the object's **values** match the declared value type, and its
@@ -2009,36 +2053,37 @@ Two `Sparse` fixtures, not twelve: only `Declaration` (`submission.rs:126-133`)
 and `TraversalDeclaration` (`731-736`) carry `Sparse<T>`, and the removal probe
 reads the same `fully_populated` values every other pin uses.
 
-## Pins 1–3 have a second arm: the variant payloads
+## Where the variant payloads are pinned
 
-`KeyContract` rows are not a struct's alone. `VariantPayload::Keys` carries the
+`KeyContract` rows are not a struct's alone: `VariantPayload::Keys` carries the
 same row type (`sec-2`), so `DelegationAct::Propose` declares a `key`, a `ty` and
 a `presence` for each of `id`, `by`, `summary` and `declare` exactly as
-`Declaration` does for its fields — and the three assertions above reach none of
-them, because all three range over the twelve `fully_populated` **struct** values.
-A contract row with no oracle over it is the defect this ladder exists to
-prevent, so the arm is stated here rather than left to implementation to notice.
+`Declaration` does for its fields. Two of the three questions are already
+answered above and only the third needs an arm here.
 
-It needs no new fixture. Pin 4 already constructs one sample value per variant
-for all fourteen enums, and each sample is a value of its own type, so the same
-three questions are well defined over it:
+**Key sets and wire types are pin 2's**, because its descent is over the model
+and reaches a variant payload the same way it reaches a struct's keys — through
+`Named(t)` where `t.form` is `Enum`, or from a root sample. Nothing extra is
+needed, and adding a second statement of it would be the duplication this slice
+exists to remove.
 
-- **key set** — the sample's serialised keys == the variant's rows (pin 1's
-  assertion, at the variant);
-- **wire type** — each key's JSON kind against its declared `WireType`, and each
-  `Named` edge against its target's key set (pin 2's walk, unchanged);
-- **requiredness** — remove one key from the sample's JSON, attempt
-  `from_value::<TheEnum>`, and collect the keys whose removal refuses; that set ==
-  the variant's `Required` rows (pin 3's probe, on the same read path).
+**Requiredness needs the arm**, because the removal probe needs a subject it can
+deserialise, and that is a type rather than a point in a walk. Pin 4 already
+constructs one sample value per variant for all fourteen enums, and each sample
+is a value of its own type, so the probe runs there unchanged: remove one key
+from the sample's JSON, attempt `from_value::<TheEnum>`, and collect the keys
+whose removal refuses; that set == the variant's `Required` rows. The domain is
+then total over the closure — pin 1's eleven plus `SubmissionEnvelope` plus these
+samples are exactly `sec-3`'s twelve structs and fourteen enums, with nothing
+else in it.
 
-Two mechanics the arm has to name. **The tag is not a row**: under
-`Tagging::Internal(tag)` the tag key belongs to pin 4 and the walk skips it, and
-under `External` the three checks apply to the wrapped object rather than to the
-single-key wrapper. And **the sample is its own compile barrier** — an enum
-variant literal has no functional-update form, so every field must be named at
-construction, and a new field is a compile error at the sample before it can
-become a missing row. That is `I9`'s guarantee, obtained for variants without a
-second literal.
+**The tag is not a row.** Under `Tagging::Internal(tag)` the tag key belongs to
+pin 4 and the probe skips it; under `External` it applies to the wrapped object
+rather than to the single-key wrapper. And **the sample is its own compile
+barrier** — an enum variant literal has no functional-update form, so every field
+must be named at construction, and a new field is a compile error at the sample
+before it can become a missing row. That is `I9`'s guarantee, obtained for
+variants without a second literal.
 
 **What the arm currently guards.** Exactly one variant key in the closure is not
 required today: `DelegationAct::Propose.declare` is `#[serde(default)]`
@@ -2058,11 +2103,16 @@ fixtures sit beside their types for the opposite reason — they are `I9`'s
 precedent, and `Declaration`'s literal is reused by an existing test
 (`tests.rs:2908`) rather than copied.
 
-**Why this arm was missed twice.** Pin 3's earlier drafts each corrected the
-assertion's *direction* — superset, then equality, then the read-path probe —
-while leaving its **domain** unexamined. Two oracles were wrong in a row and the
-fixture set was never the thing under inspection. A pin's domain is a claim like
-any other in this ladder, and this is the place the design says so.
+**Why this took four rounds.** Pin 3's drafts each corrected the assertion's
+*direction* — superset, then equality, then the read-path probe — and the three
+rounds after that each corrected one place its **input** did not reach: struct
+fixtures only, then empty containers, then an untagged `Shape` that no key led
+to. Every repair was right about the case it was shown and wrong to be written as
+a case. What ended it was not a fifth case but a change of instrument — a descent
+that matches on `sec-2`'s model with no wildcard arm, and a coverage equality
+over the rows it reaches. Both are in the oracle discipline above, which is where
+the general lesson belongs; what is left here is the one thing genuinely local to
+variants, which is that a removal probe needs a type to deserialise into.
 
 ## 4 — Tokens against serde's renames, and why the coverage is total
 
@@ -2314,10 +2364,9 @@ They are the dominant mechanical cost of the slice and the compile barrier under
 pin 1, and an implementer who reaches for `..` in any of them silently deletes that
 type's barrier while every test still passes. There is no pin for this — a test
 cannot see the difference. It is a review point, and each fixture should carry
-`Declaration::fully_populated`'s doc sentence saying why the `..` is forbidden —
-now joined by the second obligation `sec-8`'s oracle discipline adds, that no
-`Seq` or `Map` key is left empty. That one *is* pinned, and the sentence is there
-so an implementer meets it deliberately rather than by accident.
+`Declaration::fully_populated`'s doc sentence saying why the `..` is forbidden.
+The neighbouring hazard — a fixture that leaves a row unreached — is *not* on
+this list, because `sec-8`'s coverage equality pins it.
 
 **`R5` (new, and now measured) — the contract can be correct and still too
 expensive to read.** No longer an estimate: the full closure was rendered ahead of

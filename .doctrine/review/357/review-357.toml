@@ -59,7 +59,7 @@ response = "Contest upheld — the repair proved structural shape and the prose 
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected presence pinning in both directions; observed required fields may be mislabeled optional without failure"
 detail = "sec-4 says presence correctness is verified, but sec-8 pin 3 asserts only that keys present in a minimal value are a superset of rows declared Required (.doctrine/slice/251/design.md:927-932, 1658-1670). This catches an optional source field falsely declared Required, but not the converse: if run_uid, known_revision, or submission_id is changed in the contract from Required to Optional, the real minimal ApplyRequest still serializes all three because SubmissionEnvelope makes them mandatory (src/design_run/submission.rs:680-691), while the declared-Required set merely shrinks and the superset assertion remains true. Pin 1 checks only key inventory, so it does not close the gap. Expected equality against a source-derived required-key oracle or an equivalent two-way check; observed a one-way assertion that allows the contract to understate requiredness while every proposed pin passes. The false green must be broken before /plan."
