@@ -4,8 +4,8 @@
 ## Current
 
 `doctrine design apply` accepts one JSON object on `--input` and documents none
-of it. `ApplyRequest` (`submission.rs:923`) carries twelve top-level wire keys —
-three flattened in from `SubmissionEnvelope`, nine act fields — and the only
+of it. `ApplyRequest` (`submission.rs:923`) carries thirteen top-level wire keys —
+three flattened in from `SubmissionEnvelope`, ten act fields — and the only
 description of any of them that reaches a caller is a single worked example,
 `DECLARATION_EXAMPLE` (`render/envelope.rs:75`), which shows two acts of ten and
 omits `cursor`.
@@ -152,7 +152,7 @@ never need it. `sec-3`'s `Extern` region is the reason: the command tier assembl
 that sub-contract from `facet_fields` while the process runs, so its row slice
 cannot be `'static`. Every *string* in an injected contract already is — kind
 tokens, facet names, the `KNOWN` sets — so the borrow-or-own split lands on these
-two slices and nowhere else, and the constructors keep it out of ~13 hand-written
+two slices and nowhere else, and the constructors keep it out of twelve hand-written
 table rows. `sec-7` records the alternatives.
 
 `WireType` is the recursion:
@@ -174,6 +174,32 @@ pub(crate) enum WireType {
 `FieldShape::Closed` actually is on the wire — a plain string drawn from a closed
 set, with no Rust type name a caller could ever see. `Named` pointing at an
 invented enum would say something false about the payload.
+
+## The variant row, and where a payload actually sits
+
+`TypeForm::Enum` holds these:
+
+```rust
+/// One enum variant: its token, and the keys its payload carries — empty for a
+/// unit variant.
+pub(crate) struct VariantContract {
+    pub(crate) token: &'static str,
+    pub(crate) payload: &'static [KeyContract],
+}
+```
+
+**Where those keys sit on the wire is a function of `Tagging`, not a field of its
+own.** Under `Internal(tag)` serde inlines them *beside* the tag: a `create`
+disposition is `{"form":"create","kind":…,"title":…}`, with `CreateRecord`'s keys
+at the same level as `form` rather than nested under it — `Dispose`
+(`submission.rs:213`) is internally tagged and its `Create(CreateRecord)` is a
+newtype variant. Under `External` the payload nests under the token,
+`{"blocking-set-declared":{"blocking":[…]}}`. Under `Bare` there is no payload.
+
+Deriving placement from the tagging rather than storing it is what keeps the two
+from disagreeing. The renderer still has to *say* it: a rendering that listed
+`Dispose`'s four tokens and stopped would leave a caller believing `create`'s
+payload nests, which is precisely the class of error this contract exists to end.
 
 ## The three fields that carry the semantics
 
@@ -237,18 +263,33 @@ wrong on that distinction spends a revision hunting a change that was never
 made. `SilentlyDropped` cannot be misread, and that is the whole reason it is
 spelled out rather than negated.
 
-The underlying fact: `serde(flatten)` forbids `deny_unknown_fields`, so
-`ApplyRequest` cannot refuse a key it does not know — it is discarded, the
-revision bumps, a receipt is written, no change row prints, and the command exits
-0. Inner types *do* refuse: `Declaration` (`submission.rs:123`),
-`CheckpointActDeclaration` (824), `AgentActDeclaration` (854). The hole is
-exactly one level deep.
+**The hole is not one level deep — it is most of the payload.** Exactly three
+wire structs carry `deny_unknown_fields`: `Declaration` (`submission.rs:123`),
+`CheckpointActDeclaration` (824) and `AgentActDeclaration` (854). The other nine
+— including `TraversalDeclaration`, which carries `cursor` — accept an unknown
+key and discard it. A misspelt `cursor` therefore behaves exactly like a misspelt
+top-level act: the revision bumps, a receipt is written, no change row prints,
+and the command exits 0.
 
-This slice does not repair that mechanism — an explicit Non-Goal — it stops the
+Two causes sit under that one behaviour, and the difference decides what happens
+next rather than what a caller sees. `ApplyRequest` **cannot** deny —
+`serde(flatten)` forbids it, which is `ISS-333`'s actual mechanism. The other
+eight simply carry no attribute, and nothing structural stops them acquiring one.
+So `SilentlyDropped` is the majority row in this contract, not a single top-level
+disclosure, and the eventual repair is mostly cheap. Both facts belong in the
+design rather than left for a reader to infer from `ISS-333`'s framing.
+
+Annotating those eight is still out of scope, on the Non-Goal that actually
+applies: stored proposal declarations ride the run snapshot and outlive the
+binary that wrote them, so tightening a read path converts previously-readable
+stored state into a parse failure at exactly the moment someone is resuming.
+
+This slice does not repair the mechanism — an explicit Non-Goal — it stops the
 mechanism from being a secret. The ordering is deliberate: be truthful about the
-protocol now, and change the protocol later. When `ISS-333` is eventually fixed,
-`SilentlyDropped` has no members, the enum collapses to a single variant, and the
-field can be deleted outright. A contract that had quietly implied uniform
+protocol now, and change the protocol later. When every wire struct refuses —
+the eight attribute-only cases as well as `ISS-333`'s flatten — `SilentlyDropped`
+has no members, the enum collapses to a single variant, and the field can be
+deleted outright. A contract that had quietly implied uniform
 refusal would instead have been wrong for the whole intervening period, and
 wrong in the direction that costs a caller a revision to discover.
 
@@ -274,10 +315,13 @@ everyone else.
 pub(crate) const PAYLOAD: TypeContract = /* ApplyRequest */;
 ```
 
-One root, from which the closure is reachable. `ApplyRequest`'s twelve top-level
-wire keys are three flattened in from `SubmissionEnvelope` (`run_uid`,
-`known_revision`, `submission_id`) and nine act fields. The flatten is a
-presentation detail of the Rust types, not of the wire — a caller sends twelve
+One root, from which the closure is reachable. `ApplyRequest`'s thirteen
+top-level wire keys are three flattened in from `SubmissionEnvelope` (`run_uid`,
+`known_revision`, `submission_id`) and **ten** act fields (`submission.rs:923-967`).
+Ten against `WRITER_ACTS`'s nine rows is the asymmetry Objective 3 names —
+`delegation` is the tenth — and stating nine here would have reproduced the
+defect the slice exists to fix. The flatten is a
+presentation detail of the Rust types, not of the wire — a caller sends thirteen
 keys at one level — so the contract renders them at one level too, and
 `SubmissionEnvelope` appears in the closure only as the reason the root's
 `unknown_keys` is `SilentlyDropped`.
@@ -293,22 +337,34 @@ which is the same test `DEC-227` used to reject a boundary drawn by judgement.
 ## What is in it
 
 `DEC-227` set totality as the full recursive wire closure rooted at
-`ApplyRequest`. Enumerated, that is thirteen struct types —
+`ApplyRequest`. Traced against the source rather than recalled, that is **twelve
+struct types** —
 
-`ApplyRequest`, `SubmissionEnvelope`, `Declaration`, `CreateRecord`,
-`AcceptanceDeclaration`, `DischargeDeclaration`, `AdoptAuthored`,
-`StageDeclaration`, `TraversalDeclaration`, `ReviewPolicyDeclaration`,
-`CheckpointActDeclaration`, `AgentActDeclaration`
+`ApplyRequest`, `SubmissionEnvelope`, `AdoptAuthored`, `TraversalDeclaration`,
+`StageDeclaration`, `AcceptanceDeclaration`, `Declaration`, `CreateRecord`,
+`DischargeDeclaration`, `ReviewPolicyDeclaration`, `CheckpointActDeclaration`,
+`AgentActDeclaration`
 
-— plus the enums they admit: `Dispose` (four forms), `WireFacetValue`,
-`DischargeClaim`, `DelegationAct` (four acts), `AgentAct`, `ActKind`, `Stage`,
-`Posture`, `Authority`, `Provenance`, `Lifecycle`, `ReviewDisposition`, and
-`Sparse`'s three-state presence, which the `Presence` field carries rather than a
-type row.
+— plus **fourteen enums** they admit: `Dispose` (four forms), `WireFacetValue`,
+`DischargeClaim`, `DelegationAct` (four acts), `AgentAct`, `ActKind` (eight),
+`ReviewPolicy`, `ReviewDisposition`, `Reviewer`, `Stage`, `Posture`, `Authority`,
+`Provenance`, `InquiryLifecycle`. `Sparse`'s three states ride the `Presence`
+field rather than a type row.
 
-`AgentAct` and `ActKind` live in `attestation.rs` rather than `submission.rs`.
-`design_run` is one leaf-tier module (`layering.toml:31`), so the closure
-crossing that file boundary creates no module-graph edge.
+Two of those enums were missing from the first enumeration, and the class matters
+more than the errata: `ReviewPolicy` is reachable only through
+`ReviewPolicyDeclaration.policy` and `Reviewer` only through
+`Declaration.reviewer` — each one hop below a field nobody had walked. That is
+the argument for **deriving the closure mechanically at implementation time and
+diffing it against this list**, rather than trusting either.
+
+**The closure spans five files**, all inside `design_run`: `submission.rs` (every
+wire struct), `attestation.rs` (`Reviewer`, `ActKind`, `ReviewPolicy`,
+`ReviewDisposition`, `AgentAct`), `inquiry.rs` (`Provenance`,
+`InquiryLifecycle`), `traversal.rs` (`Authority`, `Posture`) and `mod.rs`
+(`Stage`). `design_run` is one leaf-tier module (`layering.toml:31`), so none of
+those crossings creates a module-graph edge — but an implementer walking the
+closure visits all five.
 
 ## What bounds it, and why the bound is a fact rather than an opinion
 
@@ -319,19 +375,31 @@ is the live case. It is excluded because serde does not accept it, not because
 someone judged it internal — which is the same test `DEC-227` used to reject a
 boundary drawn by judgement.
 
+**A type that serialises as a scalar is not a struct row.** `DesignId`
+(`ids.rs:132`) carries `#[serde(try_from = "String", into = "String")]`, and
+`ReviewRef` (`attestation.rs:475`, reached through `ReviewDisposition::Conducted`)
+is a newtype over `String`. Both sit in the *type* closure and neither has wire
+keys, so both render as scalars — `Id` and `Text` — not as types with rows. The
+test is mechanical again: what serde emits, not what the Rust declaration looks
+like.
+
 **`WRITER_ACTS` is not the axis.** It enumerates nine acts and correctly omits
 `delegation`, because it answers *does this payload write* for `EX-2` and the
-proposal channel must not count as a write (`A2`). `ApplyRequest` carries twelve
-top-level wire keys. A contract keyed off that table would ship a payload field
+proposal channel must not count as a write (`A2`). `ApplyRequest` carries thirteen
+top-level wire keys — ten act fields against that table's nine rows. A contract keyed off that table would ship a payload field
 no caller could discover, which is the asymmetry the scope named.
 
 **The closure is acyclic, and this was checked rather than assumed.** It matters
 mechanically: `WireType::Named(&'static TypeContract)` is a const reference, and
-a cyclic const graph cannot be expressed that way. The deepest chain is
-`ApplyRequest → declare → Declaration → dispose → Dispose::Create → CreateRecord
-→ facet → WireFacetValue`, and `WireFacetValue` bottoms out in `Vec<String>` and
-`String` rather than recursing (`submission.rs:254`). Nothing else re-enters a
-type already on its own path.
+a cyclic const graph cannot be expressed that way. The deepest chain runs through the proposal channel:
+`ApplyRequest → delegation → DelegationAct::Propose → declare → Declaration →
+dispose → Dispose::Create → CreateRecord → facet → WireFacetValue`.
+`DelegationAct::Propose` carries `declare: Vec<Declaration>`
+(`submission.rs:882-891`) — the one edge that re-enters the declaration subtree
+from outside it, and `Declaration` reaches no delegation act, so it closes
+nothing. `WireFacetValue` bottoms out in `Vec<String>` and `String` rather than
+recursing (`submission.rs:254`). Nothing else re-enters a type already on its own
+path.
 
 This is worth stating in the design rather than discovering at the compiler: if
 a future payload type does introduce a cycle, `&'static TypeContract` stops
@@ -556,7 +624,7 @@ elsewhere.
 
 ## The struct pin: `I9`, extended down the closure
 
-Each of the thirteen struct types in `sec-3`'s closure gets `I9`'s treatment: an
+Each of the twelve struct types in `sec-3`'s closure gets `I9`'s treatment: an
 exhaustive no-`..` literal, serialised, its key set compared against the type's
 `KeyContract` rows.
 
@@ -567,7 +635,7 @@ applies here: the literal pin proves every key is described, not that any key is
 described *correctly*. Type and presence correctness is `sec-8`'s round-trip
 work.
 
-Thirteen literals is the dominant mechanical cost of this slice, and `DEC-227`
+Twelve literals is the dominant mechanical cost of this slice, and `DEC-227`
 accepted it explicitly when it chose the full closure over top-level-only.
 
 ## Where the pins do not reach
@@ -686,9 +754,17 @@ type Declaration  unknown-keys: refused
   parent           id                   sparse   (omit persists · null clears)
   dispose          Dispose              optional
 
-enum Dispose  tagging: internal("form")
-  create · adopt · unresolved · non-durable
+enum Dispose  tagging: internal("form")   variant keys sit BESIDE "form"
+  create        → CreateRecord's keys, inlined
+  adopt         record   text   required
+  unresolved    note     text   required
+  non-durable   note     text   required
 ```
+
+A variant's payload is rendered where it actually lands, which the tagging
+already determines (`sec-2`): inlined beside the tag under `Internal`, nested
+under the token under `External`, absent under `Bare`. A token list alone would
+be the contract making this slice's own mistake.
 
 Field order is the commitment, as it is for `contract_line`. The parenthetical on
 `sparse` is the one place the rendering adds words the table does not carry, and
@@ -773,17 +849,20 @@ other's failure.
 by analogy with the wrong sibling's tagging, produces a serde error. There *is* a
 refusal to attach a remedy to, and the parse-site wrap is what attaches it.
 
-**A top-level misspelling is not refused at all.** `ISS-333`: `serde(flatten)`
-forbids `deny_unknown_fields` on `ApplyRequest`, so an unknown top-level key is
-discarded, the revision bumps, a receipt is written, no change row prints, and the
-command exits 0. **No refusal is ever emitted**, so the parse-site seam is
-structurally unable to reach this failure. The only surface that reaches a caller
-who is not being refused is one that rides every turn.
+**Everywhere else, a misspelling is not refused at all.** Those three are the
+only wire structs that deny unknown fields; the other nine accept and discard —
+`ApplyRequest` itself, where `serde(flatten)` forbids the attribute (`ISS-333`),
+and eight more that simply lack it, `TraversalDeclaration` and its `cursor`
+among them (`sec-2`). The revision bumps, a receipt is written, no change row
+prints, and the command exits 0. **No refusal is ever emitted**, so the parse-site
+seam is structurally unable to reach three quarters of the payload. The only
+surface that reaches a caller who is not being refused is one that rides every
+turn.
 
 So the envelope pointer is not redundancy against the refusal. It is the sole
-push coverage of `ISS-333`'s failure mode for as long as `ISS-333` stands — which
-is the whole of this slice's horizon, since repairing the mechanism is an explicit
-Non-Goal. `sec-2`'s `UnknownKeys::SilentlyDropped` is the same disclosure on the
+push coverage of the silent-discard mode — nine of twelve wire structs — for as
+long as that mode stands, which is the whole of this slice's horizon, since
+repairing it is an explicit Non-Goal. `sec-2`'s `UnknownKeys::SilentlyDropped` is the same disclosure on the
 pull side; the two are one commitment rendered at two surfaces.
 
 ## Point 1 — the parse refusal
@@ -1110,13 +1189,13 @@ broke, it carries a positive control first, on `the_artefact_cites_no_repo_priva
 pattern (`artifact.rs:360-370`) — assert the detector fires on a known-bad input,
 then assert the real input is clean.
 
-## 1 — Key sets: thirteen types, one assertion body
+## 1 — Key sets: twelve types, one assertion body
 
 ```rust
 fn assert_keys_described<T: Serialize>(value: &T, contract: &TypeContract);
 ```
 
-One body, thirteen call sites. Each type gains a `#[cfg(test)] fn
+One body, twelve call sites. Each type gains a `#[cfg(test)] fn
 fully_populated()` beside its definition, on `Declaration::fully_populated`'s
 precedent (`submission.rs:653`) — an exhaustive literal with no `..`, so a new
 field is a compile error at the fixture before it can be a missing contract row.
@@ -1153,7 +1232,7 @@ only `Omitted`, while `Option` fields drop on `is_none`. So a fixture with every
 - `{keys serialising to null}` == `{keys declared `Sparse`}`
 - `{keys present in a minimal value}` ⊇ `{keys declared `Required`}`
 
-Two fixtures, not thirteen: only `Declaration` (`submission.rs:126-133`) and
+Two fixtures, not twelve: only `Declaration` (`submission.rs:126-133`) and
 `TraversalDeclaration` (`731-736`) carry `Sparse<T>`.
 
 ## 4 — Tokens against serde's renames, and why the coverage is total
@@ -1243,7 +1322,7 @@ const so the test parses the first alone.
 |---|---|
 | The contract is reachable from the binary without reading `src/`, `cursor` among it | pin 7 (three surfaces) + pin 1 (the closure includes `TraversalDeclaration`) + pin 8 |
 | A test fails if a payload field is added, removed or renamed without the contract following | pins 1 and 2, over the compile barrier |
-| The surface is total over the payload, not over `WRITER_ACTS` | pin 1 across all thirteen types; nothing in the ladder reads `WRITER_ACTS` |
+| The surface is total over the payload, not over `WRITER_ACTS` | pin 1 across all twelve types; nothing in the ladder reads `WRITER_ACTS` |
 | `ISS-333` option 3 discharged and recorded as such | not a test — a close-time statement, whose shipped half is `sec-2`'s `UnknownKeys::SilentlyDropped` |
 
 ## Not pinned, deliberately
@@ -1306,7 +1385,7 @@ carry it (`sec-8` pin 5). That residue is real and bounded; it is the price
 Reduced to near-nothing by `DEC-229`: the generated region is a token array and a
 match with empty arms, so there is no code in it that could hold a bug.
 
-**`R4` (new) — the thirteen exhaustive literals are one `..` away from useless.**
+**`R4` (new) — the twelve exhaustive literals are one `..` away from useless.**
 They are the dominant mechanical cost of the slice and the compile barrier under
 pin 1, and an implementer who reaches for `..` in any of them silently deletes that
 type's barrier while every test still passes. There is no pin for this — a test

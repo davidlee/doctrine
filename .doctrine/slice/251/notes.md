@@ -75,6 +75,40 @@ an installed client project with no source to read.
 - The same memory cites `ISS-346` for the silent-discard; the slice scope cites
   `ISS-333`. Reconcile which is canonical before close.
 
+## Self-review pass (2026-08-15, run rev 41–43)
+
+Nine findings raised on the run (`fnd-1`..`fnd-9`), all dispositioned; the
+integration is in the sections themselves. Ids only — the run holds the text.
+
+- **Facts, not judgement, dominated.** Five of the nine were claims the draft had
+  never checked against source: the top-level key count (thirteen, not twelve —
+  and "nine act fields" had silently reproduced `WRITER_ACTS`'s row count, which
+  is the very asymmetry Objective 3 exists to resolve), the struct closure
+  (twelve, listed, against a stated thirteen), two enums missing from the closure
+  (`ReviewPolicy`, `Reviewer`), a fifth file the closure crosses, and a deeper
+  chain through `DelegationAct::Propose`.
+- **Two were modelling gaps.** `Dispose` is internally tagged with a *newtype*
+  variant, so `CreateRecord`'s keys inline beside `form` — the model had no way
+  to say that, and `sec-5`'s sample would have taught the wrong shape.
+  `VariantContract` was referenced and never defined.
+- **One was load-bearing and wrong.** "The hole is exactly one level deep" — only
+  three of twelve wire structs deny unknown fields; nine discard silently,
+  `TraversalDeclaration` and its `cursor` among them.
+
+**What a further pass should probe.** Three areas this one did not reach:
+
+1. **The renderers.** `sec-5` fixes the line shape and `sec-2` the model, but no
+   full rendering of the real closure has been written down — `--format prompt`
+   over twelve structs and fourteen enums is where `R5` (size) and any remaining
+   presentation gaps would show. A worked fragment would settle both.
+2. **`sec-8`'s pins against a real fixture.** The pin ladder is argued, not
+   exercised. Whether `assert_keys_described` can stay one generic body across
+   twelve types with different `Serialize` shapes is unproven.
+3. **Governance re-read at the finished artefact.** `ADR-001`, `STD-001` and
+   `POL-002` were applied while drafting; nothing has re-read the whole design
+   against them since the sections settled. That is the pass an external
+   adversarial reviewer is best used for.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-08-15 · design/drafting (run rev 38) · dabba7175

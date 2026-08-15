@@ -205,6 +205,15 @@ Added by inquiry (2026-08-15), from the decisions above:
   type, required/optional, owning act, and the token vocabulary of every enum a
   key admits, including serde tagging style. No per-act narrative asset; that
   option is deferred on `DEC-122`'s pattern, not rejected.
+- **Widened by design self-review (2026-08-15).** `ISS-333`'s silent discard is
+  not a top-level-only defect. Exactly three of the twelve wire structs carry
+  `deny_unknown_fields` — `Declaration`, `CheckpointActDeclaration`,
+  `AgentActDeclaration` — so nine discard an unknown key in silence, including
+  `TraversalDeclaration`, which carries `cursor`. Only `ApplyRequest`'s case is
+  `serde(flatten)`'s doing; the other eight simply lack the attribute. The
+  Non-Goals are unchanged — annotating them is a read-path tightening — but the
+  disclosure the contract ships is the majority row, not one top-level caveat
+  (design `sec-2`).
 
 ## Verification / closure intent
 
