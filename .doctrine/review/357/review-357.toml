@@ -32,7 +32,7 @@ response = "Confirmed; every citation resolved. Six of the fourteen closure enum
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected the contract pointer to have one named spelling under STD-001; observed help deliberately hand-types a second copy"
 detail = "sec-6 defines PAYLOAD_CONTRACT_POINTER as the named invocation, then explicitly chooses to hand-type the same invocation in Apply's doc comment and relies on a help snapshot to catch drift (.doctrine/slice/251/design.md:1329-1366, 1368-1375). The incumbent Apply help is indeed sourced from its doc comment (src/commands/design.rs:112-130), and the design itself establishes that clap accepts long_about = <expression> (design.md:1340-1349); the objection is only the cost of moving long help behind a function. STD-001 is required and says a meaningful literal is named once, existing constants are used rather than pasted, and tests do not create an exception. Expected the help surface to consume the named pointer through the supported expression seam; observed an intentional second source plus drift detector. The duplicated invocation deserves the wheel before /plan."
@@ -50,7 +50,7 @@ response = "Confirmed. artifact.rs:325-347 lists ISS among fourteen REPO_PRIVATE
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected pin 2 to prove each declared WireType; observed its JSON-kind oracle permits semantically wrong rows"
 detail = "sec-4 promises type correctness by round trip, while sec-8 pin 2 compares only the serialized JSON kind against WireType and admits that Text, Id, and Token are all strings (.doctrine/slice/251/design.md:927-932, 1640-1656). Parsing the fixture as DesignId proves the fixture value, not that the contract row chose Id rather than Text, nor that its advertised IdKind slice is correct; the actual source distinguishes the five declarable kinds through IdKind::declarable (src/design_run/ids.rs:70-90), and AdoptAuthored.sections is a BTreeMap keyed by DesignId (src/design_run/submission.rs:696-704), yet pin 2 only asks that such keys parse. Likewise every Named target serializes as an object: swapping ApplyRequest.traversal and stage between TraversalDeclaration and StageDeclaration (src/design_run/submission.rs:926-932) preserves JSON kinds, and pin 9 only proves names resolve and remain reachable, not that either edge names its real Rust type (design.md:1777-1794). Expected a source-backed oracle for semantic string categories, IdKind domains, and nominal Named targets; observed a coarse kind check under which a materially false machine contract stays green. This central anti-drift rung must be reforged before /plan."
@@ -64,7 +64,7 @@ severity = "blocker"
 title = "Expected presence pinning in both directions; observed required fields may be mislabeled optional without failure"
 detail = "sec-4 says presence correctness is verified, but sec-8 pin 3 asserts only that keys present in a minimal value are a superset of rows declared Required (.doctrine/slice/251/design.md:927-932, 1658-1670). This catches an optional source field falsely declared Required, but not the converse: if run_uid, known_revision, or submission_id is changed in the contract from Required to Optional, the real minimal ApplyRequest still serializes all three because SubmissionEnvelope makes them mandatory (src/design_run/submission.rs:680-691), while the declared-Required set merely shrinks and the superset assertion remains true. Pin 1 checks only key inventory, so it does not close the gap. Expected equality against a source-derived required-key oracle or an equivalent two-way check; observed a one-way assertion that allows the contract to understate requiredness while every proposed pin passes. The false green must be broken before /plan."
 disposition = "design-wrong"
-response = "Contest upheld, and it caught a defect my repair introduced. Verified: ApplyRequest.declare carries #[serde(default)] with no skip_serializing_if (submission.rs:939-940), so it serialises as [] in a minimal value while remaining optional on input — the equality I substituted for the superset would have failed on a correct table. The oracle was wrong, not just its direction: requiredness is a property of the read path. Pin 3's second assertion is now a per-key removal probe — take fully_populated's JSON, remove one key, attempt from_value, and collect the keys whose removal refuses — which puts declare and every other defaulted field on the correct side by construction, needs no minimal-value fixture, and reuses the fixtures every other pin already has. Both earlier attempts are recorded in the section so the next reader does not re-derive serialization as the oracle. Fixed at rev 67."
+response = "Contest upheld a second time, and the contest is right about the mechanism while understating one thing and overstating another. Verified: VariantPayload::Keys carries the same KeyContract row type as a struct's TypeForm (design.md sec-2), so every struct variant declares key, ty and presence; pins 1, 2 and 3 all range over the twelve fully_populated struct values, and pin 4's per-variant samples were consumed for token extraction alone. So no enum variant key had an oracle over it at all. Understated: the gap is not presence alone — pin 1's key-set claim and pin 2's wire-type walk had the same domain hole, and payload_variants!'s _pin match uses a braced { .. } pattern by design, so it pins the variant set and not the variant's fields. Overstated: DelegationAct::Propose.declare is the ONLY non-required variant key in the closure (submission.rs:889-891). Every other key on every struct variant of Provenance, ReviewDisposition, AgentAct, Dispose and DelegationAct is a plain field, so the live hazard is a required variant key declared Optional, not a defaulted one declared Required. Fixed at rev 68 as an arm rather than a patch: sec-8 gains 'Pins 1-3 have a second arm: the variant payloads', which re-runs all three assertions over pin 4's existing per-variant samples — key set against the variant's rows, JSON kind against the declared WireType, and the read-path removal probe against from_value::<TheEnum>. It names the two mechanics that arm needs (the tag is not a row; an enum variant literal has no functional-update form, so construction is itself I9's compile barrier), states that the samples live in payload_contract.rs beside the payload_variants! invocations rather than beside each enum — which is F-14's settlement applied to their samples and what keeps inquiry.rs, traversal.rs and mod.rs out of sec-7's touch-set — and records the live inventory above. sec-4's pin ladder gains two rows; sec-7's payload_contract.rs row gains the samples. The section also records why this was missed twice: pin 3's three drafts each corrected the assertion's DIRECTION while leaving its DOMAIN unexamined. That is the judgement about sec-8 as a whole rather than one more point — the fixture set was never the thing under inspection."
 
 [[finding]]
 id = "F-7"
@@ -113,7 +113,7 @@ response = "Confirmed. Four closed facet vocabularies, not three: Confidence::KN
 
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected every RecordKind to flow into the selector table by construction; observed ALL is an independently maintained list"
 detail = "The sec-3 drift-proof claim says an eighth kind flows through with no second list to update because the builder uses RecordKind::ALL and facet_fields, at design.md:753-769. In source, however, the enum is declared at src/knowledge.rs:58-68 while RecordKind::ALL separately enumerates exactly seven variants at src/knowledge.rs:159-169. Adding an eighth enum arm to the exhaustive facet_fields match does not add it to ALL, so the generated contract can silently omit the new kind. The only apparent ALL check iterates ALL and asserts seven distinct prefixes at src/knowledge.rs:3334-3341; it also remains green when an eighth enum variant is omitted. Expected an enum-derived exhaustive source or an explicit equality pin against all declared variants; observed the claimed compile barrier does not cover the iteration authority."
@@ -122,7 +122,7 @@ response = "Contest upheld — sec-3 and pin 5 were honest and sec-7 was not, wh
 
 [[finding]]
 id = "F-13"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected the fourteen-enum classification to reconcile; observed the outside-the-split count and membership contradict each other"
 detail = "In sec-4, design.md:947-985 divides fourteen closure enums into six consuming existing authorities, six using the naming arm, WireFacetValue with no tokens, and Dispose as the separate type-identity judgement. That arithmetic leaves two enums outside the six-plus-six split. But design.md:978 says three enums sit outside it, then immediately lists Reviewer, Posture and Authority as taking the naming arm and therefore being inside the second six. Expected the count and classification to agree; observed a fresh revision-66 contradiction that makes the macro inventory ambiguous even though the STD-001 repair itself is sound."
@@ -131,7 +131,7 @@ response = "Confirmed — my own prose, muddled. The paragraph said 'three enums
 
 [[finding]]
 id = "F-14"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected one declared home for payload_variants invocations; observed sec-7 assigns them to both the new module and five type modules"
 detail = "The sec-7 touch-set says src/design_run/payload_contract.rs owns payload_variants and its per-enum invocations at design.md:1615-1618. The next rows instead assign those invocations to submission.rs, attestation.rs, inquiry.rs, traversal.rs and mod.rs at design.md:1624-1627, and design.md:1639-1643 relies on the latter placement when describing what changes in those files. These are mutually exclusive implementation instructions and materially change the touch-set, macro visibility and phase sequencing. Expected one unambiguous invocation location; observed the F-8 integration introduced two competing owners."

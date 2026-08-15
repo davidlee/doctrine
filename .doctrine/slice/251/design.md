@@ -1105,6 +1105,8 @@ to it.
 | Wire type correctness | JSON kind, plus each `Named` edge against the target's key set (structural, not nominal — `sec-8` pin 2) | test |
 | `Sparse` vs the rest | null-set equality on an all-`Null` fixture | test |
 | Requiredness | per-key removal probe on the **read** path, never serialization | test |
+| A variant payload's field set | exhaustive variant literal (no functional-update form), plus set-equality against the variant's rows | compile + test |
+| A variant payload's wire types and requiredness | pins 2 and 3 re-run over pin 4's per-variant samples (`sec-8`, "Pins 1–3 have a second arm") | test |
 | A named extern region is supplied | exhaustive match on `ExternRegion` | compile |
 | The extern facet vocabulary is current | derived from `facet_fields`, never copied | compile |
 | The extern **kind** set is the enum's | exhaustive match over `RecordKind` (`ALL` is hand-maintained) | test |
@@ -1628,7 +1630,7 @@ between two routes to one answer, which is a cost with no matching benefit.
 
 | Path | Change | Rough size |
 |---|---|---|
-| `src/design_run/payload_contract.rs` | **new** — the model types (`sec-2`), `payload_variants!` and its per-enum invocations (`sec-4`), the `PAYLOAD` table, the three renderers (`sec-5`), `PAYLOAD_CONTRACT_POINTER` and `PAYLOAD_CONTRACT_PATH` | ~500 table, ~250 renderer |
+| `src/design_run/payload_contract.rs` | **new** — the model types (`sec-2`), `payload_variants!` and its per-enum invocations (`sec-4`), the `PAYLOAD` table, the three renderers (`sec-5`), `PAYLOAD_CONTRACT_POINTER` and `PAYLOAD_CONTRACT_PATH`, plus the `#[cfg(test)]` per-variant sample values pins 1–4 consume (`sec-8`) | ~500 table, ~250 renderer, ~120 test-only |
 | `src/design_run/mod.rs` | one `pub(crate) mod payload_contract;` | 1 |
 | `src/design_run/render/envelope.rs` | `contract_pointer` field, its projection, one pushed line (`sec-6`) | ~10 |
 | `src/commands/design.rs` | `Contract` variant, `ContractArgs`, `ContractFormat`, `run_contract`, `extern_contracts()`, `APPLY_ABOUT` and `Apply`'s `about` / `long_about` attributes carrying the pointer (`sec-6`), the `map_err` at 1504 | ~70 |
@@ -1972,6 +1974,61 @@ also needs no new fixture and no minimal value.
 Two `Sparse` fixtures, not twelve: only `Declaration` (`submission.rs:126-133`)
 and `TraversalDeclaration` (`731-736`) carry `Sparse<T>`, and the removal probe
 reads the same `fully_populated` values every other pin uses.
+
+## Pins 1–3 have a second arm: the variant payloads
+
+`KeyContract` rows are not a struct's alone. `VariantPayload::Keys` carries the
+same row type (`sec-2`), so `DelegationAct::Propose` declares a `key`, a `ty` and
+a `presence` for each of `id`, `by`, `summary` and `declare` exactly as
+`Declaration` does for its fields — and the three assertions above reach none of
+them, because all three range over the twelve `fully_populated` **struct** values.
+A contract row with no oracle over it is the defect this ladder exists to
+prevent, so the arm is stated here rather than left to implementation to notice.
+
+It needs no new fixture. Pin 4 already constructs one sample value per variant
+for all fourteen enums, and each sample is a value of its own type, so the same
+three questions are well defined over it:
+
+- **key set** — the sample's serialised keys == the variant's rows (pin 1's
+  assertion, at the variant);
+- **wire type** — each key's JSON kind against its declared `WireType`, and each
+  `Named` edge against its target's key set (pin 2's walk, unchanged);
+- **requiredness** — remove one key from the sample's JSON, attempt
+  `from_value::<TheEnum>`, and collect the keys whose removal refuses; that set ==
+  the variant's `Required` rows (pin 3's probe, on the same read path).
+
+Two mechanics the arm has to name. **The tag is not a row**: under
+`Tagging::Internal(tag)` the tag key belongs to pin 4 and the walk skips it, and
+under `External` the three checks apply to the wrapped object rather than to the
+single-key wrapper. And **the sample is its own compile barrier** — an enum
+variant literal has no functional-update form, so every field must be named at
+construction, and a new field is a compile error at the sample before it can
+become a missing row. That is `I9`'s guarantee, obtained for variants without a
+second literal.
+
+**What the arm currently guards.** Exactly one variant key in the closure is not
+required today: `DelegationAct::Propose.declare` is `#[serde(default)]`
+(`submission.rs:889-891`). Every other key on every struct variant of
+`Provenance`, `ReviewDisposition`, `AgentAct`, `Dispose` and `DelegationAct` is a
+plain field. So the live hazard is a required variant key declared `Optional` — a
+caller told they may omit `DelegationAct::Refuse.reason` — and what the arm keeps
+true is that the answer stays *derived* as variants gain fields, rather than
+re-established by the next reader from the definitions.
+
+**The samples live in `payload_contract.rs`**, in its test module beside the
+`payload_variants!` invocations, not beside each enum. `sec-7` settled that the
+invocations do not scatter across the five modules defining the closure's enums;
+their samples answer to the same reason, and keeping them together is what keeps
+`inquiry.rs`, `traversal.rs` and `mod.rs` out of the touch-set. The struct
+fixtures sit beside their types for the opposite reason — they are `I9`'s
+precedent, and `Declaration`'s literal is reused by an existing test
+(`tests.rs:2908`) rather than copied.
+
+**Why this arm was missed twice.** Pin 3's earlier drafts each corrected the
+assertion's *direction* — superset, then equality, then the read-path probe —
+while leaving its **domain** unexamined. Two oracles were wrong in a row and the
+fixture set was never the thing under inspection. A pin's domain is a claim like
+any other in this ladder, and this is the place the design says so.
 
 ## 4 — Tokens against serde's renames, and why the coverage is total
 
