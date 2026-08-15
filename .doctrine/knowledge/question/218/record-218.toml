@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 218
+slug = "does-the-inquiry-map-earn-a-semantic-tier"
+title = "Does the inquiry map earn a semantic tier?"
+record_kind = "question"
+status = "open"
+created = "2026-08-15"
+updated = "2026-08-15"
+tags = ["area:design-run", "cluster:design-run"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+question = "Should the inquiry map grow the semantic tier RFC-026 E8.5 names — cascade on a changed answer, a retained prior answer, an explicit cauterised-by edge, structured rejected alternatives — or is the map's current flat, edge-free shape adequate at slice altitude?"
+why_matters = "RFC-026 E8.3 measured SL-243's run at nine nodes and zero edges of either kind across seventeen revisions, by a competent agent never told not to use them. Both edge kinds shipped with full render support. So the four map improvements (IMP-386/387/388/389) would deepen a structure the corpus has not yet shown anyone using, and building them first risks answering E8.6's meaning-tier gap with more machinery rather than more use. The answer decides whether that batch is work or waste."
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "prerequisite reading: the map must reach a user before under-use can be diagnosed"
+target = "ISS-299"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "E8.3/E8.5/E8.6 — the measurement, the capability table, the asymmetry"
+target = "RFC-026"

@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 219
+slug = "submission-strictness-against-snapshot-forward-compatibility"
+title = "Submission strictness against snapshot forward-compatibility"
+record_kind = "question"
+status = "open"
+created = "2026-08-15"
+updated = "2026-08-15"
+tags = ["area:design-run", "cluster:design-run", "footgun"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+question = "When a design-run submission carries a key the schema does not hold, should the engine refuse it — and how does that reconcile with stored proposal declarations outliving the binary that wrote them?"
+why_matters = "Four items (ISS-290/327/328/333) are the same silent-absorption class on four surfaces, and each is blocked on the same tradeoff rather than on effort. ISS-328 states it: tightening a nested type converts previously-readable stored state into a parse failure at exactly the moment someone is resuming (mem.fact.design-run.snapshot-outlives-the-binary). ISS-315 is that failure already happening for a different reason. Answering once — strict on the write path, tolerant on the read path, or migrate — unblocks all four; answering per-item invites four inconsistent rulings."
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the read-path horn, already live as a breakage"
+target = "ISS-315"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "E8.7 — payload-shape lookups as the largest source-read category"
+target = "RFC-026"

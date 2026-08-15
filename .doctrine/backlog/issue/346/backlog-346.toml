@@ -8,8 +8,8 @@ kind = "issue"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-08-12"
-updated = "2026-08-12"
-tags = ["area:cli", "area:correctness", "area:design"]
+updated = "2026-08-15"
+tags = ["area:cli", "area:correctness", "area:design-run", "cluster:design-run", "footgun"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -17,6 +17,6 @@ tags = ["area:cli", "area:correctness", "area:design"]
 # `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
-needs    = []                   # item→item hard prerequisite
+needs    = ["QUE-219"]                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
