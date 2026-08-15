@@ -139,15 +139,16 @@ re-derived:
 
 ### Superseded by measurement
 
-The scope's claim that harm is latent — *"all ten targets happen to be `done`"* —
-is false as of 2026-08-15. Eleven cross-kind `needs` edges target `QUE` records,
-two of which (`QUE-218`, `QUE-219`) are `open` and gate nine live items that
-`backlog list --by sequence` currently renders as ungated while `next` and
-`blockers` gate them correctly.
+~~The scope's claim that harm is latent — *"all ten targets happen to be
+`done`"*~~ — **this section is spent.** The scope was rewritten at the
+`inquire.scope` gate (`037b98b06`) and now carries the corrected measurement
+itself: 30 authored cross-kind edges, 25 reaching the footer, 10 with a
+non-terminal target. Nothing here contradicts the scope any more; read
+`slice-238.md`.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-15 · design/exploring (run `dr-01a00475`, rev 21) · 20ecb2296
+fresh-as-of: 2026-08-15 · design/**drafting** (run `dr-01a00475`, rev 28) · 037b98b06
 
 ### Produced
 
@@ -227,8 +228,15 @@ fresh-as-of: 2026-08-15 · design/exploring (run `dr-01a00475`, rev 21) · 20ecb
 
 ### Open
 
-- **Inquiry map is fully dispositioned** (8/8 at revision 21). What remains is
-  the stage gate, not a question.
+- **Inquiry map fully dispositioned and the run is at `drafting`** (revision 28).
+  Blocking set declared, graph reviewed, governance confirmed, sufficiency
+  accepted; both `inquiring` runbook steps discharged. Nothing about the *design*
+  is open — what remains is authoring `design.md` from five settled decisions.
+- ~~Slice scope stale against `DEC-231`~~ — **closed** at the `inquire.scope`
+  gate (`037b98b06`). `slice-238.md` is rewritten against `DEC-231`…`DEC-235`,
+  all four OQs carry their resolutions, and the title now matches the content.
+  The slug symlink deliberately still reads `…admission-and-override-footer`;
+  the id is identity (AGENTS.md), so it was left alone.
 - **`IDE-019` divergences (2), for reconcile.** It asked for the absent-ref case
   to be *surfaced in the footer* (`DEC-232` routes it to `doctor`) and for a
   `--verbose`/`--explain` flag on `backlog list` (`DEC-234` declines the flag and
