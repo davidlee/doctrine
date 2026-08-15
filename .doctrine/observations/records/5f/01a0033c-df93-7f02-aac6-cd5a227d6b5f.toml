@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0033c-df93-7f02-aac6-cd5a227d6b5f"
+recorded_at = "2026-08-15T02:25:16.179147424Z"
+kind = "friction"
+summary = "knowledge edit decision: --alternatives/--consequences split on every comma with no escape, silently fragmenting prose items"
+detail = "While recording DEC-229 during /design drafting for SL-251. The comma-separated list flags have no documented escape, so ordinary prose containing commas (nearly all of it) is split into many spurious list items. Nothing refuses or warns; the mangling is only visible on a subsequent 'knowledge inspect'. Cost: one wasted write plus a scripted TOML repair with a sentinel separator. This is the same defect class as the slice under design — an undocumented payload contract for a structured field — but on the CLI flag surface rather than the design-run JSON surface, so SL-251's contract would not cover it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -77,10 +77,42 @@ an installed client project with no source to read.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-08-15 · design/drafting (run rev 32) · b3e64183f
 
 ### Produced
 
+- `DEC-219` `DEC-221` `DEC-224` `DEC-225` `DEC-226` `DEC-227` `DEC-228` `DEC-229`
+  — the inquiry's eight decisions. `DEC-229` partially supersedes `DEC-221`
+  (enums only; struct half stands).
+- Run sections `sec-1`..`sec-5` — declared, all 5 outstanding review.
+- Scope reconciled: `OQ-1` `OQ-2` `OQ-3` `R2` resolved against their records;
+  Objective 2's "authored, not derived" contradiction corrected.
+
 ### Learned
 
+- Triage errors corrected in the governance table above: `ADR-001` (`design_run`
+  is leaf out-degree 0, not engine) and `ADR-019` (engaged on the publication
+  leg, not the embed-root leg).
+- `DEC-224` body carried a wrong line ref; corrected to `guard.rs:430`.
+- `WireFacetValue` is `#[serde(untagged)]` — a fifth tagging mode the `sec-2`
+  model initially missed.
+- `knowledge.rs:860-875,1028` — `facet_fields` / `FieldShape` already publish a
+  contract-shaped description of the knowledge tier; `sec-3`'s `Extern` injects
+  it. Enforced post hoc by `doctor_checks.rs:161`, not at the write seam.
+- The braced pattern `Variant { .. }` is uniform across unit / tuple / struct
+  variants (compiler-verified) — the basis of `DEC-229`.
+- `artifact.rs:373-375` — a generated-asset golden must read disk-source, never
+  the embed (`install/` has no `rerun-if-changed`).
+- `asset_source.rs:132` compels publication of any new `install/` asset.
+
 ### Open
+
+- `sec-6`..`sec-9` undrafted (discoverability · code impact · verification ·
+  assumptions). All five declared sections still outstanding review.
+- `sec-3`'s `Extern` soft spot: no compile-time pin that the shell supplies a
+  sub-contract per `Extern`, or that it matches `facet_fields`. `sec-8` owes the
+  two tests.
+- `ISS-346` duplicates `ISS-333` (minted 2026-08-12 vs 2026-08-09) — merge so
+  closure lands on one id.
+- `mem.fact.design-run.apply-payload-vocabulary` wrongly claims `Declaration`
+  does not deny unknown fields; it does (`submission.rs:123`).
