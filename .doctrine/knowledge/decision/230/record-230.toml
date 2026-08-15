@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 230
+slug = "backlog-list-by-sequence-is-an-actionability-surface-and-honours-the-depseq-gate"
+title = "backlog list --by sequence is an actionability surface and honours the dep/seq gate"
+record_kind = "decision"
+status = "superseded"
+created = "2026-08-15"
+updated = "2026-08-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Measured 2026-08-15: eleven cross-entity-kind `needs` edges in the backlog corpus target QUE records, and QUE-218/QUE-219 are open. Nine live items (IMP-386/387/388/389, ISS-290/327/328/333/346) hang off them. `doctrine next` excludes all nine and `doctrine blockers ISS-327` names QUE-219, while `backlog list --by sequence` ranks them as though workable — ISS-327 at rank 357. Three surfaces, one corpus, three answers. Whether that is a defect at all depends on what this surface claims, and the governance research initially reported PRD-011 and SPEC-015 as asserting competing framings of the same rows with nothing adjudicating."
+choice = "`backlog list --by sequence` is an actionability surface: it must honour the dep/seq gate rather than merely avoid contradicting it. A dependent whose cross-kind prerequisite is non-terminal is demoted out of the composed order instead of being presented head-of-line, so `next`, `blockers`, and `list --by sequence` agree. The surface must additionally be able to express what was withheld and by what — a gate the reader cannot interrogate is worse than no gate."
+alternatives = ["Render-only: keep the rows where they are and make the `overrides:` footer honest about the dropped edge. Rejected — it asks a footnote to correct what the ranks assert, and the reader who scans ranks without reading the footer is the common case. It is also the only option preserving `project` as a pure function of `&[BacklogItem]`, which is a real cost of the choice taken, not a nil one.", "Split by flag: default renders, opt-in gates. Rejected — it doubles the surface to avoid making the decision, and neither mode would be the one a reader trusts."]
+rationale = "The apparent PRD-011/SPEC-015 conflict dissolves on a careful read: SPEC-015 attaches `a grouping, never a priority claim` to grouping the cross-kind list by declaration-order `ordinal` — that is `--by id` — while separately describing the `backlog_order` cordage projection as composing `priority order`, which is `--by sequence`. They are two different orderings, not two framings of one. So gating is not a new claim for this surface; it is the claim SPEC-015 already makes, being honoured. PRD-011 owns cross-kind actionability and `--by sequence` composes exactly the `needs`/`after` edges that layer is built from."
+consequences = ["The withhold candidate in SL-238's OQ-1 becomes a legitimate horn rather than an out-of-band gating act, so the fork narrows to widen-vs-withhold.", "The footer's job widens from `edges I dropped` to `items I withheld, and by what` — an owner requirement, and it reshapes the footer question before it is reached.", "This surface acquires a dependency on corpus state beyond the five backlog kinds; `project` is pure over `&[BacklogItem]` and cannot reach a cross-kind target's status, so the impure shell must resolve and classify, then pass the result in.", "Row order changes for the nine currently-misplaced items. Membership must not change: `list_rows` documents that the ordering never filters, and `list_sequence_and_id_share_membership_differ_on_order` asserts sequence is a permutation of id."]
+decided_by = "owner"
+decided_on = "2026-08-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = ["DEC-231"]   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-238"

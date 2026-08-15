@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 231
+slug = "backlog-list-by-sequence-stays-a-backlog-induced-work-order-cross-kind-edges-are-diagnosed-never"
+title = "backlog list --by sequence stays a backlog-induced work order; cross-kind edges are diagnosed, never ordered"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-15"
+updated = "2026-08-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-238 opened on a measured contradiction: eleven cross-kind `needs` edges target QUE records, QUE-218/QUE-219 are open, and nine live items they gate are excluded by `doctrine next` and named by `doctrine blockers` while `backlog list --by sequence` ranks them as though workable. DEC-230 read that as `--by sequence` failing to honour the gate and ruled it an actionability surface. That reading was wrong, and this record supersedes it. The fork it left open - widen the ordering adapter to cross-kind ids, or withhold gated dependents - is settled here by dissolving it: both horns answer a question the surface does not ask."
+choice = "`backlog list --by sequence` is a backlog-induced work order, not an actionability surface. It shows every non-terminal backlog row including blocked ones, in dependency position, and does not gate. A cross-kind `needs` or `after` edge - whose target lies outside the backlog ordering universe and can never be rendered as a row - contributes NO ordering effect on either axis, is never used to withhold a dependent, and is instead disclosed as a diagnosed boundary edge naming the target and its real status. `backlog_order.rs` is not widened, no phantom node is admitted, membership and backlog-internal dependency order are untouched."
+alternatives = ["Withhold dependents of a live cross-kind prerequisite (DEC-230's reading). Rejected - it makes `--by sequence` a worse `next` and destroys the one thing it uniquely does, since `next` structurally cannot show blocked work in dependency position.", "Widen `ItemId` to a cross-kind key and admit the target as a node. Rejected - cordage assigns longest-path LEVELS before NodeId, so admitting a phantom demotes the dependent behind every level-0 node rather than making the legible local statement `IMP-390 comes after SL-251`; and there is no principled exposure/created for a node that has neither.", "Retire the adapter and recompose from priority/graph.rs + order.rs. Rejected on governance cost - REQ-218 names `backlog_order` in the requirement itself, so removal needs a SPEC-015 REV, and `frontier_order` is score-aware, importing ADR-015 scoring into a view SPEC-015 keeps score-free."]
+rationale = "Origin intent is decisive and was being retrofitted against. SL-051 states `ordering is a sort, not a view`, keeps membership unchanged, and names blocked nodes as retained participants; the code calls it a work order throughout (src/backlog.rs:81, :1113, :1190) and the permutation invariant is deliberate (:5136). `next`, by contrast, explicitly builds only the actionable set (src/priority/surface.rs:384, :406). Three surfaces answering three different questions is the correct architecture, not a contradiction: `next` says what is startable, `blockers` says why not, `--by sequence` says where it sits in the work. The pressure to make `--by sequence` gate came from `doctrine next` having no kind filter, so `the actionable backlog` was not expressible - a gap in the actionability surface, misdiagnosed as a defect in the ordering one (IMP-432). The residual need `actionable first, blocked retained` is already `survey`'s (src/priority/surface.rs:198). What survives as a genuine defect is narrower and untouched by any of this: the cross-kind edge is INVISIBLE, so ISS-327 sits behind nothing and nothing on screen says a prerequisite exists, whereas `ISS-X needs ISS-Y` at least renders Y above X."
+consequences = ["The slice's centre of gravity moves from admission to disclosure - objectives 2 and 3 (honest footer, default quiet / opt-in loud) become the whole of it, and objective 1 (admission) is withdrawn.", "The withheld-partition machinery, hard-successor closure, and the composed/withheld/terminal three-way partition are all unnecessary and are not built.", "`backlog_order.rs`, `ItemId`, and the cordage adapter are untouched, so the behaviour-preservation gate on the `backlog_order` and `priority` suites should hold with no intentional golden change.", "The impure shell must still resolve cross-kind refs and classify them via `partition::status_class` so the footer can say `QUE-219 (open)` rather than `absent` - so the purity constraint and its seam remain live design work, unresolved here.", "The two interim tests from 74b773690 (src/backlog.rs:5301, :5332) still need superseding, because the settled design discloses cross-kind edges that they assert are silent.", "A soft `after` onto an unrecognised-status target must NOT withhold or order - the conservative blocker rule is implemented over dep_overlay only (src/priority/channels.rs:58, :66), and treating status uncertainty as a gate would silently harden a preference into a blocker.", "IMP-432 raised for the missing `next` filters; the split is only complete once it lands."]
+decided_by = "owner"
+decided_on = "2026-08-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = ["DEC-230"]   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-238"
