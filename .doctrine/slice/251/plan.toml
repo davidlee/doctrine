@@ -123,6 +123,7 @@ expects = "RETIRED — void on contact. See PHASE-02/EX-10 and VT-4."
 test_file = "src/design_run/attestation.rs"
 keywords = ["fully_populated", "CheckpointActDeclaration"]
 waived = true
+waived_reason = "Void on contact: attestation.rs holds no closure struct, and this criterion's own keyword `CheckpointActDeclaration` names a submission.rs type (825). Retired at PHASE-02 execution; VT-4 carries the obligation. See PHASE-02/EX-10."
 
 [[phase.verification]]
 id = "VT-4"
