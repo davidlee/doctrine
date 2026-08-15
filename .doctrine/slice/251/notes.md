@@ -113,7 +113,7 @@ integration is in the sections themselves. Ids only — the run holds the text.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-15 · design/reviewing (run rev 64) · 0eb5803c5
+fresh-as-of: 2026-08-15 · design/reviewing (run rev 67) · e5c868ea0
 
 ### Produced
 
@@ -164,6 +164,22 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 64) · 0eb5803c5
   the missing row is not a signal and the disclosure has to ride the contract
   rather than the response); `sec-6` records that `DEC-225`'s parse site is clean.
   Neither is a scope change.
+- **`RV-357` conducted — external adversarial pass, two rounds, 14 findings, all
+  dispositioned.** Round 1 raised `F-1`..`F-12` (integrated at rev 66); round 2
+  verified eight, contested `F-3` `F-5` `F-6` `F-12` and raised `F-13` `F-14`
+  (integrated at rev 67). Every finding was checked against source before
+  disposition; none was confabulated, and every round-2 point was a defect in the
+  round-1 *integration* rather than in the reviewed design. Ids only; the ledger
+  holds the text and the responses.
+  - `F-1` deleted `UnknownKeys::StoredThenFlagged` — the design had the facet
+    write seam backwards. `sec-8` gained pin 10 (`F-4`, no repo-private id in
+    shipped output) and lost pin 7's drift role (`F-3`, the pointer is
+    single-sourced through `long_about = format!(…)`, so `STD-001` needed no
+    deviation). `sec-4`'s `payload_variants!` now consumes six existing `as_str`
+    authorities (`F-2`).
+  - `sec-4`'s ladder table is the current index of what each rung holds; it
+    gained rows for both `TypeContract::name` seams, split presence into `Sparse`
+    and requiredness, and added the citation detector.
 
 ### Learned
 
@@ -175,7 +191,15 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 64) · 0eb5803c5
   model initially missed.
 - `knowledge.rs:860-875,1028` — `facet_fields` / `FieldShape` already publish a
   contract-shaped description of the knowledge tier; `sec-3`'s `Extern` injects
-  it. Enforced post hoc by `doctor_checks.rs:161`, not at the write seam.
+  it. ~~Enforced post hoc by `doctor_checks.rs:161`, not at the write seam.~~
+  **Wrong, and it was load-bearing — corrected via `RV-357` `F-1`.** It is
+  enforced **at** the write seam: `plan_facet_edits` refuses
+  `FacetEditRefusal::UnknownField` (`knowledge.rs:1233-1247`) from inside
+  `plan_checkpoints`, before `execute_mint` and before an id is reserved
+  (`commands/design.rs:985`). `doctor`'s inert-facet check is the **authored
+  corpus**, and its doc comment says so: it is a warning there "because the
+  design-run seam's equivalent is a refusal" (`doctor_checks.rs:141-148`).
+  Reading a corpus-hygiene warning as a wire-seam behaviour is the mistake.
 - The braced pattern `Variant { .. }` is uniform across unit / tuple / struct
   variants (compiler-verified) — the basis of `DEC-229`.
 - `artifact.rs:373-375` — a generated-asset golden must read disk-source, never
@@ -197,9 +221,46 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 64) · 0eb5803c5
   refusing `dlg-` / `cpa-` / `agd-` as engine-allocated (`run.rs:1139-1150`).
 - **clap's derive does take an expression** — `compare.rs:75` passes
   `clap::ArgGroup::new(…)` into `#[command(group = …)]`; of eighty `#[command]`
-  attributes, 46 are `subcommand`, 30 `flatten`, and 4 others. What blocks
+  attributes, 46 are `subcommand`, 30 `flatten`, and 4 others. ~~What blocks
   single-sourcing the `--help` pointer is that `long_about` *replaces* a doc
-  comment and `concat!` cannot splice a `const &str` — a cost, not a limit.
+  comment and `concat!` cannot splice a `const &str` — a cost, not a limit.~~
+  **Neither, in the end — corrected via `RV-357` `F-3`.** Both premises are true
+  and the conclusion did not follow. `Command::long_about` takes
+  `impl IntoResettable<StyledStr>`; `String` satisfies it through the blanket
+  `impl<I: Into<StyledStr>>` (`resettable.rs:190`, `styled_str.rs:161`), so
+  `long_about = format!("{CONST}…")` single-sources with no function and no
+  `concat!`. Doc-comment methods emit **before** explicit attribute methods
+  (`clap_derive item.rs:980`), so an explicit `long_about` wins while a doc
+  comment still supplies `about`. Cost: two attribute lines.
+- **The error class both of the above belong to** — an unverified claim about
+  what a *tool* cannot do, load-bearing on a design decision. `A3` was the first
+  instance (clap can't take an expression → bought an unnecessary pin); its
+  *cost* estimate was the second (→ nearly bought an unnecessary `STD-001`
+  deviation). Both read as settled reasoning on the page, and both cost minutes
+  to check. Cite the source whenever asserting a limit of clap, serde or cargo.
+- **Requiredness is a read-path property; serialization is never its oracle.**
+  `ApplyRequest.declare` carries `#[serde(default)]` with **no**
+  `skip_serializing_if` (`submission.rs:939`), so it serialises as `[]` while
+  being optional on input — any pin reading "present in a minimal value" gets it
+  wrong in one direction or the other. The correct probe is removal: delete a key
+  from a full payload and see whether `from_value` refuses. (`RV-357` `F-6`,
+  which caught this in a *repair*, not in the original design.)
+- **A structural key-set check is not a nominal type check.** Comparing a
+  `Named` edge against its target's keys catches every swap the current closure
+  can express — the eleven contract-bearing structs have eleven distinct
+  key-name sets — but it is total by a property of the closure, not by
+  construction (`RV-357` `F-5`).
+- **The run's revision moves when review findings land**, not only when a payload
+  is applied: `RV-357`'s twelve raises took the run 64 → 65 with `changes: none
+  since revision 64` and a new `review_outstanding` line. An `adopt_authored`
+  built against the pre-review revision is refused as a conflict; re-read and
+  resubmit.
+- **Adopting hand-edited design prose, last section included**: the whole-file
+  `sha256` is the run's watermark, and each section's fingerprint is the
+  `sha256` of the bytes between its marker and the next, less exactly one
+  trailing newline. For the final section that means dropping the file's own
+  trailing newline — the uniform rule reproduces all nine (positive-controlled
+  against the unchanged `sec-1`).
 - **`design_run` const tables tolerate a `Named` graph over drop-glue types** —
   compiled as a probe rather than assumed, when the `Cow` question was live.
 - **`ISS-361`'s reported mechanism is not at the parse site** — verified against
@@ -220,20 +281,31 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 64) · 0eb5803c5
 
 - **Two obligations open, both the user's** — section attestations (all nine
   outstanding; human review is the v1 default per `reviewing.md`) and the review
-  pass disposition. Every section but `sec-1` has now been revised at rev 52–63,
-  so nothing carried over from before is reusable.
-- **`RV-357` still cannot be named as conducted** — empty, minted by the stage
-  move rather than by a review, and now stale against two more revisions. Three
-  self-review passes have each found real defects and each found its predecessor's
-  blind spot; the probe none has reached is a governance re-read (`ADR-001`,
-  `STD-001`, `POL-002`) against the finished artefact, which is what an external
-  adversarial pass is best at. Priming it stays the recommendation; waiving is the
-  honest alternative.
+  pass disposition. Every section but `sec-1` has been revised at rev 52–67, so
+  nothing carried over from before is reusable. `sec-1` alone has been untouched
+  since rev 52 and is still outstanding for that earlier reason.
+- **`RV-357` is now conductable but not yet terminal** — 14 findings, all
+  dispositioned, `await=raiser`. Round 2's verifications stand; the four contests
+  and two new findings were re-dispositioned at rev 67 and have **not** been
+  re-verified. A third raiser round closes them, after which the pass can honestly
+  be named *conducted* rather than waived. The codex thread carrying rounds 1 and
+  2 is `01a0048a-b948-7bf1-9ee6-f5d3fbc93fa1`.
 - **`sec-8` pin 1's premise is still unexercised** — whether
   `assert_keys_described` can stay one generic body across eleven types with
-  different `Serialize` shapes is argued, not proven. A `/plan` or
-  implementation-time discovery, not a design defect, but a reviewer who reads
-  `sec-8` as fully exercised will be wrong.
+  different `Serialize` shapes is argued, not proven, and it now also carries the
+  `TypeContract::name` comparison (`F-9`) and feeds the removal probe's fixtures
+  (`F-6`). A `/plan` or implementation-time discovery, not a design defect, but a
+  reviewer who reads `sec-8` as fully exercised will be wrong.
+- **`RecordKind::ALL` is hand-maintained and nothing forces a new variant into
+  it** (`knowledge.rs:60-68` vs `159-169`; the incumbent test iterates `ALL`, so
+  it is green over a stale one). Out of scope here — `sec-3` states the barrier at
+  its real strength and `sec-8` pin 5 takes its oracle from an exhaustive match
+  instead. Deriving `ALL` from the enum is the knowledge tier's repair and wants a
+  `ISS-364`.
+- **The nominal-identity residue on `Named` edges** — `sec-8` pin 2 is structural,
+  total over today's closure only because no two structs share a key-name set. The
+  recorded escalation is a `payload_struct!` mirroring `sec-4`'s enum instrument;
+  not taken.
 - **`ISS-362` is now load-bearing on `sec-3`** — the design states the bound and
   defers the repair. If `ISS-362` lands a payload-act-to-stage guard as data, the
   stage column becomes derivable and `sec-3`'s subsection should be revisited.
@@ -241,8 +313,9 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 64) · 0eb5803c5
   source: the pin parses the constant's JSON arm alone after placeholder
   substitution, keeping `concat!(JSON_ARM, PROSE)` so the length assertion still
   covers what renders. `sec-8` pin 8 matches.
-- `sec-3`'s `Extern` soft spot is now discharged in design by `sec-8` pin 5 (the
-  two set-equalities); it remains the ladder's only test-only rung.
+- `sec-3`'s `Extern` soft spot is discharged in design by `sec-8` pin 5's two
+  equalities over one-and-a-half compile barriers — the supply is closed and the
+  facet vocabulary is derived, the kind list is not (above).
 - `ISS-346` duplicates `ISS-333` (minted 2026-08-12 vs 2026-08-09) — merge so
   closure lands on one id.
 - `mem.fact.design-run.apply-payload-vocabulary` wrongly claims `Declaration`
