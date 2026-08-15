@@ -2282,7 +2282,24 @@ fn render_overrides(
     let mut lines: Vec<String> = Vec::new();
 
     // project-level drops: an unparseable ref never became an ItemId.
+    //
+    // Suppress the ones whose ref is a well-formed canonical ref of a NON-backlog kind
+    // (`QUE-219`, `SL-238`). `project` cannot represent such a target — `ItemId` is
+    // `(ItemKind, u32)` over the five backlog prefixes — so the edge lands here rather
+    // than in the adapter's `Dangling` leg, and `absent` is then simply false: the
+    // record exists, and `next`/`blockers` gate on it correctly through
+    // `priority/graph.rs`. Silence is the honest interim; SL-238 owns admitting the
+    // edge and choosing what a revealed footer says. Same posture as the IDE-019
+    // suppression below — this view declines to report what it cannot report truly.
+    //
+    // A ref of no known kind at all (`not-a-ref`, `ZZZ-1`) still surfaces, because
+    // `absent` remains true of it. The cost of the narrow rule is that a well-formed
+    // ref to a non-existent cross-kind id (`SL-9999`) also goes quiet — telling those
+    // apart needs a disk probe, and this leg is pure.
     for drop in absent {
+        if crate::kinds::parse_canonical_ref(drop.reference()).is_ok() {
+            continue;
+        }
         lines.push(format!(
             "  {} → {} dropped (dangling: {} absent)\n",
             drop.from().render(),
@@ -5270,6 +5287,64 @@ tags = []
         assert!(
             out.contains("ISS-099") && out.contains("absent"),
             "absent ref named: {out}"
+        );
+    }
+
+    /// A cross-kind prerequisite is legal authored data (`run_needs` validates it via
+    /// `kinds::ensure_ref_resolves`), and the actionability graph already gates on it —
+    /// `next` and `blockers` both honour a live `QUE` prerequisite. Only this view's
+    /// ordering adapter cannot represent the target, and it used to report the live
+    /// record as `absent`, which is false. Stay silent until SL-238 settles how the
+    /// edge should be admitted; keep the line for a ref that is not a canonical ref of
+    /// any kind, where `absent` still means what it says.
+    #[test]
+    fn list_sequence_stays_silent_on_a_cross_kind_drop_but_names_a_malformed_ref() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &["QUE-219", "not-a-ref"],
+            &[],
+        );
+
+        let (out, _) = list_seq(root, list_args());
+        assert_eq!(
+            seq_ids(&out),
+            vec!["ISS-001"],
+            "the node still orders: {out}"
+        );
+        assert!(
+            !out.contains("QUE-219"),
+            "a well-formed cross-kind ref is not called absent: {out}"
+        );
+        assert!(
+            out.contains("not-a-ref") && out.contains("absent"),
+            "a ref of no known kind is still named absent: {out}"
+        );
+    }
+
+    /// The whole footer goes when a cross-kind drop is the only thing in it — an
+    /// `overrides:` header over nothing is the same false signal one line up.
+    #[test]
+    fn list_sequence_emits_no_footer_when_every_drop_is_cross_kind() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &["QUE-219", "SL-238"],
+            &[],
+        );
+
+        let (out, _) = list_seq(root, list_args());
+        assert!(
+            !out.contains("overrides:"),
+            "cross-kind drops alone raise no footer: {out}"
         );
     }
 
