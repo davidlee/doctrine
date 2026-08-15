@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00500-10ef-7a11-88c1-8a09f2166302"
+recorded_at = "2026-08-15T10:38:05.551657529Z"
+kind = "friction"
+summary = "adversarial plan-vs-design check has no tooling seam — read both artefacts in full"
+detail = "Checking SL-251's plan.toml against a locked design.md for obligation coverage meant reading 2445 lines of design plus 335 of plan (~40k tokens) with no way to narrow. The design states its obligations as pins (sec-8's ten) and criteria (sec-2..sec-7 prose), and the plan restates them as EX/VT rows; nothing relates the two, so every mapping is done by hand and by recall. Four of the nine defects found were the plan citing a design pin by number while restating its content wrongly — exactly what a mechanical 'which pins does no criterion cite' pass would surface cheaply. Nearest existing seam: none; slice plan/phase are writers, and slice show does not render plan criteria."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -114,3 +114,7 @@ target = "QUE-200"
 label = "related"
 target = "IMP-382"
 
+[[relation]]
+label = "related"
+target = "SL-251"
+

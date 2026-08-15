@@ -1,0 +1,8 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00504-0c1b-7f93-bf89-cf96beaa43f8"
+recorded_at = "2026-08-15T10:42:26.45947294Z"
+kind = "supersession"
+old_uid = "01a00500-10ef-7a11-88c1-8a09f2166302"
+replacement_uid = "01a00503-ed44-74e1-b45f-6719bc75a13a"
+reason = "first capture inverted the finding: the five citation-present-content-wrong defects are what a mechanical citation pass MISSES, not what it would surface"

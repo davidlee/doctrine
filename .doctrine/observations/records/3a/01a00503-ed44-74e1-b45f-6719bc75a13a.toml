@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00503-ed44-74e1-b45f-6719bc75a13a"
+recorded_at = "2026-08-15T10:42:18.564885862Z"
+kind = "friction"
+summary = "adversarial plan-vs-design check has no tooling seam — and its dominant defect class is not mechanically reportable"
+detail = "Checking SL-251's plan.toml against a locked design.md for obligation coverage meant reading 2445 lines of design plus 335 of plan (~40k tokens) with no way to narrow: the design states obligations as ten numbered pins plus section-level commitments, the plan restates them as EX/VT rows, and nothing relates the two. Nine defects found. Only two were 'no criterion claims this obligation' — the shape a mechanical citation-coverage pass would catch. FIVE were citation-present-content-wrong: the criterion names the pin and paraphrases it incorrectly, so every reference resolves and no coverage report would flag it. Two more were checkable against the tree but missed by check plan's shipped VT rule (test_file fits a design-target selector while being unable to reach the fixtures the design sites elsewhere). Recorded against RFC-027 G4: mechanical reporting relocates the adversarial residue rather than shrinking it. Supersedes the first capture, whose detail claimed the five were what a citation pass would surface cheaply — they are precisely what it misses."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
