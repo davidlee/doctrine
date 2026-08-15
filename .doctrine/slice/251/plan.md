@@ -95,9 +95,15 @@ authorities in five modules — while the narrow rows record the files it
 *writes*. The two remaining `unmatched` rows are the files the slice creates.
 
 **What the plan deliberately does not carry.** `SPEC-029` names the design verb
-set as *start, show, apply, resume*; a fifth verb makes that line stale. The
-design settled this as a prose update at reconcile rather than an amendment, so
-it is not a phase here — but it is the first thing `/reconcile` owes.
+set as *start, show, apply, resume*. That line is **already** stale by
+`materialise`, and `contract` is the sixth verb, not the fifth — so the prose
+update `/reconcile` owes is a two-verb correction, not one. (`sec-6` says "a
+fifth variant beside the existing four"; `DesignCommand` has carried five since
+`materialise` landed — `commands/design.rs:118-130`, classified at
+`guard.rs:431-435`. The plan repeated the miscount and `PHASE-06/EX-1` now
+carries the correction.) The design settled this as a prose update at reconcile
+rather than an amendment, so it is not a phase here — but it is the first thing
+`/reconcile` owes.
 `sec-7` also records two corrections this slice owes elsewhere: the memory
 `mem.fact.design-run.apply-payload-vocabulary` is wrong about `Declaration`'s
 `deny_unknown_fields`, and `ISS-346` and `ISS-333` record the same
@@ -127,7 +133,10 @@ and splitting structs from enums leaves a root that references half a closure.
 the full closure over top-level-only; the size is the decision's, and hiding it
 behind a phase boundary would not make it smaller.
 
-**Where PHASE-02 and PHASE-03 will feel like rework and are not.** The coverage
+**Where PHASE-02 and PHASE-03 will feel like rework and are not.** (`PHASE-03`'s
+`EX-9` used to say this and only this, which made it a note in a criterion slot
+that nothing could fail; it now carries the checkable half — amended fixtures
+keep their no-`..` form — and the rationale lives here.) The coverage
 equality is the thing that tells us which declaration sites no fixture reaches,
 and it cannot say so until it runs. So PHASE-03 is expected to go back and put
 elements in containers PHASE-02 left empty. PHASE-03/EX-9 says this in the plan
@@ -135,3 +144,65 @@ so a reader does not score it as PHASE-02 having been done badly — under the
 design's rev-72 rework, *fully populated* keeps exactly one obligation (the
 no-`..` literal), and container non-emptiness stopped being a fixture rule at
 all when it became a pin.
+
+## Plan review, 2026-08-15 — what changed and why
+
+An adversarial pass over plan-against-design found nine gaps. All are now in
+`plan.toml`; this is the account of them, since a criterion carries its
+obligation but not its history.
+
+**Three obligations were mis-stated — a criterion that, met literally, ships the
+wrong thing.**
+
+- `PHASE-02/VT-1` said "for each of the **twelve** closure structs … equals its
+  `KeyContract` rows". `sec-8` pin 1 has **eleven** call sites and says
+  `SubmissionEnvelope` "cannot take that call site" — no `TypeContract`, so
+  `PAYLOAD` would be three keys against thirteen rows. Its real pin, the
+  disjoint union `{envelope keys} ⊎ {ten act keys} == {thirteen rows}`, was in no
+  phase at all; it is now `PHASE-02/VT-3`. `EX-2` had the distinction right, so
+  the plan contradicted itself one criterion apart.
+- `PHASE-07/VT-2` asserted the worked example "parses as a valid
+  `ApplyRequest`" — the exact claim `DEC-228` was corrected off, for two reasons
+  both live in the source (`envelope.rs:75-81`): `"known_revision":<n>` is not a
+  JSON value and the final `concat!` arm is prose. It now pins the JSON arm
+  alone, after substitution, and `EX-9` carries the `JSON_ARM` / `concat!`
+  restructuring the pin needs and the plan had not allocated.
+- The two extern-region rows — `CreateRecord.kind` as `Token(Extern)` and
+  `.facet` as `Map { key: Extern{…, selector: "kind"} }` — had no exit criterion
+  anywhere, while `PHASE-04/EN-2` cited `PHASE-02/EX-1` as though it carried
+  them. It does not. Now `PHASE-02/EX-9`, with `EN-2` re-pointed.
+
+**Three obligations were dropped or downgraded.** `sec-8` pin 7's *refusal*
+surface survived only as a manual `VA` (now also `PHASE-07/VT-3`); its
+*classification* pin pointed at `guard.rs`, where the arm is a compile barrier,
+rather than `main.rs`'s `cls` / `observation_write_class_split` where `sec-7`
+puts it (now `PHASE-06/VT-2`). Pin 9's selector-sibling assertion — which
+`sec-8` says "no other pin reads" — was absent, and is folded into
+`PHASE-05/VT-1`. And `sec-5`'s three *semantic* rendering rules (payload placed
+by tagging, `BARE STRING` marking, struck-out untagged token) had no criterion
+behind `VA-1`'s shape comparison, though they are the two failures `sec-1`
+opens on; now `PHASE-05/EX-8`, with the fixed-string parentheticals as `EX-9`.
+
+**Two over-claims would have failed on contact.** `PHASE-01`'s "all fourteen
+enums" and "each `VARIANTS` non-empty" are false for the untagged
+`WireFacetValue`, which pin 4's own extraction table skips; and pin 4's samples
+live in `payload_contract.rs`'s test module per `sec-8`, which a sibling
+`tests.rs` cannot reach — so `PHASE-01/VT-1` moved, and `PHASE-03/VT-3` split,
+leaving the struct probe in `tests.rs` and the variant probe (`VT-4`) beside its
+samples.
+
+**Retired ids, spent and not reusable** (`PHASE-NN` and criterion ids are
+immutable — a later append takes the next number, never these):
+
+- `PHASE-01/VT-2` — a `VT` over a compile barrier `sec-8` lists under *four
+  things need no test*, with keywords the macro's own definition satisfies. It
+  could not fail. `VA-1` carries that barrier properly, both ways.
+- `PHASE-05/EX-6` — restated a choice `sec-5` explicitly leaves to the
+  implementer and calls not load-bearing.
+
+**What this owes the design.** Three of the nine originate upstream rather than
+in the plan, and `/reconcile` should carry them back: `sec-6`'s *fifth variant*
+is the sixth; `sec-4`'s "pin 4 covers all fourteen uniformly" reads against
+`sec-8` pin 4's own `Untagged → skipped` row; and `sec-8` pin 1's eleven/twelve
+split is stated correctly but is easy to read as twelve call sites — which is
+how the plan came to say it.
