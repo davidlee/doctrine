@@ -1,0 +1,14 @@
+schema = "doctrine.comparison-session"
+version = 3
+judgement = []
+
+[session]
+uid = "01a003e4-37ba-7a51-8ad2-f821c51f9405"
+date = "2026-08-15"
+
+[[tombstone]]
+uid = "01a003e4-37ba-7a51-8ad2-f830caf8183b"
+seq = 0
+target = "f7c9efc5-8de7-4dcd-a975-78c6842a5702"
+date = "2026-08-15"
+note = "2026-08-15 bulk clear: unattributed migrated estimate claim from the 2026-07-18 import; the corpus held no human or pinned estimate claim, and the ~17x cost gap between imported and non-imported items dominated ranking on provenance nobody stands behind. Re-elicit with `doctrine compare elicit`."
