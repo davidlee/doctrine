@@ -11,10 +11,10 @@ sort itself is delegated to the `backlog_order` cordage adapter.
 
 A backlog item may declare either axis on an entity that is **not** a backlog item:
 a slice, an open question, a decision. The corpus carries **30 such edges** today
-(measured 2026-08-15), 21 of them on the `needs` axis. The ordering machinery cannot
-represent them: its node key `ItemId` is a `(backlog kind, number)` pair over exactly
-five prefixes, so a `QUE-219` or `SL-251` target has no node to be, no rank to hold,
-and no row to appear above.
+(measured 2026-08-15, re-counted 2026-08-16), 16 of them on the `needs` axis and 14
+on `after`. The ordering machinery cannot represent them: its node key `ItemId` is a
+`(backlog kind, number)` pair over exactly five prefixes, so a `QUE-219` or `SL-251`
+target has no node to be, no rank to hold, and no row to appear above.
 
 This design does not change that, and `DEC-231` is the reason: `--by sequence` is a
 *backlog-induced work order*, not an actionability gate. `doctrine next` already
@@ -64,7 +64,8 @@ Three further faults sit behind that one, and this design closes all four:
    internally. All four hardcode `status == "resolved" || status == "closed"` —
    *backlog* vocabulary. A slice is terminal at `done` (ADR-009), a question at
    `answered`. So `doctrine after IMP-172 --prune`, with the edge present and
-   `SL-154` at `done`, reports `nothing to prune`.
+   `SL-154` at `done`, reports `nothing to prune`. All four also launder a failed
+   read into an empty status word, which STD-003 forbids (§6).
 
 And one gap that is not cross-kind-specific at all: **`needs` has no removal verb**
 for any kind. `doctrine unlink` operates on tier-1 relation rows, a different
@@ -82,6 +83,13 @@ the reader of that destination needs to know (`DEC-232`):
 | resolves cross-kind, target **not** terminal | `boundary:` (new) | `ISS-327 needs QUE-219 (open)` |
 | resolves, target terminal | nowhere | — |
 | does not resolve at all | `doctrine doctor` | a `RelationIntegrity` error |
+
+The last row leaves the listing surface, so the listing surface says one thing about
+it: when the probe drops at least one unresolvable ref, a **count-only advisory**
+goes to stderr naming no individual ref and pointing at `doctor` (§2). That is a
+signpost, not the report — the footer's contract is unchanged, and the reader is not
+left to discover a validation failure by running a command nothing prompted them to
+run.
 
 Alongside that, the edges become clearable on both axes and the terminality probe
 that decides *clearable* collapses to one implementation shared with the footer.
@@ -108,8 +116,10 @@ remembered:
   its single row-membership meaning (`DEC-234`).
 - **No relation vocabulary change.** No new label, no new axis, no widening of which
   kinds may author dep/seq. `doctrine unlink` stays tier-1-only.
-- **No corpus edit.** The 30 authored refs are legal data. Clearing individual spent
-  edges is a judgement call for after the tooling can make it honestly.
+- **No corpus edit.** The 30 authored refs are legal data, and none of them is
+  broken today — a full scan on 2026-08-16 found **zero** unresolvable authored
+  `needs`/`after` refs. Clearing individual spent edges is a judgement call for
+  after the tooling can make it honestly.
 - **`backlog::parse_ref` is not widened.** Its five other callers depend on it
   hard-failing on a non-backlog prefix.
 
@@ -118,33 +128,42 @@ remembered:
 ```mermaid
 flowchart LR
   subgraph leaf
-    K["kinds<br/>ref parse · kind sets"]
+    K["kinds<br/>ref parse · kind sets · AuthoredStatus"]
     DS["dep_seq<br/>edit-preserving read/append/remove"]
   end
   subgraph engine
-    M["meta<br/>authored_status"]
+    M["meta<br/>strict Meta reader"]
+    AS["authored_status<br/>NEW · per-kind status+title"]
   end
   subgraph command
     BL["backlog<br/>footer · inspect · doctor check"]
     CD["commands::dep_seq<br/>needs/after verbs · prune"]
     P["priority::partition<br/>status_class · class_of"]
+    CS["catalog::scan<br/>derived-status overlay"]
     D["commands::doctor"]
   end
-  BL --> M
+  BL --> AS
   BL --> K
   BL --> P
-  CD --> M
+  CD --> AS
   CD --> K
   CD --> P
   CD --> DS
-  M --> K
+  CS --> AS
+  AS --> M
+  AS --> K
   P --> K
   D --> BL
 ```
 
-The one new module-level edge in that picture is `meta → kinds`, engine to leaf and
-therefore downward. Every other edge already exists in the crate today, which is
-what keeps the ADR-001 command-tier tangle baseline untouched (§3).
+The picture answers the layering question the earlier draft got wrong. That draft
+sited the per-kind status read in `meta` and defended the resulting `meta → kinds`
+edge as safe because it pointed downward — true, and beside the point: `meta`'s own
+charter is that it carries *zero per-kind knowledge*, which is what makes it safe
+for its seventeen consumers (§3). Siting the read in its own engine module leaves
+`meta` untouched, and the new module's import set is one `integrity.rs` already
+carries. **No new module edge, in any direction.** The command-tier tangle baseline
+of 76 is untouched (§3, §7).
 
 <!-- doctrine:section sec-2 -->
 # 2. Where an authored ref goes, and what each destination says
@@ -290,45 +309,78 @@ kinds are added.
 
 Three consumers need the same fact about a cross-kind target — the `boundary:`
 block needs its status to print, the suppression rule needs its class, and
-`after --prune` needs to know whether it is spent. `DEC-233` settles how that fact
-is obtained, and the constraint is layering rather than cost.
+`after --prune` needs to know whether it is spent. `DEC-233` settles how that
+fact is obtained, and the constraint is layering rather than cost.
 
-## Why not the obvious route
+## Why the obvious route is refused, and what that refusal does not license
 
-`src/catalog/scan.rs` already owns an all-kind status read and claims sole ownership
-of the KINDS walk. It is unusable here in both of its shapes:
+`src/catalog/scan.rs` already owns an all-kind status read. It is unusable *as a
+call* in both of its shapes:
 
 - `scan_entities`, the full 24-kind walk, costs `doctrine validate` 3.6s and
   `doctrine doctor` 10.8s on a ~4,400-entity corpus, against `backlog list --by
   sequence`'s 0.19s. A ~20× regression on the default listing command.
-- `status_and_title_for`, the targeted per-ref read, is refused by governance, not
-  cost. ADR-001 classifies `catalog::scan` as **command** tier and records that it
-  reaches `backlog`; a `backlog → catalog::scan` edge closes a command-tier cycle
-  the layering ratchet rejects.
+- `status_and_title_for`, the targeted per-ref read, is refused by governance,
+  not cost. ADR-001 classifies `catalog::scan` as **command** tier, and it
+  reaches `backlog` (`scan.rs:65-66`), so a `backlog → catalog::scan` edge
+  closes a command-tier cycle the layering ratchet rejects.
 
-Both named horns are dead, so the probe is composed instead from two seams the
-consumers already reach *downward*.
+**The refusal is about the call, not about the code.** `status_and_title_for` is
+already exactly the reader this design needs: `(root, kref, id)`, dispatched on
+the canonical prefix — `REC` status-less, `RV` derived, every other kind one
+`meta::read_meta` that yields status and title from a single parse. Writing a
+second reader beside it and reconciling only the two string constants would
+leave two readers that **disagree by construction** on `RV`: one answering
+`Some(derived)`, the other `Unavailable`, with the pin guarding a membership
+list and nothing guarding the behaviour. That is the parallel implementation
+this project forbids, dressed as layering compliance.
+
+So the reader moves **down**, and the caller that can see further stays where it
+is.
+
+## Where it moves to, and why that is not `meta`
+
+A new engine module, `src/authored_status.rs`.
+
+Not `meta`, whose module doc forbids it in as many words: *"The reader, status
+filter, and aligned formatter are status/path-parametric — they carry **zero
+per-kind knowledge** — so they live here once and every kind calls them"*, and
+*"deliberately not `entity.rs`, which stays a kind-blind scaffold engine"*
+(`src/meta.rs:3-13`). A reader that branches on `RV` and `REC` is per-kind
+knowledge by definition, and `meta` has some seventeen consumers whose safety
+rests on that blindness. An earlier draft of this design routed the read through
+`meta` and argued the resulting `meta → kinds` edge was safe because it pointed
+downward. The direction was never the question.
+
+The new module costs nothing in layering. `src/integrity.rs` is already an
+engine module importing `kinds`, `meta` and `entity` (`integrity.rs:19-20`), so
+`engine → {kinds, meta, entity}` is a precedented edge set and this design adds
+no new module edge at all.
 
 ## The composition
 
-**Resolution is leaf.** `kinds::ensure_ref_resolves` (via `parse_resolvable_ref`)
+**Resolution is leaf.** `kinds::parse_resolvable_ref` (`kinds/resolve.rs:63`)
 turns a ref into a `(&'static KindRef, u32)` and, for a canonical ref, costs a
-single directory stat with no file read. This is the same function `run_needs` uses
-at authoring time and the same one `doctor`'s new check uses (§5), so authoring
-and health agree by construction rather than by two tables kept in step.
+single directory stat with no file read. `ensure_ref_resolves` (`:33`) is the
+`-> Result<()>` wrapper over that same function, and is what `backlog needs`
+uses at authoring time (`backlog.rs:1963`) and what `doctor`'s new check uses
+(§5). The probe needs the pair, so it calls the delegate directly. One resolver,
+three callers, agreeing by construction rather than by two tables kept in step.
 
-**Status is engine.** `meta::read_meta` is one toml parse per **distinct** target —
+`parse_resolvable_ref` also accepts the **bare** form (`31`, not just `SL-031`),
+scanning all kinds for a unique match. An authored bare ref therefore resolves
+and is disclosed by its ref verbatim; no consumer needs to special-case it, and
+§6 names the one place where the distinction bites.
+
+**Status is engine.** The new module, one toml parse per **distinct** target —
 about 15 in the live corpus, ~8ms against a 190ms baseline.
 
 **Classification is policy.** `priority::partition::status_class` stays the sole
-per-kind terminality authority, which is what REQ-238 requires and what makes the
-`VA` criterion checkable: no second terminal-status vocabulary may survive anywhere.
+per-kind terminality authority, which is what REQ-238 requires and what makes
+the `VA` criterion checkable: no second terminal-status vocabulary may survive
+anywhere.
 
-## The three-way, and where its vocabulary lives
-
-`read_meta` deserializes a strict `Meta` that demands a top-level `status`, so it
-cannot be pointed at every kind. Two kinds author none, for opposite reasons, and
-telling them apart is the whole point of a three-way return:
+## The types
 
 ```rust
 // src/kinds/mod.rs — leaf, beside WORK_LIKE / RECORD / ADMISSIBLE_DEP_TARGETS
@@ -353,21 +405,78 @@ pub(crate) enum AuthoredStatus {
 }
 ```
 
-```rust
-// src/meta.rs — engine
+The vocabulary stays in `kinds` (leaf, `out=0`) so that both the engine reader
+and the command-tier classifier depend only on leaf for the type.
 
-pub(crate) fn authored_status(
+```rust
+// src/authored_status.rs — engine
+
+pub(crate) struct Authored {
+    pub(crate) status: AuthoredStatus,
+    pub(crate) title: String,
+}
+
+pub(crate) fn read(
     root: &Path,
     kref: &'static kinds::KindRef,
     id: u32,
-) -> anyhow::Result<AuthoredStatus>
+) -> anyhow::Result<Authored>
 ```
 
-Detection is **static, from the parsed kind** — never inferred from a read failure.
-That distinction is load-bearing: an entity whose directory resolves but whose toml
-is missing or unparseable is a *corpus defect*, and it must keep its existing
-channel (an `Err` the caller reports) rather than being laundered into
-`Unavailable`. A tooling limit and a broken file must not share a signal.
+The title rides along rather than being a second read: `meta::Meta` already
+carries both fields, and SL-050 `F-1` collapsed precisely this pair into one
+parse. A caller wanting only the status discards the title; nobody pays twice.
+Three arms, each **static from the parsed kind**:
+
+| kind set | status | title |
+|---|---|---|
+| `DERIVED_STATUS` | `Unavailable` | lenient read |
+| `STATUS_LESS` | `Absent` | lenient read |
+| otherwise | `Known(s)` from one `meta::read_meta` | same parse |
+
+The lenient title reader moves here from `catalog::scan::title_for`, which
+repairs something adjacent: `meta.rs`'s `IdOnly` doc states that leniency over a
+status-less toml is *confined to that path*, and `title_for` was a second
+lenient reader living outside the confinement.
+
+## The one status the probe cannot read, and who can
+
+`RV`'s status is derived at command tier from its authored finding ledger
+(`review::derived_status_string`), and `review` is itself command tier
+(`layering.toml:114`), so no engine-tier reader can obtain it. The engine
+returns `Unavailable`, and `catalog::scan::status_and_title_for` becomes the
+command-tier **overlay** that can do better:
+
+```rust
+let a = authored_status::read(root, kref, id)?;
+match a.status {
+    AuthoredStatus::Unavailable => (Some(review::derived_status_string(root, id)?), a.title),
+    AuthoredStatus::Absent      => (None, a.title),
+    AuthoredStatus::Known(s)    => (Some(s), a.title),
+}
+```
+
+One implementation, one parse, and the `DERIVED_STATUS` arm decided in exactly
+one place — so the pin binds *behaviour*, not merely a membership list.
+
+On the listing surface `DEC-233` refuses to let `Unavailable` read as anything
+else: the target renders `(status unavailable)`, a token that names the tooling
+gap rather than occupying the status slot, and it classifies `Unrecognised`,
+which is not suppressed. An unreadable status must never be silently classed
+`Terminal` — that is the precise path by which an open prerequisite would vanish
+from a work order, and it is the failure this design exists to remove rather
+than relocate.
+
+Worth stating plainly, because it changes how the case is tested: **the
+authoring gate already refuses `RV` and `REC` as dep/seq targets**
+(`kinds::ADMISSIBLE_DEP_TARGETS`, `kinds/mod.rs:78`), so `doctrine needs ISS-401
+RV-350` is rejected at author time. On the *listing* path the `Unavailable` arm
+is therefore defensive, reachable only through a hand-edited or legacy toml, and
+its fixture must be hand-written rather than produced through the CLI. It is not
+defensive in `catalog::scan`, which reads every `RV` in the corpus on every
+walk — which is a second reason the arm belongs to one shared reader.
+
+## `class_of`
 
 ```rust
 // src/priority/partition.rs — the policy tier
@@ -375,37 +484,35 @@ channel (an `Err` the caller reports) rather than being laundered into
 pub(crate) fn class_of(kind: &entity::Kind, status: &AuthoredStatus) -> StatusClass
 ```
 
-`class_of` is four lines over `status_class`: `Known(s)` → `status_class(kind,
-Some(s))`; `Absent` → `status_class(kind, None)`, which the table already documents
-as `Terminal`; `Unavailable` → `Unrecognised`, which the default-quiet rule does not
-hide. It exists rather than being inlined at each consumer so the `Unavailable`
-rule is stated once, in the module REQ-238 designates as the home of per-kind
-terminality policy.
+Four lines over `status_class`: `Known(s)` → `status_class(kind, Some(s))`;
+`Absent` → `status_class(kind, None)`, which the table already documents as
+`Terminal` (`partition.rs:244-247`); `Unavailable` → `Unrecognised`, which the
+default-quiet rule does not hide. It exists rather than being inlined at each
+consumer so the `Unavailable` rule is stated once, in the module REQ-238
+designates as the home of per-kind terminality policy. The inline comment on
+that `None` arm — *"The only status-less kind is REC"* — re-sources from
+`kinds::STATUS_LESS` at the same time, so the fact has one home rather than
+three.
 
 ## The three standing rules the degradation carries
 
 1. **`Unavailable` never suppresses.** It classifies `Unrecognised`; only
-   `Terminal` is suppressed. The edge is always disclosed, with a token that reads
-   as a tooling gap.
+   `Terminal` is suppressed. The edge is always disclosed, with a token that
+   reads as a tooling gap.
 2. **The derived-status set is pinned by a test.** A future kind that derives its
    status and is not added to `DERIVED_STATUS` must fail a test, not degrade
-   quietly.
-3. **A genuine read failure is a different trip.** It is `doctor`'s business, never
-   a rendered status, and never silently dropped.
-
-## One table, not two
-
-`catalog::scan::status_and_title_for` currently spells the same two special cases as
-inline string literals (`"REC" =>`, `"RV" =>`). Introducing the consts above without
-touching it would create exactly the duplicated vocabulary STD-001 forbids — and
-would hollow out rule 2, since the pin would guard one reader while the other
-drifted. So its match arms re-source from `kinds::STATUS_LESS` /
-`kinds::DERIVED_STATUS`. Two lines, and it makes the pin bind both readers.
+   quietly — and because there is now one reader, the pin binds what every
+   caller does, not just what one of them lists.
+3. **A read failure is a corpus defect, not a tooling gap — STD-003.** `read`
+   returns `Err`, never `Unavailable` and never `Absent`, so a broken file and a
+   tooling limit can never share a signal; detection is static from the parsed
+   kind, never inferred from a failed read. *How* that `Err` is handled belongs
+   to each caller, and STD-003 fixes the floor: no caller may propagate it into
+   a command failure, and none may drop the edge silently. §4 discloses it on
+   the listing surface under its own token, §6 keeps the edge and says why, §5
+   reports it as a finding.
 
 ## Layering, stated so it can be checked
-
-Every module-level edge the design needs already exists in the crate, with one
-exception:
 
 | edge | status | tier direction |
 |---|---|---|
@@ -414,13 +521,16 @@ exception:
 | `commands → priority` | exists (`commands::inspect`, `commands::compare`) | command → command |
 | `commands → backlog`, `commands → dep_seq`, `commands → kinds` | exist | command → command / leaf |
 | `priority → kinds` | exists (`partition` already imports it) | command → leaf |
-| **`meta → kinds`** | **new** | engine → leaf, downward |
+| `backlog → authored_status`, `commands → authored_status` | **new module** | command → engine, downward |
+| `authored_status → {kinds, meta, entity}` | **new module**, precedented by `integrity` | engine → engine / leaf, downward |
 
-The layering gate records edges at top-level-module granularity, so reaching a new
-*function* inside a module the source already imports adds no edge. The single new
-edge is downward and therefore cannot join a cycle. **The command-tier tangle
-baseline of 76 does not move**, and that is a test assertion, not a claim to be
-taken on trust (§7).
+Every edge is downward and none is new *in kind* — `integrity.rs:19-20` already
+carries the engine module's whole import set. The layering gate records edges at
+top-level-module granularity, so reaching a new function inside a module the
+source already imports adds nothing. **The command-tier tangle baseline of 76
+(`layering.toml:190`) does not move**, and that is a test assertion, not a claim
+to be taken on trust (§7). `layering.toml` gains one authored row for the new
+module, beside the comment inventory every other module carries.
 
 <!-- doctrine:section sec-4 -->
 # 4. The listing path: keeping the composition pure

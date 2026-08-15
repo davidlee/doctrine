@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a005d9-ce8d-7b51-8ba9-013bc1b791fa"
+recorded_at = "2026-08-15T14:35:55.40509758Z"
+kind = "friction"
+summary = "design (SL-238): apply payload shape needed a source read; not in the run's own guidance"
+detail = "To declare a revised section body I needed the apply payload's section form. 'doctrine design apply --help' lists only --input; an empty-object probe names one missing envelope field at a time; unknown keys are silently ignored (so a wrong key looks like success and burns a revision); library show design-prompts/drafting.md repeats the drafting obligation already in context and carries no payload schema. Resolved by reading src/design_run/submission.rs:687 (SubmissionEnvelope) and :124 (Declaration.body). Cost: 2 wasted revisions (33, 34) on no-op probes plus four lookups. This is a direct instance of the class RFC-026 E8.7 measures — payload-shape lookups as a share of engine source reads — and of the cluster's 'contract legibility' batch (ISS-320, ISS-282, ISS-298, IMP-393)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
