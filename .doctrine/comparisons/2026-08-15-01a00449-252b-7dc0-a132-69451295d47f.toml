@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-252b-7dc0-a132-69451295d47f"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-252b-7dc0-a132-695535f8e2d3"
+seq = 0
+a = "ISS-328"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.0
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "Nested unknown key swallowed; record lands with empty facets while reporting success."
+date = "2026-08-15"
+basis = "obs 019ff90f-770a"

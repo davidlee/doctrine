@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-373e-7a50-8ecd-6086cf9633e6"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-373e-7a50-8ecd-6093ec8607d6"
+seq = 0
+a = "ISS-298"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.0
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "The --full projection asserts omitted=0 while open non-frontier nodes are unreachable."
+date = "2026-08-15"
+basis = "obs 019ff9d1-7991, 019fc148-3b16"

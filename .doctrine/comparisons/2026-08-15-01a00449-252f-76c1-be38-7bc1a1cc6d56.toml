@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-252f-76c1-be38-7bc1a1cc6d56"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-252f-76c1-be38-7bda8fe62788"
+seq = 0
+a = "ISS-327"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.0
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "Declaration key inert at the subject's state, reported as success."
+date = "2026-08-15"
+basis = "obs 019fd5f4-66d8"

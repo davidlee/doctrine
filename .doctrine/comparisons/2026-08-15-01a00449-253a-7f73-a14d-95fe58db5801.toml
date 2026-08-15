@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-253a-7f73-a14d-95fe58db5801"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-253a-7f73-a14d-9608dc57c370"
+seq = 0
+a = "ISS-357"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.0
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "A stale-but-green marker is worse than no marker; compounds ISS-359."
+date = "2026-08-15"
+basis = "obs 019ffa7e-248d"

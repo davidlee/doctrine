@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-2524-7793-bbac-438db88ef0d4"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-2524-7793-bbac-4390dbe90586"
+seq = 0
+a = "ISS-360"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.5
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "Confounds QUE-218's evidence — refuses the natural way to author the parent edges whose absence the fork turns on."
+date = "2026-08-15"
+basis = "obs 019fc523-c616; RFC-026 E8.3"

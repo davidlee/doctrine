@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-2528-76e2-b683-d7731de48aab"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-2528-76e2-b683-d78bbbb6f0c9"
+seq = 0
+a = "ISS-356"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.0
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "Corrupts the reader-facing artefact and is unrecoverable in-run; penalises the token-efficient batched declare."
+date = "2026-08-15"
+basis = "obs 019ff53c-902e, 019ff986-999b"

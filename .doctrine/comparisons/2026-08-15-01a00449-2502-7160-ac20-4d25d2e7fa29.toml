@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-2502-7160-ac20-4d25d2e7fa29"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-2502-7160-ac20-4d3a1517245e"
+seq = 0
+a = "ISS-361"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 5.0
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "Breaks the failure contract (error reported, state moved), unrecoverable in-run via the idempotency receipt, and corrupts the change log. Outranks everything if it reproduces."
+date = "2026-08-15"
+basis = "obs 019fec3e-cf4e"

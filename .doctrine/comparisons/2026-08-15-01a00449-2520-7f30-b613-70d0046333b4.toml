@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-2520-7f30-b613-70d0046333b4"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-2520-7f30-b613-70e332f92124"
+seq = 0
+a = "IMP-430"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 3.0
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "Dominant per-revision token cost of the managed run (~90 KB payload for a paragraph edit); pure overhead, scales with document maturity."
+date = "2026-08-15"
+basis = "obs 019ffa30-2aec, 019ff661-d3db"

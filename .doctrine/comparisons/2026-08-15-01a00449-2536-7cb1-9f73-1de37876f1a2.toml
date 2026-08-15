@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-2536-7cb1-9f73-1de37876f1a2"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-2536-7cb1-9f73-1df5b7eafd4a"
+seq = 0
+a = "ISS-359"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.0
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "The last gate before lock can clear on a citation nobody re-derived; fails silently."
+date = "2026-08-15"
+basis = "obs 019ffa30-4e0d"

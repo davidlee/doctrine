@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-250f-7f20-a0d4-219f7c6f95b6"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-250f-7f20-a0d4-21a354bf5e67"
+seq = 0
+a = "ISS-362"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 3.5
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "Stage is the run's core sequencing constraint and it fails open; also consumes a revision for a no-op."
+date = "2026-08-15"
+basis = "obs 019fd226-ad55"

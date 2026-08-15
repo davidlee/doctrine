@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-2518-7c82-a970-798de1763de5"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-2518-7c82-a970-79939ad6da1d"
+seq = 0
+a = "ISS-320"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 3.0
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "5 hits. Closes the hand-edit escape hatch, which is the fallback for IMP-430's cost."
+date = "2026-08-15"
+basis = "obs 019fcc03-62c4, 019fd72b-04e5, 019ff82b-8c60, 019ffa3d-b148, 019fdea2-8902"

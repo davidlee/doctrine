@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-2513-76b1-8c29-25aedbab2717"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-2513-76b1-8c29-25bf5e22c9c1"
+seq = 0
+a = "IMP-390"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 3.0
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "Joint-highest recurrence (6 hits): the mutation vocabulary is recoverable only by reading submission.rs."
+date = "2026-08-15"
+basis = "obs 019ff49d-4a49, 019ff9ea-b401, 019ffa30-16f1, 019fd1d7-a5f8, 019fd6d8-f538, 019ffb44-9150"

@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-251c-7401-a8f7-ddba7b899130"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-251c-7401-a8f7-ddc8ad80ec56"
+seq = 0
+a = "ISS-299"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 3.0
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "Prerequisite for answering QUE-218 and for CHR-065's re-measurement; the whole IMP-386..389 batch is gated behind it."
+date = "2026-08-15"
+basis = "RFC-026 E8.3; obs 019ff5ac-67f3"

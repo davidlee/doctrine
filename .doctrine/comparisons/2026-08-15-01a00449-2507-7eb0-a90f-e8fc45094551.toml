@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-2507-7eb0-a90f-e8fc45094551"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-2507-7eb0-a90f-e904c63eae4f"
+seq = 0
+a = "ISS-346"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 4.0
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "Highest recurrence in the 47-observation sweep (5 hits over 10 days); a typo costs a revision and reads as applied."
+date = "2026-08-15"
+basis = "obs 019fd433-f391, 019fd675-f411, 019fdf74-26a8, 019ff42b-2655, 019fd22a-126f"

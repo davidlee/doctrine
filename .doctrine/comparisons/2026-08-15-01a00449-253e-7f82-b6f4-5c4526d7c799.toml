@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-253e-7f82-b6f4-5c4526d7c799"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-253e-7f82-b6f4-5c5c7abb04db"
+seq = 0
+a = "IMP-393"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.0
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "Raised findings visible only as a change-log row; no standing signal for a returning reviewer."
+date = "2026-08-15"
+basis = "obs 019ff550-6459"

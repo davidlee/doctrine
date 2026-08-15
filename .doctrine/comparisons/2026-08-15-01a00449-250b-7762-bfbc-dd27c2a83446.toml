@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a00449-250b-7762-bfbc-dd27c2a83446"
+date = "2026-08-15"
+
+[[judgement]]
+uid = "01a00449-250b-7762-bfbc-dd3988405f82"
+seq = 0
+a = "ISS-355"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 3.5
+rater = "agent"
+by = "opus5-friction-sweep-2026-08-15"
+note = "Force multiplier: with no change row on success, ISS-346/ISS-361/ISS-362 are all unobservable. Fixing this makes the others diagnosable."
+date = "2026-08-15"
+basis = "obs 019ff4a1-088f, 019ff675-5c42, 019ffb44-aa1f"
