@@ -113,7 +113,7 @@ integration is in the sections themselves. Ids only — the run holds the text.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-15 · design/reviewing (run rev 49) · ed8bd7453
+fresh-as-of: 2026-08-15 · design/reviewing (run rev 50) · ef47e756b
 
 ### Produced
 
@@ -132,6 +132,12 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 49) · ed8bd7453
   three steps discharged.
 - Scope reconciled: `OQ-1` `OQ-2` `OQ-3` `R2` resolved against their records;
   Objective 2's "authored, not derived" contradiction corrected.
+- `.doctrine/slice/251/render-sample.md` — the owed full-closure rendering.
+  Evidence beside the design; no section, no attestation. Closure **derived from
+  source** (rev `ef47e756b`) then diffed against `sec-3`, per `sec-3`'s own
+  commitment to mechanical derivation. `R5` measured: **202 lines / 8 826 B**.
+- `fnd-10`..`fnd-19` raised on the run (rev 50) from that diff — **undisposed**,
+  four blocking. Ids only; the run holds the text.
 
 ### Learned
 
@@ -165,12 +171,22 @@ fresh-as-of: 2026-08-15 · design/reviewing (run rev 49) · ed8bd7453
 
 - **Section attestations** — all nine outstanding. Human review is the v1
   default (`reviewing.md`); the run will not lock without them.
-- **Owed artefact: a worked full-closure rendering.** `.doctrine/slice/251/render-sample.md`
-  — `--format prompt` over the real twelve structs and fourteen enums, plus a
-  `--format json` fragment, checked against `sec-2`/`sec-3`/`sec-5` and reporting
-  every disagreement found. It is the evidence `R5` (render size) and the
-  presentation gaps need, and the reference codex and later agents read instead
-  of re-deriving the closure. Not yet started.
+- ~~**Owed artefact: a worked full-closure rendering.**~~ — **delivered
+  2026-08-15**, `.doctrine/slice/251/render-sample.md`. What it settled: the
+  closure itself is right (twelve structs, fourteen enums, membership, the
+  three-refuse/nine-discard split, the thirteen-vs-nine asymmetry, acyclicity —
+  all confirmed against source). What it broke is one tier down.
+- **`fnd-10`..`fnd-19` undisposed — four blocking, and they gate the lock.**
+  Four are **expressibility**: `sec-2`'s model cannot state an untagged variant
+  (`fnd-11`), per-variant tagging where `External` is non-uniform (`fnd-12`), a
+  map's key type or a key set that depends on a sibling field (`fnd-13`), or the
+  name of an inlined variant type (`fnd-14`). Three are **rendering**:
+  `render_json` cannot be the derived `Serialize` (`fnd-10`), the variant line
+  has no multi-key form (`fnd-17`), eleven blocks render against twelve closure
+  types (`fnd-16`). Three are **facts**: a third scalar and a sixth file
+  (`fnd-15`), a second internal- and a second external-tagged enum (`fnd-18`),
+  and a `sec-2`/`sec-3` contradiction over `CreateRecord.kind` (`fnd-19`).
+  `fnd-13` and `fnd-19` are forks with real alternatives, not corrections.
 - ~~`DEC-228`'s pin is not achievable as recorded~~ — corrected 2026-08-15 at
   source: the pin parses the constant's JSON arm alone after placeholder
   substitution, keeping `concat!(JSON_ARM, PROSE)` so the length assertion still

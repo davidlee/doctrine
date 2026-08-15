@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0042c-42ec-7d82-b718-ca878d124900"
+recorded_at = "2026-08-15T06:46:44.716189791Z"
+kind = "friction"
+summary = "/design (reviewing): slice notes has no read verb; the write verb's refusal is the only signal"
+detail = "Reached for `doctrine slice notes SL-251` to READ the notes' Harvest section, on the boot guardrail habit of 'read entities via show'. `notes` is a WRITER: it refused with 'Refusing to overwrite existing .doctrine/slice/251/notes.md'. The refusal was correct and safe, but it is the only thing that told me the verb's direction, and it cost a round trip plus a fallback to raw sed on the file the guardrail says not to read raw. Same class as mem_019facc24ac576e0a4d9ace5b2eeb12f (slice plan / slice phase are writers with no read-back). Three verbs now share the shape. Either the SPINE gains a read for authored prose sidecars, or the refusal names the read path."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
