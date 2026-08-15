@@ -3,8 +3,8 @@ slug = "cross-kind-backlog-ordering-admission-and-override-footer"
 title = "Cross-kind backlog ordering admission and override footer"
 status = "design"
 created = "2026-07-29"
-updated = "2026-07-29"
-tags = []
+updated = "2026-08-15"
+tags = ["next"]
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
