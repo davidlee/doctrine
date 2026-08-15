@@ -147,6 +147,45 @@ cross-kind dep/seq edges, and make those edges clearable.
   Retiring kills a parallel implementation (the stronger DRY answer) but changes
   row order (R1) and pulls scoring into a view that has none today. Widening is
   contained but keeps two cordage consumers alive. `/design` decides.
+
+  **A third candidate, appended 2026-08-15: suppress rather than represent.**
+  Neither horn above is forced, because the ordering adapter does not have to
+  hold the cross-kind target at all. `project` could resolve a cross-kind
+  reference's status through `partition::status_class` and, where the target is
+  non-terminal, **withhold the dependent from the ordered output** — no
+  `OrderInput` edge, no `ItemId` for the target, no adapter change.
+
+  Its case rests on a fact this scope did not have when it was written:
+  **`next` and `blockers` already gate correctly, and only this one view
+  disagrees.** Measured 2026-08-15 on the `cluster:design-run` batch — `QUE-218`
+  gates `IMP-386`/`387`/`388`/`389` and `QUE-219` gates
+  `ISS-290`/`327`/`328`/`333`/`346` out of `doctrine next`'s 378 actionable rows,
+  and `doctrine blockers ISS-327` names `QUE-219` as the blocker. So `list --by
+  sequence`'s job is narrower than the fork assumes: it must stop **contradicting**
+  the gate, not re-derive it. Gating is already owned elsewhere; this view only
+  renders.
+
+  What it buys: **R1 dissolves** — row order is untouched because no scoring is
+  pulled in and no comparator changes; the change is contained to `project` and
+  the footer; and `status_class` becomes the sole classifier on this leg too,
+  which is what the `VA` criterion below asks for regardless of the horn chosen.
+
+  What it costs: **transitive ordering through a cross-kind node is not
+  recovered.** Two items that both `needs` a live `QUE` are each withheld, but
+  their order relative to one another falls back to the existing
+  `created`/`exposure` comparator rather than being derived through the shared
+  prerequisite. Nothing in the corpus uses that today; whether it is wanted later
+  is the question `/design` should put to this candidate, and it is the cheapest
+  of the three to reverse if the answer is yes.
+
+  It is **not** an answer to the DRY objection. `backlog_order.rs` survives as a
+  second cordage consumer, so the parallel-implementation debt the retire horn
+  would clear stays on the books and should be recorded as such rather than
+  quietly dropped.
+
+  Note this candidate is orthogonal to the footer's honesty defect: the
+  `AbsentDrop` leg hardcodes the word `absent` for what is really *not a backlog
+  prefix*, and correcting that wording needs no horn settled at all.
 - **OQ-2.** Flag naming and shape for the reveal: `--explain` vs `--verbose`
   (IDE-019 leaves it open), and whether the footer belongs on stdout with the table
   or on stderr as an advisory (the cycle warning already goes to stderr —
