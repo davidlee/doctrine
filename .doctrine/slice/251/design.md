@@ -1297,24 +1297,24 @@ fails on an `install/` asset that is neither published nor flagged.
 - **classification** — `cls(&["doctrine", "design", "contract"])` is `None`, i.e.
   `Read`, on `observation_write_class_split`'s shape (`main.rs:338`, `866`).
 
-## 8 — `DEC-228`'s worked example, and a defect in the pin as recorded
+## 8 — `DEC-228`'s worked example
 
-`DEC-228` pins the example by asserting it deserialises as a valid `ApplyRequest`.
-**As written it cannot**: `DECLARATION_EXAMPLE` carries `"known_revision":<n>`
-(`envelope.rs:75-80`), and `<n>` is not a JSON value. The example is a *template*,
-and a template does not parse.
+`DEC-228` first pinned the example by asserting the constant deserialises as a
+valid `ApplyRequest`. It cannot, for two independent reasons, and the record was
+corrected on both: `DECLARATION_EXAMPLE` carries `"known_revision":<n>`
+(`envelope.rs:75-80`) and `<n>` is not a JSON value — the example is a *template*
+— and the constant's final `concat!` arm is prose, not JSON.
 
-The pin therefore substitutes before parsing — `<uid>` → a well-formed run uid,
-`<n>` → `0`, `<unique>` → a submission id — and then asserts the result
-deserialises. The substitution table is itself self-pinning: a fourth placeholder
-introduced into the example makes the parse fail rather than pass quietly, which
-is the right direction to fail in.
+So the pin parses the **JSON arm alone, after substitution**: `<uid>` → a
+well-formed run uid, `<n>` → `0`, `<unique>` → a submission id. The substitution
+table is self-pinning: a fourth placeholder introduced into the example makes the
+parse fail rather than pass quietly, which is the right direction to fail in.
 
-Two further assertions on the same value, both from `DEC-228`'s purpose: the
-parsed request carries a `traversal.cursor` — the omission that cost fifteen
-source reads — and the JSON half is separable from the trailing parenthetical,
-which means splitting today's single `concat!` into a JSON const and a prose
-const so the test parses the first alone.
+That needs the JSON arm named as its own const, with
+`DECLARATION_EXAMPLE = concat!(JSON_ARM, PROSE)` retained so the existing
+compile-time length assertion keeps covering exactly what is rendered. The parsed
+request must then carry `traversal.cursor` — the omission that cost fifteen source
+reads and the reason `DEC-228` exists.
 
 ## Alignment with the slice's closure intent
 

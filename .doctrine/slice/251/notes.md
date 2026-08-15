@@ -145,10 +145,10 @@ fresh-as-of: 2026-08-15 · design/drafting (run rev 38) · dabba7175
 ### Open
 
 - The review pass — all nine sections outstanding, no prior partial state.
-- `DEC-228`'s pin is not achievable as recorded: `DECLARATION_EXAMPLE` is a
-  template (`"known_revision":<n>`) and does not parse. `sec-8` specifies a
-  placeholder substitution before the parse; the record itself still reads as a
-  direct deserialisation.
+- ~~`DEC-228`'s pin is not achievable as recorded~~ — corrected 2026-08-15 at
+  source: the pin parses the constant's JSON arm alone after placeholder
+  substitution, keeping `concat!(JSON_ARM, PROSE)` so the length assertion still
+  covers what renders. `sec-8` pin 8 matches.
 - `sec-3`'s `Extern` soft spot is now discharged in design by `sec-8` pin 5 (the
   two set-equalities); it remains the ladder's only test-only rung.
 - `ISS-346` duplicates `ISS-333` (minted 2026-08-12 vs 2026-08-09) — merge so

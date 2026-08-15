@@ -58,3 +58,30 @@ Roughly 15 for the `cursor` correction, on top of `DEC-225`'s roughly 60 for the
 address pointer, against a 1024-byte example bound and a 24576-byte normal
 envelope budget. The example still shows two acts of ten; `DEC-225`'s adjacent
 pointer covers the rest, which is the division of labour the pair exists for.
+
+
+## Correction (2026-08-15): the pin as first written could not be tested
+
+`SL-251`'s design self-review (`fnd-7`) found this record's pin unwritable as
+stated. Two independent reasons, both visible in the constant:
+
+- **It is a template, not a payload.** `"known_revision":<n>` is not JSON — `<n>`
+  stands where a number belongs, and `<uid>` / `<unique>` stand inside strings.
+  `serde_json` refuses it at the first `<`.
+- **It is not all JSON.** `DECLARATION_EXAMPLE` is a `concat!` whose final arm is
+  prose — `"  (omit a key to persist it, send null to clear a scalar, [] to clear
+  a collection)"` — appended after the closing brace.
+
+The decision is unchanged; only its mechanism is. The pin becomes:
+
+1. name the JSON arm as its own const and keep
+   `DECLARATION_EXAMPLE = concat!(JSON_ARM, PROSE)`, so the existing compile-time
+   length assertion still covers exactly what is rendered;
+2. substitute `<uid>`, `<n>` and `<unique>` with well-formed values in the test;
+3. assert the result deserialises as an `ApplyRequest`, and that it carries
+   `traversal.cursor` — the omission this record exists to correct.
+
+The substitution table fails in the right direction: a fourth placeholder added
+to the example makes the parse fail rather than pass quietly.
+
+`SL-251`'s design carries this as `sec-8`'s pin 8.
