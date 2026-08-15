@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00408-8105-7c70-8fcd-9065aec33e26"
+recorded_at = "2026-08-15T06:07:41.317436708Z"
+kind = "friction"
+summary = "/design drafting: payload shape for a section declaration required a source read of submission.rs"
+detail = "Drafting SL-251's own design, I needed the wire keys for a section declaration (subject/body) and the run's declare envelope. The turn envelope's worked example shows an inquiry declaration only, so I read src/design_run/submission.rs:563 (Declaration::WIRE_KEYS) to confirm 'body' is the section key. This is exactly the cost SL-251 exists to remove — one payload-shape source read, inside the design run for the slice that fixes it. Second-order: DEC-228's pin as recorded ('the worked example deserialises as a valid ApplyRequest') is not achievable as written, because the example carries the placeholder <n> for known_revision and is a template rather than JSON; sec-8 now specifies a substitution before parsing."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
