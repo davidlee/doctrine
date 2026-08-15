@@ -1835,6 +1835,20 @@ broke, it carries a positive control first, on `the_artefact_cites_no_repo_priva
 pattern (`artifact.rs:360-370`) — assert the detector fires on a known-bad input,
 then assert the real input is clean.
 
+**And a fixture that leaves a container empty stops testing without failing.**
+Pin 2 reads element types *through the value*, so a `Seq(inner)` or `Map` row is
+exercised only where the fixture actually put something in it — and the precedent
+this design builds on does not: `Declaration::fully_populated` sets
+`needs: Sparse::Value(Vec::new())` (`submission.rs:657`), and its doc says the
+values are arbitrary because `I9` observed each key's *presence* alone. True of
+`I9`, false of this ladder. So *fully populated* carries a second obligation
+beside the no-`..` literal: **every `Seq` and `Map` key holds at least one
+element, in every struct fixture and every variant sample**, and the walk
+**asserts** non-emptiness on those rows rather than trusting it — an emptied
+container is then a failure rather than a check that quietly stopped running.
+`Declaration::fully_populated`'s value and its doc sentence both change with it,
+in the one place `I9` and this ladder share the literal (`tests.rs:2908`).
+
 ## 1 — Key sets: eleven types one way, the twelfth another
 
 ```rust
@@ -1889,6 +1903,13 @@ Serialise the same `fully_populated` value and compare each key's JSON kind
 against its declared `WireType`: string against `Text` / `Id` / `Token`, number
 against `Integer`, bool against `Boolean`, array against `Seq`, object against
 `Named` / `Map`.
+
+**The walk is recursive over the value, not a pass over its top-level keys.** A
+`Seq(inner)` row checks *every element* against `inner`, and a `Map` row checks
+every value against the declared value type — otherwise `declare`'s
+`Seq(Named(Declaration))` says only "array", and any named target would satisfy
+it. Non-emptiness is what keeps both checks from being vacuous, which is why the
+oracle discipline above makes it a fixture obligation and asserts it.
 
 A `Map` row is now two claims rather than one, because `sec-2` gave the key a
 description: the object's **values** match the declared value type, and its
@@ -2280,7 +2301,10 @@ They are the dominant mechanical cost of the slice and the compile barrier under
 pin 1, and an implementer who reaches for `..` in any of them silently deletes that
 type's barrier while every test still passes. There is no pin for this — a test
 cannot see the difference. It is a review point, and each fixture should carry
-`Declaration::fully_populated`'s doc sentence saying why the `..` is forbidden.
+`Declaration::fully_populated`'s doc sentence saying why the `..` is forbidden —
+now joined by the second obligation `sec-8`'s oracle discipline adds, that no
+`Seq` or `Map` key is left empty. That one *is* pinned, and the sentence is there
+so an implementer meets it deliberately rather than by accident.
 
 **`R5` (new, and now measured) — the contract can be correct and still too
 expensive to read.** No longer an estimate: the full closure was rendered ahead of
