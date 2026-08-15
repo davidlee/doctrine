@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 227
+slug = "contract-totality-is-the-full-recursive-wire-closure"
+title = "Contract totality is the full recursive wire closure"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-15"
+updated = "2026-08-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-101's totality template requires the contract to describe a closed set, and A2 established that `WRITER_ACTS` is the wrong axis to close over — it answers `does this payload write`, and correctly omits `delegation`, so it is not an inventory of the payload. What remained was the closure depth. `submission.rs` holds twelve wire-participating structs (`ApplyRequest`, `SubmissionEnvelope`, `Declaration`, `Dispose`, `CreateRecord`, `AcceptanceDeclaration`, `DischargeDeclaration`, `AdoptAuthored`, `StageDeclaration`, `TraversalDeclaration`, `ReviewPolicyDeclaration`, `CheckpointActDeclaration`, `AgentActDeclaration`) plus the enums they admit, including `AgentAct` in `attestation.rs`."
+choice = "Totality is the full recursive closure over reachable wire types, rooted at `ApplyRequest`. Every struct in the closure carries a DEC-221 serde-key-set literal pin; every enum in the closure contributes its generated token vocabulary and its serde tagging style per DEC-219."
+alternatives = ["Top-level only — the twelve keys of `ApplyRequest` and the enums they directly admit, one `fully_populated` literal. Rejected on measurement: both failures observed during this design run were nested. The unknown key was on `Declaration`; the tagging error was on `AgentAct`, inside `agent_declaration`. A top-level contract would have prevented neither, so it fails to cover the cost the slice was scoped against.", "Bounded recursion — recurse only into types reachable from an act field, excluding the envelope and internal machinery. Rejected: it saves roughly two literals and reintroduces a judgement about what counts as internal, which is the same class of judgement that made `WRITER_ACTS` the wrong axis to begin with."]
+rationale = "The closure is the only depth whose boundary is a fact about the types rather than an opinion about them, and it is the only one that covers the observed failures. Reachability from `ApplyRequest` is mechanically checkable; `is this internal` is not."
+consequences = ["Roughly twelve struct literal pins under DEC-221, each mechanical, plus the generated enum vocabularies. This is the dominant implementation cost of the slice and was accepted as such.", "`AgentAct` lives in `attestation.rs`, so the closure crosses module boundaries within the engine tier. ADR-001's layering is unaffected — both modules are engine tier.", "A new nested wire type added later joins the closure by construction; failing to pin it is a compile error at its own literal, not an omission from a hand-kept list.", "DEC-221's `HELD LOOSELY` caveat applies with more force here: twelve literals is the count that would make per-type `fully_populated` the dominant cost, which is one of the two conditions DEC-221 named for revisiting its split."]
+decided_by = "user"
+decided_on = "2026-08-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-251"

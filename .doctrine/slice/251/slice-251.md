@@ -83,13 +83,25 @@ They are not exclusive and the choice is a design decision, not a scoping one.
 Whichever lands must at minimum cover the omission that provoked this: `cursor` is
 reachable without reading source.
 
+**Settled by inquiry (2026-08-15), `DEC-224`.** Three renderings from one
+generator, not two: a `doctrine design contract [--format json|prompt]` verb (the
+schema surface, and the primary one); a one-line *pointer* in `design apply
+--help` rather than a full enumeration there; and a generated reference doc
+published into the library, sealed `customization = "fixed"` (`DEC-226`). The
+`cursor` omission is covered twice over — by the contract itself and by
+`DEC-228`, which corrects the worked example in place.
+
 ### 2. The contract is pinned against the types
 
-The contract is authored, not derived from the types by a proc macro — but a test
-must fail when the two drift. `SL-249`'s `I9` is the pattern: set-equality between
-the authored inventory and the serde key set of an exhaustively-constructed value.
-Generation *from* the types is a live alternative for `/design` to weigh; if it
-wins, the pin obligation is discharged by construction instead.
+A test must fail when the contract and the types drift. **Corrected by inquiry
+(2026-08-15), `DEC-221`:** the original "authored, not derived from the types by a
+proc macro" no longer holds as written. The pin splits by what it pins — enum
+token vocabularies are **generated**, on `SL-244`'s `condition_vocabulary!`
+pattern, because tier-2 equality has no oracle for a variant set; struct field
+sets stay **authored and literal-pinned**, on `SL-249`'s `I9` pattern, because
+there the exhaustive no-`..` literal already makes a new field a compile error at
+the pin. `DEC-221` is held loosely at the user's direction: this is type-design
+detail the implementing agent may overturn on evidence.
 
 ### 3. Totality across the act vocabulary
 
@@ -100,6 +112,16 @@ A contract surface keyed naively off `WRITER_ACTS` would therefore ship a payloa
 field no caller can discover. Whether the existing table is extended, mirrored, or
 left alone beside a new one is a design decision; that the surface is **total over
 the payload** is a scope commitment.
+
+**Settled by inquiry (2026-08-15), `DEC-227`.** Totality is the full recursive
+wire closure rooted at `ApplyRequest` — roughly twelve wire-participating structs
+plus the enums they admit, including `AgentAct` over in `attestation.rs`. Not
+top-level only: both failures observed during this slice's own design run were
+nested (an unknown key on `Declaration`; `AgentAct`'s external tagging inside
+`agent_declaration`), so a top-level contract would have prevented neither. The
+closure's boundary is reachability, which is mechanically checkable, rather than
+a judgement about what counts as internal — the same class of judgement that made
+`WRITER_ACTS` the wrong axis.
 
 ## Non-Goals
 
@@ -137,6 +159,21 @@ job:
   narrative on `DEC-122`'s pattern.
 - `src/design_run/tests.rs` — the drift pin.
 
+Added by inquiry (2026-08-15), from the decisions above:
+
+- `src/design_run/attestation.rs` — `AgentAct` and `ActKind` are inside
+  `DEC-227`'s closure, so the contract crosses into this module. Both it and
+  `submission.rs` are leaf tier, so no layering edge is created.
+- `src/commands/design.rs` — `DEC-224`'s verb, `DEC-225`'s wrap of the payload
+  parse refusal at the `serde_json::from_str` site, and the `--help` pointer.
+- `publication/manifest.toml` and `src/publication.rs`'s vocabulary —
+  `DEC-224`'s published doc and `DEC-226`'s `customization = "fixed"`.
+- **Layering constraint, corrected.** `ADR-001` classifies `design_run` as
+  **leaf, out-degree 0** (`layering.toml:31`), not engine tier as first triaged.
+  The contract table and its renderer must therefore be pure and import nothing
+  from the crate; embedding, publication and CLI attachment sit above them in
+  command tier.
+
 ## Risks, assumptions, open questions
 
 - **R1 — a second description of the payload that can go stale.** The whole point
@@ -150,14 +187,24 @@ job:
 - **A1 — no v1 envelope wire change is needed.** Assumed on `IMP-390`'s own
   reading of `DEC-064`; if `/design` finds a chosen shape needs one, that is a
   `/consult`, because it would import the cost this slice was carved to avoid.
-- **OQ-1 — generated or authored?** The user's framing offers both and calls the
-  authored-plus-drift-test the `SL-249`-shaped answer. `/design` decides.
-- **OQ-2 — one surface or two?** Schema dump and `--help` enumeration serve
-  different callers (a machine assembling a payload; an agent orienting). Whether
-  both ship, or one, is open.
-- **OQ-3 — does the contract carry semantics or only shape?** `Declaration::WIRE_KEYS`
-  carries a key's *home kind*, not just its name, and that is what made `ISS-318`'s
-  refusal nameable. How much of that register the act contract carries is open.
+- **R2 — answered (2026-08-15) by `DEC-225`.** The contract's *address* is pushed
+  into the payload parse refusal and into the turn envelope's no-drop region; the
+  body stays behind the fetch verb, which is what keeps `DEC-064`'s byte budget
+  intact. Injecting the full contract into `resume`'s `contract_section` channel
+  was weighed and declined, not foreclosed — it is the recorded escalation if
+  cold-re-entry agents prove to fail before fetching.
+- **OQ-1 — resolved (2026-08-15) by `DEC-221`.** Neither purely generated nor
+  purely authored: the pin splits by what it pins. Note the framing itself was
+  re-cut before the decision — research established the real fork was tier 2
+  (serde-key-set equality against an exhaustive literal) versus tier 3
+  (single-source generation), with tier 1 (hand-written test-copy set-equality)
+  excluded because it is blind to the failure it claims to prevent.
+- **OQ-2 — resolved (2026-08-15) by `DEC-224`.** Three renderings, one generator.
+  See § 1 above.
+- **OQ-3 — resolved (2026-08-15) by `DEC-219`.** Shape *and* engine semantics: key,
+  type, required/optional, owning act, and the token vocabulary of every enum a
+  key admits, including serde tagging style. No per-act narrative asset; that
+  option is deferred on `DEC-122`'s pattern, not rejected.
 
 ## Verification / closure intent
 

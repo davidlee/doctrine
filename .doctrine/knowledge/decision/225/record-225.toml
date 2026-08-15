@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 225
+slug = "contract-address-pushed-into-refusal-and-envelope"
+title = "Contract address pushed into refusal and envelope"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-15"
+updated = "2026-08-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = """DEC-224 settled which renderings exist; nothing yet said how a caller reaches one. The repo has a stated position on exactly this trade. `refusal.rs:483` explains why gate refusals carry remedy text rather than naming an unmet condition alone — the remedy is a total function of the condition, `which is what lets a caller refused at the top edge on a bottom edge's condition act on it without fetching anything`. That is push over pull, argued in the repo's own words, and a fetch-only contract would fall short of it. Meanwhile the payload parse site carries no remedy seam at all: `design.rs:1504` is a bare `serde_json::from_str(payload).context("parse the apply payload as JSON")?`, so both failures observed during this design run — an unknown key on `Declaration`, and `AgentAct`'s external tagging — surface as raw serde text pointing nowhere."""
+choice = "Push the contract's address at two points. (1) Wrap the parse refusal at `design.rs:1504` so a payload that fails to deserialise names where the wire shape is documented — the caller is told at the moment of failure, meeting the standard `refusal.rs:483` sets. (2) Add a one-line pointer to the turn envelope's no-drop region beside `DECLARATION_EXAMPLE`, so a caller reaches the contract before failing rather than after. The address only is pushed; the contract body stays behind the fetch verb."
+alternatives = ["Fetch-only, relying on DEC-224's verb, `--help` pointer and library doc for discovery. Rejected on the repo's own precedent: a refusal that names a wire problem without saying where the wire shape is documented is the defect this slice exists to close.", "Injecting the full contract body into `resume`'s projection, riding `contract_section`'s pattern with a `--known-*` suppression flag (the candidate deferred here from inq-2). Rejected: it spends the envelope budget DEC-064 exists to protect in order to save a caller one invocation, when a pointer does the same work. Not rejected in principle — if measurement later shows cold re-entry agents routinely fail before fetching, this is the escalation, and `contract_section` is the seam it would ride."]
+rationale = "Push the address, pull the body. The address is small enough to ride every refusal and every turn; the body is not, and DEC-064's byte discipline is the reason. Both insertion points are measured rather than assumed: the parse site is where the two observed failures actually landed, and `DECLARATION_EXAMPLE` is under 320 bytes against a 1024 bound inside a 24576-byte normal budget, so a ~60-byte pointer is affordable and, being in the no-drop set, un-elidable."
+consequences = ["The parse path gains its first remedy seam, so payload deserialisation refusals join the gate refusals in being actionable without a round trip.", "inq-8 becomes concrete rather than hypothetical: the pointer sits beside `DECLARATION_EXAMPLE`, in the same no-drop region, and the example's known defect — it omits `cursor` — is now adjacent to new content.", "Envelope byte cost is ~60 of 24576, measured against the existing bound rather than estimated.", "The contract body never rides the turn, so A1 (no v1 envelope wire change) holds."]
+decided_by = "user"
+decided_on = "2026-08-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-251"

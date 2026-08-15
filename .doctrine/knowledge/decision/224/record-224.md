@@ -1,0 +1,5 @@
+# DEC-224: Contract ships as verb, help pointer, and library doc
+
+<!-- Knowledge record body — context, detail, links. The structured, queried
+     fields live in the sister `record-NNN.toml`; this prose is free-form and is
+     never structurally parsed (the storage rule). -->

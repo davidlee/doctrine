@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 228
+slug = "worked-example-kept-corrected-and-parse-pinned"
+title = "Worked example kept, corrected, and parse-pinned"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-15"
+updated = "2026-08-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "`DECLARATION_EXAMPLE` (`render/envelope.rs:75`) is the copyable one-line next-mutation example in the turn envelope's no-drop set, under 320 bytes against a 1024 bound. DEC-225 places the contract's address beside it. It covers two acts of ten and omits `cursor`, and its doc comment (IMP-402) argues explicitly against trimming it as a byte saving."
+choice = "Keep it, correct it, and pin it. Add `cursor` to its traversal fragment (~15 bytes, well inside the bound). Add a test asserting the constant deserialises as a valid `ApplyRequest`, so the hand-written example cannot drift from the contract it illustrates."
+alternatives = ["Shrink it to a pointer now that the contract exists. Rejected: it spends the example's proven value — copyable without a fetch, which is DEC-225's own push-the-address logic — to save bytes nobody is short of, and IMP-402 argues against exactly this trade.", "Drop it from the no-drop set. Rejected for the same reason, more strongly: the no-drop membership exists because half a contract is worse than none."]
+rationale = "The example and the contract do different jobs — one is copyable at zero cost, the other is total — so the contract's arrival does not make the example redundant. But an illustration that omits a key is a defect once a total contract exists to contradict it, and a hand-written example beside a generated contract is a STD-001 drift risk. The parse pin closes that without attempting to generate a worked example, which is the hard and unnecessary version."
+consequences = ["The example still shows two acts of ten; DEC-225's adjacent pointer covers the rest, which is the division of labour the pair is for.", "The parse pin is a test, not a compile-time assertion, since deserialisation is not const. It sits beside the existing compile-time length assertion.", "Envelope byte cost of this decision is ~15, on top of DEC-225's ~60, against a 1024-byte example bound and a 24576-byte normal budget."]
+decided_by = "user"
+decided_on = "2026-08-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-251"

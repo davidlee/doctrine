@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 224
+slug = "contract-ships-as-verb-help-pointer-and-library-doc"
+title = "Contract ships as verb, help pointer, and library doc"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-15"
+updated = "2026-08-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-219 fixed what a contract row carries and DEC-221 fixed what pins it against the types; what remained was how many surfaces render it. Four candidates were live: a fetch verb, an enumerating `design apply --help`, a generated reference doc published into the library, and injection into `resume`'s existing `contract_section` channel (`commands/design.rs:2343`, suppressed by `--known-contracts`). Research claim X3 — that the published doc is the only form reaching an installed client project with no source — was checked and retracted: a client project installs the binary, and under ADR-019 reference docs are published rather than projected, so both the verb and the doc are binary-mediated and neither has a reach advantage over the other."
+choice = "Three renderings, one generator. (1) A fetch verb, `doctrine design contract [--format json|prompt]`, on `design show --format json`'s precedent — the primary surface, sufficient on its own for the measured cost. (2) A one-line pointer in `design apply --help` naming that verb — no enumeration in help output. (3) A generated reference doc embedded and published into the library, on `artifact.rs`'s pattern: render function, golden test pinning it to the embedded bytes, `#[ignore]`d regeneration test, `publication/manifest.toml` entry. All three render from one generator over the const contract table, per STD-001; none restates another."
+alternatives = ["The fetch verb alone. Rejected by the user: the contract is the kind of thing the library should contain, and the library index is browsed by agents who do not yet know the verb exists. The cost is one render function on a pattern the repo already runs.", "A full enumeration in `design apply --help`. Rejected: clap derive wants literals, so a generated table means builder-side injection, and the enumeration would bloat help output with content the fetch verb already serves better. Reduced to a pointer.", "Injection into `resume`'s `contract_section` channel. Not rejected — deferred to inq-7, which owns discoverability. It is a delivery mechanism rather than a rendering, and `contract_section` is keyed off stage-advance edges, so a payload contract cannot ride it literally; the reusable part is the pattern (a suppressible block negotiated by a `--known-*` flag)."]
+rationale = "The verb discharges the scope's fetchability requirement and the measured cost by itself; the pointer costs a line and answers half of inq-7; the library doc buys index-level discoverability at the price of a second surface, which STD-001 makes safe by forcing both through one generator. Adding the doc is a discoverability call the user made explicitly, not a reach argument — X3's reach claim does not survive."
+consequences = ["The generator is now load-bearing for three consumers, so inq-6's totality argument covers all three at once.", "A new embedded asset and a manifest entry. ADR-019 stays unengaged: `install/` is already a RustEmbed root, so no `flake.nix` graft is required.", "SPEC-029's `start, show, apply, resume` prose goes stale on the fifth verb — a prose update, not an amendment.", "The golden test is the drift pin for the doc rendering, layered over DEC-221's pins on the table itself.", "inq-3 (where the verb attaches on the CLI) and inq-9 (sealed or overridable) are unblocked, and inq-9 now has a concrete subject: the published doc is the prose that ships, so DEC-102's sealing question is live rather than hypothetical."]
+decided_by = "user"
+decided_on = "2026-08-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-251"

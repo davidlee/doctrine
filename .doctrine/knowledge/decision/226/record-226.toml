@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 226
+slug = "published-contract-doc-ships-fixed-not-customizable"
+title = "Published contract doc ships fixed, not customizable"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-15"
+updated = "2026-08-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-224 ships a generated reference doc into the published library, which makes the sealing question live rather than hypothetical. `publication.rs:86` carries a two-member `CustomizationStatus` vocabulary — `customizable` / `fixed` — required per manifest entry and parsed fail-closed (an unknown value is refused, `publication.rs:394`). DEC-102 and DEC-122 hold that where the engine enforces a claim, a client override of that claim is false rather than merely different."
+choice = 'The published contract doc ships `customization = "fixed"`. A client project may read it and may stop reading it, but may not edit it.'
+alternatives = ["""`customization = "customizable"`, letting a client project amend the doc for local conventions. Rejected on DEC-102/DEC-122: the doc's content is a rendering of what the binary's deserialiser actually accepts, so a client edit does not express a local preference — it states something false about the engine, and the caller who believes it constructs a payload that is refused.""", "Shipping no prose at all, sidestepping the question. Already foreclosed by DEC-224."]
+rationale = "Sealing follows from what the prose is. Contract text is derived from the types, not authored opinion, so there is no editorial axis for a client to hold a different position on. This also keeps IMP-372's override seam out of the slice, which was the reason the question was asked."
+consequences = ["IMP-372's override machinery stays out of scope.", 'One manifest entry with `customization = "fixed"`; the vocabulary already exists, so no new engine-tier concept is introduced.', "A client project wanting local payload guidance writes its own document beside the published one rather than editing it."]
+decided_by = "agent"
+decided_on = "2026-08-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-251"
