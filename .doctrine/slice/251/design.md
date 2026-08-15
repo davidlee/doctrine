@@ -155,12 +155,14 @@ pub(crate) struct KeyContract {
 /// A struct or enum on the wire, named so a refusal and the contract agree.
 pub(crate) struct TypeContract {
     pub(crate) name: &'static str,
-    pub(crate) unknown_keys: UnknownKeys,
     pub(crate) form: TypeForm,
 }
 
 pub(crate) enum TypeForm {
-    Struct(&'static [KeyContract]),
+    Struct {
+        unknown_keys: UnknownKeys,
+        keys: &'static [KeyContract],
+    },
     Enum {
         tagging: Tagging,
         variants: &'static [VariantContract],
@@ -173,6 +175,21 @@ put it on the type and gave `Tagging` a `NotTagged` variant for structs. A struc
 has no tagging; `TypeForm::Struct` already says so, and a field whose only job is
 to be meaningless on half its inhabitants is a slot for a wrong answer rather than
 a fact. Moving it removes the variant and the question together.
+
+**`unknown_keys` sits inside `Struct`, for the same reason and found the same
+way.** An earlier draft put it on `TypeContract` beside `form`, which obliged all
+fourteen enums in the closure to carry a value for it. `Stage` is a fieldless
+externally tagged enum with no key surface at all, so there is no answer it could
+give that would be true. That is the `NotTagged` defect one paragraph up,
+committed in the other direction and one field over — and the repair is the same:
+the field belongs to the inhabitants the question is meaningful for. Unknown keys
+are a **struct** property here, and mechanically so. `deny_unknown_fields` is a
+serde *container* attribute, and exactly three types in the closure carry it —
+`Declaration` (`submission.rs:123`), `CheckpointActDeclaration` (824) and
+`AgentActDeclaration` (854) — all three structs. No enum in the closure denies.
+If one ever does, the field goes on `TypeForm::Enum` and not on
+`VariantContract`, because serde makes it a property of the container rather than
+of the arm.
 
 **Every row slice stays `&'static`, and that is a consequence rather than a
 wish.** An intermediate draft made all three of them `Cow<'static, [_]>`, on the
@@ -368,18 +385,24 @@ somewhere better.
 pub(crate) enum UnknownKeys {
     Refused,            // deny_unknown_fields — a misspelt key is a refusal
     SilentlyDropped,    // serde(flatten) forbids deny_unknown_fields — ISS-333
-    StoredThenFlagged,  // accepted and persisted, reported later by `doctor`
 }
 ```
 
-**Three states, not two, and the third is not a wire struct's.** An unrecognised
-*facet* key is accepted, written to the record, and surfaces afterwards as a
-`doctor` inert-facet-key finding (`doctor_checks.rs:161-175`). That is neither
-of the first two, and `SilentlyDropped` is wrong for it in exactly the direction
-the paragraph below says is expensive — the key is stored, which is the reading
-`SilentlyDropped` exists to exclude. `StoredThenFlagged` is carried by `sec-3`'s
-selector table rather than by any `TypeContract`, so the twelve wire structs
-still range over the first two alone.
+**Two states, and an earlier draft's third was false.** That draft added
+`StoredThenFlagged` — *accepted, written to the record, reported afterwards by
+`doctor`* — for `sec-3`'s facet keys, and made the selector table its only
+inhabitant. It describes behaviour this codebase does not have. An unrecognised
+facet key on a `create` disposition is **refused**: `plan_facet_edits` returns
+`FacetEditRefusal::UnknownField` when no `facet_fields(kind)` row matches
+(`knowledge.rs:1233-1247`), and the apply path calls it inside `plan_checkpoints`,
+which runs before `execute_mint` — so the refusal lands before an id is reserved
+(`commands/design.rs:985`). `doctor`'s inert-facet-key check reports the
+**authored corpus**, not this seam, and says where the line falls in its own doc
+comment: it is a warning there "because the design-run seam's equivalent is a
+refusal" (`doctor_checks.rs:141-148`). A contract that had shipped
+`StoredThenFlagged` would have sent a caller hunting for a write that never
+happened — the same class of harm `SilentlyDropped` exists to prevent, inverted.
+`sec-3` carries the correction where it lands.
 
 **The name is the contract here, and a bool would have been the wrong type.**
 `denies_unknown: false` is readable two ways — *accepted and stored*, or
@@ -421,13 +444,10 @@ This slice does not repair the mechanism — an explicit Non-Goal — it stops t
 mechanism from being a secret. The ordering is deliberate: be truthful about the
 protocol now, and change the protocol later. When every wire struct refuses —
 the eight attribute-only cases as well as `ISS-333`'s flatten — `SilentlyDropped`
-has no members among them, `TypeContract::unknown_keys` collapses to a single
-value, and the field can be deleted outright. `StoredThenFlagged` survives that
-collapse on the selector table, because it records when a value is *checked*
-rather than whether a key is refused — a different fact, which is why `sec-3`
-carries it somewhere else. A contract that had quietly implied uniform
-refusal would instead have been wrong for the whole intervening period, and
-wrong in the direction that costs a caller a revision to discover.
+has no members left, `TypeForm::Struct`'s `unknown_keys` collapses to a single
+value, and the field can be deleted outright. A contract that had quietly implied
+uniform refusal would instead have been wrong for the whole intervening period,
+and wrong in the direction that costs a caller a revision to discover.
 
 ## Naming, and why the type names ship
 
@@ -449,6 +469,21 @@ It is also what `VariantPayload::Inlines` carries. `Dispose::Create`'s rendering
 — *`create` → `CreateRecord`'s keys, inlined* — needs the name, and taking it
 from the pointed-at `TypeContract` means the variant row and the type row cannot
 disagree about what the inlined type is called.
+
+**And the name is tied to the type rather than merely spelled beside it.** A
+`&'static str` holding `"AgentAct"` is a second spelling of an identity the
+compiler already owns. Rename the Rust type and that literal, every `Named` edge
+reaching it and every JSON key derived from it stay perfectly consistent with
+each other and go wrong together — the refusal then cites one vocabulary and the
+contract another, which is the single failure this subsection exists to prevent.
+Internal consistency is not the property wanted here; agreement with the source
+is. Two seams supply it, each where the type identity is already in hand. The
+enums get theirs by construction: `payload_variants!` (`sec-4`) is invoked with
+the type, so it emits a `stringify!` of that identifier rather than a
+typed-again literal. The structs get theirs by assertion: `assert_keys_described`
+(`sec-8` pin 1) already receives both the value and its contract, so it also
+compares `name` against `T`'s own name. Neither adds a mechanism; both stop an
+identity the site already holds from being retyped.
 
 ## The root, and what it does not include
 
@@ -613,10 +648,16 @@ pub(crate) enum FieldShape {
 ```
 
 (`knowledge.rs:860-875`, `1028`.) `RecordFacet` is a typed enum-of-structs, one
-variant per kind, deliberately *not* an untyped bag; the three closed facet
-value-enums (`Confidence`, `Basis`, a constraint's `source`) each carry a `KNOWN`
-set, and `FieldShape::Closed` takes its tokens from that set rather than a
-retyped literal, on `STD-001`.
+variant per kind, deliberately *not* an untyped bag; **four** closed facet
+value-enums each carry a `KNOWN` set — `Confidence::KNOWN` (on both the
+assumption and evidence rows), `Basis::KNOWN` (assumption),
+`ConstraintSource::KNOWN` (constraint) and `Provenance::KNOWN` (evidence,
+`knowledge.rs:993-1007`) — and `FieldShape::Closed` takes its tokens from that
+set rather than a retyped literal, on `STD-001`. An earlier draft of this
+sentence counted three and lost `Provenance`; the mapping is generic over
+`FieldShape` and never enumerated them, so nothing downstream was built on the
+miscount, but a design that claims to have traced the source has to have traced
+it.
 
 The correspondence with `sec-2`'s model is close enough to be suspicious, and it
 is not a coincidence — both are describing the same wire. `FieldShape::Text` and
@@ -691,7 +732,8 @@ pub(crate) struct SelectorTable {
     pub(crate) source: &'static str,          // "knowledge::RecordKind"
     /// Each admissible value of the selecting field, with the keys it opens.
     pub(crate) rows: Vec<SelectedKeys>,
-    /// `StoredThenFlagged` here, and this is the only inhabitant of it.
+    /// `Refused` — an unknown facet key is rejected before the mint, not stored
+    /// (`knowledge.rs:1233`).
     pub(crate) unknown_keys: UnknownKeys,
 }
 
@@ -702,17 +744,16 @@ pub(crate) struct SelectedKeys {
 ```
 
 A first draft of this section made it an enum-form `TypeContract` with seven
-variants, and that was wrong three times over in the same shape. There is no
-tagged union here, so no `Tagging` value is true of it — not `Internal`, since
-there is no tag key; not `External`, since facet keys do not nest under the kind
-token; not `Untagged`, since the rows do carry tokens. `TypeContract::name` is
-defined one section up as the Rust type name a refusal will cite, and nothing
-here is a type a refusal ever names. And `unknown_keys` had to be given a value
-that `sec-2`'s two-variant enum could not supply truthfully. `sec-2` deleted
-`Tagging::NotTagged` on the argument that a field meaningless on some of its
-inhabitants is a slot for a wrong answer; pressing this region into `TypeForm`
-would have re-created that inhabitant one section later, which is why it gets a
-type of its own instead.
+variants, and that was wrong twice over in the same shape. There is no tagged
+union here, so no `Tagging` value is true of it — not `Internal`, since there is
+no tag key; not `External`, since facet keys do not nest under the kind token;
+not `Untagged`, since the rows do carry tokens. And `TypeContract::name` is
+defined one section up as the Rust type name a refusal will cite, while nothing
+here is a type a refusal ever names. `sec-2` deleted `Tagging::NotTagged` on the
+argument that a field meaningless on some of its inhabitants is a slot for a
+wrong answer, and moved `unknown_keys` into `TypeForm::Struct` on the same
+argument; pressing this region into `TypeForm` would have re-created that
+inhabitant one section later, which is why it gets a type of its own instead.
 
 Two consumers read the one table and neither can disagree with the other,
 because there is still only one list:
@@ -750,43 +791,81 @@ is missing. An absent extern contract has no such reading. It renders the region
 as nothing, silently, which is the discoverability failure itself rather than a
 degraded report of it.
 
-**A vocabulary that has moved.** Not drift, if the builder never copies. Built
-from `RecordKind::ALL` and `facet_fields(kind)` directly, an eighth kind or a new
-facet field flows through with no second list to update; `facet_fields` is a
-`const fn` whose match over `RecordKind` is already exhaustive, so a new kind is a
-compile error *there*, at the source, before it can be a silent omission here. And
-`FieldShape → WireType` written as a match with no wildcard arm makes a new
-`FieldShape` variant a compile error at the mapping.
+**A vocabulary that has moved.** Partly a compile barrier — and the part that is
+not was found by review rather than by drafting, so it is stated here at its real
+strength. Built from `RecordKind::ALL` and `facet_fields(kind)` directly, a new
+facet *field* flows through with no second list to update. `facet_fields` is a
+`const fn` whose match over `RecordKind` is already exhaustive, so a new *kind*
+is a compile error *there*, at the source, forcing someone to give it a facet
+row. And `FieldShape → WireType` written as a match with no wildcard arm makes a
+new `FieldShape` variant a compile error at the mapping.
+
+**What that barrier does not cover: `RecordKind::ALL` is not enum-derived.** The
+enum is declared at `knowledge.rs:60-68`; `ALL` is a hand-written
+`[RecordKind; 7]` two hundred lines away at `159-169`. Adding an eighth variant
+compels a `facet_fields` arm and compels nothing about `ALL`, so the builder —
+which *iterates* `ALL` — would emit a contract silently missing the new kind. The
+incumbent test cannot see it either: `record_kind_from_prefix_round_trips_each_kind`
+iterates `ALL` and asserts its seven prefixes are distinct
+(`knowledge.rs:3334-3341`), which is green over a stale `ALL` by construction.
+This is a pre-existing gap in the knowledge tier, not one this slice introduces,
+and repairing `ALL` is not in scope here. What is in scope is refusing to claim a
+barrier that is not there: `sec-8` pin 5's row-token equality therefore takes its
+oracle from an **exhaustive match over `RecordKind`** — `sec-4`'s own instrument,
+pointed at a knowledge-tier enum from a test — and never from `ALL`, which would
+compare the table against the same list that dropped the kind.
 
 **A mapping that dropped or reordered something.** This is the residue, and it is
-a test — `sec-8` pin 5. It is a far narrower claim than the one the first draft
-made: not *whether the vocabulary is the same vocabulary*, which the two barriers
-above now settle, but whether a total, compile-checked mapping was also a faithful
-one. That is the kind of thing a set-equality is actually good at.
+a test — `sec-8` pin 5. It is a narrower claim than the one the first draft made:
+not *whether the vocabulary is the same vocabulary* for the parts the barriers
+above do settle, but whether a compile-checked mapping was also a faithful one.
+That is the kind of thing a set-equality is good at.
 
-So the injected region is no longer the ladder's only test-only rung. It carries
-two compile barriers and one narrow fidelity test, which puts it within reach of
-what `DEC-221` buys elsewhere rather than conspicuously below it.
+So the injected region is no longer the ladder's only test-only rung, but it is
+not fully compile-held either, and the honest tally is one-and-a-half barriers
+rather than two. *A region nobody supplies* is closed outright. *A vocabulary
+that has moved* is closed for facet fields and for the `FieldShape` mapping, and
+open at `RecordKind::ALL`, where the iteration authority is hand-maintained. Pin
+5 therefore carries two claims rather than one — the mapping is faithful, and the
+kind set is the enum's — and it is sized in `sec-8` against both. That is below
+what `DEC-221` buys elsewhere, and saying so is the point: the gap is in the
+knowledge tier's own list, this slice does not repair it, and a reader who takes
+the region as fully compile-held would be relying on a barrier that is not there.
 
-## One thing the contract must say carefully
+## One thing the contract may say plainly
 
-`facet_fields` is enforced **post hoc, not at the write seam**. An unrecognised
-facet key is accepted by `create` and surfaces later as a `doctor` inert-facet-key
-finding (`doctor_checks.rs:161-175`). So the contract describes *what a kind
-owns*, not *what will be refused* — and it must say so, or it makes a promise
-about refusal that the write path does not keep.
+An earlier draft of this subsection had `facet_fields` enforced **post hoc, not
+at the write seam** — an unrecognised facet key accepted by `create` and
+surfacing later as a `doctor` inert-facet-key finding — and concluded that the
+contract could describe only *what a kind owns*, never *what will be refused*.
+That is not this codebase's behaviour, and the correction runs the other way.
 
-This is the same disclosure discipline `sec-2`'s `UnknownKeys` applies one level
-up, and it is carried by the same enum — but by its **third** state, not by
-either of the first two. `SilentlyDropped` would be affirmatively wrong here: the
-facet key is *stored*, which is the one reading `sec-2` argues that variant
-exists to exclude, and a caller told *dropped* would go looking for a write that
-did in fact happen. `StoredThenFlagged` says what occurs, and `SelectorTable` is
-its only inhabitant.
+**The write path refuses.** `plan_facet_edits` resolves every supplied edit
+against `facet_fields(kind)` and returns `FacetEditRefusal::UnknownField` on the
+first row it cannot find (`knowledge.rs:1233-1247`). The apply path calls it
+inside `plan_checkpoints`, which runs before `execute_mint` — the comment at the
+call site says so in terms: siting the validation in that walk is what makes
+*before any id is reserved* a property of existing structure rather than of a new
+guard (`commands/design.rs:985`). A bad facet key therefore refuses before
+anything is written and burns no id.
 
-Note that the disclosure survives every strengthening above: making the
-*description* drift-proof says nothing about when the *value* is checked, and
-conflating the two would be a new way to mislead a caller.
+**`doctor` is a different surface answering a different question.** Its
+inert-facet-key check reports the **authored corpus** — it scans each kind's
+record tree on disk — and its doc comment draws exactly this line: the check is a
+warning there "because the design-run seam's equivalent is a refusal"
+(`doctor_checks.rs:141-148`). Reading a corpus-hygiene warning as the design-run
+seam's behaviour is what produced the draft's inversion.
+
+So `SelectorTable::unknown_keys` is `Refused`, alongside the three wire structs
+that deny, and `sec-2`'s enum keeps two states rather than growing a third to
+hold this one. **The contract is stronger than the draft claimed**: `facet` is
+not an open bag with a late warning, it is a closed vocabulary checked before
+anything is written, and a caller can be told so without the contract promising
+more than the write path keeps.
+
+One thing does survive from the discarded reasoning, and it is the part worth
+keeping: making the *description* drift-proof says nothing about the *check*
+being over the same vocabulary. `sec-8` pin 5 is what holds those together.
 
 ## And one thing it does not claim at all: stage admissibility
 
@@ -866,20 +945,52 @@ non-exhaustive, which is a build failure.** That guarantee can be had without
 owning the definition.
 
 For each enum in the closure, the macro emits its token list *and* a dead
-exhaustive match over the real type:
+exhaustive match over the real type. **Where the type already owns its token
+vocabulary, the macro consumes that authority rather than retyping it** — six of
+the fourteen closure enums do, and each of those `as_str` bodies cites `STD-001`
+as its own reason for existing:
+
+| enum | authority |
+|---|---|
+| `Stage` | `Stage::as_str` (`mod.rs:147`) |
+| `ActKind` | `ActKind::as_str` (`attestation.rs:107`) |
+| `ReviewPolicy` | `ReviewPolicy::as_str` (`attestation.rs:221`) |
+| `ReviewDisposition` | `ReviewDisposition::arm` (`attestation.rs:597`) |
+| `Provenance` | `Provenance::label` (`inquiry.rs:55`) |
+| `InquiryLifecycle` | `InquiryLifecycle::as_str` (`inquiry.rs:78`) |
+
+All six are `const fn`, so the token array stays a const:
 
 ```rust
 payload_variants! {
-    Dispose {
-        Create      = "create",
-        Adopt       = "adopt",
-        Unresolved  = "unresolved",
-        NonDurable  = "non-durable",
+    // Six: the type names its own tokens; take them.
+    Stage via Stage::as_str { Exploring, Inquiring, Drafting, Reviewing, Locked }
+
+    // Six more: no authority exists, so this invocation is where the vocabulary
+    // is named for the first time — which STD-001 permits and in fact wants.
+    AgentAct {
+        BlockingSetDeclared = "blocking-set-declared",
+        DraftingReady       = "drafting-ready",
     }
 }
 ```
 
-expanding to a `VARIANTS: &[&str]` used by the contract table, plus:
+Three enums sit outside that split and are called out so the table is not read as
+covering them. `WireFacetValue` is `Untagged` and contributes no tokens at all.
+`Reviewer`, `Posture` and `Authority` have no `as_str`, so they take the naming
+arm above. And `Dispose` is the one genuine judgement: its four tokens are
+`DispositionForm::as_str`'s (`inquiry.rs:163`) exactly, but that is a **different
+type** whose vocabulary merely coincides, so consuming it would assert an
+equivalence nothing enforces. `Dispose` names its own four, and `sec-8` pin 4's
+round trip is what keeps them equal to serde's.
+
+An earlier draft of this subsection retyped every vocabulary, including all six
+above, and justified it by the round-trip test — treating a drift *detector* as a
+substitute for a single source. `STD-001` says the opposite in terms: when a
+constant for a value already exists, use it; do not paste the raw literal beside
+it. A test that catches the divergence still leaves two places to change.
+
+The macro expands to a `VARIANTS: &[&str]` used by the contract table, plus:
 
 ```rust
 const fn _pin(value: &Dispose) {
@@ -908,13 +1019,23 @@ a match with no bodies, so `R3`'s clippy blindness covers nothing that could hol
 a bug. Not one existing type definition moves, so the behaviour-preservation gate
 on shared machinery is satisfied by construction rather than by argument.
 
+**It also supplies the type's name, which is why `sec-2` can stop hand-spelling
+it.** The macro is invoked *with* the type, so `stringify!` on that identifier
+emits `TypeContract::name` for every enum in the closure. A rename is then a
+build failure at the match rather than a stale literal that every other pin
+agrees with.
+
 What it does *not* pin is that the token strings equal serde's actual renames. A
 `#[serde(rename_all = "kebab-case")]` type could have its variant renamed while
-the contract's literal stays put. That is a per-variant round-trip test —
-serialise a value of each variant, assert the token matches — and `sec-8` carries
-it. The exhaustiveness barrier guarantees the test has a case for every variant,
-which is what makes a round-trip test sufficient here and insufficient on its own
-elsewhere.
+the contract's tokens stay put. That is a per-variant round-trip test —
+serialise a value of each variant, assert the token matches — and `sec-8` pin 4
+carries it. The exhaustiveness barrier guarantees the test has a case for every
+variant, which is what makes a round-trip test sufficient here and insufficient
+on its own elsewhere. For the six enums that consume an existing `as_str`, this
+duplicates a guarantee the incumbent types already hold — each of those doc
+comments records that it "agrees with the serde rename by construction of the
+test that compares them" — and pin 4 covers all fourteen uniformly rather than
+carving out an exception it would have to keep current.
 
 ## The struct pin: `I9`, extended down the closure
 
@@ -940,14 +1061,16 @@ Two regions, both named rather than discovered later.
 
 **The injected sub-contract, and only part of it.** `sec-3`'s region is supplied
 by the command tier at render time, so no pin *inside* `design_run` can see its
-content. That is a smaller gap than it first looks, because `sec-3` closed the
-seam rather than the content: `ExternRegion` is a closed leaf-side enum resolved
-to its supply by exhaustive match, so *whether a named region is supplied* is a
-compile error above the leaf, and *whether the vocabulary is current* is settled
-by a builder that derives from `RecordKind::ALL` and `facet_fields` instead of
-copying them. What no compiler holds is whether that total mapping was also
-order- and content-preserving, and that is `sec-8` pin 5 — one narrow test, not
-the whole region.
+content. That is a smaller gap than it first looks, because `sec-3` closed most
+of the seam rather than the content: `ExternRegion` is a closed leaf-side enum
+resolved to its supply by exhaustive match, so *whether a named region is
+supplied* is a compile error above the leaf, and a builder that derives from
+`facet_fields` rather than copying it keeps the facet vocabulary current by
+construction. Two things no compiler holds. Whether that mapping was also order-
+and content-preserving — and whether the **kind** set is the enum's, since the
+builder iterates the hand-maintained `RecordKind::ALL` and a new variant is not
+forced into it (`sec-3`). Both are `sec-8` pin 5, which is two equalities for
+that reason and not one.
 
 **The published document.** Its pin is `artifact.rs`'s golden test, which
 compares `render_artifact()` against the committed file read **from disk at
@@ -963,12 +1086,17 @@ to it.
 |---|---|---|
 | Enum variant set | generated exhaustive match | compile |
 | Struct field set | exhaustive no-`..` literal (`I9`) | compile |
+| An enum's `TypeContract::name` | `stringify!` at the macro invocation | compile |
+| A struct's `TypeContract::name` | compared against `T` in the key-set pin | test |
 | Token ↔ serde rename | per-variant round trip | test |
-| Type and presence correctness | round trip per key | test |
+| Wire type correctness | JSON kind, plus each `Named` edge against its field's type | test |
+| Presence correctness | set-equality both ways, not a superset | test |
 | A named extern region is supplied | exhaustive match on `ExternRegion` | compile |
-| The extern vocabulary is current | derived from `RecordKind::ALL` / `facet_fields`, never copied | compile |
+| The extern facet vocabulary is current | derived from `facet_fields`, never copied | compile |
+| The extern **kind** set is the enum's | exhaustive match over `RecordKind` (`ALL` is hand-maintained) | test |
 | The extern mapping is faithful | set-equality against `facet_fields` | test |
 | Published document | golden against disk-source | test |
+| No repo-private id in shipped output | citation detector, positive control first | test |
 | The envelope's worked example | parses as a valid `ApplyRequest` (`DEC-228`) | test |
 
 <!-- doctrine:section sec-5 -->
@@ -1081,7 +1209,7 @@ The payload contract follows it — one line per key, indentation carrying the
 closure depth:
 
 ```
-payload ApplyRequest  unknown-keys: silently-dropped   (ISS-333 — a misspelt top-level key is discarded)
+payload ApplyRequest  unknown-keys: silently-dropped   (a misspelt top-level key is discarded, and the command still exits 0)
   run_uid          text                 required
   known_revision   integer              required
   declare          [Declaration]        optional
@@ -1125,7 +1253,23 @@ rendering the real thing rather than by reasoning about it.
 
 The parenthetical on `sparse` is the one place the rendering adds words the table
 does not carry, and it is a fixed string per `Presence` variant rather than per
-key — so it cannot drift row by row.
+key — so it cannot drift row by row. The `unknown-keys` parenthetical works the
+same way: one fixed string per `UnknownKeys` variant.
+
+**And no parenthetical cites a repo-private id.** An earlier draft rendered the
+root's line as `(ISS-333 — a misspelt top-level key is discarded)`, which would
+have shipped a doctrine-development issue id into every installed client — where
+`ISS-333` is either absent or, worse, that client's own unrelated issue. This is
+not a new rule to invent: `artifact.rs` already forbids it for the sibling
+generated asset, listing `ISS` among fourteen repo-private prefixes and giving
+the reason as ids that "resolve to an unrelated record, silently"
+(`artifact.rs:325-365`). `POL-002` is the standing form of the same constraint —
+shipped behaviour rests on doctrine-owned portable contracts, not on a host
+project's records. So the disclosure is rendered as behaviour a caller can act
+on, and the `ISS-333` citation stays where it belongs: in this design, in the
+source comment on `UnknownKeys::SilentlyDropped`, and in the issue itself. `sec-8`
+carries the detector as a pin, since the whole document and both renderings
+inherit the constraint rather than just this one line.
 
 ## What the whole thing costs, measured
 
@@ -1134,13 +1278,30 @@ longer an estimate: the full closure was rendered ahead of implementation
 (`.doctrine/slice/251/render-sample.md` §2) and comes to **202 lines / 8 826
 bytes** — 66 lines of structs, 70 of enums, 40 of the injected region, 26 blank.
 
-Two things follow. First, it is **~8.6× the 1024-byte cap the turn envelope
-already runs**, which confirms `A1` from a direction the assumption did not have:
-the contract could not ride the envelope even if `DEC-064` were resolved, so
-`sec-6`'s choice to push an *address* rather than the contract is forced rather
-than preferred. Second, there is no case for trimming — the cheapest fifth to cut
-is the injected region, which is the one part a caller cannot recover any other
-way and the only part that is wholly undocumented today.
+Two things follow, and the first was stated wrongly in an earlier draft. It read
+"~8.6× the 1024-byte cap the turn envelope already runs", and concluded that the
+contract *could not* ride the envelope, making `sec-6`'s address-not-body choice
+forced rather than preferred. The denominator was the wrong constant.
+`ENVELOPE_DECLARATION_EXAMPLE_BYTES = 1024` caps the **worked example**, one
+no-drop line (`render/mod.rs:117-124`); the envelope itself runs
+`ENVELOPE_NORMAL_BUDGET_BYTES = 24576` (`render/mod.rs:126-134`) — which this
+design already cites correctly two sections over, when pricing the 46-byte
+pointer (`sec-6`).
+
+Against the real ceiling, 8 826 B is **36% of the envelope budget**, and the
+sketch's saturated table already totals 15 576 B. So the body would *fit*, with
+about 174 B to spare at saturation, and the choice is **preferred, not forced**.
+It is still the right choice, on grounds that do not need a false number: the
+address costs 46 B on every turn where the body would cost 8 826 B on every turn,
+for content a caller needs once per session and can fetch on demand; and
+`DEC-064`'s budget exists to keep headroom available for design alternatives
+rather than to be consumed by the largest thing that fits. Saying *forced* when
+the honest answer is *preferred* would have made the decision look inevitable and
+left nobody able to re-open it on evidence — which is exactly what `OQ-B` is for.
+
+Second, there is no case for trimming — the cheapest fifth to cut is the injected
+region, which is the one part a caller cannot recover any other way and the only
+part that is wholly undocumented today.
 
 The one presentational thing the measurement did surface: the root's header line
 runs to 104 columns, over the 100 the rest of the corpus holds to. Shorten the
@@ -1203,7 +1364,8 @@ Four things, all above the leaf:
 1. building `ExternContracts` from `RecordKind::ALL` and `facet_fields` (`sec-3`),
    which requires importing both `design_run` and `knowledge` and is therefore
    only possible here — and building it by derivation rather than by hand, which
-   is what makes two of `sec-3`'s three drift risks compile barriers;
+   is what makes the supply and the facet vocabulary compile barriers, leaving the
+   kind list to `sec-8` pin 5 because `ALL` is hand-maintained;
 2. the `DesignCommand::Contract` variant, its clap `Args`, its `dispatch` arm and
    its `guard.rs:430` classification — the last two being compile errors until
    written;
@@ -1331,39 +1493,63 @@ placement. Cost is ~46 bytes against `ENVELOPE_NORMAL_BUDGET_BYTES = 24576`
 `DEC-224` reduced this to a pointer, and `sec-5` already argued why a pointer is
 not a `STD-001` exception. What remains is where the bytes live.
 
-The pointer rides the `Apply` variant's doc comment (`commands/design.rs:124-125`).
-Clap's derive splits a doc comment at the first paragraph — line one becomes
-`about`, the whole becomes `long_about` — so a second line costs nothing in
-`doctrine design --help`'s table and appears in `doctrine design apply --help`,
-which is where a caller reading about `--input` is standing.
+The pointer belongs in `Apply`'s long help (`commands/design.rs:124-125`), which
+is where a caller reading about `--input` is already standing. Clap separates the
+two altitudes — `about` for `doctrine design --help`'s table, `long_about` for
+`doctrine design apply --help` — so the pointer appears at the verb without
+widening the table above it.
 
-**The address could be single-sourced here. It is not, and the reason is cost
-rather than impossibility** — an earlier draft claimed the derive cannot take an
-expression, and that is false. Of the crate's **eighty** `#[command(…)]`
-attributes, seventy-six are `subcommand` (46) or `flatten` (30), and three of the
-remaining four are a literal `name`/`about`, an `alias` and a `visible_alias`.
-The fourth is `compare.rs:75` —
-`group = clap::ArgGroup::new("response").required(true).multiple(false)` — an
-expression, because clap's derive forwards `key = expr` as a method call. So
-`long_about = <expression>` is available, and the earlier draft's own enumeration
-carried the counterexample filed under *literal*.
+**The address is single-sourced, and an earlier draft's reason for not doing so
+did not survive checking.** That draft kept a second hand-typed copy, on cost. It
+held that `long_about` *replaces* a doc comment rather than extending it, and
+that `concat!` cannot splice a `const &str` — both true — and concluded that
+single-sourcing therefore meant moving `Apply`'s entire long help behind a
+function returning `&'static str`: more machinery than the pin it removes, for
+one line on one verb.
 
-What is genuinely unavailable is *appending* to a doc comment. Every verb in
-`commands/design.rs` takes its help from one; `long_about` replaces a doc comment
-rather than extends it, and `concat!` cannot splice a `const &str`. Single-sourcing
-the pointer therefore means moving `Apply`'s entire long help out of its doc
-comment and behind a function returning `&'static str` — more machinery than the
-pin it removes, for one line on one verb. So the literal stays and `sec-8` pin 7
-holds it, on cost rather than on a limit of the macro.
+The conclusion does not follow from those premises. `long_about` takes any
+expression. `clap_derive` forwards `key = expr` as a method call (`compare.rs:75`
+is the in-crate proof, passing a `clap::ArgGroup`), `Command::long_about` accepts
+`impl IntoResettable<StyledStr>`, and `String` satisfies that through the blanket
+`impl<I: Into<StyledStr>>` (`resettable.rs:190`, `styled_str.rs:161`). A
+`format!` is the whole mechanism, and no function has to exist:
 
-`STD-001`'s force does not evaporate because an address is spelled twice; it
-relocates to a pin, the same move `sec-4` makes for the injected region.
-`render_subcommand_help(&["design", "apply"], …)` must contain
-`PAYLOAD_CONTRACT_POINTER` — the seam already exists, carries **five**
+```rust
+const APPLY_ABOUT: &str = "Validate and apply one sparse idempotent mutation.";
+
+#[command(
+    about = APPLY_ABOUT,
+    long_about = format!("{APPLY_ABOUT}\n\n{PAYLOAD_CONTRACT_POINTER}"),
+)]
+Apply(ApplyArgs),
+```
+
+The real cost is that one verb in `commands/design.rs` takes its help from two
+attributes rather than a doc comment. That is the whole price, and it buys the
+address exactly one home.
+
+**`STD-001` was never available to trade against that price.** The standard is
+`required`, and it says *when a constant for a value already exists, use it; do
+not paste the raw literal beside it*. Its single exclusion is a one-shot literal
+with no sibling constant, which this is not. The earlier draft's closing claim —
+that `STD-001`'s force "relocates to a pin" — has no basis in the standard's
+text: a drift detector reports a divergence, it does not remove the second place
+to change.
+
+**This is `A3`'s error class, second instance.** `A3` was retired for asserting,
+unchecked, that clap's derive cannot take an expression. The capability claim got
+corrected; the *cost estimate* resting on the same unverified reading of the
+macro did not, and it rode into the finished draft one subsection later. `sec-9`
+records the pattern, because the lesson is about the habit rather than about clap.
+
+`sec-8` pin 7 keeps a help rung, but a smaller one. With the address
+single-sourced there is no drift left to detect, so what remains is the ordinary
+assertion that the pointer reaches the rendered help:
+`render_subcommand_help(&["design", "apply"], …)` contains
+`PAYLOAD_CONTRACT_POINTER`. The seam already exists, carries **five**
 `help_snapshot_*` users (`main.rs:889-970`) across sixteen
 `render_subcommand_help` call sites, and one of those already takes the
-two-element path form this needs (`main.rs:1120`, `["memory", "sync"]`). `sec-8`
-carries it.
+two-element path form this needs (`main.rs:1120`, `["memory", "sync"]`).
 
 ## Where the pointer lives
 
@@ -1435,15 +1621,28 @@ between two routes to one answer, which is a cost with no matching benefit.
 | `src/commands/guard.rs` | `Contract(_) => Read` | 1 |
 | `install/design-payload-contract.md` | **new** — the generated document | rendered |
 | `publication/manifest.toml` | one `[[entry]]` | 7 |
+| `src/design_run/submission.rs` | `#[cfg(test)] fully_populated()` beside each wire struct it defines, plus `payload_variants!` invocations for the enums it owns | ~250 test-only |
+| `src/design_run/attestation.rs` | the same, for the closure members defined here (`AgentAct`, `ActKind`, `ReviewPolicy`, `ReviewDisposition`, `Reviewer`, `ReviewRef`) | ~80 test-only |
+| `src/design_run/inquiry.rs`, `traversal.rs`, `mod.rs` | `payload_variants!` invocations for `Provenance`, `InquiryLifecycle`, `Authority`, `Posture`, `Stage` | ~30 |
 | `src/design_run/tests.rs` + in-module tests | the pin ladder (`sec-8`) | ~400 |
 | `src/main.rs` tests | the help-pointer pin and the guard classification row (`sec-8`) | ~15 |
 
-**`submission.rs` and `attestation.rs` are read, not written.** Every wire type
-in `sec-3`'s closure keeps its current definition; the contract describes them
-from outside. This is what makes the behaviour-preservation gate on shared
-machinery vacuous here rather than argued — there is no behaviour to preserve
-because no behaviour is touched. The only additions near those types are the
-exhaustive `I9`-style literals, which live in tests.
+**No wire type's definition or behaviour changes — but four of their files are
+still written.** An earlier draft of this table listed `submission.rs` and
+`attestation.rs` as *read, not written* and omitted them entirely, which
+contradicted `sec-8` pin 1 in the same design: the fixtures it calls for sit
+"beside each type's definition", on `Declaration::fully_populated`'s precedent —
+and that precedent is a `#[cfg(test)] pub(super) fn` inside `submission.rs`
+(`submission.rs:653`), not something in `tests.rs`. A plan sequenced off the
+omission would have allocated no work to the files most of the closure lives in.
+
+What is true, and is what the earlier draft was reaching for: every addition to
+those files is `#[cfg(test)]` or a macro invocation that emits a token array and
+a dead match. Not one wire type's definition moves, and no production path
+changes, so the behaviour-preservation gate on shared machinery is vacuous here
+rather than argued — there is no behaviour to preserve because none is touched.
+The distinction the table now draws is *file written* versus *behaviour changed*;
+collapsing them is what lost the rows.
 
 ## Where the new module sits
 
@@ -1458,8 +1657,9 @@ Not under `render/` either: that tree projects a *run* into a turn envelope, and
 everything in it is keyed to a snapshot. The payload contract has no run — which
 is exactly the property `sec-6` spends on the verb needing no slice and no root.
 
-Out-degree stays inside `design_run`: `submission` and `attestation` for the
-`payload_variants!` match arms, and nothing else. `layering.toml:31` keeps
+Out-degree stays inside `design_run`: `submission`, `attestation`, `inquiry`,
+`traversal` and `mod` for the `payload_variants!` match arms and the six `as_str`
+authorities they consume (`sec-4`), and nothing else. `layering.toml:31` keeps
 `design_run = "leaf"  # out=0` unchanged, because an intra-module `use` creates no
 crate-level edge (`ADR-001`).
 
@@ -1509,8 +1709,9 @@ One field, `ExternRegion::KnowledgeRecord`: a `SelectorTable` with one
 `SelectedKeys` row per member of `RecordKind::ALL` (`knowledge.rs:161`), each
 carrying that kind's `facet_fields` rows in template order, mapped
 `Text → WireType::Text`, `List → Seq(Text)`, `Closed(tokens) → Token(Fixed(tokens))`,
-and `unknown_keys: StoredThenFlagged` on the whole table. Around 25 lines, no
-branching beyond that three-arm map.
+and `unknown_keys: Refused` on the whole table — the facet check rejects an
+unknown key before the mint (`sec-3`). Around 25 lines, no branching beyond that
+three-arm map.
 
 Two properties of those 25 lines are load-bearing rather than incidental, and
 `sec-3` rests on both. It **iterates** `RecordKind::ALL` and calls `facet_fields`
@@ -1551,9 +1752,14 @@ Three chains, stated as dependency rather than as a plan — phase boundaries ar
   existing root inherits the existing graft; adding a *root* would not.
 - **`layering.toml`** unchanged, per above.
 - **`ADR-001` / `STD-001` / `POL-002`** are the slice's `governed_by` set and all
-  three bind here: leaf purity (`sec-2`, `sec-5`), one generator for three
-  renderings plus a tested pin where a single source is inexpressible (`sec-6`),
-  and nothing host-project-specific in the shipped document.
+  three bind here. `ADR-001`: leaf purity, and the extern region injected as data
+  from the one tier that may import both (`sec-2`, `sec-3`, `sec-5`). `STD-001`:
+  one generator for three renderings, the six existing `as_str` authorities
+  consumed rather than retyped (`sec-4`), and the contract pointer named once and
+  read by all three surfaces (`sec-6`) — no rung of this slice spells a value
+  twice and pins the copies. `POL-002`: nothing host-project-specific in the
+  shipped document or either rendering, which is why no repo-private id reaches
+  them (`sec-5`, `sec-8` pin 10).
 
 ## Corrections this slice owes elsewhere
 
@@ -1608,6 +1814,15 @@ One body, **eleven** call sites. Each type gains a `#[cfg(test)] fn
 fully_populated()` beside its definition, on `Declaration::fully_populated`'s
 precedent (`submission.rs:653`) — an exhaustive literal with no `..`, so a new
 field is a compile error at the fixture before it can be a missing contract row.
+Those fixtures live in `submission.rs` and `attestation.rs` beside the types they
+populate, which is why `sec-7`'s touch-set lists both files as written.
+
+**The same call site also pins the type's name**, since it is the one place that
+holds both the contract and `T`. `contract.name` is compared against `T`'s own
+name, so a Rust rename fails here rather than leaving a stale literal that every
+`Named` edge and every JSON key agrees with (`sec-2`). The enums need no
+equivalent — `payload_variants!` emits their names by `stringify!` at the
+invocation, which is a compile barrier rather than a test.
 
 **`SubmissionEnvelope` is the twelfth member and cannot take that call site**, and
 an earlier draft claimed it could. The assertion is a set-equality between a
@@ -1651,9 +1866,34 @@ key parses as a `DesignId`. Under `MapKey::Extern` the keys are checked by pin 5
 not here, because the fixture cannot know which kind was selected.
 
 Catches the commonest table defect — a row whose `ty` was copied from the row
-above it. It does **not** separate `Text` from `Id` or `Token`, which are all
-strings on the wire: `Id` is pinned by the fixture's own `DesignId::parse`, and
-`Token` by pin 4.
+above it.
+
+**A JSON kind alone is too coarse for two of the eight `WireType`s, and an
+earlier draft stopped there.** It conceded that `Text`, `Id` and `Token` are all
+strings and pointed at the fixture's `DesignId::parse` and at pin 4 — but parsing
+the fixture's *value* as a `DesignId` says the value is an id, not that the row
+chose `Id` over `Text`, nor that the `IdKind` slice it advertises is the set the
+engine actually admits. And every `Named` target serialises as an object, so
+swapping `ApplyRequest.traversal` and `stage` between `TraversalDeclaration` and
+`StageDeclaration` (`submission.rs:926-932`) leaves the JSON kinds identical, pin
+1's key sets identical, and pin 9's names resolving and reachable. A materially
+false machine-readable contract stayed green under all of them.
+
+Two additions close it, both riding oracles already in the tree.
+
+- **A `Named` edge is checked against the field's real type**, not merely against
+  the name table: the walk recurses into the object and compares its key set with
+  the target `TypeContract`'s rows. A swapped edge then fails because
+  `TraversalDeclaration`'s keys are not `StageDeclaration`'s. This is pin 1's
+  assertion applied at the edge rather than at the type, so it costs a call and
+  no new fixture.
+- **`Id` rows are checked against `IdKind::declarable`** (`ids.rs:70-90`) where
+  the engine's admissible set is already computed, rather than against a slice
+  the table asserts about itself. `declare` admits five of the eight and
+  `AdoptAuthored.sections` admits `sec-` alone (`sec-2`), and those are the two
+  claims worth failing on.
+
+`Token` stays pin 4's, which reads the tagging and payload together.
 
 ## 3 — Presence: the all-null fixture
 
@@ -1664,10 +1904,23 @@ only `Omitted`, while `Option` fields drop on `is_none`. So a fixture with every
 `null` for **exactly** the sparse keys.
 
 - `{keys serialising to null}` == `{keys declared `Sparse`}`
-- `{keys present in a minimal value}` ⊇ `{keys declared `Required`}`
+- `{keys present in a minimal value}` == `{keys declared `Required`}`
+
+**The second is an equality, and an earlier draft had it as `⊇`.** That direction
+catches an optional field falsely declared `Required` and misses the converse
+entirely. `SubmissionEnvelope`'s three fields are the live case: `run_uid`,
+`known_revision` and `submission_id` are plain non-`Option` fields
+(`submission.rs:686-690`), so a minimal `ApplyRequest` emits all three no matter
+what the contract says about them. Re-declare any one as `Optional` and the
+declared-`Required` set merely shrinks — the superset still holds, pin 1 still
+sees the same key inventory, and every pin passes while the contract tells a
+caller they may omit a key the compare-and-swap depends on. The equality is the
+same cost and fails in both directions.
 
 Two fixtures, not twelve: only `Declaration` (`submission.rs:126-133`) and
-`TraversalDeclaration` (`731-736`) carry `Sparse<T>`.
+`TraversalDeclaration` (`731-736`) carry `Sparse<T>`. The minimal value the
+`Required` equality reads is a third, built by `Default` where the type has one
+and by omitting every non-mandatory field where it does not.
 
 ## 4 — Tokens against serde's renames, and why the coverage is total
 
@@ -1710,10 +1963,12 @@ pin already covers the facts it is derived from.
 ## 5 — The injected region: one narrow fidelity test
 
 `sec-3` used to name this the soft spot and concede it closed by test alone. It no
-longer does, and the pin shrinks accordingly. Two of the three drift risks are
-compile barriers now — a region nobody supplies cannot be spelled, and a
-vocabulary that moved flows through a builder that never copied it — so what is
-left for a test is the one thing a compiler cannot see.
+longer does, and the pin shrinks — though not as far as an intermediate draft
+claimed. A region nobody supplies cannot be spelled, and a moved *facet
+vocabulary* flows through a builder that never copied it: those two are compile
+barriers. The **kind** list is not one, because the builder iterates the
+hand-maintained `RecordKind::ALL` (`sec-3`). So two things are left for a test,
+and both are below.
 
 - **The mapping is faithful.** Per kind: the `SelectedKeys` row's key set equals
   `facet_fields(kind)`'s names in order, and each `Token` vocabulary equals
@@ -1721,15 +1976,22 @@ left for a test is the one thing a compiler cannot see.
   against `knowledge`'s tables directly, not against the builder that read them —
   what it pins is that a total, compile-checked mapping was also an order- and
   content-preserving one.
-- **The row tokens are the kind tokens.** `{the selector table's row
-  tokens}` == `{`RecordKind::ALL`'s tokens}`. One line, and it is what makes
+- **The row tokens are the kind tokens — and the oracle is the enum, not
+  `ALL`.** `{the selector table's row tokens}` == `{every declared `RecordKind`
+  variant's token}`, where the right-hand side comes from an **exhaustive match
+  over `RecordKind`** written in the test: `sec-4`'s own instrument, pointed at a
+  knowledge-tier enum. An earlier draft compared against `RecordKind::ALL`, which
+  is the hand-maintained array the builder already iterates (`knowledge.rs:159-169`),
+  so the pin would have agreed with the builder about a kind both had dropped —
+  and `sec-3` shows an eighth variant can be added with `ALL` left behind. The
+  exhaustive match makes that a build failure in this test instead. It also makes
   `CreateRecord.kind`'s `TokenSource::Extern` and `CreateRecord.facet`'s
-  `MapKey::Extern` provably the same seven kinds rather than two readings of one
-  list.
+  `MapKey::Extern` provably the same kinds rather than two readings of one list.
 
-This is still the ladder's weakest rung — a test where the rest has a compile
-error — but it is now weak about a narrow claim rather than about whether the
-region is the region.
+This is still the ladder's weakest rung — two tests where the rest has compile
+errors — but it is now weak about narrow claims rather than about whether the
+region is the region, and the second of the two covers a gap in the knowledge
+tier that this slice does not otherwise repair.
 
 ## 6 — The document
 
@@ -1744,8 +2006,10 @@ fails on an `install/` asset that is neither published nor flagged.
 ## 7 — The three pointer surfaces
 
 - **help** — `render_subcommand_help(&["design", "apply"], …)` contains
-  `PAYLOAD_CONTRACT_POINTER`. This is the pin `sec-6` owes for the one address
-  spelled twice; the seam already has five `help_snapshot_*` users
+  `PAYLOAD_CONTRACT_POINTER`. This is no longer a drift pin: `sec-6` single-sources
+  the address through `long_about = format!(…)`, so there is no second spelling to
+  diverge, and what remains is the ordinary reachability check that the pointer
+  actually renders. The seam already has five `help_snapshot_*` users
   (`main.rs:889-970`) and sixteen `render_subcommand_help` call sites, one of them
   already on the two-element path form (`main.rs:1120`).
 - **refusal** — a payload carrying an unknown key on `Declaration` is refused with
@@ -1793,6 +2057,23 @@ names `kind` as its selector, and `kind` must be a sibling key of the same type 
 a mis-typed selector is otherwise a promise no consumer can act on and no other
 pin reads.
 
+## 10 — No repo-private id reaches a shipped surface
+
+Every output this slice ships — `render_prompt`, `render_json` and the published
+document — must be free of per-repo sequential ids. In an installed client
+`ISS-333` is either absent or that client's own unrelated issue, and a citation
+that silently resolves to the wrong record is worse than a dangling one
+(`POL-002`).
+
+The detector already exists and is not reimplemented: `cites_a_repo_private_id`
+and its fourteen `REPO_PRIVATE_PREFIXES` are `artifact.rs:325-347`'s, written for
+the sibling generated asset. The assertion is lifted to cover all three
+renderings, and it carries `the_artefact_cites_no_repo_private_id`'s positive
+control first (`artifact.rs:360-370`) — fire the detector on a known citation,
+*then* assert the real output is clean — so a broken extractor cannot pass
+vacuously. `sec-5` fixes the line shape this pin protects; the pin is what stops
+the next parenthetical reintroducing one.
+
 ## Alignment with the slice's closure intent
 
 | Closure intent | Discharged by |
@@ -1800,8 +2081,9 @@ pin reads.
 | The contract is reachable from the binary without reading `src/`, `cursor` among it | pin 7 (three surfaces) + pin 1 (the closure includes `TraversalDeclaration`) + pin 8 |
 | A test fails if a payload field is added, removed or renamed without the contract following | pins 1 and 2, over the compile barrier |
 | The surface is total over the payload, not over `WRITER_ACTS` | pin 1 across all twelve closure members — eleven by contract, `SubmissionEnvelope` by the root's composition; pin 9 that every one of them reaches the rendering; nothing in the ladder reads `WRITER_ACTS` |
-| `facet` is discoverable rather than an open bag | pin 5's two equalities, over the compile barrier `sec-3` put under them |
+| `facet` is discoverable rather than an open bag | pin 5's two equalities — mapping fidelity over the compile barrier `sec-3` put under it, and the kind set against the enum because `RecordKind::ALL` is not one |
 | `ISS-333` option 3 discharged and recorded as such | not a test — a close-time statement, whose shipped half is `sec-2`'s `UnknownKeys::SilentlyDropped` |
+| Nothing doctrine-private ships to a client project | pin 10, over `artifact.rs`'s existing detector and its positive control |
 | `ISS-355` — a correct submission prints no change row either | not a test and not repaired here; recorded in `sec-2` as the reason the disclosure has to ride the contract rather than the response |
 
 ## Not pinned, deliberately
@@ -1848,10 +2130,21 @@ refutes it: `compare.rs:75` passes `clap::ArgGroup::new(…)` into `#[command(gr
 = …)]`, and clap's derive forwards `key = expr` as a method call throughout. What
 actually blocks single-sourcing is narrower and is not an assumption at all — a
 `long_about` expression *replaces* a doc comment rather than appending to it, and
-`concat!` cannot splice a `const &str`. `sec-6` now carries that as a cost
-judgement about one line of help on one verb. Nothing above depended on the
-assumption; what it cost was a rung on the ladder justified by the wrong reason,
-which is the more expensive kind of wrong to leave standing.
+`concat!` cannot splice a `const &str`. `sec-6` briefly carried that as a cost
+judgement about one line of help on one verb, and **that judgement was the same
+error a second time**: it assumed, still without checking, that single-sourcing
+required moving the whole long help behind a function. It does not —
+`long_about` accepts any expression that is `Into<StyledStr>`, so a `format!`
+suffices, and `sec-6` now single-sources the pointer. Nothing above ever depended
+on `A3`; what it cost was a ladder rung justified by the wrong reason, and then a
+`STD-001` deviation justified by a price that was never charged.
+
+**The class, stated once so it is findable:** an unverified claim about what a
+*tool* cannot do, load-bearing on a design decision. It is cheap to check and
+expensive to leave — the first instance bought an unnecessary pin, the second
+bought an unnecessary standards deviation, and both read as settled reasoning on
+the page. Where this design asserts a limit of clap, serde or cargo, it now cites
+the source that establishes it.
 
 **`A4` (new) — the closure is acyclic.** Checked in `sec-3`, and
 `WireType::Named(&'static TypeContract)` depends on it. A future payload type that
@@ -1887,13 +2180,21 @@ implementation and comes to **202 lines / 8 826 bytes**
 (`.doctrine/slice/251/render-sample.md` §2, and `sec-5` carries the composition).
 That is one fetch against `RFC-026 E8.7`'s measured fifteen source reads, which is
 a good trade at session scale, and it is small enough that no bound is worth
-designing in. The measurement also settled two things the risk could not: the
-render is ~8.6× the turn envelope's 1024-byte cap, which is why `sec-6` pushes an
-address rather than the contract; and the cheapest fifth to cut is the injected
-region, which is the one part a caller cannot recover any other way. So the risk
-is **retired as measured rather than carried** — if later evidence shows the full
-render is what stops agents fetching, the escalation is still a filter (`OQ-A`),
-not a smaller contract.
+designing in. The measurement also settled what the cheapest fifth to cut would
+be — the injected region, which is the one part a caller cannot recover any other
+way, so there is nothing worth trimming. So the risk is **retired as measured
+rather than carried**: if later evidence shows the full render is what stops
+agents fetching, the escalation is a filter (`OQ-A`), not a smaller contract.
+
+What the measurement does **not** settle is whether the body could ride the turn.
+An earlier draft said it could not, reading 8 826 B as ~8.6× "the turn envelope's
+1024-byte cap" — but that constant is `ENVELOPE_DECLARATION_EXAMPLE_BYTES`, the
+cap on one worked-example line, not the envelope. The envelope runs
+`ENVELOPE_NORMAL_BUDGET_BYTES = 24576` (`render/mod.rs:126-134`), so the body
+would fit, and `sec-6`'s address-not-body choice is **preferred rather than
+forced**. `sec-5` carries the corrected arithmetic and the grounds the choice
+actually rests on. The distinction is load-bearing for `OQ-B`: an escalation
+nobody can re-open is not an open question.
 
 ## Open questions
 

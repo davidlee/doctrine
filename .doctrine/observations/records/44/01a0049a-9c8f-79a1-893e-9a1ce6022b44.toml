@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0049a-9c8f-79a1-893e-9a1ce6022b44"
+recorded_at = "2026-08-15T08:47:16.623356003Z"
+kind = "friction"
+summary = "/feedback: review show prints no finding detail, so a responder cannot read the ledger it must dispose"
+detail = "Adjudicating RV-357's 12 findings needed each finding's title+detail. 'doctrine review show RV-357' prints derived status, the reviews edge and the brief body only — no findings. 'review list' is cross-review. The only route was 'review show --json' piped through a hand-written python walker to reach review.finding[]. The responder role is the one that must read every finding in full, and the table view omits exactly that. Cost: two exploratory calls plus a scratch parser before adjudication could start."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
