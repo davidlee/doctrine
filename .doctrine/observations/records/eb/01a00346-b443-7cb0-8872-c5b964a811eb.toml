@@ -1,0 +1,8 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00346-b443-7cb0-8872-c5b964a811eb"
+recorded_at = "2026-08-15T02:36:00.451423646Z"
+kind = "supersession"
+old_uid = "01a0031f-8c8e-7b63-ad98-8ca6dc52f9d0"
+replacement_uid = "01a00346-a766-7903-9536-adfcf3ac4da1"
+reason = "claimed the gate was inert; measurement showed next/blockers gate correctly and only the footer was false"

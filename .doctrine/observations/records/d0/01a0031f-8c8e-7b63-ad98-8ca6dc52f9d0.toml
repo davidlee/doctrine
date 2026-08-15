@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0031f-8c8e-7b63-ad98-8ca6dc52f9d0"
+recorded_at = "2026-08-15T01:53:14.382129486Z"
+kind = "friction"
+summary = "backlog: a cross-kind needs edge is accepted at write and silently dropped at order, with a footer that calls the live target 'absent'"
+detail = "doctrine backlog needs ISS-327 QUE-219 validates the ref and writes it. doctrine backlog list --by sequence then reports 'ISS-327 -> QUE-219 dropped (dangling: QUE-219 absent)' and contributes no ordering edge. QUE-219 exists. This directly defeats ADR-017's actionability gating on unsettled records: the gate is authored, validated, and then inert. Known and already scoped -- SL-238 (design), which names the same false 'absent' and the same silent discard for SL- prefixes. Recording because it now bites live gates rather than only stale done-slices, which raises SL-238's value."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

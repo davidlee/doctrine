@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00346-a766-7903-9536-adfcf3ac4da1"
+recorded_at = "2026-08-15T02:35:57.158816248Z"
+kind = "friction"
+summary = "backlog: list --by sequence called a live cross-kind prerequisite 'absent'; the gate itself was fine"
+detail = "Corrects 01a0031f-8c8e-7b63-ad98-8ca6dc52f9d0, which claimed the gate was inert. Measured after: 'doctrine next' gates QUE-218's four and QUE-219's five out of 378 actionable rows, and 'blockers ISS-327' names QUE-219. The actionability graph (priority/graph.rs) admits cross-kind edges; only backlog_order.rs cannot represent the target, since ItemId is (ItemKind,u32) over the five backlog prefixes. So the defect was one view's footer stating a falsehood, not a broken gate. The friction that cost real tokens was believing the footer: it is the loudest surface on that view and asserted the opposite of the truth, so diagnosing it meant reading three call sites. Interim fix landed 74b773690 (suppress the false lines); SL-238 still owns admission."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

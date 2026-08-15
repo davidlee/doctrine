@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0031f-7c16-73e2-887f-bec15e9bcdda"
+recorded_at = "2026-08-15T01:53:10.166208305Z"
+kind = "friction"
+summary = "backlog grooming: cluster tag is the dedup instrument, and three design-run items were re-filed because their predecessors were untagged"
+detail = "ISS-346 duplicates ISS-333 (2026-08-09 -> 2026-08-12), ISS-348 duplicates ISS-320 (2026-08-07 -> 2026-08-12), IMP-357 duplicates IMP-364 (same day). In each pair the later filer wrote a full, independently-researched record — so the cost is not the tag, it is the re-derivation. The earlier item was outside cluster:design-run in every case, so 'doctrine backlog list -t cluster:design-run' before filing would not have surfaced it. Suggests capture-time prompting toward a cluster tag, or a similarity check at 'backlog new'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
