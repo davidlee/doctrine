@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a008c1-c8bd-7a83-ad92-1b4b76ede925"
+recorded_at = "2026-08-16T04:08:32.701382063Z"
+kind = "friction"
+summary = "/design: no read verb for a knowledge record's prose body"
+detail = "Resuming SL-256 I needed the bodies of DEC-237/238/239. The guardrail says read entities via 'doctrine <kind> show <ID>', but the knowledge kind has no 'show' verb — its verbs are inspect/edit/status/settle. 'knowledge inspect' is documented metadata-only (no prose body) and returned relations + actionability only; 'doctrine inspect DEC-238' gave the same; 'doctrine explain DEC-238' gave scoring. Three commands, no prose. Net effect: the substance of a decision the run itself minted is unreachable through the CLI, so the fallback is reading raw MD, which the guardrails prohibit. Cost ~3 wasted calls; I proceeded from the slice scope and notes.md instead."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a008c1-d245-7822-bf72-8691a096ceb9"
+recorded_at = "2026-08-16T04:08:35.14159818Z"
+kind = "friction"
+summary = "/design: 'slice notes' is a writer, not a reader — third instance of the shape"
+detail = "Typed 'doctrine slice notes 256' expecting to read the slice's notes; got 'Error: Refusing to overwrite existing .../256/notes.md'. Correct refusal, but the verb reads as a noun-accessor. mem_019facc24ac576e0a4d9ace5b2eeb12f already records that 'slice plan' and 'slice phase' are writers with no read-back verb; 'slice notes' is the third member of that family, so the memory understates the pattern. Cost one turn plus a Read of the raw file."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
