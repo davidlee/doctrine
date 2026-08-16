@@ -1248,6 +1248,79 @@ fn probe_ref(root: &Path, target: &str) -> RefState {
     }
 }
 
+/// IMPURE. The RECORD projection, for `show` / `inspect` (§4): classify EVERY ref
+/// this item declares, keyed by the axis it was declared on. **Nothing is dropped**
+/// — a terminal target and an unresolvable ref are both part of the record, which
+/// is the divergence from [`probe_boundary`] that the two projections exist to
+/// carry (`DEC-234`).
+///
+/// Backlog-shaped refs are probed too, not filtered out ahead of the probe:
+/// `ISS-999` parses as an `ItemId` and still names nothing, and only resolving it
+/// says so. Which results earn a *rendered* annotation is the renderer's rule —
+/// see [`ref_annotation`], not this function.
+///
+/// Memoised per distinct ref (§4 `:826-827`), exactly as [`probe_boundary`] is: a
+/// ref declared on BOTH axes is probed once and keyed twice.
+fn probe_item_refs(root: &Path, item: &BacklogItem) -> BTreeMap<(Axis, String), RefState> {
+    let mut cache: BTreeMap<String, RefState> = BTreeMap::new();
+    let mut map: BTreeMap<(Axis, String), RefState> = BTreeMap::new();
+
+    let needs = item
+        .relationships
+        .needs
+        .iter()
+        .map(|r| (Axis::Needs, r.as_str()));
+    let after = item
+        .relationships
+        .after
+        .iter()
+        .map(|e| (Axis::After, e.to.as_str()));
+
+    for (axis, target) in needs.chain(after) {
+        let state = cache
+            .entry(target.to_string())
+            .or_insert_with(|| probe_ref(root, target))
+            .clone();
+        map.insert((axis, target.to_string()), state);
+    }
+    map
+}
+
+/// The RECORD view's rendering rule (§4's five rules), over one probed ref.
+///
+/// `render_ref_state` says what a state *is*; this says whether the record view
+/// **states** it. The one suppression is §4 rule 1: a resolvable backlog target's
+/// status is already carried by the rows of every listing the reader has, so
+/// repeating it here is noise. The second clause of that rule is why the
+/// suppression is narrow — a ref that resolves to *nothing* has no row anywhere to
+/// carry it, so `ISS-999` is annotated despite being backlog-shaped.
+///
+/// `Unreadable` is not a `Resolved` and so is never suppressed, and `Unavailable`
+/// cannot arise for a backlog kind (`DERIVED_STATUS` is `[RV]`); both therefore
+/// keep their `STD-003` disclosure under rule 5.
+fn ref_annotation(state: Option<&RefState>) -> String {
+    match state {
+        Some(RefState::Resolved { kind, .. }) if crate::kinds::BACKLOG.contains(&kind.prefix) => {
+            String::new()
+        }
+        Some(state) => render_ref_state(state),
+        None => String::new(),
+    }
+}
+
+/// Join a rendered ref to its annotation, appending **only when the annotation is
+/// non-empty**. `AuthoredStatus::Absent` renders the empty string (§4 — a
+/// status-less kind has no status to state), and a naive `format!("{base} {a}")`
+/// would freeze `SL-154 ` — with a trailing space — into a golden. PHASE-04's
+/// `O-2` was exactly this bug on the boundary line; one guard, both axes.
+fn annotated(base: &str, annotation: &str) -> String {
+    if annotation.is_empty() {
+        base.to_string()
+    } else {
+        format!("{base} {annotation}")
+    }
+}
+
 /// IMPURE. The LISTING projection: classify each distinct ref in `absent` and
 /// return the rows the footer discloses — deduplicated per `(dependent, target)`
 /// with axes joined, sorted by that same pair, terminal targets dropped, and
@@ -1610,6 +1683,7 @@ fn derive_fulfils_inbound(
 fn format_metadata(
     item: &BacklogItem,
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
+    ref_states: &BTreeMap<(Axis, String), RefState>,
     value_line: Option<&str>,
     estimate_line: Option<&str>,
 ) -> Vec<String> {
@@ -1709,7 +1783,18 @@ fn format_metadata(
             parts.push(format!("  drift: {}\n", drift.join(", ")));
         }
         if !rel.needs.is_empty() {
-            parts.push(format!("  needs: {}\n", rel.needs.join(", ")));
+            let rendered = rel
+                .needs
+                .iter()
+                .map(|r| {
+                    annotated(
+                        r,
+                        &ref_annotation(ref_states.get(&(Axis::Needs, r.clone()))),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            parts.push(format!("  needs: {rendered}\n"));
         }
         if !ref_implements.is_empty() {
             parts.push(format!(
@@ -1734,11 +1819,15 @@ fn format_metadata(
                 .after
                 .iter()
                 .map(|e| {
-                    if e.rank == 0 {
+                    let base = if e.rank == 0 {
                         e.to.clone()
                     } else {
                         format!("{} (rank {})", e.to, e.rank)
-                    }
+                    };
+                    annotated(
+                        &base,
+                        &ref_annotation(ref_states.get(&(Axis::After, e.to.clone()))),
+                    )
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
@@ -1769,10 +1858,11 @@ fn format_metadata(
 fn format_show(
     item: &BacklogItem,
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
+    ref_states: &BTreeMap<(Axis, String), RefState>,
     value_line: Option<&str>,
     estimate_line: Option<&str>,
 ) -> String {
-    let mut parts = format_metadata(item, fulfils_inbound, value_line, estimate_line);
+    let mut parts = format_metadata(item, fulfils_inbound, ref_states, value_line, estimate_line);
     parts.push(format!("\n{}", item.body));
     parts.concat()
 }
@@ -1781,10 +1871,11 @@ fn format_show(
 fn format_inspect(
     item: &BacklogItem,
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
+    ref_states: &BTreeMap<(Axis, String), RefState>,
     value_line: Option<&str>,
     estimate_line: Option<&str>,
 ) -> String {
-    format_metadata(item, fulfils_inbound, value_line, estimate_line).concat()
+    format_metadata(item, fulfils_inbound, ref_states, value_line, estimate_line).concat()
 }
 
 /// `doctrine backlog show <ID>` — reassemble metadata + prose body (PRD-009 REQ-051, §5.4). Thin
@@ -1806,7 +1897,13 @@ fn format_inspect(
 /// drops the estimation unit and the two confidence bounds — all three had been
 /// threaded to `format_metadata` and read by nothing since the `[estimate]` facet
 /// fallback was deleted.
-type BacklogTableFn = fn(&BacklogItem, &[FulfilsRef], Option<&str>, Option<&str>) -> String;
+type BacklogTableFn = fn(
+    &BacklogItem,
+    &[FulfilsRef],
+    &BTreeMap<(Axis, String), RefState>,
+    Option<&str>,
+    Option<&str>,
+) -> String;
 
 fn run_show_inspect(
     path: Option<PathBuf>,
@@ -1845,9 +1942,14 @@ fn run_show_inspect(
                 item.kind.prefix(),
                 &estimation_unit,
             )?;
+            // SL-238 PHASE-05 (§4, D-2): the RECORD projection over this item's own
+            // refs. Built inside the Table arm ONLY — `show_json` neither takes nor
+            // wants it, so `EX-4` holds by construction and `--json` pays no disk
+            // cost for a probe it will not render.
             format_table(
                 &item,
                 &fulfils_inbound,
+                &probe_item_refs(&root, &item),
                 value_line.as_deref(),
                 estimate_line.as_deref(),
             )
@@ -4149,7 +4251,7 @@ tags = []
         // a plain issue and an assessed risk, both reserved id 1 (independent trees).
         new_item(root, ItemKind::Issue, "Auth bug");
         let issue = read_item(root, ItemKind::Issue, 1).unwrap();
-        let issue_out = format_show(&issue, &[], None, None);
+        let issue_out = format_show(&issue, &[], &unprobed(), None, None);
         assert!(
             issue_out.starts_with("ISS-001 — Auth bug\n"),
             "identity line: {issue_out}"
@@ -4166,7 +4268,7 @@ tags = []
         // an assessed risk (seeded directly) shows its facet axes.
         write_assessed_risk(root, 1);
         let risk = read_item(root, ItemKind::Risk, 1).unwrap();
-        let risk_out = format_show(&risk, &[], None, None);
+        let risk_out = format_show(&risk, &[], &unprobed(), None, None);
         assert!(risk_out.starts_with("RSK-001 — Token expiry\n"));
         assert!(risk_out.contains("[facet]"), "risk shows the facet block");
         assert!(risk_out.contains("likelihood: high"));
@@ -4195,6 +4297,7 @@ tags = []
         let out = format_show(
             &item,
             &[],
+            &unprobed(),
             Some("value: 42.0 magic_beans (human claim, ada, 2026-07-16)"),
             None,
         );
@@ -4221,6 +4324,7 @@ tags = []
         let out = format_show(
             &item,
             &[],
+            &unprobed(),
             None,
             Some("estimate: 2.0–8.0 espresso_shots (human claim, david, 2026-07-17)"),
         );
@@ -4242,7 +4346,7 @@ tags = []
         let root = dir.path();
         new_item(root, ItemKind::Issue, "No est");
         let item = read_item(root, ItemKind::Issue, 1).unwrap();
-        let out = format_show(&item, &[], None, None);
+        let out = format_show(&item, &[], &unprobed(), None, None);
         assert!(!out.contains("estimate"), "no estimate line: {out}");
     }
 
@@ -4262,6 +4366,7 @@ tags = []
         let out = format_show(
             &read_item(root, ItemKind::Issue, 1).unwrap(),
             &[],
+            &unprobed(),
             None,
             None,
         );
@@ -4276,6 +4381,7 @@ tags = []
         let bare = format_show(
             &read_item(root, ItemKind::Issue, 2).unwrap(),
             &[],
+            &unprobed(),
             None,
             None,
         );
@@ -4366,7 +4472,7 @@ tags = []
 
         // table seam: each axis renders, in fixed §5.2 order (needs/after/triggers);
         // a non-zero `after` rank annotates, the trigger note trails its globs.
-        let out = format_show(&item, &[], None, None);
+        let out = format_show(&item, &[], &unprobed(), None, None);
         assert!(out.contains("needs: ISS-002"), "hard prereq axis: {out}");
         assert!(
             out.contains("after: ISS-003 (rank 2)"),
@@ -4714,6 +4820,13 @@ tags = []
                 }),
             },
         );
+    }
+
+    /// No probe. The render tests that predate SL-238 PHASE-05 pass an empty map,
+    /// which renders every ref bare and so preserves their expectations exactly —
+    /// the annotation is additive, and these tests pin the un-annotated shape.
+    fn unprobed() -> BTreeMap<(Axis, String), RefState> {
+        BTreeMap::new()
     }
 
     /// The rendered canonical ids of a built order, in composed order.
@@ -5718,6 +5831,288 @@ tags = []
         let kref = seed::kref_for("QUE");
         seed::seed_status_bearing(root, kref, id, status, &format!("Question {id}"));
         seed::seed_md(root, kref, id, "q\n");
+    }
+
+    // -- SL-238 PHASE-05: the RECORD projection (§4) ---------------------------
+
+    /// Seed a status-BEARING entity of any kind, by prefix. Generalises
+    /// `seed_question` rather than growing a fourth hand-rolled seeder.
+    fn seed_entity(root: &Path, prefix: &str, id: u32, status: &str) {
+        use crate::authored_status::test_support as seed;
+        let kref = seed::kref_for(prefix);
+        seed::seed_status_bearing(root, kref, id, status, &format!("{prefix} {id}"));
+        seed::seed_md(root, kref, id, "e\n");
+    }
+
+    /// Seed a status-LESS entity — the shape `REC` actually authors, and the only
+    /// route to `AuthoredStatus::Absent`.
+    fn seed_statusless_entity(root: &Path, prefix: &str, id: u32) {
+        use crate::authored_status::test_support as seed;
+        let kref = seed::kref_for(prefix);
+        seed::seed_status_less(root, kref, id, &format!("{prefix} {id}"));
+        seed::seed_md(root, kref, id, "e\n");
+    }
+
+    /// Seed an entity whose directory resolves but whose toml will not parse — the
+    /// only route to `RefState::Unreadable`.
+    fn seed_corrupt_entity(root: &Path, prefix: &str, id: u32) {
+        use crate::authored_status::test_support as seed;
+        let kref = seed::kref_for(prefix);
+        seed::seed_toml(root, kref, id, "this is not = = valid toml {{{\n");
+    }
+
+    /// The five `RefState` cases as the record view renders them, from one item.
+    /// `"active"` appears twice on purpose: it is TERMINAL for `SPEC` and GATING
+    /// for `CON`, so the pair pins that the **kind** decides terminality, not the
+    /// status word (§4, and why `RefState::Resolved` carries both halves).
+    fn seed_every_ref_state(root: &Path) -> BacklogItem {
+        seed_entity(root, "SPEC", 1, "active"); // Resolved, terminal by kind
+        seed_entity(root, "CON", 1, "active"); // Resolved, gating by kind
+        seed_entity(root, "QUE", 219, "open"); // Resolved, gating
+        seed_statusless_entity(root, "REC", 1); // Resolved{Absent}
+        seed_corrupt_entity(root, "STD", 7); // Unreadable
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &[
+                "SPEC-001",
+                "CON-001",
+                "QUE-219",
+                "REC-001",
+                "STD-007",
+                "ISS-999",
+                "not-a-ref",
+            ],
+            &[AfterLit {
+                to: "CON-001",
+                rank: 0,
+            }],
+        );
+        read_item(root, ItemKind::Issue, 1).unwrap()
+    }
+
+    /// `VT-1` — **the two projections never differ in what they FOUND.**
+    ///
+    /// They differ in what they KEEP: the footer drops terminal targets and
+    /// withholds unresolvable refs, the record view shows both (`DEC-234`). This
+    /// pins the half they must share — the classification — over every ref the
+    /// footer does keep.
+    ///
+    /// Compared **as rendered**, not by `RefState` equality: `RefState` derives
+    /// only `Clone` (it holds a `&'static entity::Kind`, which derives neither
+    /// `PartialEq` nor `Debug`), and `render_ref_state` separates all five cases,
+    /// so rendering is both writable and the stronger claim.
+    #[test]
+    fn both_projections_agree_on_what_a_ref_is() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let item = seed_every_ref_state(root);
+
+        let (_, absent) = project(std::slice::from_ref(&item));
+        let boundary = probe_boundary(root, &absent);
+        let record = probe_item_refs(root, &item);
+
+        // Positive control: an empty boundary would make the loop below vacuous.
+        assert!(
+            boundary.rows.len() >= 2,
+            "the footer must keep something to agree about: {} rows",
+            boundary.rows.len()
+        );
+
+        for row in &boundary.rows {
+            let found = record
+                .get(&(Axis::Needs, row.target.clone()))
+                .or_else(|| record.get(&(Axis::After, row.target.clone())))
+                .unwrap_or_else(|| panic!("{} is in the footer but not the record", row.target));
+            assert_eq!(
+                render_ref_state(&row.status),
+                render_ref_state(found),
+                "the two projections disagree about {}",
+                row.target
+            );
+        }
+
+        // And every declared ref reached the record projection, classified.
+        let rendered = |axis: Axis, r: &str| render_ref_state(&record[&(axis, r.to_string())]);
+        assert_eq!(rendered(Axis::Needs, "SPEC-001"), "(active)");
+        assert_eq!(rendered(Axis::Needs, "CON-001"), "(active)");
+        assert_eq!(rendered(Axis::Needs, "QUE-219"), "(open)");
+        assert_eq!(
+            rendered(Axis::Needs, "REC-001"),
+            "",
+            "Absent states nothing"
+        );
+        assert_eq!(rendered(Axis::Needs, "STD-007"), "(unreadable)");
+        assert_eq!(rendered(Axis::Needs, "ISS-999"), "(unresolved)");
+        assert_eq!(rendered(Axis::Needs, "not-a-ref"), "(unresolved)");
+        assert_eq!(rendered(Axis::After, "CON-001"), "(active)");
+    }
+
+    /// `VT-2` — **the record projection keeps what the footer drops.**
+    ///
+    /// Stated as a test so a later tidy-up cannot quietly re-merge the two
+    /// projections: the divergence is the reason both exist (§4 `:857-865`).
+    #[test]
+    fn the_record_projection_keeps_what_the_footer_drops() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let item = seed_every_ref_state(root);
+
+        let (_, absent) = project(std::slice::from_ref(&item));
+        let boundary = probe_boundary(root, &absent);
+        let record = probe_item_refs(root, &item);
+
+        let in_footer = |r: &str| boundary.rows.iter().any(|row| row.target == r);
+
+        // A terminal target: dropped by the footer, kept by the record.
+        assert!(!in_footer("SPEC-001"), "the footer drops a terminal target");
+        assert!(record.contains_key(&(Axis::Needs, "SPEC-001".to_string())));
+
+        // An unresolvable ref: counted by the footer, shown by the record.
+        assert!(
+            !in_footer("ISS-999"),
+            "the footer withholds an unresolved ref"
+        );
+        assert!(record.contains_key(&(Axis::Needs, "ISS-999".to_string())));
+        assert!(boundary.unresolved >= 2, "it is counted, not lost");
+
+        // Positive control — a non-terminal, resolvable target IS in both, so the
+        // two assertions above are demonstrated absences, not a broken lookup.
+        assert!(in_footer("CON-001"), "the control must be in the footer");
+        assert!(record.contains_key(&(Axis::Needs, "CON-001".to_string())));
+    }
+
+    /// `VT-3` — **`inspect` annotates a backlog ref that names nothing.**
+    ///
+    /// The rule has two halves and they are one test because either alone reads as
+    /// the wrong rule: only cross-kind targets carry a status annotation, AND a ref
+    /// with no row *anywhere* carries one regardless of prefix (§4 rule 1).
+    ///
+    /// **What this does not prove.** It composes `probe_item_refs` → `format_inspect`
+    /// itself, so it pins the probe and the renderer. It does **not** observe the
+    /// wiring inside `run_show_inspect` — that has no render seam (`:1879` writes
+    /// straight to stdout) and is verified by reading. See `F-1`.
+    #[test]
+    fn inspect_annotates_a_backlog_ref_that_names_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_rel_item(root, ItemKind::Issue, 84, "open", &[], &[]);
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &["ISS-999", "ISS-084"],
+            &[],
+        );
+        let item = read_item(root, ItemKind::Issue, 1).unwrap();
+
+        let out = format_inspect(&item, &[], &probe_item_refs(root, &item), None, None);
+
+        assert!(
+            out.contains("ISS-999 (unresolved)"),
+            "a ref that names nothing is annotated despite being backlog-shaped: {out}"
+        );
+        assert!(
+            !out.contains("ISS-084 ("),
+            "a RESOLVABLE backlog target renders bare — its status is already on \
+             every listing row the reader has: {out}"
+        );
+        assert!(out.contains("ISS-084"), "…but it still renders: {out}");
+    }
+
+    /// `VT-4` — **the record view is never deduplicated.**
+    ///
+    /// `needs: SL-154` and `after: SL-154` are two authored facts under two labels,
+    /// which is what the `(Axis, String)` key exists for. `DEC-234` calls tidying
+    /// this away "deleting authored truth". The target is terminal (`done` is
+    /// terminal for `SL`), which also pins §4 rule 3: **a terminal target is
+    /// annotated like any other** here, though the footer suppresses it.
+    #[test]
+    fn the_record_view_is_never_deduplicated() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_entity(root, "SL", 154, "done");
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &["SL-154"],
+            &[AfterLit {
+                to: "SL-154",
+                rank: 0,
+            }],
+        );
+        let item = read_item(root, ItemKind::Issue, 1).unwrap();
+
+        let out = format_inspect(&item, &[], &probe_item_refs(root, &item), None, None);
+
+        assert!(
+            out.contains("needs: SL-154 (done)"),
+            "the needs axis states it: {out}"
+        );
+        assert!(
+            out.contains("after: SL-154 (done)"),
+            "and so does the after axis — two facts, two labels: {out}"
+        );
+    }
+
+    /// §4's fifth rule and `R-c`: `AuthoredStatus::Absent` renders **no parenthesis
+    /// at all**, and — the part a golden would freeze forever — **no trailing
+    /// space** either. PHASE-04's `O-2` was exactly this bug on the boundary line.
+    #[test]
+    fn a_status_less_target_renders_bare_with_no_trailing_space() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_statusless_entity(root, "REC", 1);
+        seed_entity(root, "QUE", 219, "open");
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &["REC-001", "QUE-219"],
+            &[],
+        );
+        let item = read_item(root, ItemKind::Issue, 1).unwrap();
+
+        let out = format_inspect(&item, &[], &probe_item_refs(root, &item), None, None);
+
+        assert!(
+            out.contains("needs: REC-001, QUE-219 (open)\n"),
+            "the status-less target renders bare and un-padded, and the annotated \
+             one beside it is the positive control: {out}"
+        );
+    }
+
+    /// `VT-5` — **`--json` carries no annotation**, written as a TRIPWIRE.
+    ///
+    /// `show_json` takes `(item, fulfils_inbound, with_body)` and cannot receive the
+    /// probe map, so `EX-4` holds by construction and "assert there is no
+    /// annotation" would pass vacuously forever. This asserts instead that the ref
+    /// is carried **verbatim** and the annotation vocabulary is absent — which
+    /// fails the day someone threads the map into the JSON arm, the only thing this
+    /// row can usefully protect (`D-2`).
+    #[test]
+    fn json_carries_the_authored_ref_verbatim_and_no_annotation() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_rel_item(root, ItemKind::Issue, 1, "open", &["ISS-999"], &[]);
+        let item = read_item(root, ItemKind::Issue, 1).unwrap();
+
+        let out = show_json(&item, &[], false).unwrap();
+
+        assert!(
+            out.contains("ISS-999"),
+            "the authored record is carried verbatim: {out}"
+        );
+        assert!(
+            !out.contains("unresolved"),
+            "the JSON envelope must stay free of the record view's annotation: {out}"
+        );
     }
 
     /// **SUPERSEDES** `list_sequence_stays_silent_on_a_cross_kind_drop_but_names_a_malformed_ref`
