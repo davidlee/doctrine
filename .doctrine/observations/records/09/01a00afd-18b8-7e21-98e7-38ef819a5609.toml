@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00afd-18b8-7e21-98e7-38ef819a5609"
+recorded_at = "2026-08-16T14:32:34.232204786Z"
+kind = "friction"
+summary = "phase-plan: a superseded memory is still injected by the PreToolUse hook as a live high-severity footgun"
+detail = "While running /phase-plan for SL-238 PHASE-04, a Bash PreToolUse hook surfaced mem_01a005e5794671c2a0a80bb7fecbfc52 (mem.fact.rtk.output-filter-rewrites-identifiers) as a [high] footgun. That memory was retired at 17ec1e09e and correctly carries superseded_by -> mem_01a00ae17d2f78c1b2a27f94335de866, but the hook surfaces it with no supersession marker and at trust_level: high. The agent must spend a doctrine memory show round-trip to discover that context-injected guidance is dead. Cost: one wasted verification cycle per sighting, plus the standing risk that an agent acts on a retired claim. The claim in question is one this slice already spent a session disproving. Candidate fix: exclude superseded memories from hook surfacing, or render the supersession inline."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
