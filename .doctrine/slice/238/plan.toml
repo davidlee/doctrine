@@ -1,0 +1,326 @@
+# Implementation plan for SL-238 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-238"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber, so the id
+# sequence goes non-monotonic after a split and that is expected. Criterion ids
+# are local to their phase, bare, and equally immutable (glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance. The prefix is
+# the only mode marker; there is no mode field. Reference a criterion from
+# another phase phase-qualified (PHASE-03/EX-8) — bare EX-8 is ambiguous.
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-01"
+name      = "Authored-status vocabulary and the engine reader"
+objective = """
+Land §3's substrate: the status vocabulary in `kinds` (leaf), the per-kind status
+reader as a new engine module `src/authored_status.rs`, the `authored_class`
+adapter over `partition::status_class`, and the collapse of
+`catalog::scan::status_and_title_for` onto the same reader as its command-tier
+overlay. Nothing on any CLI surface changes; every later phase reads terminality
+through what this phase builds.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §3 and §8 read. Per DEC-242 the red suite is authored by a seat with no access to `proto/SL-238-types`; the planner and code author may read it as an oracle only." },
+  { id = "EN-2", text = "`just check` green at the phase's base commit, and `git status --porcelain` clean of unexpected staged paths." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/kinds/mod.rs` declares `STATUS_LESS = &[REC]`, `DERIVED_STATUS = &[RV]` and `enum AuthoredStatus { Known(String), Absent, Unavailable }` beside the existing membership constants. `Axis` is NOT added here — it is backlog-local (§8)." },
+  { id = "EX-2", text = "`src/authored_status.rs` exists at engine tier carrying `Authored { status, title }` and `read(root, kref: &KindRef, id) -> anyhow::Result<Authored>` — three arms static on the two kind sets, one `meta::read_meta` on the common path, `kref` a plain borrow with no `'static` bound." },
+  { id = "EX-3", text = "`catalog::scan::title_for` is absorbed into `authored_status::read` as its lenient title reader and no longer exists as a second lenient reader outside `meta.rs`'s `IdOnly` confinement." },
+  { id = "EX-4", text = "`src/main.rs` declares `mod authored_status;`." },
+  { id = "EX-5", text = "`priority::partition::authored_class(kind, &AuthoredStatus) -> StatusClass` exists over `status_class`, and the `Unavailable -> Unrecognised` rule is stated exactly once, in the policy module." },
+  { id = "EX-6", text = "`catalog::scan::status_and_title_for` delegates to `authored_status::read` and maps only the `Unavailable` arm through `review::derived_status_string`; its two inline `RV`/`REC` arms are gone." },
+  { id = "EX-7", text = "`.doctrine/adr/001/layering.toml` carries one authored row classifying `authored_status` as engine — no accepted-violation entry, no tangle-baseline movement." },
+  { id = "EX-8", text = "`src/meta.rs` is unmodified (§7, §8 — a design commitment, not an omission)." },
+]
+verification = [
+  { id = "VT-1", expects = "`authored_status read returns a known status for each admissible target kind`; `... returns Absent for a status-less kind`. One read per call, title and status from the same parse.", test_file = "src/authored_status.rs", keywords = ["AuthoredStatus", "read_meta", "returns_a_known_status"], waived = false },
+  { id = "VT-2", expects = "`authored_status read returns Unavailable for a derived status kind without reading` — a fixture with no toml at all still returns `Unavailable`, so the arm is static on the kind set rather than a read outcome.", test_file = "src/authored_status.rs", keywords = ["Unavailable", "without_reading"], waived = false },
+  { id = "VT-3", expects = "`authored_status read returns Err on a present but unparseable toml` — never `Unavailable`, never `Absent`. STD-003: the two signals stay distinct at the type level.", test_file = "src/authored_status.rs", keywords = ["unparseable", "is_err"], waived = false },
+  { id = "VT-4", expects = "`authored_class never returns Terminal for Unavailable` — the standing rule as an assertion; `Terminal` is the one class the footer suppresses.", test_file = "src/priority/partition.rs", keywords = ["authored_class", "AuthoredStatus", "never_terminal"], waived = false },
+  { id = "VT-5", expects = "`the derived status kind set is pinned` — `DERIVED_STATUS == [RV]` and `STATUS_LESS == [REC]`, so a future kind that derives its status and is not added fails here rather than degrading quietly.", test_file = "src/kinds/mod.rs", keywords = ["DERIVED_STATUS", "STATUS_LESS"], waived = false },
+  { id = "VT-6", expects = "`catalog scan status_and_title_for delegates to authored_status`, asserted by behaviour: one `RV` fixture yields its derived status through `catalog::scan` and `Unavailable` through the engine reader, from one read path. This is what makes VT-5's pin bind behaviour rather than a membership list.", test_file = "src/catalog/scan.rs", keywords = ["authored_status", "status_and_title_for", "delegates"], waived = false },
+  { id = "VT-7", expects = "`catalog scan yields status and title from one parse` — SL-050 `F-1` preserved across the move; a regression is a doubled parse on a 24-kind walk.", test_file = "src/catalog/scan.rs", keywords = ["one_parse", "status_and_title_for"], waived = false },
+  { id = "VT-8", expects = "`tests/architecture_layering.rs` stays green with the command tangle baseline unchanged at 76 and no new accepted violation; the authored row for `authored_status` is what the suite reads.", test_file = ".doctrine/adr/001/layering.toml", keywords = ["authored_status", "command = 76"], waived = false },
+  { id = "VA-1", expects = "One per-ref status reader survives: grep shows no second `match` on `kref.kind.prefix` selecting a status strategy, and `STATUS_LESS`/`DERIVED_STATUS` have exactly one consumer each. Run with a positive control so an empty result is a known absence." },
+  { id = "VA-2", expects = "`src/meta.rs` is unmodified — `git diff` over the phase's landed range names no change to it." },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "Characterisation: pin the before-state of every deliberately changed leg"
+objective = """
+§7 requires that deliberately changed behaviour has its before-state pinned first,
+so the change is visible as a change rather than as a passing test that was always
+going to pass. `--prune` has no coverage at all, in either of its two copies, and
+R3 names that as the slice's untested leg. This phase adds characterisation tests
+only — no production line moves — pinning today's `--prune` behaviour in both
+copies and today's `after --remove` target gate. PHASE-06 and PHASE-07 then
+supersede these tests deliberately, each replacement stating what it now asserts
+and why the old assertion no longer holds.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §6 (`--prune`'s probe, collapsed; the remove path gates the source, not the target) and §7 (Characterisation first) read. Written from the current production tree, never from `proto/SL-238-types` (DEC-242)." },
+  { id = "EN-2", text = "PHASE-01 landed and green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Today's `--prune` behaviour is pinned in BOTH copies (`backlog.rs`'s leg and `commands/dep_seq.rs`'s): the `resolved`/`closed` terminal vocabulary, the `/resolution` reason suffix, the silent keep on a target whose toml will not read, and a hand-authored bare `to = \"154\"` being dropped without the target being read at all." },
+  { id = "EX-2", text = "Today's `after --remove` refusal of a target that does not resolve on disk is pinned." },
+  { id = "EX-3", text = "The phase's diff touches test modules only — no production statement changes. `just gate` green." },
+  { id = "EX-4", text = "Each characterisation test carries a comment naming the phase that will supersede it and the design section that authorises the change, so a later reader cannot mistake a superseded pin for a regression." },
+]
+verification = [
+  { id = "VT-1", expects = "`commands::dep_seq::run_after_prune`'s current vocabulary, reason wording, silent-keep-on-unreadable and bare-ref-deletion are each pinned by a named test that passes against today's code.", test_file = "src/commands/dep_seq.rs", keywords = ["run_after_prune", "characterisation", "resolution"], waived = false },
+  { id = "VT-2", expects = "The same four behaviours are pinned against `backlog.rs`'s duplicate prune leg, so the collapse in PHASE-07/PHASE-08 can be shown behaviour-preserving where it should be.", test_file = "src/backlog.rs", keywords = ["characterisation", "prune"], waived = false },
+  { id = "VT-3", expects = "`after --remove` refuses a target that does not resolve — pinned as today's behaviour, and deliberately superseded by PHASE-06/EX-3.", test_file = "src/commands/dep_seq.rs", keywords = ["run_after_remove", "characterisation"], waived = false },
+  { id = "VA-1", expects = "The phase's diff is test-only: `git diff` over the landed range shows changes inside `#[cfg(test)]` modules exclusively." },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-03"
+name      = "The doctor check: authored refs that name nothing"
+objective = """
+§5, and it is GREENFIELD — no prototype code exists for any of it (DEC-242's third
+consequence). Add `dep_seq_ref_findings` beside `lifecycle_findings`, the tolerant
+diagnostic reader `read_all_tolerant` with its `ReadFailure`, and the one `extend`
+in `run_doctor` under the existing `RelationIntegrity` category. This is the home
+the errors go to before §2 deletes the only place they are currently mentioned, so
+it lands before the footer change rather than after it, and its count semantics —
+every item including terminal ones, both axes, undeduplicated — are what PHASE-04's
+stderr advisory has to agree with.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §5 read in full, including `When the check itself cannot read the corpus`. No skeleton exists for this section; plan and implement it as greenfield rather than as a diff against something (DEC-242)." },
+  { id = "EN-2", text = "PHASE-02 landed and green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`backlog::dep_seq_ref_findings(root: &Path) -> Vec<String>` exists beside `lifecycle_findings`, returning lines rather than `Finding`s — the hand-back shape `relation_graph::validate_relations` already uses." },
+  { id = "EX-2", text = "`read_all_tolerant(root) -> (Vec<BacklogItem>, Vec<ReadFailure>)` and `struct ReadFailure { entity, reason }` exist. `read_all` keeps its fail-fast contract unchanged — this is a second named reader, not a change to the first." },
+  { id = "EX-3", text = "`run_doctor` extends `RelationIntegrity` with the new lines via `Finding::from_lines`, immediately after the existing relation-integrity leg. No new `Category` variant is minted." },
+  { id = "EX-4", text = "The check covers every backlog item INCLUDING terminal ones, both axes, undeduplicated, and judges resolution only — admissibility is explicitly not folded in (§5, §9 follow-up)." },
+  { id = "EX-5", text = "The verdict comes from `kinds::parse_resolvable_ref`; the wording is re-classified with a second pure `parse_canonical_ref` call into exactly two reasons — `not a canonical ref` and `no such entity`. The resolver's own `dir.display()` message is never folded into a finding." },
+  { id = "EX-6", text = "A read failure is disclosed as a finding beside the items that did parse, and the walk continues (STD-003: tolerate AND disclose). A missing kind tree is still the empty set, not a failure — `entity::scan_ids`'s total-function tolerance is preserved." },
+]
+verification = [
+  { id = "VT-1", expects = "`a malformed needs ref raises a RelationIntegrity finding` (reason `not a canonical ref`); `a needs ref to an absent backlog id raises a finding` (reason `no such entity`); `an unresolvable cross kind ref raises a finding`.", test_file = "src/backlog.rs", keywords = ["dep_seq_ref_findings", "not a canonical ref", "no such entity"], waived = false },
+  { id = "VT-2", expects = "`a resolvable cross kind ref raises nothing` — the positive control. Without it, a check that reports everything is indistinguishable from one that works.", test_file = "src/backlog.rs", keywords = ["dep_seq_ref_findings", "resolvable"], waived = false },
+  { id = "VT-3", expects = "`no doctor finding contains an absolute path` — pins that the resolver's `dir.display()` dangling message is not what the finding renders.", test_file = "src/backlog.rs", keywords = ["absolute", "dep_seq_ref_findings"], waived = false },
+  { id = "VT-4", expects = "`a broken ref on a terminal item is still reported` — the class the footer structurally cannot see (5 of the 31 authored cross-kind edges hang off terminal dependents). And `both axes are checked independently`.", test_file = "src/backlog.rs", keywords = ["terminal", "both_axes", "dep_seq_ref_findings"], waived = false },
+  { id = "VT-5", expects = "`a corpus read failure raises a finding rather than reporting clean` — STD-003's disclose half; the check does not mirror `lifecycle_findings`'s empty-vec degrade.", test_file = "src/backlog.rs", keywords = ["read_all_tolerant", "ReadFailure", "cannot read"], waived = false },
+  { id = "VT-6", expects = "`an unreadable item is named and its readable siblings are still checked` — STD-003's tolerate half, and the one that fails against `read_all`. The fixture authors the unreadable item at the LOWER id so a fail-fast walk aborts before reaching the broken ref and the test goes red for the right reason; both findings must appear in one run.", test_file = "src/backlog.rs", keywords = ["read_all_tolerant", "siblings"], waived = false },
+  { id = "VT-7", expects = "`a missing kind tree is clean, not a failure` — the boundary against VT-6's rule; a virgin repo reports nothing rather than five findings.", test_file = "src/backlog.rs", keywords = ["missing", "dep_seq_ref_findings"], waived = false },
+  { id = "VA-1", expects = "`doctrine doctor` on the live corpus reports zero findings from the new check — §5 measured zero unresolvable authored refs, so the drift guard starts from an empty population. A non-zero result is real data, not a test failure: report it rather than adjusting the check." },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-04"
+name      = "The projection and the footer: boundary:, overrides:, and the signpost"
+objective = """
+§4 and §2's listing half — the largest single surface in the slice. `AbsentDrop`
+gains an axis and a second recording case; `project` is hoisted out of `compose`
+into `list_rows` so the one new impure read can sit between them; `probe_ref` /
+`probe_boundary` classify what an authored ref turned out to be; `render_overrides`
+loses its `corpus` parameter, loses the `AbsentDrop` leg and the `Dangling` arm,
+and gains the `boundary:` block; `classify_dangling` is deleted and `compose`'s
+`cmap` build goes with it; and `backlog list` emits the count-only stderr advisory.
+Membership, row order and the JSON envelope are the load-bearing non-goals.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §2 and §4 read in full. The red suite is authored blind to `proto/SL-238-types` (DEC-242); every output string the tests assert comes from the design, not from code." },
+  { id = "EN-2", text = "PHASE-01 landed (the probe reads terminality through `authored_class`) and PHASE-03 landed (the advisory's count must report the same population `dep_seq_ref_findings` does)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`enum Axis { Needs, After }` is declared backlog-local, and `AbsentDrop` carries it. `project` records an `AbsentDrop` for the second case too — a ref that PARSES but whose `ItemId` matches no item in the corpus. `project` still never pre-filters edges by node membership, and the adapter's inputs are byte-identical." },
+  { id = "EX-2", text = "`project` is hoisted out of `compose` into `list_rows`; the corpus is walked once, not twice. `compose` no longer builds `cmap`." },
+  { id = "EX-3", text = "`RefState { Resolved { kind, status }, Unreadable, Unresolved }`, `BoundaryRow { dependent, target, axes, status }` and `BoundaryProbe { rows, unresolved }` exist. `RefState` WRAPS `AuthoredStatus` — it does not flatten it to a status word (the kind and the status-less case are both needed)." },
+  { id = "EX-4", text = "`probe_ref(root, target) -> RefState` is the single classification (`parse_resolvable_ref` -> `authored_status::read` -> `authored_class`), memoised per distinct ref, and is the only new disk touch on the listing path. `probe_boundary(root, &absent) -> BoundaryProbe` dedups per `(dependent, target)` with axes joined, sorts by dependent then target, drops terminal targets, and counts rather than shows unresolvable refs." },
+  { id = "EX-5", text = "`render_overrides(boundary: &[BoundaryRow], overrides: &[Override]) -> String` — the `corpus` parameter deleted, the `AbsentDrop` loop deleted, the adapter's `Dangling` arm deleted, `SoftCycleEvicted` and `Contradicted` rendering as today, and a `boundary:` block appended after `overrides:` when non-empty. Either block may appear without the other; both empty means no footer, as today. `classify_dangling` is deleted." },
+  { id = "EX-6", text = "`backlog list --by sequence` emits one count-only stderr advisory when the probe drops one or more unresolvable refs: it names no individual ref, names `doctrine doctor`, counts distinct `(dependent, axis, ref)` occurrences, and never fires under `--by id`." },
+  { id = "EX-7", text = "The two interim tests from `74b773690` are SUPERSEDED, not relaxed, and each replacement states what it now asserts and why the old assertion no longer holds: `list_sequence_stays_silent_on_a_cross_kind_drop_but_names_a_malformed_ref` (superseded on two counts) and `list_sequence_emits_no_footer_when_every_drop_is_cross_kind`." },
+  { id = "EX-8", text = "`src/backlog_order.rs` is unmodified and the `backlog_order` and `priority` suites are green UNMODIFIED. A suite edited to pass is a finding, not a pass (R1, §7)." },
+]
+verification = [
+  { id = "VT-1", expects = "`a live cross_kind needs emits one boundary line naming target and status` — `ISS-327 needs QUE-219 (open)`, dependent-first, no arrow; the word `absent` appears nowhere in the output.", test_file = "src/backlog.rs", keywords = ["boundary:", "probe_boundary", "BoundaryRow"], waived = false },
+  { id = "VT-2", expects = "`a terminal cross_kind target emits no boundary line` (the 15-edge class) and `a terminal dependent contributes no boundary line` (the 5 edges the projection never admits).", test_file = "src/backlog.rs", keywords = ["terminal", "boundary"], waived = false },
+  { id = "VT-3", expects = "`a pair declared on both axes emits one boundary line with both relation words`, and `boundary lines sort by dependent then target` — asserted on a fixture whose correct order INTERLEAVES kinds (`IMP` before `ISS`), so a sort that groups by kind fails rather than passing by accident.", test_file = "src/backlog.rs", keywords = ["Axis", "sort", "boundary"], waived = false },
+  { id = "VT-4", expects = "`overrides keeps soft cycle and contradicted and nothing else` — the `Dangling` arm gone, the two surviving reasons rendered as today.", test_file = "src/backlog.rs", keywords = ["render_overrides", "SoftCycleEvicted", "Contradicted"], waived = false },
+  { id = "VT-5", expects = "`the json envelope carries rows only and both footer blocks go to stderr`, alongside the existing `Ordering::Degraded` cycle warning.", test_file = "src/backlog.rs", keywords = ["json", "stderr", "boundary"], waived = false },
+  { id = "VT-6", expects = "`an unresolvable ref emits no footer line` — malformed, absent backlog id, and unresolvable cross-kind ref, each asserted absent from STDOUT; and `a corpus with no unresolvable refs emits no advisory`, the positive control and the state of the live corpus.", test_file = "src/backlog.rs", keywords = ["unresolved", "advisory", "doctrine doctor"], waived = false },
+  { id = "VT-7", expects = "`an unresolvable ref emits one count-only advisory on stderr` (count present, no individual ref, `doctrine doctor` named); `the advisory counts distinct dependent-axis-ref occurrences` — the same bad ref on both axes counts twice, which is unreachable under a `(dependent, ref)` key and is what forces the axis into the key.", test_file = "src/backlog.rs", keywords = ["advisory", "Axis", "occurrences"], waived = false },
+  { id = "VT-8", expects = "`the advisory counts an absent backlog id` — `needs: ISS-999` on a live item: one `doctor` finding, no footer line, and ONE on the advisory's count. Red without EX-1's added projection case, because that class would otherwise reach only the adapter.", test_file = "src/backlog.rs", keywords = ["ISS-999", "advisory"], waived = false },
+  { id = "VT-9", expects = "`--by id emits neither footer nor advisory` — the order mode never composes and so never probes.", test_file = "src/backlog.rs", keywords = ["OrderBy::Id", "advisory"], waived = false },
+  { id = "VT-10", expects = "`list_sequence_and_id_share_membership_differ_on_order` holds unmodified — sequence remains a permutation of id. The `backlog_order` and `priority` suites pass with no edit.", test_file = "src/backlog.rs", keywords = ["list_sequence_and_id_share_membership_differ_on_order"], waived = false },
+  { id = "VA-1", expects = "`render_overrides` no longer takes `corpus` and `compose` no longer builds `cmap` — enforced by the repo's `dead_code`/`unused` denials rather than by a test, but confirmed as a deliberate deletion rather than fallout." },
+  { id = "VA-2", expects = "Every intentional output change in this phase is recorded for the reconciliation brief with its reason: the two superseded tests, the new stderr advisory, and the `boundary:` block's introduction." },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-05"
+name      = "inspect and show gain the target's state"
+objective = """
+§4's record half. `probe_item_refs` is the SECOND projection over the shared
+`probe_ref` — it classifies every ref an item declares, keyed by `(Axis, String)`,
+drops nothing, and is threaded into `run_show_inspect` / `format_metadata` so
+`backlog inspect` and `backlog show` print each declared target's state. The split
+from `probe_boundary` is load-bearing and is pinned as a test so a later tidy-up
+cannot quietly re-merge them.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §4 `inspect and show gain the target's state` and its five rendering rules read; `DEC-234` inspected. Red suite blind to the prototype (DEC-242)." },
+  { id = "EN-2", text = "PHASE-04 landed and green — `RefState`, `Axis` and `probe_ref` exist." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`probe_item_refs(root, item) -> BTreeMap<(Axis, String), RefState>` exists: every declared ref classified, nothing dropped, backlog-shaped refs probed rather than filtered out ahead of the probe." },
+  { id = "EX-2", text = "`run_show_inspect` threads the map into `format_metadata` beside the value and estimate lines it already threads; `backlog show` gains the annotation through the shared renderer." },
+  { id = "EX-3", text = "The five rendering rules hold: cross-kind targets AND any ref that does not resolve are annotated (a resolvable backlog target is not); never deduplicated; a terminal target is annotated like any other; `Unresolved` renders `(unresolved)`; `Unavailable` renders `(status unavailable)` and `Unreadable` renders `(unreadable)`. `Absent` renders no parenthesis at all." },
+  { id = "EX-4", text = "The `--json` projection stays faithful to the authored record — no annotation." },
+]
+verification = [
+  { id = "VT-1", expects = "`both projections agree on what a ref is` — one fixture carrying every `RefState` case, including a status-less `REC` target and a `Resolved` pair whose kind decides terminality, asserted through `probe_boundary` AND `probe_item_refs` in one test. They differ in what they KEEP; this pins that they never differ in what they FOUND.", test_file = "src/backlog.rs", keywords = ["probe_item_refs", "probe_boundary", "RefState"], waived = false },
+  { id = "VT-2", expects = "`the record projection keeps what the footer drops` — a terminal target and an unresolvable ref both annotated by `probe_item_refs`, both absent from `probe_boundary`'s rows. Stated as a test so a later tidy-up cannot re-merge the two projections.", test_file = "src/backlog.rs", keywords = ["probe_item_refs", "keeps"], waived = false },
+  { id = "VT-3", expects = "`inspect annotates a backlog ref that names nothing` — `needs: ISS-999` renders `(unresolved)` while a resolvable `needs: ISS-084` renders bare. One test, because the rule has two halves: only cross-kind targets carry a status annotation, and a ref with no row anywhere carries one regardless of prefix.", test_file = "src/backlog.rs", keywords = ["unresolved", "format_metadata", "ISS-999"], waived = false },
+  { id = "VT-4", expects = "The record view is never deduplicated: `needs: SL-154` and `after: SL-154` both render, under their own labels — which is what the `(Axis, String)` key exists for.", test_file = "src/backlog.rs", keywords = ["Axis", "format_metadata"], waived = false },
+  { id = "VT-5", expects = "`backlog inspect --json` carries no annotation — the authored record only.", test_file = "src/backlog.rs", keywords = ["json", "run_show_inspect"], waived = false },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-06"
+name      = "The needs removal, and the remove path's source-only gate"
+objective = """
+§6's clearing half, minus `--prune`. The leaf gains `remove_needs` symmetric with
+`append`, `RelRemove` carries the axis into the one IO wrapper, and `doctrine needs
+<SRC> <TGT> --remove` appears on the CLI. Both axes' remove paths then gate the
+SOURCE only and treat the target as an authored string canonicalised through the
+three-tier needle — which is what makes every ref PHASE-03's check reports at Error
+severity actually clearable. That is a deliberate behaviour change on `after
+--remove`, which today refuses an unresolvable target.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §6 through `The remove path gates the source, not the target` read, including the named unpadded-ref bound. Red suite blind to the prototype (DEC-242)." },
+  { id = "EN-2", text = "PHASE-02 landed — `after --remove`'s current target-gate refusal is pinned, so its removal reads as an intentional change." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`dep_seq::remove_needs(doc, to) -> Result<usize>` exists at leaf tier with `remove_after`'s F-1 strict-refuse posture on a missing seeded array; `enum RelRemove { Needs(&str), After { to, rank_ceiling } }` exists; `remove(toml_path, &RelRemove)` is the single IO wrapper and all three existing call sites move to it. `remove_after`'s own logic is unchanged." },
+  { id = "EX-2", text = "`Command::Needs` carries `remove: bool` with its dispatch arm, and `commands::dep_seq::run_needs_remove(path, source, target)` echoes `{source_id} needs {target_id} removed (N edges)` and bails when nothing matched, mirroring `run_after_remove`. There is no `needs --prune`." },
+  { id = "EX-3", text = "Both remove paths gate the source through `resolve_dep_seq_src_path` only, and canonicalise the target through the three tiers in order: `parse_resolvable_ref` (preserving today's bare-id tolerance), then `parse_canonical_ref` (a well-formed ref to a deleted target), then verbatim." },
+  { id = "EX-4", text = "The unpadded-ref bound is preserved deliberately and asserted, not fixed: a stored `needs = [\"SL-1\"]` is not cleared by `--remove SL-1`, because the needle canonicalises to `SL-001`. Closing it later must be a deliberate change with a red test." },
+]
+verification = [
+  { id = "VT-1", expects = "`needs remove clears one edge and reports the count` and `needs remove bails when no edge matches`.", test_file = "src/commands/dep_seq.rs", keywords = ["run_needs_remove", "removed"], waived = false },
+  { id = "VT-2", expects = "`needs remove clears a ref that does not resolve` and `after remove clears a ref that does not resolve` — the repair path PHASE-03's check depends on, and the deliberate supersession of PHASE-02/VT-3.", test_file = "src/commands/dep_seq.rs", keywords = ["run_needs_remove", "run_after_remove", "does_not_resolve"], waived = false },
+  { id = "VT-3", expects = "`remove accepts a bare id target` — `after SRC 154 --remove` clears the `SL-154` edge. This works today through `resolve_dep_seq_src` and must survive the gate change; it is the regression the three-tier needle exists to prevent.", test_file = "src/commands/dep_seq.rs", keywords = ["bare", "run_after_remove"], waived = false },
+  { id = "VT-4", expects = "`remove canonicalises a parseable ref to a deleted target` — `SL-9999` does not resolve but still canonicalises, so a stale edge is clearable; and `remove matches an unparseable ref verbatim`.", test_file = "src/commands/dep_seq.rs", keywords = ["SL-9999", "verbatim"], waived = false },
+  { id = "VT-5", expects = "`remove does not match a well-formed unpadded ref` — a stored `needs = [\"SL-1\"]` is NOT cleared by `--remove SL-1`. Asserted as the known bound §6 names.", test_file = "src/commands/dep_seq.rs", keywords = ["SL-1", "unpadded"], waived = false },
+  { id = "VT-6", expects = "`remove_needs refuses a malformed entity without touching the file` — the leaf's F-1 posture, matching `remove_after`.", test_file = "src/dep_seq.rs", keywords = ["remove_needs", "RelRemove", "malformed"], waived = false },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-07"
+name      = "--prune's probe, collapsed onto one resolver and one read"
+objective = """
+§6's `--prune` half. Four hardcoded copies of `status == \"resolved\" || status ==
+\"closed\"` — two near-verbatim duplicate functions, each doubling its own
+read-parse block — collapse to one probe routing terminality through
+`partition::authored_class`. That closes the STD-001 duplicated-table violation and
+the REQ-238 routing breach together, and repairs four `unwrap_or_default()` laundered
+reads (STD-003). Four consequences are behaviour changes, each tested as what it is
+against PHASE-02's pins.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §6 `--prune's probe, collapsed` and its four consequences read. Red suite blind to the prototype (DEC-242)." },
+  { id = "EN-2", text = "PHASE-01 landed (`authored_class`, `authored_status::read`) and PHASE-02 landed (the four pinned behaviours), PHASE-06 landed (the shared `RelRemove` seam)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`run_after_prune` runs ONE probe per edge: `parse_resolvable_ref` — `Err` -> prunable; `Ok` -> `authored_status::read` — `Err` -> KEEP and say so on stderr; `Ok` -> `authored_class` — `Terminal` -> prunable, anything else -> keep. One read per edge, not two; the internal double read is collapsed." },
+  { id = "EX-2", text = "No hardcoded `resolved`/`closed` terminal-status literal survives in `src/commands/dep_seq.rs`; `partition::status_class` is the sole classifier reached through `authored_class`." },
+  { id = "EX-3", text = "All four `read_to_string(..).unwrap_or_default()` -> empty-`toml::Table` laundered reads are gone. The unreadable-target case keeps the edge (the conservative call) AND says why on stderr." },
+  { id = "EX-4", text = "The three reason strings the two copies render today (`absent`, `(unparseable)`, `absent (unparseable ref)`) collapse to one — `dropped (dangling: unresolved)` — reusing §4's token, and the reason word loses its `/resolution` suffix: output becomes `dropped (dangling: closed)`." },
+  { id = "EX-5", text = "PHASE-02's characterisation tests for `--prune` are superseded, each replacement naming what it now asserts and why the old assertion no longer holds." },
+]
+verification = [
+  { id = "VT-1", expects = "`after prune clears an edge onto a done slice` and `... onto an answered question` — the deliberate vocabulary change; `IMP-172 -> SL-154` is the standing live instance.", test_file = "src/commands/dep_seq.rs", keywords = ["run_after_prune", "authored_class", "dangling"], waived = false },
+  { id = "VT-2", expects = "`after prune keeps an edge onto a live target` — the conservative half: `Workable`, `Gating` and `Unrecognised` all keep it.", test_file = "src/commands/dep_seq.rs", keywords = ["run_after_prune", "keeps"], waived = false },
+  { id = "VT-3", expects = "`after prune keeps an edge whose target toml is unreadable, and says so on stderr` — conservative on uncertainty, and not silently so (STD-003).", test_file = "src/commands/dep_seq.rs", keywords = ["unreadable", "stderr"], waived = false },
+  { id = "VT-4", expects = "`after prune resolves a bare ref rather than dropping it` — a hand-authored `to = \"154\"` onto a live `SL-154` survives, and the same ref onto a `done` `SL-154` is pruned with the ordinary terminal reason. Red against both copies today, which delete it either way without reading the target at all.", test_file = "src/commands/dep_seq.rs", keywords = ["parse_resolvable_ref", "run_after_prune"], waived = false },
+  { id = "VA-1", expects = "No laundered read survives in the touched surfaces: grep for `unwrap_or_default()` on a read or parse, and for `Err(_) =>` arms yielding a default value, over `src/commands/dep_seq.rs` — the four `--prune` copies are the known population and each is repaired (STD-003). Run with a positive control." },
+  { id = "VA-2", expects = "No second terminal-status vocabulary survives: every inline `resolved`/`closed` status probe is gone from `src/commands/dep_seq.rs`, established by grep with the known sites named." },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-08"
+name      = "DepSeqOps injection: backlog after routed, backlog needs gated"
+objective = """
+§6's routing half, and the slice's live layering result. `backlog` must reach three
+`commands::dep_seq` operations plus the admissible-target gate WITHOUT gaining a
+`crate::commands` import: a `backlog -> commands` edge merges two SCCs and moves the
+command tangle baseline. So `cli.rs` fills a `DepSeqOps` struct of `fn` pointers and
+threads it through `backlog::dispatch` into `run_after` (all three legs) and
+`run_needs` (the prerequisite loop's new gate). This closes ISS-368 as a side effect
+and removes `backlog.rs`'s duplicate prune leg, which PHASE-02 also pinned.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §6 `How backlog reaches them: injection, not import` and `backlog needs is routed for its target gate` read, plus §9 items 10 and 11 — both are behaviour changes named rather than folded in. Red suite blind to the prototype (DEC-242)." },
+  { id = "EN-2", text = "PHASE-06 and PHASE-07 landed — the injected pointers must point at the final implementations, not at intermediate ones." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`commands::dep_seq::ensure_admissible_dep_target(kind, target)` is extracted from the existing `ensure!` and called by `resolve_dep_seq_src`, so both paths refuse in one voice. It takes the target REF as well as its kind, because the message interpolates both." },
+  { id = "EX-2", text = "`backlog::DepSeqOps { edge, remove, prune, admit_target }` exists with `edge`/`remove` typed `fn(Option<PathBuf>, &str, &str, i32)` — rank as `i32`, NOT `Option<i32>`, and `remove` KEEPS its rank, which on `--remove` is an upper bound. `run_needs_remove` is not a member (the `needs` array carries no rank)." },
+  { id = "EX-3", text = "`backlog::dispatch(cmd, color, ops)` receives the struct and threads it into `run_after` and `run_needs`; `cli.rs`'s `Command::Backlog` arm fills it. All three `run_after` legs — append, `--remove`, `--prune` — run the injected operation; `backlog.rs`'s duplicate prune leg and its `require_item(to)` twins are gone." },
+  { id = "EX-4", text = "`run_needs`' prerequisite loop calls `(ops.admit_target)(tkref.kind, prereq)` after `parse_resolvable_ref`. `backlog needs` now refuses `RV`, `REC` and governance docs — a deliberate refusal of input accepted today (ISS-368, §9 item 11)." },
+  { id = "EX-5", text = "`src/knowledge.rs` is untouched — `commands::dep_seq` keeps its `RecordKind::ALL` read for the refusal message, because injection leaves that module at command tier where the edge is legal." },
+  { id = "EX-6", text = "Echo strings on the routed `backlog after` legs unify on the canonical source id — a named output change for the reconciliation brief." },
+]
+verification = [
+  { id = "VT-1", expects = "`backlog after accepts a cross kind target on every leg` — append, `--remove`, `--prune`, each asserted against the same target that fails today with `unknown backlog prefix SL`.", test_file = "src/backlog.rs", keywords = ["DepSeqOps", "run_after", "cross_kind"], waived = false },
+  { id = "VT-2", expects = "`backlog after --remove honours the rank ceiling` — with edges at rank 1 and rank 5, `--remove --rank 3` clears the first and keeps the second, on the backlog-scoped leg as on the top-level one. A pointer that had dropped the rank argument would pass every other test here while silently widening the delete; a type prototype of this design shipped exactly that signature.", test_file = "src/backlog.rs", keywords = ["rank", "DepSeqOps", "ceiling"], waived = false },
+  { id = "VT-3", expects = "`backlog needs refuses an inadmissible target kind` — `RV`, `REC` and a governance doc each refused, with the BYTE-IDENTICAL message `doctrine needs` gives for the same target, ref included. Identity, not similarity: a prototype rendered `` `ADR` is a ADR entity `` from a gate handed only the kind, and a test written for `shape` would have accepted it.", test_file = "src/backlog.rs", keywords = ["admit_target", "run_needs", "byte"], waived = false },
+  { id = "VT-4", expects = "`ensure_admissible_dep_target` is the one gate both `resolve_dep_seq_src` and the injected pointer call, and its message interpolates the target ref as well as the kind prefix.", test_file = "src/commands/dep_seq.rs", keywords = ["ensure_admissible_dep_target", "resolve_dep_seq_src"], waived = false },
+  { id = "VT-5", expects = "`tests/architecture_layering.rs` green with the command tangle baseline UNCHANGED at 76 and no new accepted violation. This is the live check on §6's siting: a `backlog -> commands` edge merges two SCCs, so the baseline is measured, never predicted.", test_file = ".doctrine/adr/001/layering.toml", keywords = ["command = 76"], waived = false },
+  { id = "VT-6", expects = "`backlog needs` keeps its cycle oracle: a closing `needs` cycle is still refused before writing, using the adapter — capability the kind-neutral verb does not have, and which the gate must not displace.", test_file = "src/backlog.rs", keywords = ["run_needs", "cycle"], waived = false },
+  { id = "VA-1", expects = "`backlog` reaches `commands` nowhere: grep for `crate::commands` over `src/backlog.rs` returns nothing in production code, with a positive control on a module that DOES reach it (`src/status.rs`) so the empty result is a known absence rather than a broken search. The assertion is over the module, not over `DepSeqOps`' membership, so a fifth injected operation inherits it." },
+  { id = "VA-2", expects = "ISS-368 is closed against what was built, and the `IDE-019` divergences (footer vs `doctor` routing; `inspect` vs a `--verbose` flag) plus every intentional output change across all eight phases are named in the reconciliation brief with its reason." },
+]
+specs        = []
+requirements = []
