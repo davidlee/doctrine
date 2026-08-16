@@ -1,0 +1,45 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 241
+slug = "a-review-disposing-act-emits-two-rows-one-per-claim"
+title = "A review-disposing act emits two rows, one per claim"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-16"
+updated = "2026-08-16"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by = "david"
+decided_on = "2026-08-16"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the defect whose repair this arm-level ruling completes"
+target = "ISS-355"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the unified emit seam this ruling declines to carve an exception into"
+target = "DEC-238"
+
+[[relation]]
+label = "shapes"
+target = "SL-256"
