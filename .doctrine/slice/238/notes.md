@@ -1055,3 +1055,29 @@ routes around: it does not care who authored the signature.
   criterion can be stated to permit an import-only move — or to leave it and
   accept one duplicated four-line function. Owner's call; no correctness impact
   either way.
+
+- **§6's `Three call sites move to the new form` is short by one — prose fix at
+  reconcile.** `design.md:1187` says three, and `plan.toml` `EX-1` transcribed the
+  same census (`backlog.rs:2077`, `backlog.rs:2099`, `commands/dep_seq.rs:167`).
+  There are **four** production callers of `dep_seq::remove`: the fourth is
+  `commands/dep_seq.rs:254`, the removal loop inside `run_after_prune`. It is not
+  optional — reshaping `remove` to take `&RelRemove` breaks it at compile time, so
+  it moves in PHASE-06 whether or not the design counted it. Two of the three
+  quoted line numbers were also stale (PHASE-05 grew `backlog.rs`; now `:2353` and
+  `:2375`), and the leaf's own two test call sites (`src/dep_seq.rs:849`, `:877`)
+  move with them.
+
+  Nothing about the design's substance changes — `run_after_prune` is rewritten
+  wholesale by PHASE-07, so its site is "being rewritten anyway" exactly as the two
+  backlog-side sites are. Only the count and the citations are wrong.
+
+  **Reconcile action:** correct `design.md:1187` to four call sites, naming
+  `run_after_prune`'s loop and PHASE-07 as its second rewrite. No code change.
+  `plan.toml` `EX-1` is already amended in place (id kept, reasoning inline, per
+  `execution-protocol.md` `R5`).
+
+  Raised at PHASE-06 planning, blind to the type prototype (`R1`). Third instance
+  of the `execution-protocol.md` §3 seam, and the second reached from PHASE-02's
+  direction — not *write the assertion*, but *count the population the criterion
+  quantifies over*. A prose reviewer reads "three call sites" and has no reason to
+  run the grep; the compiler does it for free the moment the signature moves.
