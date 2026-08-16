@@ -120,12 +120,39 @@ stale, its `layering.toml` edit is fork-local, and it carries no tests, no lint,
 and none of the `#[derive]`s §7's tests need on `RefState` / `BoundaryRow` /
 `BoundaryProbe`.
 
-### Test naming
+### Test naming and the VT mandates
 
 `design.md` §7 names roughly thirty assertions in prose. Those names are the
 test names, normalised to snake_case — that is what makes the `VT` keyword
 mandates in `plan.toml` checkable, and it is what lets an auditor walk §7 and
 the suite side by side without a mapping table.
+
+Two consequences for the `VT` keyword mandates in `plan.toml`, both of which
+bit while drafting:
+
+- **`slice verify-vt` runs slice-wide at every conclude, not per phase.** So a
+  keyword may not name anything this slice later deletes. PHASE-02's mandates
+  are therefore keyed on the production symbols that survive
+  (`run_after_prune`, `run_after_remove`, `prune`) rather than on the strings
+  its characterisation tests assert — the `/resolution` suffix, the
+  `resolved`/`closed` literals — all of which PHASE-07 removes on purpose. The
+  assertions themselves live in each row's `expects`. The mandates on that
+  phase are correspondingly weak; `VA-1` (the diff is test-only) is what
+  actually holds it.
+- **A `VT` mandate is only attributable if the phase modifies the mandated
+  file.** PHASE-08's layering assertion is a `VA`, not a `VT`, because the
+  phase modifies no file carrying the evidence — the row for `authored_status`
+  and the `command = 76` baseline are both PHASE-01's edit. A `test_file`
+  mandate there would read `UNATTRIBUTABLE` forever and look like a gap.
+
+### Per-phase hygiene
+
+Project standing obligations, not restated as criteria on eight phases:
+`doctrine check quick|commit` as the inner loop, `just gate` (clippy at zero
+warnings plus `test-all`) before every commit, `cargo fmt`, and path-limited
+commits scoped `feat(SL-238):` / `test(SL-238):`. `doctrine check gate` belongs
+to close, where the build-before-validate order is what gives it a fresh
+binary.
 
 ## Notes
 
