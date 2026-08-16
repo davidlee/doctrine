@@ -113,23 +113,35 @@ integration is in the sections themselves. Ids only — the run holds the text.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-15 · PHASE-03 · 00295be85
+fresh-as-of: 2026-08-16 · audit/`RV-361` · all 7 phases complete, merged to
+`edge` at `eddb971c1`
 
 ### Produced
 
-**Execution, PHASE-01..03.**
+**Execution, PHASE-01..07 — all seven complete.**
 
 - `b36cd84f1` (PHASE-01), `836662efa` and `8d2845ac5` (PHASE-02 — the second
   records `VT-2`'s waiver reason), `017c59742` (PHASE-03). `4663ce278` is an
   incidental `skills-lock.json` hash refresh that falls inside PHASE-02's
   recorded boundary; `00295be85` carries thirteen friction observations.
-  `doctrine check gate` exit 0 and `doctrine slice verify-vt 251` clean for
-  PHASE-01..03 as of `00295be85`. PHASE-04..07 not started.
-- Six criteria appended and one VT retired **at execution**: `PHASE-01/EX-9`;
-  `PHASE-02/EX-10`, `EX-11`, `VT-4`; `PHASE-03/EX-10`, `EX-11`; `PHASE-02/VT-2`
-  waived. Ids only — the whole rationale for each is authored in `plan.md`'s
-  three per-phase execution headings and in the criterion text in `plan.toml`.
-  Criteria ids are immutable: append, never renumber.
+- `cc64a24c2` (PHASE-04), `01f757571` (PHASE-05), `cba1f257f` (PHASE-06),
+  `d7001375c` (PHASE-07), each preceded by its plan amendment — `34935b318`
+  (PHASE-05 `VT-3`), `be5605b2d` (PHASE-06 `VT-1` re-sited, `DEC-226` pinned),
+  `015099119` (PHASE-07 `EX-10`). `b90577f75` harvested; `eca2c9a11` carries the
+  PHASE-04..07 friction observations. `be679d544` is the capsule driver's own
+  commit and is `RV-361` `F-7`.
+- Landed on `edge` at `eddb971c1`, which also resolved an id collision: `edge`
+  and `sl-251` both allocated backlog ids 434 and 366 after the merge base, so
+  this slice's two items were re-minted as `IMP-438` and `ISS-439`. Anything in
+  this slice's record naming `IMP-434` before that merge means `IMP-438`.
+- `doctrine check gate` exit 0 on the merged tree. `doctrine slice verify-vt 251`
+  is clean but for `PHASE-06/VT-1`, a keyword-grep artefact adjudicated as
+  `aligned` — see `RV-361` `F-1`.
+- Seven criteria appended and one VT retired **at execution**: `PHASE-01/EX-9`;
+  `PHASE-02/EX-10`, `EX-11`, `VT-4`; `PHASE-03/EX-10`, `EX-11`; `PHASE-07/EX-10`;
+  `PHASE-02/VT-2` waived. Ids only — the whole rationale for each is authored in
+  `plan.md`'s per-phase execution headings and in the criterion text in
+  `plan.toml`. Criteria ids are immutable: append, never renumber.
 - The design corrections `/reconcile` owes are enumerated in `plan.md` (the
   `## Notes` section plus the three execution headings). Not restated here, and
   not implementation work.
@@ -369,14 +381,15 @@ fresh-as-of: 2026-08-15 · PHASE-03 · 00295be85
 
 ### Open
 
-- **PHASE-04..07 unstarted**, and their criteria are authoritative only as far
-  as the design is — see the `attestation.rs` trap under *Learned*. `PHASE-04`
-  crosses the leaf/command tier boundary (`ADR-001`) and its kind set rides
-  `RecordKind::ALL`, which is hand-maintained (below, and `ISS-364`).
-- **`/reconcile` obligations accumulate at execution.** Every phase so far has
-  added one; `plan.md` is the single place they are enumerated, and the count
-  in any prose that names one is a snapshot. Query `plan.md`, do not carry a
-  number.
+- **`/reconcile` obligations are now enumerated on `RV-361`'s Reconciliation
+  Brief, not only in `plan.md`.** Every phase added one at execution and
+  `plan.md`'s per-phase headings remain the reasoning; the brief is the
+  actionable list, because `plan.toml` is immutable-append and is not a reconcile
+  write surface. Query one of those two, never a count carried in prose.
+- **The `attestation.rs` trap was real and reached the audit** — `design.md` §7
+  attributes closure-struct fixtures to a file that defines none, which
+  `PHASE-02/VT-2`'s waiver caught at execution and the design never absorbed.
+  `RV-361` `F-2`.
 
 - **Two obligations open, both the user's** — section attestations (all nine
   outstanding; human review is the v1 default per `reviewing.md`) and the review

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a009a2-dc1c-7c52-8fef-0d127cd089e9"
+recorded_at = "2026-08-16T08:14:23.260390409Z"
+kind = "friction"
+summary = "/audit: review verbs refuse every ordinary worktree, contradicting AGENTS.md's 'audit/close on a worktree' ritual"
+detail = "SL-251 close. AGENTS.md instructs auditing/closing a feature on a worktree, and the user asked for exactly that. But resolve_review_root (src/review.rs:2358) bails on IMP-024 for any tree where classify_worktree_role == 'fork', and classify_worktree_role (src/worktree/shared.rs:77) returns 'fork' for EVERY linked worktree whose branch is not dispatch/<digits>. So a plain 'git worktree add -b close/SL-251' tree cannot run prime/status/raise/dispose — the whole audit ledger. ISS-275 already widened the guard once to spare dispatch coordination trees; the solo /worktree isolation branch that AGENTS.md prescribes for audit/close was not included. There is no env escape hatch. Cost: a full merge + build + conformance run in the worktree, then the audit has to relocate to the primary tree on edge, plus one premature RV entity created and deleted (review new does NOT route through the guard, so it succeeded where every later verb refuses — that inconsistency is its own defect)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
