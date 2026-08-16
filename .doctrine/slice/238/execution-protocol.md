@@ -57,8 +57,10 @@ Do not read:
 1. anything under `.worktrees/` — in particular `.worktrees/proto-SL-238-types`;
 2. any git object on branch `proto/SL-238-types`;
 3. `.doctrine/slice/238/handover.md` — it describes the prototype;
-4. `.doctrine/state/slice/238/phases/phase-NN.md` — the phase sheet is written by
-   a planner who *has* read the prototype.
+4. `.doctrine/state/slice/238/phases/phase-NN.md` — where the phase sheet is
+   written by a planner who *has* read the prototype. Under `R1`'s default the
+   planner is blind and the sheet IS readable, except the oracle-derived section
+   its `## Findings` names — say which when handing it over.
 
 Everything else in the repo is open. Point 4 is the one most easily forgotten and
 the one that leaks most quietly.
@@ -94,6 +96,15 @@ The pattern is worth naming, because it predicts where the next one will be:
 to enforce it.** Prose review reads both and sees agreement; only someone
 obliged to *write the assertion* discovers the criterion cannot carry the claim.
 
+**PHASE-02 found a fourth at the same seam, approached from the other side.** §6
+and §7 both state that `--prune` has no test coverage; five SL-105-era goldens
+exist (`notes.md ### Open`). They pin the *decision* — which edges survive — and
+never the rendered reason, so the design's substance held and its claim did not.
+The generalisation is cheap and worth keeping: **before pinning a before-state,
+grep for the pin.** A design's account of what is *untested* ages exactly as
+badly as its account of what is true, and it is not a claim a prose reviewer
+thinks to check.
+
 Two further returns that are not defects:
 
 - The seat drew boundaries around its own tests rather than letting them look
@@ -108,14 +119,41 @@ Two further returns that are not defects:
 
 ## 4. Refinements for PHASE-02 onward
 
-**R1 — plan the phase from a context that has not read the prototype, and the
-second seat disappears.** The planner is what got contaminated in PHASE-01;
-`DEC-242` permits it but does not require it. A planner who never opens the fork
-can author its own red suite, and the phase runs one-seat. The trade is real: as
-planner-with-the-fork, PHASE-01 caught the prototype's stale `engine (17)` header
-and its total absence of lint attributes *before* they became implementation
-bugs. Decide per phase. **PHASE-03 is the natural place to try it** — §5 is
-greenfield, there is no prototype code for it at all, so nothing is given up.
+**R1 — plan the phase blind, THEN read the prototype against the finished plan.
+This is the default from PHASE-02 onward.** The planner is what got contaminated
+in PHASE-01; `DEC-242` permits that but does not require it. A planner who never
+opens the fork can author its own red suite, and the phase runs **one-seat**.
+
+The trade looked real when this was written — as planner-with-the-fork, PHASE-01
+caught the prototype's stale `engine (17)` header and its total absence of lint
+attributes *before* they became implementation bugs. **Ordering dissolves the
+trade.** Plan blind, commit the plan, and only then read the fork as an oracle
+against it. The plan cannot be contaminated by something read after it was
+written, and the prototype's defects still surface — they just land as
+carried-forward findings instead of silently shaping the plan.
+
+PHASE-02 ran it. The blind sheet was written and committed, then the fork was
+read: **it poked no hole in the plan.** It corroborated the ground truth (its
+diff removes exactly the code the phase characterises), changed one *annotation*
+— the backlog copy's canonical echo is preserved across the collapse, not
+superseded, so labelling it superseded would have been the precise confusion
+`EX-4` exists to prevent — and yielded two prototype defects logged forward to
+PHASE-07 (a `Terminal` branch minting reasons for states `authored_class` may
+make unreachable; an `eprintln!` against `print_stderr = "deny"`). See
+`phase-02.md` `## Findings` F-3.
+
+Two caveats on the default:
+
+- The oracle pass is thinnest on a **characterisation** phase, where the ground
+  truth is today's tree and fully readable, and richest where the prototype
+  lands real consumers. Run it either way; it is cheap.
+- The oracle's returns then live in the sheet, so **the sheet stops being
+  prototype-clean.** Say so when handing it to an implementer: which section is
+  oracle-derived, and that the fork itself stays closed.
+
+PHASE-03 remains the freest case — §5 is greenfield, there is no prototype code
+for it at all, so the oracle pass has nothing to return and the blindness costs
+literally nothing.
 
 **R2 — hand the seat a task, not a criterion.** Messages that named the criterion
 *and why it carries weight* produced better assertions than messages that quoted
@@ -192,16 +230,30 @@ declared in `main.rs` with no `use` lines passes the entire suite. It reports
 
 ## 6. The loop, concretely
 
+Default, one-seat (`R1`):
+
 ```
-/phase-plan PHASE-NN            # fill the runtime sheet; confirm EN criteria
+/phase-plan PHASE-NN            # BLIND — design + plan + today's tree only
+  amend a wrong criterion in place (R5); findings → notes.md (R6)
+  commit the plan
+oracle pass                     # NOW read the fork, against the finished plan
+  → returns append to the sheet's ## Findings, flagged as oracle-derived
 doctrine slice phase 238 PHASE-NN --status in_progress
-  spawn blind seat once (§2)  →  per task: SendMessage red brief
-                              →  verify red is for the right reason
-                              →  orchestrator writes green
+  hand the phase to ONE implementer — task-shaped, not criterion-shaped (R2)
+                              →  red first, green, refactor
                               →  cargo fmt; just gate
                               →  path-limited commit (git commit <paths> -F -)
 doctrine slice phase 238 PHASE-NN --status completed --note "…"
 /harvest                        # notes.md ## Harvest, then this file if the protocol moved
+```
+
+Fallback, two-seat — when the planner has already read the fork, or the phase is
+large enough that a separate red author earns its spawn:
+
+```
+  spawn blind seat once (§2)  →  per task: SendMessage red brief
+                              →  verify red is for the right reason
+                              →  orchestrator writes green
 ```
 
 `just check` for the inner loop, `just gate` before every commit,
