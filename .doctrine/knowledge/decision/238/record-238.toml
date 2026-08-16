@@ -5,7 +5,7 @@ id = 238
 slug = "a-recording-is-an-occurrence-so-it-is-emitted-explicitly-at-a-unified-admit-store-emit-seam"
 title = "A recording is an occurrence, so it is emitted explicitly at a unified admit-store-emit seam"
 record_kind = "decision"
-status = "proposed"
+status = "accepted"
 created = "2026-08-16"
 updated = "2026-08-16"
 tags = []
@@ -16,8 +16,8 @@ choice       = ""
 alternatives = []
 rationale    = ""
 consequences = []
-decided_by   = ""
-decided_on   = ""
+decided_by = "david"
+decided_on = "2026-08-16"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
