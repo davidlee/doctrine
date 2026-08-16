@@ -1,0 +1,33 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 437
+slug = "emit-seam-is-bypassable-act-storage-sinks-are-pubcrate"
+title = "Emit seam is bypassable: act storage sinks are pub(crate)"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-08-16"
+updated = "2026-08-16"
+tags = []
+
+# outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
+# — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
+# uniform `[[relation]]` rows (SL-048 "the cut") — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = []                   # item→item hard prerequisite
+after    = [{ to = "SL-256", rank = 0 }]                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "SL-256"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "weakens the cannot-forget claim DEC-238's appended correction retracts"
+target = "DEC-238"

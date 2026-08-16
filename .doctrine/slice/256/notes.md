@@ -25,48 +25,46 @@ integration rather than assuming.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 25, stage `drafting`) · pending
+fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 36, stage `reviewing`) · 1e495e88c
 
 ### Produced
 
-- `DEC-237`…`DEC-241` — minted through the run's own checkpoint dispositions (`cp-1`…`cp-6` over `inq-1`…`inq-6`), so each is bound
-  to the question it answers.
-- `REQ-478` (`FR-009` under SPEC-029) — the durable statement `DEC-240` rules
-  this slice owes. Authored `pending`; its coverage cell is deferred to when the
-  e2e checks exist.
-- `ISS-367` — sequenced `after SL-256`.
-- `research/research.md` + `raw/` — two-thread round, with a verification pass
-  appended.
+- `DEC-237`…`DEC-241` — minted through the run's own checkpoint dispositions
+  (`cp-1`…`cp-6` over `inq-1`…`inq-6`), so each is bound to the question it
+  answers. `DEC-238` carries an appended correction (`RV-360` `F-1`).
+- `REQ-478` (`FR-009` under SPEC-029) — authored `pending`; coverage cell
+  deferred until the e2e checks exist.
+- `ISS-367`, `IMP-437` — both sequenced `after SL-256`.
+- `RV-360` — external adversarial pass over all four sections; 7 findings raised
+  by codex, 7 disposed. `RV-359` was empty and is committed as-is.
+- `design.md` `sec-1`…`sec-4` drafted, revised and materialised (`9fe802b8f`,
+  `1e495e88c`). Scope and selectors reconciled in the same commit.
+- `research/research.md` + `raw/` — two-thread round, verification pass appended.
 
 ### Learned
 
-- `DEC-238` carries the general statement (a derived row can only report changes
-  in the *key* of the set it differences). `ISS-367` is its second instance.
-- Candidates for `/record-memory` at close, not yet written: the key-vs-content
-  rule above, and that `pi-scout` line anchors drift onto the doc comment or
-  attribute above an item while its content stays accurate (observed across
-  three cites this round — see `research.md` § Verification pass errata).
+- `mem.fact.coverage.vt-needs-a-check-field` — recorded this session.
+- Candidates for `/record-memory` at close, not yet written: `DEC-238`'s
+  key-vs-content rule (a derived row can only report changes in the *key* of the
+  set it differences); `pi-scout` line anchors drift onto the doc comment or
+  attribute above an item while content stays accurate (`research.md`
+  § Verification pass errata); adding an inquiry node after the exploring gate
+  costs two acts to restore, one of them the user's; an argument from absence
+  needs enumeration, not a generalisation (`RV-360` `F-7`).
 
 ### Open
 
-- **`graph-reviewed` is invalidated and must be re-attested by the user before
-  `drafting` → `reviewing`.** Declaring `inq-6` mid-drafting moved the inquiry
-  map, which invalidated both it and `blocking-set-declared`; the agent half has
-  been redeclared over all six nodes, the user half has not. `governance-confirmed`
-  and `sufficiency-accepted` are unaffected and still current. The lesson is
-  cheap and worth keeping: adding a node after the exploring gate costs two acts
-  to restore, one of them the user's.
-- **`SL-251`'s last phase is in flight** and will likely land in a worktree for
-  audit before this design finishes. That is better than the posture the scope
-  assumes: `R4` and the Non-Goals argue disjointness from a file list, and we
-  will instead be able to check against the landed capsule. Re-read `R4` and the
-  `SL-251` coordination note at that point rather than before.
-- Sections still to draft: the vocabulary (`ActRecorded` plus the readable/
-  emittable split), the emit seam, and verification. Both of the first two want
-  diagrams per the drafting obligation. `sec-1` is declared and revised;
-  `doctrine design materialise` has **not** been run, so `design.md` does not
-  yet exist on disk.
-- `QUE-219` — not this slice's to settle, but `DEC-239` now bears on it and
-  says how. Relation carries the descriptor.
-- Coverage cell for `REQ-478` — deferred by design, not forgotten. Recipe and
-  criterion mapping are in the slice's Verification & Closure Intent.
+- **Four sections outstanding review, and the run's `review_pass` is STALE** —
+  the rev-35 rewrite moved every fingerprint. Policy is `human-only`.
+- `RV-360` is `await=raiser`. Seven dispositions stand answered, unverified.
+- `IMP-437` — the emit seam is a convention, not a guarantee; needs its own
+  scope because the fix reaches `fixture.rs` and `SL-251`'s `tests.rs`.
+- `ISS-367` — `live_acts` blind to same-kind replacement. `sec-1`/`sec-3` state
+  the boundary so the design promises no symmetry it does not deliver.
+- **`SL-251` coordination: three sites, not two** — its `design.md` ¶ 422–428,
+  its ledger row at 2289, and `payload_contract.rs:501`. Discharged at that
+  slice's reconcile, not here.
+- `QUE-219` — not this slice's to settle; `DEC-239` bears on it and the relation
+  carries the descriptor.
+- Coverage cell for `REQ-478` — deferred by design. The recipe was **wrong** and
+  is corrected in `sec-4`; see `mem.fact.coverage.vt-needs-a-check-field`.
