@@ -234,12 +234,17 @@ flowchart LR
   R --> D["round-trip + alias guard<br/>(new)"]
   E["EMITTABLE (22)"] --> C["every_material_event_kind_persists_a_change_row<br/>e2e_design_state.rs:1081"]
   E --> F["no fixture row carries a<br/>non-EMITTABLE member (new)"]
-  E -.->|strict subset| R
+  E --> S["compile-time assert<br/>EMITTABLE ⊆ READABLE<br/>change_log.rs (new)"]
+  S --> R
   L["LegacyAcceptanceAttested"] -.->|the difference| R
 ```
 
-*The diagram's one non-obvious edge is the dotted one: `EMITTABLE ⊆ READABLE` is
-an invariant a test asserts, not a relationship the type enforces.*
+*The subset relation is **proved, not asserted at runtime** — a compile-time
+assert in the same idiom as the widest-name one it sits beside, which
+`change_log.rs:42-46` already documents as "proved rather than asserted". It is
+also the only thing in `src/` that reads `EMITTABLE`, since both roster tests
+live in a separate compilation unit, so dropping it stops the bin's own test
+build. `sec-4` carries the proof and both reasons.*
 
 - **`READABLE`** governs rendering and bounds. A historical row must stay
   renderable within the same budget, so the widest-name assert and the payload-cap
@@ -652,7 +657,7 @@ directly, as above.*
 
 | path | intended change |
 |---|---|
-| `src/design_run/change_log.rs` | `ActRecorded` and `LegacyAcceptanceAttested` variants; `ALL` → `READABLE` + `EMITTABLE`; `as_str` and `payload_terms` arms for both; the compile-time widest-name assert re-quantified over `READABLE`; `#[serde(try_from = "String", into = "String")]` with its `From`/`TryFrom` impls, replacing `rename_all` / `alias` / `rename` (`sec-2`); and one doc correction — `:69-70` attributes the eight legacy `evidence_invalidated` rows to the `SL-243`/`SL-244` runs, and all eight are `SL-244`'s |
+| `src/design_run/change_log.rs` | `ActRecorded` and `LegacyAcceptanceAttested` variants; `ALL` → `READABLE` + `EMITTABLE`; `as_str` and `payload_terms` arms for both; the compile-time widest-name assert re-quantified over `READABLE`; a `const fn` `is_subset` and the compile-time assert that `EMITTABLE ⊆ READABLE`; `#[serde(try_from = "String", into = "String")]` with its `From`/`TryFrom` impls, replacing `rename_all` / `alias` / `rename` (`sec-2`); and one doc correction — `:69-70` attributes the eight legacy `evidence_invalidated` rows to the `SL-243`/`SL-244` runs, and all eight are `SL-244`'s |
 | `src/design_run/run.rs` | `ActRecord` sum; `admit_and_record`; `admit_against` deleted; `record_declaration` and `record_act` signatures; the three call sites in `apply`; the `AcceptanceAttested` push deleted |
 | `src/design_run/bounds.rs` | one doc reference to `ChangeEvent::ALL` (`:49`) follows the rename to `READABLE` |
 | `src/design_run/refusal.rs` | one new variant, `UnknownChangeEvent { raw }`, for `ChangeEvent`'s `TryFrom`. **A new selector** — the fence widens by one file, declared here rather than discovered at execution (`sec-2`) |
@@ -673,18 +678,6 @@ directly (`sec-3`), so a reader will ask whether they move. They do not: neither
 references `ChangeEvent::ALL`, `admit_against`, or any event this slice renames.
 `tests.rs` is one of `SL-251`'s design-targets, so if that answer ever changes it
 is a scope question, not an edit.
-
-**`EMITTABLE` is dead in the bin's test build.** Its only consumers are in
-`tests/e2e_design_state.rs`, a separate compilation unit, so after the split
-nothing in `src/` names it — `READABLE` inherits the compile-time widest-name
-assert and gains `TryFrom`, `EMITTABLE` inherits neither. The module's dead-code
-gate is `#![cfg_attr(not(test), expect(dead_code, …))]` (`mod.rs:68`), stripped
-exactly where the constant is dead, while the crate denies `unused`
-(`Cargo.toml:224`). So `cargo check` passes and `cargo test --bin doctrine`
-fails to compile. The constant needs an exemption scoped to `test` — the inverse
-of this codebase's usual staging gate. Its form is the implementor's call, with
-one constraint: `expect` is a hard error when unfulfilled, so writing the
-exemption as `expect` forbids any future bin-side test from naming `EMITTABLE`.
 
 ## What is verified, and how
 
@@ -720,8 +713,8 @@ the snapshot already held.
 
 5. **`the_retired_event_is_readable_but_not_emittable`** —
    `LegacyAcceptanceAttested` is absent from `EMITTABLE` and present in
-   `READABLE`, and `EMITTABLE` is a subset of `READABLE`. The invariant `sec-2`'s
-   diagram draws as a dotted edge; nothing in the type enforces it.
+   `READABLE`. The subset half of the invariant is not a test — it is proved at
+   compile time, below.
 6. **`no_row_the_ladder_produces_carries_a_non_emittable_event`** — every row in
    `every_event_fixture`'s change log has an event in `EMITTABLE`. This is the
    converse of check 5 and a **partial** answer to `RV-360` `F-2`: the roster
@@ -777,15 +770,43 @@ snapshot rather than one row. That is `ISS-315`'s defect class, and 7 rows acros
 
 ### Not a test
 
-The event-name bound is proved, not asserted at runtime:
+Two facts are proved at compile time rather than asserted at runtime:
 
 ```rust
 const _: () = assert!(widest(&ChangeEvent::READABLE) <= DESIGN_EVENT_NAME_BYTES);
+const _: () = assert!(is_subset(&ChangeEvent::EMITTABLE, &ChangeEvent::READABLE));
 ```
 
-`act_recorded` is 12 bytes against a 32-byte bound whose current widest is 27, so
-this cannot fail — but it is the discharge of `REQ-437` (SPEC-029 `NF-002`) and
-the rename must carry it across rather than drop it.
+The first is the event-name bound. `act_recorded` is 12 bytes against a 32-byte
+bound whose current widest is 27, so it cannot fail — but it is the discharge of
+`REQ-437` (SPEC-029 `NF-002`) and the rename must carry it across rather than
+drop it.
+
+The second is `sec-2`'s subset relation, which the split would otherwise leave to
+a runtime assertion. `is_subset` is a `const fn` in the module's existing
+slice-recursion idiom (`widest`, `:31-40`), comparing members by `as_str()` —
+already the event's identity everywhere else (STD-001). Two shorter spellings are
+closed off by the workspace lint gate and are named so nobody re-derives them:
+comparing discriminants trips `clippy::as_conversions`, and deriving `READABLE`
+from `EMITTABLE` by a const-block copy trips `clippy::indexing_slicing`.
+
+**The second assert is also load-bearing against the lint gate**, and that is the
+reason it must not be dropped later as redundant. After the split it is the only
+thing in `src/` that reads `EMITTABLE`: both roster tests live in
+`tests/e2e_design_state.rs`, a separate compilation unit, because the crate is
+binary-only and that file `#[path]`-includes the module. The module's dead-code
+exemption is `not(test)`-scoped (`mod.rs:68`) and the crate denies `unused`
+(`Cargo.toml:224`), so with no `src/` reader `cargo check` passes and
+`cargo test --bin doctrine` fails to compile. No attribute substitutes for the
+assert: `cfg(test)` holds in **both** compilation units, so
+`cfg_attr(test, expect(dead_code, …))` is unfulfilled in the e2e unit and stops
+*that* build instead, and `cfg_attr(test, allow(dead_code, …))` escapes
+`clippy::allow_attributes` (`Cargo.toml:252`) only because `just gate` runs
+clippy without `--all-targets` (`justfile:67`).
+
+Neither assert says anything about what a writer may emit, so `DEC-239`'s ruling
+against type enforcement at the construction seam, and `RV-360` `F-2`'s residual
+as `sec-2` and the criterion table state it, both stand exactly as written.
 
 ## Why nothing else in the suite moves
 
@@ -942,5 +963,6 @@ exit fails the command outright.
 Recorded once those checks exist, not now — a coverage cell pointing at a test
 that has not been written is the same empty claim again. `REQ-478` moves
 `pending` → `active` at close, on that evidence.
+
 
 

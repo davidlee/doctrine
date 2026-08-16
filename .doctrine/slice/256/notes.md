@@ -117,18 +117,12 @@ passes and `cargo test --bin doctrine` fails. Gating the prototype's own
 throwaway test out reproduced it: `error: associated constant EMITTABLE is never
 used`.
 
-**Disposition.** The observation is adopted as a fourth note under `sec-4`'s
-code-impact table (rev 43 declare, rev 44 materialise, 13 lines, no other section
-touched). No attestation was spent — all four sections were already
-`review=outstanding`. The proposed *repair* — a specific `cfg_attr` — was
-declined at that altitude: a design declares no attributes, and
-`mem.pattern.lint.dead-code-derives-count-as-reads` records that `expect`
-hard-errors when unfulfilled, so freezing that form would forbid any future
-bin-side test from naming `EMITTABLE`. The design states the constraint and
-leaves the form to the implementor. A second admissible repair — giving
-`EMITTABLE` a production consumer — is **not** taken here because it would reopen
-`RV-360` `F-2`'s ruling that the converse is bought with evidence rather than
-types; that reopening should be deliberate, not smuggled in under a lint fix.
+**Disposition — first adopted at rev 43/44, superseded at rev 45/49.** The
+observation went in as a fourth note under `sec-4`'s code-impact table, stating
+the constraint and leaving the exemption's form to the implementor. The
+adversarial pass below found that ruling's stated constraint wrong and its repair
+space mis-bounded; the note is deleted, because the repair that landed removes
+the finding's subject rather than exempting it.
 
 **Class swept, and it is empty.** The class is *a constant whose only consumers
 live in the integration-test compilation unit*. Nothing else this slice
@@ -144,6 +138,66 @@ compile-clean. Against a design this hardened, confirming three claims at runtim
 and returning one consequence nobody had reasoned to is the shape of success. The
 finding was also *not* findable by re-reading — it is a property of the crate's
 lint configuration meeting a compilation-unit boundary, three files apart.
+
+### Adversarial pass on the rev 43/44 repairs (2026-08-16)
+
+Held to the standard `codex` applies on `RV-360`: verify against source, and
+treat a plausible rationale as the thing to attack. Two findings raised and
+answered on `RV-360` (`F-15`, `F-16`); the ledger's `await` returned to `raiser`,
+so `codex`'s owed verification turn on `F-1`–`F-14` is undisturbed.
+
+**The adopted claim itself held, and was re-verified by reproduction rather than
+by re-reading.** Every link checked against source (`change_log.rs:46`;
+`mod.rs:68-74`; `Cargo.toml:97`/`:224`; `e2e_design_state.rs:6-8`/`:40-46`), then
+the failure reproduced in a scratch worktree at `c546a9ae0` by adding a
+consumer-less `pub(crate)` associated const: `cargo check --bin doctrine`
+finished, `cargo test --bin doctrine --no-run` gave
+`error: associated constant … is never used`, `-D dead-code implied by -D unused`.
+`bounds.rs:49` is an intra-doc link, and a doc link is **not** a dead-code read,
+so it could never have stood in for one.
+
+**`F-15` — the note named a constraint that does not bind.** It warned that an
+`expect` exemption would forbid a *future* bin-side test. The binding fact is
+that `cfg(test)` is true in **both** compilation units — the bin's test build and
+the integration-test crate that `#[path]`-includes the module — so
+`cfg_attr(test, expect(dead_code, …))` is unfulfilled in the e2e unit and stops
+*that* build today. Reproduced:
+`error: this lint expectation is unfulfilled`, `-D unfulfilled-lint-expectations`.
+`cfg_attr(test, allow(dead_code, …))` does compile, but only because `just gate`
+runs `cargo clippy` without `--all-targets` (`justfile:67`), so
+`clippy::allow_attributes = "deny"` (`Cargo.toml:252`) never sees it.
+
+**`F-16` — the repair space was mis-bounded, and that is what hid the fix.**
+`notes.md` had recorded any production consumer as reopening `RV-360` `F-2`.
+`F-2` and `DEC-239` decline type enforcement at the *construction seam* — a
+constraint on writers, in the converse direction — so a consumer that constrains
+no writer cannot reopen them. `sec-2` already named the candidate without
+claiming it. Promoting `EMITTABLE ⊆ READABLE` from a runtime assertion to a
+compile-time `is_subset` proof gives `EMITTABLE` a `src/` consumer, so
+`dead_code` never fires and `sec-4`'s note has no subject; it also upgrades a
+planned test to a proof. Probed green on `cargo check`,
+`cargo test --bin doctrine`, `cargo test --test e2e_design_state` and
+`cargo clippy`. Two shorter spellings are closed off by the workspace gate and
+are now named in `sec-4` so nobody re-derives them: a discriminant compare trips
+`clippy::as_conversions`; deriving `READABLE` from `EMITTABLE` by a const-block
+copy trips `clippy::indexing_slicing`.
+
+**Siting, the fourth target, dissolved.** With the note deleted there is nothing
+to re-site; the premise it rested on now lives in `sec-2`'s caption, which is the
+section that owns the roster split.
+
+**On method — the cost of reasoning where compiling was available.** The rev
+43/44 ruling was reached by recalling
+`mem.pattern.lint.dead-code-derives-count-as-reads`, whose own conclusion is
+*"Do not reason about it; compile."* One build during adoption would have covered
+what five scratch-worktree builds established here. Captured as a friction
+observation.
+
+**`/record-memory` candidates at close.** (a) `cfg(test)` holds in *both* the bin
+test build and any integration-test crate that `#[path]`-includes a module, so no
+`cfg(test)`-keyed `expect` can be correct for an item live in only one of them.
+(b) `just gate` runs clippy without `--all-targets`, so clippy restriction lints
+— `allow_attributes` among them — do not see `tests/` or the bin's test cfg.
 
 ### Open
 
@@ -161,10 +215,11 @@ lint configuration meeting a compilation-unit boundary, three files apart.
 - **`SL-251` coordination: three sites, not two** — its `design.md` ¶ 422–428,
   its ledger row at 2289, and `payload_contract.rs:501`. Discharged at that
   slice's reconcile, not here.
-- **Unreopened by choice: `EMITTABLE` could have a production consumer.** The
-  prototype's finding has a second admissible repair that would close `RV-360`
-  `F-2`'s acknowledged hole by types rather than evidence. Not taken — it
-  reopens a settled ruling, so it needs a deliberate decision, not a lint fix.
+- ~~Unreopened by choice: `EMITTABLE` could have a production consumer.~~
+  Closed by `RV-360` `F-16`. It now has one — the compile-time subset proof —
+  and it reopens nothing: `DEC-239`'s ruling against construction-seam type
+  enforcement and `F-2`'s residual stand exactly as written, which `sec-4` says
+  in as many words.
 - `QUE-219` — not this slice's to settle; `DEC-239` bears on it and the relation
   carries the descriptor.
 - Coverage cell for `REQ-478` — deferred by design. The recipe was **wrong** and

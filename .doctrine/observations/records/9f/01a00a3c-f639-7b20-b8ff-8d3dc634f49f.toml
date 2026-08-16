@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00a3c-f639-7b20-b8ff-8d3dc634f49f"
+recorded_at = "2026-08-16T11:02:42.489586622Z"
+kind = "friction"
+summary = "/design: a lint-consequence finding was adopted into the design and its repair space reasoned about from memory instead of compiled"
+detail = "SL-256 rev 43/44 adopted a prototype probe's dead-code finding, then ruled on the repair space by recalling mem.pattern.lint.dead-code-derives-count-as-reads. That memory's own conclusion is 'Do not reason about it; compile' — the one step the adoption skipped. Cost: the design's stated 'one constraint' (expect forbids a FUTURE bin-side test) is not the binding one; cfg(test) holds in both compilation units, so the cfg_attr(test, expect(dead_code)) form fails TODAY in the e2e unit with unfulfilled-lint-expectations. Establishing this took four scratch-worktree builds in the adversarial pass that a single build during adoption would have covered."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
