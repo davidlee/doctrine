@@ -1,0 +1,54 @@
+memory_uid = "mem_01a00b0defd279438fff81cdad1f1a64"
+memory_key = "mem.pattern.testing.scannable-entity-fixture-needs-md-and-dates"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Scannable entity fixture needs more than meta::Meta requires"
+summary = "relation_graph::scan_entities needs the .md sibling AND created/updated; omitting either yields a silent wrong count, not an error"
+created = "2026-08-16"
+updated = "2026-08-16"
+
+[scope]
+paths = ["src/authored_status.rs", "src/backlog.rs", "src/relation_graph.rs"]
+globs = []
+commands = []
+tags = ["testing", "fixtures", "entity-scan", "silent-failure"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "522765a760007d460ba647f3416dc7cb6a67e40d"
+tree = "e68f960193aa57efb7e77c68b305308b3b04eb59"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "522765a760007d460ba647f3416dc7cb6a67e40d"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-238"
+
+[[relation]]
+label = "related"
+target = "mem_019ef8c35b407a738b66e1fa5eaaa0f3"
+
+[[relation]]
+label = "related"
+target = "mem_019fe20c79d47da28cfb143c7ae21a2a"
+
