@@ -160,7 +160,7 @@ Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-16 · design/**reviewing** (run `dr-01a00475`, rev 53; `RV-358` ten findings all dispositioned; runbook 3/3 discharged; gate to `locked` holds on three USER acts) · 582300f14 + uncommitted
+fresh-as-of: 2026-08-16 · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · 4148b441b, clean but for untracked `ISS-368`
 
 ### Produced
 
@@ -208,6 +208,36 @@ fresh-as-of: 2026-08-16 · design/**reviewing** (run `dr-01a00475`, rev 53; `RV-
   `RFC-026` `E8.7`).
 - **No code written. `doctrine check gate` not run and not owed** — this pass
   touched only `.doctrine/` prose.
+- **Type prototype, two rounds** (fork `proto/SL-238-types`, uncommitted,
+  disposable). Round 1 found five issues, three accepted and landed as revisions
+  58/59. Round 2 proved all three and found **no new design defects** — the rank
+  ceiling honoured identically on both legs with two edges to one target at ranks
+  1 and 5; the admission refusal byte-identical across `backlog needs` and
+  `doctrine needs` (same sha256); the unpadded-ref bound exactly the
+  short-hyphenated form. Detail in the *Type prototype* section above.
+- `DEC-242` — *Skeleton-informed implementation with a blind test author.*
+  Accepted. Three seats per phase (planner / test author / code author); the test
+  author may **not** read the prototype, which is the clause that makes this not
+  prototype promotion. `concerns` `SL-238` and `RFC-026`.
+- `ISS-368` — `backlog needs` accepts targets `doctrine needs` refuses. The
+  shipped half of `RV-358` `F-5`, filed separately because it is live whether or
+  not this slice lands. `ISS-046` was the mirror defect and is closed.
+- `CHR-068` — `tests/architecture_layering.rs:8,22` cite a stale `command=120`
+  against the real `command = 76` (`layering.toml:190`). Found by the prototype
+  while checking §7's preservation claim; the design is right, the comment is not.
+- `RV-358` **waived**, not conducted. `F-1` rests at `answered` and concluding the
+  pass would have meant asserting the raiser's role over a review this side
+  responded to. The waiver reason — durable on the run, not restated here — names
+  which four of the five unverified findings the prototype supports and how.
+- Two further friction observations: `design apply`'s `adopt_authored` needs
+  section fingerprints no command emits (four source reads + a Python
+  reimplementation of `document::parse`; `RFC-026` `E8.7` again), and
+  `DOCTRINE_WORKER=1` refuses every authored write in a worker fork, blocking the
+  live smoke-tests such a fork exists to run.
+- **The lock carries its own caveat**, printed by the engine at the transition:
+  *"locked on an auditable agent claim of user acceptance — not authenticated
+  proof of a human act."* v1 has no authenticated human identity; the attestations
+  are an agent's record of a human's claim.
 
 ### Learned
 
@@ -406,13 +436,9 @@ routes around: it does not care who authored the signature.
 
 ### Open
 
-- **Run at `drafting`, all 9 sections `review=outstanding`** — the next stage is
-  `reviewing`. The `draft.selectors` runbook step is discharged and
-  `drafting-ready` is declared; the one gate still shut is
-  `governing-context-recorded`, because linking `STD-003` moved the slice's
-  `governance-edges` fingerprint and expired the earlier `governance-confirmed`.
-  It needs a **user** act. Query the run, not this line:
-  `doctrine design resume 238`.
+- ~~**Run at `drafting`, all 9 sections `review=outstanding`**~~ — **closed
+  2026-08-16.** Every gate act is now current and the run is `locked` at rev 63.
+  Query the run, never this line: `doctrine design resume 238`.
 - ~~**`slice-238.md` carries two known errors**~~ — **closed 2026-08-16.** The
   21/9 axis split now reads 16/14 with the miscount named, and `src/cli.rs`
   is now `src/commands/cli.rs`. Direct edits, outside the design run.
