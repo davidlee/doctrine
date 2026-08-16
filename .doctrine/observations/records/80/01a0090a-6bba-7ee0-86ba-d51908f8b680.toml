@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0090a-6bba-7ee0-86ba-d51908f8b680"
+recorded_at = "2026-08-16T05:27:53.018538454Z"
+kind = "friction"
+summary = "/design: adopt_authored needs section fingerprints no command emits"
+detail = "Landing three hand-authored section edits on SL-238's run required an adopt_authored payload carrying the full sha256 of design.md plus a complete map of per-section fingerprints. Nothing emits those: 'design show' (both --format prompt and json) truncates every section fingerprint to 12 hex, 'resume' does not report them, and the AdoptionMarkersInvalid refusal returns only counts (missing/unknown/mismatched), never the observed values — so the refusal cannot drive a correction loop the way AdoptionStale's observed-vs-declared does for the document. Cost: four source reads (commands/design.rs authored_sections, design_run/document.rs parse/per_line/unescape_line/shape/marker_lines, refusal.rs, ids.rs) to learn that body = the region from just past the marker line to the next marker line, minus one trailing newline, then a Python reimplementation of the decomposition to hash it. Validated by positive control — the six unchanged sections reproduced show's 12-hex prefixes exactly — but that control was my own invention, not something the tool offered. This is RFC-026 E8.7's payload-shape-lookup class measured again at 4 reads for one submission."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

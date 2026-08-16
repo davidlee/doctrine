@@ -273,6 +273,16 @@ Both legs it loses are legs that were never about the render:
   (`backlog.rs:742`), so there is no third case. With both arms routed elsewhere
   the leg has nothing left to print.
 
+  **What is deleted is the render leg, not the verdict.** The adapter goes on
+  computing `Dangling` overrides exactly as it does today — §7 asserts no adapter
+  input changes — and `render_overrides` now discards them. So for an absent
+  backlog id the fact is briefly carried twice, once as an adapter verdict that
+  is dropped unprinted and once as the `AbsentDrop` `project` records. That is
+  deliberate: retiring the adapter's computation would be an ordering-machinery
+  change for a rendering problem, and it is the adapter's verdict that the
+  suppressed terminal case still rides. Named because a reader of the bullet
+  above could otherwise conclude `Dangling` no longer exists.
+
 `Override::from` stays the predecessor, `Override::to` stays the dependent, and the
 surviving lines keep the arrow. Nothing in `backlog_order.rs` is touched.
 
@@ -1219,6 +1229,17 @@ now and must keep working; resolving is what turns `154` into `SL-154`. Then
 target still canonicalises and can be cleared. Then verbatim, because a ref that
 names nothing is still a string in an array that has to come out.
 
+**What this does not reach: a stored ref that is well-formed but not padded.**
+Both parsing tiers hand off to `kinds::canonical_id`, so the needle is always
+canonical — a hand-authored `needs = ["SL-1"]` is sought as `SL-001` and never
+matches, and the verbatim tier does not rescue it because `SL-1` *parses*. The
+bare form is fine (`154` → `SL-154`); it is the short hyphenated form that is
+unreachable. The gap is narrow by construction: such a ref resolves, so §5's check
+does not report it either, and every CLI-authored ref is stored canonical. It is
+named here rather than fixed because normalising on read is a `kinds` change with
+five other callers, out of this slice's scope — §7 asserts the bound instead of
+the capability.
+
 The only disk touch is the first tier's stat, and its failure is not fatal. This is
 a deliberate behaviour change on `after --remove` — it now accepts a target it used
 to refuse — and it is what makes §5's check repairable.
@@ -1269,17 +1290,35 @@ downward, so `commands` supplies the operations and `backlog` receives them:
 // the caller supplies them. NOT the withdrawn `src/dep_seq_ops.rs` below: this is
 // a struct of function pointers held at command tier, and it relocates no code.
 pub(crate) struct DepSeqOps {
-    pub edge:   fn(Option<PathBuf>, &str, &str, Option<i32>) -> anyhow::Result<()>,
-    pub remove: fn(Option<PathBuf>, &str, &str)              -> anyhow::Result<()>,
-    pub prune:  fn(Option<PathBuf>, &str)                    -> anyhow::Result<()>,
+    pub edge:   fn(Option<PathBuf>, &str, &str, i32) -> anyhow::Result<()>,
+    pub remove: fn(Option<PathBuf>, &str, &str, i32) -> anyhow::Result<()>,
+    pub prune:  fn(Option<PathBuf>, &str)            -> anyhow::Result<()>,
     /// The admissible-target gate `backlog needs` is missing — see below.
-    pub admit_target: fn(&'static entity::Kind) -> anyhow::Result<()>,
+    /// Takes the target *ref* as well as its kind — see that subsection.
+    pub admit_target: fn(&'static entity::Kind, &str) -> anyhow::Result<()>,
 }
 
 pub(crate) fn dispatch(cmd: BacklogCommand, color: bool, ops: &DepSeqOps) -> anyhow::Result<()>
 fn run_after(path: Option<PathBuf>, …, ops: &DepSeqOps) -> anyhow::Result<()>
 fn run_needs(path: Option<PathBuf>, …, ops: &DepSeqOps) -> anyhow::Result<()>
 ```
+
+**The rank parameters are `i32`, and `remove` keeps one.** An earlier revision
+typed `edge` with `Option<i32>` and gave `remove` no rank at all; a type prototype
+of this design refused both. `run_after_edge` and `run_after_remove` each take
+`rank: i32` (`commands/dep_seq.rs:131`, `:157`), and `rank == 0` is already the
+"unset" sentinel the callee decodes — `let ceiling = if rank == 0 { None } else
+{ Some(rank) }` (`:166`), with `--rank` defaulting to 0 (`cli.rs:741`). An
+`Option` would invent a `None`/`Some(0)` distinction no consumer reads, and it
+would relocate a decoding step that already lives past the pointer. Dropping
+`remove`'s rank is the worse error: on `--remove` that argument is an **upper
+bound** — "only edges with rank ≤ N are removed" (`cli.rs:738-740`) — so a
+rankless pointer would silently discard a documented ceiling on the backlog-scoped
+leg, an unnamed behaviour change of exactly the kind §7 exists to forbid. Matching
+the existing signatures also keeps the churn at zero: `run_after_edge` and
+`run_after_remove` and their top-level call sites are untouched. `run_needs_remove`
+stays rankless because the `needs` array carries no rank, and it is not a
+`DepSeqOps` member — the struct's `remove` serves the `after` leg only.
 
 **The injection point is `dispatch`, and naming it matters.** `cli.rs`'s
 `Command::Backlog` arm calls `crate::backlog::dispatch(command, color)`
@@ -1351,13 +1390,27 @@ fourth member:
 
 ```rust
 // src/commands/dep_seq.rs — the existing ensure! at :92-97, extracted and named,
-// so `resolve_dep_seq_src` and the injected pointer refuse in one voice.
-pub(crate) fn ensure_admissible_dep_target(kind: &'static entity::Kind) -> anyhow::Result<()>
+// so `resolve_dep_seq_src` and the injected pointer refuse in one voice. It takes
+// the target ref as well as its kind because the message interpolates both.
+pub(crate) fn ensure_admissible_dep_target(
+    kind: &'static entity::Kind,
+    target: &str,
+) -> anyhow::Result<()>
 
 // src/backlog.rs — run_needs' prerequisite loop
 let (tkref, _tid) = kinds::parse_resolvable_ref(&root, prereq)?;
-(ops.admit_target)(tkref.kind)?;
+(ops.admit_target)(tkref.kind, prereq)?;
 ```
+
+**Why the ref rides along.** The `ensure!` being extracted interpolates two
+things, not one — `` `{target}` is a {} entity `` over the caller's ref string
+*and* `tkref.kind.prefix` (`dep_seq.rs:92-97`). A signature carrying only the
+kind has thrown the ref away by the time the message is built, and the best it
+can render is `` `ADR` is a ADR entity `` — the prefix twice, the ref nowhere.
+That defeats the stated purpose: one voice means the *same* message, and a
+message that has lost its subject is a second message. A type prototype of this
+design caught this; the earlier revision's narrower signature is the defect it
+found.
 
 One gate, one message, no import — and `knowledge::RecordKind::ALL` stays exactly
 where §8 commits to leaving it.
@@ -1534,9 +1587,15 @@ Both are kept after §6 shuts the CLI route, and the second gains a sibling that
 pins the shutting:
 
 - `backlog needs refuses an inadmissible target kind` — `RV`, `REC` and a governance
-  doc each refused, with the same message shape `doctrine needs` gives. Red before
-  §6's gate lands, green after; it is a deliberate refusal of input accepted today
-  (§9), not a tidy-up.
+  doc each refused, with the **byte-identical** message `doctrine needs` gives for
+  the same target, ref included. Red before §6's gate lands, green after; it is a
+  deliberate refusal of input accepted today (§9), not a tidy-up.
+
+  Identity, not similarity, and the assertion is written that way deliberately. A
+  type prototype of this design rendered `` `ADR` is a ADR entity `` from a gate
+  that had been handed only the target's kind — a message the word "shape" would
+  have accepted. Comparing the two paths' output byte for byte is what makes
+  "one voice" (§6) a claim a test can fail.
 
 ## `doctor`
 
@@ -1589,6 +1648,17 @@ pins the shutting:
 - `remove matches an unparseable ref verbatim`.
 - `backlog after accepts a cross kind target on every leg` — append, `--remove`,
   `--prune`, each asserted against the same target that fails today.
+- `backlog after --remove honours the rank ceiling` — with edges at rank 1 and
+  rank 5, `--remove --rank 3` clears the first and keeps the second, on the
+  backlog-scoped leg as on the top-level one. The routing in §6 sends this leg
+  through an injected pointer, and a pointer that had dropped the rank argument
+  would pass every other test in this list while silently widening the delete;
+  a type prototype of this design shipped exactly that signature. This is the
+  assertion that catches it.
+- `remove does not match a well-formed unpadded ref` — a stored `needs = ["SL-1"]`
+  is *not* cleared by `--remove SL-1`, because the needle canonicalises to
+  `SL-001`. Asserted as the known bound §6 names, so that closing it later is a
+  deliberate change with a red test rather than an accident.
 - `remove_needs refuses a malformed entity without touching the file` — the leaf's
   F-1 posture, matching `remove_after`.
 

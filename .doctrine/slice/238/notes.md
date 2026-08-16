@@ -382,6 +382,19 @@ Three lesser findings, reasoned but not source-verified to the same depth:
    case, added in the self-attack round). Correct per §2 — `render_overrides`
    drops `Dangling` — but the adapter's computation is only un-rendered, not
    retired. Worth stating where §4 claims the class is counted once.
+6. **The probe and row types carry no derives.** `RefState`, `BoundaryRow`,
+   `BoundaryProbe` and `PruneVerdict` will need `Debug`/`Clone`/`PartialEq`/`Eq`
+   before §7's tests can assert on them. Deliberately **not** a design change —
+   `design.md` declares no derive on any type it shapes, and adding attributes to
+   a design document is the wrong altitude. Recorded here so it survives the
+   fork, which is disposable; it belongs to whoever executes §7.
+
+**Disposition (2026-08-16).** Findings 1, 2 and 3 were verified against source and
+landed in design revisions 58 (adoption) and 59 (materialise, byte-identical),
+touching `sec-2`, `sec-6` and `sec-7` only. No attestation was spent — every
+section was already `review=outstanding`. Findings 4 and 5 needed no design
+change; 6 defers to execute. A second prototype round was then issued against the
+same fork to prove 1–3 compile and behave, and to keep hunting.
 
 **What the experiment establishes about method, separate from the findings.** The
 two confirmed defects are both type-level and both sat in prose that had already

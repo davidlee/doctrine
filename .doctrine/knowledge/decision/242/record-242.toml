@@ -1,0 +1,41 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 242
+slug = "skeleton-informed-implementation-with-a-blind-test-author"
+title = "Skeleton-informed implementation with a blind test author"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-16"
+updated = "2026-08-16"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-238's design was prototyped in Rust in a disposable fork (proto/SL-238-types) to type-check it. Two rounds found four defects that prose review had read past, and the fork now holds a working implementation of most of the design. The question was how — or whether — that code should inform implementation, given that RFC-026's P8 names probe-branch merging as the failure mode to watch for first, and that a design run whose repairs are self-authored has been governed all slice by the never-self-rule bar."
+choice = "Implement per phase through three seats — planner, test author, code author — where the planner and code author may read the prototype as raw material to critically evaluate, and the TEST AUTHOR MAY NOT. The red suite is written from design.md section 7 and the design alone, in a context that has never seen the skeleton."
+alternatives = ["Cherry-pick from the prototype at implementation time (the plan this decision replaced)", "Discard the fork entirely and implement greenfield from the design", "Review the prototype into a production-ready skeleton up front and then implement from it"]
+rationale = "Every defect the prototype found came from the design and the code disagreeing loudly. A test author who can see the skeleton resolves those disagreements silently in the skeleton's favour, and nothing downstream can distinguish an assertion derived from the design from one transcribed from code — which is exactly the grandfathering that makes prototype promotion a sin. Blinding one seat converts that from a judgement call into a structural property, at the cost that design gaps surface as questions rather than being quietly filled; that cost is the signal the experiment has been paying for. Front-loaded review rounds were declined because the prototype's demonstrated value is as an oracle, not as source, and 'production-ready' has no bar attached until the tests exist."
+consequences = ["The red suite must be authored in a context with no access to the prototype — an arrangement rather than an intention", "Separate red and green agents are new machinery (the capsule worker does both in one seat) and need a subagent definition", "The planner must derive phases from §8's file list and the design's own decomposition rather than the prototype's diff — else §5 is under-planned since no prototype code exists for it", "The code author is the only seat holding both the red tests and the skeleton so on any design/prototype conflict it must escalate via /consult rather than pick a side", "Output strings and behaviours the tests need must live in the design and not be read out of the code"]
+decided_by = "david"
+decided_on = "2026-08-16"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "how SL-238's type prototype informs its implementation"
+target = "SL-238"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "second field trial of P8; accepts the probe-branch-merging tension P8 names"
+target = "RFC-026"

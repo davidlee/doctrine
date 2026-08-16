@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00912-a8af-7993-a39e-c6e35efa9ad6"
+recorded_at = "2026-08-16T05:36:52.911723537Z"
+kind = "friction"
+summary = "prototype fork: DOCTRINE_WORKER=1 refuses every authored write, blocking live smoke-tests"
+detail = "Reported by a confined pi worker in .worktrees/proto-SL-238-types (round 2 of the SL-238 type prototype); recorded here because a fork has no broker. spawn-confined.sh / pi-respawn-nofork.sh set DOCTRINE_WORKER=1 in the jail env, which makes every authored write verb (backlog new, slice new, adr new, the dep/seq verbs) refuse with 'refusing authored write — workers return a source delta'. That is correct for a dispatch worker returning a delta, but a worker whose whole job is proving CLI behaviour against a scratch corpus must author fixtures. It cost several confusing failed invocations before the env leak was identified; the workaround is to prefix every smoke-test invocation with 'env -u DOCTRINE_WORKER'. The refusal message names the policy but not the env var that triggered it, which is what made it hard to attribute. Secondary, weaker: a warm 'cargo check' prints 'Finished in 0.06s' after edits it has not recompiled, which nearly passed for a re-check; the worker had to touch the edited files to force an honest build."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
