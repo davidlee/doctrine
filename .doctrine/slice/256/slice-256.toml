@@ -12,27 +12,27 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/design_run/change_log.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/design_run/run.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/design_run/render/**"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/design_run/bounds.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/e2e_design_state.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/design_run/snapshot.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
