@@ -25,7 +25,7 @@ integration rather than assuming.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 44, stage `reviewing`), head `93e05f49f`
+fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 50, stage `reviewing`), head `8cda64e973`
 
 ### Produced
 
@@ -35,11 +35,10 @@ fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 44, stage `reviewing`)
 - `REQ-478` (`FR-009` under SPEC-029) — authored `pending`; coverage cell
   deferred until the e2e checks exist.
 - `ISS-367`, `IMP-437` — both sequenced `after SL-256`.
-- `RV-360` — external adversarial pass over all four sections. **14 findings, all
-  disposed.** Codex raised `F-1`…`F-7`, verified five of its own dispositions and
-  contested `F-2` and `F-4`; a responder verification pass produced eight further
-  defects which codex raised as `F-8`…`F-14`. `RV-359` was empty and is committed
-  as-is.
+- `RV-360` — external adversarial pass over all four sections; 16 findings swept
+  the roster split, emit seam, suite fence, coverage binding, and compile-time
+  subset proof. Verification and conclusion are uncommitted for responder landing;
+  no source code changed and no full gate was run. `RV-359` remains the empty pass.
 - `DEC-239` carries an appended correction: the retirement's pinning mechanism
   moves from `#[serde(rename)]` to `#[serde(try_from/into)]` single-sourced
   through `as_str`. Substance unchanged; `STD-001` satisfied rather than excepted.
@@ -201,13 +200,9 @@ test build and any integration-test crate that `#[path]`-includes a module, so n
 
 ### Open
 
-- **Four sections outstanding review, and the run's `review_pass` is STALE** —
-  every fingerprint moved again at rev 37/39/41. Policy is `human-only`, so the
-  attestations and the review-pass disposition are the user's.
-- `RV-360` is `await=raiser` with all 14 findings answered. `F-2` is answered by
-  a **contest of the contest** — the ruling is that `REQ-478` criterion 3 never
-  asked for the proof the reviewer required — so it is the one disposition most
-  likely to come back.
+- **Four sections still need the human-only section attestations, and the run's
+  `review_pass` remains stale.** `RV-360`'s integrated pass is concluded; `sec-2`
+  and `sec-4` moved through rev 50 while `sec-1` and `sec-3` stayed byte-identical.
 - `IMP-437` — the emit seam is a convention, not a guarantee; needs its own
   scope because the fix reaches `fixture.rs` and `SL-251`'s `tests.rs`.
 - `ISS-367` — `live_acts` blind to same-kind replacement. `sec-1`/`sec-3` state
@@ -215,11 +210,6 @@ test build and any integration-test crate that `#[path]`-includes a module, so n
 - **`SL-251` coordination: three sites, not two** — its `design.md` ¶ 422–428,
   its ledger row at 2289, and `payload_contract.rs:501`. Discharged at that
   slice's reconcile, not here.
-- ~~Unreopened by choice: `EMITTABLE` could have a production consumer.~~
-  Closed by `RV-360` `F-16`. It now has one — the compile-time subset proof —
-  and it reopens nothing: `DEC-239`'s ruling against construction-seam type
-  enforcement and `F-2`'s residual stand exactly as written, which `sec-4` says
-  in as many words.
 - `QUE-219` — not this slice's to settle; `DEC-239` bears on it and the relation
   carries the descriptor.
 - Coverage cell for `REQ-478` — deferred by design. The recipe was **wrong** and
