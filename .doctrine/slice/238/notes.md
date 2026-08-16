@@ -454,3 +454,28 @@ routes around: it does not care who authored the signature.
 - **Scope grew five times now** — the three owner-accepted at inquiry, plus the
   `catalog::scan` collapse and the two stderr notices. Phase plan should be built
   against §8's file list, not "make the footer honest".
+- **§3 rule 2 and §7's VT-5 gloss overclaim — prose fix at reconcile, owner
+  accepted 2026-08-16.** Both say a future kind that derives its status *and is
+  not added* to `DERIVED_STATUS` "must fail a test, not degrade quietly". An
+  equality pin (`DERIVED_STATUS == [RV]`, as VT-5 specifies and PHASE-01 T1
+  landed) fires when a kind **is** added, never when one is omitted — omission
+  leaves the assertion true and the suite green. The pin is a tripwire on
+  *intent*, not a completeness check.
+
+  The safety holds by a different mechanism than the one named: an omitted
+  derived-status kind takes the common arm, `meta::read_meta` fails on its
+  missing top-level `status`, and `STD-003` turns that into a disclosed `Err`.
+  Loud, not silent. So the defect is the claim, not the protection — and the
+  irony is worth keeping: this slice exists because a footer stated a claim it
+  had not checked.
+
+  **Reconcile action:** correct §3 `The three standing rules the degradation
+  carries` (rule 2) and §7 `The probe` (the VT-5 bullet) to state what the pin
+  does, and to name the strict-read failure as what enforces completeness. No
+  code change; the owner declined the alternative (a per-kind fixture asserting
+  every kind outside `STATUS_LESS ∪ DERIVED_STATUS` authors a top-level status —
+  24 fixtures to make an already-loud failure louder).
+
+  Raised by the `DEC-242` blind test-author seat at PHASE-01 T1, which is the
+  arrangement working as designed: a prototype-informed author would have
+  transcribed the pin and never questioned the prose around it.
