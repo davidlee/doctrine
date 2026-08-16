@@ -6,13 +6,16 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 5, stage `exploring`) · c136177ab
+fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 6, stage `exploring`) · pending
 
 ### Produced
 
-- `DEC-237`, `DEC-238`, `DEC-239` — minted through the run's own checkpoint
-  dispositions (`cp-1`…`cp-4` over `inq-1`…`inq-4`), so each is bound to the
-  question it answers.
+- `DEC-237`, `DEC-238`, `DEC-239`, `DEC-240` — minted through the run's own
+  checkpoint dispositions (`cp-1`…`cp-5` over `inq-1`…`inq-5`), so each is bound
+  to the question it answers.
+- `REQ-478` (`FR-009` under SPEC-029) — the durable statement `DEC-240` rules
+  this slice owes. Authored `pending`; its coverage cell is deferred to when the
+  e2e checks exist.
 - `ISS-367` — sequenced `after SL-256`.
 - `research/research.md` + `raw/` — two-thread round, with a verification pass
   appended.
@@ -28,7 +31,11 @@ fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 5, stage `exploring`) 
 
 ### Open
 
-- `inq-5` — the one unresolved node. Does this owe a durable statement: a new
-  `REQ` under SPEC-029, or a widening of `STD-003`? Live in the run.
+- The inquiry map is fully resolved (5/5). What the run now needs is not a
+  question but two acts it cannot perform for itself: `governance-confirmed` and
+  `graph-reviewed`, both the user's, plus the agent's `blocking-set-declared`.
+  Those clear `exploring` → `drafting`.
 - `QUE-219` — not this slice's to settle, but `DEC-239` now bears on it and
   says how. Relation carries the descriptor.
+- Coverage cell for `REQ-478` — deferred by design, not forgotten. Recipe and
+  criterion mapping are in the slice's Verification & Closure Intent.

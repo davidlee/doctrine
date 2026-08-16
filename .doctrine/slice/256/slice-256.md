@@ -176,22 +176,44 @@ extends the output with every row in `Applied::rows`.
   second prohibition is a near-exact fit in spirit: *"No empty success. A check
   or report that returns 'nothing found' because it could not read the corpus is
   asserting health it did not observe… where the empty result is the claim."*
-  Only the trailing clause keeps `ISS-355` out. Design decides whether the
-  durable statement owed is a new REQ under SPEC-029 or a widening of STD-003.
+  Only the trailing clause keeps `ISS-355` out. ~~Design decides whether the
+  durable statement owed is a new REQ under SPEC-029 or a widening of STD-003.~~
+  **Discharged 2026-08-16 by `DEC-240`**: a new REQ — `REQ-478` (`FR-009`,
+  *Report every recorded mutation on the change log*), authored `pending` under
+  SPEC-029. STD-003 is **not** widened; its exclusion of write paths is
+  deliberate and stated twice ("tolerate-and-disclose is a rule for readers"; "a
+  degraded read on a **write** path refuses"), so the near-miss above is a
+  coincidence of wording, not of subject. No REV, as this assumption predicted.
 
 ## Open Questions
+
+All three settled in the design run (`dr-01a0088b`, rev 6), along with a fourth
+question raised in-run as `inq-5` and answered by `DEC-240` — recorded once, at
+the discharged `A1`, not restated here. Kept with their answers rather than
+deleted, because `R3` above cites `OQ-3` by id.
 
 - **OQ-1** — one event or two? A single `ActRecorded` carrying the act kind as a
   term, versus `DeclarationRecorded` + `CheckpointActRecorded`. The former keeps
   the roster small and matches `ActInvalidated`, which already reports by
   subject with the act as a term; the latter renders more legibly.
+  → **Settled by `DEC-237`: one event.** `ActRecorded`, the exact mirror of
+  `ActInvalidated`. Act records and section attestations stay separate families,
+  split by replacement key rather than by taste.
 - **OQ-2** — does `AcceptanceAttested` fold into the new member, stay as a
   special case, or get restated as one? Folding it changes an existing token's
   meaning, which R1 makes non-free.
+  → **Settled by `DEC-239`: none of the three.** The roster splits into
+  `READABLE` and `EMITTABLE`, and the member retires into the readable-only half
+  as `LegacyAcceptanceAttested` — serde name, rendered token and stored payload
+  shape all unchanged. This is what widened the scope; see the amended Non-Goal.
 - **OQ-3** — should `record_declaration`'s row carry the declared act's kind,
   its basis, its fingerprint, or the coverage it claimed? The terms decide what
   an agent can confirm without reading the snapshot, which is the whole point of
   `ISS-355`.
+  → **Settled by `DEC-237`: the kind only.** Subject id plus one `act=<kind>`
+  term. Basis and coverage have no `PayloadKey` and would answer a question
+  nobody asked; a fourth term would also silently falsify `WIDEST_PAYLOAD_EVENT`
+  (`R5`).
 
 ## Verification & Closure Intent
 
@@ -211,6 +233,17 @@ extends the output with every row in `Applied::rows`.
 - `doctrine slice conformance` reports no edit outside the fenced surface — in
   particular none inside `SL-251`'s design-targets.
 - `ISS-355` closed; the `SL-251` coordination note discharged or handed on.
+- **`REQ-478` covered.** Its three acceptance criteria are already discharged by
+  the bullets above — no new test is owed. The mapping, since it is not
+  one-to-one: criterion 1 (*an apply that records an act emits a row naming its
+  subject and kind*) by bullets 1–2; criterion 2 (*every emittable member is
+  driven by the ladder*) by bullet 3; criterion 3 (*retired vocabulary is
+  readable-only and carries no emission obligation*) by bullet 5's legacy-
+  fragment round-trip, plus bullet 3's roster test iterating `EMITTABLE` alone.
+  What *is* owed is the coverage cell binding them — `doctrine coverage record
+  --slice 256 --requirement REQ-478 --change 256 --mode VT` against those e2e
+  checks — recorded once they exist rather than now. `REQ-478` moves `pending` →
+  `active` at close, on that evidence.
 
 ## Summary
 

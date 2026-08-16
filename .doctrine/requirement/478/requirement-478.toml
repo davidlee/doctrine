@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 478
+slug = "report-every-recorded-mutation-on-the-change-log"
+title = "Report every recorded mutation on the change log"
+status = "pending"
+kind = "functional"
+
+description = "Every mutation the run records is reported by at least one change row, so a submission that landed is distinguishable from one whose payload was discarded. The emittable event vocabulary is closed and exhaustively driven: a member no path emits fails loudly rather than being silently absent. The row reports that the mutation was recorded; it is not a claim about the payload keys the mutation was built from."
+tags = ["change-log", "observability", "design-run"]
+acceptance_criteria = [
+  "An apply that records an act emits a change row identifying the act's subject and kind.",
+  "Every member of the emittable roster is driven by the fixture ladder; an undriven member fails the roster test.",
+  "Retired vocabulary is readable-only and carries no emission obligation.",
+]
