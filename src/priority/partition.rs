@@ -281,16 +281,10 @@ pub(crate) fn status_class(kind: &entity::Kind, status: Option<&str>) -> StatusC
 /// Classing an unread status `Gating` would assert unsettledness nobody
 /// observed — `ADR-017`'s vocabulary spent on absence of evidence.
 /// `Unrecognised` is the honest class: *this tool could not place this*.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-238 PHASE-01 lands the policy adapter; its first production \
-                  consumer is the boundary: suppression rule in PHASE-04. \
-                  Self-clearing — the expectation goes unfulfilled once that \
-                  consumer arrives, which is the signal to remove this."
-    )
-)]
+// SL-238 PHASE-04: the staging `expect(dead_code)` is GONE, self-cleared exactly as
+// PHASE-01 predicted — `backlog::probe_boundary`'s terminal-target suppression is the
+// first production consumer, and rustc reported the expectation unfulfilled the moment
+// it landed.
 pub(crate) fn authored_class(kind: &entity::Kind, status: &kinds::AuthoredStatus) -> StatusClass {
     match status {
         kinds::AuthoredStatus::Known(s) => status_class(kind, Some(s)),

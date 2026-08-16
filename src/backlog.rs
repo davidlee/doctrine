@@ -703,6 +703,23 @@ pub(crate) struct AbsentDrop {
     from: ItemId,
     /// The unparseable ref string verbatim.
     reference: String,
+    /// Which authored axis the ref was declared on (SL-238 §4).
+    axis: Axis,
+}
+
+/// Which authored axis an edge was declared on (SL-238 §4). Backlog-local, and
+/// distinct from `crate::hymns::Axis` — this one names a relationship array, not a
+/// prompt band.
+///
+/// `needs` and `after` are stored as separate authored arrays, so the same ref
+/// under both labels is TWO facts, not one. That is why the `boundary:` line can
+/// name the relation word, and why the stderr advisory's count keys on the axis:
+/// without it, one bad ref on both axes reads as one repair where there are two
+/// edges to remove.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Axis {
+    Needs,
+    After,
 }
 
 impl AbsentDrop {
@@ -714,6 +731,11 @@ impl AbsentDrop {
     /// The unparseable ref string.
     pub(crate) fn reference(&self) -> &str {
         &self.reference
+    }
+
+    /// The authored axis this ref was declared on.
+    pub(crate) fn axis(&self) -> Axis {
+        self.axis
     }
 }
 
@@ -739,32 +761,50 @@ fn project(items: &[BacklogItem]) -> (Vec<OrderInput>, Vec<AbsentDrop>) {
     let mut inputs: BTreeMap<ItemId, OrderInput> = BTreeMap::new();
     let mut absent: Vec<AbsentDrop> = Vec::new();
 
+    // Corpus membership — the FULL corpus, terminal items included. §4: the corpus
+    // and node sets differ by exactly the terminal items, and it is the wider one
+    // being asked, so a ref to a terminal item is NOT a drop (it is the satisfied
+    // prerequisite the footer keeps silent). Pure: the corpus is already in hand.
+    let corpus_members: std::collections::BTreeSet<ItemId> =
+        items.iter().map(|i| ItemId::new(i.kind, i.id)).collect();
+
     for item in items.iter().filter(|i| !i.status.is_terminal()) {
         let from = ItemId::new(item.kind, item.id);
 
-        let mut resolve = |reference: &str| -> Option<ItemId> {
-            if let Ok((kind, id)) = parse_ref(reference) {
-                Some(ItemId::new(kind, id))
-            } else {
+        let mut resolve = |reference: &str, axis: Axis| -> Option<ItemId> {
+            let mut record = || {
                 absent.push(AbsentDrop {
                     from,
                     reference: reference.to_string(),
+                    axis,
                 });
-                None
+            };
+            let Ok((kind, id)) = parse_ref(reference) else {
+                record();
+                return None;
+            };
+            let to = ItemId::new(kind, id);
+            // A parsed ref naming no corpus item is as unrepresentable as one that
+            // will not parse — record it (§4). A RECORD, not a filter: the edge is
+            // still emitted, so the adapter's inputs are byte-identical and row
+            // order/membership cannot move.
+            if !corpus_members.contains(&to) {
+                record();
             }
+            Some(to)
         };
 
         let needs: Vec<ItemId> = item
             .relationships
             .needs
             .iter()
-            .filter_map(|r| resolve(r))
+            .filter_map(|r| resolve(r, Axis::Needs))
             .collect();
         let after: Vec<(ItemId, i32)> = item
             .relationships
             .after
             .iter()
-            .filter_map(|e| resolve(&e.to).map(|to| (to, e.rank)))
+            .filter_map(|e| resolve(&e.to, Axis::After).map(|to| (to, e.rank)))
             .collect();
 
         // A-distinct: the corpus is one row per `(kind, id)`, but key by `ItemId` so a
@@ -1122,6 +1162,154 @@ pub(crate) enum OrderBy {
     Id,
 }
 
+// ---------------------------------------------------------------------------
+// The cross-kind ref probe (SL-238 §4) — the ONE impure read on the listing path
+// ---------------------------------------------------------------------------
+
+/// What one authored cross-kind ref turns out to be. The shared answer, before any
+/// surface has decided what to do with it.
+///
+/// This **wraps** [`AuthoredStatus`] rather than flattening it to a status word,
+/// because classifying is the projection's job and `authored_class` needs the
+/// **kind** as well as the status — `done` is not terminal for every kind — and
+/// because the **status-less** case (`REC` authors no status field at all) has to
+/// stay representable. A flattened `Status(String)` has nowhere to put either.
+///
+/// What this adds on top of the engine's three-way are the two outcomes that are
+/// not statuses at all. The engine answers *what could be read*; this answers
+/// *what the ref turned out to be*, which is a strictly larger question.
+// No `PartialEq`/`Debug`: this holds a `&'static entity::Kind`, which derives
+// neither, and deriving them here would mean changing a shared type for a local
+// convenience. `matches!` covers the one discrimination this module needs.
+#[derive(Clone)]
+enum RefState {
+    /// The ref resolved to an entity. Carries BOTH halves.
+    Resolved {
+        kind: &'static crate::entity::Kind,
+        status: crate::kinds::AuthoredStatus,
+    },
+    /// The directory resolved but the toml could not be read or parsed. A read
+    /// failure is an `Err` and never an `AuthoredStatus` (§3 rule 3), and it is
+    /// disclosed under a token distinct from `Unavailable` so a corpus defect and
+    /// a tooling limit never share a signal (`STD-003`).
+    Unreadable,
+    /// The ref names no entity at all. Counted rather than shown on the listing
+    /// surface; `doctor` carries the refs themselves.
+    Unresolved,
+}
+
+/// One disclosed boundary edge, ready to render.
+struct BoundaryRow {
+    dependent: ItemId,
+    /// The authored canonical ref, verbatim.
+    target: String,
+    /// Canonical order; both when the pair is declared on both axes.
+    axes: Vec<Axis>,
+    /// Never `Unresolved` here — those are counted, not shown.
+    status: RefState,
+}
+
+/// What the shell hands the pure renderer, plus what it hands stderr.
+struct BoundaryProbe {
+    rows: Vec<BoundaryRow>,
+    /// Distinct `(dependent, axis, ref)` occurrences whose ref resolved to nothing
+    /// — the count behind §2's stderr advisory. The refs themselves are `doctor`'s.
+    unresolved: usize,
+}
+
+/// Render one [`RefState`]'s status annotation. `Absent` prints **nothing**: a
+/// status-less kind has no status to state, and inventing a word for it would be
+/// the invention `DEC-233` refused.
+fn render_ref_state(state: &RefState) -> String {
+    match state {
+        RefState::Resolved { status, .. } => match status {
+            crate::kinds::AuthoredStatus::Known(s) => format!("({s})"),
+            crate::kinds::AuthoredStatus::Absent => String::new(),
+            crate::kinds::AuthoredStatus::Unavailable => "(status unavailable)".to_string(),
+        },
+        RefState::Unreadable => "(unreadable)".to_string(),
+        RefState::Unresolved => "(unresolved)".to_string(),
+    }
+}
+
+/// IMPURE, and the only new disk touch on the listing path: classify ONE authored
+/// ref. `parse_resolvable_ref` → `authored_status::read` → (the caller's)
+/// `authored_class`. Memoised per distinct ref by each caller.
+fn probe_ref(root: &Path, target: &str) -> RefState {
+    match crate::kinds::parse_resolvable_ref(root, target) {
+        Ok((kref, id)) => match crate::authored_status::read(root, kref, id) {
+            Ok(a) => RefState::Resolved {
+                kind: kref.kind,
+                status: a.status,
+            },
+            Err(_) => RefState::Unreadable,
+        },
+        Err(_) => RefState::Unresolved,
+    }
+}
+
+/// IMPURE. The LISTING projection: classify each distinct ref in `absent` and
+/// return the rows the footer discloses — deduplicated per `(dependent, target)`
+/// with axes joined, sorted by that same pair, terminal targets dropped, and
+/// unresolvable refs **counted rather than shown**.
+///
+/// The count keys on `(dependent, axis, ref)`, not `(dependent, ref)`: `needs` and
+/// `after` are separate authored arrays, so one bad ref on both axes is two edges
+/// to remove and must read as two repairs.
+fn probe_boundary(root: &Path, absent: &[AbsentDrop]) -> BoundaryProbe {
+    let mut cache: BTreeMap<String, RefState> = BTreeMap::new();
+    let mut rows: BTreeMap<(ItemId, String), BoundaryRow> = BTreeMap::new();
+    let mut unresolved: std::collections::BTreeSet<(ItemId, Axis, String)> =
+        std::collections::BTreeSet::new();
+
+    for drop in absent {
+        let state = cache
+            .entry(drop.reference().to_string())
+            .or_insert_with(|| probe_ref(root, drop.reference()))
+            .clone();
+
+        if matches!(state, RefState::Unresolved) {
+            unresolved.insert((drop.from(), drop.axis(), drop.reference().to_string()));
+            continue;
+        }
+        // A terminal target is silent — a satisfied prerequisite explains nothing.
+        // `Unreadable` and `Unavailable` both classify `Unrecognised`, so neither
+        // can be suppressed here (§3, `STD-003`).
+        let terminal = match &state {
+            RefState::Resolved { kind, status } => {
+                crate::priority::partition::authored_class(kind, status)
+                    == crate::priority::partition::StatusClass::Terminal
+            }
+            _ => false,
+        };
+        if terminal {
+            continue;
+        }
+        rows.entry((drop.from(), drop.reference().to_string()))
+            .or_insert_with(|| BoundaryRow {
+                dependent: drop.from(),
+                target: drop.reference().to_string(),
+                axes: Vec::new(),
+                status: state,
+            })
+            .axes
+            .push(drop.axis());
+    }
+
+    let rows = rows
+        .into_values()
+        .map(|mut row| {
+            row.axes.sort_unstable();
+            row.axes.dedup();
+            row
+        })
+        .collect();
+    BoundaryProbe {
+        rows,
+        unresolved: unresolved.len(),
+    }
+}
+
 /// The composed ordering over the live corpus plus its honest-record diagnostic
 /// (SL-051 — the folded-in `order` view). The two outcomes are distinct variants so
 /// the illegal mixes — a degrade carrying composed positions, a clean compose carrying
@@ -1145,14 +1333,9 @@ enum Ordering {
 /// `Degraded` (carrying the cycle `warning`), so `list_rows` falls back to the classic
 /// id sort and emits the advisory to stderr (no misleading order, never a non-zero
 /// exit — SL-051 §4.4). Borrows `corpus` (then `list_rows` MOVES it into `retain`).
-fn compose(corpus: &[BacklogItem]) -> anyhow::Result<Ordering> {
-    let (inputs, absent) = project(corpus);
-    let order = BacklogOrder::build(&inputs)?;
-    let cmap: BTreeMap<ItemId, &BacklogItem> = corpus
-        .iter()
-        .map(|i| (ItemId::new(i.kind, i.id), i))
-        .collect();
-    let footer = render_overrides(&cmap, &absent, &order.overrides());
+fn compose(inputs: &[OrderInput], boundary: &[BoundaryRow]) -> anyhow::Result<Ordering> {
+    let order = BacklogOrder::build(inputs)?;
+    let footer = render_overrides(boundary, &order.overrides());
     if let Some(cycle) = order.dep_cycles().first() {
         return Ok(Ordering::Degraded {
             footer,
@@ -1206,8 +1389,20 @@ fn list_rows(
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let corpus = read_all(root)?;
+    // SL-238 §4: project (pure) → probe_boundary (the ONE new read) → compose
+    // (pure). `project` is hoisted out of `compose` so the probe can sit between
+    // them; the corpus is walked once, not twice.
+    let mut unresolved_advisory = String::new();
     let ordering = match by {
-        OrderBy::Sequence => Some(compose(&corpus)?),
+        OrderBy::Sequence => {
+            let (inputs, absent) = project(&corpus);
+            let probe = probe_boundary(root, &absent);
+            if probe.unresolved > 0 {
+                unresolved_advisory = format!("{}\n", advisory_line(probe.unresolved));
+            }
+            Some(compose(&inputs, &probe.rows)?)
+        }
+        // `--by id` never composes and so never probes — no footer, no advisory.
         OrderBy::Id => None,
     };
     let mut items = listing::retain(corpus, &filter, is_hidden, key);
@@ -1262,10 +1457,11 @@ fn list_rows(
             let effective_default = listing::default_with_tags(BL_DEFAULT, any_tagged);
             let sel = listing::select_columns(&BL_COLUMNS, &effective_default, columns.as_deref())?;
             let table = listing::render_columns(&items, &sel, render);
-            // Table: rows + footer to stdout; the cycle warning to stderr.
+            // Table: rows + footer to stdout; the cycle warning and the
+            // unresolved-ref advisory to stderr. Both can fire.
             Ok(ListOutput {
                 stdout: format!("{table}{footer}"),
-                stderr: warning.to_string(),
+                stderr: format!("{warning}{unresolved_advisory}"),
             })
         }
         Format::Json => {
@@ -1275,7 +1471,7 @@ fn list_rows(
             let envelope = listing::json_envelope("backlog", &json_rows(&items))?;
             Ok(ListOutput {
                 stdout: envelope,
-                stderr: format!("{warning}{footer}"),
+                stderr: format!("{warning}{footer}{unresolved_advisory}"),
             })
         }
     }
@@ -2247,106 +2443,101 @@ fn run_paths(
 // The honest-record block (SL-051: folded into `backlog list --by sequence`)
 // ---------------------------------------------------------------------------
 
-/// Name a `Dangling` endpoint loudly (A-classify / DD1 / design §5.6 E1): the
-/// status/resolution vocabulary is supplied SHELL-side from the corpus, keeping the
-/// adapter id-only (the R-C kill). `endpoint` is the adapter's `Dangling.from()` — the
-/// missing endpoint. Looked up in `corpus`:
-/// - **present but terminal** (`resolved`/`closed`) ⇒ `"<status>/<resolution>"`
-///   (e.g. `closed/wont-do`) — the author judges staleness from the named resolution,
-///   never a silent satisfied-claim;
-/// - **not present** (a stale ref to a never-existed / since-deleted id) ⇒ `"absent"`.
+/// The stderr signpost's wording (SL-238 §2, `STD-001`). Routing every broken-ref
+/// class to `doctor` removes the only mention it has ever had on the surface where
+/// the work happens, so the listing surface keeps a **count-only** pointer.
 ///
-/// (A present-but-NON-terminal endpoint cannot be `Dangling` — it would be a live
-/// node — so that arm is unreachable; rendered defensively as `"absent"`.)
-fn classify_dangling(corpus: &BTreeMap<ItemId, &BacklogItem>, endpoint: ItemId) -> String {
-    match corpus.get(&endpoint) {
-        Some(item) if item.status.is_terminal() => {
-            let resolution = item.resolution.map_or("?", Resolution::as_str);
-            format!("{}/{resolution}", item.status.as_str())
-        }
-        _ => "absent".to_string(),
-    }
+/// Four properties keep this a signpost rather than a second report, and keep
+/// `DEC-232` intact: it names **no ref** (so it is not the footer, and stderr
+/// already carries advisories in this voice beside the cycle warning); the count is
+/// over distinct `(dependent, axis, ref)` occurrences, matching §5's undeduplicated
+/// check rather than the footer's per-pair dedup; it counts all three broken-ref
+/// classes, not the two the projection notices first; and it fires only under
+/// `--by sequence`, because `--by id` never composes and so never probes.
+const UNRESOLVED_ADVISORY: &str =
+    "backlog list: {n} authored needs/after refs name nothing — run `doctrine doctor`";
+
+/// The advisory with its count substituted.
+fn advisory_line(n: usize) -> String {
+    UNRESOLVED_ADVISORY.replace("{n}", &n.to_string())
 }
 
-/// Render the honest-record `overrides:` block (design §5.6, R1): one terse line per
-/// dropped edge — `<from> → <to> dropped (<why>)` — `ItemId` refs + reason words only
-/// (no NodeId/ordering internals leak). Covers BOTH the project-level [`AbsentDrop`]s
-/// (unparseable refs that never reached the adapter) and the adapter's `overrides()`
-/// (soft-cycle evictions, contradictions, and the parses-but-not-a-node `Dangling`s,
-/// each named with status+resolution). Empty when nothing was dropped (no block).
-fn render_overrides(
-    corpus: &BTreeMap<ItemId, &BacklogItem>,
-    absent: &[AbsentDrop],
-    overrides: &[Override],
-) -> String {
+/// Render the footer's two blocks (SL-238 §2/§4). `DEC-232` gives the footer one
+/// contract — **it states only what is needed to understand the rendered content** —
+/// and both blocks follow from applying that to each class of authored ref.
+///
+/// `overrides:` keeps exactly the two adapter verdicts that are about THIS render.
+/// Both legs it lost were never about the render: the project-level `AbsentDrop`
+/// leg reported a validation failure under a listing command using a word
+/// (`absent`) it had not checked, and the `Dangling` leg's two arms are now routed
+/// elsewhere — a terminal target is a satisfied prerequisite and stays silent, an
+/// absent one is an `AbsentDrop` in its own right and reaches `doctor` plus the
+/// stderr advisory. The adapter goes on COMPUTING `Dangling` exactly as before; this
+/// renderer discards it.
+///
+/// `boundary:` states the edges that were never in this order's universe:
+/// **dependent-first, relation word, target, target status — no arrow**, because it
+/// renders an authored declaration rather than a graph edge the adapter processed,
+/// and no `dropped`, because the edge was never a candidate for this order.
+///
+/// PURE — `boundary` arrives already resolved, classified and sorted. Either block
+/// may appear without the other; both empty means no footer at all, as before.
+fn render_overrides(boundary: &[BoundaryRow], overrides: &[Override]) -> String {
+    let mut out = String::new();
+
     let mut lines: Vec<String> = Vec::new();
-
-    // project-level drops: an unparseable ref never became an ItemId.
-    //
-    // Suppress the ones whose ref is a well-formed canonical ref of a NON-backlog kind
-    // (`QUE-219`, `SL-238`). `project` cannot represent such a target — `ItemId` is
-    // `(ItemKind, u32)` over the five backlog prefixes — so the edge lands here rather
-    // than in the adapter's `Dangling` leg, and `absent` is then simply false: the
-    // record exists, and `next`/`blockers` gate on it correctly through
-    // `priority/graph.rs`. Silence is the honest interim; SL-238 owns admitting the
-    // edge and choosing what a revealed footer says. Same posture as the IDE-019
-    // suppression below — this view declines to report what it cannot report truly.
-    //
-    // A ref of no known kind at all (`not-a-ref`, `ZZZ-1`) still surfaces, because
-    // `absent` remains true of it. The cost of the narrow rule is that a well-formed
-    // ref to a non-existent cross-kind id (`SL-9999`) also goes quiet — telling those
-    // apart needs a disk probe, and this leg is pure.
-    for drop in absent {
-        if crate::kinds::parse_canonical_ref(drop.reference()).is_ok() {
-            continue;
-        }
-        lines.push(format!(
-            "  {} → {} dropped (dangling: {} absent)\n",
-            drop.from().render(),
-            drop.reference(),
-            drop.reference(),
-        ));
-    }
-
-    // adapter-level drops. Suppress Dangling overrides whose from-endpoint is
-    // terminal (IDE-019): a stale dep on resolved/closed work is noise; only
-    // truly-absent endpoints matter in the default view.
     for ov in overrides {
-        if ov.reason() == OverrideReason::Dangling
-            && corpus
-                .get(&ov.from())
-                .is_some_and(|item| item.status.is_terminal())
-        {
-            continue;
-        }
         let line = match ov.reason() {
             OverrideReason::SoftCycleEvicted => format!(
-                "  {} → {} dropped (soft cycle)\n",
+                "  {} \u{2192} {} dropped (soft cycle)\n",
                 ov.from().render(),
                 ov.to().render()
             ),
             OverrideReason::Contradicted => format!(
-                "  {} → {} dropped (contradicts a need)\n",
+                "  {} \u{2192} {} dropped (contradicts a need)\n",
                 ov.from().render(),
                 ov.to().render()
             ),
-            OverrideReason::Dangling => format!(
-                "  {} → {} dropped (dangling: {} {})\n",
-                ov.from().render(),
-                ov.to().render(),
-                ov.from().render(),
-                classify_dangling(corpus, ov.from()),
-            ),
+            // The render leg is deleted, not the verdict (§2).
+            OverrideReason::Dangling => continue,
         };
         lines.push(line);
     }
-
-    if lines.is_empty() {
-        return String::new();
+    if !lines.is_empty() {
+        out.push_str("\noverrides:\n");
+        out.push_str(&lines.concat());
     }
-    let mut out = vec!["\noverrides:\n".to_string()];
-    out.extend(lines);
-    out.concat()
+
+    if !boundary.is_empty() {
+        out.push_str("\nboundary:\n");
+        for row in boundary {
+            let axes: Vec<&str> = row
+                .axes
+                .iter()
+                .map(|a| match a {
+                    Axis::Needs => "needs",
+                    Axis::After => "after",
+                })
+                .collect();
+            // The annotation is APPENDED only when non-empty: `AuthoredStatus::Absent`
+            // renders nothing, and a naive trailing `{}` would leave a trailing space
+            // before the newline for every status-less target.
+            let mut line = format!(
+                "  {} {} {}",
+                row.dependent.render(),
+                axes.join(", "),
+                row.target
+            );
+            let annotation = render_ref_state(&row.status);
+            if !annotation.is_empty() {
+                line.push(' ');
+                line.push_str(&annotation);
+            }
+            line.push('\n');
+            out.push_str(&line);
+        }
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -4640,6 +4831,104 @@ tags = []
         assert_eq!(ordered_ids(&inputs), vec!["ISS-001"]);
     }
 
+    // --- SL-238 PHASE-04 T1 (EX-1): the axis, and the second recording case ---
+
+    /// EX-1's second case. A ref that PARSES but names no item in the corpus is as
+    /// unrepresentable as one that will not parse, so it is recorded too. Without
+    /// this, the absent-backlog-id class reaches only the adapter (as the `Dangling`
+    /// override whose render leg §2 deletes) and is the one broken-ref class the
+    /// stderr advisory could not count.
+    #[test]
+    fn project_records_an_absent_backlog_id_as_an_absent_drop() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // ISS-999 parses cleanly to an ItemId and names nothing.
+        write_rel_item(root, ItemKind::Issue, 1, "open", &["ISS-999"], &[]);
+
+        let (_, absent) = project(&read_all(root).unwrap());
+        assert_eq!(absent.len(), 1, "a well-formed ref to nothing is recorded");
+        assert_eq!(absent[0].from().render(), "ISS-001");
+        assert_eq!(absent[0].reference(), "ISS-999");
+    }
+
+    /// EX-1's last clause — "a record, not a filter": the adapter's inputs are
+    /// byte-identical, so row order and membership cannot move. `OrderInput` exposes
+    /// no getters, so this is asserted behaviourally, which is the stronger form: the
+    /// adapter can only emit a `Dangling` override ABOUT the edge if the edge
+    /// actually reached it. A filtering `project` yields no override here.
+    #[test]
+    fn project_still_emits_an_absent_id_edge_to_the_adapter() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_rel_item(root, ItemKind::Issue, 1, "open", &["ISS-999"], &[]);
+
+        let (inputs, _) = project(&read_all(root).unwrap());
+        let order = BacklogOrder::build(&inputs).unwrap();
+        assert!(
+            order.overrides().iter().any(
+                |ov| ov.reason() == OverrideReason::Dangling && ov.from().render() == "ISS-999"
+            ),
+            "the edge still reaches the adapter: {:?}",
+            order.overrides()
+        );
+        assert_eq!(
+            ordered_ids(&inputs),
+            vec!["ISS-001"],
+            "the node still orders"
+        );
+    }
+
+    /// The `boundary:` line must name the relation word, so the drop has to carry the
+    /// axis it was declared on. The same ref on both axes is TWO authored facts under
+    /// two labels — `needs` and `after` are separate arrays — and the stderr
+    /// advisory's count keys on the axis for exactly this reason.
+    #[test]
+    fn project_records_the_axis_each_drop_was_declared_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &["QUE-219"],
+            &[AfterLit {
+                to: "QUE-219",
+                rank: 1,
+            }],
+        );
+
+        let (_, absent) = project(&read_all(root).unwrap());
+        assert_eq!(absent.len(), 2, "one drop per axis, not one per ref");
+        let mut axes: Vec<Axis> = absent.iter().map(AbsentDrop::axis).collect();
+        axes.sort_unstable();
+        assert_eq!(axes, vec![Axis::Needs, Axis::After]);
+        assert!(
+            absent.iter().all(|d| d.reference() == "QUE-219"),
+            "both drops name the same ref"
+        );
+    }
+
+    /// The boundary against the case above, and the one that keeps §4's "corpus
+    /// membership, not node membership" contract honest. A terminal item IS in the
+    /// corpus — the two sets differ by exactly the terminal items, and it is the
+    /// wider one being asked — so a ref to it is the satisfied-prerequisite case,
+    /// not a drop. Recording it would resurrect the false `absent` claim this slice
+    /// exists to remove.
+    #[test]
+    fn project_does_not_record_a_terminal_target_as_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_rel_item(root, ItemKind::Issue, 1, "open", &["ISS-002"], &[]);
+        write_rel_item(root, ItemKind::Issue, 2, "closed", &[], &[]);
+
+        let (_, absent) = project(&read_all(root).unwrap());
+        assert!(
+            absent.is_empty(),
+            "a terminal target is present in the corpus, so it is not absent: {absent:?}"
+        );
+    }
+
     #[test]
     fn project_emits_distinct_item_ids_one_row_per_item() {
         let dir = tempfile::tempdir().unwrap();
@@ -5250,9 +5539,17 @@ tags = []
 
     /// The composed-order ids from a `--by sequence` stdout (before the `overrides:`
     /// honest-record footer). Reuses [`ids`] over just the table half.
+    /// SL-238 PHASE-04: the footer now has TWO blocks and either may appear without
+    /// the other, so splitting on `overrides:` alone would let `boundary:` lines
+    /// leak into the row set — a test that then passes while asserting the wrong
+    /// thing. Cut at whichever block comes first.
     fn seq_ids(out: &str) -> Vec<String> {
-        let table = out.split("\noverrides:").next().unwrap_or(out);
-        ids(table)
+        let cut = ["\noverrides:", "\nboundary:"]
+            .iter()
+            .filter_map(|m| out.find(m))
+            .min()
+            .unwrap_or(out.len());
+        ids(&out[..cut])
     }
 
     #[test]
@@ -5321,7 +5618,11 @@ tags = []
         write_rel_item(root, ItemKind::Issue, 2, "open", &["ISS-001"], &[]);
 
         let corpus = read_all(root).unwrap();
-        let Ordering::Degraded { warning, .. } = compose(&corpus).unwrap() else {
+        // SL-238 PHASE-04 EX-2: `project` is hoisted out of `compose`, so the caller
+        // supplies the inputs. A MECHANICAL call-site adaptation to the new
+        // signature — no assertion below it moved.
+        let (inputs, _) = project(&corpus);
+        let Ordering::Degraded { warning, .. } = compose(&inputs, &[]).unwrap() else {
             panic!("a needs cycle degrades to Ordering::Degraded");
         };
         assert!(warning.contains("cycle"), "names the failure: {warning}");
@@ -5384,11 +5685,24 @@ tags = []
         assert!(out.contains("soft cycle"), "named a soft-cycle drop: {out}");
     }
 
+    /// **SUPERSEDES** `list_sequence_records_terminal_and_absent_drops_with_status_and_resolution`
+    /// (SL-051 `VT-7`). The third supersession, added to `EX-7` at PHASE-04 planning
+    /// after the criterion was found to name only two.
+    ///
+    /// It asserted an `overrides:` block is present and that `ISS-099` renders with
+    /// the word `absent`. Both are now false, and deliberately so: `EX-5` deletes
+    /// the `Dangling` arm, and `EX-1`/`EX-6` route an absent backlog id to the
+    /// stderr count rather than to stdout. On this exact fixture the footer is
+    /// therefore empty.
+    ///
+    /// What survives unchanged is the claim worth keeping — **a terminal
+    /// prerequisite is suppressed** (IDE-019) — so that is re-pinned here, now
+    /// alongside its sibling: the absent ref is suppressed from stdout too, by a
+    /// different route, and neither is silently lost (`doctor` has both).
     #[test]
-    fn list_sequence_records_terminal_and_absent_drops_with_status_and_resolution() {
+    fn list_sequence_suppresses_a_terminal_dep_and_withholds_an_absent_ref() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        // VT-7: ISS-001 needs a terminal (CHR-001 closed/wont-do) AND an absent ref.
         write_rel_item(
             root,
             ItemKind::Issue,
@@ -5397,7 +5711,6 @@ tags = []
             &["CHR-001", "ISS-099"],
             &[],
         );
-        // CHR-001 is terminal — closed with a wont-do resolution (abandoned).
         write_item(
             root,
             ItemKind::Chore,
@@ -5410,37 +5723,51 @@ tags = []
         );
 
         let (out, _) = list_seq(root, list_args());
-        // the live node still orders.
         assert_eq!(
             seq_ids(&out),
             vec!["ISS-001"],
             "the live node survives: {out}"
         );
-        assert!(out.contains("overrides:"));
-        // IDE-019: the terminal dep is suppressed by default (stale; no action
-        // needed on resolved work). Only the truly-absent ref surfaces.
         assert!(
             !out.contains("CHR-001"),
-            "terminal dep suppressed by default: {out}"
+            "IDE-019: the terminal dep stays suppressed: {out}"
         );
-        // the absent ref is still named absent.
         assert!(
-            out.contains("ISS-099") && out.contains("absent"),
-            "absent ref named: {out}"
+            !out.contains("ISS-099"),
+            "an absent backlog id is counted, not shown: {out}"
+        );
+        assert!(
+            !out.contains("overrides:") && !out.contains("boundary:"),
+            "nothing left to head a block: {out}"
         );
     }
 
-    /// A cross-kind prerequisite is legal authored data (`run_needs` validates it via
-    /// `kinds::ensure_ref_resolves`), and the actionability graph already gates on it —
-    /// `next` and `blockers` both honour a live `QUE` prerequisite. Only this view's
-    /// ordering adapter cannot represent the target, and it used to report the live
-    /// record as `absent`, which is false. Stay silent until SL-238 settles how the
-    /// edge should be admitted; keep the line for a ref that is not a canonical ref of
-    /// any kind, where `absent` still means what it says.
+    // --- SL-238 PHASE-04 (EX-7): three supersessions, each stating what it now
+    //     asserts and why the old assertion no longer holds ---
+
+    /// Seed a `QUE` entity so a cross-kind ref actually resolves. `open` is Gating
+    /// (shown at the boundary); `answered` is Terminal (suppressed).
+    fn seed_question(root: &Path, id: u32, status: &str) {
+        use crate::authored_status::test_support as seed;
+        let kref = seed::kref_for("QUE");
+        seed::seed_status_bearing(root, kref, id, status, &format!("Question {id}"));
+        seed::seed_md(root, kref, id, "q\n");
+    }
+
+    /// **SUPERSEDES** `list_sequence_stays_silent_on_a_cross_kind_drop_but_names_a_malformed_ref`
+    /// (the `74b773690` interim), on both of its counts.
+    ///
+    /// It asserted the cross-kind ref stays SILENT and the malformed ref is named
+    /// `absent`. Neither holds now. A resolvable, non-terminal cross-kind target is
+    /// the `boundary:` block's whole subject — silence was the interim honest
+    /// answer while the view could not represent the target, and it can now. And a
+    /// malformed ref leaves the listing surface entirely for `doctor` (§2), so the
+    /// word `absent` — the false verb this slice exists to remove — appears nowhere.
     #[test]
-    fn list_sequence_stays_silent_on_a_cross_kind_drop_but_names_a_malformed_ref() {
+    fn list_sequence_shows_a_cross_kind_target_and_withholds_a_malformed_ref() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
+        seed_question(root, 219, "open");
         write_rel_item(
             root,
             ItemKind::Issue,
@@ -5457,21 +5784,33 @@ tags = []
             "the node still orders: {out}"
         );
         assert!(
-            !out.contains("QUE-219"),
-            "a well-formed cross-kind ref is not called absent: {out}"
+            out.contains("ISS-001 needs QUE-219 (open)"),
+            "dependent-first, relation word, target, target's own status: {out}"
         );
         assert!(
-            out.contains("not-a-ref") && out.contains("absent"),
-            "a ref of no known kind is still named absent: {out}"
+            !out.contains("not-a-ref"),
+            "an unresolvable ref is `doctor`'s, not the footer's: {out}"
+        );
+        assert!(
+            !out.contains("absent"),
+            "the false verb is gone from this surface entirely: {out}"
         );
     }
 
-    /// The whole footer goes when a cross-kind drop is the only thing in it — an
-    /// `overrides:` header over nothing is the same false signal one line up.
+    /// **SUPERSEDES** `list_sequence_emits_no_footer_when_every_drop_is_cross_kind`
+    /// (the `74b773690` interim).
+    ///
+    /// It asserted that cross-kind drops alone raise no footer. That was right only
+    /// while such a drop had nothing true to say; now a resolvable non-terminal
+    /// target is exactly what the `boundary:` block is for. What survives is the
+    /// narrower claim the old test was really protecting — **no header over
+    /// nothing** — so it is re-pinned on refs that genuinely render nothing: an
+    /// unresolvable cross-kind ref, which is counted rather than shown.
     #[test]
-    fn list_sequence_emits_no_footer_when_every_drop_is_cross_kind() {
+    fn list_sequence_emits_no_block_header_over_nothing() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
+        // Neither ref resolves — both are `doctor`'s, so both blocks stay empty.
         write_rel_item(
             root,
             ItemKind::Issue,
@@ -5483,8 +5822,299 @@ tags = []
 
         let (out, _) = list_seq(root, list_args());
         assert!(
+            !out.contains("overrides:") && !out.contains("boundary:"),
+            "no line, no header — either block: {out}"
+        );
+    }
+
+    // --- VT-1 / VT-2 / VT-3: the `boundary:` block ---
+
+    /// VT-2. Two suppressions, both consequences of the footer's contract rather
+    /// than noise heuristics: a **terminal target** is a satisfied prerequisite and
+    /// explains nothing (15 of the 26 edges reaching the footer on the live
+    /// corpus), and a **terminal dependent** never reaches the footer at all
+    /// because the projection admits only live items as nodes (5 of 31). The
+    /// second is the class `doctor` still checks and this surface cannot.
+    #[test]
+    fn boundary_suppresses_a_terminal_target_and_a_terminal_dependent() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_question(root, 220, "answered"); // Terminal
+        seed_question(root, 219, "open"); // Gating, but on a terminal dependent
+        write_rel_item(root, ItemKind::Issue, 1, "open", &["QUE-220"], &[]);
+        write_rel_item(root, ItemKind::Issue, 2, "closed", &["QUE-219"], &[]);
+
+        let (out, _) = list_seq(root, list_args());
+        assert!(
+            !out.contains("QUE-220"),
+            "a satisfied prerequisite is silent: {out}"
+        );
+        assert!(
+            !out.contains("QUE-219"),
+            "a terminal dependent never reaches the footer: {out}"
+        );
+        assert!(!out.contains("boundary:"), "no lines, no block: {out}");
+    }
+
+    /// VT-3, both halves. One line per `(dependent, target)` pair with the axes
+    /// joined — the footer's job is one line's worth of information about a target,
+    /// and the undeduplicated authored record is `backlog inspect`'s.
+    ///
+    /// The sort fixture is chosen to DISCRIMINATE: `IMP-001` must precede
+    /// `ISS-001`, which is what `ItemId`'s prefix-STRING ordering gives
+    /// (`IMP` < `ISS`) and what a sort by `kind.ordinal` would not — issue is
+    /// ordinal 0 and improvement 1, so a kind-grouped sort puts `ISS` first and
+    /// fails here rather than passing by accident.
+    #[test]
+    fn boundary_joins_both_axes_and_sorts_by_dependent_then_target() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_question(root, 218, "open");
+        seed_question(root, 219, "open");
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &["QUE-219"],
+            &[AfterLit {
+                to: "QUE-219",
+                rank: 1,
+            }],
+        );
+        write_rel_item(root, ItemKind::Improvement, 1, "open", &["QUE-218"], &[]);
+
+        let (out, _) = list_seq(root, list_args());
+        assert!(
+            out.contains("ISS-001 needs, after QUE-219 (open)"),
+            "one line, both relation words, canonical order: {out}"
+        );
+        let imp = out
+            .find("IMP-001 needs QUE-218")
+            .unwrap_or_else(|| panic!("IMP line missing: {out}"));
+        let iss = out
+            .find("ISS-001 needs, after")
+            .unwrap_or_else(|| panic!("ISS line missing: {out}"));
+        assert!(imp < iss, "sorted by dependent, interleaving kinds: {out}");
+    }
+
+    // --- VT-5 / VT-6 / VT-7 / VT-8 / VT-9: the count-only stderr advisory ---
+
+    /// VT-7, both halves. The advisory names no individual ref (that is `doctor`'s
+    /// job and the footer's contract), carries a count, and points at `doctor`.
+    ///
+    /// The second half is the load-bearing one: the same bad ref declared on BOTH
+    /// axes counts **twice**. That outcome is unreachable under a `(dependent, ref)`
+    /// key and is precisely what forces the axis into the key — `needs` and `after`
+    /// are separate authored arrays, so there are two edges to remove and a count of
+    /// one would understate the repair.
+    #[test]
+    fn advisory_counts_distinct_dependent_axis_ref_occurrences() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &["QUE-777"],
+            &[AfterLit {
+                to: "QUE-777",
+                rank: 1,
+            }],
+        );
+
+        let (out, err) = list_seq(root, list_args());
+        assert!(
+            err.contains("2 authored needs/after refs name nothing"),
+            "one ref on two axes is two repairs: {err:?}"
+        );
+        assert!(
+            err.contains("doctrine doctor"),
+            "the signpost points somewhere: {err:?}"
+        );
+        assert!(
+            !err.contains("QUE-777"),
+            "count-only — it names no ref: {err:?}"
+        );
+        assert!(
+            !out.contains("QUE-777"),
+            "and nothing about it reaches stdout: {out}"
+        );
+    }
+
+    /// VT-8. The absent-backlog-id class (`ISS-999`) parses cleanly and would
+    /// otherwise reach only the adapter, as the `Dangling` override whose render leg
+    /// §2 deletes — leaving the one class that produces a `doctor` error and no
+    /// signpost at all. This goes red without EX-1's added projection case.
+    ///
+    /// Asserts the two surfaces agree on this class: one `doctor` finding, one on
+    /// the advisory's count, and no footer line.
+    #[test]
+    fn advisory_counts_an_absent_backlog_id_and_doctor_agrees() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_rel_item(root, ItemKind::Issue, 1, "open", &["ISS-999"], &[]);
+
+        assert_eq!(
+            dep_seq_ref_findings(root).len(),
+            1,
+            "doctor reports the broken ref"
+        );
+        let (out, err) = list_seq(root, list_args());
+        assert!(
+            err.contains("1 authored needs/after refs name nothing"),
+            "and the advisory counts it: {err:?}"
+        );
+        assert!(!out.contains("ISS-999"), "no footer line for it: {out}");
+    }
+
+    /// VT-6, both halves. All three broken-ref classes are absent from STDOUT — a
+    /// malformed ref, an absent backlog id, and an unresolvable cross-kind ref —
+    /// because every one of them leaves the listing surface for `doctor`.
+    ///
+    /// The second half is the **positive control**, and it is why this test seeds a
+    /// corpus that DOES fire alongside one that does not: a negative assertion about
+    /// an empty result is worthless unless the same code path is shown emitting
+    /// something. Without the control, a broken advisory and a clean corpus are
+    /// indistinguishable.
+    #[test]
+    fn advisory_withholds_every_unresolvable_class_and_stays_silent_when_clean() {
+        let noisy = tempfile::tempdir().unwrap();
+        let root = noisy.path();
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &["not-a-ref", "ISS-999", "QUE-777"],
+            &[],
+        );
+
+        let (out, err) = list_seq(root, list_args());
+        for class in ["not-a-ref", "ISS-999", "QUE-777"] {
+            assert!(
+                !out.contains(class),
+                "{class} is doctor's, not stdout's: {out}"
+            );
+        }
+        assert!(
+            err.contains("3 authored needs/after refs name nothing"),
+            "the control: this corpus DOES fire: {err:?}"
+        );
+
+        // The control's counterpart: a corpus with nothing unresolvable is silent.
+        let clean = tempfile::tempdir().unwrap();
+        let root = clean.path();
+        seed_question(root, 219, "open");
+        write_rel_item(root, ItemKind::Issue, 1, "open", &["QUE-219"], &[]);
+
+        let (out, err) = list_seq(root, list_args());
+        assert!(
+            !err.contains("name nothing"),
+            "no unresolvable refs, no advisory: {err:?}"
+        );
+        assert!(
+            out.contains("boundary:"),
+            "and the same run still renders its boundary line, so the silence is \
+             about the advisory and not about a dead code path: {out}"
+        );
+    }
+
+    /// VT-9. `--by id` never composes and so never probes: no footer, no advisory.
+    /// Adding a probe to `--by id` purely to emit the line would buy a warning at
+    /// the cost of the very read the order mode exists to avoid.
+    #[test]
+    fn by_id_emits_neither_footer_nor_advisory() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_question(root, 219, "open");
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &["QUE-219", "ISS-999"],
+            &[],
+        );
+
+        let out = list_rows(root, None, OrderBy::Id, &[], &[], list_args()).unwrap();
+        assert!(
+            !out.stdout.contains("boundary:") && !out.stdout.contains("overrides:"),
+            "no footer under --by id: {}",
+            out.stdout
+        );
+        assert!(out.stderr.is_empty(), "and no advisory: {:?}", out.stderr);
+    }
+
+    /// VT-5. The JSON envelope carries rows ONLY; both footer blocks and the
+    /// advisory are routed to stderr, alongside the existing `Ordering::Degraded`
+    /// cycle warning. The envelope staying clean is the load-bearing non-goal.
+    #[test]
+    fn json_envelope_carries_rows_only_and_both_blocks_go_to_stderr() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_question(root, 219, "open");
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &["QUE-219", "ISS-999"],
+            &[],
+        );
+
+        let out = list_rows(
+            root,
+            None,
+            OrderBy::Sequence,
+            &[],
+            &[],
+            ListArgs {
+                json: true,
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+
+        let v: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
+        assert_eq!(v["rows"].as_array().unwrap().len(), 1, "rows only");
+        assert!(
+            !out.stdout.contains("boundary:") && !out.stdout.contains("name nothing"),
+            "the envelope stays clean: {}",
+            out.stdout
+        );
+        assert!(
+            out.stderr.contains("boundary:") && out.stderr.contains("ISS-001 needs QUE-219 (open)"),
+            "the footer is on stderr under --json: {:?}",
+            out.stderr
+        );
+        assert!(
+            out.stderr
+                .contains("1 authored needs/after refs name nothing"),
+            "and so is the advisory: {:?}",
+            out.stderr
+        );
+    }
+
+    /// VT-4. `overrides:` keeps exactly the two verdicts that are about THIS render
+    /// and loses the `Dangling` arm. An absent backlog id still produces a
+    /// `Dangling` override inside the adapter — §2 keeps that computation — but the
+    /// render leg discards it, so nothing about it reaches stdout.
+    #[test]
+    fn overrides_keeps_soft_cycle_and_contradicted_and_drops_dangling() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_rel_item(root, ItemKind::Issue, 1, "open", &["ISS-999"], &[]);
+
+        let (out, _) = list_seq(root, list_args());
+        assert!(
             !out.contains("overrides:"),
-            "cross-kind drops alone raise no footer: {out}"
+            "a Dangling override renders nothing: {out}"
+        );
+        assert!(
+            !out.contains("dangling") && !out.contains("absent"),
+            "neither the reason word nor the false verb survives: {out}"
         );
     }
 
