@@ -281,6 +281,13 @@ keywords = ["render_document", "render_prompt", "repo_private"]
 waived = false
 
 [[phase.verification]]
+id = "VT-3"
+expects = "EX-5, EX-8 and EX-9 carry evidence rather than a reading. The plan review restored these three as exit criteria after finding them dropped, then left VA-1's shape comparison as their only witness — which is the same downgrade the review was correcting. Assert: a unit-payload external variant renders as a BARE STRING (AgentAct::DraftingReady is the live case); an internally tagged variant's payload is inlined beside its tag while an externally tagged one nests under its token; an untagged variant renders with the token column struck out; `bare` is derived from every-payload-Absent rather than stored; and each Presence / UnknownKeys parenthetical is one fixed string reused across every row that carries it, so no two rows can word it differently."
+test_file = "src/design_run/payload_contract.rs"
+keywords = ["BARE STRING", "DraftingReady", "bare", "parenthetical"]
+waived = false
+
+[[phase.verification]]
 id = "VA-1"
 text = "Render the full closure and compare against .doctrine/slice/251/render-sample.md §2 for SHAPE AND COMPLETENESS ONLY. It is hand-written evidence that predates the generator and is explicitly not a golden — it will differ in whitespace and ordering, and pinning the two together would pin the generator to a transcription (sec-5, sec-8)."
 

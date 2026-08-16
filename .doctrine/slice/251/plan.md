@@ -329,3 +329,49 @@ whenever a leaf-tier subject is pinned against a command-tier oracle.
 retyping" is discharged by `VA-1` reading, not by a test: an identical retyped
 literal satisfies every assertion a test could make, so the property is
 review-visible only. That is a deliberate routing, not a gap.
+
+## PHASE-05 planning, 2026-08-15 — one VT appended, five dispositions
+
+**`PHASE-05/VT-3` appended.** `EX-5`, `EX-8` and `EX-9` had no `VT` behind them.
+That is not an oversight of the plan review's — the review *restored* `EX-8` and
+`EX-9` after finding `sec-5`'s three semantic rules dropped, and then left
+`VA-1`'s shape comparison as their only witness, which is the same downgrade it
+was correcting one paragraph earlier. `VT-3` gives them evidence. Ids are
+immutable and `VT-1`/`VT-2` are spent, so this is `VT-3`.
+
+**The five questions planning raised, and how they are disposed.**
+
+- **The `SilentlyDropped` parenthetical is reworded, and this is forced rather
+  than chosen.** `render-sample.md:111` prints `(ISS-333 — a misspelt top-level
+  key is discarded)`, which cites a repo-private id on a shipped surface — the
+  exact defect `VT-2`/`sec-8` pin 10 exists to catch. So the sample's own string
+  cannot ship whatever `EX-4` says about columns. Planning's
+  `(a misspelt key is discarded, exit 0)` is adopted: it drops the id, drops
+  "top-level" (wrong once the string is per-variant per `EX-9` and so appears on
+  nested types too), and keeps `exit 0`, which is the actionable half — a
+  silently-discarded key that also exits 0 is what cost this slice's own design
+  run three revisions. It lands the root header at 91 columns, so `EX-4` is met
+  as a consequence rather than needing a separate concession.
+- **`WireType::Id` renders its admissible prefixes, not a bare `id`** — the model
+  over the sample. `payload_contract.rs:363-366` calls a bare `id` "the same
+  omission this slice exists to remove", and `VA-1` says in terms that the sample
+  is *not* a golden and is compared for shape and completeness only. Following
+  the sample here would ship the omission the slice was carved to close.
+- **The repo-private-id detector is hoisted, not copied.** `artifact.rs`'s
+  `cites_a_repo_private_id` and its fourteen-prefix const are private to that
+  file's `mod tests`. Planning proposed copying them; the tree has already
+  answered this, two lines from where the worker will be typing —
+  `payload_contract.rs:1550-1553` records cfg(test) helpers being put at *module
+  level* precisely because "a sibling module cannot see a private `mod tests`".
+  So: hoist them out of `mod tests` to module level, `#[cfg(test)] pub(crate)`.
+  A copied fourteen-element list is a second description free to drift, which is
+  `R1` and `STD-001` both, and pin 10's "not reimplemented" is then honoured in
+  letter as well as substance.
+- **`VA-1`'s printer sited in `src/commands/design.rs`** is right and is not a
+  fourth instance of the siting defect: it needs the real `RecordKind` /
+  `facet_fields` table, which is a command-tier fact, while `VT-1` and `VT-2`
+  stay in the leaf on a leaf-local `ExternContracts` fixture.
+- **Long lines in the shipped document are accepted.** `EX-4` pins the root
+  header alone at 100 columns and the design chose that scope deliberately; a
+  `Closed` token list wrapped mid-vocabulary is harder to read and to grep than
+  one long line, and no criterion asks for it.
