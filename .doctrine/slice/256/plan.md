@@ -131,3 +131,13 @@ close.
   planning purposes — every anchor in `sec-3` and `sec-4` was re-resolved against
   the current tree at plan time and all resolve. Restamping the research artefact
   is not a precondition for execution.
+- **`plan.toml` carries no spec / requirement keys.** `SPEC-029` and `REQ-478`
+  are already on the slice as relations (`references(implements)`, and `REQ-478`
+  named throughout `design.md` `sec-4`). The v1 plan reader models neither, so
+  restating them in the TOML would be a second source with nothing consuming it.
+- **`is_subset` has one const-safe spelling.** `str` equality is not const, and
+  a byte-index loop trips `clippy::indexing_slicing` — the same lint `sec-4`
+  names for a different shortcut. The spelling that works is the module's own
+  slice-recursion idiom, the one `widest` (`change_log.rs:31-40`) already uses,
+  recursing over `as_bytes()` with a slice pattern. Worth knowing before
+  PHASE-02 starts rather than after the lint gate says so.

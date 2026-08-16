@@ -11,11 +11,11 @@ slice   = "SL-256"
 # Canonical spec/requirement links — cite ids, never restate what they say. The
 # plan reader does not model these yet, so nothing downstream consumes them.
 [specs]
-primary       = ["SPEC-029"]
+primary       = []
 collaborators = []
 
 [requirements]
-targets      = ["REQ-478"]
+targets      = []
 dependencies = []
 
 # One [[phase]] per ordered phase, in execution order — the authored array order
