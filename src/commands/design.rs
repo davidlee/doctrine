@@ -60,8 +60,8 @@ use crate::design_run::delegation::Delegation;
 use crate::design_run::gate::ObservedFact;
 use crate::design_run::ids::{DesignId, Fingerprint, IdKind};
 use crate::design_run::payload_contract::{
-    self, ExternContracts, ExternRegion, KeyContract, Presence, SelectedKeys, SelectorTable,
-    TokenSource, UnknownKeys, WireType,
+    self, ExternContracts, ExternRegion, KeyContract, PAYLOAD_CONTRACT_POINTER, Presence,
+    SelectedKeys, SelectorTable, TokenSource, UnknownKeys, WireType,
 };
 use crate::design_run::render::envelope::{self, Detail, OutstandingBySeverity};
 use crate::design_run::run::{Admission, DerivedInput, ObservedReview, Resolution};
@@ -110,6 +110,14 @@ const LOCK_ACCEPTANCE_DISCLOSURE: &str = "locked on an auditable agent claim of 
 /// and needs to be told, in the same breath, that it may propose and may not
 /// write.
 const ASSIGNMENT_CONTRACT: &str = "propose back with a `delegation` act of `propose` carrying `by`, `summary` and any `declare`; a proposal may carry nothing that writes — the coordinator applies what it accepts";
+/// `design apply`'s summary line, hoisted out of the doc comment it used to be so
+/// the long help can splice the payload-contract address beside it without a
+/// second copy of either (STD-001, SL-251 `sec-6`).
+///
+/// **No trailing full stop**, deliberately: `clap_derive` strips one from a doc
+/// comment but not from an explicit `about`, so the period would be a visible
+/// one-character change to `doctrine design --help`'s Commands row.
+const APPLY_ABOUT: &str = "Validate and apply one sparse idempotent mutation";
 
 // ── CLI surface ───────────────────────────────────────────────────────────
 
@@ -125,7 +133,15 @@ pub(crate) enum DesignCommand {
     /// Show the current turn: active path, nearby frontier, blockers, counts and
     /// material changes. `--full` widens it.
     Show(ShowArgs),
-    /// Validate and apply one sparse idempotent mutation.
+    // The third push point (SL-251 `sec-6`): the contract's ADDRESS, never its
+    // body, at the verb whose payload it describes. `about` feeds the family
+    // table above; `long_about` feeds the focused `design apply --help` — and
+    // the pointer rides a SINGLE newline, because the About block keeps only the
+    // first paragraph (`cli.rs`), so `\n\n` would render nothing.
+    #[command(
+        about = APPLY_ABOUT,
+        long_about = format!("{APPLY_ABOUT}\nThe payload contract: {PAYLOAD_CONTRACT_POINTER}"),
+    )]
     Apply(ApplyArgs),
     /// Re-enter a run with the compact projection a fresh context needs.
     Resume(ResumeArgs),
@@ -1600,8 +1616,14 @@ fn apply(
     fault: FaultHook<'_>,
 ) -> Result<()> {
     let prior = read_snapshot(root, slice)?;
-    let request: ApplyRequest =
-        serde_json::from_str(payload).context("parse the apply payload as JSON")?;
+    // The remedy rides the point of failure (SL-251 sec-6, DEC-225): serde's own
+    // message verbatim — no paraphrase, no classifier — then the contract's
+    // ADDRESS on an indented continuation, matching `Refusal::GateNotCleared`'s
+    // form. `.context()` would hide serde's text in the error's source rather
+    // than its `Display`, which is what a caller actually reads.
+    let request: ApplyRequest = serde_json::from_str(payload).map_err(|error| {
+        anyhow::anyhow!("parse the apply payload as JSON: {error}\n  {PAYLOAD_CONTRACT_POINTER}")
+    })?;
     let digest = crate::git::sha256(payload.as_bytes());
 
     match design_run::run::admit(&prior, &request.envelope, &digest)
@@ -2770,6 +2792,41 @@ mod tests {
             "\"run_uid\":\"{}\",\"known_revision\":{revision},\"submission_id\":\"{submission}\"",
             run.run.uid
         )
+    }
+
+    /// `SL-251 PHASE-07 VT-3` / `sec-8` pin 7's refusal bullet — the
+    /// point-of-failure remedy `DEC-225` argues the slice on. A manual read
+    /// (`VA-1`) leaves an audit nothing to re-derive, so this is a test as well.
+    #[test]
+    fn a_refused_payload_names_the_contract_and_keeps_serdes_own_words() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let slice = fixture(root);
+        // `Declaration` carries `deny_unknown_fields`, so a misspelt key THERE is
+        // refused — unlike nine of the twelve wire structs, which drop it silently.
+        let payload = format!(
+            "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"cursror\":\"inq-1\"}}]}}",
+            envelope(root, slice, 1, "sub-1")
+        );
+        let error = apply(root, slice, &payload, &|| {}, &no_fault)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("unknown field"),
+            "serde's own text survives verbatim: {error}"
+        );
+        assert!(
+            error.contains("cursror"),
+            "including the key it names: {error}"
+        );
+        assert!(
+            error.contains(PAYLOAD_CONTRACT_POINTER),
+            "and the refusal carries the remedy: {error}"
+        );
+        assert!(
+            error.contains(&format!("\n  {PAYLOAD_CONTRACT_POINTER}")),
+            "on an indented continuation, matching Refusal::GateNotCleared's form: {error}"
+        );
     }
 
     /// VT-9 / EX-11 / §9.2 — an edit injected into the named pre-write window

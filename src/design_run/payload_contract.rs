@@ -1527,10 +1527,6 @@ pub(crate) const PAYLOAD: TypeContract = TypeContract {
 
 /// How an agent asks for the contract — the pointer a refusal and the run's
 /// prompts cite. Spelled once (STD-001).
-#[expect(
-    dead_code,
-    reason = "SL-251 PHASE-06/07 land the first readers — the renderer and the CLI surface"
-)]
 pub(crate) const PAYLOAD_CONTRACT_POINTER: &str = "doctrine design contract --format prompt";
 
 /// The committed file the generated contract is pinned to, relative to the repo

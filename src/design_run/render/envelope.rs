@@ -43,6 +43,7 @@ use serde::Serialize;
 use super::super::attestation::ActKind;
 use super::super::ids::DesignId;
 use super::super::inquiry::{Disposition, InquiryLifecycle, InquiryNode};
+use super::super::payload_contract::PAYLOAD_CONTRACT_POINTER;
 use super::super::refusal::Refusal;
 use super::super::snapshot::DesignSnapshot;
 use super::super::traversal::{Authority, Posture};
@@ -71,11 +72,40 @@ const TURN_ENVELOPE_VERSION: u32 = 1;
 /// caller that declares the fragment digest has that prose elided — leaving this
 /// line as the only surface naming the map's shape. Showing `parent` alone
 /// taught a warm run that the map is a tree, which it is not. Do not trim
-/// `needs` back out as a byte saving: the bound is 1024 and this is under 320.
+/// `needs` back out as a byte saving: the bound is 1024 and this is under 350.
+///
+/// **It declares `cursor` as well as `pin`** (SL-251 `EX-5`, DEC-228). The two
+/// are independent facts — what must stay visible, and where attention moves —
+/// so an example showing only `pin` reads as though moving the cursor were
+/// implied by pinning. It is not, and discovering that cost fifteen source reads.
+///
+/// Spelled as a macro rather than a const because [`concat!`] accepts **literals
+/// only**: a `const &str` is not one, so `concat!(JSON_ARM, PROSE)` does not
+/// compile. Invoking a macro twice is what lets the JSON be written once
+/// (STD-001) while [`JSON_ARM`] names the parseable half and the byte assertion
+/// below keeps covering exactly what is rendered.
+macro_rules! declaration_example_json {
+    () => {
+        concat!(
+            r#"{"run_uid":"<uid>","known_revision":<n>,"submission_id":"<unique>","#,
+            r#""declare":[{"subject":"inq-2","question":"...","parent":"inq-1","needs":["inq-1"]}],"#,
+            r#""traversal":{"pin":"inq-2","cursor":"inq-2","posture":"depth","authority":"user-pinned"}}"#,
+        )
+    };
+}
+
+/// The example's JSON arm alone — parseable after substitution, which the whole
+/// constant is not, for two independent reasons (`sec-8` pin 8, DEC-228):
+/// `"known_revision":<n>` is not a JSON value, and [`DECLARATION_EXAMPLE`]'s
+/// final `concat!` arm is prose. A pin over the constant as a whole would assert
+/// neither, which is what `DEC-228` was corrected off.
+const JSON_ARM: &str = declaration_example_json!();
+
+/// What the turn actually renders: the JSON above plus the sparse-semantics
+/// note. The byte assertion is deliberately on **this** — the rendered whole —
+/// and not on [`JSON_ARM`], so the bound keeps meaning what it says.
 const DECLARATION_EXAMPLE: &str = concat!(
-    r#"{"run_uid":"<uid>","known_revision":<n>,"submission_id":"<unique>","#,
-    r#""declare":[{"subject":"inq-2","question":"...","parent":"inq-1","needs":["inq-1"]}],"#,
-    r#""traversal":{"pin":"inq-2","posture":"depth","authority":"user-pinned"}}"#,
+    declaration_example_json!(),
     "  (omit a key to persist it, send null to clear a scalar, [] to clear a collection)"
 );
 const _: () = assert!(DECLARATION_EXAMPLE.len() <= ENVELOPE_DECLARATION_EXAMPLE_BYTES);
@@ -356,6 +386,20 @@ pub(crate) struct TurnEnvelope {
     /// all) is what the section rows and [`Self::pass_stale`] already say.
     pub(crate) outstanding: OutstandingBySeverity,
     pub(crate) declaration_example: &'static str,
+    /// Where to fetch the payload contract (SL-251 `sec-6`, DEC-225).
+    ///
+    /// The **address**, never the body — `A1`. The contract is a page; the turn
+    /// carries the one line that fetches it, so a caller who did not know to ask
+    /// is told where to look without every turn paying for the table.
+    ///
+    /// Unconditional and outside the eviction ladder **by construction**: the
+    /// ladder pops lists ([`evict_one`]), so a scalar cannot be dropped and there
+    /// is no no-drop registration for it to join.
+    ///
+    /// Additive at [`TURN_ENVELOPE_VERSION`] `= 1`, on `SL-244`'s precedent two
+    /// fields up: the version discriminates *meaning*, and a new key changes no
+    /// existing key's meaning.
+    pub(crate) contract_pointer: &'static str,
     pub(crate) omitted: Omitted,
     pub(crate) truncated: bool,
 }
@@ -542,6 +586,7 @@ fn assemble(
         pass_stale: run.review.pass.is_some() && !run.review_standing().integrated_current,
         outstanding,
         declaration_example: DECLARATION_EXAMPLE,
+        contract_pointer: PAYLOAD_CONTRACT_POINTER,
         truncated: omitted.any(),
         omitted,
     }
@@ -1222,6 +1267,7 @@ pub(crate) fn prompt(envelope: &TurnEnvelope) -> Vec<String> {
     lines.extend(delta_lines(&envelope.changes, envelope.omitted.changes));
     lines.push(format!("truncated {}", envelope.truncated));
     lines.push(format!("declare {}", envelope.declaration_example));
+    lines.push(format!("contract {}", envelope.contract_pointer));
     lines
 }
 
@@ -1468,6 +1514,55 @@ mod tests {
             crate::design_run::traversal::Authority::UserPinned,
         );
         run
+    }
+
+    /// `SL-251 PHASE-07` `VT-2` — `sec-8` pins 8 and 7.
+    ///
+    /// (a) pins the worked example over its **JSON arm alone, after
+    /// substitution**. Not the whole constant and not unsubstituted: `DEC-228`
+    /// was corrected off exactly that claim, for two independent reasons that
+    /// both still hold — `"known_revision":<n>` is not a JSON value, and
+    /// [`super::DECLARATION_EXAMPLE`]'s final `concat!` arm is prose.
+    ///
+    /// (b) reads **one** envelope value two ways. Two fixtures would prove only
+    /// that two renderings exist; the force comes from the bytes being identical,
+    /// which is what makes the field additive rather than a moved rule.
+    #[test]
+    fn the_envelope_pushes_the_contract_pointer_and_the_example_declares_a_cursor() {
+        use crate::design_run::submission::{ApplyRequest, Sparse};
+
+        // (a) sec-8 pin 8. The substitution table is self-pinning: a fourth
+        // placeholder introduced into the example makes the parse fail rather
+        // than pass quietly.
+        let json = super::JSON_ARM
+            .replace("<uid>", "dr-000001")
+            .replace("<n>", "0")
+            .replace("<unique>", "sub-0001");
+        let request: ApplyRequest = serde_json::from_str(&json).unwrap_or_else(|e| {
+            panic!("the worked example's JSON arm parses after substitution: {e}\n{json}")
+        });
+        assert!(
+            matches!(request.traversal.cursor, Sparse::Value(ref id) if id.as_str() == "inq-2"),
+            "DEC-228 — the worked example declares `cursor`, the omission that cost fifteen source reads"
+        );
+
+        // (b) sec-8 pin 7's envelope bullet.
+        let (run, _) = cleared();
+        let envelope = project(&run, 0, Detail::Normal, NOTHING_OUTSTANDING).unwrap();
+        let expected = format!(
+            "contract {}",
+            crate::design_run::payload_contract::PAYLOAD_CONTRACT_POINTER
+        );
+        assert!(
+            prompt(&envelope).contains(&expected),
+            "the prompt rendering pushes the contract line: {:?}",
+            prompt(&envelope)
+        );
+        assert_eq!(
+            serde_json::to_value(&envelope).unwrap()["contract_pointer"],
+            serde_json::json!(crate::design_run::payload_contract::PAYLOAD_CONTRACT_POINTER),
+            "and the JSON rendering carries the same address under `contract_pointer`"
+        );
     }
 
     /// `VT-1` — the currency lamp is rendered and never refuses.

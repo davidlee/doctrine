@@ -901,6 +901,32 @@ mod write_class_tests {
         );
     }
 
+    /// `SL-251 PHASE-07` `VT-1` (`sec-8` pin 7's help bullet) — the contract's
+    /// address reaches the help a caller actually sees.
+    ///
+    /// Not a drift pin: `sec-6` single-sources the address, so what a test can
+    /// still add is **reachability** through the renderer doctrine actually uses.
+    /// `main.rs` intercepts clap's `DisplayHelp` and calls
+    /// [`commands::cli::render_subcommand_help`], which reads `long_about` only
+    /// because `EX-10` taught it to — clap's own renderer never runs here.
+    #[test]
+    fn design_apply_help_carries_the_payload_contract_pointer() {
+        let help =
+            crate::commands::cli::render_subcommand_help(&["design", "apply"], false, Some(100));
+        assert!(
+            help.contains(crate::design_run::payload_contract::PAYLOAD_CONTRACT_POINTER),
+            "design apply --help names the contract invocation: {help}"
+        );
+        // The pointer rides the verb, not the family table above it. Safe as a
+        // negative because the leg above is its positive control: the same const,
+        // found by the same `contains`, one command deeper.
+        let family = crate::commands::cli::render_subcommand_help(&["design"], false, Some(100));
+        assert!(
+            !family.contains(crate::design_run::payload_contract::PAYLOAD_CONTRACT_POINTER),
+            "and `doctrine design --help`'s table is not widened by it: {family}"
+        );
+    }
+
     // ── PHASE-01: Behaviour-preservation verification net (SL-115) ──────────────
 
     #[test]

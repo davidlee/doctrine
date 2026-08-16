@@ -1425,7 +1425,15 @@ pub(crate) fn render_subcommand_help(
 
     // About — first paragraph only. (Clap emits no ANSI here because the root was
     // built with `ColorChoice::Never` under `!color` — VT-3.)
-    if let Some(about) = cmd.get_about() {
+    //
+    // The LONG form first (SL-251 PHASE-07 `EX-10`), on the `or_else` shape
+    // `render_options_section` already uses one function up — with the opposite
+    // preference, deliberately. This renderer replaces clap's own, so a command
+    // that sets `long_about` to say more at the verb than the family table shows
+    // would otherwise say it to nobody. Preferring the long form costs nothing
+    // where none is set, and the truncation below keeps the widening to the
+    // long form's FIRST paragraph.
+    if let Some(about) = cmd.get_long_about().or_else(|| cmd.get_about()) {
         let about = about.to_string();
         let first = about.split("\n\n").next().unwrap_or(&about).trim_end();
         if !first.is_empty() {
