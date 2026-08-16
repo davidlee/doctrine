@@ -1,7 +1,7 @@
 id = 256
 slug = "recording-an-act-emits-a-change-row"
 title = "Recording an act emits a change row"
-status = "design"
+status = "plan"
 created = "2026-08-16"
 updated = "2026-08-16"
 tags = ["area:correctness", "area:design-run", "cluster:design-run", "footgun"]

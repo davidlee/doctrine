@@ -74,3 +74,29 @@ ledger with zero rounds, so option 3's trap cannot be walked into at all.
 
 Related: `DEC-125` (the two disposition arms), `DEC-138` (admissibility),
 `IMP-392`, `ISS-320` (the other unactionable-refusal defect on this surface).
+
+## Second occurrence — SL-256, 2026-08-16
+
+Recurred unchanged eight days on. SL-256's run minted `RV-359` on entry to
+`reviewing`; the external adversarial pass was raised and concluded on `RV-360`
+(16 findings, 16/16 verified). Same refusal, same dead end.
+
+Two things this occurrence adds.
+
+**The dodge is better than `Waived`, and still not good.** Concluding the empty
+`RV-359` and disposing it `conducted` with a basis that redirects the reader to
+`RV-360` keeps the *"a pass was run"* claim true and puts the pointer somewhere
+durable. A `Waived` row would have said the user declined a pass that in fact
+happened, which is a worse lie than a misdirected pointer. The cost is that the
+redirect lives in prose — the basis string and a note written into `RV-359`'s
+own `.md` — where nothing structural can follow it. Fix option 1 is still the
+only one that makes the record true rather than annotated.
+
+**Option 3's trap was walked into on the way.** `review conclude RV-359` was
+required before the disposition would admit, and it accepted a ledger with zero
+rounds without comment — exactly the refusal the note above proposes. The
+sequence cost two refusals to discover: `ForeignPass` first, then the
+concluded-pass marker. Neither refusal named the run's pass `RV` before it was
+too late to choose differently, and nothing in the `reviewing` envelope prints
+it either. Worth adding to option 3: **show the pass `RV` in the envelope**, so
+the mismatch is visible while it is still cheap to act on.

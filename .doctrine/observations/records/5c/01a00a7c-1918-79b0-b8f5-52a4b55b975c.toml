@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00a7c-1918-79b0-b8f5-52a4b55b975c"
+recorded_at = "2026-08-16T12:11:40.184402241Z"
+kind = "friction"
+summary = "/design: the run's pass slot named an empty self-minted RV while the real adversarial pass ran on a different one"
+detail = "SL-256's design run minted RV-359 for itself on entry to reviewing. The adversarial pass was raised and concluded on RV-360 (16 findings, 16/16 verified). The run's review-disposed act can only name its own pass slot, and the slot cannot be re-pointed, so RV-359 had to be concluded empty and disposed 'conducted' with a basis redirecting the reader to RV-360. Two refusals were spent discovering this: ForeignPass (naming RV-360), then the concluded-pass marker (RV-359 read 'done' but had never been concluded). Nothing in the reviewing envelope names the pass RV, so the mismatch is invisible until the disposition is refused."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
