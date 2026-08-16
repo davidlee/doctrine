@@ -305,6 +305,37 @@ pub(crate) struct CreateRecord {
     pub(crate) acceptance: Option<AcceptanceDeclaration>,
 }
 
+impl CreateRecord {
+    /// A `CreateRecord` carrying **every** wire key, for `sec-8` pin 1.
+    ///
+    /// An exhaustive struct literal with no `..` update syntax, deliberately:
+    /// that is what makes a newly added field a compile error *here*, before it
+    /// can be a silently missing row in `payload_contract::CREATE_RECORD`. No
+    /// value may be one its own `skip_serializing_if` would drop — `facet` is
+    /// non-empty for exactly that reason — or the key leaves the wire and the
+    /// key-set equality passes on a smaller set.
+    #[cfg(test)]
+    pub(super) fn fully_populated() -> CreateRecord {
+        CreateRecord {
+            kind: "decision".to_owned(),
+            title: "A sample record".to_owned(),
+            slug: Some("a-sample-record".to_owned()),
+            body: Some("## A sample record\n".to_owned()),
+            facet: BTreeMap::from([
+                (
+                    "basis".to_owned(),
+                    WireFacetValue::Text("observation".to_owned()),
+                ),
+                (
+                    "supersedes".to_owned(),
+                    WireFacetValue::List(vec!["DEC-000".to_owned()]),
+                ),
+            ]),
+            acceptance: Some(AcceptanceDeclaration::fully_populated()),
+        }
+    }
+}
+
 /// The user-acceptance half a caller may supply (DEC-088).
 ///
 /// Authority is not a field: this declaration *is* the user's, and offering an
@@ -318,6 +349,25 @@ pub(crate) struct AcceptanceDeclaration {
     /// The harness turn the acceptance was given in, when the caller knows it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) turn: Option<String>,
+}
+
+impl AcceptanceDeclaration {
+    /// An `AcceptanceDeclaration` carrying **every** wire key, for `sec-8`
+    /// pin 1.
+    ///
+    /// An exhaustive struct literal with no `..` update syntax, deliberately:
+    /// that is what makes a newly added field a compile error *here*, before it
+    /// can be a silently missing row in
+    /// `payload_contract::ACCEPTANCE_DECLARATION`. No value may be one its own
+    /// `skip_serializing_if` would drop, or the key leaves the wire and the
+    /// key-set equality passes on a smaller set.
+    #[cfg(test)]
+    pub(super) fn fully_populated() -> AcceptanceDeclaration {
+        AcceptanceDeclaration {
+            basis: "the user accepts it as true".to_owned(),
+            turn: Some("turn-7".to_owned()),
+        }
+    }
 }
 
 /// What a caller may say about one runbook step (SL-233 PHASE-16, `EX-7`).
@@ -350,6 +400,25 @@ pub(crate) struct DischargeDeclaration {
     /// (the [`AcceptanceDeclaration::basis`] precedent).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) reason: Option<String>,
+}
+
+impl DischargeDeclaration {
+    /// A `DischargeDeclaration` carrying **every** wire key, for `sec-8` pin 1.
+    ///
+    /// An exhaustive struct literal with no `..` update syntax, deliberately:
+    /// that is what makes a newly added field a compile error *here*, before it
+    /// can be a silently missing row in
+    /// `payload_contract::DISCHARGE_DECLARATION`. No value may be one its own
+    /// `skip_serializing_if` would drop, or the key leaves the wire and the
+    /// key-set equality passes on a smaller set.
+    #[cfg(test)]
+    pub(super) fn fully_populated() -> DischargeDeclaration {
+        DischargeDeclaration {
+            step: "run-the-suite".to_owned(),
+            outcome: DischargeClaim::Attested,
+            reason: Some("the suite is green".to_owned()),
+        }
+    }
 }
 
 impl Declaration {
@@ -642,20 +711,61 @@ impl Declaration {
             })
     }
 
-    /// A declaration carrying **every** wire key, for `I9`.
+    /// A declaration carrying **every** wire key, for `I9` and for `sec-8`.
     ///
     /// An exhaustive struct literal with no `..` update syntax, deliberately:
     /// that is what makes a newly added field a compile error *here*, before it
-    /// can be a silently missing row in [`Declaration::WIRE_KEYS`]. The values
-    /// are arbitrary — only each key's presence on the wire is observed — but
-    /// none may be a value its field's `skip_serializing_if` would drop.
+    /// can be a silently missing row in [`Declaration::WIRE_KEYS`]. No value may
+    /// be one its field's `skip_serializing_if` would drop, **and no container
+    /// may be empty**: `sec-8` pin 2's descent reads element types *through* the
+    /// value, so an empty `needs` would prove `array` and nothing whatever about
+    /// what an element must be (`PHASE-03/EX-7`).
+    ///
+    /// The sentence that stood here — that the values are arbitrary because only
+    /// each key's presence on the wire is observed — was true of `I9`, which
+    /// compares key sets, and false of the ladder that now shares this literal.
     #[cfg(test)]
     pub(super) fn fully_populated(subject: DesignId) -> Declaration {
         Declaration {
             subject,
             question: Sparse::Value("why?".to_owned()),
-            needs: Sparse::Value(Vec::new()),
+            needs: Sparse::Value(vec![DesignId::parse("inq-3").expect("a literal id")]),
             parent: Sparse::Value(DesignId::parse("inq-0").expect("a literal id")),
+            provenance: Some(Provenance::AgentProposed),
+            lifecycle: Some(InquiryLifecycle::Open),
+            body: Some("## a section\n".to_owned()),
+            attests: Some(DesignId::parse("sec-0").expect("a literal id")),
+            reviewer: Some(Reviewer::Human),
+            concerns: Some(DesignId::parse("sec-0").expect("a literal id")),
+            summary: Some("a finding".to_owned()),
+            blocking: Some(true),
+            resolution: Some("disposed".to_owned()),
+            disposes: Some(DesignId::parse("inq-0").expect("a literal id")),
+            dispose: Some(Dispose::Unresolved {
+                note: "retained".to_owned(),
+            }),
+            resolved_record: Some("DEC-000".to_owned()),
+        }
+    }
+
+    /// A declaration whose every `Sparse` field is [`Sparse::Null`] and whose
+    /// every `Option` field is `Some`, for `sec-8` pin 3.
+    ///
+    /// `Sparse` serialises `Omitted` and `Null` identically, and
+    /// `skip_serializing_if` drops only `Omitted` — so this value emits JSON
+    /// `null` for **exactly** the sparse keys, which is the oracle pin 3's
+    /// null-set equality reads. An exhaustive literal with no `..` for
+    /// [`Declaration::fully_populated`]'s reason.
+    ///
+    /// It is deliberately **outside** pin 2's coverage union: it exists to make
+    /// containers absent, which is the assertion rather than a gap.
+    #[cfg(test)]
+    pub(super) fn sparse_nulled(subject: DesignId) -> Declaration {
+        Declaration {
+            subject,
+            question: Sparse::Null,
+            needs: Sparse::Null,
+            parent: Sparse::Null,
             provenance: Some(Provenance::AgentProposed),
             lifecycle: Some(InquiryLifecycle::Open),
             body: Some("## a section\n".to_owned()),
@@ -690,6 +800,25 @@ pub(crate) struct SubmissionEnvelope {
     pub(crate) submission_id: String,
 }
 
+impl SubmissionEnvelope {
+    /// A `SubmissionEnvelope` carrying **every** wire key, for `sec-8` pin 1.
+    ///
+    /// An exhaustive struct literal with no `..` update syntax, deliberately:
+    /// that is what makes a newly added field a compile error *here*, before it
+    /// can be a silently missing row in `payload_contract::PAYLOAD` — this
+    /// struct's three keys are rendered **at the root** by `#[serde(flatten)]`,
+    /// so it is the one closure struct with no `TypeContract` of its own and its
+    /// pin is the root's disjoint union rather than a key set of its own.
+    #[cfg(test)]
+    pub(super) fn fully_populated() -> SubmissionEnvelope {
+        SubmissionEnvelope {
+            run_uid: "run-0000".to_owned(),
+            known_revision: 7,
+            submission_id: "sub-0001".to_owned(),
+        }
+    }
+}
+
 /// The sole lawful crossing of an authored-watermark divergence (DEC-092 rule 2)
 /// — a protocol, not a bypass.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -703,6 +832,26 @@ pub(crate) struct AdoptAuthored {
     pub(crate) sections: BTreeMap<DesignId, String>,
 }
 
+impl AdoptAuthored {
+    /// An `AdoptAuthored` carrying **every** wire key, for `sec-8` pin 1.
+    ///
+    /// An exhaustive struct literal with no `..` update syntax, deliberately:
+    /// that is what makes a newly added field a compile error *here*, before it
+    /// can be a silently missing row in `payload_contract::ADOPT_AUTHORED`. No
+    /// value may be one its own `skip_serializing_if` would drop, or the key
+    /// leaves the wire and the key-set equality passes on a smaller set.
+    #[cfg(test)]
+    pub(super) fn fully_populated() -> AdoptAuthored {
+        AdoptAuthored {
+            fingerprint: "sha256:design".to_owned(),
+            sections: BTreeMap::from([(
+                DesignId::parse("sec-0").expect("a literal id"),
+                "sha256:sec-0".to_owned(),
+            )]),
+        }
+    }
+}
+
 /// A declared stage move. A backward move carries its reason (DEC-067); the type
 /// keeps the reason optional only because a *forward* move has none.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -710,6 +859,23 @@ pub(crate) struct StageDeclaration {
     pub(crate) to: Stage,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) reason: Option<String>,
+}
+
+impl StageDeclaration {
+    /// A `StageDeclaration` carrying **every** wire key, for `sec-8` pin 1.
+    ///
+    /// An exhaustive struct literal with no `..` update syntax, deliberately:
+    /// that is what makes a newly added field a compile error *here*, before it
+    /// can be a silently missing row in `payload_contract::STAGE_DECLARATION`.
+    /// No value may be one its own `skip_serializing_if` would drop, or the key
+    /// leaves the wire and the key-set equality passes on a smaller set.
+    #[cfg(test)]
+    pub(super) fn fully_populated() -> StageDeclaration {
+        StageDeclaration {
+            to: Stage::Drafting,
+            reason: Some("the inquiry map is sufficient".to_owned()),
+        }
+    }
 }
 
 /// A declared change of traversal direction (design §5.3, EX-8).
@@ -750,6 +916,39 @@ impl TraversalDeclaration {
     /// On whose authority, defaulting to agent-proposed.
     pub(crate) fn authority(&self) -> Authority {
         self.authority.unwrap_or(Authority::AgentProposed)
+    }
+
+    /// A `TraversalDeclaration` carrying **every** wire key, for `sec-8` pin 1.
+    ///
+    /// An exhaustive struct literal with no `..` update syntax, deliberately:
+    /// that is what makes a newly added field a compile error *here*, before it
+    /// can be a silently missing row in
+    /// `payload_contract::TRAVERSAL_DECLARATION`. No value may be one its own
+    /// `skip_serializing_if` would drop — every `Sparse` field is a `Value`, and
+    /// the whole declaration must fail [`TraversalDeclaration::is_empty`] or
+    /// `ApplyRequest`'s own `traversal` key leaves the wire with it.
+    #[cfg(test)]
+    pub(super) fn fully_populated() -> TraversalDeclaration {
+        TraversalDeclaration {
+            pin: Sparse::Value(DesignId::parse("inq-0").expect("a literal id")),
+            cursor: Sparse::Value(DesignId::parse("inq-1").expect("a literal id")),
+            posture: Some(Posture::Depth),
+            authority: Some(Authority::UserPinned),
+        }
+    }
+
+    /// A traversal declaration whose every `Sparse` field is [`Sparse::Null`]
+    /// and whose every `Option` field is `Some`, for `sec-8` pin 3 —
+    /// [`Declaration::sparse_nulled`]'s sibling and its reasoning, including
+    /// that it sits deliberately outside pin 2's coverage union.
+    #[cfg(test)]
+    pub(super) fn sparse_nulled() -> TraversalDeclaration {
+        TraversalDeclaration {
+            pin: Sparse::Null,
+            cursor: Sparse::Null,
+            posture: Some(Posture::Depth),
+            authority: Some(Authority::UserPinned),
+        }
     }
 }
 
@@ -808,6 +1007,25 @@ pub(crate) struct ReviewPolicyDeclaration {
     pub(crate) acceptance: AcceptanceDeclaration,
 }
 
+impl ReviewPolicyDeclaration {
+    /// A `ReviewPolicyDeclaration` carrying **every** wire key, for `sec-8`
+    /// pin 1.
+    ///
+    /// An exhaustive struct literal with no `..` update syntax, deliberately:
+    /// that is what makes a newly added field a compile error *here*, before it
+    /// can be a silently missing row in
+    /// `payload_contract::REVIEW_POLICY_DECLARATION`. The acceptance is composed
+    /// from its own fixture rather than spelled again here, so a field joining
+    /// `AcceptanceDeclaration` is one compile error and not four.
+    #[cfg(test)]
+    pub(super) fn fully_populated() -> ReviewPolicyDeclaration {
+        ReviewPolicyDeclaration {
+            policy: ReviewPolicy::HumanThenAdversarial,
+            acceptance: AcceptanceDeclaration::fully_populated(),
+        }
+    }
+}
+
 /// A user act at a checkpoint, as a **caller** may state it (design `sec-4`,
 /// `EX-7b`).
 ///
@@ -842,6 +1060,28 @@ pub(crate) struct CheckpointActDeclaration {
     pub(crate) disposition: Option<ReviewDisposition>,
 }
 
+impl CheckpointActDeclaration {
+    /// A `CheckpointActDeclaration` carrying **every** wire key, for `sec-8`
+    /// pin 1.
+    ///
+    /// An exhaustive struct literal with no `..` update syntax, deliberately:
+    /// that is what makes a newly added field a compile error *here*, before it
+    /// can be a silently missing row in
+    /// `payload_contract::CHECKPOINT_ACT_DECLARATION`. No value may be one its
+    /// own `skip_serializing_if` would drop, or the key leaves the wire and the
+    /// key-set equality passes on a smaller set.
+    #[cfg(test)]
+    pub(super) fn fully_populated() -> CheckpointActDeclaration {
+        CheckpointActDeclaration {
+            act: ActKind::ReviewDisposed,
+            acceptance: AcceptanceDeclaration::fully_populated(),
+            disposition: Some(ReviewDisposition::Conducted {
+                review: super::attestation::ReviewRef::new("RV-001"),
+            }),
+        }
+    }
+}
+
 /// An agent's declaration about its own work, as the agent states it (DEC-121,
 /// `EX-7b`).
 ///
@@ -860,6 +1100,29 @@ pub(crate) struct AgentActDeclaration {
     /// The harness turn it was declared in, when the caller knows it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) turn: Option<String>,
+}
+
+impl AgentActDeclaration {
+    /// An `AgentActDeclaration` carrying **every** wire key, for `sec-8` pin 1.
+    ///
+    /// An exhaustive struct literal with no `..` update syntax, deliberately:
+    /// that is what makes a newly added field a compile error *here*, before it
+    /// can be a silently missing row in
+    /// `payload_contract::AGENT_ACT_DECLARATION`. No value may be one its own
+    /// `skip_serializing_if` would drop, or the key leaves the wire and the
+    /// key-set equality passes on a smaller set.
+    #[cfg(test)]
+    pub(super) fn fully_populated() -> AgentActDeclaration {
+        AgentActDeclaration {
+            act: AgentAct::BlockingSetDeclared {
+                blocking: std::collections::BTreeSet::from([
+                    DesignId::parse("inq-0").expect("a literal id")
+                ]),
+            },
+            basis: "these three gate the draft".to_owned(),
+            turn: Some("turn-7".to_owned()),
+        }
+    }
 }
 
 /// One delegation act (DEC-068).
@@ -1016,6 +1279,46 @@ impl ApplyRequest {
             .iter()
             .find(|(_, carried)| carried(self))
             .map(|(act, _)| *act)
+    }
+
+    /// An `ApplyRequest` carrying **every** wire key, for `sec-8` pin 1.
+    ///
+    /// An exhaustive struct literal with no `..` update syntax, deliberately:
+    /// that is what makes a newly added field a compile error *here*, before it
+    /// can be a silently missing row in `payload_contract::PAYLOAD`. No value
+    /// may be one its own `skip_serializing_if` would drop — `traversal` in
+    /// particular is composed from a declaration that fails
+    /// [`TraversalDeclaration::is_empty`], or its key would leave the wire and
+    /// the key-set equality would pass on a smaller set.
+    ///
+    /// Every nested value is composed by **calling** the type's own fixture
+    /// rather than spelled again here: a field joining `AcceptanceDeclaration`
+    /// is then one compile error at that fixture, not one per site, which is the
+    /// same drift this contract exists to prevent.
+    #[cfg(test)]
+    pub(super) fn fully_populated() -> ApplyRequest {
+        ApplyRequest {
+            envelope: SubmissionEnvelope::fully_populated(),
+            adopt_authored: Some(AdoptAuthored::fully_populated()),
+            traversal: TraversalDeclaration::fully_populated(),
+            stage: Some(StageDeclaration::fully_populated()),
+            acceptance: Some(AcceptanceDeclaration::fully_populated()),
+            declare: vec![Declaration::fully_populated(
+                DesignId::parse("inq-1").expect("a literal id"),
+            )],
+            delegation: Some(DelegationAct::Propose {
+                id: DesignId::parse("dlg-1").expect("a literal id"),
+                by: "a delegate".to_owned(),
+                summary: "what it concluded".to_owned(),
+                declare: vec![Declaration::fully_populated(
+                    DesignId::parse("inq-2").expect("a literal id"),
+                )],
+            }),
+            discharge: Some(DischargeDeclaration::fully_populated()),
+            review_policy: Some(ReviewPolicyDeclaration::fully_populated()),
+            checkpoint_act: Some(CheckpointActDeclaration::fully_populated()),
+            agent_declaration: Some(AgentActDeclaration::fully_populated()),
+        }
     }
 }
 

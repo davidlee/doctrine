@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a005ac-929a-77b0-b352-680fbe7b0156"
+recorded_at = "2026-08-15T13:46:30.93857972Z"
+kind = "friction"
+summary = "phase-plan (SL-251/PHASE-01): materialised phase sheet template has no criterion-to-verification mapping slot"
+detail = "The planner had to hand-roll a 'Verification steps' heading with a criterion->verification table because the materialised sheet template offers no slot for it. Every phase sheet in the slice will invent its own shape."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

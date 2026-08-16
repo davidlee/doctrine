@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a005ac-9295-79c0-85d0-8f085c99ba6c"
+recorded_at = "2026-08-15T13:46:30.933888774Z"
+kind = "friction"
+summary = "phase-plan (SL-251): skill mandates /retrieve-memory and 'doctrine slice research --restamp', neither available to a scoped subagent planner"
+detail = "The /phase-plan skill's steps 3-4 mandate a memory retrieval pass and disposition of the research staleness advisory (which prescribes 'refresh the affected sections then --restamp'). A planner scoped to write only the runtime phase sheet cannot do either: it has no memory broker and restamping is an authored-state write. The disposition already argued in plan.md Notes has to be re-derived per phase."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

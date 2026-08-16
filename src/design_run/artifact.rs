@@ -257,6 +257,42 @@ const NO_CONDITIONS: &str = "—";
 #[cfg(test)]
 const INHERITED_COLUMN: usize = 3;
 
+/// The entity-id prefixes a shipped asset may not cite.
+///
+/// At **module level** rather than inside `mod tests`, because a sibling module
+/// cannot see a private `mod tests` and the second generated asset
+/// ([`super::payload_contract`]'s) inherits the same constraint. One list, not
+/// two: a copied fourteen-element list is a second description free to drift,
+/// which is what `STD-001` forbids.
+#[cfg(test)]
+pub(crate) const REPO_PRIVATE_PREFIXES: [&str; 14] = [
+    "ADR", "CHR", "DEC", "IDE", "IMP", "ISS", "POL", "PRD", "REQ", "RSK", "RV", "SL", "SPEC", "STD",
+];
+
+/// Whether `text` cites a per-repo sequential id — a prefix on a word
+/// boundary, followed by a hyphen and a digit.
+///
+/// Per-repo sequential ids do not dangle in a client project: they resolve to an
+/// unrelated record, silently, which is worse than a broken link. `POL-002` is
+/// the standing form of the same constraint.
+#[cfg(test)]
+pub(crate) fn cites_a_repo_private_id(text: &str) -> bool {
+    REPO_PRIVATE_PREFIXES.iter().any(|prefix| {
+        text.match_indices(prefix).any(|(at, _)| {
+            let starts_a_word = text
+                .get(..at)
+                .and_then(|before| before.chars().next_back())
+                .is_none_or(|char| !char.is_ascii_alphanumeric());
+            let rest = text.get(at + prefix.len()..).unwrap_or_default();
+            starts_a_word
+                && rest
+                    .strip_prefix('-')
+                    .and_then(|digits| digits.chars().next())
+                    .is_some_and(|char| char.is_ascii_digit())
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -322,37 +358,12 @@ mod tests {
             .collect()
     }
 
-    /// The entity-id prefixes a shipped asset may not cite.
-    const REPO_PRIVATE_PREFIXES: [&str; 14] = [
-        "ADR", "CHR", "DEC", "IDE", "IMP", "ISS", "POL", "PRD", "REQ", "RSK", "RV", "SL", "SPEC",
-        "STD",
-    ];
-
-    /// Whether `text` cites a per-repo sequential id — a prefix on a word
-    /// boundary, followed by a hyphen and a digit.
-    fn cites_a_repo_private_id(text: &str) -> bool {
-        REPO_PRIVATE_PREFIXES.iter().any(|prefix| {
-            text.match_indices(prefix).any(|(at, _)| {
-                let starts_a_word = text
-                    .get(..at)
-                    .and_then(|before| before.chars().next_back())
-                    .is_none_or(|char| !char.is_ascii_alphanumeric());
-                let rest = text.get(at + prefix.len()..).unwrap_or_default();
-                starts_a_word
-                    && rest
-                        .strip_prefix('-')
-                        .and_then(|digits| digits.chars().next())
-                        .is_some_and(|char| char.is_ascii_digit())
-            })
-        })
-    }
-
     /// `VA-1`, discharged with evidence rather than with a reading.
     ///
-    /// Per-repo sequential ids do not dangle in a client project — they resolve
-    /// to an unrelated record, silently, which is worse than a broken link. The
-    /// in-tree generated artefact this one is modelled on cites two in its own
-    /// banner, so this is a live defect class and not a hypothetical.
+    /// The detector itself is at module level above, shared with the payload
+    /// contract's rendering (`SL-251 PHASE-05`). The in-tree generated artefact
+    /// this one is modelled on cites two ids in its own banner, so this is a
+    /// live defect class and not a hypothetical.
     #[test]
     fn the_artefact_cites_no_repo_private_id() {
         assert!(

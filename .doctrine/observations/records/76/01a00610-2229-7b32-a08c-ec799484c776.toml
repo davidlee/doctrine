@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00610-2229-7b32-a08c-ec799484c776"
+recorded_at = "2026-08-15T15:35:15.753749302Z"
+kind = "friction"
+summary = "execute (SL-251/PHASE-03): check gate output interleaves a boot-snapshot JSON dump and a SessionStart hook error"
+detail = "doctrine check gate prints a boot-snapshot JSON dump plus 'claude: refresh failed: ... Is a directory (os error 21)' from a SessionStart hook. Non-fatal (exit 0) but it sits between the worker and the verdict on every inner-loop run, and an error string in gate output invites a worker to chase something that is not theirs."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -200,9 +200,306 @@ immutable — a later append takes the next number, never these):
 - `PHASE-05/EX-6` — restated a choice `sec-5` explicitly leaves to the
   implementer and calls not load-bearing.
 
+## PHASE-01 execution, 2026-08-15 — one criterion appended
+
+`PHASE-01/EX-9`, appended at execution. `sec-4` concludes "All six are `const
+fn`, so the token array stays a const" and `EX-5` turns that into an obligation
+to consume all six authorities. The `const fn` half is true — all six are, at
+the exact lines `sec-4` cites — but the conclusion does not follow for two of
+them. `Provenance` and `ReviewDisposition` have **no fieldless variant between
+them**: `ShapingQuestion { record: String }`, `ImportedProse { section:
+DesignId, … }`, `Conducted { review: ReviewRef }`, `Waived { reason: String }`.
+Calling `label()`/`arm()` in a const initialiser therefore needs a temporary the
+const evaluator must drop (E0493, confirmed by a compiled repro), and two of
+those four cannot be built from the leaf at all — `DesignId`'s `raw` and
+`ReviewRef`'s tuple field are private with non-`const` constructors.
+
+The repair keeps the single source and moves where it is enforced. Those two
+enums take the naming arm, and `VT-1`'s per-variant walk — which the
+exhaustiveness barrier makes total over variants, so it cannot silently lose a
+case — asserts each named token against the authority's own return for that
+variant. That is a *detector* where the other four get a barrier, which is
+exactly the substitution `sec-4` warns against at line 992; it is taken here
+because the barrier is unavailable rather than merely inconvenient, and `EX-9`
+records the difference instead of hiding it. `/reconcile` owes `sec-4` the
+correction, alongside the three it already owes.
+
+## PHASE-02 execution, 2026-08-15 — two criteria appended, one VT retired
+
+**The closure has no attestation side.** `sec-7`'s touch table and `sec-8` pin 1
+both allocate fixtures to `attestation.rs`, and `PHASE-02/EX-5` and `VT-2`
+inherited that. It is wrong: all twelve closure structs are defined in
+`submission.rs` — `CheckpointActDeclaration` at 825 and `AgentActDeclaration` at
+855, the two the design names as attestation-side — and `attestation.rs`
+contributes enums plus `ReviewRef` and nothing else. The design contradicts
+itself one section apart, since `sec-3` already says "`submission.rs` (every wire
+struct)" at design.md:600-601.
+
+`VT-2` is therefore not merely hard, it is **void on contact**: its `test_file`
+is a file no closure struct lives in and its own keyword,
+`CheckpointActDeclaration`, names a `submission.rs` type. The only way to make it
+green would be to site a fixture away from its type, which is the opposite of
+what it asks for. So it is retired — the id is spent — and `VT-4` carries the
+obligation it was really after (a fixture sits beside its type, where a new field
+is a compile error in the reader's line of sight) at the file where the types
+are. `EX-10` records the whole disposition; `/reconcile` owes the design the
+correction.
+
+**Two criteria would have shipped a false row if read literally.** `EX-3`'s
+"Presence is Sparse exactly on the Sparse<T> fields, Optional on Option,
+Required otherwise" reads presence off the Rust *spelling*. Five keys are
+omissible on the wire while being neither — `ApplyRequest.traversal` and
+`.declare`, `AdoptAuthored.sections`, `CreateRecord.facet`, and
+`DelegationAct::Propose.declare` all carry `#[serde(default)]` — so a literal
+reading calls five omissible keys Required, which is exactly the class of wrong
+answer this contract exists to stop. `render-sample.md` already renders four of
+them optional. And `EX-4`'s five-kind `Id` row is on the wrong key:
+`run.rs:1137-1155` routes on `declaration.subject().kind()`, so the five kinds
+belong to `Declaration.subject`, while `ApplyRequest.declare` is
+`Seq(Named(Declaration))` and carries no id at all. `EX-11` settles both against
+the source.
+
+## PHASE-03 execution, 2026-08-15 — two criteria appended
+
+**`IdKind::declarable` answers a different question than `sec-8` asks it.**
+`sec-8`:2012-2016 says `Id` rows are checked against `IdKind::declarable`
+"where the engine's admissible set is already computed". It is not a set; it is
+a `const fn -> bool` predicate over **declaration subjects** (`ids.rs:82-91`),
+and it says `false` for `dlg-`. `DelegationAct`'s variants each carry an `id`
+key that legitimately holds a `dlg-` id, so the rule as written fails four
+correct rows in `PAYLOAD` — the contract would be marked wrong for describing
+the wire accurately. `EX-10` splits the claim in two: the descent's generic
+arm checks a value's own kind against that row's admissible set, and the two
+engine-derived claims `sec-8` actually cares about — the declaration subject's
+five kinds, and `sec-` alone for `AdoptAuthored.sections` — are asserted at
+their sites, where `declarable` is the right oracle.
+
+**The oracle could have restated itself one field over.** `EX-3` insists the
+coverage equality's two sides derive independently, and the plan review already
+named the way that fails: recording sites from the table rather than from
+arrival. Planning found a second route to the same vacuity. Pin 4's per-variant
+samples each carry a `payload` field, which is a *placeholder* — one variant's
+sample points at the exemplar contract rather than the real `CREATE_RECORD`, and
+an empty `Keys(&[])` stands in wherever a variant's rows are not the sample's
+business. A descent that read `sample.payload` as its declaration would assert
+nothing and pass on any input, exactly as a table-sourced left side would.
+`EX-11` bars it: variant selection comes from the tagging table and a variant's
+rows from the real `TypeContract`, which is what `EX-2` already meant.
+
+**What planning did not have to fix.** `EX-9` anticipated going back to fill
+containers `PHASE-02` left empty. There is one — `Declaration::fully_populated`'s
+`needs`, which is `EX-7`'s anyway. The other empty containers are in pin 4's
+samples, where the fixtures already reach the same sites.
+
 **What this owes the design.** Three of the nine originate upstream rather than
 in the plan, and `/reconcile` should carry them back: `sec-6`'s *fifth variant*
 is the sixth; `sec-4`'s "pin 4 covers all fourteen uniformly" reads against
 `sec-8` pin 4's own `Untagged → skipped` row; and `sec-8` pin 1's eleven/twelve
 split is stated correctly but is easy to read as twelve call sites — which is
 how the plan came to say it.
+
+## PHASE-04 planning, 2026-08-15 — VT-1's test_file moved
+
+`PHASE-04/VT-1`'s `test_file` was `src/design_run/tests.rs`; it is now
+`src/commands/design.rs`. The id is unchanged — this is the same move the plan
+review already made once for `PHASE-01/VT-1`, for the same reason, and it is a
+field amendment rather than a new criterion because the obligation did not
+change.
+
+The pin must name `crate::knowledge::{RecordKind, facet_fields}` and
+`crate::commands::design::extern_contracts`, and `src/design_run/tests.rs`
+cannot hold a reference to either. `tests/architecture_layering.rs` skips a file
+only when its *first* non-comment line is `#[cfg(test)]`
+(`skip_cfg_test_file`, :135-160); `src/design_run/tests.rs` opens with SPDX
+comments and then `#![expect(…)]`, so the collector walks it as production and
+visits its `use` trees. `design_run` is `leaf` (`layering.toml:31`) and both
+`knowledge` and `commands` are `command` (`:101`, `:94`), so the pin would land
+a leaf→command edge and red `just check` — remediable only by an
+`[[accepted_violation]]`, which is the wrong instrument for a test siting.
+
+`src/commands/design.rs`'s existing `#[cfg(test)] mod tests` is skipped by the
+collector outright, and all three of `VT-1`'s keywords occur there naturally.
+This is the third instance of one defect class in this slice — `PHASE-01/VT-1`
+moved, `PHASE-03/VT-3` split, now this — which is worth carrying to `/audit` as
+a pattern rather than three incidents: **the plan sites pins by subject matter
+and the layering test sites them by import legality**, and the two disagree
+whenever a leaf-tier subject is pinned against a command-tier oracle.
+
+`EX-1`'s "takes `SelectorTable.source` from `ExternRegion::label()` rather than
+retyping" is discharged by `VA-1` reading, not by a test: an identical retyped
+literal satisfies every assertion a test could make, so the property is
+review-visible only. That is a deliberate routing, not a gap.
+
+## PHASE-05 planning, 2026-08-15 — one VT appended, five dispositions
+
+**`PHASE-05/VT-3` appended.** `EX-5`, `EX-8` and `EX-9` had no `VT` behind them.
+That is not an oversight of the plan review's — the review *restored* `EX-8` and
+`EX-9` after finding `sec-5`'s three semantic rules dropped, and then left
+`VA-1`'s shape comparison as their only witness, which is the same downgrade it
+was correcting one paragraph earlier. `VT-3` gives them evidence. Ids are
+immutable and `VT-1`/`VT-2` are spent, so this is `VT-3`.
+
+**The five questions planning raised, and how they are disposed.**
+
+- **The `SilentlyDropped` parenthetical is reworded, and this is forced rather
+  than chosen.** `render-sample.md:111` prints `(ISS-333 — a misspelt top-level
+  key is discarded)`, which cites a repo-private id on a shipped surface — the
+  exact defect `VT-2`/`sec-8` pin 10 exists to catch. So the sample's own string
+  cannot ship whatever `EX-4` says about columns. Planning's
+  `(a misspelt key is discarded, exit 0)` is adopted: it drops the id, drops
+  "top-level" (wrong once the string is per-variant per `EX-9` and so appears on
+  nested types too), and keeps `exit 0`, which is the actionable half — a
+  silently-discarded key that also exits 0 is what cost this slice's own design
+  run three revisions. It lands the root header at 91 columns, so `EX-4` is met
+  as a consequence rather than needing a separate concession.
+- **`WireType::Id` renders its admissible prefixes, not a bare `id`** — the model
+  over the sample. `payload_contract.rs:363-366` calls a bare `id` "the same
+  omission this slice exists to remove", and `VA-1` says in terms that the sample
+  is *not* a golden and is compared for shape and completeness only. Following
+  the sample here would ship the omission the slice was carved to close.
+- **The repo-private-id detector is hoisted, not copied.** `artifact.rs`'s
+  `cites_a_repo_private_id` and its fourteen-prefix const are private to that
+  file's `mod tests`. Planning proposed copying them; the tree has already
+  answered this, two lines from where the worker will be typing —
+  `payload_contract.rs:1550-1553` records cfg(test) helpers being put at *module
+  level* precisely because "a sibling module cannot see a private `mod tests`".
+  So: hoist them out of `mod tests` to module level, `#[cfg(test)] pub(crate)`.
+  A copied fourteen-element list is a second description free to drift, which is
+  `R1` and `STD-001` both, and pin 10's "not reimplemented" is then honoured in
+  letter as well as substance.
+- **`VA-1`'s printer sited in `src/commands/design.rs`** is right and is not a
+  fourth instance of the siting defect: it needs the real `RecordKind` /
+  `facet_fields` table, which is a command-tier fact, while `VT-1` and `VT-2`
+  stay in the leaf on a leaf-local `ExternContracts` fixture.
+- **Long lines in the shipped document are accepted.** `EX-4` pins the root
+  header alone at 100 columns and the design chose that scope deliberately; a
+  `Closed` token list wrapped mid-vocabulary is harder to read and to grep than
+  one long line, and no criterion asks for it.
+
+## PHASE-05 execution, 2026-08-16 — one criterion appended
+
+**`EX-10`: the JSON carries a fifth top-level key.** `EX-3` enumerates
+`{schema, version, root, types}`; the rendering also carries `extern`. This is
+an accepted departure, and the reason is the scope's, not the compiler's.
+
+Execution offered two arguments and only one of them is load-bearing. The weak
+one: `render_json(&ExternContracts)` with the parameter unread is a hard error
+under `unused = "deny"`. That is a consequence of `EX-1`'s signature, and *the
+compiler left me nowhere else to put it* would be a poor reason to widen a wire
+shape — if that were the whole case, the right move would be to revisit the
+signature.
+
+The real one is `DEC-227` and `DEC-224` together. Scope §3 commits the surface
+to being **total over the payload**, and `DEC-224` makes the JSON the *primary*
+rendering. `sec-5` says the extern region is the one part of the contract a
+caller cannot recover any other way — `CreateRecord.kind`'s seven admissible
+tokens and `facet`'s per-kind keys exist nowhere in the type closure. A JSON
+that omits them is not total, and it makes the primary surface strictly less
+informative than the secondary one: a machine consumer would have to fall back
+to parsing the prompt rendering to learn what a `kind` may be. That reproduces
+this slice's founding defect — *the contract is knowable only by reading
+something not meant to be read as a contract* — inside the artefact built to
+cure it. `EX-3`'s four keys were enumerated against the type closure, before
+the extern region was in view; the appended criterion records the fifth rather
+than letting the JSON quietly out-run its own exit criterion.
+
+The region is carried **once**, at top level, keyed by `ExternRegion::label()`
+over an iteration of `ExternRegion::ALL` — not inlined at its two referencing
+sites, which would state it twice (`STD-001`) and would make a second region
+a two-site edit.
+
+**Also appended by execution, and not a criterion (PHASE-05):** `TYPE_COLUMN_CAP = 40`.
+One `FieldShape::Closed` token list is 105 characters, and without a cap it
+padded thirty sibling rows out to 105 columns of whitespace. With it, a wide
+type overflows its own column and its siblings stay narrow. This is padding,
+not content — plan disposition 5 accepts long *content* lines and is untouched.
+
+## PHASE-06 planning, 2026-08-16 — VT-1 re-sited, EX-8 appended
+
+**`PHASE-06/VT-1`'s `test_file` moved** from `src/design_run/payload_contract.rs`
+to `src/commands/design.rs`. Same field amendment, same reason, **fourth time in
+this slice** — and this instance is materially worse than the other three, which
+is why it has now been carried out of the slice as `IMP-438`.
+
+`PHASE-01/VT-1`, `PHASE-03/VT-3` and `PHASE-04/VT-1` would each merely have
+redded the build: a leaf-sited test naming a command-tier symbol is a layering
+violation and `just check` says so. `PHASE-06/VT-1` would have gone **green**.
+`render_document` takes `&ExternContracts`, and a leaf-sited golden can only pass
+`extern_fixture()` — the two-row stub PHASE-05 built for `VT-1`/`VT-3`. The
+golden would then have pinned the *shipped, published* document to a test
+fixture, and `install/design-payload-contract.md` would describe a knowledge
+region that does not exist, with a passing test underneath it. Only
+`crate::commands::design::extern_contracts()` builds the real seven-kind table.
+
+`DEC-140` — *verification evidence lives at the tier that can produce its
+subject* — decided this in the general case on 2026-08-04, before this slice
+existed. It is accepted governance that `/plan` does not enforce, which is what
+`IMP-438` now records: a defect class that usually fails loudly and occasionally
+fails silently is worth mechanising, because vigilance calibrates to the usual
+case.
+
+**`EX-8` appended: `DEC-226`'s seal gets a pin.** Planning found
+`customization = "fixed"` unpinned and judged the gap acceptable on the grounds
+that `publication.rs` admits fail-closed. That reasoning is half right —
+fail-closed admission rejects an absent or out-of-vocabulary value, but `fixed`
+and `customizable` are *both* in the vocabulary, and `publication/manifest.toml`
+runs 71 `customizable` to 19 `fixed`. A drift to the majority value is therefore
+silent, and `DEC-226` would have no enforcement anywhere in the tree. This is
+`R1` — *a description free to drift is worth less than no description* — applied
+to the decision rather than to the contract, and it costs one assertion.
+
+**Three planning questions answered without an amendment.**
+
+- `EX-6`'s "the failure message names the regeneration test" has no mechanical
+  pin here and none in the `artifact.rs` precedent either. Follow the precedent;
+  a cross-asset fix is reconcile's business, not this phase's to take
+  unilaterally.
+- `PAYLOAD_CONTRACT_PATH`'s unconditional `#[expect(dead_code)]` must become
+  `cfg_attr(not(test), …)` once the golden gives it a `cfg(test)` reader, in the
+  opposite direction to `extern_contracts()`'s gate coming off. That is the one
+  permitted leaf edit and it is mechanical, not a scope change.
+- The boot snapshot goes stale the moment the verb lands. `boot.md` is runtime
+  and gitignored, and the worker's contract forbids writing runtime state, so
+  the orchestrator runs `doctrine boot` after the phase lands rather than the
+  worker running it mid-phase.
+
+## PHASE-07 planning, 2026-08-16 — EX-10 appended
+
+**`EX-4`'s named mechanism does not work, and the reason is a design-level
+mistake rather than a plan-level one.** `EX-4` has `Apply` take
+`long_about = format!(…)` splicing `PAYLOAD_CONTRACT_POINTER`. Nothing would
+render. Four facts, each checked against the tree:
+
+- `render_subcommand_help` reads `cmd.get_about()` and nothing else
+  (`cli.rs:1427`), and keeps only the first paragraph.
+- `main.rs:285-292` routes every `--help` and every `help` subcommand through
+  that renderer, so clap's own help renderer never runs.
+- `long_about` and `get_long_about` occur **zero** times in the tree. Nobody has
+  ever set one, which is why the gap has never been noticed.
+- `sec-6:1518-1522` reasons from clap's rendering behaviour, and `sec-8` pin 7's
+  help bullet inherits it.
+
+So the design's argument is sound about clap and wrong about doctrine, which
+overrides clap here. `EX-10` authorises the renderer change —
+`get_long_about().or_else(|| cmd.get_about())`, the `or_else` shape
+`render_options_section` already uses one function up — and widens the touch-set
+to `src/commands/cli.rs`, which `sec-7`'s table does not list.
+
+**The bound is measured, not trusted.** `clap_derive` synthesises `long_about`
+only for a multi-paragraph doc comment, and its first paragraph is byte-identical
+to `about` except for a stripped trailing period — so the rendered help of every
+*other* command should be unchanged but for a restored full stop. The phase
+diffs before against after rather than asserting this. If the diff shows more,
+the phase **halts and hands back**: the fallback of putting the pointer in
+`--input`'s arg help would satisfy `VT-1` while quietly deviating from `EX-4`'s
+named mechanism, and substituting one push point for another is a design
+decision, not a keyboard one.
+
+Note the direction. `render_options_section`'s precedent prefers the *short*
+form (`get_help().or_else(get_long_help())`); `EX-10` prefers the *long* one.
+That is the same shape with the opposite preference, and it is deliberate: the
+about section already truncates to one paragraph, so preferring the long form
+costs nothing where no `long_about` exists — which today is everywhere.
+
+**Reconcile owes a design correction here**, not just a prose tidy: `sec-6` and
+`sec-8` pin 7 both describe a help renderer this project does not use.

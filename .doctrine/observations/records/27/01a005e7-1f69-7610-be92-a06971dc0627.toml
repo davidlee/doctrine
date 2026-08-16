@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a005e7-1f69-7610-be92-a06971dc0627"
+recorded_at = "2026-08-15T14:50:28.073440149Z"
+kind = "friction"
+summary = "execute (SL-251): 'cargo test -p doctrine --lib design_run' silently runs zero tests — the suite is in the bin target"
+detail = "Failure mode is silent SUCCESS: the command exits 0 having run nothing, so a worker reads it as green. CLAUDE.md says to use 'cargo --bin doctrine memory' style invocations, but the wrong one does not complain. Cost a wasted cycle in PHASE-02."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

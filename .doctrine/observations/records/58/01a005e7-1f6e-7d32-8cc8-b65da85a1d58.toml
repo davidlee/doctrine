@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a005e7-1f6e-7d32-8cc8-b65da85a1d58"
+recorded_at = "2026-08-15T14:50:28.078032866Z"
+kind = "friction"
+summary = "phase-plan (SL-251/PHASE-02): the sheet contradicted itself on a naming convention it invented"
+detail = "The phase sheet used '<TYPE>_CONTRACT' for the static naming convention in one task and bare '&STAGE'/'&DECLARATION' in four others. The worker had to resolve it by counting mentions (12 vs 1). A sheet that names a convention should name it once."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

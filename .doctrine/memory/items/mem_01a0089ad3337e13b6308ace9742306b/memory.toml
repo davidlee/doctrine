@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0089ad3337e13b6308ace9742306b"
+memory_key = "mem.fact.build.dead-code-fires-only-under-test-compile"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Dead code fires only under the test compile"
+summary = "dead_code is silent under cargo build and cargo clippy but a hard error under the cargo test compile; the gate still catches it"
+created = "2026-08-16"
+updated = "2026-08-16"
+
+[scope]
+paths = []
+globs = []
+commands = ["cargo build", "cargo clippy", "cargo test"]
+tags = ["build", "lint", "footgun"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ff1c5032469959269e7f45fd76c700525134efcf"
+ref_name = "refs/heads/work"
+checkout_state_id = "79b94d7d0bb5f0f0988faa7f6dce251a9d99659742ff2651c2e7bcd7a2e6059e"
+base_commit = "0150991191f144f67d591e003fcb5fbfa4a3c1b8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+

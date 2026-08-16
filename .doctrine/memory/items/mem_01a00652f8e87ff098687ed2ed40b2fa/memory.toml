@@ -1,0 +1,47 @@
+memory_uid = "mem_01a00652f8e87ff098687ed2ed40b2fa"
+memory_key = "mem.pattern.slice.record-delta-before-verify-vt"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "record-delta before verify-vt, or every VT row reads UNATTRIBUTABLE"
+summary = "doctrine slice verify-vt builds its attributable-file set solely from the slice's source-delta registry; a phase with no recorded delta reports every VT row UNATTRIBUTABLE however well its keywords match. Run slice record-delta after each phase commit."
+created = "2026-08-15"
+updated = "2026-08-15"
+
+[scope]
+paths = []
+globs = [".doctrine/slice/**", "src/vtgate.rs"]
+commands = ["doctrine slice verify-vt", "doctrine slice record-delta", "doctrine slice phase"]
+tags = ["slice-lifecycle", "verification", "phase-execution"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d0693e0e7d289d21005b115a89c930c01f72da23"
+ref_name = "refs/heads/work"
+checkout_state_id = "a7e76eae87b954fa40a2c5c5e87dd45805432f9100b2bd71ee000f399f747291"
+base_commit = "00295be851f60f05443f5741a610d129f3373db0"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-251"
+

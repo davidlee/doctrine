@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0083d-3aa1-76f0-b314-602a8f42f4fe"
+recorded_at = "2026-08-16T01:43:45.569026658Z"
+kind = "friction"
+summary = "second phase sheet in a row specified a mutation arm that cannot compile, after the orchestrator explicitly warned against the class"
+detail = "SL-251 PHASE-06 (capsule-phase-planner). The sheet's T9 arm M7 added an unread clap field, which is a dead_code failure under -D warnings — a lint conviction, not a mutant. This is the second consecutive phase with this defect (PHASE-05's M4 stopped reading a bound variable). Two things make the repeat interesting rather than routine: the sheet DISTILLED mem_019fe6ccc6ad7b23bc8bf746351f9a09 ('a mutant must compile or it is not a mutant') into its own memory section, and the orchestrator's spawn prompt carried an explicit instruction to state arms as value substitutions on expressions that still read all their inputs, naming PHASE-05's failure. Both the memory and the warning were present and neither prevented it. The worker repaired it by consuming the field with drop(args.path). Suggests the rule needs to be a template constraint on how an arm is WRITTEN rather than a caution to be remembered — the planner can recite it and still violate it, because the arm is authored as a description of behaviour and the rule is stated as a property of mutants."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

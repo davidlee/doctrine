@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0089b06ba7260925dd75fe1d5e424"
+memory_key = "mem.fact.design-run.payload-contract-is-fetchable"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "The apply payload contract is fetchable"
+summary = "doctrine design contract --format json|prompt prints the whole apply payload contract — do not read submission.rs to learn payload shape"
+created = "2026-08-16"
+updated = "2026-08-16"
+
+[scope]
+paths = []
+globs = []
+commands = ["doctrine design contract", "doctrine design apply"]
+tags = ["design-run", "cli"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ff1c5032469959269e7f45fd76c700525134efcf"
+ref_name = "refs/heads/work"
+checkout_state_id = "e9d51280c79592390b3091b64e8caa9617c322951b40e537fa4f68517ced50db"
+base_commit = "0150991191f144f67d591e003fcb5fbfa4a3c1b8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[relation]]
+label = "supersedes"
+target = "mem_019ff439bede7fb29c7c09b7fd76d893"
+

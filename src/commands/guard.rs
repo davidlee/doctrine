@@ -425,14 +425,16 @@ ConceptMapCommand::New { .. } => Write("concept-map new"),
         },
         // SL-233: `start`/`apply` write runtime state and `materialise` writes
         // the authored design document, so all three are Writes; `show` and
-        // `resume` are projections and mutate neither tier (design §5.3 rule 1
-        // names exactly this split).
+        // `resume` are projections and `contract` renders a pure function of the
+        // binary, so those three mutate neither tier (design §5.3 rule 1 names
+        // exactly this split; SL-251 adds `contract`, which reads no tier at all).
         Command::Design { command } => match command {
             crate::commands::design::DesignCommand::Start(_) => Write("design start"),
             crate::commands::design::DesignCommand::Apply(_) => Write("design apply"),
             crate::commands::design::DesignCommand::Materialise(_) => Write("design materialise"),
             crate::commands::design::DesignCommand::Show(_)
-            | crate::commands::design::DesignCommand::Resume(_) => Read,
+            | crate::commands::design::DesignCommand::Resume(_)
+            | crate::commands::design::DesignCommand::Contract(_) => Read,
         },
     }
 }

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a005c6-667b-7872-9bc6-57331673aaf3"
+recorded_at = "2026-08-15T14:14:43.579392651Z"
+kind = "friction"
+summary = "execute (SL-251/PHASE-01): slice verify-vt reports UNATTRIBUTABLE for a VT whose test landed in a slice-scoped commit"
+detail = "After committing PHASE-01 as feat(SL-251), verify-vt still reports 'keyword present but src/design_run/payload_contract.rs not modified by this slice' for every VT in the plan. Selector doctor is clean (the file is covered by src/design_run/**). Exit 0, non-halting, but the whole VT summary reads as unattributed evidence, which makes it useless as a per-phase signal during execution."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

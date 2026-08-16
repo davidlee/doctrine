@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a005e7-1f64-7523-bd33-dd4a26682c6c"
+recorded_at = "2026-08-15T14:50:28.068295024Z"
+kind = "friction"
+summary = "execute (SL-251/PHASE-02): just check / check gate stdout is dominated by unrelated dispatch and worktree warnings"
+detail = "Every inner-loop run prints 'phase-binding capture skipped for PHASE-NN', 'not a git repository', and a long tail of unresolved-citation warnings before the real test signal. The worker had to grep for the actual verdict on every cycle. This is pure per-invocation token cost on the single most-repeated command in an execute phase."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

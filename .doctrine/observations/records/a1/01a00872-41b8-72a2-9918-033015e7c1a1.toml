@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00872-41b8-72a2-9918-033015e7c1a1"
+recorded_at = "2026-08-16T02:41:40.793019788Z"
+kind = "friction"
+summary = "a design reasoned from clap's help renderer while the project overrides it, making a criterion's named mechanism inert"
+detail = "SL-251 PHASE-07 (found at /phase-plan; originates in /design). sec-6:1518-1522 argues that a long_about on 'design apply' will render a pointer line, and sec-8 pin 7's help bullet inherits it; PHASE-07/EX-4 turns it into an obligation. Nothing would have rendered: render_subcommand_help reads cmd.get_about() only (cli.rs:1427) and keeps just the first paragraph, and main.rs:285-292 routes every --help through it so clap's renderer never runs. long_about/get_long_about occur ZERO times in the tree, which is why the gap survived — no existing caller could have exposed it. The design's reasoning is correct ABOUT CLAP and wrong about doctrine. Generalisable: when a design reasons from a dependency's documented behaviour, the check that matters is whether this project wraps or overrides that behaviour, not whether the dependency does what the docs say. Cost here was one planner discovery plus an appended criterion (EX-10) widening the touch-set to a file sec-7's table does not list; had the planner not checked, it would have been a worker's inert green — the pointer present in source, absent from every rendered help."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a007db-0de0-7f30-900f-52a145a33f08"
+recorded_at = "2026-08-15T23:56:31.584396468Z"
+kind = "friction"
+summary = "python3 is absent in the bwrap jail"
+detail = "SL-251 PHASE-04 worker (capsule-worker, /execute). A reflex 'python3 - <<EOF' for a two-line text edit failed. Not blocking — the worker used Write instead — but it is an unwritten environment fact that costs a round-trip to discover, and agents reach for python for text munging by habit."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

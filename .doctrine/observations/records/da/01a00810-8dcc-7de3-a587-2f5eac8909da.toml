@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00810-8dcc-7de3-a587-2f5eac8909da"
+recorded_at = "2026-08-16T00:54:57.740890064Z"
+kind = "friction"
+summary = "two entangled test legs admit no mutation that isolates one of them"
+detail = "SL-251 PHASE-05 (capsule-worker, /execute). The sheet predicted arm M2 (an extra unreachable entry in the flat table) would convict VT-1's reachability leg but not its count leg. Not achievable: any type dropped from `types` is also a dangling edge, and any extra entry moves the count, so no mutation fires reachability with the count intact. The coverage the sheet wanted is real and is delivered by a different arm (M3, emitting a Named edge as the target's body). Worth naming as a sheet-authoring hazard: when two assertions in one test read the same collection from different angles, a per-leg mutation prediction is usually unsatisfiable, and predicting one anyway sends a worker hunting for an arm that does not exist."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

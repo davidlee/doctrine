@@ -59,6 +59,10 @@ use crate::design_run::attestation::{
 use crate::design_run::delegation::Delegation;
 use crate::design_run::gate::ObservedFact;
 use crate::design_run::ids::{DesignId, Fingerprint, IdKind};
+use crate::design_run::payload_contract::{
+    self, ExternContracts, ExternRegion, KeyContract, PAYLOAD_CONTRACT_POINTER, Presence,
+    SelectedKeys, SelectorTable, TokenSource, UnknownKeys, WireType,
+};
 use crate::design_run::render::envelope::{self, Detail, OutstandingBySeverity};
 use crate::design_run::run::{Admission, DerivedInput, ObservedReview, Resolution};
 use crate::design_run::snapshot::{self, CheckpointGroup, DesignSnapshot};
@@ -106,6 +110,14 @@ const LOCK_ACCEPTANCE_DISCLOSURE: &str = "locked on an auditable agent claim of 
 /// and needs to be told, in the same breath, that it may propose and may not
 /// write.
 const ASSIGNMENT_CONTRACT: &str = "propose back with a `delegation` act of `propose` carrying `by`, `summary` and any `declare`; a proposal may carry nothing that writes — the coordinator applies what it accepts";
+/// `design apply`'s summary line, hoisted out of the doc comment it used to be so
+/// the long help can splice the payload-contract address beside it without a
+/// second copy of either (STD-001, SL-251 `sec-6`).
+///
+/// **No trailing full stop**, deliberately: `clap_derive` strips one from a doc
+/// comment but not from an explicit `about`, so the period would be a visible
+/// one-character change to `doctrine design --help`'s Commands row.
+const APPLY_ABOUT: &str = "Validate and apply one sparse idempotent mutation";
 
 // ── CLI surface ───────────────────────────────────────────────────────────
 
@@ -121,12 +133,22 @@ pub(crate) enum DesignCommand {
     /// Show the current turn: active path, nearby frontier, blockers, counts and
     /// material changes. `--full` widens it.
     Show(ShowArgs),
-    /// Validate and apply one sparse idempotent mutation.
+    // The third push point (SL-251 `sec-6`): the contract's ADDRESS, never its
+    // body, at the verb whose payload it describes. `about` feeds the family
+    // table above; `long_about` feeds the focused `design apply --help` — and
+    // the pointer rides a SINGLE newline, because the About block keeps only the
+    // first paragraph (`cli.rs`), so `\n\n` would render nothing.
+    #[command(
+        about = APPLY_ABOUT,
+        long_about = format!("{APPLY_ABOUT}\nThe payload contract: {PAYLOAD_CONTRACT_POINTER}"),
+    )]
     Apply(ApplyArgs),
     /// Re-enter a run with the compact projection a fresh context needs.
     Resume(ResumeArgs),
     /// Render runtime sections into authored prose.
     Materialise(MaterialiseArgs),
+    /// Print the payload contract `design apply` parses with.
+    Contract(ContractArgs),
 }
 
 /// Which rendering of the turn envelope to emit (DEC-064).
@@ -144,6 +166,21 @@ pub(crate) enum ShowFormat {
     Json,
     /// The same envelope, for a human at a terminal.
     Status,
+}
+
+/// Which rendering of the payload contract to emit.
+///
+/// **Not [`ShowFormat`].** That enum's third member, `status`, is "the same
+/// envelope, for a human at a terminal", and there is no per-run status to
+/// render for a static document. Admitting a token the renderer must then refuse
+/// is the failure this surface exists to end (`sec-6`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum ContractFormat {
+    /// The rendering an agent reads.
+    #[default]
+    Prompt,
+    /// The machine surface.
+    Json,
 }
 
 /// Arguments for `design start`.
@@ -236,6 +273,23 @@ pub(crate) struct MaterialiseArgs {
     path: Option<PathBuf>,
 }
 
+/// Arguments for `design contract`.
+///
+/// `--format` **alone**: no positional slice and no `-p/--path`. The contract is
+/// a property of the binary, not of a run, so there is no root to resolve
+/// (`sec-6`).
+///
+/// `Copy`, unlike its siblings: each of those owns a `String` slice reference
+/// and a `PathBuf` root that its handler consumes, while this one holds a single
+/// enum token and consumes nothing. Deriving it keeps the dispatch arm the same
+/// shape as every other arm rather than singling this verb out with a borrow.
+#[derive(clap::Args, Clone, Copy, Debug)]
+pub(crate) struct ContractArgs {
+    /// Which rendering of the payload contract to emit.
+    #[arg(long, value_enum, default_value_t = ContractFormat::Prompt)]
+    format: ContractFormat,
+}
+
 /// Route a design verb.
 pub(crate) fn dispatch(command: DesignCommand) -> Result<()> {
     match command {
@@ -244,6 +298,7 @@ pub(crate) fn dispatch(command: DesignCommand) -> Result<()> {
         DesignCommand::Apply(args) => run_apply(args),
         DesignCommand::Resume(args) => run_resume(args),
         DesignCommand::Materialise(args) => run_materialise(args),
+        DesignCommand::Contract(args) => run_contract(args),
     }
 }
 
@@ -941,6 +996,67 @@ fn raw_facet(create: &CreateRecord) -> Vec<crate::knowledge::RawEdit<'_>> {
         .collect()
 }
 
+/// The one externally-owned region of the payload closure, supplied from the
+/// only tier where `design_run` and `knowledge` are both in scope (ADR-001,
+/// `sec-3`/`sec-7`).
+///
+/// **Two properties below are barriers, not style, and both are what a
+/// well-meaning simplifier deletes.** It *iterates*
+/// [`crate::knowledge::RecordKind::ALL`] and *calls*
+/// [`crate::knowledge::facet_fields`] rather than restating either, so a new
+/// facet field reaches the contract with no edit in this file at all; and the
+/// [`crate::knowledge::FieldShape`] map is three named arms with **no
+/// wildcard**, so a new shape is a compile error here rather than a silent
+/// [`WireType::Text`] that mis-describes it. A `_ =>` arm, a hand-typed kind
+/// list, or a hand-typed facet-name list removes a barrier `sec-8` pin 5 is
+/// sized against — pin 5 is the ladder's weakest rung *because* these carry the
+/// rest.
+///
+/// Iterating `ALL` is deliberately **not** among them. `ALL` is hand-maintained
+/// (`knowledge.rs:161`), so an eighth kind is forced into `facet_fields` by that
+/// function's exhaustive match yet not into `ALL`, and this function would then
+/// emit a table missing it in silence. That residue is carried by pin 5's
+/// kind-set equality, whose oracle is an exhaustive match over `RecordKind`
+/// written in the test and never `ALL` itself.
+pub(crate) fn extern_contracts() -> ExternContracts {
+    use crate::knowledge::FieldShape;
+
+    let rows = crate::knowledge::RecordKind::ALL
+        .into_iter()
+        .map(|kind| SelectedKeys {
+            // `as_str()` is the stored/wire discriminator's own authority
+            // (STD-001) — no kind token is spelled here.
+            token: kind.as_str(),
+            keys: crate::knowledge::facet_fields(kind)
+                .iter()
+                .map(|field| KeyContract {
+                    key: field.name,
+                    ty: match field.shape {
+                        FieldShape::Text => WireType::Text,
+                        FieldShape::List => WireType::Seq(&WireType::Text),
+                        // The row already holds the enum's own `KNOWN` set;
+                        // it reaches the contract unretyped.
+                        FieldShape::Closed(tokens) => WireType::Token(TokenSource::Fixed(tokens)),
+                    },
+                    // Every facet field is omissible: `plan_facet_edits` maps
+                    // over the edits the caller supplied and compels none.
+                    presence: Presence::Optional,
+                })
+                .collect(),
+        })
+        .collect();
+
+    ExternContracts {
+        knowledge_record: SelectorTable {
+            source: ExternRegion::KnowledgeRecord.label(),
+            rows,
+            // An unrecognised facet key is `FacetEditRefusal::UnknownField`
+            // before an id is reserved — refused, not stored, not dropped.
+            unknown_keys: UnknownKeys::Refused,
+        },
+    }
+}
+
 fn plan_checkpoints(
     root: &Path,
     prior: &DesignSnapshot,
@@ -1500,8 +1616,14 @@ fn apply(
     fault: FaultHook<'_>,
 ) -> Result<()> {
     let prior = read_snapshot(root, slice)?;
-    let request: ApplyRequest =
-        serde_json::from_str(payload).context("parse the apply payload as JSON")?;
+    // The remedy rides the point of failure (SL-251 sec-6, DEC-225): serde's own
+    // message verbatim — no paraphrase, no classifier — then the contract's
+    // ADDRESS on an indented continuation, matching `Refusal::GateNotCleared`'s
+    // form. `.context()` would hide serde's text in the error's source rather
+    // than its `Display`, which is what a caller actually reads.
+    let request: ApplyRequest = serde_json::from_str(payload).map_err(|error| {
+        anyhow::anyhow!("parse the apply payload as JSON: {error}\n  {PAYLOAD_CONTRACT_POINTER}")
+    })?;
     let digest = crate::git::sha256(payload.as_bytes());
 
     match design_run::run::admit(&prior, &request.envelope, &digest)
@@ -1935,6 +2057,29 @@ fn run_show(args: ShowArgs) -> Result<()> {
             )
         }
     }
+}
+
+// ── contract ──────────────────────────────────────────────────────────────
+
+/// The contract as lines, for a format. Pure — no root, no snapshot, no I/O.
+///
+/// Split out of [`run_contract`] so the dispatch on the format is testable
+/// without a process boundary. The match is **wildcard-free**: a third format
+/// would be a compile error here rather than a silently-defaulted rendering.
+fn contract_text(format: ContractFormat, contracts: &ExternContracts) -> Vec<String> {
+    match format {
+        ContractFormat::Prompt => payload_contract::render_prompt(contracts),
+        ContractFormat::Json => vec![payload_contract::render_json(contracts)],
+    }
+}
+
+/// Print the payload contract.
+///
+/// The one design verb that resolves **no root**: the contract is a pure
+/// function of the binary, so it answers in a project with no design run, and
+/// outside a doctrine project entirely (`sec-6`).
+fn run_contract(args: ContractArgs) -> Result<()> {
+    emit(&contract_text(args.format, &extern_contracts()))
 }
 
 // ── resume ────────────────────────────────────────────────────────────────
@@ -2391,6 +2536,247 @@ mod tests {
     /// only observable across a process boundary.
     fn no_fault(_: CheckpointStep) {}
 
+    /// `SL-251 PHASE-05/VA-1` — print the contract over the **real** extern
+    /// table, for a human reading against `render-sample.md` §2.
+    ///
+    /// Sited here and not beside the renderers because this is the one tier
+    /// where `design_run` and `knowledge` are both in scope: rendering the full
+    /// closure needs the real `RecordKind` / `facet_fields` table, and a leaf
+    /// test that reached for it would land a leaf → command edge (ADR-001).
+    ///
+    /// Not an assertion, and deliberately not a golden — the sample predates the
+    /// generator and pinning the two together would pin the generator to a
+    /// transcription. The golden is `PHASE-06`'s, against the committed file.
+    #[ignore = "prints the rendered contract for SL-251 PHASE-05/VA-1; not an assertion"]
+    #[test]
+    fn print_the_rendered_payload_contract() {
+        for line in crate::design_run::payload_contract::render_prompt(&extern_contracts()) {
+            println!("{line}");
+        }
+    }
+
+    // --- SL-251 PHASE-06: the pull surface and the published document ---------
+    //
+    // The golden below is sited here rather than beside the renderers for a
+    // mechanical reason, the same one that sited pin 5's kind-set equality and
+    // PHASE-05's printer here: the committed document must be `render_document`'s
+    // output over the **real** extern table, and only this tier can build one —
+    // `payload_contract.rs` names `crate::` nowhere (ADR-001). A leaf-sited golden
+    // could only pass the two-row `extern_fixture()`, and would then pin the
+    // *shipped* document to a stub, describing a knowledge region that does not
+    // exist with a passing test underneath it.
+
+    use clap::Parser as _;
+
+    use crate::design_run::payload_contract::{
+        PAYLOAD_CONTRACT_PATH, PAYLOAD_CONTRACT_SCHEMA, render_document,
+    };
+
+    /// A parser harness for the design verbs alone, so this module's private
+    /// argument fields are readable from the parse result.
+    #[derive(clap::Parser, Debug)]
+    struct ContractCli {
+        #[command(subcommand)]
+        command: DesignCommand,
+    }
+
+    /// The parsed `contract` args, or a panic naming what was expected.
+    fn parse_contract(args: &[&str]) -> ContractArgs {
+        let parsed = ContractCli::try_parse_from(args).expect("the contract verb parses");
+        let DesignCommand::Contract(args) = parsed.command else {
+            panic!("the contract verb")
+        };
+        args
+    }
+
+    /// `EX-2` — `--format` alone, defaulting to `prompt`.
+    ///
+    /// The two `is_err()` rows are the half a reviewer would otherwise take on
+    /// trust: the contract is a property of the binary, so there is no slice to
+    /// name and no root to point at.
+    #[test]
+    fn contract_takes_format_alone_and_defaults_to_prompt() {
+        assert_eq!(
+            parse_contract(&["x", "contract"]).format,
+            ContractFormat::Prompt
+        );
+        assert_eq!(
+            parse_contract(&["x", "contract", "--format", "json"]).format,
+            ContractFormat::Json
+        );
+        assert!(
+            ContractCli::try_parse_from(["x", "contract", "SL-001"]).is_err(),
+            "no positional slice"
+        );
+        assert!(
+            ContractCli::try_parse_from(["x", "contract", "-p", "/tmp"]).is_err(),
+            "no -p/--path: there is no root to resolve"
+        );
+    }
+
+    /// `EX-3` — the format dispatch, over the real extern table.
+    ///
+    /// Both line counts are asserted, so a transposed pair of arms cannot pass by
+    /// producing *some* output on each side.
+    #[test]
+    fn contract_text_dispatches_on_the_format() {
+        let contracts = extern_contracts();
+
+        let prompt = contract_text(ContractFormat::Prompt, &contracts);
+        assert!(
+            prompt.len() > 100,
+            "the prompt rendering is the whole closure, not a stub ({} lines)",
+            prompt.len()
+        );
+        assert!(
+            prompt
+                .first()
+                .is_some_and(|line| line.starts_with("payload ApplyRequest")),
+            "the root block leads: {:?}",
+            prompt.first()
+        );
+
+        let json = contract_text(ContractFormat::Json, &contracts);
+        assert_eq!(json.len(), 1, "the machine surface is one document");
+        let document: serde_json::Value =
+            serde_json::from_str(&json[0]).expect("the json arm emits a JSON document");
+        assert_eq!(
+            document.get("schema").and_then(serde_json::Value::as_str),
+            Some(PAYLOAD_CONTRACT_SCHEMA)
+        );
+    }
+
+    /// `VT-1` — the published document's golden.
+    ///
+    /// Read from **disk** at runtime, never through the embed. The committed file
+    /// is the artefact being published; the embed is a copy of it that this same
+    /// build produced, so comparing the renderer against the embed could only
+    /// confirm the build agreed with itself. Whether an `install/` edit currently
+    /// invalidates the embed is a build-system detail this pin deliberately does
+    /// not rest on — if it ever stops holding, an embed comparison false-greens
+    /// after every edit, and silently.
+    #[test]
+    fn the_published_payload_contract_matches_the_renderer() {
+        let path = crate::test_support::repo_root().join(PAYLOAD_CONTRACT_PATH);
+        let shipped = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read the shipped contract at {}: {e}", path.display()));
+        assert_eq!(
+            render_document(&extern_contracts()),
+            shipped,
+            "the shipped payload contract has drifted from the table — re-render with \
+             `cargo test --bin doctrine regen_payload_contract -- --ignored`, never hand-edit ({})",
+            path.display()
+        );
+
+        // The shipped surface goes to client projects (POL-002), where a
+        // per-repo sequential id resolves to an unrelated record. The positive
+        // control fires the detector on a known citation first, or the two
+        // absence assertions below are unfalsified.
+        assert!(
+            crate::design_run::artifact::cites_a_repo_private_id("rendered from ISS-333"),
+            "the detector fires on a known citation"
+        );
+        assert!(
+            shipped.len() > 1000 && shipped.contains("ApplyRequest"),
+            "a whole contract, not an empty or truncated file ({} bytes)",
+            shipped.len()
+        );
+        assert!(
+            !crate::design_run::artifact::cites_a_repo_private_id(&shipped),
+            "the shipped contract cites no per-repo sequential id"
+        );
+        // A design-section annotation is lowercase and unlisted, so the detector
+        // above cannot see it — and it means nothing in a client project.
+        assert!(
+            cites_a_design_section("as (sec-6) explains"),
+            "the annotation detector fires on a known citation"
+        );
+        assert!(
+            !cites_a_design_section(&shipped),
+            "a design-section annotation shipped"
+        );
+    }
+
+    /// Whether `text` carries a design-section annotation — `sec-` followed by a
+    /// **digit**, e.g. `(sec-6)`.
+    ///
+    /// Digit-sensitive for the same reason
+    /// [`crate::design_run::artifact::cites_a_repo_private_id`] is: a bare
+    /// `sec-` also opens the design run's own section-**id namespace**, which the
+    /// contract renders as `id(sec-)` in five places and which a client project
+    /// needs in order to send a well-formed payload at all. Only the digit
+    /// distinguishes a citation of *this repository's* design document from wire
+    /// vocabulary.
+    fn cites_a_design_section(text: &str) -> bool {
+        const ANNOTATION: &str = "sec-";
+        text.match_indices(ANNOTATION).any(|(at, _)| {
+            text.get(at + ANNOTATION.len()..)
+                .and_then(|rest| rest.chars().next())
+                .is_some_and(|char| char.is_ascii_digit())
+        })
+    }
+
+    /// `EX-8` — the published contract is sealed `fixed`, asserted rather than
+    /// merely written.
+    ///
+    /// Fail-closed admission already rejects an **absent** or out-of-vocabulary
+    /// `customization`, but `fixed` and `customizable` are both admissible and
+    /// the manifest runs the majority the other way, so a drift to that majority
+    /// is silent and the seal would otherwise have no enforcement anywhere. It is
+    /// sealed because an edited copy would describe a payload the binary does not
+    /// accept — the same reason the document's own banner gives.
+    ///
+    /// The backing is derived from [`PAYLOAD_CONTRACT_PATH`] rather than spelled
+    /// again (STD-001); `install/` is enumerated flat, so a backing key is the
+    /// path's file name.
+    #[test]
+    fn the_published_contract_is_sealed_fixed() {
+        let manifest = crate::publication::PublicationManifest::admit(
+            &crate::asset_source::publication_manifest_bytes_from_disk(),
+        )
+        .expect("shipped publication manifest admits from disk");
+
+        let backing = Path::new(PAYLOAD_CONTRACT_PATH)
+            .file_name()
+            .and_then(std::ffi::OsStr::to_str)
+            .expect("the contract path names a file");
+        assert!(
+            manifest.declares_backing(backing),
+            "{backing} is published by backing, not only addressed"
+        );
+
+        let entry = manifest
+            .entries()
+            .iter()
+            .find(|entry| entry.address().as_str() == PUBLISHED_CONTRACT_ADDRESS)
+            .unwrap_or_else(|| panic!("{PUBLISHED_CONTRACT_ADDRESS} is published"));
+        assert_eq!(
+            entry.customization(),
+            crate::publication::CustomizationStatus::Fixed,
+            "the published contract is sealed: an edited copy would describe a \
+             payload the binary does not accept"
+        );
+    }
+
+    /// The stable logical address the published contract answers to — the row
+    /// this module's seal assertion selects. Deliberately distinct from both the
+    /// on-disk path and the embed key (`sec-5`).
+    const PUBLISHED_CONTRACT_ADDRESS: &str = "reference/design-payload-contract.md";
+
+    /// Re-render the shipped document.
+    ///
+    /// A test rather than a CLI verb, and named so the golden's failure message
+    /// can point at it: re-rendering is a dev act in this repository and
+    /// meaningless in a client project, where the file is a read-only artefact of
+    /// an installed binary.
+    #[test]
+    #[ignore = "writes the shipped contract; run deliberately after a table or renderer change"]
+    fn regen_payload_contract_writes_the_shipped_file() {
+        let path = crate::test_support::repo_root().join(PAYLOAD_CONTRACT_PATH);
+        std::fs::write(&path, render_document(&extern_contracts()))
+            .unwrap_or_else(|e| panic!("write the shipped contract to {}: {e}", path.display()));
+    }
+
     /// A repo root with a slice tree and a started run. Returns the root.
     fn fixture(dir: &Path) -> u32 {
         std::fs::create_dir_all(dir.join(".doctrine")).unwrap();
@@ -2406,6 +2792,41 @@ mod tests {
             "\"run_uid\":\"{}\",\"known_revision\":{revision},\"submission_id\":\"{submission}\"",
             run.run.uid
         )
+    }
+
+    /// `SL-251 PHASE-07 VT-3` / `sec-8` pin 7's refusal bullet — the
+    /// point-of-failure remedy `DEC-225` argues the slice on. A manual read
+    /// (`VA-1`) leaves an audit nothing to re-derive, so this is a test as well.
+    #[test]
+    fn a_refused_payload_names_the_contract_and_keeps_serdes_own_words() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let slice = fixture(root);
+        // `Declaration` carries `deny_unknown_fields`, so a misspelt key THERE is
+        // refused — unlike nine of the twelve wire structs, which drop it silently.
+        let payload = format!(
+            "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"cursror\":\"inq-1\"}}]}}",
+            envelope(root, slice, 1, "sub-1")
+        );
+        let error = apply(root, slice, &payload, &|| {}, &no_fault)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("unknown field"),
+            "serde's own text survives verbatim: {error}"
+        );
+        assert!(
+            error.contains("cursror"),
+            "including the key it names: {error}"
+        );
+        assert!(
+            error.contains(PAYLOAD_CONTRACT_POINTER),
+            "and the refusal carries the remedy: {error}"
+        );
+        assert!(
+            error.contains(&format!("\n  {PAYLOAD_CONTRACT_POINTER}")),
+            "on an indented continuation, matching Refusal::GateNotCleared's form: {error}"
+        );
     }
 
     /// VT-9 / EX-11 / §9.2 — an edit injected into the named pre-write window
@@ -3417,6 +3838,156 @@ mod tests {
                 manifest.declares_backing(key),
                 "{key} is published by backing, not only addressed"
             );
+        }
+    }
+
+    // --- sec-8 pin 5: the injected extern region ---------------------------
+    //
+    // Sited here and not in `src/design_run/tests.rs` (which `plan.toml`'s
+    // `VT-1` names) for a mechanical reason: the pin cannot be written without
+    // naming `crate::knowledge` *and* `crate::commands::design`, and
+    // `tests/architecture_layering.rs` walks `src/design_run/tests.rs` as
+    // production — its first non-comment line is `#![expect(…)]`, not
+    // `#[cfg(test)]`, so `skip_cfg_test_file` does not skip it. The edge would
+    // be leaf → command. This module is `#[cfg(test)]` and already command
+    // tier, so the collector skips it outright.
+
+    use crate::knowledge::{FieldShape, RecordKind, facet_fields};
+
+    /// One list, two uses: the array the pin enumerates, **and** a match rustc
+    /// must find exhaustive. An eighth [`RecordKind`] is therefore a build
+    /// failure *here* — which comparing against the kinds' hand-maintained
+    /// `ALL` array could never be, because that is the very array
+    /// [`extern_contracts`] itself iterates, so the pin would have agreed with
+    /// the builder about a kind both had dropped (`sec-3`, `sec-8` pin 5).
+    /// Naming that array anywhere in these tests is the failure mode.
+    ///
+    /// The instrument is `payload_variants!`'s `_pin`, transposed onto a
+    /// knowledge-tier enum. `_pin` is never called; its exhaustiveness is the
+    /// whole point, and the leading underscore is what keeps `dead_code` quiet.
+    macro_rules! every_record_kind {
+        ($($variant:ident),+ $(,)?) => {{
+            const fn _pin(kind: RecordKind) {
+                match kind {
+                    $(RecordKind::$variant => ()),+
+                }
+            }
+            [$(RecordKind::$variant),+]
+        }};
+    }
+
+    /// The oracle: every kind `RecordKind` declares, named once.
+    const DECLARED_RECORD_KINDS: [RecordKind; 7] = every_record_kind!(
+        Assumption, Decision, Question, Constraint, Evidence, Hypothesis, Concept,
+    );
+
+    /// `sec-8` pin 5, first equality — the row tokens **are** the kind tokens.
+    ///
+    /// The two count assertions are not decoration: a set equality is blind to a
+    /// duplicated row, and every per-row loop in the sibling test below passes
+    /// vacuously over an empty `rows`. `concept` contributes a legitimate row
+    /// with **zero** keys (`CONCEPT_FACET_FIELDS = &[]`), so "every row has
+    /// keys" would be false and the total-key count is the only non-vacuity
+    /// available.
+    #[test]
+    fn the_selector_tables_rows_are_exactly_the_declared_record_kinds() {
+        let table = extern_contracts().knowledge_record;
+
+        let expected: std::collections::BTreeSet<&str> =
+            DECLARED_RECORD_KINDS.iter().map(|k| k.as_str()).collect();
+        let actual: std::collections::BTreeSet<&str> =
+            table.rows.iter().map(|row| row.token).collect();
+        assert_eq!(
+            actual,
+            expected,
+            "row tokens disagree with the declared kinds: in the table only {:?}, \
+             declared only {:?}",
+            actual.difference(&expected).collect::<Vec<_>>(),
+            expected.difference(&actual).collect::<Vec<_>>(),
+        );
+
+        assert_eq!(
+            table.rows.len(),
+            DECLARED_RECORD_KINDS.len(),
+            "one row per declared kind, no duplicates: {:?}",
+            table.rows.iter().map(|row| row.token).collect::<Vec<_>>(),
+        );
+
+        let declared_keys: usize = DECLARED_RECORD_KINDS
+            .iter()
+            .map(|kind| facet_fields(*kind).len())
+            .sum();
+        let supplied_keys: usize = table.rows.iter().map(|row| row.keys.len()).sum();
+        assert_eq!(
+            supplied_keys, declared_keys,
+            "the table carries every declared facet field — the evidence count \
+             behind the per-row verdicts"
+        );
+    }
+
+    /// `sec-8` pin 5, second equality — mapping fidelity, compared against
+    /// `knowledge`'s tables directly rather than against the builder that read
+    /// them.
+    ///
+    /// The shape/type correspondence is asserted as a match over the **pair**,
+    /// so this test states the mapping independently instead of reconstructing
+    /// it: a `Closed` field that arrived as `Text` falls to the mismatch arm,
+    /// and a `Closed` field whose vocabulary was swapped for another of the same
+    /// length fails the slice equality inside its arm.
+    #[test]
+    fn each_rows_keys_are_that_kinds_facet_fields_in_template_order() {
+        let table = extern_contracts().knowledge_record;
+
+        assert_eq!(
+            table.source,
+            ExternRegion::KnowledgeRecord.label(),
+            "the table names the region it supplies"
+        );
+        assert_eq!(
+            table.unknown_keys,
+            UnknownKeys::Refused,
+            "an unknown facet key is refused before the mint, not stored"
+        );
+
+        for row in &table.rows {
+            let kind = DECLARED_RECORD_KINDS
+                .iter()
+                .find(|kind| kind.as_str() == row.token)
+                .copied()
+                .unwrap_or_else(|| panic!("row token `{}` is not a record kind", row.token));
+            let fields = facet_fields(kind);
+
+            assert_eq!(
+                row.keys.iter().map(|key| key.key).collect::<Vec<_>>(),
+                fields.iter().map(|field| field.name).collect::<Vec<_>>(),
+                "`{}`'s keys are its facet fields, in template order",
+                row.token,
+            );
+
+            for (key, field) in row.keys.iter().zip(fields) {
+                assert_eq!(
+                    key.presence,
+                    Presence::Optional,
+                    "`{}`.`{}` is omissible — no facet field is ever compelled",
+                    row.token,
+                    field.name,
+                );
+                match (field.shape, key.ty) {
+                    (FieldShape::Text, WireType::Text) => {}
+                    (FieldShape::List, WireType::Seq(&WireType::Text)) => {}
+                    (FieldShape::Closed(known), WireType::Token(TokenSource::Fixed(tokens))) => {
+                        assert_eq!(
+                            tokens, known,
+                            "`{}`.`{}` carries that field's own vocabulary, unretyped",
+                            row.token, field.name,
+                        );
+                    }
+                    (shape, ty) => panic!(
+                        "`{}`.`{}`: {shape:?} was mapped to {ty:?}",
+                        row.token, field.name,
+                    ),
+                }
+            }
         }
     }
 }

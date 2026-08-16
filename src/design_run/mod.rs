@@ -84,6 +84,7 @@ pub(crate) mod gate;
 pub(crate) mod ids;
 pub(crate) mod inquiry;
 pub(crate) mod legacy;
+pub(crate) mod payload_contract;
 pub(crate) mod prompt;
 pub(crate) mod refusal;
 // `render` is a SIBLING of the storage and admission modules above and below,

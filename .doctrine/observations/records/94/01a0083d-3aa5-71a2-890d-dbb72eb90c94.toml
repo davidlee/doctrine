@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0083d-3aa5-71a2-890d-dbb72eb90c94"
+recorded_at = "2026-08-16T01:43:45.573175976Z"
+kind = "friction"
+summary = "a sheet predicted the wrong KIND of red for its first TDD step"
+detail = "SL-251 PHASE-06 (capsule-phase-planner). T2's predicted red was 'the test does not compile' for a VT-2 test naming a not-yet-existing subcommand. In fact cls takes &[&str], so it compiles and fails at runtime — Cli::try_parse_from(...).unwrap() panics with InvalidSubcommand. Harmless here, but a worker trusting the prediction can read an expected runtime panic as a defect in its own work and start debugging the wrong thing. Cheap fix: a sheet should state the red as the observable (which assertion, which message), not as the failure mechanism."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
