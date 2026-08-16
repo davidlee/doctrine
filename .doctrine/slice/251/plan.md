@@ -408,8 +408,57 @@ over an iteration of `ExternRegion::ALL` — not inlined at its two referencing
 sites, which would state it twice (`STD-001`) and would make a second region
 a two-site edit.
 
-**Also appended by execution, and not a criterion:** `TYPE_COLUMN_CAP = 40`.
+**Also appended by execution, and not a criterion (PHASE-05):** `TYPE_COLUMN_CAP = 40`.
 One `FieldShape::Closed` token list is 105 characters, and without a cap it
 padded thirty sibling rows out to 105 columns of whitespace. With it, a wide
 type overflows its own column and its siblings stay narrow. This is padding,
 not content — plan disposition 5 accepts long *content* lines and is untouched.
+
+## PHASE-06 planning, 2026-08-16 — VT-1 re-sited, EX-8 appended
+
+**`PHASE-06/VT-1`'s `test_file` moved** from `src/design_run/payload_contract.rs`
+to `src/commands/design.rs`. Same field amendment, same reason, **fourth time in
+this slice** — and this instance is materially worse than the other three, which
+is why it has now been carried out of the slice as `IMP-434`.
+
+`PHASE-01/VT-1`, `PHASE-03/VT-3` and `PHASE-04/VT-1` would each merely have
+redded the build: a leaf-sited test naming a command-tier symbol is a layering
+violation and `just check` says so. `PHASE-06/VT-1` would have gone **green**.
+`render_document` takes `&ExternContracts`, and a leaf-sited golden can only pass
+`extern_fixture()` — the two-row stub PHASE-05 built for `VT-1`/`VT-3`. The
+golden would then have pinned the *shipped, published* document to a test
+fixture, and `install/design-payload-contract.md` would describe a knowledge
+region that does not exist, with a passing test underneath it. Only
+`crate::commands::design::extern_contracts()` builds the real seven-kind table.
+
+`DEC-140` — *verification evidence lives at the tier that can produce its
+subject* — decided this in the general case on 2026-08-04, before this slice
+existed. It is accepted governance that `/plan` does not enforce, which is what
+`IMP-434` now records: a defect class that usually fails loudly and occasionally
+fails silently is worth mechanising, because vigilance calibrates to the usual
+case.
+
+**`EX-8` appended: `DEC-226`'s seal gets a pin.** Planning found
+`customization = "fixed"` unpinned and judged the gap acceptable on the grounds
+that `publication.rs` admits fail-closed. That reasoning is half right —
+fail-closed admission rejects an absent or out-of-vocabulary value, but `fixed`
+and `customizable` are *both* in the vocabulary, and `publication/manifest.toml`
+runs 71 `customizable` to 19 `fixed`. A drift to the majority value is therefore
+silent, and `DEC-226` would have no enforcement anywhere in the tree. This is
+`R1` — *a description free to drift is worth less than no description* — applied
+to the decision rather than to the contract, and it costs one assertion.
+
+**Three planning questions answered without an amendment.**
+
+- `EX-6`'s "the failure message names the regeneration test" has no mechanical
+  pin here and none in the `artifact.rs` precedent either. Follow the precedent;
+  a cross-asset fix is reconcile's business, not this phase's to take
+  unilaterally.
+- `PAYLOAD_CONTRACT_PATH`'s unconditional `#[expect(dead_code)]` must become
+  `cfg_attr(not(test), …)` once the golden gives it a `cfg(test)` reader, in the
+  opposite direction to `extern_contracts()`'s gate coming off. That is the one
+  permitted leaf edit and it is mechanical, not a scope change.
+- The boot snapshot goes stale the moment the verb lands. `boot.md` is runtime
+  and gitignored, and the worker's contract forbids writing runtime state, so
+  the orchestrator runs `doctrine boot` after the phase lands rather than the
+  worker running it mid-phase.

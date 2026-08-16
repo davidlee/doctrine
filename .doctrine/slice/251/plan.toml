@@ -313,6 +313,7 @@ exit_criteria = [
   { id = "EX-5", text = "The golden compares render_document() against the committed file read FROM DISK at runtime via CARGO_MANIFEST_DIR, never from the embed, because install/ is embedded with no rerun-if-changed and an embed comparison would false-green (artifact.rs precedent)." },
   { id = "EX-6", text = "An #[ignore]d regeneration test writes the file, and the golden's failure message names it." },
   { id = "EX-7", text = "`doctrine check gate` is green, and assert_unprojected_install_assets_are_published passes without a flag." },
+  { id = "EX-8", text = "Appended at planning (2026-08-16). DEC-226's customization = \"fixed\" is asserted on the new manifest row, not merely written into it. Fail-closed admission (publication.rs) rejects an absent or out-of-vocabulary value, but `fixed` and `customizable` are both admissible and the manifest is 71 customizable to 19 fixed — so a drift to the majority value is silent, and DEC-226 would then have no enforcement anywhere. One assertion in the phase's test module; the same reasoning as R1, applied to the decision rather than to the contract." },
 ]
 specs        = []
 requirements = []
@@ -320,7 +321,7 @@ requirements = []
 [[phase.verification]]
 id = "VT-1"
 expects = "sec-8 pin 6 — the published document golden: render_document() equals the committed install/design-payload-contract.md read from disk, with an #[ignore]d regeneration test named in the failure message."
-test_file = "src/design_run/payload_contract.rs"
+test_file = "src/commands/design.rs"
 keywords = ["PAYLOAD_CONTRACT_PATH", "CARGO_MANIFEST_DIR", "ignore"]
 waived = false
 
