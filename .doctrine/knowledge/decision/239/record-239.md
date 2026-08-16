@@ -112,3 +112,48 @@ Reached in the `SL-256` design run with GPT-5.5 (codex) as peer advisor. Codex
 initially preferred whole-row normalisation and moved to the roster split when
 shown the `change_log.rs:69-70` quote. The `Legacy` naming and the
 proportionality argument against a second enum are codex's.
+
+
+## Correction, 2026-08-16 — the retirement's pinning mechanism, and STD-001
+
+Raised as `RV-360` `F-4` by an external adversarial reviewer during `SL-256`'s
+design review, contested once, and upheld on the second pass. The decision's
+substance is unaffected; one mechanism in it is replaced.
+
+**What is replaced.** The snippet above pins the wire name with
+`#[serde(rename = "acceptance_attested")]`. That writes `acceptance_attested` a
+second time, beside the literal `as_str` already spells, and `STD-001` —
+**required** — asks that a recurring meaningful token be named once and
+referenced everywhere. A design section cannot grant an exception to a required
+standard, and the drift guard first offered in repair detects divergence without
+single-sourcing anything.
+
+**What replaces it.** `ChangeEvent` takes
+`#[serde(try_from = "String", into = "String")]`, with `Into` returning
+`as_str().to_owned()` and `TryFrom` resolving a token by scanning `READABLE`,
+plus one arm for the `evidence_invalidated` legacy alias. This is the module's
+own idiom, not a new one — `DesignId` (`ids.rs:131`), `IntentSubject`
+(`attestation.rs:935`) and `PayloadTerm` (`change_log.rs:387`) already carry it,
+and `Refusal`'s `Display` doc names serde's `try_from` as the boundary it exists
+to cross (`refusal.rs:457-460`). `as_str` becomes every token's only source, and
+`rename_all`, `alias` and `rename` all leave the enum.
+
+**Why this is larger than the finding.** The finding read the duplication as
+something the retirement *introduced*. It is not. `rename_all` derives 22 tokens
+from variant identifiers while `as_str` hand-writes the same 22; they agree by
+convention and nothing enforces it. The retirement is merely the first change to
+make one instance visible. So the repair is applied to the class — after it, no
+member has two sources.
+
+**What is unchanged.** Every ruling above stands: the readable/emittable split,
+the `Legacy` Rust prefix as the warning to future construction sites, the
+preserved wire token and stored payload shape, the refusal of a bare alias, and
+the refusal of whole-row normalisation. Strict deserialisation is preserved
+rather than relaxed — an unmatched token is a `Refusal`, exactly as the derive
+refused it, which is what `ISS-315`'s defect class depends on. "Deliberately not
+done" is also untouched: it declined an `EmittableEvent` wrapper on
+proportionality grounds, and token single-sourcing is a different question.
+
+**Cost carried.** `TryFrom` needs one new `Refusal` variant, so
+`src/design_run/refusal.rs` joins `SL-256`'s selectors. The fence widening is
+declared in that slice's `sec-4` rather than discovered at execution.

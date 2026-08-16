@@ -11,7 +11,7 @@ The mechanism is `record_declaration` (`src/design_run/run.rs:539`): it validate
 the basis, resolves the fingerprint, admits the record against its gate rule, and
 calls `next.declarations.record(record)` — then returns `Ok(())`. Nothing is
 pushed onto `pending`, so nothing reaches `Applied::rows`, so the shell's
-existing render at `src/commands/design.rs:1649` has nothing to render.
+existing render at `src/commands/design.rs:1771` has nothing to render.
 
 **The reported instance is one of two.** Its sibling `record_act`
 (`run.rs:577`) emits a row only when the act carries a review disposition
@@ -88,12 +88,13 @@ a submission which records one says so.
    difference empty in both directions.
 3. Split `ChangeEvent`'s single `ALL` roster into `READABLE` and `EMITTABLE`,
    and retire `AcceptanceAttested` into the readable-only half as
-   `LegacyAcceptanceAttested` (serde name and rendered token unchanged, stored
+   `LegacyAcceptanceAttested` (wire token and rendered token unchanged — now
+   single-sourced through `as_str`, see `DEC-239`'s appended correction — stored
    payload shape preserved). Scope widened here by explicit decision —
    see `DEC-239` and the amended Non-Goal.
 4. Pin the behaviour where it broke: an apply that records an act renders a row
-   through the existing shell render — `commands/design.rs:1649` on `edge`,
-   `:1771` in `SL-251`'s landed capsule.
+   through the existing shell render (`commands/design.rs:1771`). `SL-251` has
+   landed on `edge`, so there is no second tree to cite against.
 5. Accept the one change to an **existing** observable this implies. A
    review-disposing act goes from one row to two, keeping `ReviewDisposed` and
    gaining `ActRecorded` beside it — **decided by `DEC-241`**, on the grounds
@@ -105,15 +106,16 @@ a submission which records one says so.
 
 | path | why |
 |---|---|
-| `src/design_run/change_log.rs` | the closed vocabulary, its `ALL` roster, `as_str`, `payload_terms` |
+| `src/design_run/change_log.rs` | the closed vocabulary, its `ALL` roster, `as_str`, `payload_terms`, and the serde attributes `as_str` now single-sources (`DEC-239` correction) |
 | `src/design_run/run.rs` | `record_declaration`, `record_act`, the `acceptance` arm; tests in its own `#[cfg(test)]` module (line 1869) |
 | `src/design_run/render/mod.rs` | `render_row` (line 358) and its tests, if the new terms need rendering work |
 | `src/design_run/render/change_row.rs` | row-render internals, if reached |
 | `src/design_run/bounds.rs` | only if a new event name outgrows `DESIGN_EVENT_NAME_BYTES` |
 | `src/design_run/snapshot.rs` | the literal-fragment compat pin (test module) |
+| `src/design_run/refusal.rs` | one new variant for `ChangeEvent`'s `TryFrom` — a fence widening added at the `RV-360` raiser integration |
 | `tests/e2e_design_state.rs` | **mandatory** — `every_material_event_kind_persists_a_change_row` (`:1081`) enumerates `ChangeEvent::ALL` and reds on a member the `every_event_fixture` ladder (`:838`) does not drive. This is where change rows are asserted; `run.rs`'s own test module asserts only on snapshot state. Named nowhere in `SL-251`. |
 
-`src/commands/design.rs` is expected to need **no** change: line 1649 already
+`src/commands/design.rs` is expected to need **no** change: line 1771 already
 extends the output with every row in `Applied::rows`.
 
 ## Non-Goals

@@ -40,6 +40,11 @@ selector = "src/design_run/render/change_row.rs"
 intent = "design-target"
 note = "narrowed from render/** at RV-360 integration: the glob covered render/envelope.rs, an SL-251 design-target the Non-Goals fence out"
 
+[[selector]]
+selector = "src/design_run/refusal.rs"
+intent = "design-target"
+note = "added at RV-360 raiser integration: ChangeEvent's TryFrom needs one new Refusal variant (sec-2 single-sourcing)"
+
 [[relation]]
 label = "governed_by"
 target = "STD-001"

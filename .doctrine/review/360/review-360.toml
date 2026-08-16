@@ -14,7 +14,7 @@ ref   = "SL-256"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The shared act seam remains bypassable"
 detail = "SL-256 sec-3 says admit_and_record makes storage and emission the same operation and that a future record kind cannot reach the groups by another route (.doctrine/slice/256/design.md:368-372). The actual storage sinks remain pub(crate): CheckpointActGroup::record at src/design_run/snapshot.rs:348-365 and AgentDeclarationGroup::record at src/design_run/snapshot.rs:380-392. Current production reaches them directly at src/design_run/run.rs:566 and :640, while src/design_run/fixture.rs:211-242 and src/design_run/tests.rs:2430/2829 demonstrate that crate peers can call them without any ActRecord or Pending value. Wrapping those callable sinks in ActRecord::insert does not make the seam non-bypassable; it leaves the exact forget-to-emit regression DEC-238 claims to prevent available to any future production caller. Suggested direction: make the storage capability reachable only through an API that also returns the mandatory row, or weaken the claimed invariant explicitly."
@@ -27,12 +27,23 @@ status = "answered"
 severity = "major"
 title = "EMITTABLE does not close the writable vocabulary"
 detail = "SL-256 sec-2 claims EMITTABLE is the vocabulary this binary may newly write and that iterating it makes an unwired member fail loudly (.doctrine/slice/256/design.md:196-197,224-226,563-571), but sec-2 also leaves Pending accepting any ChangeEvent and explicitly declines an emittable wrapper (:256-261). The current constructors accept unrestricted ChangeEvent at src/design_run/run.rs:257 and :266; the roster test only iterates the manual array at tests/e2e_design_state.rs:1090-1094. Therefore a writer can construct LegacyAcceptanceAttested, or a future variant omitted from EMITTABLE, and every proposed roster/subset test still passes. This leaves REQ-478 criteria 2 and 3 conventionally named rather than verified, so the planned VT coverage would overstate both exhaustive writer coverage and readable-only retirement. Suggested direction: enforce the writable subset at the construction seam or add evidence that is exhaustive over actual writer capability, not only over the declared array."
-disposition = "fixed-with-evidence"
-response = "Observation correct: EMITTABLE is a declared array, Pending::about/run_wide (run.rs:257,:266) take any ChangeEvent, so a retired member could be emitted with every roster test green. The suggested repair - enforce the writable subset at the construction seam - is declined, because DEC-239 considered exactly that under 'Deliberately not done' and judged a wrapper or second enum disproportionate for this vocabulary. Re-litigating a settled decision inside a feedback integration is not available; reopening it deliberately is, and the evidence here did not justify it. Adopted instead: a new check asserting that no row every_event_fixture's ladder produces carries an event absent from EMITTABLE. That is exhaustive over what the writer actually emits on the path that drives every emittable member, rather than over the array. sec-2 now states the asymmetry plainly - the roster proves every member is driven, nothing in the type proves the converse - and sec-4 maps this to REQ-478 criterion 3, which now takes three checks rather than one."
+disposition = "fixed-differently"
+response = """
+Half upheld, half contested, and the contested half rests on REQ-478's own text rather than on my judgement.
+
+Upheld: the unhedged gloss. sec-4's criterion-mapping table described check 6 as 'nothing outside EMITTABLE is actually emitted' with no qualifier, where sec-2:256-262 and check 6's own text correctly bound it to what the every_event_fixture ladder reaches. The contest is right that the ladder closes neither Pending's writer capability nor future construction sites, and an unqualified restatement in the table that discharges the criterion is the worst place to drop the qualifier. Corrected.
+
+Contested: that criterion 3 is therefore conventionally named. Re-read against the requirement rather than against the design, criterion 3 is 'Retired vocabulary is readable-only and carries no emission obligation.' Neither clause asks for a proof that emission cannot occur. REQ-478's own prose gives the reason in terms that settle it: the completeness obligation 'is stated over the emittable roster rather than over the whole event vocabulary, because DEC-239 splits the two — the readable half exists to keep historical snapshots parsing, and holding it to an emission obligation would force a live path for vocabulary that is deliberately dead.' Criterion 3 is a RELIEVING clause. It exempts the retired member from criterion 2's exhaustiveness demand; it does not impose a converse proof burden. Check 5 (member present in READABLE, absent from EMITTABLE, EMITTABLE a subset) plus criterion 2's roster test quantifying over EMITTABLE discharge it exactly, and the legacy-fragment round-trip evidences the readable half.
+
+So the defect the contest found is real but is mine and not the criterion's: the design imported a proof burden REQ-478 never imposed, then could not fully discharge it, and the contest correctly noticed the shortfall. The repair is to stop claiming the burden, not to build machinery for it. sec-4's table now maps criterion 3 to check 5 and the legacy-fragment round-trip, and names check 6 as defence in depth rather than as discharge — bounded to the ladder, worth keeping because it is what fails if a retired member is still being pushed anywhere the ladder reaches, and honest that a writer path off the ladder stays invisible.
+
+The class this belongs to, swept: the criterion table is the only place in the design where an acceptance criterion is restated in the design's own words. All three rows were re-read against REQ-478's text. Criteria 1 and 2 restate faithfully; criterion 3 did not, and now does.
+
+DEC-239 stands unreopened. Type enforcement was declined there on proportionality and nothing here disturbs that; F-2's residual is now stated at its true size instead of being papered over by an overreaching table row."""
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The proposed coverage command records no VT check"
 detail = "SL-256 sec-4 calls the command at .doctrine/slice/256/design.md:651-656 the coverage cell binding REQ-478 to the new e2e checks, but the command supplies only --mode VT and no alias, command, or matcher. CoverageRecordArgs::has_check returns false when those fields are absent (src/coverage_store.rs:289-300), run_record consequently passes check=None (:363-370), and record takes the attestation branch and preserves the default verified status (:132-139). The verifier reports check-less VT entries only as backfill and leaves them untouched (src/coverage_verify.rs:125-135,156-162). Deferring the cell until tests exist is sound, but the shown command would not bind or execute any of them and could leave a verified-looking VT key without test evidence. Suggested direction: specify a runnable check plus its mandatory positive matcher when the closure recipe is authored."
@@ -45,12 +56,21 @@ status = "answered"
 severity = "major"
 title = "The legacy wire token has two sources under STD-001"
 detail = "SL-256 sec-2 requires the literal serde rename acceptance_attested on LegacyAcceptanceAttested (.doctrine/slice/256/design.md:232-237), while the code-impact table also requires an as_str arm for the renamed variant (:507-510). ChangeEvent::as_str is the rendered-token source and returns explicit token literals today (src/design_run/change_log.rs:128-156), so implementing the design as written repeats acceptance_attested in the serde attribute and the rendering mapping. STD-001 requires a meaningful recurring format token to be named once and referenced everywhere; this compatibility-critical token is especially vulnerable to drift because either spelling can compile independently. The design is governed by STD-001 but does not describe a single owned wire/render token mechanism. Suggested direction: choose a serialization/token design with one source of truth, or explicitly reconcile why this required-standard exception is unavoidable."
-disposition = "fixed-differently"
-response = "Observation correct, and stronger than stated. The finding says as_str returns explicit literals today; the sharper point is that today the serde token is DERIVED by serde(rename_all = snake_case), so there is one written literal per member. Renaming the Rust variant to LegacyAcceptanceAttested forces an explicit serde(rename = acceptance_attested), which INTRODUCES a second literal that did not exist before. So this design creates the dual source rather than inheriting it, and STD-001 bites. The prescription - choose a design with one source of truth - is not reachable: a serde attribute takes a string literal, not a const, so no spelling references one name from both sites. Adopted instead: a drift guard, which is the more valuable half for a compatibility-critical token because either spelling compiles alone and the failure mode is silent divergence rather than a build error. sec-4 adds every_readable_event_token_round_trips_through_serde over READABLE. Noted in sec-2 that no such guard exists for this enum today - I searched, with a positive control that also came up empty - so this adds the first rather than extending a pattern."
+disposition = "fixed"
+response = """
+Contest upheld, and it defeats a claim I should not have made. STD-001 is a REQUIRED standard whose statement is 'named once and referenced by that name everywhere'; a drift guard detects divergence, it does not single-source. Naming the exception was not available to me either — a required standard is comply-or-except, and a design section is not the surface that grants an exception.
+
+The repair, and the reason it is available after I said it was not. sec-2 claimed 'it cannot be single-sourced: a serde attribute takes a string literal, not a const'. That is true of #[serde(rename = ...)] and irrelevant, because the derive is not the only route. This module already carries the answer three times: DesignId is #[serde(try_from = "String", into = "String")] (ids.rs:131), IntentSubject the same (attestation.rs:935), and PayloadTerm is #[serde(try_from = "PayloadTermWire")] in change_log.rs itself (:387). Putting the same attribute on ChangeEvent makes as_str the single spelling of every token: Into gives as_str().to_owned(), TryFrom resolves a token by scanning READABLE for a member whose as_str matches, with one extra arm for the evidence_invalidated legacy alias. Strict deserialisation is preserved — an unmatched token is a Refusal, exactly as the derive refused it.
+
+This is larger than F-4 asked for, and deliberately so, because the finding's own framing understated the defect. sec-2 said 'today every member's wire token has exactly one literal'. That is false. rename_all derives 22 tokens from variant identifiers while as_str hand-writes the same 22; they agree by convention and nothing enforces it, which is precisely why renaming one variant would silently move its wire token. The retirement did not create the dual source — it made one instance visible. So the fix is applied to the class rather than to acceptance_attested: after it, no member has two sources, #[serde(rename_all)], #[serde(alias)] and #[serde(rename)] all disappear, and round-trip becomes true by construction rather than by test.
+
+Check 7 (every_readable_event_token_round_trips_through_serde) survives with a changed job: it no longer guards drift between two spellings, because there is one. It guards the alias arm and TryFrom's rejection of an unknown token — cheap, and the thing that can still regress.
+
+DEC-239 is not reopened. It chose serde-rename over a bare alias or whole-row normalisation, and it declined an EmittableEvent wrapper. The wire token is still acceptance_attested and the Rust name still LegacyAcceptanceAttested; only the mechanism that pins them changes, from an attribute literal to the module's own try_from idiom. Its 'Deliberately not done' concerned writability enforcement, which this does not touch."""
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The claimed act-lifecycle symmetry excludes a live death path"
 detail = "SL-256 sec-1 says the current log reports acts ceasing to bind and that after this slice ActRecorded and ActInvalidated report both ends symmetrically (.doctrine/slice/256/design.md:49-51,81-85). In source, live_acts is only a BTreeSet of (ActKind, DesignId) (src/design_run/run.rs:1777-1797), and act_id is derived from the same kind (:663-672); replacing a record with another of the same kind therefore leaves the set identical and invalidation_rows emits nothing (:1842-1855). The design itself concedes this as ISS-367 in sec-3 (:307-315). Deferring ISS-367 is an honest scope boundary, but the sec-1 current and target framing contradicts that boundary and promises lifecycle symmetry the proposed change does not deliver. Suggested direction: qualify ActInvalidated as reporting only deaths visible in the live-set difference."
@@ -59,7 +79,7 @@ response = "Correct, and an internal contradiction between sections rather than 
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Fixture inputs are free but the fixture edit is not"
 detail = "SL-256 sec-4 says driving ActRecorded through every_event_fixture is expected free and confirmed only at execution (.doctrine/slice/256/design.md:565-571). The payload ladder already records several acts, so no new input is needed, but its source explicitly documents acceptance_attested as part of the material review vocabulary at tests/e2e_design_state.rs:937-943. Retiring that event makes this fixture comment false, and ActRecorded will be driven by multiple earlier and later act submissions instead. The code-impact table describes two roster redirects and five new checks but does not account for correcting the load-bearing fixture narrative. This understates the required test-file change even though the behavioural fixture is sufficient."
@@ -68,12 +88,98 @@ response = "Correct. Verified the comment at tests/e2e_design_state.rs:937-943 n
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Not every change-log assertion filters by event"
 detail = "SL-256 sec-4 makes the absolute claim that every change-log assertion finds or filters by event (.doctrine/slice/256/design.md:595-598). Independent inspection finds event-neutral assertions: change_log_floor_is_recorded_not_inferred scans all row revisions at tests/e2e_design_state.rs:708-725; within_revision_index_is_candidate_order_not_submission_order maps every row without filtering at :786-815; and retention_evicts_oldest_revisions_and_advances_the_floor scans all row revisions at :1150-1165. These particular fixtures do not record acts, so the new row does not obviously break them, but that is a separate fact the load-bearing suite-fence argument must state. As written, the negative proof is factually false and cannot support the conclusion merely by event invisibility. Suggested direction: enumerate the event-neutral assertions and explain from their fixtures or predicates why each remains stable."
 disposition = "fixed"
 response = "Correct, and this was the weakest thing in the design - an absolute claim supporting a load-bearing fence argument. Verified all three: change_log_floor_is_recorded_not_inferred (:708-725) and retention_evicts_oldest_revisions_and_advances_the_floor (:1150-1165) scan every row's revision, within_revision_index_is_candidate_order_not_submission_order (:786-815) maps every row unfiltered. The suggested direction is adopted rather than the claim being patched: sec-4 now splits the argument in two, says most assertions select by event, then names the three that do not and gives the per-fixture reason each is stable - none of their fixtures records an act, so no new row enters their scan. That is stated as a fixture-level fact an implementor must re-check if any of those fixtures is later given an act to record, which is the thing event-invisibility could never have supported."
+
+[[finding]]
+id = "F-8"
+status = "answered"
+severity = "minor"
+title = "A capped normal delta makes added rows substitutive, not always additive"
+detail = "Expected: the suite-fence argument should account for the normal projection retaining only the newest 10 change rows before concluding that an added rendered line cannot break a contains assertion. Observed: SL-256 sec-4:739-741 infers 'additive, not breaking' merely from stdout assertions using contains. ENVELOPE_CHANGE_ROWS is 10 at src/design_run/render/mod.rs:78 and changes() drops the oldest rows at src/design_run/render/envelope.rs:1071-1080, so a new ActRecorded row can displace content a contains assertion expects. The current conclusion survives only after fixture-specific inspection: tests/e2e_design_state.rs:730-735 checks the newest inq-late row in a no-act fixture; :1260-1267 checks the newest regression row's elision marker even though every_event_fixture records acts; :1292-1313 checks two no-act rows and then the current revision's edge row; tests/e2e_design_projection.rs:301/:312 assert only cap saturation. e2e_design_review.rs does call resume at :734/:747, contrary to the verification note, but asserts contract content rather than delta-row identity. The byte ceiling remains safe: render/mod.rs:126-134 documents 15,576 saturated bytes against 24,576, about 9,000 bytes headroom, and the delta cardinality stays capped. The result is stable; the stated absolute proof is false."
+disposition = "fixed"
+response = """
+Correct, and it is F-7's defect a second time in the same section — which makes the class rather than the instance the thing to repair. F-7 was 'every change-log assertion filters by event'; F-8 is 'every stdout assertion is contains, so an added line is additive'. Both are universal quantifiers standing in for a per-instance argument, and both were false.
+
+Verified: ENVELOPE_CHANGE_ROWS is 10 (render/mod.rs:78) and changes() cuts by (revision, index) descending at render/envelope.rs:1073-1080, so the normal projection retains the NEWEST rows. An added row is therefore substitutive, not additive, and contains-vs-equality is not the property that protects the suite.
+
+Two corrections to my own verification, both from this finding. e2e_design_review does call resume, at :734 and :747 — my grep pattern required a bracket after the paren and missed the no-arg form; those assertions read contract-block content, so the conclusion survives but not on the basis I gave. And I missed a rendered-delta assertion outright: elided_reason_carries_an_explicit_marker (e2e_design_state.rs:1253-1269) runs on every_event_fixture, which DOES record acts, and asserts contains(ELISION_MARKER) on show(&[]). It is safe only because the stage-move row it wants is the newest and survives the cut — which is exactly the fixture-level reasoning the section owes.
+
+sec-4 now states the cap first as the mechanism, then names every rendered-delta assertion in the suite with its per-fixture reason: change_log_floor_is_recorded_not_inferred (newest row, no acts), distinct_ids_sharing_a_long_prefix_render_distinguishably (two rows, no acts, then a single-revision delta), elided_reason_carries_an_explicit_marker (act-recording fixture, newest row), the projection cap assertions (saturation, not identity), and e2e_design_review's resume calls (contract content, not delta rows). The byte ceiling is separately safe with the documented headroom the finding measured.
+
+Class sweep beyond this instance: every remaining universal quantifier in the four sections was re-read for the same shape. sec-3:380-382's 'every accessor on RecordedAct resolves from the shape without reading a field' was re-derived and holds — all five accessors answer the Section arm from the shape. sec-4's 'no test indexes rows positionally' holds. sec-4's 'neither tests.rs nor fixture.rs references ChangeEvent::ALL, admit_against, or any event this slice renames' holds and is stronger than stated: neither file contains a single ChangeEvent reference. The two that did not hold are this finding and F-10."""
+
+[[finding]]
+id = "F-9"
+status = "answered"
+severity = "minor"
+title = "The direct storage-sink call count is 13, not eight"
+detail = "Expected: sec-3's scope argument should report the measured direct-call surface accurately. Observed: SL-256 sec-3:448-450 says restricting storage-sink visibility breaks eight existing direct callers in fixture.rs and tests.rs. On edge there are 13 direct call expressions: src/design_run/fixture.rs:211, :212, :242 and src/design_run/tests.rs:1094, :1099, :1104, :1127, :1132, :1141, :1142, :1143, :2443, :2842. DEC-238's correction wisely carries no count. The selector conclusion is unchanged, but the design's measured evidence is false."
+disposition = "fixed"
+response = """
+Correct on both the count and the anchors, and my own re-derivation had the anchors wrong in a way worth recording: an earlier grep in this session returned 1081/1086/1091 for the same three call expressions that awk and the file reader both place at 1094/1099/1104. The tool output filter had elided lines and renumbered. Every anchor in this integration was re-derived with a line-numbering method cross-checked against a direct read.
+
+Measured afresh, the direct storage-sink call expressions are 13: fixture.rs:211, :212, :242 and tests.rs:1094, :1099, :1104, :1127, :1132, :1141, :1142, :1143, :2443, :2842. sec-3 now carries the measurement with its anchors rather than a bare number, and the scope conclusion is unchanged — fixture.rs is outside this slice's selectors, tests.rs is one of SL-251's design-targets.
+
+This finding names the class, so the whole design was swept for it: a measured claim asserted without re-derivation. Three further members were found and repaired, none of which the review raised.
+
+1. sec-1 cited src/commands/design.rs at :1649 'on edge' and :1771 'in SL-251's landed capsule', and the same pair at :2457/:2878. SL-251 IS on edge — git merge-base --is-ancestor eca2c9a11 HEAD returns true and the last three commits touching design.rs are SL-251 phases. So on the tree the design is read against, the render loop is :1771 and the abandoned-write assertion is :2878, and the numbers labelled edge resolve to unrelated lines. The dual-tree device is collapsed to single citations. This was live in the working assumptions handed to both sides of this review, so it survived a full external pass unchallenged.
+2. sec-4 said SL-251 landed in 15 commits. I derive 17 on the capsule range and cannot reproduce 15. The count was decorative, so it is removed rather than replaced — a number nobody can re-derive is worth less than no number.
+3. sec-2's 'today every member's wire token has exactly one literal' was the load-bearing premise under F-4 and was false. Handled there.
+
+Re-derived and CORRECT, so recorded here rather than changed: run.rs 257/266/380/382/397/407/539/565/566/577/619/640/652/671/1777/1842; snapshot.rs 361/387/745; attestation.rs 796; change_log.rs 46/56/69-70/293; render/mod.rs 78/198; e2e_design_state.rs 937/1081/1110/1219; e2e_design_review.rs 1415; coverage_store.rs 132-139/289-300; bounds.rs 49; payload_contract.rs 501; SL-238's fourteen selectors; SL-251's ten src files, no tests file, no intersection with this slice's selectors; 7 acceptance_attested rows across 6 live snapshots; READABLE 23 / EMITTABLE 22; act_recorded 12 bytes against a 32-byte bound whose widest is 27."""
+
+[[finding]]
+id = "F-10"
+status = "answered"
+severity = "minor"
+title = "Row order is contractual through stored-vector evidence, not goldens"
+detail = "Expected: sec-3 should cite the mechanism and test that make ActRecorded-before-ReviewDisposed contractual. Observed: SL-256 sec-3:488-491 says goldens assert an ordered row sequence, but tests/fixtures contains no design change-log golden. The actual contract is stronger and different: src/design_run/run.rs:494-504 assigns ChangeRow.index by pending.into_iter().enumerate(), so pending vector order becomes stored order, and tests/e2e_design_state.rs:786-815 asserts the exact ordered (index, subject) vector. DEC-238:89-90 additionally requires constructing the optional disposition row before admit_and_record while ordering the mandatory row first; construction order and vector order deliberately differ. The proposed order is mechanically forceable, but the design attributes it to nonexistent evidence and does not name the inversion an implementor must preserve."
+disposition = "fixed"
+response = """
+Correct. There is no change-log golden anywhere — tests/fixtures holds two sl071_inspect_*.json files and nothing else — so the appeal was to evidence that does not exist. sec-3 now cites what actually makes the order contractual, which is stronger: ChangeRow.index is assigned by pending.into_iter().enumerate() at run.rs:494-504, so the pending vector's order IS the stored order, and within_revision_index_is_candidate_order_not_submission_order (e2e_design_state.rs:786-815) asserts an exact ordered (index, subject) vector.
+
+The inversion the finding names is adopted as its own sentence rather than left implicit. DEC-238:89-90 requires the optional disposition row be CONSTRUCTED before admit_and_record, so a row-construction failure precedes mutation, while the returned vector must place the mandatory ActRecorded row FIRST. Construction order and vector order deliberately run opposite. Both instructions were present across DEC-238 and sec-3 but adjacent rather than named as a tension, and an implementor following construction order produces the wrong sequence. sec-3 now states it as a tension and names check 3 as what catches it."""
+
+[[finding]]
+id = "F-11"
+status = "answered"
+severity = "minor"
+title = "The two-row sequence is attributed to the wrong decision"
+detail = "Expected: check 3 should cite the decision that actually fixes ActRecorded before ReviewDisposed. Observed: SL-256 sec-4:634-637 attributes both rows and their order to DEC-241. DEC-241 decides that two distinct rows exist but says nothing about their sequence. DEC-238:82-90 owns the sequencing rule: construct the optional disposition first so failure precedes mutation, then order the mandatory ActRecorded row first."
+disposition = "fixed"
+response = "Correct. DEC-241 decides that the disposing arm carries two rows rather than one, and argues the two-claims point plus the R5 refusal of folding the act kind into ReviewDisposed as a third term. It says nothing about sequence. The sequencing rule is DEC-238:82-90 — seed the vector from the mandatory row, construct the optional disposition row before admit_and_record, order the mandatory row first. sec-4 check 3 now cites DEC-238 for the order and DEC-241 for the two rows, which are genuinely different rulings by different decisions."
+
+[[finding]]
+id = "F-12"
+status = "answered"
+severity = "minor"
+title = "The SL-238 disjointness comparison counts seven selectors as six"
+detail = "Expected: the coordination arithmetic should match the slice's selector registry after the render narrowing. Observed: SL-256 sec-4:772-775 says 'this slice's six'. ./target/debug/doctrine slice selector list 256 returns seven design-target selectors: change_log.rs, run.rs, bounds.rs, e2e_design_state.rs, snapshot.rs, render/mod.rs, and render/change_row.rs. The disjointness conclusion may still hold; the stated count does not."
+disposition = "fixed"
+response = "Correct, and self-inflicted: the count went stale inside the same revision that made it stale. The render narrowing replaced one glob selector with two file selectors, taking the list from six to seven, and the SL-238 disjointness sentence three subsections later still said six. doctrine slice selector list 256 returns seven design-targets: change_log.rs, run.rs, bounds.rs, e2e_design_state.rs, snapshot.rs, render/mod.rs, render/change_row.rs. Corrected, and the disjointness conclusion re-derived rather than assumed to survive: SL-238's fourteen selectors are backlog, priority and command-tier paths, and the intersection with all seven is empty."
+
+[[finding]]
+id = "F-13"
+status = "answered"
+severity = "nit"
+title = "The fixture comment block will itself emit ActRecorded"
+detail = "Expected: the amended-comment explanation should distinguish all sources of the replacement event accurately. Observed: SL-256 sec-4:692-698 says ActRecorded arrives from earlier and later act submissions rather than from the review-vocabulary block. That block includes the run-level acceptance at tests/e2e_design_state.rs:950-955, and sec-3:517-519 explicitly routes that acceptance through record_act after this slice, so the block itself will emit ActRecorded. The conclusion that the old comment becomes false still stands; the 'rather than' clause does not."
+disposition = "fixed"
+response = "Correct. The block the comment describes carries the run-level acceptance at e2e_design_state.rs:950-955, and sec-3's acceptance arm routes exactly that through record_act after this slice — so the block emits ActRecorded itself. The 'rather than' clause is deleted. What replaces it is the accurate statement: the comment names finding_raised, finding_disposed and acceptance_attested as the PHASE-12 review vocabulary; retiring the third makes that list false, and ActRecorded arrives both from this block's acceptance and from act submissions earlier and later in the ladder. The conclusion the finding leaves standing — that the comment must be corrected as part of this slice's test-file change — is unchanged."
+
+[[finding]]
+id = "F-14"
+status = "answered"
+severity = "nit"
+title = "The coverage backfill citation names the contract, not the branch"
+detail = "Expected: the F-3 repair should anchor the implementation branch that leaves check-less VT entries untouched. Observed: SL-256 sec-4:799-806 cites src/coverage_verify.rs:125-135, which is the run() contract doc. The executable backfill branch is at src/coverage_verify.rs:156-162. The behavioural conclusion is correct but the source anchor is not."
+disposition = "fixed"
+response = "Correct. src/coverage_verify.rs:125-135 is inside run()'s contract doc comment, whose final bullet happens to state the behaviour ('Check-less VT entries are reported in the backfill list and LEFT UNTOUCHED'), which is how the anchor passed a reading that was looking for the sentence rather than the branch. The executable branch is the let-else at :156-162 that pushes a BackfillEntry and continues. sec-4 now cites the branch, and keeps the contract bullet as a second anchor since a reader wanting the guarantee stated in prose is well served by it."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

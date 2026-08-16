@@ -28,9 +28,8 @@ worth reporting, and nothing states why.
 record against its gate rule, hands it to the declaration group and returns
 `Ok(())`. Nothing is pushed onto `pending`, so nothing reaches `Applied::rows`,
 so the shell's render — the loop that extends its output with every row in
-`Applied::rows`, at `commands/design.rs:1649` on `edge` and `:1771` in `SL-251`'s
-landed capsule — has nothing to render. `record_act` is the same story with one
-exception carved out of it: it returns `Option<Pending>`, and the `Some` arm is
+`Applied::rows` at `commands/design.rs:1771` — has nothing to render.
+`record_act` is the same story with one exception carved out of it: it returns `Option<Pending>`, and the `Some` arm is
 reached only when the act carries a disposition.
 
 So the same operation — *the run now holds this act* — is reported, unreported,
@@ -139,8 +138,8 @@ The cost is a test update wherever an exact row set is asserted for that path.
   `REQ-478` states the bound explicitly so the new row cannot be mistaken for
   coverage it does not provide.
 - **Refused writes.** An `apply` abandoned in the pre-write window records
-  nothing, and the assertion that pins this — `assert_eq!(after.change_log.rows.len(), 0)`,
-  at `commands/design.rs:2457` on `edge` and `:2878` in the landed capsule —
+  nothing, and the assertion that pins this —
+  `assert_eq!(after.change_log.rows.len(), 0)` at `commands/design.rs:2878` —
   stays true unchanged. This was checked because `R4` flagged the risk of a
   capsule test pinning current behaviour; that assertion is about an abandoned
   write, not about a successful one, so the risk does not land there.
@@ -232,7 +231,7 @@ Each consumer takes the roster that matches the question it asks:
 flowchart LR
   R["READABLE (23)"] --> A["compile-time assert<br/>widest name ≤ 32 bytes<br/>change_log.rs:46"]
   R --> B["rendered_payload_fits_its_cap_…<br/>e2e_design_state.rs:1219"]
-  R --> D["token/serde round-trip guard<br/>(new)"]
+  R --> D["round-trip + alias guard<br/>(new)"]
   E["EMITTABLE (22)"] --> C["every_material_event_kind_persists_a_change_row<br/>e2e_design_state.rs:1081"]
   E --> F["no fixture row carries a<br/>non-EMITTABLE member (new)"]
   E -.->|strict subset| R
@@ -258,8 +257,9 @@ an invariant a test asserts, not a relationship the type enforces.*
   carries a member absent from `EMITTABLE`** — exhaustive over what the writer
   actually does on the path that drives every emittable member, rather than over
   a hand-maintained array. It is weaker than a type-level guarantee and stronger
-  than the roster alone, and `sec-4` records which `REQ-478` criterion each half
-  discharges.
+  than the roster alone — and `sec-4` records it as **defence in depth**, not as
+  the discharge of any `REQ-478` criterion. A writer path the ladder never
+  traverses stays invisible to it.
 
 ## Retiring `AcceptanceAttested`
 
@@ -269,12 +269,15 @@ an invariant a test asserts, not a relationship the type enforces.*
 /// Read-only history. Superseded by [`ChangeEvent::ActRecorded`] once acceptance
 /// flows through the shared record seam; retained because the change log is
 /// append-only history and `ChangeEvent` deserialises strictly.
-#[serde(rename = "acceptance_attested")]
 LegacyAcceptanceAttested,   // payload_terms() => &[]
+
+// …and in `as_str`, which after this section is the token's only source:
+ChangeEvent::LegacyAcceptanceAttested => "acceptance_attested",
 ```
 
-Three things are unchanged on purpose: the serde name, the rendered token, and
-the stored payload shape (run-wide, term-free). Only the **Rust** name moves, and
+Three things are unchanged on purpose: the wire token, the rendered token — the
+same string, now spelled once — and the stored payload shape (run-wide,
+term-free). Only the **Rust** name moves, and
 that is the point — the type warns every future construction site that the
 variant is history. `DEC-239` refused both alternatives on the record: a bare
 serde alias renames the variant but not the row, so old run-wide term-free rows
@@ -284,31 +287,74 @@ reader manufacture a subject and an `act` term the writer never stored, and the
 next snapshot write would persist the manufactured history as though it had
 always had that shape.
 
-### The retirement introduces a second source for one token
+### The retirement forces the wire token to get one source
 
-Today every member's wire token has exactly one literal. `as_str` spells it, and
-serde derives its own from the variant name through
-`#[serde(rename_all = "snake_case")]` — one written token per member, one
-generated from the Rust identifier that already had to agree with it.
+Every member's wire token has **two** sources today, and they agree by
+convention rather than by construction. `as_str` hand-writes one;
+`#[serde(rename_all = "snake_case")]` derives a second from the Rust identifier.
+Nothing holds them together — rename a variant and serde's token moves while
+`as_str`'s stays, and both halves still compile. The retirement does not create
+that defect. It is the first change to make an instance of it *visible*, because
+`LegacyAcceptanceAttested` derives `legacy_acceptance_attested` against an
+`as_str` still spelling `acceptance_attested`.
 
-Renaming the Rust variant breaks that. `LegacyAcceptanceAttested` would derive
-`legacy_acceptance_attested`, so the wire name has to be pinned with an explicit
-`#[serde(rename = "acceptance_attested")]` — and `acceptance_attested` is now
-written twice, once in the attribute and once in `as_str`. STD-001 governs this
-slice and asks for a recurring token to be named once, so the duplication is
-declared rather than left implicit (`RV-360` `F-4`).
+Pinning the wire name with `#[serde(rename = "acceptance_attested")]` would put
+that literal beside `as_str`'s and settle for the same convention one degree
+more explicitly. `STD-001` is **required** and asks that a recurring meaningful
+token be named once and referenced everywhere, and a design section is not a
+surface that can grant an exception to a required standard. A drift guard
+detects divergence; it does not single-source anything (`RV-360` `F-4`).
 
-It cannot be single-sourced: a serde attribute takes a string literal, not a
-`const`, so there is no spelling of this that references one name from both
-sites. What is available is a drift guard, and it is the more valuable half for
-a compatibility-critical token — either spelling compiles alone, so the failure
-mode is silent divergence, not a build error. `sec-4` adds a check asserting that
-every `READABLE` member round-trips between its `as_str` token and its serde
-representation. Notably, no such guard exists for this enum today; this slice adds
-the first one rather than extending a pattern.
+The module already owns the answer, three times over: `DesignId` is
+`#[serde(try_from = "String", into = "String")]` (`ids.rs:131`), `IntentSubject`
+the same (`attestation.rs:935`), and `PayloadTerm` carries
+`#[serde(try_from = "PayloadTermWire")]` in this very file (`change_log.rs:387`).
+`Refusal`'s own `Display` doc names serde's `try_from` as the boundary it exists
+to cross (`refusal.rs:457-460`), so this is the seam the module was built for.
 
-**Migration surface, measured:** 7 `acceptance_attested` rows across 6 live
-snapshots (slices 243, 244, 248, 249, 251, 254). The `evidence_invalidated`
+```rust
+#[serde(try_from = "String", into = "String")]
+pub(crate) enum ChangeEvent { … }
+
+impl From<ChangeEvent> for String {
+    fn from(event: ChangeEvent) -> String { event.as_str().to_owned() }
+}
+
+impl TryFrom<String> for ChangeEvent {
+    type Error = Refusal;
+    fn try_from(raw: String) -> Result<ChangeEvent, Refusal> {
+        ChangeEvent::READABLE
+            .into_iter()
+            .find(|event| event.as_str() == raw)
+            .or_else(|| (raw == LEGACY_ACT_INVALIDATED).then_some(ChangeEvent::ActInvalidated))
+            .ok_or_else(|| Refusal::UnknownChangeEvent { raw })
+    }
+}
+```
+
+`as_str` becomes the single spelling of every token, and `rename_all`, `alias`
+and `rename` all leave the enum. Three consequences worth stating.
+
+- **Strictness is preserved, not relaxed.** An unmatched token is a `Refusal`,
+  exactly as the derive refused it. `ISS-315`'s defect class depends on that,
+  and `sec-4`'s legacy-fragment test pins it.
+- **One legacy literal remains**, `LEGACY_ACT_INVALIDATED` — the
+  `evidence_invalidated` alias. It spells a *retired* token, so it has no live
+  `as_str` counterpart to drift from, and it is named once, which is what
+  `STD-001` asks.
+- **`Refusal` gains a variant**, so `src/design_run/refusal.rs` joins this
+  slice's selectors. That is a fence widening, declared here rather than
+  discovered at execution — `sec-4` records it in the code-impact table.
+
+`sec-4`'s round-trip check survives with a different job. It no longer guards
+drift between two spellings, because there is only one; it guards the alias arm
+and `TryFrom`'s refusal of an unknown token, which are what can still regress.
+
+**Migration surface, measured** — `event = "acceptance_attested"` across
+`.doctrine/state/slice/*/design.toml`: 7 rows over 6 live snapshots (243 carries
+two; 244, 248, 249, 251 and 254 one each). The predicate is given so the
+measurement can be re-run rather than trusted; live runs accrue rows, so it is a
+floor rather than a constant. The `evidence_invalidated`
 legacy that `ISS-315` broke on is 8 rows — the same order, and it is the worked
 precedent for how this repo carries a retired token.
 
@@ -446,8 +492,10 @@ sinks stay reachable from anywhere in the `design_run` tree. Wrapping them in
 production caller could still store an act without producing a row.
 
 Closing it properly would mean restricting those methods' visibility, which
-breaks the eight existing direct callers in `fixture.rs` and `tests.rs` — the
-first outside this slice's selectors, the second one of `SL-251`'s design-targets.
+breaks 13 existing direct call sites: three in `fixture.rs` (`:211`, `:212`,
+`:242`) and ten in `tests.rs` (`:1094`, `:1099`, `:1104`, `:1127`, `:1132`,
+`:1141`–`:1143`, `:2443`, `:2842`). The first file is outside this slice's
+selectors; the second is one of `SL-251`'s design-targets.
 So the invariant is weakened rather than enforced, `DEC-238` carries an appended
 correction saying so, and what remains is a convention held by there being one
 obvious route rather than a guarantee held by the type system.
@@ -486,11 +534,24 @@ removing it is what makes the mandatory row expressible in the type.
 **`record_act` returns `Vec<Pending>`, one or two rows.** One on every path;
 two on the arm that carries a review disposition, where `ActRecorded` and
 `ReviewDisposed` sit side by side (`DEC-241`). The order within the vector is
-`ActRecorded` first, then `ReviewDisposed`: the recording is what makes the
-disposition addressable, and goldens assert an ordered row sequence, so the
-order is part of the contract rather than an artefact of construction. The
-optional disposition row is constructed **before** `admit_and_record` is called,
-so a row-construction failure precedes mutation.
+`ActRecorded` first, then `ReviewDisposed` (`DEC-238`): the recording is what
+makes the disposition addressable.
+
+The order is contractual rather than incidental, and the mechanism is worth
+naming because it is not visible from the signature. `apply` assigns
+`ChangeRow.index` from `pending.into_iter().enumerate()` (`run.rs:494-504`), so
+the vector's order **is** the stored order — and
+`within_revision_index_is_candidate_order_not_submission_order`
+(`e2e_design_state.rs:786-815`) already pins that mapping with an exact ordered
+`(index, subject)` vector.
+
+**Construction order runs opposite to vector order, deliberately.** The optional
+disposition row is built **before** `admit_and_record` is called, so a
+row-construction failure precedes mutation — while the mandatory `ActRecorded`
+row, which does not exist until `admit_and_record` returns, has to be placed
+**first**. An implementor who lets the vector follow construction order emits the
+pair backwards; `sec-4`'s check 3 asserts the ordered pair and is what catches it
+(`RV-360` `F-10`).
 
 ## The call sites
 
@@ -591,11 +652,12 @@ directly, as above.*
 
 | path | intended change |
 |---|---|
-| `src/design_run/change_log.rs` | `ActRecorded` and `LegacyAcceptanceAttested` variants; `ALL` → `READABLE` + `EMITTABLE`; `as_str` and `payload_terms` arms for both; the compile-time widest-name assert re-quantified over `READABLE` |
+| `src/design_run/change_log.rs` | `ActRecorded` and `LegacyAcceptanceAttested` variants; `ALL` → `READABLE` + `EMITTABLE`; `as_str` and `payload_terms` arms for both; the compile-time widest-name assert re-quantified over `READABLE`; `#[serde(try_from = "String", into = "String")]` with its `From`/`TryFrom` impls, replacing `rename_all` / `alias` / `rename` (`sec-2`); and one doc correction — `:69-70` attributes the eight legacy `evidence_invalidated` rows to the `SL-243`/`SL-244` runs, and all eight are `SL-244`'s |
 | `src/design_run/run.rs` | `ActRecord` sum; `admit_and_record`; `admit_against` deleted; `record_declaration` and `record_act` signatures; the three call sites in `apply`; the `AcceptanceAttested` push deleted |
 | `src/design_run/bounds.rs` | one doc reference to `ChangeEvent::ALL` (`:49`) follows the rename to `READABLE` |
+| `src/design_run/refusal.rs` | one new variant, `UnknownChangeEvent { raw }`, for `ChangeEvent`'s `TryFrom`. **A new selector** — the fence widens by one file, declared here rather than discovered at execution (`sec-2`) |
 | `src/design_run/snapshot.rs` | test module only — a legacy-fragment pin for the retired token |
-| `src/design_run/render/mod.rs`, `render/change_row.rs` | expected untouched; the renderer reads `payload_terms`, and a one-token row needs no new handling. In the fence because a rename they do not survive would surface here |
+| `src/design_run/render/mod.rs`, `render/change_row.rs` | expected untouched. `change_row.rs` renders from `row.terms` and names no `ChangeEvent` at all; `mod.rs` names exactly one, `WIDEST_PAYLOAD_EVENT` (`:198`), whose exemplar this slice does not move. In the fence so a change to either reads as a conformance signal rather than a silent edit |
 | `tests/e2e_design_state.rs` | the two roster enumerations re-pointed; one fixture comment corrected; seven new checks |
 
 **The `render` selector narrows.** This slice currently fences
@@ -631,10 +693,12 @@ the snapshot already held.
 2. **`a_checkpoint_act_without_a_disposition_renders_a_change_row`** — the
    sibling `record_act` path, subject `cpa-<kind>`. Named separately because
    `ISS-355` reported one of two and the second was found in scoping.
-3. **`a_disposing_act_renders_both_its_recording_and_its_disposition`** —
-   `DEC-241`. Two rows for one act, `ActRecorded` before `ReviewDisposed`,
-   asserted as an ordered pair rather than as set membership, because the order
-   is the contract.
+3. **`a_disposing_act_renders_both_its_recording_and_its_disposition`** — two
+   rows for one act (`DEC-241`), `ActRecorded` before `ReviewDisposed`
+   (`DEC-238`), asserted as an ordered pair rather than as set membership. The
+   order is the contract, and `sec-3` names why an implementor can invert it:
+   construction order runs opposite to vector order. This check is what catches
+   that.
 4. **`an_acceptance_reports_through_the_shared_act_row`** — the run-level
    `acceptance` field yields `ActRecorded` with subject `cpa-design_accepted` and
    term `act=design_accepted`, and **no** `acceptance_attested` row. This is the
@@ -648,20 +712,20 @@ the snapshot already held.
    diagram draws as a dotted edge; nothing in the type enforces it.
 6. **`no_row_the_ladder_produces_carries_a_non_emittable_event`** — every row in
    `every_event_fixture`'s change log has an event in `EMITTABLE`. This is the
-   converse of check 5 and the answer to `RV-360` `F-2`: the
-   roster array cannot prove that nothing outside it is written, because
-   `Pending`'s constructors take any `ChangeEvent`, so the evidence has to come
+   converse of check 5 and a **partial** answer to `RV-360` `F-2`: the roster
+   array cannot prove that nothing outside it is written, because `Pending`'s
+   constructors take any `ChangeEvent`, so what evidence there is has to come
    from what the writer actually emitted on a path that drives every emittable
    member. It fails if a retired member is still being pushed anywhere the ladder
-   reaches.
+   reaches, and says nothing about a writer path the ladder does not reach.
 7. **`every_readable_event_token_round_trips_through_serde`** — for each
-   `READABLE` member, its `as_str` token and its serde representation agree.
-   `sec-2` explains why this is needed now and was not before: the retirement
-   forces `acceptance_attested` to be written twice, in the `serde(rename)`
-   attribute and in `as_str`, and a serde attribute cannot reference a `const`.
-   Either spelling compiles alone, so without this the failure mode is silent
-   divergence on a compatibility-critical token (`RV-360` `F-4`). No such guard
-   exists for this enum today.
+   `READABLE` member, `TryFrom(Into(event))` returns that member; and the
+   retired `evidence_invalidated` alias resolves to `ActInvalidated`. After
+   `sec-2`'s change the token has one source, so the round trip is true by
+   construction and this is **not** a drift guard. What it guards is what
+   construction does not give for free: the alias arm, and `TryFrom` refusing a
+   token no member spells (`RV-360` `F-4`). No round-trip guard exists for this
+   enum today.
 
 ### New — the retired token still parses
 
@@ -693,11 +757,11 @@ snapshot rather than one row. That is `ISS-315`'s defect class, and 7 rows acros
   wrong after this change.** The fixture's payloads already record acts, so
   `ActRecorded` is driven for free. The comment at `:937-943` names the review
   vocabulary as `finding_raised, finding_disposed, acceptance_attested`, and
-  retiring the third makes that false — while `ActRecorded` arrives from several
-  earlier and later act submissions rather than from the block the comment
-  describes. The behavioural fixture is sufficient; the load-bearing narrative is
-  not, and correcting it is part of this slice's test-file change (`RV-360`
-  `F-6`).
+  retiring the third makes that false — and `ActRecorded` arrives from this
+  block's own run-level `acceptance` (`:950-955`) as well as from act submissions
+  earlier and later in the ladder. The behavioural fixture is sufficient; the
+  load-bearing narrative is not, and correcting it is part of this slice's
+  test-file change (`RV-360` `F-6`).
 
 ### Not a test
 
@@ -714,31 +778,50 @@ the rename must carry it across rather than drop it.
 ## Why nothing else in the suite moves
 
 `DEC-241` says any test asserting an exact row set for the disposing path moves.
-The suite was checked rather than assumed, and the argument has two parts,
-because the first one alone is not true (`RV-360` `F-7`).
+The suite was checked rather than assumed, and it takes three arguments rather
+than one generalisation. Two earlier drafts each offered a single absolute and
+each was false (`RV-360` `F-7`, `F-8`), so nothing below is stated as a rule
+where a per-fixture fact is what carries it.
 
-**Most change-log assertions select by event before asserting**, so a row of a
-different event is invisible to them — including the disposing arm's own
-assertions (`tests/e2e_design_review.rs:1415`, and the `disposition_rows` helper
-at `:1429`), which filter on `ChangeEvent::ReviewDisposed`.
+### Stored-row assertions
+
+**Most select by event before asserting**, so a row of a different event is
+invisible to them — including the disposing arm's own assertions
+(`tests/e2e_design_review.rs:1415`, and the `disposition_rows` helper at
+`:1425`), which filter on `ChangeEvent::ReviewDisposed`.
 
 **Three do not, and they are named rather than covered by the generalisation.**
 `change_log_floor_is_recorded_not_inferred` (`:708-725`) and
 `retention_evicts_oldest_revisions_and_advances_the_floor` (`:1150-1165`) scan
 every row's revision; `within_revision_index_is_candidate_order_not_submission_order`
-(`:786-815`) maps every row without filtering. Each is stable for a reason that
-has to be stated per fixture rather than inferred from event invisibility: none
-of their fixtures records an act, so no new row enters their scan. That is a
-fixture-level fact, and it is the one an implementor must re-check if any of
-those fixtures is later given an act to record.
+(`:786-815`) maps every row without filtering. None of their fixtures records an
+act, so no new row enters their scan. An act reaches a fixture only through
+`agent_declaration`, `checkpoint_act`, or the run-level `acceptance` — the three
+writer-act keys (`submission.rs:765-784`) — and none of those three payloads
+carries one. That is a fixture-level fact, and it is what an implementor must
+re-check if any of those fixtures is later given an act to record.
 
-Two further checks, both clean:
+### Rendered-delta assertions
+
+**An added row is substitutive, not additive**, so `contains`-versus-equality is
+not the property that protects anything here. `ENVELOPE_CHANGE_ROWS` is 10
+(`render/mod.rs:78`) and `changes` cuts by `(revision, index)` descending
+(`render/envelope.rs:1073-1080`), keeping the **newest** rows — so a new
+`ActRecorded` row can push the row an assertion wants out of the window. Each
+assertion over rendered delta content is therefore named with its own reason:
+
+| assertion | why it is stable |
+|---|---|
+| `change_log_floor_is_recorded_not_inferred` (`:730-735`) | wants `inq-late`, the newest row; fixture records no act |
+| `distinct_ids_sharing_a_long_prefix_render_distinguishably` (`:1291-1313`) | two rows in the whole log, no acts; its second half reads a one-revision delta |
+| `elided_reason_carries_an_explicit_marker` (`:1253-1269`) | runs on `every_event_fixture`, which **does** record acts — stable only because the stage-move row it wants is the newest |
+| `normal_envelope_stays_within_named_limits_on_a_large_run` (`e2e_design_projection.rs:301`, `:312`) | asserts cap saturation and a byte ceiling, never row identity. `large_run` records an act (`:237`); both hold under more rows because the eviction ladder, not the headroom, is what makes the ceiling true (`render/mod.rs:126-134`) |
+| `locked_run_emits_no_contract_block` (`e2e_design_review.rs:734`, `:747`) | reads contract-block lines, not delta rows |
+
+### Two further checks, both clean
 
 - **No test indexes rows positionally.** There is no `rows[0]` or `since(0)[n]`
   anywhere in the design e2e suite.
-- **Every stdout assertion is `contains`, not equality** — checked across
-  `e2e_design_checkpoint`, `_review`, `_runbook`, `_delegation`, `_materialise`
-  and `_projection`. An added rendered line is additive, not breaking.
 - **The one exact row-count assertion is about an abandoned write** and stays
   true unchanged (`sec-1`).
 
@@ -754,11 +837,15 @@ quiet edit outside the fence.
   `src/commands/design.rs` is one. This design needs no change there: the shell
   already extends its output with every row in `Applied::rows`, which is why the
   repair is entirely engine-side.
-- **`SL-251` has landed** (15 commits, `refs/capsule/d/heads/work`). Its diff was
-  checked against this slice's selectors rather than argued from the file list
-  `R4` anticipated: it touches ten files under `src/`, **none** of which is one of
-  this slice's specific selectors, and no file under `tests/` at all. The only
-  intersection was the `render/**` glob, narrowed above.
+- **`SL-251` has landed, and it is on `edge`.** `eca2c9a11` is an ancestor of the
+  branch this design is read against, so there is no second tree to reconcile and
+  every source anchor here is an `edge` anchor. An earlier revision carried
+  `commands/design.rs` line numbers for both trees; that device is retired rather
+  than updated (`RV-360` `F-9`). Its diff was checked against this slice's
+  selectors rather than argued from the file list `R4` anticipated: it touches ten
+  files under `src/`, **none** of which is one of this slice's selectors, and no
+  file under `tests/` at all. The only intersection was the `render/**` glob,
+  narrowed above.
 - **The `SL-251` coordination note has a third site, in shipped source.** The
   scope tracks that slice's `design.md` ¶ at 422–428 and its ledger row at 2289.
   The capsule landed a third at `payload_contract.rs:501`, on
@@ -769,9 +856,12 @@ quiet edit outside the fence.
   the conclusion survives, because a misspelt key rides *inside* an otherwise-valid
   struct and an `ActRecorded` row says nothing about a key dropped within it. Only
   the unqualified premise goes false, and only for act-recording submissions.
-- **`SL-238` is disjoint** and was checked, not assumed: its fourteen selectors
-  are backlog, priority and command-tier paths with no member in common with this
-  slice's six. `ISS-355` appears in its design once, as prose illustrating a
+- **`SL-238` is disjoint** and was checked, not assumed: its selectors are
+  backlog, priority and command-tier paths, and the intersection with this
+  slice's is empty. Neither list's size is restated here — both are read from
+  `doctrine slice selector list`, and this slice's moved twice inside one
+  revision (the `render` narrowing, then `refusal.rs`), so a count in prose would
+  have gone stale twice over. `ISS-355` appears in its design once, as prose illustrating a
   footer line format, and its fixtures pin classes rather than corpus counts — so
   closing `ISS-355` costs it nothing. `STD-003` was minted from that slice, which
   strengthens `DEC-240` rather than threatening it: the standard's own subject is
@@ -790,11 +880,27 @@ the mapping is not one-to-one, so it is stated:
 |---|---|
 | an apply that records an act emits a row naming its subject and kind | checks 1–4 |
 | every emittable member is driven by the ladder | `every_material_event_kind_persists_a_change_row` over `EMITTABLE` |
-| retired vocabulary is readable-only and carries no emission obligation | check 5 (roster membership), check 6 (nothing outside `EMITTABLE` is actually emitted), and the legacy-fragment round-trip (it still parses) |
+| retired vocabulary is readable-only and carries no emission obligation | check 5 (roster membership) and the legacy-fragment round-trip (it still parses) |
 
-The third row is three checks rather than one because the criterion has two
-halves — *readable* and *carries no emission obligation* — and the roster array
-alone evidences neither (`sec-2`, `RV-360` `F-2`).
+The third criterion is a **relieving** clause, and reading it as a positive proof
+obligation is the mistake an earlier revision made. `REQ-478`'s own statement says
+completeness is stated over the emittable roster "because `DEC-239` splits the two
+— the readable half exists to keep historical snapshots parsing, and holding it to
+an emission obligation would force a live path for vocabulary that is deliberately
+dead." So the criterion asks that the retired member be **exempt** from criterion
+2's exhaustiveness demand, not that emission be proven impossible. Check 5 puts it
+in `READABLE` and out of `EMITTABLE`; criterion 2's roster test quantifies over
+`EMITTABLE` and therefore never demands it; the legacy fragment evidences the
+readable half. That is the whole criterion.
+
+**Check 6 is defence in depth, not discharge** (`RV-360` `F-2`). It fails if a
+retired member is still being pushed anywhere the `every_event_fixture` ladder
+reaches, which is worth having and is strictly more than the roster array proves.
+It is not a proof that nothing outside `EMITTABLE` is written: `Pending::about`
+and `Pending::run_wide` take any `ChangeEvent`, and a future writer path the
+ladder never traverses stays invisible to it. `DEC-239` weighed type enforcement
+and declined it; that residual is named here at its true size rather than
+absorbed into a criterion that never asked for it.
 
 **The coverage cell must bind a runnable check, not just a mode.** An earlier
 draft gave the recipe as `--mode VT` alone. That does not record a `VT` check at
@@ -802,7 +908,8 @@ all: `CoverageRecordArgs::has_check` (`src/coverage_store.rs:289-300`) returns
 false when no alias, command, extra-arg or matcher is supplied, so `record` takes
 the attestation branch (`:132-139`), stores the default `Verified` status with
 today's date, and the verifier then treats a check-less entry as backfill and
-leaves it alone (`src/coverage_verify.rs:125-135`). The result reads as verified
+leaves it alone — the branch is the `let … else` at `src/coverage_verify.rs:156-162`,
+whose guarantee `run`'s contract doc states in prose at `:125-135`. The result reads as verified
 `VT` with no test bound to it — the same empty claim this slice exists to close
 (`RV-360` `F-3`). The recipe is therefore:
 

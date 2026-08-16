@@ -25,7 +25,7 @@ integration rather than assuming.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 36, stage `reviewing`) · 1e495e88c
+fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 42, stage `reviewing`)
 
 ### Produced
 
@@ -35,8 +35,16 @@ fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 36, stage `reviewing`)
 - `REQ-478` (`FR-009` under SPEC-029) — authored `pending`; coverage cell
   deferred until the e2e checks exist.
 - `ISS-367`, `IMP-437` — both sequenced `after SL-256`.
-- `RV-360` — external adversarial pass over all four sections; 7 findings raised
-  by codex, 7 disposed. `RV-359` was empty and is committed as-is.
+- `RV-360` — external adversarial pass over all four sections. **14 findings, all
+  disposed.** Codex raised `F-1`…`F-7`, verified five of its own dispositions and
+  contested `F-2` and `F-4`; a responder verification pass produced eight further
+  defects which codex raised as `F-8`…`F-14`. `RV-359` was empty and is committed
+  as-is.
+- `DEC-239` carries an appended correction: the retirement's pinning mechanism
+  moves from `#[serde(rename)]` to `#[serde(try_from/into)]` single-sourced
+  through `as_str`. Substance unchanged; `STD-001` satisfied rather than excepted.
+- `src/design_run/refusal.rs` added as an eighth selector — `ChangeEvent`'s
+  `TryFrom` needs one new variant. Fence widening declared, not discovered.
 - `design.md` `sec-1`…`sec-4` drafted, revised and materialised (`9fe802b8f`,
   `1e495e88c`). Scope and selectors reconciled in the same commit.
 - `research/research.md` + `raw/` — two-thread round, verification pass appended.
@@ -51,12 +59,37 @@ fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 36, stage `reviewing`)
   § Verification pass errata); adding an inquiry node after the exploring gate
   costs two acts to restore, one of them the user's; an argument from absence
   needs enumeration, not a generalisation (`RV-360` `F-7`).
+- **HIGH — grep line numbers from the Bash tool are intermittently wrong.** The
+  same `grep -n` returned `1081/1086/1091` early in a session and `1094/1099/1104`
+  later for the same three call expressions in `src/design_run/tests.rs`; the Read
+  tool agrees with the second. Multi-line `sed` ranges come back with lines elided,
+  so content cannot be aligned to a range's numbers either. This corrupted a whole
+  verification pass and was caught only because an external reviewer's anchors
+  disagreed. Extends `mem.fact.rtk.output-filter-rewrites-identifiers` from
+  identifiers to line numbers, and adds that it is **non-deterministic**. Ground
+  truth is the Read tool or `awk '{print NR}'` cross-checked against it.
+- An acceptance criterion can be a **relieving** clause rather than a positive
+  proof obligation. `REQ-478`'s third criterion exempts retired vocabulary from
+  the emission obligation; the design read it as demanding proof that emission
+  cannot occur, imported a burden it could not discharge, and a reviewer correctly
+  found the shortfall. Read the requirement's own rationale before restating a
+  criterion in a design's words (`RV-360` `F-2`).
+- `#[serde(try_from = "String", into = "String")]` is this repo's idiom for
+  single-sourcing a token enum's wire spelling through one `as_str`
+  (`ids.rs:131`, `attestation.rs:935`, `change_log.rs:387`), and `Refusal`'s
+  `Display` doc names serde's `try_from` as the boundary it exists to cross. A
+  serde attribute cannot take a `const`; this is the way round that (`RV-360`
+  `F-4`).
 
 ### Open
 
 - **Four sections outstanding review, and the run's `review_pass` is STALE** —
-  the rev-35 rewrite moved every fingerprint. Policy is `human-only`.
-- `RV-360` is `await=raiser`. Seven dispositions stand answered, unverified.
+  every fingerprint moved again at rev 37/39/41. Policy is `human-only`, so the
+  attestations and the review-pass disposition are the user's.
+- `RV-360` is `await=raiser` with all 14 findings answered. `F-2` is answered by
+  a **contest of the contest** — the ruling is that `REQ-478` criterion 3 never
+  asked for the proof the reviewer required — so it is the one disposition most
+  likely to come back.
 - `IMP-437` — the emit seam is a convention, not a guarantee; needs its own
   scope because the fix reaches `fixture.rs` and `SL-251`'s `tests.rs`.
 - `ISS-367` — `live_acts` blind to same-kind replacement. `sec-1`/`sec-3` state
