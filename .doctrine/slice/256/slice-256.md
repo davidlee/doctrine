@@ -163,10 +163,13 @@ extends the output with every row in `Applied::rows`.
   standing, that is a **new REQ minted under SPEC-029** — additive authoring,
   still not a REV. Only retiring or renaming an existing member would force one,
   and that is a non-goal. Note also that **STD-003** (*no silent skip*) misses by
-  its wording — it governs degraded *reads* of authored data, not silent
-  *emission* — while being the closest thing in the corpus to a principle that
-  covers `ISS-355`. Design decides whether the durable statement owed is a new
-  REQ or a widening of STD-003.
+  its wording — its statement scopes to "a read of authored corpus data [that]
+  fails or degrades", and `ISS-355` is emission on a *successful* path. But its
+  second prohibition is a near-exact fit in spirit: *"No empty success. A check
+  or report that returns 'nothing found' because it could not read the corpus is
+  asserting health it did not observe… where the empty result is the claim."*
+  Only the trailing clause keeps `ISS-355` out. Design decides whether the
+  durable statement owed is a new REQ under SPEC-029 or a widening of STD-003.
 
 ## Open Questions
 
