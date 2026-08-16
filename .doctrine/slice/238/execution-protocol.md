@@ -1,0 +1,213 @@
+# SL-238 execution protocol — the `DEC-242` seats, as practised
+
+**Authored, committed, binding on PHASE-02…PHASE-08.** Read before `/phase-plan`.
+
+`DEC-242` decides *that* implementation runs through three seats and *why*. It
+does not say how to operate them — it names the machinery gap instead
+(*"separate red and green agents are new machinery … and need a subagent
+definition"*, and `IMP-434` is still open). PHASE-01 ran the seats without that
+machinery and this file is the result: what worked, what it cost, and what the
+next agent should do differently.
+
+Nothing here supersedes `DEC-242`, `design.md` or `plan.toml`. Where this file
+and the design disagree, the design wins and the disagreement is a finding.
+
+---
+
+## 1. The mechanism that worked
+
+**One resumable subagent for the whole phase, not one per task.**
+
+- Spawn a `general-purpose` subagent once, at the start of the phase, with the
+  full blind brief (§2). The built-in `Explore` and `Plan` agents are one-shot
+  and return no agent id — they cannot be resumed, so they are unusable here.
+- Drive it with one `SendMessage` per task, addressed to the agent id from the
+  spawn result. A completed subagent auto-resumes with its whole transcript; no
+  re-orientation, no re-reading of the design.
+- `SendMessage` needs no environment variable and no agent-teams enablement.
+  Only structured team-protocol messages do (`docs/claude/subagents.md:958`).
+
+PHASE-01 cost: **one spawn, four messages, ~215k subagent tokens**, across T1,
+T2, T4 and T3. Per-task spawning would have paid the design-reading cost four
+times over and lost the accumulated test idiom between tasks.
+
+The seat stays warm across a phase and dies with the session. That is the real
+constraint on phase shape: **finish a phase in one sitting, or expect to pay the
+spawn again.**
+
+### The blindness is a property of what you send it, not of a sandbox
+
+There is no enforcement. The seat is blind because its brief forbids four paths
+and because the orchestrator never pastes prototype content into a message.
+Both halves are yours to keep.
+
+Order is what makes the second half honest: the blind seat writes a task's red
+tests **before** the code author writes green, so it never has cause to look at
+an implementation. If a red test later needs repair, relay the *failure
+symptom*, never the code.
+
+---
+
+## 2. The blind brief — reusable, four prohibitions
+
+Every spawn and every resume carries these. They are the whole arrangement.
+
+Do not read:
+
+1. anything under `.worktrees/` — in particular `.worktrees/proto-SL-238-types`;
+2. any git object on branch `proto/SL-238-types`;
+3. `.doctrine/slice/238/handover.md` — it describes the prototype;
+4. `.doctrine/state/slice/238/phases/phase-NN.md` — the phase sheet is written by
+   a planner who *has* read the prototype.
+
+Everything else in the repo is open. Point 4 is the one most easily forgotten and
+the one that leaks most quietly.
+
+Also give it, every time:
+
+- **its sources of truth** — `design.md` (§7 names the assertions, §3 specifies
+  behaviour, §8 lists files) and `plan.toml`'s `VT-` rows, which are the spec;
+- **the grep hazard** (§5). It bites test authors hardest, because a fixture
+  built on a mangled identifier fails for a reason that looks like a design
+  disagreement;
+- **`cargo test --bin doctrine <filter>`** — this project's focused run, never
+  `--lib`;
+- **the standing instruction**: if the design does not state an output string, a
+  type shape or a behaviour, *report it, do not infer it*. That is `DEC-242`'s
+  intended signal, and it is where all the value came from.
+
+---
+
+## 3. What the arrangement actually caught
+
+Four rounds, three defects that had survived a locked design run, a two-round
+external adversarial review (`RV-358`), and a type prototype:
+
+| | what | severity |
+|---|---|---|
+| **F-3** | §3 rule 2 / §7 promise `VT-5` catches an *omitted* derived-status kind. An equality pin catches addition only. | harmless — the strict read fails loudly anyway. Prose fix at reconcile. |
+| **VT-2 contradiction** | §7's fixture (*"no toml at all"*) is unreachable given §3's own arm table. | **real.** Built the way §7 implied, a corrupt `RV` returns `Ok(Unavailable)` — an `STD-003` violation in the slice whose purpose is removing a surface that stated unchecked claims. |
+| **`VT-3`'s hole** | `VT-3` fixtures only the common arm, leaving the two arms where laundering was actually *possible* unconstrained. | the seat wrote the missing test unprompted. |
+
+The pattern is worth naming, because it predicts where the next one will be:
+**all three sit at the seam between a design's prose rule and the criterion meant
+to enforce it.** Prose review reads both and sees agreement; only someone
+obliged to *write the assertion* discovers the criterion cannot carry the claim.
+
+Two further returns that are not defects:
+
+- The seat drew boundaries around its own tests rather than letting them look
+  stronger than they are — `VT-6` cannot distinguish delegation from a duplicated
+  inline arm; `VT-7` pins non-independence, not parse *count*. Both fall to
+  `VA-1`'s grep. Keeping those honest matters here specifically, because `VA-1`
+  is grep-shaped and grep in this jail lies (§5).
+- Given a choice, it quantified over a kind *set* rather than naming kinds — so a
+  kind added later is already covered. Ask for that when the criterion allows it.
+
+---
+
+## 4. Refinements for PHASE-02 onward
+
+**R1 — plan the phase from a context that has not read the prototype, and the
+second seat disappears.** The planner is what got contaminated in PHASE-01;
+`DEC-242` permits it but does not require it. A planner who never opens the fork
+can author its own red suite, and the phase runs one-seat. The trade is real: as
+planner-with-the-fork, PHASE-01 caught the prototype's stale `engine (17)` header
+and its total absence of lint attributes *before* they became implementation
+bugs. Decide per phase. **PHASE-03 is the natural place to try it** — §5 is
+greenfield, there is no prototype code for it at all, so nothing is given up.
+
+**R2 — hand the seat a task, not a criterion.** Messages that named the criterion
+*and why it carries weight* produced better assertions than messages that quoted
+`plan.toml`. The `VT-4` brief said *"`Terminal` is the one class the footer
+suppresses — this is the path by which an open prerequisite vanishes"*, and got
+back an assertion quantified over all 24 kinds plus a positive control. Quoting
+the row alone would have got one `assert_ne!`.
+
+**R3 — correct the seat's model when it drifts, immediately.** After T2 it
+concluded "every arm performs the same lenient title read". Half right, and it
+would have written `VT-7` expecting `Ok` where the answer is `Err`. One sentence
+in the next brief fixed it. Read the seat's closing notes for model errors, not
+just its findings.
+
+**R4 — batch a task's red suite with the green that consumes it when staging
+would otherwise need a throwaway lint attribute.** T2 and T4 landed as one commit
+because `read`/`Authored` had no production consumer until the overlay; splitting
+them would have added and removed a `dead_code` attribute inside one phase. Take
+both red suites first, then one green. This is also the commit boundary the
+design implies — §3 treats the reader and its overlay as one collapse.
+
+**R5 — when a criterion is wrong, amend it in `plan.toml` at the moment you find
+it.** Deferring costs more than the edit: anyone reading the plan meanwhile sees
+a criterion the code deliberately contradicts, and the audit has to reconcile a
+`VT` that never passed as written. Criteria **ids are immutable** — replace the
+text in place, keep the id, put the reasoning inline (see PHASE-01 `VT-2`). The
+`design.md` half cannot be edited — the run is locked at rev 63 — so it goes to
+`notes.md` `### Open` as a reconcile action. Both halves, every time.
+
+**R6 — put findings in `notes.md`, not the phase sheet.** The sheet is
+gitignored and `rm -rf`-able. PHASE-01's two reconcile actions live in
+`notes.md ### Open`; the sheet holds only the pointer.
+
+---
+
+## 5. Environment hazards that bit, or nearly did
+
+**Proxied grep rewrites identifiers *and* line numbers, silently and
+non-deterministically** (`mem.fact.rtk.output-filter-rewrites-identifiers`).
+`fn status_and_title_for` has been observed rendering as `fn status_and_n`. The
+same `grep -n` returned different line numbers for an unchanged file within one
+session. Multi-line `sed -n 'A,Bp'` *elides* lines. Single-line `sed -n 'Np'` and
+the `Read` tool are reliable.
+
+Consequences to work around, not just know:
+
+- Never quote an identifier, signature or line number from grep. Locate with it;
+  confirm with `Read` or single-line `sed`.
+- `VA-1` is a grep-shaped criterion. Run it **with a positive control** — a
+  search that must return hits — so an empty result is a demonstrated absence
+  rather than a broken search.
+- Every `file:line` in this slice's PHASE-01 records was reconfirmed that way.
+
+**Shell working directory persists between tool calls.** A `cd` into the
+prototype worktree silently redirected three later "production" greps in
+PHASE-01. Use absolute paths, or `git -C`.
+
+**Two lint asymmetries, both measured, neither predictable:**
+
+- an `enum` deriving `PartialEq`/`Eq` is *live* even with no constructor — no
+  `dead_code` attribute needed;
+- a plain `fn` with no production caller needs
+  `#[cfg_attr(not(test), expect(dead_code, reason = "…"))]`, and it self-clears.
+
+Add the item bare, compile, let rustc name the set. Under `warnings = "deny"`
+that costs one cycle and is never wrong. Three prior slices (SL-244, SL-248,
+SL-249) recorded predictions here that were wrong.
+
+**The layering gate is blind to a module with no edges.** A new root module
+declared in `main.rs` with no `use` lines passes the entire suite. It reports
+`Unclassified` only once edges land. Do not read "gate green" as "classified".
+
+---
+
+## 6. The loop, concretely
+
+```
+/phase-plan PHASE-NN            # fill the runtime sheet; confirm EN criteria
+doctrine slice phase 238 PHASE-NN --status in_progress
+  spawn blind seat once (§2)  →  per task: SendMessage red brief
+                              →  verify red is for the right reason
+                              →  orchestrator writes green
+                              →  cargo fmt; just gate
+                              →  path-limited commit (git commit <paths> -F -)
+doctrine slice phase 238 PHASE-NN --status completed --note "…"
+/harvest                        # notes.md ## Harvest, then this file if the protocol moved
+```
+
+`just check` for the inner loop, `just gate` before every commit,
+`doctrine check gate` at close. **Path-limit the commit itself**, not just the
+`add` — agents share one index.
+
+Phase status is runtime state and the flip is not optional: PHASE-01 was executed
+before being flipped to `in_progress`, and both transitions had to be recorded
+retrospectively. Flip first.

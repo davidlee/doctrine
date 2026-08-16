@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00a38-5139-76d2-8f1a-dd1a00903793"
+recorded_at = "2026-08-16T10:57:38.106023774Z"
+kind = "friction"
+summary = "/phase-plan: doctrine slice notes <ID> is a WRITER, not a reader — third instance of the writer-verb-looks-like-a-reader class"
+detail = "Ran 'doctrine slice notes SL-238' expecting to read the slice's notes during /phase-plan orientation; it refused with 'Refusing to overwrite existing .doctrine/slice/238/notes.md'. Same class already recorded for 'slice plan' and 'slice phase' (mem_019facc24ac576e0a4d9ace5b2eeb12f: they are writers, no read-back verb). 'notes' is a third member. Cost: one wasted call plus the ambiguity of a refusal message that reads like an error rather than 'wrong verb'. A reader would be 'doctrine slice show --notes' or similar; absent that, the memory needs extending to name 'notes' so the next agent does not rediscover it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

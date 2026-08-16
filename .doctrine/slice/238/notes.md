@@ -160,7 +160,7 @@ Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-16 · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · 4148b441b, clean but for untracked `ISS-368`
+fresh-as-of: 2026-08-16 · **PHASE-01 completed** (1 of 8) · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `13808f354`, clean
 
 ### Produced
 
@@ -208,6 +208,23 @@ fresh-as-of: 2026-08-16 · design/**locked** (run `dr-01a00475`, rev 63; `RV-358
   `RFC-026` `E8.7`).
 - **No code written. `doctrine check gate` not run and not owed** — this pass
   touched only `.doctrine/` prose.
+
+#### PHASE-01 (2026-08-16) — `8e0c4fbdd`, `843fba6f3`, `8cda64e97`, `13808f354`
+
+- `src/authored_status.rs` — the sole per-kind status reader, engine tier. Three
+  arms static on `kinds::STATUS_LESS` / `DERIVED_STATUS`; absorbed
+  `catalog::scan::title_for`. `catalog::scan::status_and_title_for` is now the
+  command-tier overlay over it; its two inline `"REC"`/`"RV"` arms are gone.
+- `kinds::{STATUS_LESS, DERIVED_STATUS, AuthoredStatus}`;
+  `priority::partition::authored_class`; `layering.toml` engine row (18 now).
+- `execution-protocol.md` — **new authored artefact**, the `DEC-242` three-seat
+  protocol as practised plus its findings. Binds PHASE-02…08. Read it before
+  `/phase-plan`.
+- `plan.toml` PHASE-01 `VT-2` **amended** (id unchanged, text replaced with the
+  reasoning inline) — see Open for the design-text half.
+- All eight PHASE-01 VT/VA criteria satisfied; `just gate` green (117 suites,
+  clippy zero warnings); `catalog`/`search`/`map` green **unmodified** (EX-9);
+  tangle baseline unmoved at 76; `src/meta.rs` unmodified (EX-8, diff-verified).
 - **Type prototype, two rounds** (fork `proto/SL-238-types`, uncommitted,
   disposable). Round 1 found five issues, three accepted and landed as revisions
   58/59. Round 2 proved all three and found **no new design defects** — the rank
@@ -241,6 +258,17 @@ fresh-as-of: 2026-08-16 · design/**locked** (run `dr-01a00475`, rev 63; `RV-358
 
 ### Learned
 
+- `mem.fact.layering.gate-blind-to-an-edgeless-module` — **PHASE-01, measured.**
+  A new root module declared in `main.rs` but carrying no `use` lines passes the
+  whole `tests/architecture_layering.rs` suite with no `Unclassified` finding.
+  The gate reports it only once it acquires edges. So "gate green" does not mean
+  "classified", and a phase that lands a module shell and defers its
+  `layering.toml` row will look correct until the next phase turns red.
+- `mem.pattern.lint.dead-code-derives-count-as-reads` — **confirmed twice in one
+  phase, in opposite directions.** `AuthoredStatus` needed no staging attribute
+  (its `PartialEq`/`Eq` derives are a live use of the enum itself, not merely of
+  its fields); `authored_class`, a plain `fn`, needed one and it is fulfilled.
+  One task apart, same phase. Compile, do not reason.
 - `mem.pattern.layering.direction-is-not-cohesion` — a gate-clean downward edge
   can still be the wrong siting; read the target module's charter.
 - `mem.fact.rtk.output-filter-rewrites-identifiers` — proxied grep silently

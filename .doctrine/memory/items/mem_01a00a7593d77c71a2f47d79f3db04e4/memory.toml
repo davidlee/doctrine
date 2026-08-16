@@ -1,0 +1,42 @@
+memory_uid = "mem_01a00a7593d77c71a2f47d79f3db04e4"
+memory_key = "mem.fact.layering.gate-blind-to-an-edgeless-module"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "ADR-001 layering gate is blind to a module with no edges"
+summary = "A new root module declared in main.rs with no use lines passes the whole layering suite; Unclassified fires only once it acquires edges"
+created = "2026-08-16"
+updated = "2026-08-16"
+
+[scope]
+paths = [".doctrine/adr/001/", "tests/architecture_layering.rs", "src/"]
+globs = []
+commands = []
+tags = ["layering", "adr-001", "footgun", "phasing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c17dc5aa89896edb11be88e63885b9054eed9700"
+ref_name = "refs/heads/edge"
+checkout_state_id = "92e8ef4675f78635d759ad6e9edab6a3f208fe28f1b6ebf87f1074b25ff3872c"
+base_commit = "0ebbd11788bee4b023813e0122b9a283ad12b673"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
