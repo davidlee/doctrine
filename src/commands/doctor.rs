@@ -28,6 +28,14 @@ pub(crate) fn run_doctor(
     // #2 — Relation Integrity (Error)
     let rel_lines = crate::relation_graph::validate_relations(&root)?;
     findings.extend(Finding::from_lines(Category::RelationIntegrity, rel_lines));
+    // SL-238 PHASE-03 (design §5): authored `needs`/`after` refs that name
+    // nothing. `RelationIntegrity` is REUSED, not extended with a new variant —
+    // it is already the Error-severity home for target-resolution failures, and
+    // a new `Category` touches six sites with a known silent-drop failure mode.
+    findings.extend(Finding::from_lines(
+        Category::RelationIntegrity,
+        crate::backlog::dep_seq_ref_findings(&root),
+    ));
 
     // #3 — Spec Foreign Key (Error)
     let fk_lines = crate::spec::spec_fk_findings(&root);

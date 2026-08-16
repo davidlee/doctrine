@@ -2358,6 +2358,146 @@ use crate::lifecycle::is_transition_terminal;
 // SL-176 PHASE-03: RelationLabel and targets_for no longer used here
 // (fulfils-inbound replaces Slices outbound).
 
+// ---------------------------------------------------------------------------
+// SL-238 PHASE-03 — authored refs that name nothing (design §5)
+// ---------------------------------------------------------------------------
+
+/// A backlog entity that exists but could not be read. `reason` is path-free by
+/// construction — see [`read_failure_reason`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ReadFailure {
+    entity: String,
+    reason: String,
+}
+
+/// The reason text for an unreadable item. Built from the **root cause**, never
+/// `err.to_string()`: the outermost anyhow context interpolates `path.display()`
+/// (`read_item`), and an absolute path must not reach a golden-tested finding —
+/// the same rule §5 states for the resolver's dangling message.
+///
+/// NB: `read_item` also reads the sibling `backlog-NNN.md`, so a missing prose
+/// file renders under the toml's name. The toml is the failure mode §5 shows and
+/// the one that occurs in practice; the root cause disambiguates either way.
+fn read_failure_reason(err: &anyhow::Error, id: u32) -> String {
+    format!(
+        "cannot read {BACKLOG_STEM}-{id:03}.toml: {}",
+        err.root_cause()
+    )
+}
+
+/// The DIAGNOSTIC read: never abandons the walk. Every id under every kind tree
+/// is attempted; a failure becomes a [`ReadFailure`] beside the items that did
+/// parse.
+///
+/// [`read_all`]'s fail-fast contract is correct for the MUTATING verbs — never
+/// write against a corpus you could not fully read — and wrong for a report,
+/// which is why this is a second named reader and not a change to the first.
+/// `STD-003` requires both halves: **tolerate** (the walk continues) and
+/// **disclose** (the failure is named, never silently dropped).
+///
+/// A missing kind tree is still the empty set — `entity::scan_ids`'s C2
+/// total-function tolerance, which a virgin repo depends on.
+fn read_all_tolerant(root: &Path) -> (Vec<BacklogItem>, Vec<ReadFailure>) {
+    let mut items = Vec::new();
+    let mut failures = Vec::new();
+    for item_kind in ItemKind::ALL {
+        let tree = root.join(item_kind.kind().dir);
+        let ids = match entity::scan_ids(&tree) {
+            Ok(ids) => ids,
+            // Not a missing tree (that reads as empty) but an unreadable one.
+            // Disclosed rather than skipped, on the same STD-003 terms.
+            Err(e) => {
+                failures.push(ReadFailure {
+                    entity: item_kind.prefix().to_string(),
+                    reason: format!(
+                        "cannot scan the {} tree: {}",
+                        item_kind.as_str(),
+                        e.root_cause()
+                    ),
+                });
+                continue;
+            }
+        };
+        for id in ids {
+            match read_item(root, item_kind, id) {
+                Ok(item) => items.push(item),
+                Err(e) => failures.push(ReadFailure {
+                    entity: item_kind.canonical_id(id),
+                    reason: read_failure_reason(&e, id),
+                }),
+            }
+        }
+    }
+    (items, failures)
+}
+
+/// Re-classify a resolution failure into one of exactly two path-free reasons.
+///
+/// The resolver is the oracle for the **verdict**, not for the **wording**:
+/// `parse_resolvable_ref`'s own dangling message interpolates `dir.display()`,
+/// so folding it verbatim into a finding would put a machine-specific path into
+/// golden-tested, user-facing output. `parse_canonical_ref` is pure and
+/// path-free — failing means *not a canonical ref*, succeeding means the shape
+/// was fine and the entity is absent.
+fn ref_failure_reason(reference: &str) -> &'static str {
+    if crate::kinds::parse_canonical_ref(reference).is_ok() {
+        "no such entity"
+    } else {
+        "not a canonical ref"
+    }
+}
+
+/// Every authored `needs`/`after` ref on every backlog item, checked for
+/// resolution. Lines rather than `Finding`s — `run_doctor` wraps them in the
+/// existing `RelationIntegrity` category, the same hand-back shape
+/// `relation_graph::validate_relations` already uses. (`lifecycle_findings`, the
+/// siting precedent beside it, returns `Finding`s; the shapes differ because the
+/// categories do.)
+///
+/// Covers **every** item including terminal ones — `project` admits only live
+/// items as nodes, so the footer structurally cannot see a broken ref on a closed
+/// issue, and it is still broken data. **Both axes, undeduplicated**: the same bad
+/// ref on `needs` and `after` is two authored facts needing two repairs.
+/// **Resolution only** — a ref that resolves is not further judged here, even if
+/// its kind is one the authoring gate would refuse; admissibility is a different
+/// claim (§9 follow-up).
+///
+/// What this reports and what authoring refuses cannot drift apart:
+/// `parse_resolvable_ref` is the same function the authoring gate resolves
+/// through — one resolver, both directions.
+pub(crate) fn dep_seq_ref_findings(root: &Path) -> Vec<String> {
+    let (items, failures) = read_all_tolerant(root);
+    let mut lines = Vec::new();
+    for item in &items {
+        let dependent = item.kind.canonical_id(item.id);
+        let needs = item
+            .relationships
+            .needs
+            .iter()
+            .map(|r| ("needs", r.as_str()));
+        let after = item
+            .relationships
+            .after
+            .iter()
+            .map(|e| ("after", e.to.as_str()));
+        for (axis, reference) in needs.chain(after) {
+            if crate::kinds::parse_resolvable_ref(root, reference).is_err() {
+                lines.push(format!(
+                    "{dependent} {axis} `{reference}` — {}",
+                    ref_failure_reason(reference)
+                ));
+            }
+        }
+    }
+    // Both halves land as findings, in the same category and on the same channel.
+    lines.extend(
+        failures
+            .iter()
+            .map(|f| format!("{} — {}", f.entity, f.reason)),
+    );
+    lines
+}
+
 /// Flag non-terminal backlog items whose linked slices are ALL terminal.
 ///
 /// For each open (non-terminal) backlog item that links to at least one slice,
@@ -5980,6 +6120,244 @@ tags = []
             ids(&out),
             vec!["ISS-001", "ISS-002"],
             "empty --needs is a noop: {out}"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // SL-238 PHASE-03 — the doctor check: authored refs that name nothing
+    // (design.md §5). Two surfaces: `read_all_tolerant` (the diagnostic
+    // reader) and `dep_seq_ref_findings` (the check itself).
+    // ------------------------------------------------------------------
+
+    /// Seed an item carrying dep/sequence refs. The refs are authored verbatim
+    /// through the shared fixture seam, so a deliberately broken one survives to
+    /// the reader instead of being canonicalised on the way in.
+    fn seed_refs(
+        root: &Path,
+        kind: ItemKind,
+        id: u32,
+        status: &str,
+        needs: &[&str],
+        after: &[&str],
+    ) {
+        let after_edges: Vec<AfterLit<'_>> =
+            after.iter().map(|to| AfterLit { to, rank: 0 }).collect();
+        write_fixture(
+            root,
+            Fixture {
+                kind,
+                id,
+                slug: "a",
+                title: "Alpha",
+                status,
+                resolution: "",
+                tags: &[],
+                facet: None,
+                rels: Some(RelLit {
+                    slices: &[],
+                    specs: &[],
+                    needs,
+                    after: &after_edges,
+                    triggers: &[],
+                }),
+            },
+        );
+    }
+
+    /// Author an item whose `backlog-NNN.toml` will not parse. `write_fixture`
+    /// only emits valid TOML, so the malformed case is written directly.
+    fn seed_unreadable_item(root: &Path, kind: ItemKind, id: u32) {
+        let name = format!("{id:03}");
+        let dir = root.join(kind.kind().dir).join(&name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(format!("backlog-{name}.toml")),
+            "id = \ntitle = \n",
+        )
+        .unwrap();
+        std::fs::write(dir.join(format!("backlog-{name}.md")), "# broken\n").unwrap();
+    }
+
+    // --- VT-5: STD-003's disclose half ---
+
+    #[test]
+    fn read_all_tolerant_discloses_a_read_failure_instead_of_reporting_clean() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_unreadable_item(root, ItemKind::Issue, 1);
+
+        let (items, failures) = read_all_tolerant(root);
+        assert!(items.is_empty(), "nothing parsed");
+        assert_eq!(failures.len(), 1, "the unreadable item is a ReadFailure");
+        assert_eq!(failures[0].entity, "ISS-001");
+        assert!(
+            failures[0].reason.contains("cannot read"),
+            "reason names the failure: {}",
+            failures[0].reason
+        );
+
+        // The finding reaches the check's output, not just the reader.
+        let findings = dep_seq_ref_findings(root);
+        assert!(
+            findings.iter().any(|l| l.contains("cannot read")),
+            "a read failure is a finding: {findings:?}"
+        );
+
+        // The contrast this reader exists for: `lifecycle_findings` degrades to
+        // an empty Vec over the same corpus, asserting health it never observed.
+        assert!(
+            lifecycle_findings(root).is_empty(),
+            "precondition: the incumbent check reports clean here"
+        );
+    }
+
+    // --- VT-6: STD-003's tolerate half ---
+
+    #[test]
+    fn read_all_tolerant_names_the_unreadable_item_and_still_checks_its_siblings() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // The unreadable item takes the LOWER id, so a fail-fast walk aborts
+        // before ever reaching the broken ref below it.
+        seed_unreadable_item(root, ItemKind::Issue, 1);
+        seed_refs(root, ItemKind::Issue, 2, "open", &["ISS-999"], &[]);
+
+        // Precondition, and the whole point of the fixture ordering: the
+        // fail-fast reader abandons this corpus at ISS-001 and never reaches
+        // ISS-002's broken ref. Without this the test could pass vacuously.
+        assert!(
+            read_all(root).is_err(),
+            "precondition: `read_all` gives up on this corpus"
+        );
+
+        let (items, failures) = read_all_tolerant(root);
+        assert_eq!(failures.len(), 1, "the walk is not abandoned");
+        assert_eq!(items.len(), 1, "the sibling still parsed");
+
+        let findings = dep_seq_ref_findings(root);
+        assert!(
+            findings
+                .iter()
+                .any(|l| l.contains("ISS-001") && l.contains("cannot read")),
+            "the unreadable item is named: {findings:?}"
+        );
+        assert!(
+            findings
+                .iter()
+                .any(|l| l.contains("ISS-002") && l.contains("ISS-999")),
+            "the sibling's broken ref is still reported: {findings:?}"
+        );
+    }
+
+    // --- VT-7: the boundary against VT-6's rule ---
+
+    #[test]
+    fn dep_seq_ref_findings_treats_a_missing_kind_tree_as_clean() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // A virgin repo: no kind trees authored at all.
+        assert!(
+            dep_seq_ref_findings(root).is_empty(),
+            "a missing tree is the empty set, not five failures"
+        );
+    }
+
+    // --- VT-1: the two reasons ---
+
+    #[test]
+    fn dep_seq_ref_findings_reports_both_failure_reasons() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_refs(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &["not-a-ref", "ISS-999"],
+            &["SL-9999"],
+        );
+
+        let findings = dep_seq_ref_findings(root);
+        assert_eq!(
+            findings,
+            vec![
+                "ISS-001 needs `not-a-ref` — not a canonical ref".to_string(),
+                "ISS-001 needs `ISS-999` — no such entity".to_string(),
+                "ISS-001 after `SL-9999` — no such entity".to_string(),
+            ],
+            "design §5's rendered lines, verbatim"
+        );
+    }
+
+    // --- VT-2: the positive control ---
+
+    #[test]
+    fn dep_seq_ref_findings_is_silent_on_a_resolvable_cross_kind_ref() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_slice_entity(root, 1, "done");
+        seed_refs(root, ItemKind::Issue, 1, "open", &["SL-001"], &[]);
+
+        assert!(
+            dep_seq_ref_findings(root).is_empty(),
+            "a resolvable ref raises nothing — without this, a check that \
+             reports everything is indistinguishable from one that works"
+        );
+    }
+
+    // --- VT-3: the resolver is the oracle for the verdict, not the wording ---
+
+    #[test]
+    fn dep_seq_ref_findings_never_renders_an_absolute_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // Both leak routes in one corpus: the resolver's `dir.display()` dangling
+        // message, and the read failure's anyhow context (which interpolates the
+        // path too — see the phase sheet's F-2).
+        seed_refs(root, ItemKind::Issue, 1, "open", &["ISS-999"], &[]);
+        seed_unreadable_item(root, ItemKind::Issue, 2);
+
+        let findings = dep_seq_ref_findings(root);
+        assert_eq!(findings.len(), 2, "positive control: both findings fired");
+
+        let abs = root.to_str().unwrap();
+        for line in &findings {
+            assert!(
+                !line.contains(abs),
+                "finding leaks a machine-specific path: {line}"
+            );
+        }
+    }
+
+    // --- VT-4: the class the footer structurally cannot see ---
+
+    #[test]
+    fn dep_seq_ref_findings_covers_terminal_items_and_both_axes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // A closed item: `project` admits only live items as nodes, so the footer
+        // can never see this edge. A broken ref on it is still broken data.
+        seed_refs(root, ItemKind::Issue, 1, "closed", &["ISS-999"], &[]);
+        // The SAME bad ref on both axes is two authored facts needing two
+        // repairs — reported undeduplicated.
+        seed_refs(
+            root,
+            ItemKind::Improvement,
+            2,
+            "open",
+            &["ISS-999"],
+            &["ISS-999"],
+        );
+
+        let findings = dep_seq_ref_findings(root);
+        assert!(
+            findings.iter().any(|l| l.starts_with("ISS-001 needs")),
+            "a terminal dependent is still reported: {findings:?}"
+        );
+        assert_eq!(
+            findings.iter().filter(|l| l.starts_with("IMP-002")).count(),
+            2,
+            "both axes counted independently, undeduplicated: {findings:?}"
         );
     }
 }
