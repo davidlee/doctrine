@@ -47,6 +47,33 @@ reduced by exhaustive match plus an assurance profile published **per row**, wit
 fronts as open grouping metadata that is never a reduction target. Objective 2
 states the resulting shape; read it rather than `DEC-191`'s sketch.
 
+**Trimmed and blocked — 2026-08-17.** The claim above that *none of these
+decisions can land alone* was wrong in one direction, and the error was
+load-bearing. `DEC-195`'s floor-and-profile and `DEC-201`'s `REV` do not need the
+extraction: the floor wants a closed set, and `DEC-189` falsifies `REV-051`'s
+recorded discharge as a matter of fact rather than as a consequence of any code
+moving. Both are **moved to `SL-257`**, which this slice now `needs`. What remains
+here is the extraction itself — the kernel seam, `DEC-194`'s rename, the payload
+isolation and `DEC-200`'s test bands — and every one of those exists to make a
+verdict shape portable across mechanisms.
+
+Which mechanisms those are is not decided. `QUE-217` (*which casual capsule
+backends should complement hardened microVMs*) is `open`, and it holds that the
+bubblewrap capsule is *"a candidate foundation for the casual tier, not
+presumptively disposable and not the presumed hardened production backend"*.
+`EVD-025` prices the alternative's host coupling; `OQ-1` below already refuses to
+implement against a backend that does not exist. Extracting a neutral kernel
+before that answer is building a seam for an unnamed counterpart, on the surface
+`RSK-231` says is already over budget. This slice therefore carries a `needs`
+edge to `QUE-217` and is gated on it (`ADR-017`), not abandoned: the extraction is
+still the right shape once there is a second mechanism to extract *for*.
+
+**The design run is stale against this trim.** It sits at stage `reviewing` with
+one blocker and one major outstanding and all ten sections unreviewed, so nothing
+downstream is built on it — but its nodes `inq-1`, `inq-2` and `inq-7` settled
+decisions that now belong to `SL-257`. Re-enter it when `QUE-217` unblocks this
+slice; do not plan from it as it stands.
+
 ## Scope & Objectives
 
 1. **Extract the verdict kernel.** The seam cuts at row **identity**, not at the
@@ -86,64 +113,45 @@ states the resulting shape; read it rather than `DEC-191`'s sketch.
    the check is now a `harness = false` compile probe that builds the kernel as a
    synthetic crate with **no fake module** — which is why the two types move
    rather than being imported.
-2. **Publish the profile instead of collapsing it.** Replace the all-or-nothing
-   AND over a fixed row set with a verdict carrying two structures of different
-   semantics (`DEC-195`): a closed **authority floor**, reduced by exhaustive
-   match over a closed enum so an empty floor is unrepresentable, whose
-   membership is row 3 — `DeniedCanonicalStateAndCredentials` — and nothing else;
-   and an **assurance profile**, the remaining rows, published per row and never
-   reduced. Fronts are open grouping metadata over rows and are **never** a
-   reduction target: reducing per front reproduces the vacuity one level up,
-   since `DEC-189` guarantees empty fronts exist. Fronts are **escape** fronts
-   and the rendering must say so (`CPT-002`), so a strong profile is not read as
-   a strong safety claim. **Fronts live wholly in the payload** (design `D8`):
-   its table declares each row's front and the command tier consults it when
-   rendering, because the kernel neither reduces over fronts nor validates them
-   and `DEC-191`'s front list is still a sketch. Authority remains a floor: a
-   composition that weakens it is not a weaker posture, it is not a capsule.
-
-   The floor's *reading* and the floor's *standing* are two questions, not one
-   (design `D7`): `Floor` stays total so an empty floor is unrepresentable, and
-   a wrapper carries *the floor row was never submitted* — which is a state of
-   the run, distinct from *the answer was no*, and which the rows that did run
-   are still published alongside.
+2. **Publish the profile instead of collapsing it — MOVED to `SL-257`**
+   (*Authority floor and assurance profile*), 2026-08-17. `DEC-195`'s closed
+   authority floor and unreduced per-row assurance profile — with `D7`'s
+   reading-versus-standing split and `CPT-002`'s escape-front labelling — do not
+   need the extraction. The floor wants closedness, and while one mechanism
+   exists the profile keys on today's `Property`; `DEC-198`'s open assurance key
+   is what needs a second mechanism, and it defers here. `EVD-021`'s vacuous
+   admission is live on the backend that ships, so the fix goes ahead of this
+   slice rather than behind it. This slice `needs` `SL-257`.
 3. **Apply `DEC-194`'s rename** across the extracted surface —
    `QualificationVerdict`, `Qualification`, the verb `backend qualify`, exits
    `EXIT_QUALIFIED` / `EXIT_DISQUALIFIED`. This closes the existing
-   `EXIT_REFUSED` / `NotAdmitted` mismatch in passing. Note that `Qualification`'s
-   variants are `Unavailable` and `Ran`, **not** `Qualified` / `Disqualified` as
-   this objective first read: `DEC-194` named the axis, and design `D4` then
-   ruled that the summary word is *computed at the command tier from
-   `floor.standing()`* rather than stored, because a stored scalar can disagree
-   with the rows it was computed from — which is `DEC-191`'s original complaint
-   in miniature.
+   `EXIT_REFUSED` / `NotAdmitted` mismatch in passing — a mismatch `SL-257`
+   deliberately leaves standing, because `DEC-194`'s own justification is that
+   the rename is free *only* while these types are moving anyway. Note that
+   `Qualification`'s variants are `Unavailable` and `Ran`, **not** `Qualified` /
+   `Disqualified` as this objective first read: `DEC-194` named the axis, and
+   design `D4` then ruled that the summary word is *computed at the command tier
+   from `floor.standing()`* rather than stored, because a stored scalar can
+   disagree with the rows it was computed from — which is `DEC-191`'s original
+   complaint in miniature. `SL-257` lands that shape under the pre-rename names,
+   so this objective renames a structure that already exists rather than
+   introducing one.
 4. **Isolate the bubblewrap payload** behind the kernel's seam, unmigrated and
    unported, so what is namespace-shaped is visibly namespace-shaped.
-5. **Carry the `REV` against `REQ-459`** as a phase of this slice. `REQ-459`
-   enumerates one undifferentiated property list with canonical-authority inside
-   it, which is exactly the conflation the kernel un-conflates; shipping the code
-   without the revision leaves the spec contradicting the binary. `DEC-201`
-   settles the REV's shape: **one REV, four payloads**, landing with the code so
-   no commit has the spec contradicting the binary. Criterion 1 splits into two
-   criteria of different invariance — a floor proven on every mechanism, a
-   profile that varies per mechanism. Criterion 3's **text** narrows to *same
-   floor, own profile*: `edits nothing` survives, *the same property suite* does
-   not. **That narrowing is an explicit widening of this slice's scope, taken by
-   the owner** — the objective as first written revised the criteria around
-   criterion 3, not criterion 3 itself. `IMP-405`'s platform-versus-mechanism
-   rename applies across § Platform backend contract, and `CPT-002`'s threat
-   priority lands in `SPEC-030` § **Concerns** — not § Overview.
-6. **The same `REV` revises `REV-051`'s criterion-3 disposition** (owner's
-   direction, 2026-08-12). `REV-051` is `done` and applied; it records
-   `REQ-459` criterion 3 as *"discharged structurally — one suite parameterised
-   by backend; a second backend passing it edits nothing."* `DEC-189` contradicts
-   that: if row membership is a function of the mechanism's available deltas,
-   there is no single parameterised suite for a second backend to pass, and the
-   structural discharge does not hold. Shipping the kernel makes an applied
-   revision's recorded reading false, so the correction rides this slice rather
-   than being left for a reader to notice. It is payload 3 of objective 5's one
-   REV, not a second one — `DEC-201` refused splitting them, because the two must
-   be true together and separating them opens a window in which they are not.
+5. **The `REV` against `REQ-459` — MOVED to `SL-257`**, 2026-08-17, as
+   `DEC-201`'s single four-payload revision, landing there with the floor and
+   profile. `DEC-189` falsifies criterion 3's premise whether or not any code
+   moves, so the spec correction does not wait on the extraction.
+6. **`REV-051`'s criterion-3 disposition — MOVED to `SL-257`** as payload 3 of
+   that same REV. `DEC-201` refused splitting the payloads and they are not
+   split: all four move together, which is what keeps the window closed.
+
+   **One amendment rides the move, and it lands back on this slice.** `DEC-201`
+   assumed the narrowed criterion 3 landed *discharged*, because `DEC-198`'s open
+   assurance key would have shipped beside it. Deferring that key means a second
+   mechanism would still have to edit the enum to publish its own rows, so
+   `SL-257` records criterion 3 as **undischarged**, and **discharging it is an
+   exit criterion of this slice** — see § Verification.
 7. **Carve the test bands before the split** (`DEC-200`). The 186 test functions
    sit in one flat `#[cfg(test)] mod tests` with no inner module declaration at
    all, and the crate is bin-only by declared intent, so they cannot move to a
@@ -297,10 +305,14 @@ every instrument here, and a mechanism that misreports its two arms is still
 believed. `D13` closes bypass, never fabrication;
 `RV-352`'s row-level baseline reproduces unchanged — the nineteen row verdicts
 exactly, with the artefact's text derived line-for-line by `DEC-199`'s
-transformation contract — while the verdict publishes a floor and a profile
-instead of a scalar; `backend qualify` replaces `backend verify` with its exits
-renamed; the bubblewrap payload is behind the seam and unported; and `SPEC-030`
-no longer contradicts the binary.
+transformation contract — while the floor and profile `SL-257` landed survive the
+move intact; `backend qualify` replaces `backend verify` with its exits renamed;
+the bubblewrap payload is behind the seam and unported; and **`REQ-459` criterion
+3, as `SL-257` narrows it, is discharged** — a second mechanism proves the same
+floor and publishes its own profile, editing nothing, which `DEC-198`'s open
+assurance key is what makes true. That discharge is this slice's, not `SL-257`'s:
+`SL-257` records the criterion as undischarged precisely because the open key
+defers here.
 
 **How the proof is run** (`DEC-199`), since neither recipe is wired into
 `just gate`: `just capsule-check` is the per-phase gate, green at the end of
@@ -333,6 +345,8 @@ ground truth to derive from, and stays irreducibly reviewer-checked.
 
 ## Non-Goals
 
+- **The floor and the profile themselves**, and the `REV` — `SL-257`, per the
+  trim. This slice consumes the shape it lands; it does not introduce it.
 - **A Firecracker or microVM backend.** Not built here; see `OQ-1`.
 - **Migrating the bubblewrap payload to a second mechanism.** `DEC-190` refuses
   it and `DEC-189` explains why porting membership would be actively harmful.
@@ -346,13 +360,17 @@ ground truth to derive from, and stays irreducibly reviewer-checked.
 
 ## Summary
 
-Split the 14k-line capsule conformance suite into a small backend-neutral
-verdict kernel and an unported bubblewrap payload, cutting at row identity; stop
-collapsing the row outcomes the verdict already carries, reducing a closed
-authority floor and publishing the rest as an assurance profile; rename the
-mechanism axis to qualification while those types are moving; and revise
-`SPEC-030` `REQ-459` so the spec stops conflating the authority floor with
-confinement strength.
+Split the 14k-line capsule conformance suite into a small backend-neutral verdict
+kernel and an unported bubblewrap payload, cutting at row identity; open the
+assurance key so a mechanism nobody has written can mint its own rows without
+editing the kernel (`DEC-198`), which is what discharges `REQ-459` criterion 3 as
+`SL-257` narrows it; and rename the mechanism axis to qualification while those
+types are moving.
+
+Gated on `QUE-217`: every objective here buys portability across mechanisms, and
+which mechanisms there will be is undecided. The floor, the profile and the `REV`
+were trimmed out to `SL-257` on 2026-08-17 because they do not depend on that
+answer.
 
 ## Follow-Ups
 
