@@ -1517,6 +1517,20 @@ two altitudes — `about` for `doctrine design --help`'s table, `long_about` for
 `doctrine design apply --help` — so the pointer appears at the verb without
 widening the table above it.
 
+**Corrected at reconcile (`RV-361` `F-3`): that separation is real and it is not
+what carries the pointer, because clap's renderer never runs.** Doctrine renders
+its own help — `main.rs:285-292` routes every `--help` through
+`render_subcommand_help` (`cli.rs:1427`) — and as this design was written that
+function read `get_about()` alone. `long_about` occurred zero times in the tree,
+so the mechanism above was inert on arrival: the pointer would have been set and
+rendered to nobody. `PHASE-07` found this while planning and appended `EX-10`
+to supply the missing half — `get_long_about().or_else(|| cmd.get_about())`, on
+the `or_else` shape `render_options_section` already used at `cli.rs:1319-1322`,
+with the renderer's existing first-paragraph truncation bounding the widening to
+the long form's first paragraph. The two-altitude property this subsection wants
+is therefore real, but doctrine's renderer provides it, not clap's, and
+`src/commands/cli.rs` is in the touch-set (`sec-7`) because of it.
+
 **The address is single-sourced, and an earlier draft's reason for not doing so
 did not survive checking.** That draft kept a second hand-typed copy, on cost. It
 held that `long_about` *replaces* a doc comment rather than extending it, and
@@ -1568,6 +1582,13 @@ assertion that the pointer reaches the rendered help:
 `help_snapshot_*` users (`main.rs:889-970`) across sixteen
 `render_subcommand_help` call sites, and one of those already takes the
 two-element path form this needs (`main.rs:1120`, `["memory", "sync"]`).
+
+That assertion is less ordinary than it reads, and reconcile is where it gets
+said (`RV-361` `F-3`): it presumes `render_subcommand_help` surfaces
+`long_about` at all. It did not, until `PHASE-07`'s `EX-10` changed it — see the
+correction under *Point 3* above. The pin is sound and its oracle is the right
+one; what this design left unstated is that the pin depended on a renderer
+change it never scheduled.
 
 ## Where the pointer lives
 
@@ -1640,18 +1661,30 @@ between two routes to one answer, which is a cost with no matching benefit.
 | `install/design-payload-contract.md` | **new** — the generated document | rendered |
 | `publication/manifest.toml` | one `[[entry]]` | 7 |
 | `src/design_run/submission.rs` | `#[cfg(test)] fully_populated()` beside each wire struct it defines | ~250 test-only |
-| `src/design_run/attestation.rs` | the same, for the closure structs defined here | ~40 test-only |
 | `src/design_run/tests.rs` + in-module tests | the pin ladder (`sec-8`) | ~400 |
 | `src/main.rs` tests | the help-pointer pin and the guard classification row (`sec-8`) | ~15 |
+| `src/commands/cli.rs` | `render_subcommand_help` prefers `get_long_about()` — appended at `PHASE-07` planning as `EX-10`, without which `sec-6`'s pointer mechanism is inert (below) | ~10 |
+| `src/design_run/artifact.rs` | `REPO_PRIVATE_PREFIXES` and `cites_a_repo_private_id` hoisted out of its private `mod tests` to module level as `#[cfg(test)] pub(crate)`, so the second generated asset shares one list rather than copying fourteen elements (`STD-001`) | ~35 test-only |
 
-**No wire type's definition or behaviour changes — but two of their files are
-still written.** An earlier draft of this table listed `submission.rs` and
-`attestation.rs` as *read, not written* and omitted them entirely, which
-contradicted `sec-8` pin 1 in the same design: the fixtures it calls for sit
-"beside each type's definition", on `Declaration::fully_populated`'s precedent —
-and that precedent is a `#[cfg(test)] pub(super) fn` inside `submission.rs`
-(`submission.rs:653`), not something in `tests.rs`. A plan sequenced off the
-omission would have allocated no work to the files most of the closure lives in.
+**No wire type's definition or behaviour changes — but one of their files is
+still written.** An earlier draft of this table listed `submission.rs` as *read,
+not written* and omitted it entirely, which contradicted `sec-8` pin 1 in the
+same design: the fixtures it calls for sit "beside each type's definition", on
+`Declaration::fully_populated`'s precedent — and that precedent is a
+`#[cfg(test)] pub(super) fn` inside `submission.rs` (`submission.rs:653`), not
+something in `tests.rs`. A plan sequenced off the omission would have allocated
+no work to the file most of the closure lives in.
+
+**Corrected at reconcile (`RV-361` `F-2`): `attestation.rs` is not the other
+one.** Until then this table carried a `src/design_run/attestation.rs` row for
+"the closure structs defined here", and the paragraph above named it alongside
+`submission.rs`. No closure struct is defined there. `PHASE-02` hit this at
+execution and waived `VT-2` on exactly this ground — *"attestation.rs holds no
+closure struct, and this criterion's own keyword `CheckpointActDeclaration`
+names a submission.rs type (825)"* — but a waiver reason lives on a runtime
+phase sheet, so the design went on asserting the opposite for the rest of the
+slice, and `slice conformance` reported the selector `undelivered` to the end.
+The row and its `design-target` selector are both gone.
 
 Every addition to those two files is `#[cfg(test)]`. Not one wire type's
 definition moves and no production path changes, so the behaviour-preservation
@@ -1894,8 +1927,15 @@ One body, **eleven** call sites. Each type gains a `#[cfg(test)] fn
 fully_populated()` beside its definition, on `Declaration::fully_populated`'s
 precedent (`submission.rs:653`) — an exhaustive literal with no `..`, so a new
 field is a compile error at the fixture before it can be a missing contract row.
-Those fixtures live in `submission.rs` and `attestation.rs` beside the types they
-populate, which is why `sec-7`'s touch-set lists both files as written.
+Those fixtures live in `submission.rs` beside the types they populate, which is
+why `sec-7`'s touch-set lists that file as written. This sentence named
+`attestation.rs` too until reconcile (`RV-361` `F-2`); all twelve
+`fully_populated` fixtures are in `submission.rs` and none is in
+`attestation.rs`. What that file contributes to the closure is five enums
+(`Reviewer`, `ActKind`, `ReviewPolicy`, `ReviewDisposition`, `AgentAct` — the
+`sec-4` instrument's business) and the newtype `ReviewRef(String)`, a scalar
+with no key set. Nothing there has keys to describe, so nothing there takes an
+`assert_keys_described` call site or the fixture that feeds one.
 
 **The same call site also pins the type's name**, since it is the one place that
 holds both the contract and `T`. `contract.name` is compared against `T`'s own

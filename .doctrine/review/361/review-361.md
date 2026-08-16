@@ -208,3 +208,91 @@ None.
 - **`SL-251`'s selectors are not pruned on `slice selector doctor`'s advice**
   (`F-9`) — the two `add`s above are additive and deliberately leave the six
   flagged `design-target` selectors in place.
+
+## Reconciliation Outcome
+
+Every brief item is applied. No REV was authored, because no item targeted
+governance or spec truth — all three reach per-slice artefacts only.
+
+### Selector registry (the load-bearing change)
+
+```
+doctrine slice selector rm  251 src/design_run/attestation.rs                        # F-2
+doctrine slice selector add 251 src/commands/cli.rs src/design_run/artifact.rs \
+                                --intent design-target                               # F-3, F-4
+```
+
+`doctrine slice conformance 251` before / after:
+
+| | before | after |
+|---|---|---|
+| undelivered | 1 (`src/design_run/attestation.rs`) | **0** |
+| conformant | 10 | **12** |
+| undeclared | 8 | 6 |
+
+The six remaining undeclared are not code: three are the slice's own governance
+artefacts (`plan.md`, `plan.toml`, `slice-251.toml`), which no design declares
+and none should, and three are `F-6`'s tolerated id-collision residue under
+`.doctrine/backlog/improvement/434/`. Every source path this slice touched is
+now conformant.
+
+### Direct edits applied
+
+- **`design.md` §7 touch-set — row removed** (`F-2`): the
+  `src/design_run/attestation.rs` row for "the closure structs defined here".
+- **`design.md` §7 prose** (`F-2`): the paragraph arguing an earlier draft was
+  wrong to omit `submission.rs` *and* `attestation.rs` is narrowed to
+  `submission.rs`, with a `Corrected at reconcile` note recording that
+  `PHASE-02` caught this at execution, waived `VT-2` on it, and that the waiver
+  reason never reached canon.
+- **`design.md` `sec-8` pin 1** (`F-2`, **second site, found while locating the
+  first**): "Those fixtures live in `submission.rs` and `attestation.rs` … which
+  is why `sec-7`'s touch-set lists both files as written" — a sentence that
+  cross-references the very table above, so leaving it would have made the
+  design internally inconsistent with its own correction. Verified empirically
+  before rewriting: all **twelve** `fully_populated` fixtures are in
+  `submission.rs` and none is in `attestation.rs`, whose contribution to the
+  closure is five enums plus the newtype `ReviewRef(String)` — nothing with a
+  key set, so nothing that takes an `assert_keys_described` call site.
+- **`design.md` `sec-6` *Point 3*** (`F-3`): a `Corrected at reconcile` note
+  under the two-altitudes claim, recording that clap's renderer never runs
+  (`main.rs:285-292` → `render_subcommand_help`, `cli.rs:1427`, which read
+  `get_about()` alone), that `long_about` occurred zero times in the tree so the
+  mechanism was inert on arrival, and that `PHASE-07/EX-10` supplied the missing
+  half.
+- **`design.md` `sec-8` pin 7** (`F-3`): one appended paragraph — the pin's
+  oracle is right, but it presumed `render_subcommand_help` surfaces
+  `long_about`, which was a renderer change the design never scheduled.
+- **`design.md` §7 touch-set — two rows added** (`F-3`, `F-4`):
+  `src/commands/cli.rs` and `src/design_run/artifact.rs`.
+
+`slice-251.md` needed no edit — scope did not change during implementation.
+
+### REVs completed
+
+None. No governance or spec item was raised.
+
+### Withdrawn / tolerated / delegated
+
+- `F-1` — `aligned`. `PHASE-06/VT-1`'s FAIL is a keyword-grep artefact over a
+  correct oracle; adjudicated on this ledger because `plan.toml` is
+  immutable-append and off-surface.
+- `F-5` — `fix-now`, discharged in the audit's own harvest tail before this
+  pass: `notes.md`'s Harvest and Open sections.
+- `F-6` — `tolerated`. Unfixable short of rewriting `sl-251`; disclosed in three
+  places instead.
+- `F-7` — `fix-now`, discharged in the merge at `eddb971c1`.
+- `F-8` — `tolerated`. The hash cannot be recomputed from the tree; reverting
+  would trade a stale record for a churning one.
+- `F-9` — `follow-up` → `ISS-440`. `SL-251`'s selectors are deliberately not
+  pruned on that advice.
+
+### Scope discipline
+
+One thing was found during this pass that was not in the brief — the `sec-8`
+pin 1 sentence above. It is **not** a new finding and no new finding was opened:
+it is a second site of `F-2`, already dispositioned, and reconcile owns landing
+a dispositioned finding at every site rather than at the one the auditor
+happened to cite. Nothing else was re-audited.
+
+Reconcile pass complete — handoff to `/close`.
