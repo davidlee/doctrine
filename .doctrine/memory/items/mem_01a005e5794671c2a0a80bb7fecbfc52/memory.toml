@@ -6,12 +6,12 @@ status = "active"
 title = "rtk-proxied grep output can silently rewrite source identifiers"
 summary = "Identifiers in rg/grep results came back substituted (title_for rendered as n) with no marker — a claim read from that output is wrong and looks right."
 created = "2026-08-15"
-updated = "2026-08-15"
+updated = "2026-08-16"
 
 [scope]
 paths = []
 globs = []
-commands = ["rg", "grep"]
+commands = ["rg", "grep", "sed"]
 tags = ["rtk", "tooling", "footgun", "verification"]
 workspace = "default"
 repo = "github.com/davidlee/doctrine"
@@ -37,7 +37,7 @@ review_by = ""
 trust_level = "high"
 
 [ranking]
-severity = "high"
+severity = "critical"
 weight = 0
 
 [[source]]
