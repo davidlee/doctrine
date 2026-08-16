@@ -462,3 +462,44 @@ to the decision rather than to the contract, and it costs one assertion.
   and gitignored, and the worker's contract forbids writing runtime state, so
   the orchestrator runs `doctrine boot` after the phase lands rather than the
   worker running it mid-phase.
+
+## PHASE-07 planning, 2026-08-16 — EX-10 appended
+
+**`EX-4`'s named mechanism does not work, and the reason is a design-level
+mistake rather than a plan-level one.** `EX-4` has `Apply` take
+`long_about = format!(…)` splicing `PAYLOAD_CONTRACT_POINTER`. Nothing would
+render. Four facts, each checked against the tree:
+
+- `render_subcommand_help` reads `cmd.get_about()` and nothing else
+  (`cli.rs:1427`), and keeps only the first paragraph.
+- `main.rs:285-292` routes every `--help` and every `help` subcommand through
+  that renderer, so clap's own help renderer never runs.
+- `long_about` and `get_long_about` occur **zero** times in the tree. Nobody has
+  ever set one, which is why the gap has never been noticed.
+- `sec-6:1518-1522` reasons from clap's rendering behaviour, and `sec-8` pin 7's
+  help bullet inherits it.
+
+So the design's argument is sound about clap and wrong about doctrine, which
+overrides clap here. `EX-10` authorises the renderer change —
+`get_long_about().or_else(|| cmd.get_about())`, the `or_else` shape
+`render_options_section` already uses one function up — and widens the touch-set
+to `src/commands/cli.rs`, which `sec-7`'s table does not list.
+
+**The bound is measured, not trusted.** `clap_derive` synthesises `long_about`
+only for a multi-paragraph doc comment, and its first paragraph is byte-identical
+to `about` except for a stripped trailing period — so the rendered help of every
+*other* command should be unchanged but for a restored full stop. The phase
+diffs before against after rather than asserting this. If the diff shows more,
+the phase **halts and hands back**: the fallback of putting the pointer in
+`--input`'s arg help would satisfy `VT-1` while quietly deviating from `EX-4`'s
+named mechanism, and substituting one push point for another is a design
+decision, not a keyboard one.
+
+Note the direction. `render_options_section`'s precedent prefers the *short*
+form (`get_help().or_else(get_long_help())`); `EX-10` prefers the *long* one.
+That is the same shape with the opposite preference, and it is deliberate: the
+about section already truncates to one paragraph, so preferring the long form
+costs nothing where no `long_about` exists — which today is everywhere.
+
+**Reconcile owes a design correction here**, not just a prose tidy: `sec-6` and
+`sec-8` pin 7 both describe a help renderer this project does not use.
