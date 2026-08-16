@@ -507,6 +507,40 @@ routes around: it does not care who authored the signature.
   Raised by the `DEC-242` blind test-author seat at PHASE-01 T1, which is the
   arrangement working as designed: a prototype-informed author would have
   transcribed the pin and never questioned the prose around it.
+
+- **§6 and §7 both say `--prune` has no test coverage; it has five tests —
+  prose fix at reconcile.** `design.md:1487` ("no test coverage at all, in
+  either copy") and `design.md:1665` ("no coverage in either copy") are false as
+  of `7958af7ca`. `tests/e2e_dep_seq_verbs.rs` carries five SL-105-era prune
+  goldens: `after_prune_drops_resolved`, `after_prune_noop`, `after_prune_mixed`,
+  `after_prune_absent_target`, `backlog_after_prune`.
+
+  The substance survives — every behaviour PHASE-02 `EX-1` names is genuinely
+  unpinned, because those goldens assert `contains("resolved")` /
+  `contains("dropped")` rather than the rendered reason, so the
+  `resolved`/`closed` split, the `/resolution` suffix, the silent keep on an
+  unreadable target and the bare-ref deletion all pass through them unobserved.
+  Two live consequences the design does not account for:
+
+  1. §7 `Preservation` does not list these five, so PHASE-06/07 will break
+     `after_prune_absent_target` (its `absent` reason becomes `unresolved`)
+     without the design having declared it a deliberate supersession. PHASE-02
+     `D2` pre-empts this by annotating the test in place.
+  2. Read literally, §6 makes PHASE-02 look greenfield, and the `resolved` and
+     `absent` pins get written twice.
+
+  **Reconcile action:** correct both sentences to say the existing goldens pin
+  the *decision* (which edges survive) and not the *rendered reason*, and add the
+  five to §7 `Preservation` with `after_prune_absent_target` marked superseded by
+  PHASE-07. No code change.
+
+  Raised at PHASE-02 planning, from a context blind to the type prototype
+  (`execution-protocol.md` `R1`). Same seam as the three PHASE-01 defects — a
+  design claim and the criterion resting on it agreeing with each other and
+  disagreeing with the tree — but reached from the other side: not *write the
+  assertion*, but *look for the assertion that already exists*. Worth adding to
+  `execution-protocol.md` §3 at harvest: **before pinning a before-state, grep
+  for the pin.**
 - **§7's VT-2 bullet contradicts §3's own arm table — design-text fix at
   reconcile, owner accepted 2026-08-16. `plan.toml`'s VT-2 row is already
   amended.** §7 says a derived-status kind *"with no toml at all still returns
