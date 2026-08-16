@@ -941,6 +941,33 @@ routes around: it does not care who authored the signature.
   gaps). Answerable at reconcile; one string if accepted, zero cost if declined.
   The count is load-bearing in three tests, so accepting is not purely cosmetic.
 
+- **PHASE-05 `EX-2` has no verification row that can observe it — owner's call at
+  reconcile, no code change.** `EX-2` requires that *"`run_show_inspect` threads
+  the map into `format_metadata`"*. `run_show_inspect` writes straight to
+  `io::stdout()` (`backlog.rs:1879`) with no render seam, so no in-module test can
+  observe the threading — it can only compose `probe_item_refs` and
+  `format_inspect` itself, which is what `VT-3`/`VT-4` do. The wiring between them
+  is verified by reading. §7 lists no assertion for it either.
+
+  **No plan amendment and no code change.** `VT-1`…`VT-5` are all writable exactly
+  as specified, so nothing is wrong with the criteria that exist; the gap is that
+  `EX-2` sits above them with nothing pointing at it.
+
+  This is the **same seam PHASE-02 hit**, where three `test_file` rows moved to a
+  black-box golden. The difference is that PHASE-02's wording had a black-box home
+  and this one does not: `tests/e2e_inspect_golden.rs` is about `doctrine inspect`,
+  not `backlog inspect`. Pinning `EX-2` means a new e2e file for three lines of
+  wiring.
+
+  **Reconcile action:** either accept `EX-2` as agent-verified and record it as
+  such, or add the e2e file. Recommendation is to accept, keep the Table arm's
+  composition to a single expression so misthreading is hard, and have `VT-3`'s
+  test state what it does not prove rather than letting the suite look stronger
+  than it is.
+
+  Raised at PHASE-05 blind planning. **Fifth defect at the same seam** — a
+  criterion stated in prose that the verification set cannot carry.
+
 - **`kref_for` is duplicated in `catalog/scan.rs:1372` — follow-up, deliberately
   outside PHASE-04.** PHASE-04 `D-1` promotes the generic entity-seeding helpers
   (`seed_toml`, `seed_status_bearing`, `seed_status_less`, `kref_for`) out of
