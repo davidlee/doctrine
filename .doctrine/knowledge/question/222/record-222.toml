@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 222
+slug = "soften-the-unresolvable-refs-advisory-wording"
+title = "Soften the unresolvable-refs advisory wording?"
+record_kind = "question"
+status = "open"
+created = "2026-08-16"
+updated = "2026-08-16"
+tags = ["advisory", "backlog", "reconcile", "sl-238", "std-003"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+question    = ""
+why_matters = ""
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "PHASE-04 F-1: whether the stderr advisory's count wording implies a completeness against doctor that it structurally cannot have"
+target = "SL-238"

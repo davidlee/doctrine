@@ -1,0 +1,46 @@
+memory_uid = "mem_01a00b2334c07380bedc64a3b9d93383"
+memory_key = "mem.pattern.verification.removal-claim-attributes-every-survivor"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A removal claim must attribute every surviving occurrence"
+summary = "Before recording that an output form was deleted, count its producers in the PRE-state and attribute each post-state survivor to a surface — a shared string makes the unscoped claim false."
+created = "2026-08-16"
+updated = "2026-08-16"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["verification", "evidence", "audit", "deletion", "grep"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "3b57f50e33f7543ac9210217b0c3c470fae4a3ff"
+tree = "32ee4f4967749060dcb18bc8440e9765f08aa4f5"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "3b57f50e33f7543ac9210217b0c3c470fae4a3ff"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-238"
+

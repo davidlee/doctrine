@@ -160,7 +160,7 @@ Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-17 · **PHASE-04 completed** (4 of 8) · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `cf1ce7bab`, clean of mine · PHASE-04's `#### PHASE-04` block below is its **`VA-2` record**, written at T5; a full `/harvest` of the phase (the `### Learned` entries in particular) has **not** been run
+fresh-as-of: 2026-08-17 · **PHASE-04 completed and harvested** (4 of 8) · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `3b57f50e3`, clean of mine
 
 ### Produced
 
@@ -330,7 +330,42 @@ fresh-as-of: 2026-08-17 · **PHASE-04 completed** (4 of 8) · slice/`started` ·
   before the sightings it explained. `.doctrine/` changes committed separately from
   the code throughout.
 
-#### PHASE-04 (2026-08-17) — `522765a76`, `76fa0ee84`
+#### PHASE-04 (2026-08-17) — `522765a76`, `ff542d519`/`17b6efc74`, `76fa0ee84`, `cf1ce7bab`
+
+- **§4 and §2's listing half landed** — the largest single surface in the slice.
+  `AbsentDrop` gained an axis and a second recording case; `project` was hoisted
+  out of `compose` into `list_rows`; `probe_ref`/`probe_boundary` classify what an
+  authored ref turned out to be; `render_overrides` lost two parameters, the
+  `AbsentDrop` leg, the `Dangling` arm and the terminal suppression, and gained
+  the `boundary:` block; `classify_dangling` is deleted; `backlog list` emits the
+  count-only stderr advisory. `EX-1`…`EX-8`, `VT-1`…`VT-10`, `VA-1`/`VA-2` all
+  discharged. `doctrine check gate` exit 0 **on a verified exit code**, twice —
+  after the code commit and again at T5.
+- **The conformance span is five commits and every one of them is this phase's**
+  — T0, the memory T0 produced, that memory's slug symlink, T1–T4, and T5. The
+  flip warned as it always does; no `record-delta` tightening was owed, unlike
+  PHASE-03. `.doctrine/` prose was committed separately from code throughout.
+- **`D-1` was revised mid-phase after an owner challenge** (`eec5d46d2`, before
+  any code). The first answer sited the cross-kind entity seeder in
+  `backlog::test_support`; it failed the least-generic-home test, because that
+  module is chartered as *the single source of the `backlog-NNN.toml` fixture
+  literal* and non-backlog entities are not that literal. It moved to a new
+  `#[cfg(test)] pub(crate) mod test_support` in `src/authored_status.rs` — beside
+  the reader whose input it authors, and already generic over `KindRef`. This
+  **removed** duplication rather than adding it: three hand-rolled copies existed
+  and PHASE-04 would have minted a fourth.
+- **`plan.toml`'s `EX-7` amended in place** (id kept, reasoning inline, per `R5`)
+  — it named two superseded tests and there are three. See `F-2`, and the
+  supersession detail in `VA-2` item 4 below.
+- **The oracle pass poked no hole in the plan** and corroborated its two riskiest
+  calls (`A-2`, the renderer takes rows not the whole probe; `A-3`, the advisory
+  fires alongside the cycle warning, not instead of it). Of its three carried
+  defects, two were fixed by what landed — the `Absent` trailing space (the
+  annotation is appended only when non-empty) and the missing memoisation — and
+  the third, `O-1`, was the prototype sharing `F-2`'s blind spot, now moot. The
+  fork stays closed (`DEC-242`).
+- One friction observation (`99e1ec0f9`): a memory superseded at PHASE-03 was
+  still being surfaced by the hook as live guidance.
 
 **`VA-2` — every intentional output change, with its reason.** The reconciliation
 brief reads this list. Nothing below is a regression: each item is mandated by
@@ -448,6 +483,39 @@ the design, per the standing rule §1 anticipates.
 
 ### Learned
 
+- `mem.pattern.verification.removal-claim-attributes-every-survivor`
+  (`mem_01a00b2334c07380bedc64a3b9d93383`) — **PHASE-04, minted at harvest.**
+  Before recording that an output form was deleted, count its producers in the
+  **pre-state** and attribute each post-state survivor to a surface. The `VA-2`
+  grep returned 1, not 0, and both instinctive readings were wrong: the string
+  had three producers across two surfaces, two deleted and one deliberately
+  untouched. A post-state grep alone yields a number with nothing to subtract it
+  from, so it cannot tell a deliberate survivor from a missed deletion. Mirror of
+  `mem.pattern.harness.grep-negative-needs-positive-control` — there a *zero*
+  needs a control; here a *non-zero* needs a census.
+- `mem.pattern.testing.scannable-entity-fixture-needs-md-and-dates`
+  (`mem_01a00b0defd279438fff81cdad1f1a64`) — **PHASE-04 T0**, found after two
+  hypotheses were tried and disproved. A fixture that satisfies `meta::Meta` is
+  **not** necessarily scannable: `relation_graph::scan_entities` also needs the
+  `.md` sibling **and** the toml's `created`/`updated` keys, neither of which is
+  a `meta::Meta` field. Either omission yields a **silent wrong count, not an
+  error**. The lesson applied for the rest of the phase: on a *move*, preserve
+  the fixture body byte-for-byte; normalising it is a separate, later decision.
+- `mem.pattern.lint.dead-code-derives-count-as-reads` — **third confirmation, and
+  the first in the predicted direction.** PHASE-01's `expect(dead_code)` on
+  `authored_class` self-cleared exactly as its own reason said it would: rustc
+  flagged the expectation unfulfilled the moment `probe_boundary` landed. In the
+  same phase, `AbsentDrop`'s new `axis` field needed no attribute at all, being
+  live on arrival through the struct's existing `PartialEq`/`Eq` derives. Compile,
+  do not reason — twice more, in opposite directions.
+- **A shared type's derives are a decision about that type, not a formality.**
+  `RefState` holds a `&'static entity::Kind`, which derives neither `PartialEq`
+  nor `Debug`; deriving them on `RefState` would have meant changing `entity::Kind`
+  for local convenience. `matches!` covers the one discrimination the module
+  needs, so `RefState` derives only `Clone`. This settles the type prototype's
+  finding 6 (*"the probe and row types carry no derives"*) in the narrow
+  direction — the prototype was right that derives would be wanted, wrong that
+  adding them is free.
 - `mem.fact.doctor.json-category-is-the-display-name` — **PHASE-03.** `doctor
   --json` wraps rows in `{kind, rows}` and renders `category` as the display name
   (`"Relation Integrity"`), so a `jq` select on the Rust variant matches nothing
@@ -687,12 +755,6 @@ routes around: it does not care who authored the signature.
   eighteen landed rows are genuine, but the summary it presents at audit now
   interleaves true negatives with false positives. **Understand before closing
   `SL-238`**; do not read later phases' `PASS` rows as evidence.
-- ~~**Run at `drafting`, all 9 sections `review=outstanding`**~~ — **closed
-  2026-08-16.** Every gate act is now current and the run is `locked` at rev 63.
-  Query the run, never this line: `doctrine design resume 238`.
-- ~~**`slice-238.md` carries two known errors**~~ — **closed 2026-08-16.** The
-  21/9 axis split now reads 16/14 with the miscount named, and `src/cli.rs`
-  is now `src/commands/cli.rs`. Direct edits, outside the design run.
 - `DEC-236` — accepted, but folded into `design.md` §9 as an overrun; confirm the
   reviewer reads it as covered rather than as an uncovered divergence.
 - **`IDE-019` divergences (2), for reconcile** — footer-vs-`doctor` siting, and
@@ -865,11 +927,19 @@ routes around: it does not care who authored the signature.
   action rather than an edit. `EN-2`'s parenthetical in `plan.toml` carries the
   same overstatement; left in place as an entrance criterion that is met on the
   reading that matters (PHASE-03 landed), with the correction recorded here.
-  **Open for the owner:** whether the advisory's own wording should soften from
-  *"N authored needs/after refs name nothing"* to something that does not imply
-  completeness against `doctor`. One string if accepted; zero cost if declined.
+
+  The narrowing above is accepted and unconditional. The **separable** owner
+  call — whether the advisory's own wording should soften — is now `QUE-222`,
+  minted at PHASE-04 harvest so it is tracked rather than buried in this entry.
+  It does not gate the narrowing.
 
   Raised at PHASE-04 blind planning. Fourth defect at the same seam.
+
+- **`QUE-222` — should the unresolvable-refs advisory soften its wording?**
+  Whether *"N authored needs/after refs name nothing"* implies a completeness
+  against `doctor` that it structurally cannot have (see `F-1` above for the two
+  gaps). Answerable at reconcile; one string if accepted, zero cost if declined.
+  The count is load-bearing in three tests, so accepting is not purely cosmetic.
 
 - **`kref_for` is duplicated in `catalog/scan.rs:1372` — follow-up, deliberately
   outside PHASE-04.** PHASE-04 `D-1` promotes the generic entity-seeding helpers
