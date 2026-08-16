@@ -263,3 +263,21 @@ large enough that a separate red author earns its spawn:
 Phase status is runtime state and the flip is not optional: PHASE-01 was executed
 before being flipped to `in_progress`, and both transitions had to be recorded
 retrospectively. Flip first.
+
+**The cost of not flipping first, discovered at PHASE-02.** `slice verify-vt`'s
+gate 4 attributes a mandated file through the slice's **source-delta registry**,
+which the `in_progress`→`completed` pair populates (`code_start` at the first
+flip, `code_end` at the second). A retrospective flip therefore records an empty
+or truncated range, and every one of that phase's `VT` rows reads
+`≈ UNATTRIBUTABLE` **forever** — not a `Fail`, so it never halts anything, it
+just silently withholds the evidence an audit is going to want. PHASE-01's eight
+rows sat that way until repaired with
+
+```
+doctrine slice record-delta 238 PHASE-01 --start 8e0c4fbdd^ --end 13808f354
+```
+
+after which all eight read `PASS`. Two lessons: flip first, and **re-run
+`verify-vt` after the `completed` flip** — mid-phase `UNATTRIBUTABLE` is gate 4
+working as designed (`mem_019f89125fb275a2895bf58b5e29ed95`), so it is only
+after the flip that the verdict means anything.
