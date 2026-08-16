@@ -298,3 +298,24 @@ after which all eight read `PASS`. Two lessons: flip first, and **re-run
 `verify-vt` after the `completed` flip** — mid-phase `UNATTRIBUTABLE` is gate 4
 working as designed (`mem_019f89125fb275a2895bf58b5e29ed95`), so it is only
 after the flip that the verdict means anything.
+
+**The other end of the same boundary, discovered at PHASE-03.** Flipping first is
+necessary but not sufficient: the span runs from the flip to the `completed`
+flip, so **anything committed in between is attributed to the phase**, including
+work that has nothing to do with it. PHASE-03's span opened with a memory-corpus
+correction that happened to land after the flip. The `completed` transition
+*warns* and names the commits; it does not refuse. Read that warning and tighten:
+
+```
+doctrine slice record-delta 238 PHASE-NN --start <first own commit>^ --end <own code tip>
+```
+
+Cheapest habit: land unrelated `.doctrine/` work **before** the `in_progress`
+flip, not after.
+
+**And a caveat on reading the result.** `verify-vt` is per-slice in its
+attribution, so once a phase touches a file that *later* phases name as their
+`test_file`, those later rows stop reading `UNATTRIBUTABLE` and start reading
+`PASS` wherever their keywords happen to occur anywhere in that file. PHASE-03
+landed `src/backlog.rs` and did exactly this to four later rows. Trust a `PASS`
+only for a phase that is `completed`; `ISS-441` carries the defect.

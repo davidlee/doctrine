@@ -160,7 +160,7 @@ Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-16 · **PHASE-02 completed** (2 of 8) · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `a9ef162d0`, clean of mine
+fresh-as-of: 2026-08-17 · **PHASE-03 completed** (3 of 8) · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `9d75444b8`, clean of mine
 
 ### Produced
 
@@ -293,8 +293,54 @@ fresh-as-of: 2026-08-16 · **PHASE-02 completed** (2 of 8) · design/**locked** 
   `authored_class` may make unreachable; an `eprintln!` against
   `print_stderr = "deny"`, `Cargo.toml:268`).
 
+#### PHASE-03 (2026-08-17) — `4ad589192`, `9d75444b8`
+
+- **§5 landed greenfield, one commit.** `dep_seq_ref_findings` beside
+  `lifecycle_findings`; `read_all_tolerant` + `ReadFailure`; one `extend` in
+  `run_doctor` under the existing `RelationIntegrity` category, no new variant.
+  `VT-1`…`VT-7` green, `VA-1` zero on the live corpus. `just gate` exit 0 on a
+  verified exit code, clippy zero warnings.
+- **The wiring shipped WITH the check, not after it** — the sheet had planned them
+  as separate commits, which was wrong on `R4`'s own terms: with no consumer, the
+  check needs a `dead_code` attribute added and removed inside one phase. The
+  three-task split survived; the commit boundary did not.
+- **`read_all_tolerant` discloses an unreadable kind *tree* as well as an
+  unreadable item.** `entity::scan_ids` returns `Result`, and the obvious
+  `let Ok(ids) = … else { continue }` would have been a silent skip inside the
+  phase whose purpose is `STD-003` compliance. Rough edge, recorded rather than
+  fixed: `read_failure_reason` names `backlog-NNN.toml` even when the failure was
+  the sibling `.md`, since `read_item` reads both and the root cause does not say
+  which. The root cause disambiguates in practice; §5's example shows the toml.
+- **`VT-6` pins its own discriminating power.** It asserts `read_all(root).is_err()`
+  as a precondition, so the fixture ordering that makes the tolerant reader
+  necessary is proven rather than assumed — without it the test could pass
+  vacuously against either reader.
+- **`VA-1` returned a false zero twice before it returned a true one.** Both from a
+  broken query, not a clean corpus; the positive control is what caught it. See
+  `mem.fact.doctor.json-category-is-the-display-name`.
+- **The auto-recorded conformance boundary swept in a non-phase commit** — the
+  span ran from the rtk-memory correction (`17ec1e09e`) because that landed after
+  the `in_progress` flip. Tightened with
+  `slice record-delta 238 PHASE-03 --start 4ad589192^ --end 4ad589192`. The tool
+  warned; it does not refuse.
+- `ISS-441` — minted; see Open.
+- The **rtk hazard was retired** (`17ec1e09e`): `mem.fact.rtk.output-filter-rewrites-identifiers`
+  superseded by `mem.pattern.verification.suspect-transcription-before-tool`, and
+  `execution-protocol.md` §5 corrected. The proxy it blamed had been removed months
+  before the sightings it explained. `.doctrine/` changes committed separately from
+  the code throughout.
+
 ### Learned
 
+- `mem.fact.doctor.json-category-is-the-display-name` — **PHASE-03.** `doctor
+  --json` wraps rows in `{kind, rows}` and renders `category` as the display name
+  (`"Relation Integrity"`), so a `jq` select on the Rust variant matches nothing
+  and reports a clean corpus. Two false zeros before the control caught it.
+- `mem.pattern.verification.suspect-transcription-before-tool` — **PHASE-03**, and
+  the correction of a memory this slice had been relying on. Deterministic tools
+  are not the likely defendant when a claim and the source disagree; a documented
+  mechanism sitting in context turns a misread into a diagnosis that then hardens
+  into corpus. Supersedes `mem.fact.rtk.output-filter-rewrites-identifiers`.
 - `mem.pattern.testing.grep-for-the-pin-before-characterising` — **PHASE-02, and
   the reason this phase nearly wrote the wrong tests.** A design's claim that a
   surface is untested is unverified prose that decays faster than its claims
@@ -517,6 +563,14 @@ routes around: it does not care who authored the signature.
 
 ### Open
 
+- **`ISS-441` — `verify-vt` `PASS`es rows for phases that have not been
+  implemented.** Raised at PHASE-03. Once a phase modifies a file that later
+  phases also name as `test_file`, those later rows leave `UNATTRIBUTABLE` and
+  land on `PASS` whenever their keywords happen to occur anywhere in the file —
+  `PHASE-04/VT-2` (`terminal`, `boundary`) is the clearest case. This slice's own
+  eighteen landed rows are genuine, but the summary it presents at audit now
+  interleaves true negatives with false positives. **Understand before closing
+  `SL-238`**; do not read later phases' `PASS` rows as evidence.
 - ~~**Run at `drafting`, all 9 sections `review=outstanding`**~~ — **closed
   2026-08-16.** Every gate act is now current and the run is `locked` at rev 63.
   Query the run, never this line: `doctrine design resume 238`.
