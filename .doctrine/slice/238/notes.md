@@ -330,6 +330,122 @@ fresh-as-of: 2026-08-17 · **PHASE-03 completed** (3 of 8) · slice/`started` ·
   before the sightings it explained. `.doctrine/` changes committed separately from
   the code throughout.
 
+#### PHASE-04 (2026-08-17) — `522765a76`, `76fa0ee84`
+
+**`VA-2` — every intentional output change, with its reason.** The reconciliation
+brief reads this list. Nothing below is a regression: each item is mandated by
+the criterion named beside it, and the fourth is a *scoped* disappearance whose
+scope is easy to overstate. Recorded here rather than on the phase sheet — a `VA`
+over gitignored runtime state leaves no evidence an audit can re-derive
+(`mem_019fd1d862887d42b7a1f88c28fd28a7`).
+
+1. **NEW — the `boundary:` footer block** (`EX-3`/`EX-4`, `DEC-232`).
+   `backlog list --by sequence` now emits a second footer block, after
+   `overrides:` when both are non-empty, one line per `(dependent, target)` pair:
+   `  ISS-327 needs QUE-219 (open)` — dependent-first, relation word, target,
+   the target's **own** authored status, no arrow. Axes join on one line; a
+   `StatusClass::Terminal` target is suppressed (a satisfied prerequisite
+   explains nothing); an unresolvable target is counted, never shown. **Why:**
+   `DEC-231` made cross-kind edges disclosed-but-not-ordering, and `DEC-232` gave
+   the footer the contract *state only what is needed to understand the rendered
+   content* — a live cross-kind prerequisite is exactly that, and the surface
+   could not previously represent it. On the live corpus this is **ten** lines.
+2. **NEW — a count-only advisory on stderr** (`EX-6`, `DEC-236`).
+   `UNRESOLVED_ADVISORY` (`backlog.rs:2457`, a named constant per `STD-001`):
+   `backlog list: {n} authored needs/after refs name nothing — run `doctrine doctor``,
+   emitted from `list_rows` when `probe.unresolved > 0`, **alongside** — not
+   instead of — the `Ordering::Degraded` cycle warning; both can fire. It names
+   no ref, and fires only under `--by sequence` (`--by id` never composes, so
+   never probes). **Why:** `DEC-232` moved every ref-integrity failure off the
+   footer to `doctor`; a silent removal would have made the listing quieter about
+   a real defect, so the signpost is the price of the deletion. **On the live
+   corpus it does not fire** — zero unresolvable authored refs, stderr empty.
+   Its population caveat is `F-1` below (*§2's "same population" claim*).
+3. **GONE — the listing footer's `dropped (dangling: …)` line form** (`EX-5`).
+   Both producing legs are deleted from `render_overrides`: the `AbsentDrop`
+   loop and the `Dangling` arm, and with them `classify_dangling` and the
+   terminal-suppression block. **Scope, measured, because the wording is shared:**
+   pre-phase `src/backlog.rs` carried three occurrences of that line form —
+   `:2083` (`run_after`'s `--prune` report), `:2304` (the `AbsentDrop` loop) and
+   `:2334` (the `Dangling` arm). Today exactly one survives, `:2279`, and it is
+   the `--prune` report, **untouched** — that copy is PHASE-06/07's business, not
+   this phase's. `SoftCycleEvicted` and `Contradicted` render byte-identically;
+   `tests/e2e_backlog_list_order_golden.rs` passes **unmodified**, which is the
+   external proof of that.
+4. **SUPERSEDED — three tests, not two** (`EX-7` as amended by `F-2`; `R5`).
+   Each replacement carries a `**SUPERSEDES**` doc-comment stating what it now
+   asserts and why the old assertion no longer holds:
+   - `list_sequence_records_terminal_and_absent_drops_with_status_and_resolution`
+     → `list_sequence_suppresses_a_terminal_dep_and_withholds_an_absent_ref`.
+     It asserted an `overrides:` block is present and that `ISS-099` renders with
+     the word `absent`; both are now false on its own fixture. The claim worth
+     keeping — `IDE-019`'s terminal-prerequisite suppression — is re-pinned,
+     beside its new sibling: the absent ref is withheld from stdout too, by a
+     different route, and neither is silently lost (`doctor` has both).
+   - `list_sequence_stays_silent_on_a_cross_kind_drop_but_names_a_malformed_ref`
+     → `list_sequence_shows_a_cross_kind_target_and_withholds_a_malformed_ref`.
+     Superseded on **both** counts: a resolvable non-terminal cross-kind target
+     is the `boundary:` block's whole subject (silence was the honest interim
+     answer only while the view could not represent it), and a malformed ref
+     leaves this surface entirely for `doctor`.
+   - `list_sequence_emits_no_footer_when_every_drop_is_cross_kind`
+     → `list_sequence_emits_no_block_header_over_nothing`. The narrower claim it
+     was really protecting — no header over nothing — survives, re-pinned on refs
+     that genuinely render nothing (unresolvable ones, which are counted).
+
+   The word **`absent`** — the false verb this slice exists to remove — now
+   appears nowhere on the **listing** surface. It survives once more in the tree,
+   at `backlog.rs:2253`, as `run_after --prune`'s reason word — the same untouched
+   copy that owns the surviving `dropped (dangling: …)` line. Both are PHASE-06/07's
+   to retire; a sweep that reads either as a PHASE-04 leftover is reading the wrong
+   surface.
+
+**`VA-1` — the deletions are deliberate, evidenced by the diff, not by the
+absence of a lint warning.** `render_overrides` lost **two** parameters, not one:
+`(corpus: &BTreeMap<ItemId, &BacklogItem>, absent: &[AbsentDrop], overrides)` →
+`(boundary: &[BoundaryRow], overrides)`. `compose` went from
+`(corpus: &[BacklogItem])` to `(inputs: &[OrderInput], boundary: &[BoundaryRow])`,
+and its `cmap` build is gone with the `Dangling` arm that was its only reader —
+as `Learned` predicted (*"read only by the `Dangling` arm; both die with it"*).
+`project` is hoisted into `list_rows`, so the corpus is walked **once**:
+`read_all` → `project` → `probe_boundary` (the one new impure read) → `compose`.
+
+**`VT-10` / `EX-8` — preservation, diff-verified over the whole phase span**
+(`ff132fe69^..HEAD`, which covers T0 as well as T1–T4). `src/backlog_order.rs`
+is absent from the changed-file list, and the span touches `tests/` **not at
+all** — zero files. `cargo test --bin doctrine backlog_order` 16 passed,
+`… priority::` 303 passed, `tests/e2e_backlog_list_order_golden.rs` 14 passed,
+all with no edit. `list_sequence_and_id_share_membership_differ_on_order` does
+not appear in the diff of `src/backlog.rs` and is unmodified.
+
+**T1–T4 landed as ONE commit, deliberately (`R4`).** `AbsentDrop::axis` has no
+production consumer until `probe_boundary`; that has none until `list_rows`;
+`list_rows` needs `probe.unresolved` for the advisory. Splitting meant adding and
+removing a throwaway lint attribute at each seam. T0 stayed separate so this
+`VA-2` record has nothing to disentangle from a behaviour-neutral refactor.
+
+**PHASE-01's `expect(dead_code)` on `authored_class` self-cleared**, exactly as
+its own reason predicted — rustc flagged the expectation unfulfilled the moment
+`probe_boundary` landed. Deleted, with a comment recording that it behaved as
+designed. Second confirmation of
+`mem.pattern.lint.dead-code-derives-count-as-reads` in the opposite direction:
+`AbsentDrop`'s new `axis` field needed no attribute at all, being live on arrival
+through the struct's existing `PartialEq`/`Eq` derives.
+
+**`RefState` derives only `Clone`.** It holds a `&'static entity::Kind`, which
+derives neither `PartialEq` nor `Debug`; deriving them here would mean changing a
+shared type for local convenience. `matches!` covers the one discrimination the
+module needs. This settles the prototype's finding 6 (*"the probe and row types
+carry no derives"*) in the narrow direction — if a later phase wants
+`RefState: PartialEq`, that is a real decision about `entity::Kind`, not a
+formality.
+
+**Live-corpus re-scan (2026-08-17).** `./target/debug/doctrine backlog list`
+exits 0, **stderr empty**, and renders **ten** boundary lines — not §2's eleven —
+with `IMP-437 after SL-256` where §2's dated sample says `SL-251`. The corpus
+drifted since that snapshot; re-scanned and reported rather than reconciled to
+the design, per the standing rule §1 anticipates.
+
 ### Learned
 
 - `mem.fact.doctor.json-category-is-the-display-name` — **PHASE-03.** `doctor
