@@ -1610,11 +1610,8 @@ fn derive_fulfils_inbound(
 fn format_metadata(
     item: &BacklogItem,
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
-    _estimation_unit: &str,
     value_line: Option<&str>,
     estimate_line: Option<&str>,
-    _lower_pct: f64,
-    _upper_pct: f64,
 ) -> Vec<String> {
     use crate::relation::{RelationLabel, Role, targets_for, targets_for_role};
     let mut parts: Vec<String> = Vec::new();
@@ -1772,21 +1769,10 @@ fn format_metadata(
 fn format_show(
     item: &BacklogItem,
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
-    estimation_unit: &str,
     value_line: Option<&str>,
     estimate_line: Option<&str>,
-    lower_pct: f64,
-    upper_pct: f64,
 ) -> String {
-    let mut parts = format_metadata(
-        item,
-        fulfils_inbound,
-        estimation_unit,
-        value_line,
-        estimate_line,
-        lower_pct,
-        upper_pct,
-    );
+    let mut parts = format_metadata(item, fulfils_inbound, value_line, estimate_line);
     parts.push(format!("\n{}", item.body));
     parts.concat()
 }
@@ -1795,22 +1781,10 @@ fn format_show(
 fn format_inspect(
     item: &BacklogItem,
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
-    estimation_unit: &str,
     value_line: Option<&str>,
     estimate_line: Option<&str>,
-    lower_pct: f64,
-    upper_pct: f64,
 ) -> String {
-    format_metadata(
-        item,
-        fulfils_inbound,
-        estimation_unit,
-        value_line,
-        estimate_line,
-        lower_pct,
-        upper_pct,
-    )
-    .concat()
+    format_metadata(item, fulfils_inbound, value_line, estimate_line).concat()
 }
 
 /// `doctrine backlog show <ID>` — reassemble metadata + prose body (PRD-009 REQ-051, §5.4). Thin
@@ -1828,9 +1802,11 @@ fn format_inspect(
 ///
 /// The table renderer selector — `format_show` (with body) or `format_inspect`
 /// (metadata only). SL-220 PHASE-06 threads the resolved value line
-/// (`Option<&str>`); SL-222 PHASE-07 adds the estimate line.
-type BacklogTableFn =
-    fn(&BacklogItem, &[FulfilsRef], &str, Option<&str>, Option<&str>, f64, f64) -> String;
+/// (`Option<&str>`); SL-222 PHASE-07 adds the estimate line. SL-238 PHASE-05 T0
+/// drops the estimation unit and the two confidence bounds — all three had been
+/// threaded to `format_metadata` and read by nothing since the `[estimate]` facet
+/// fallback was deleted.
+type BacklogTableFn = fn(&BacklogItem, &[FulfilsRef], Option<&str>, Option<&str>) -> String;
 
 fn run_show_inspect(
     path: Option<PathBuf>,
@@ -1849,7 +1825,12 @@ fn run_show_inspect(
             let cfg = crate::dtoml::load_doctrine_toml(&root)?;
             let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
             let value_unit = crate::value::resolve_unit(&cfg.value);
-            let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+            // SL-238 PHASE-05 T0: called for its VALIDATION, not its value. The
+            // confidence bounds no longer reach the renderer, but `resolve_confidence`
+            // is a five-arm validator and dropping the call would silently remove an
+            // error path from `backlog show` / `inspect` — a behaviour change this
+            // dead-parameter cull does not licence.
+            crate::estimate::resolve_confidence(&cfg.estimation)?;
             // SL-220 PHASE-06: the value line re-sources from the ladder (design §6).
             let value_line = crate::priority::surface::show_value_line(
                 &root,
@@ -1867,11 +1848,8 @@ fn run_show_inspect(
             format_table(
                 &item,
                 &fulfils_inbound,
-                &estimation_unit,
                 value_line.as_deref(),
                 estimate_line.as_deref(),
-                lower_pct,
-                upper_pct,
             )
         }
         Format::Json => show_json(&item, &fulfils_inbound, with_body)?,
@@ -4171,7 +4149,7 @@ tags = []
         // a plain issue and an assessed risk, both reserved id 1 (independent trees).
         new_item(root, ItemKind::Issue, "Auth bug");
         let issue = read_item(root, ItemKind::Issue, 1).unwrap();
-        let issue_out = format_show(&issue, &[], "points", None, None, 0.0, 1.0);
+        let issue_out = format_show(&issue, &[], None, None);
         assert!(
             issue_out.starts_with("ISS-001 — Auth bug\n"),
             "identity line: {issue_out}"
@@ -4188,7 +4166,7 @@ tags = []
         // an assessed risk (seeded directly) shows its facet axes.
         write_assessed_risk(root, 1);
         let risk = read_item(root, ItemKind::Risk, 1).unwrap();
-        let risk_out = format_show(&risk, &[], "points", None, None, 0.0, 1.0);
+        let risk_out = format_show(&risk, &[], None, None);
         assert!(risk_out.starts_with("RSK-001 — Token expiry\n"));
         assert!(risk_out.contains("[facet]"), "risk shows the facet block");
         assert!(risk_out.contains("likelihood: high"));
@@ -4217,11 +4195,8 @@ tags = []
         let out = format_show(
             &item,
             &[],
-            "espresso_shots",
             Some("value: 42.0 magic_beans (human claim, ada, 2026-07-16)"),
             None,
-            0.1,
-            0.9,
         );
         // PHASE-09: the authored [estimate] facet is no longer rendered.
         assert!(
@@ -4246,11 +4221,8 @@ tags = []
         let out = format_show(
             &item,
             &[],
-            "espresso_shots",
             None,
             Some("estimate: 2.0–8.0 espresso_shots (human claim, david, 2026-07-17)"),
-            0.1,
-            0.9,
         );
         assert!(
             out.contains("estimate: 2.0–8.0 espresso_shots (human claim, david, 2026-07-17)"),
@@ -4270,7 +4242,7 @@ tags = []
         let root = dir.path();
         new_item(root, ItemKind::Issue, "No est");
         let item = read_item(root, ItemKind::Issue, 1).unwrap();
-        let out = format_show(&item, &[], "points", None, None, 0.0, 1.0);
+        let out = format_show(&item, &[], None, None);
         assert!(!out.contains("estimate"), "no estimate line: {out}");
     }
 
@@ -4290,11 +4262,8 @@ tags = []
         let out = format_show(
             &read_item(root, ItemKind::Issue, 1).unwrap(),
             &[],
-            "points",
             None,
             None,
-            0.0,
-            1.0,
         );
         assert!(out.contains("relationships:"), "the outbound seam renders");
         assert!(
@@ -4307,11 +4276,8 @@ tags = []
         let bare = format_show(
             &read_item(root, ItemKind::Issue, 2).unwrap(),
             &[],
-            "points",
             None,
             None,
-            0.0,
-            1.0,
         );
         assert!(
             !bare.contains("relationships:"),
@@ -4400,7 +4366,7 @@ tags = []
 
         // table seam: each axis renders, in fixed §5.2 order (needs/after/triggers);
         // a non-zero `after` rank annotates, the trigger note trails its globs.
-        let out = format_show(&item, &[], "points", None, None, 0.0, 1.0);
+        let out = format_show(&item, &[], None, None);
         assert!(out.contains("needs: ISS-002"), "hard prereq axis: {out}");
         assert!(
             out.contains("after: ISS-003 (rank 2)"),
