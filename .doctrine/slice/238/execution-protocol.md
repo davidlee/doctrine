@@ -155,6 +155,32 @@ PHASE-03 remains the freest case — §5 is greenfield, there is no prototype co
 for it at all, so the oracle pass has nothing to return and the blindness costs
 literally nothing.
 
+**PHASE-05 ran it a third time, and three runs are enough to say what the oracle
+is FOR.** It poked no hole in the plan again. What it returned divides cleanly,
+and the division is the useful part:
+
+- **Corroboration of decisions the sheet already made** — worth having, and it
+  arrives free. `D-1`'s argument ceiling was real; `D-2`'s Table-arm placement
+  was the better of two working options.
+- **A shape worth borrowing.** The fork sited §4's *"a resolvable backlog target
+  renders bare"* rule in a four-line `ref_annotation` wrapper over
+  `render_ref_state` — a rule the landed renderer did not carry and the sheet had
+  not homed. Shapes transfer even when the code around them does not.
+- **Defects to avoid copying — and these are SYSTEMATIC.** The fork's
+  `probe_item_refs` omits the memoisation §4 mandates; so does its
+  `probe_boundary` (`O-3`, PHASE-04). It threaded an 8th parameter past a denied
+  `too_many_arguments` with no suppression at all, which means **it was never
+  linted**. A prototype that does not lint and does not memoise is not a
+  correctness reference.
+
+**So: read the fork for shapes and for corroboration, never for correctness.** Its
+omissions repeat across surfaces, which is exactly what makes a
+prototype-contaminated planner dangerous and `R1`'s ordering worth its cost — the
+plan is written before the fork can suggest that skipping the memoisation is
+normal. The corollary for PHASE-06/07, which read this same fork again: expect
+the same two omission classes, and expect them not to be flagged by anything the
+fork itself runs.
+
 **R2 — hand the seat a task, not a criterion.** Messages that named the criterion
 *and why it carries weight* produced better assertions than messages that quoted
 `plan.toml`. The `VT-4` brief said *"`Terminal` is the one class the footer

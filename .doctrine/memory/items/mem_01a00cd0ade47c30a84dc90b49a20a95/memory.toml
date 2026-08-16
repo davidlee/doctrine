@@ -1,0 +1,46 @@
+memory_uid = "mem_01a00cd0ade47c30a84dc90b49a20a95"
+memory_key = "mem.pattern.refactor.dead-param-cull-can-drop-a-validator"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A dead parameter's cull can delete a validation side effect"
+summary = "Before deleting an unused parameter, follow it UP to its producer: the call that computes it may validate, and its value dying does not mean its error path should."
+created = "2026-08-16"
+updated = "2026-08-16"
+
+[scope]
+paths = ["src/backlog.rs"]
+globs = []
+commands = []
+tags = ["refactor", "lint", "arg-ceiling"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "42c835b0efd298005a9567fbfc2eba27e35965d1"
+tree = "f9a163ff2fb6c60781118a9efe39b1502aa4bd0e"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "42c835b0efd298005a9567fbfc2eba27e35965d1"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-238"
+

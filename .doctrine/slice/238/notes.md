@@ -160,7 +160,7 @@ Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-17 · **PHASE-04 completed and harvested** (4 of 8) · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `3b57f50e3`, clean of mine
+fresh-as-of: 2026-08-17 · **PHASE-05 completed and harvested** (5 of 8) · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `42c835b0e`, clean of mine
 
 ### Produced
 
@@ -480,6 +480,70 @@ exits 0, **stderr empty**, and renders **ten** boundary lines — not §2's elev
 with `IMP-437 after SL-256` where §2's dated sample says `SL-251`. The corpus
 drifted since that snapshot; re-scanned and reported rather than reconciled to
 the design, per the standing rule §1 anticipates.
+
+#### PHASE-05 (2026-08-17) — `cf313cbc7`, `42c835b0e`
+
+- **§4's record half landed.** `probe_item_refs` is the second projection over the
+  shared `probe_ref` — every declared ref classified, keyed by `(Axis, String)`,
+  nothing dropped — threaded into `run_show_inspect` → `format_metadata` so
+  `backlog inspect` and `backlog show` state each declared target's status.
+  `EX-1`…`EX-4` and `VT-1`…`VT-5` all discharged; `just gate` exit 0 on a
+  **verified, unpiped** exit code. Two commits, **both this phase's own** — the
+  flip warned as always, no `record-delta` tightening owed (as PHASE-04, unlike
+  PHASE-03).
+- **The five rendering rules split across two named functions, one rule each.**
+  `ref_annotation` carries §4 rule 1 — a *resolvable* backlog target renders bare
+  (its status is already on every listing row the reader has), an unresolvable one
+  is annotated regardless of prefix. `annotated` carries the `R-c` guard: append
+  only when non-empty. The guard is written **once** for both axes rather than
+  duplicated at each render site, which is the structural fix for the bug PHASE-04
+  caught by inspection (`O-2`, the `Absent` trailing space).
+- **`T0` culled three dead parameters instead of suppressing the lint** — the one
+  scope judgement in the sheet, outside `EX-1`…`EX-4`, **owner-ruled**.
+  `format_metadata` sat at exactly 7 and `clippy::too_many_arguments` fires above
+  it; `_estimation_unit`, `_lower_pct`, `_upper_pct` were threaded through four
+  signatures and read by none. 7 → 4 → 5, no suppression, no new type. The eight
+  test call-site edits are mechanical: `git diff -U0 | grep -c assert` over that
+  commit is **0**.
+- **The cull stopped one step earlier than the sheet sketched, and that is the
+  phase's one real trap.** `lower_pct`/`upper_pct` came from
+  `estimate::resolve_confidence`, which is a **five-arm validator**, not a getter.
+  Deleting the call with the parameters would have compiled clean, passed every
+  test, and silently removed an error path from `backlog show` / `inspect`. The
+  call is kept for its `?` and its value discarded. Minted as
+  `mem.pattern.refactor.dead-param-cull-can-drop-a-validator`
+  (`mem_01a00cd0ade47c30a84dc90b49a20a95`).
+- **The oracle pass poked no hole in the plan** — third run of `R1`, third
+  no-hole. It confirmed `D-1` (the fork threaded an **8th** parameter with **no**
+  `#[expect]`, i.e. it never linted — so it supplies no evidence for the
+  annotate-instead route), confirmed `D-2` (the fork builds the map before the
+  format match, so its `--json` pays for a probe it never renders), and confirmed
+  `A-1`: the fork's `probe_item_refs` has **no memoisation at all**, the same
+  omission `O-3` caught in its `probe_boundary` at PHASE-04. **Systematic, not
+  incidental** — treat the fork as a source of *shapes*, not of correctness. It
+  did supply one shape worth taking: siting §4 rule 1 in a small `ref_annotation`
+  wrapper over `render_ref_state`, which the landed renderer did not carry. Fork
+  back closed (`DEC-242`).
+- **One oracle finding needed no action and is recorded so it is not re-derived.**
+  `ref_annotation`'s backlog-bare arm would swallow a `(status unavailable)` on §4
+  rule 5's terms — but cannot: `AuthoredStatus::Unavailable` is decided
+  **statically from the kind** (`authored_status.rs:253-256`), `DERIVED_STATUS` is
+  `[RV]` and `STATUS_LESS` is `[REC]`, and `BACKLOG` intersects neither. If that
+  ever changes, `kinds::tests::the_derived_status_kind_set_is_pinned` fails first.
+- **Preservation was demonstrated, not asserted.** The phase span touches
+  `src/backlog.rs` and nothing else, so `src/backlog_order.rs` and
+  `tests/e2e_backlog_list_order_golden.rs` are untouched by construction; and
+  `probe_boundary`, `probe_ref`, `render_ref_state`, `render_overrides` and
+  `list_rows` are byte-identical to `b81166edb` — checked with `format_metadata`
+  as a **positive control** that the comparison can report CHANGED.
+
+**`VA`-style note — the one intentional output change.** `backlog show` and
+`backlog inspect` now append the target's own authored status to each `needs` /
+`after` entry: `needs: QUE-219 (open), ISS-084`. Additive and rule-bound — a
+resolvable backlog target is unchanged, an `Absent` status appends nothing (not
+even a space), and `--json` is byte-identical because the map is never built on
+that path. **Why:** `DEC-234` puts the full authored record on this surface, and
+it lacked only what state each declared target was in.
 
 ### Learned
 
@@ -967,6 +1031,14 @@ routes around: it does not care who authored the signature.
 
   Raised at PHASE-05 blind planning. **Fifth defect at the same seam** — a
   criterion stated in prose that the verification set cannot carry.
+
+  **Status after PHASE-05 execution (`42c835b0e`): both mitigations implemented,
+  the owner call still open.** The Table arm passes `&probe_item_refs(&root,
+  &item)` as a single inline expression, and `VT-3`'s doc comment states that it
+  composes probe → renderer itself and therefore does **not** observe the wiring.
+  So what remains for reconcile is only the disposition — accept `EX-2` as
+  agent-verified and record it, or commission the e2e file. Nothing further is
+  owed in code.
 
 - **`kref_for` is duplicated in `catalog/scan.rs:1372` — follow-up, deliberately
   outside PHASE-04.** PHASE-04 `D-1` promotes the generic entity-seeding helpers
