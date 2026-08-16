@@ -25,7 +25,7 @@ integration rather than assuming.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 42, stage `reviewing`)
+fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 44, stage `reviewing`), head `93e05f49f`
 
 ### Produced
 
@@ -48,6 +48,10 @@ fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 42, stage `reviewing`)
 - `design.md` `sec-1`…`sec-4` drafted, revised and materialised (`9fe802b8f`,
   `1e495e88c`). Scope and selectors reconciled in the same commit.
 - `research/research.md` + `raw/` — two-thread round, verification pass appended.
+- `proto-prompt.md` + fork `proto/SL-256` — the prototype probe round (`93e05f49f`).
+  One adopted finding at rev 43/44; see **Prototype probe** below.
+- One `friction` observation — `adopt_authored` vs `declare`+`body`, and
+  undiscoverable section fingerprints (`.doctrine/observations/records/8a/…`).
 
 ### Learned
 
@@ -157,6 +161,10 @@ lint configuration meeting a compilation-unit boundary, three files apart.
 - **`SL-251` coordination: three sites, not two** — its `design.md` ¶ 422–428,
   its ledger row at 2289, and `payload_contract.rs:501`. Discharged at that
   slice's reconcile, not here.
+- **Unreopened by choice: `EMITTABLE` could have a production consumer.** The
+  prototype's finding has a second admissible repair that would close `RV-360`
+  `F-2`'s acknowledged hole by types rather than evidence. Not taken — it
+  reopens a settled ruling, so it needs a deliberate decision, not a lint fix.
 - `QUE-219` — not this slice's to settle; `DEC-239` bears on it and the relation
   carries the descriptor.
 - Coverage cell for `REQ-478` — deferred by design. The recipe was **wrong** and
