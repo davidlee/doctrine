@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00a81-6aca-7ca1-aaed-4359fa0c0d0c"
+recorded_at = "2026-08-16T12:17:28.778900546Z"
+kind = "friction"
+summary = "/plan: the plan.toml scaffold documents a multi-line inline table, which TOML refuses"
+detail = '''The template comment written by 'doctrine slice plan <id>' shows the VT mandate as a multi-line inline table ({ id = "VT-1",\n expects = ..., \n waived = false }). TOML 1.0 forbids a newline inside an inline table, so authoring the file as documented yields 'TOML parse error ... invalid inline table' at 'doctrine slice phases'. Cost one full rewrite of the verification arrays. The same shape appears in the /plan skill's own mandate example. Either the scaffold should show one-line inline tables or the example should use [[phase.verification]] array-of-tables.'''
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
