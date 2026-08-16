@@ -160,7 +160,7 @@ Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-17 · **PHASE-03 completed** (3 of 8) · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `9d75444b8`, clean of mine
+fresh-as-of: 2026-08-17 · **PHASE-04 completed** (4 of 8) · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `cf1ce7bab`, clean of mine · PHASE-04's `#### PHASE-04` block below is its **`VA-2` record**, written at T5; a full `/harvest` of the phase (the `### Learned` entries in particular) has **not** been run
 
 ### Produced
 
