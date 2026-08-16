@@ -65,3 +65,34 @@ stale (ISS-274 — `git restore --source=HEAD --staged --worktree -- <boundaries
 and the *previous* funnel commit now falls inside the widened range, which
 surfaces `.doctrine/dispatch/<N>/boundaries.toml` as conformance-undeclared noise
 ([[mem.pattern.conformance.boundary-start-oid-pollution]]).
+
+## The worse case: a phase flipped retrospectively never attributes at all
+
+Verified SL-238 PHASE-02 (2026-08-16). The rule above assumes the phase was
+flipped `in_progress` **before** its code landed — that flip is what stamps
+`code_start_oid`. Execute first and flip afterwards (both transitions recorded
+retrospectively) and the recorded range is empty or truncated, so **every** one
+of that phase's VT rows reads `UNATTRIBUTABLE` permanently, not just the rows
+whose file is new. Flipping `completed` does not fix it; there is no start to
+diff from.
+
+SL-238 PHASE-01 sat that way through its whole harvest: eight rows, all
+`UNATTRIBUTABLE`, while its files were in the slice's selector list and its code
+was committed under `feat(SL-238)` scopes. Selector membership is NOT the
+attribution mechanism and does not rescue it.
+
+The repair is `record-delta`'s escape-hatch mode, naming both ends:
+
+```
+doctrine slice record-delta <id> PHASE-NN --start <first own commit>^ --end <own code tip>
+```
+
+All eight rows read `PASS` immediately after. Foreign commits between your first
+and last ride along in the range — expected, and visible in `slice conformance`'s
+undeclared cell.
+
+**Why it is worth catching**: `UNATTRIBUTABLE` is non-halting (exit 0, not a
+`Fail`), so a retrospectively-flipped phase silently withholds the VT evidence an
+audit is going to want, and nothing goes red to tell you. When you inherit a
+slice, re-run `verify-vt` over the **completed** phases before trusting that
+their criteria are attributed.

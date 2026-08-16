@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00a8d-98d0-7a50-9906-de7aa283bd1c"
+recorded_at = "2026-08-16T12:30:46.993020203Z"
+kind = "friction"
+summary = "verify-vt reports UNATTRIBUTABLE for every VT row in SL-238, including landed phases"
+detail = "PHASE-02 (/execute). After landing the phase's tests, `doctrine slice verify-vt 238` reports '≈ UNATTRIBUTABLE VT-N — keyword present but <file> not modified by this slice' for EVERY phase, including PHASE-01 whose file (src/authored_status.rs) IS in the slice selector list and WAS committed under 13808f354 feat(SL-238). Exit is 0 and no row is Fail, so it is non-halting — but an implementer cannot tell from the message whether the verdict is (a) their own miss, (b) a missing selector (tests/e2e_dep_seq_verbs.rs is genuinely absent from `slice selector list 238`), or (c) an unset code baseline that makes attribution vacuous slice-wide. Cost several tool calls to establish that it was not this phase's to fix. The message names the file but not the attribution SOURCE it consulted; naming that (selector set vs commit range vs baseline oid) would make the verdict actionable in one read."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

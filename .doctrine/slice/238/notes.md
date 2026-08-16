@@ -160,7 +160,7 @@ Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-16 · **PHASE-01 completed** (1 of 8) · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `13808f354`, clean
+fresh-as-of: 2026-08-16 · **PHASE-02 completed** (2 of 8) · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `a9ef162d0`, clean of mine
 
 ### Produced
 
@@ -256,8 +256,59 @@ fresh-as-of: 2026-08-16 · **PHASE-01 completed** (1 of 8) · design/**locked** 
   proof of a human act."* v1 has no authenticated human identity; the attestations
   are an agent's record of a human's claim.
 
+#### PHASE-02 (2026-08-16) — `28cbab394`, `7e07913ac`, `8cef217ca`, `a9ef162d0`
+
+- **Characterisation landed, test-only.** Seven pins in
+  `tests/e2e_dep_seq_verbs.rs` plus two annotations on incumbents: the `closed`
+  vocabulary and `/resolution` suffix byte-exact, the silent keep on an
+  unreadable target (including the empty stderr — the `STD-003` defect pinned as
+  silence), the bare `to = "154"` dropped with the target provably unread, and
+  both unremovable edges surviving their own `--remove`. Both `--prune` copies.
+  Thirteen mutation checks, each confirming the intended assertion fires by
+  message; one deliberately *non*-firing, which is what evidences the
+  as-typed/canonical echo divergence between the two copies.
+- **`plan.toml` PHASE-02 `VT-1`/`VT-2`/`VT-3` amended** (ids unchanged, reasoning
+  inline): `test_file` moved to the black-box golden file. The wording they pin
+  goes straight to `io::stdout()` with no render seam, so an in-module test
+  cannot observe it and extracting a seam would breach `EX-3`. `verify-vt` judges
+  the row against the named file, so this was load-bearing, not documentary.
+- **`execution-protocol.md` revised** — `R1` promoted to the **default** (plan
+  blind, commit the plan, *then* read the fork as an oracle against it); §3 gains
+  the fourth prose/criterion defect; §6's loop shows the one-seat default with
+  the two-seat arrangement as fallback; §2's fourth prohibition qualified.
+- **PHASE-01's source-delta was never recorded** — it was flipped retrospectively,
+  so its eight `VT` rows read `UNATTRIBUTABLE` throughout its own harvest. Repaired
+  with `slice record-delta 238 PHASE-01 --start 8e0c4fbdd^ --end 13808f354`; all
+  eight now `PASS`, as do PHASE-02's three. Eleven criteria of audit evidence
+  recovered, silently absent until then.
+- `QUE-221` — minted; see Open.
+- `just gate` **green, verified on a real exit code** (117 suites, clippy zero
+  warnings). An earlier claim of green rested on a pipeline whose status came
+  from `tail` and established nothing; re-run properly. `.doctrine/` changes
+  committed separately from the test commit throughout.
+- The phase ran **one-seat** under `R1` — planner blind, oracle pass after, then a
+  single Opus implementer. The oracle poked no hole in the plan: it corroborated
+  the ground truth, corrected one annotation, and yielded two prototype defects
+  carried to PHASE-07 (a `Terminal` branch minting reasons for states
+  `authored_class` may make unreachable; an `eprintln!` against
+  `print_stderr = "deny"`, `Cargo.toml:268`).
+
 ### Learned
 
+- `mem.pattern.testing.grep-for-the-pin-before-characterising` — **PHASE-02, and
+  the reason this phase nearly wrote the wrong tests.** A design's claim that a
+  surface is untested is unverified prose that decays faster than its claims
+  about behaviour, because tests land continuously and designs lock. Grep the
+  test tree for the *verb*, not the production identifier (a black-box golden
+  never contains it), then read what the incumbents actually assert — a
+  `contains()` on a substring present in both before- and after-states pins
+  nothing.
+- `mem_019f89125fb275a2895bf58b5e29ed95` **extended** — a phase flipped to
+  `in_progress` retrospectively stamps no `code_start_oid`, so *every* one of its
+  `VT` rows reads `UNATTRIBUTABLE` permanently, not just the rows whose file is
+  new, and `completed` does not repair it. Non-halting, so nothing goes red to
+  tell you. Selector membership is not the attribution mechanism and does not
+  rescue it. The `record-delta` escape hatch is the repair.
 - `mem.fact.layering.gate-blind-to-an-edgeless-module` — **PHASE-01, measured.**
   A new root module declared in `main.rs` but carrying no `use` lines passes the
   whole `tests/architecture_layering.rs` suite with no `Unclassified` finding.
@@ -308,10 +359,12 @@ fresh-as-of: 2026-08-16 · **PHASE-01 completed** (1 of 8) · design/**locked** 
   burns a revision and looks like success; the schema is only in
   `src/design_run/submission.rs:687` and `:124`.
 - (Carried, still live) four `--prune` probe copies hardcode `resolved`/`closed`
-  **and** launder a failed read into an empty status word; `--prune` has no test
-  coverage in either copy; the kind-neutral clearing verb already exists and
-  `backlog after` is its duplicate; nothing re-checks dep/seq refs after
-  authoring.
+  **and** launder a failed read into an empty status word; the kind-neutral
+  clearing verb already exists and `backlog after` is its duplicate; nothing
+  re-checks dep/seq refs after authoring. **Corrected at PHASE-02:** the clause
+  that read *"`--prune` has no test coverage in either copy"* is false — five
+  SL-105 goldens exist. They pin the decision, never the rendered reason; see
+  Open for the design-text half.
 
 ### What a further review pass would probe
 
@@ -538,9 +591,16 @@ routes around: it does not care who authored the signature.
   (`execution-protocol.md` `R1`). Same seam as the three PHASE-01 defects — a
   design claim and the criterion resting on it agreeing with each other and
   disagreeing with the tree — but reached from the other side: not *write the
-  assertion*, but *look for the assertion that already exists*. Worth adding to
-  `execution-protocol.md` §3 at harvest: **before pinning a before-state, grep
-  for the pin.**
+  assertion*, but *look for the assertion that already exists*. Now landed in
+  `execution-protocol.md` §3 and in
+  `mem.pattern.testing.grep-for-the-pin-before-characterising`: **before pinning
+  a before-state, grep for the pin.**
+
+- `QUE-221` — whether `backlog after`'s cross-kind target refusal needs a
+  before-state pin. Deliberately changed behaviour by §6, but outside §7's named
+  characterisation set and outside PHASE-02's `EX-1`/`EX-2`, so PHASE-02 raised it
+  rather than deciding it. **Answerable only before PHASE-07 lands** — after that
+  the pin cannot be written at all. One test if accepted; zero cost if declined.
 - **§7's VT-2 bullet contradicts §3's own arm table — design-text fix at
   reconcile, owner accepted 2026-08-16. `plan.toml`'s VT-2 row is already
   amended.** §7 says a derived-status kind *"with no toml at all still returns

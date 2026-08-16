@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 221
+slug = "pin-backlog-afters-cross-kind-target-refusal"
+title = "Pin backlog after's cross-kind target refusal?"
+record_kind = "question"
+status = "open"
+created = "2026-08-16"
+updated = "2026-08-16"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+question    = ""
+why_matters = ""
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "PHASE-02 D4: whether backlog after's cross-kind target refusal needs a before-state pin before PHASE-07 widens it"
+target = "SL-238"

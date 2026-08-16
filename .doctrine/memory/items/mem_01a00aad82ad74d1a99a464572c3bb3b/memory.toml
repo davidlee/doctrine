@@ -1,0 +1,55 @@
+memory_uid = "mem_01a00aad82ad74d1a99a464572c3bb3b"
+memory_key = "mem.pattern.testing.grep-for-the-pin-before-characterising"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "Before pinning a before-state, grep for the pin"
+summary = "A design's claim that a surface is untested ages as badly as its claims about behaviour — verify existing coverage before writing characterisation tests, and check what the incumbent tests actually assert."
+created = "2026-08-16"
+updated = "2026-08-16"
+
+[scope]
+paths = []
+globs = ["tests/*.rs", "src/**/*.rs"]
+commands = []
+tags = ["testing", "characterisation", "design-drift"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c74be8a762d30eb27b1ee776c9c6f0f2cd87c71a"
+ref_name = "refs/heads/edge"
+checkout_state_id = "06ad524ec707d24f8601556432c0a50e2af98c53488b10d6e06c3106f31e1d41"
+base_commit = "a9ef162d05f3bd8dd80fbfa97de0384451f6bca2"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-238"
+
+[[relation]]
+label = "related"
+target = "mem_019faca1f05277729cb407f8d4487206"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.testing.black-box-cli-golden"
+
