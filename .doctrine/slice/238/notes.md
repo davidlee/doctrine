@@ -479,3 +479,36 @@ routes around: it does not care who authored the signature.
   Raised by the `DEC-242` blind test-author seat at PHASE-01 T1, which is the
   arrangement working as designed: a prototype-informed author would have
   transcribed the pin and never questioned the prose around it.
+- **§7's VT-2 bullet contradicts §3's own arm table — design-text fix at
+  reconcile, owner accepted 2026-08-16. `plan.toml`'s VT-2 row is already
+  amended.** §7 says a derived-status kind *"with no toml at all still returns
+  `Unavailable`"*. §3's arm table gives both special arms a **lenient title
+  read**, and `read` returns `Authored { status, title }` — so an absent file is
+  an `Err`, and `Ok(Unavailable)` is unreachable for that fixture. The two
+  clauses cannot both hold.
+
+  Resolved in favour of the arm table, on three independent supports:
+
+  1. **§3 rule 3 outranks it.** An arm that short-circuits before reading would
+     return `Ok(Unavailable)` for a *corrupt* `RV` toml — a broken file and a
+     tooling limit sharing one signal, precisely what rule 3 and `STD-003`
+     forbid.
+  2. **The overlay needs the title.** `catalog::scan` reads every `RV` on every
+     walk and `ScannedEntity.title` feeds the priority display surfaces; an arm
+     that returns before reading has no title to give.
+  3. **`EX-9` decides it.** Today `status_and_title_for("RV")` calls `title_for`,
+     which `read_to_string`s the file, so a missing `RV` toml already `Err`s.
+     Short-circuiting would be a behaviour *change* in a phase whose exit
+     criterion requires the `search`/`map`/`catalog` suites green **unmodified**.
+
+  So `without reading` names the **status** read, which is never attempted — not
+  the title read, which always is. A missing or corrupt file is `Err` on every
+  arm.
+
+  **Reconcile action:** correct §7 `The probe`'s VT-2 bullet to fixture *a
+  derived-status kind whose toml does carry a status* rather than *no toml at
+  all*, and say which read "without reading" refers to. `design.md` is locked at
+  rev 63, which is why this is a reconcile action and not an edit here.
+
+  Raised by the blind seat at PHASE-01 T2 as its OQ-A/OQ-B — one ruling settles
+  both. Second design defect the arrangement has surfaced.
