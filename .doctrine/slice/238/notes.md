@@ -634,3 +634,26 @@ routes around: it does not care who authored the signature.
 
   Raised by the blind seat at PHASE-01 T2 as its OQ-A/OQ-B — one ruling settles
   both. Second design defect the arrangement has surfaced.
+
+- **§5's two-reason taxonomy misclassifies a dangling *bare* ref — low severity,
+  owner's call at reconcile.** `EX-5` re-classifies a `parse_resolvable_ref`
+  failure by calling `parse_canonical_ref`: failing means *not a canonical ref*,
+  succeeding means *no such entity*. A **bare** ref (`42`) is storable — `run_needs`
+  (`backlog.rs:1955`) gates on `ensure_ref_resolves`, which accepts the bare form
+  (`kinds/resolve.rs:80-96`), and `append_relationship` (`:1855`) writes the string
+  **as typed** with no canonicalisation. So when such a target is later deleted,
+  `parse_canonical_ref("42")` fails at `rsplit_once('-')` and the finding reads
+  *not a canonical ref* where the cause was *no such entity*.
+
+  The statement is literally true and the repair is identical either way, which is
+  why this is a wording imprecision rather than a defect. **Measured 2026-08-16:
+  zero bare refs in the corpus** — every stored `needs`/`after` value is canonical.
+  So the taxonomy is exhaustive in practice and imprecise in principle.
+
+  **Reconcile action (optional):** either note in §5 that a non-canonical stored
+  ref reports under the first reason regardless of why it failed, or decline as
+  immaterial. No `VT` row mandates covering it and PHASE-03 does not widen the
+  check to chase it.
+
+  Raised at PHASE-03 blind planning. Third defect at the same seam the earlier two
+  sit on — a design's prose rule versus what the criterion enforcing it can carry.
