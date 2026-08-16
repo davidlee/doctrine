@@ -2463,6 +2463,25 @@ mod tests {
     /// only observable across a process boundary.
     fn no_fault(_: CheckpointStep) {}
 
+    /// `SL-251 PHASE-05/VA-1` — print the contract over the **real** extern
+    /// table, for a human reading against `render-sample.md` §2.
+    ///
+    /// Sited here and not beside the renderers because this is the one tier
+    /// where `design_run` and `knowledge` are both in scope: rendering the full
+    /// closure needs the real `RecordKind` / `facet_fields` table, and a leaf
+    /// test that reached for it would land a leaf → command edge (ADR-001).
+    ///
+    /// Not an assertion, and deliberately not a golden — the sample predates the
+    /// generator and pinning the two together would pin the generator to a
+    /// transcription. The golden is `PHASE-06`'s, against the committed file.
+    #[ignore = "prints the rendered contract for SL-251 PHASE-05/VA-1; not an assertion"]
+    #[test]
+    fn print_the_rendered_payload_contract() {
+        for line in crate::design_run::payload_contract::render_prompt(&extern_contracts()) {
+            println!("{line}");
+        }
+    }
+
     /// A repo root with a slice tree and a started run. Returns the root.
     fn fixture(dir: &Path) -> u32 {
         std::fs::create_dir_all(dir.join(".doctrine")).unwrap();

@@ -21,12 +21,10 @@
 //! `PAYLOAD` table itself, the renderer, and the CLI surface are later phases;
 //! nothing here reads a table that does not yet exist.
 
-#[cfg(test)]
 use std::collections::BTreeSet;
 
 #[cfg(test)]
 use serde::{Serialize, de::DeserializeOwned};
-#[cfg(test)]
 use serde_json::{Map, Value};
 
 use super::Stage;
@@ -1544,6 +1542,808 @@ pub(crate) const PAYLOAD_CONTRACT_POINTER: &str = "doctrine design contract --fo
 pub(crate) const PAYLOAD_CONTRACT_PATH: &str = "install/design-payload-contract.md";
 
 // ---------------------------------------------------------------------------
+// One generator, three consumers (sec-5)
+// ---------------------------------------------------------------------------
+//
+// `render_json`, `render_prompt` and `render_document` share the walk over
+// [`PAYLOAD`] and differ only in emission — three entry points rather than one
+// with a format parameter, because a JSON document, a line sequence and a
+// Markdown page are genuinely different shapes and one function returning one of
+// three unrelated things would be a `match` pretending to be an abstraction
+// (`sec-5`).
+//
+// **The walk is a graph walk, not a recursion into the emission.**
+// [`WireType::Named`] holds the whole [`TypeContract`], and the closure is a
+// graph: `Declaration` is reached twice and `AcceptanceDeclaration` five times.
+// So [`closure_types`] collects types **by name** into a flat table, each
+// rendering emits each type once, and every `Named` edge is emitted as a *name*.
+// A rendering that recursed instead would look right and be quadratically
+// redundant, and a consumer could not tell the two `Declaration` inlinings are
+// one type — which is the single thing a machine-readable contract exists to say
+// (`fnd-10`).
+//
+// Everything here is pure. Nothing prints, writes, embeds or publishes.
+
+/// The JSON document's schema name — [`super::render`]'s `TurnEnvelope`
+/// precedent, so a consumer branches on a declared name rather than sniffing for
+/// keys. Spelled once (STD-001).
+pub(crate) const PAYLOAD_CONTRACT_SCHEMA: &str = "design-payload-contract";
+
+/// The JSON document's schema version, on the same precedent.
+pub(crate) const PAYLOAD_CONTRACT_VERSION: u64 = 1;
+
+/// The wire scalars, and the word an id row is spelled with. **One spelling
+/// each** (STD-001): both renderings below say the same thing about the same
+/// wire, so neither may say it in its own words.
+const TEXT: &str = "text";
+const INTEGER: &str = "integer";
+const BOOLEAN: &str = "boolean";
+const ID: &str = "id";
+
+/// A struct's disclosure about the keys its contract does not list. Spelled
+/// once, and read by both renderings and the extern region's block.
+const UNKNOWN_KEYS: &str = "unknown-keys";
+
+/// What a block leads with: the root's, and every other type's.
+const ROOT_LEAD: &str = "payload";
+const TYPE_LEAD: &str = "type";
+
+/// Every type reachable from `root`, in first-visit order, **each once**.
+///
+/// The `BTreeSet` of names is what makes this a graph walk: a type met a second
+/// time contributes its name to an edge and nothing else. It is also why a cycle
+/// could not hang the walk, though the closure has none (`sec-3`).
+fn closure_types(root: &'static TypeContract) -> Vec<&'static TypeContract> {
+    let mut seen = BTreeSet::new();
+    let mut order = Vec::new();
+    visit_type(root, &mut seen, &mut order);
+    order
+}
+
+fn visit_type(
+    contract: &'static TypeContract,
+    seen: &mut BTreeSet<&'static str>,
+    order: &mut Vec<&'static TypeContract>,
+) {
+    if !seen.insert(contract.name) {
+        return;
+    }
+    order.push(contract);
+    match contract.form {
+        TypeForm::Struct { keys, .. } => {
+            for key in keys {
+                visit_wire(&key.ty, seen, order);
+            }
+        }
+        TypeForm::Enum { variants, .. } => {
+            for variant in variants {
+                visit_payload(variant.payload, seen, order);
+            }
+        }
+    }
+}
+
+fn visit_payload(
+    payload: VariantPayload,
+    seen: &mut BTreeSet<&'static str>,
+    order: &mut Vec<&'static TypeContract>,
+) {
+    match payload {
+        VariantPayload::Absent => {}
+        VariantPayload::Keys(keys) => {
+            for key in keys {
+                visit_wire(&key.ty, seen, order);
+            }
+        }
+        VariantPayload::Inlines(target) => visit_type(target, seen, order),
+        VariantPayload::Shape(shape) => visit_wire(shape, seen, order),
+    }
+}
+
+/// No wildcard arm, here or anywhere below: a new [`WireType`] must be a compile
+/// error in every rendering rather than a silently unrendered edge.
+fn visit_wire(
+    ty: &'static WireType,
+    seen: &mut BTreeSet<&'static str>,
+    order: &mut Vec<&'static TypeContract>,
+) {
+    match *ty {
+        WireType::Text
+        | WireType::Integer
+        | WireType::Boolean
+        | WireType::Id(_)
+        | WireType::Token(_) => {}
+        WireType::Named(target) => visit_type(target, seen, order),
+        WireType::Seq(inner) => visit_wire(inner, seen, order),
+        WireType::Map { key, value } => {
+            match key {
+                // An extern map key is a leaf: its vocabulary arrives through
+                // [`ExternContracts`], never through a closure edge (`sec-3`).
+                MapKey::Of(inner) => visit_wire(inner, seen, order),
+                MapKey::Extern { .. } => {}
+            }
+            visit_wire(value, seen, order);
+        }
+    }
+}
+
+// --- The model's own vocabulary, spelled once each (STD-001) -----------------
+
+/// How a key's presence is spelled. **Three states, not two** — `sparse` is not
+/// `optional` (`sec-2`).
+const fn presence_token(presence: Presence) -> &'static str {
+    match presence {
+        Presence::Required => "required",
+        Presence::Optional => "optional",
+        Presence::Sparse => "sparse",
+    }
+}
+
+/// How a struct's disclosure about unlisted keys is spelled.
+const fn unknown_keys_token(unknown_keys: UnknownKeys) -> &'static str {
+    match unknown_keys {
+        UnknownKeys::Refused => "refused",
+        UnknownKeys::SilentlyDropped => "silently-dropped",
+    }
+}
+
+/// How a tagging style is spelled. The `Internal` tag key rides beside it rather
+/// than in it, because the two renderings place it differently.
+const fn tagging_token(tagging: Tagging) -> &'static str {
+    match tagging {
+        Tagging::Internal(_) => "internal",
+        Tagging::External => "external",
+        Tagging::Untagged => "untagged",
+    }
+}
+
+// --- `--format json`: bespoke, and a flat table (sec-5) ----------------------
+
+/// A JSON object from a fixed set of pairs — the shape every emission below is
+/// built out of, so no site hand-rolls a `Map`.
+fn object<const N: usize>(pairs: [(&str, Value); N]) -> Value {
+    let mut map = Map::new();
+    for (key, value) in pairs {
+        map.insert(key.to_owned(), value);
+    }
+    Value::Object(map)
+}
+
+/// One wire type as a JSON **type expression**. A [`WireType::Named`] edge is
+/// the target's *name*, which is the whole of why the table is flat.
+fn json_wire(ty: &WireType) -> Value {
+    match *ty {
+        WireType::Text => Value::String(TEXT.to_owned()),
+        WireType::Integer => Value::String(INTEGER.to_owned()),
+        WireType::Boolean => Value::String(BOOLEAN.to_owned()),
+        // The admissible prefixes, never a bare `id`: which kinds a key admits
+        // is the omission this slice exists to remove (`WireType::Id`'s doc).
+        WireType::Id(kinds) => object([(
+            ID,
+            Value::Array(
+                kinds
+                    .iter()
+                    .map(|kind| Value::String(kind.prefix().to_owned()))
+                    .collect(),
+            ),
+        )]),
+        WireType::Named(target) => Value::String(target.name.to_owned()),
+        WireType::Token(TokenSource::Fixed(tokens)) => object([(
+            "token",
+            object([(
+                "fixed",
+                Value::Array(
+                    tokens
+                        .iter()
+                        .map(|token| Value::String((*token).to_owned()))
+                        .collect(),
+                ),
+            )]),
+        )]),
+        WireType::Token(TokenSource::Extern(region)) => object([(
+            "token",
+            object([("extern", Value::String(region.label().to_owned()))]),
+        )]),
+        WireType::Seq(inner) => object([("seq", json_wire(inner))]),
+        WireType::Map { key, value } => object([(
+            "map",
+            object([("key", json_map_key(key)), ("value", json_wire(value))]),
+        )]),
+    }
+}
+
+/// A map's key description. The extern arm **must** carry `region` and
+/// `selector`: `facet`'s admissible keys are chosen by the value of the sibling
+/// `kind`, and a rendering that dropped the selector would leave a caller a
+/// promise it cannot act on (`sec-8` pin 9).
+fn json_map_key(key: MapKey) -> Value {
+    match key {
+        MapKey::Of(inner) => json_wire(inner),
+        MapKey::Extern { region, selector } => object([
+            ("region", Value::String(region.label().to_owned())),
+            ("selector", Value::String(selector.to_owned())),
+        ]),
+    }
+}
+
+fn json_key(row: &KeyContract) -> Value {
+    object([
+        ("key", Value::String(row.key.to_owned())),
+        ("type", json_wire(&row.ty)),
+        (
+            "presence",
+            Value::String(presence_token(row.presence).to_owned()),
+        ),
+    ])
+}
+
+/// Tagging carried **as tagging style** rather than encoded structurally — one
+/// of the three things `sec-5` spent the JSON's budget on.
+fn json_tagging(tagging: Tagging) -> Value {
+    match tagging {
+        Tagging::Internal(tag) => object([(tagging_token(tagging), Value::String(tag.to_owned()))]),
+        Tagging::External | Tagging::Untagged => Value::String(tagging_token(tagging).to_owned()),
+    }
+}
+
+/// Where a variant's payload sits, **derived from the tagging and the payload
+/// together** (`sec-2`'s table). Every pair is named: a new [`Tagging`] or
+/// [`VariantPayload`] arm is a compile error here rather than a wrong answer.
+fn json_payload(tagging: Tagging, payload: VariantPayload) -> Option<(&'static str, Value)> {
+    match (tagging, payload) {
+        // The row that bit: externally tagged with no payload is the bare JSON
+        // string, not `{"drafting-ready":{}}` (`sec-2`, `fnd-12`).
+        (Tagging::External, VariantPayload::Absent) => Some(("bare-string", Value::Bool(true))),
+        // Internally tagged with no payload is the tag alone; untagged with no
+        // payload carries nothing to describe.
+        (Tagging::Internal(_) | Tagging::Untagged, VariantPayload::Absent) => None,
+        (
+            Tagging::Internal(_) | Tagging::External | Tagging::Untagged,
+            VariantPayload::Keys(rows),
+        ) => Some(("payload", Value::Array(rows.iter().map(json_key).collect()))),
+        (
+            Tagging::Internal(_) | Tagging::External | Tagging::Untagged,
+            VariantPayload::Inlines(target),
+        ) => Some(("inlines", Value::String(target.name.to_owned()))),
+        (
+            Tagging::Internal(_) | Tagging::External | Tagging::Untagged,
+            VariantPayload::Shape(shape),
+        ) => Some(("shape", json_wire(shape))),
+    }
+}
+
+fn json_variant(tagging: Tagging, variant: &VariantContract) -> Value {
+    let mut map = Map::new();
+    if let Some(token) = variant.token {
+        map.insert("token".to_owned(), Value::String(token.to_owned()));
+    }
+    if let Some((key, value)) = json_payload(tagging, variant.payload) {
+        map.insert(key.to_owned(), value);
+    }
+    Value::Object(map)
+}
+
+fn json_type(contract: &TypeContract) -> Value {
+    match contract.form {
+        TypeForm::Struct { unknown_keys, keys } => object([
+            (
+                UNKNOWN_KEYS,
+                Value::String(unknown_keys_token(unknown_keys).to_owned()),
+            ),
+            ("struct", Value::Array(keys.iter().map(json_key).collect())),
+        ]),
+        TypeForm::Enum { tagging, variants } => object([
+            ("tagging", json_tagging(tagging)),
+            (
+                "enum",
+                Value::Array(
+                    variants
+                        .iter()
+                        .map(|variant| json_variant(tagging, variant))
+                        .collect(),
+                ),
+            ),
+        ]),
+    }
+}
+
+/// One externally-supplied region: the tokens the selecting key admits, and the
+/// keys each token opens.
+///
+/// It rides the document as its own member rather than being inlined at both
+/// sites that reference the region (`CreateRecord.kind`'s token source and
+/// `facet`'s map key), which would state the same table twice (STD-001).
+fn json_region(table: &SelectorTable) -> Value {
+    object([
+        ("source", Value::String(table.source.to_owned())),
+        (
+            UNKNOWN_KEYS,
+            Value::String(unknown_keys_token(table.unknown_keys).to_owned()),
+        ),
+        (
+            "selects",
+            Value::Array(
+                table
+                    .rows
+                    .iter()
+                    .map(|row| {
+                        object([
+                            ("token", Value::String(row.token.to_owned())),
+                            (
+                                "keys",
+                                Value::Array(row.keys.iter().map(json_key).collect()),
+                            ),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+    ])
+}
+
+/// The contract as one bespoke JSON document — `{schema, version, root, types}`,
+/// plus the externally supplied regions.
+///
+/// **Bespoke, and not the derived `Serialize` of [`PAYLOAD`]**: `Named` holds
+/// the whole target, so a derived rendering inlines `AcceptanceDeclaration` five
+/// times and leaves a consumer unable to tell one type from two (`sec-5`,
+/// `fnd-10`). Not JSON Schema either — it cannot say
+/// [`UnknownKeys::SilentlyDropped`], [`Presence::Sparse`]'s omit-persists /
+/// null-clears, or serde tagging style *as* tagging style, which are the three
+/// things the contract's budget was spent on.
+///
+/// `serde_json::Map` is a `BTreeMap` here (no `preserve_order` feature), so the
+/// object key order is deterministic and a golden can rest on it.
+pub(crate) fn render_json(extern_contracts: &ExternContracts) -> String {
+    let mut types = Map::new();
+    for contract in closure_types(&PAYLOAD) {
+        types.insert(contract.name.to_owned(), json_type(contract));
+    }
+
+    let mut regions = Map::new();
+    for region in ExternRegion::ALL {
+        regions.insert(
+            region.label().to_owned(),
+            json_region(extern_contracts.region(region)),
+        );
+    }
+
+    let document = object([
+        ("schema", Value::String(PAYLOAD_CONTRACT_SCHEMA.to_owned())),
+        ("version", Value::from(PAYLOAD_CONTRACT_VERSION)),
+        ("root", Value::String(PAYLOAD.name.to_owned())),
+        ("types", Value::Object(types)),
+        ("extern", Value::Object(regions)),
+    ]);
+
+    // No `expect`: a document built from `Map` and `Value` has no unserialisable
+    // inhabitant, and clippy denies both `unwrap` and `expect` in production.
+    serde_json::to_string_pretty(&document).unwrap_or_default()
+}
+
+// --- `--format prompt`: `contract_block`'s line shape (sec-5) ---------------
+
+/// The marker for an externally tagged unit variant: it is the JSON string
+/// itself, never an object. Spelled once — a caller who wraps it has the object
+/// discarded in silence, which is one of the two failures that cost this
+/// slice's own design run a round trip (`sec-1`, `fnd-12`).
+const BARE_STRING: &str = "BARE STRING";
+
+/// What the token column holds where the wire carries no token at all. An
+/// untagged variant is a *shape*, and printing its Rust variant name would say
+/// something false (`sec-2`).
+const NO_TOKEN: &str = "‹no token›";
+
+/// What a selector token that opens no keys renders as. An empty key list emits
+/// no rows at all, and no rows is indistinguishable from a row that failed to
+/// render — so the emptiness is stated.
+const NO_KEYS: &str = "‹opens no keys›";
+
+/// The column gap. Two spaces everywhere, so the reading is one shape.
+const GAP: &str = "  ";
+
+/// The widest a type column pads to.
+///
+/// A closed token list runs to a hundred characters, and padding every sibling
+/// row out to meet it costs a block more than the alignment buys. A wider type
+/// overflows its own column instead of widening the block — which keeps the
+/// vocabulary on one greppable line, the reading `sec-5` prefers to wrapping it
+/// mid-list.
+const TYPE_COLUMN_CAP: usize = 40;
+
+/// The parenthetical for a [`Presence`] — **one fixed string per variant**, and
+/// never per key, so no two rows can word the same fact differently (`EX-9`).
+const fn presence_note(presence: Presence) -> &'static str {
+    match presence {
+        // Required and Optional mean what they say and need no gloss.
+        Presence::Required | Presence::Optional => "",
+        Presence::Sparse => "(omit persists · null clears)",
+    }
+}
+
+/// The parenthetical for an [`UnknownKeys`] — one fixed string per variant, on
+/// the same rule.
+///
+/// **No id, ever.** An earlier draft rendered the root's as
+/// `(ISS-333 — …)`, which would ship a doctrine-development issue id into every
+/// installed client, where it is absent or is that client's own unrelated
+/// record. The behaviour is rendered; the citation stays in the source comment
+/// on [`UnknownKeys::SilentlyDropped`] (`sec-5`, `POL-002`).
+const fn unknown_keys_note(unknown_keys: UnknownKeys) -> &'static str {
+    match unknown_keys {
+        UnknownKeys::Refused => "(a misspelt key is refused)",
+        UnknownKeys::SilentlyDropped => "(a misspelt key is discarded, exit 0)",
+    }
+}
+
+/// One wire type, as an agent reads it.
+fn prompt_wire(ty: &WireType) -> String {
+    match *ty {
+        WireType::Text => TEXT.to_owned(),
+        WireType::Integer => INTEGER.to_owned(),
+        WireType::Boolean => BOOLEAN.to_owned(),
+        // Which kinds the key admits, never a bare `id` — that is the same
+        // omission this slice exists to remove ([`WireType::Id`]'s own doc).
+        WireType::Id(kinds) => {
+            let prefixes: Vec<&str> = kinds.iter().map(|kind| kind.prefix()).collect();
+            format!("{ID}({})", prefixes.join("|"))
+        }
+        WireType::Named(target) => target.name.to_owned(),
+        WireType::Token(TokenSource::Fixed(tokens)) => format!("one of: {}", tokens.join(" | ")),
+        WireType::Token(TokenSource::Extern(region)) => region.label().to_owned(),
+        WireType::Seq(inner) => format!("[{}]", prompt_wire(inner)),
+        WireType::Map { key, value } => {
+            format!("{{{}: {}}}", prompt_map_key(key), prompt_wire(value))
+        }
+    }
+}
+
+fn prompt_map_key(key: MapKey) -> String {
+    match key {
+        MapKey::Of(inner) => prompt_wire(inner),
+        // The one place in the model where a key's contract depends on another
+        // key's *value*, and the selector is the whole of what makes it
+        // discoverable rather than an open bag.
+        MapKey::Extern { region, selector } => {
+            format!("{} chosen by {selector}", region.label())
+        }
+    }
+}
+
+/// One key row: name, type, presence, and the presence's fixed parenthetical.
+fn key_line(row: &KeyContract, key_width: usize, type_width: usize) -> String {
+    let line = format!(
+        "{key:<key_width$}{GAP}{ty:<type_width$}{GAP}{presence}{GAP} {note}",
+        key = row.key,
+        ty = prompt_wire(&row.ty),
+        presence = presence_token(row.presence),
+        note = presence_note(row.presence),
+    );
+    line.trim_end().to_owned()
+}
+
+/// The widest key name and rendered type across a key list — column widths are
+/// computed per block, so a wide row in one block does not pad every other, and
+/// the type column stops at [`TYPE_COLUMN_CAP`].
+fn key_widths<'a>(rows: impl Iterator<Item = &'a KeyContract>) -> (usize, usize) {
+    let (key, ty) = rows.fold((0, 0), |(key, ty), row| {
+        (
+            key.max(row.key.chars().count()),
+            ty.max(prompt_wire(&row.ty).chars().count()),
+        )
+    });
+    (key, ty.min(TYPE_COLUMN_CAP))
+}
+
+/// A struct block: the header, then one line per key in declaration order —
+/// field order is the commitment, as it is for `contract_block`'s rows.
+///
+/// `lead` is `payload` for the root and `type` for the rest, which is the only
+/// difference between the two (`sec-5`).
+fn struct_block(
+    lead: &str,
+    contract: &TypeContract,
+    unknown_keys: UnknownKeys,
+    keys: &[KeyContract],
+) -> Vec<String> {
+    let mut lines = vec![format!(
+        "{lead} {name}{GAP}{UNKNOWN_KEYS}: {token}{GAP} {note}",
+        name = contract.name,
+        token = unknown_keys_token(unknown_keys),
+        note = unknown_keys_note(unknown_keys),
+    )];
+    let (key_width, type_width) = key_widths(keys.iter());
+    lines.extend(
+        keys.iter()
+            .map(|row| format!("{GAP}{}", key_line(row, key_width, type_width))),
+    );
+    lines
+}
+
+/// Whether this enum is **bare**: externally tagged with every payload
+/// [`VariantPayload::Absent`], so every variant is a plain string on the wire.
+///
+/// Derived here and stored nowhere. Holding a `Tagging::Bare` beside the
+/// variants would give that claim something to contradict, so `bare` survives as
+/// a word the renderer prints (`sec-2`, `EX-5`).
+fn renders_bare(tagging: Tagging, variants: &[VariantContract]) -> bool {
+    let every_payload_absent = variants.iter().all(|variant| match variant.payload {
+        VariantPayload::Absent => true,
+        VariantPayload::Keys(_) | VariantPayload::Inlines(_) | VariantPayload::Shape(_) => false,
+    });
+    match tagging {
+        Tagging::External => every_payload_absent,
+        Tagging::Internal(_) | Tagging::Untagged => false,
+    }
+}
+
+/// The enum header's tagging clause, and what that tagging *means* for where a
+/// payload lands.
+fn tagging_clause(tagging: Tagging, bare: bool) -> String {
+    let style = tagging_token(tagging);
+    let claim = match tagging {
+        Tagging::Internal(tag) => {
+            format!("{style}({tag:?}){GAP} variant keys sit BESIDE {tag:?}")
+        }
+        // The header carries the claim for the whole type, so the rows below it
+        // need not repeat it once per variant.
+        Tagging::External if bare => "bare".to_owned(),
+        Tagging::External => format!("{style}{GAP} payload nests UNDER the token"),
+        Tagging::Untagged => format!("{style}{GAP} discriminated by JSON shape alone"),
+    };
+    format!("tagging: {claim}")
+}
+
+/// A variant's payload, rendered **where the tagging and the payload together
+/// put it** — never where the tagging alone would suggest (`sec-2`'s table).
+///
+/// Every pair is named. A new [`Tagging`] or [`VariantPayload`] arm is a compile
+/// error here rather than a plausible, wrong line.
+fn variant_payload_lines(
+    tagging: Tagging,
+    payload: VariantPayload,
+    bare: bool,
+    key_width: usize,
+    type_width: usize,
+) -> Vec<String> {
+    let keys = |rows: &[KeyContract]| -> Vec<String> {
+        rows.iter()
+            .map(|row| key_line(row, key_width, type_width))
+            .collect()
+    };
+    match (tagging, payload) {
+        // The row that bit: external + no payload is the bare string itself,
+        // marked per variant *because the asymmetry is per variant*. On an enum
+        // whose every variant is bare the header has already said so, and
+        // repeating it on each row would say nothing the reader does not have.
+        (Tagging::External, VariantPayload::Absent) if bare => Vec::new(),
+        (Tagging::External, VariantPayload::Absent) => {
+            vec![format!("— a {BARE_STRING}, not an object")]
+        }
+        // Internally tagged with no payload is the tag alone; an untagged unit
+        // variant is JSON `null`.
+        (Tagging::Internal(_), VariantPayload::Absent) => Vec::new(),
+        (Tagging::Untagged, VariantPayload::Absent) => vec!["null".to_owned()],
+        (Tagging::Internal(_) | Tagging::Untagged, VariantPayload::Keys(rows)) => keys(rows),
+        (Tagging::External, VariantPayload::Keys(rows)) => nested(keys(rows)),
+        (Tagging::Internal(_) | Tagging::Untagged, VariantPayload::Inlines(target)) => {
+            vec![inlined(target)]
+        }
+        (Tagging::External, VariantPayload::Inlines(target)) => nested(vec![inlined(target)]),
+        (
+            Tagging::Internal(_) | Tagging::External | Tagging::Untagged,
+            VariantPayload::Shape(shape),
+        ) => {
+            vec![prompt_wire(shape)]
+        }
+    }
+}
+
+/// The name of the type a variant inlines — never a re-listing of its keys,
+/// which is what lets a rendering say *which type arrived* (`fnd-14`).
+fn inlined(target: &TypeContract) -> String {
+    format!("→ {}'s keys, inlined", target.name)
+}
+
+/// Braces around a payload that arrives nested under its token.
+fn nested(rows: Vec<String>) -> Vec<String> {
+    let last = rows.len().saturating_sub(1);
+    rows.into_iter()
+        .enumerate()
+        .map(|(at, row)| {
+            let open = if at == 0 { "{ " } else { "  " };
+            let close = if at == last { " }" } else { "" };
+            format!("{open}{row}{close}")
+        })
+        .collect()
+}
+
+/// An enum block: the header, then one line per variant, with a multi-key
+/// payload indented under its variant line rather than wrapped (`fnd-17`).
+fn enum_block(
+    contract: &TypeContract,
+    tagging: Tagging,
+    variants: &[VariantContract],
+) -> Vec<String> {
+    let bare = renders_bare(tagging, variants);
+    let mut lines = vec![format!(
+        "enum {name}{GAP}{clause}",
+        name = contract.name,
+        clause = tagging_clause(tagging, bare),
+    )];
+
+    let token_width = variants
+        .iter()
+        .map(|variant| variant.token.unwrap_or(NO_TOKEN).chars().count())
+        .max()
+        .unwrap_or_default();
+    let (key_width, type_width) =
+        key_widths(variants.iter().flat_map(|variant| match variant.payload {
+            VariantPayload::Keys(rows) => rows.iter(),
+            VariantPayload::Absent | VariantPayload::Inlines(_) | VariantPayload::Shape(_) => {
+                [].iter()
+            }
+        }));
+
+    for variant in variants {
+        let token = variant.token.unwrap_or(NO_TOKEN);
+        let payload = variant_payload_lines(tagging, variant.payload, bare, key_width, type_width);
+        if payload.is_empty() {
+            lines.push(format!("{GAP}{token}"));
+            continue;
+        }
+        for (at, row) in payload.into_iter().enumerate() {
+            let column = if at == 0 { token } else { "" };
+            lines.push(
+                format!("{GAP}{column:<token_width$}{GAP}{row}")
+                    .trim_end()
+                    .to_owned(),
+            );
+        }
+    }
+    lines
+}
+
+/// What an extern block's rows are — one fixed sentence for every region, on
+/// the same rule as the parentheticals: a per-region gloss is a per-region
+/// wording, and there is nothing region-specific to say (`EX-9`'s discipline).
+const REGION_INTRO: &str =
+    "Each token below is one admissible value; the rows under it are the keys it opens.";
+
+/// The block for one externally supplied region: each admissible token, and the
+/// keys it opens.
+///
+/// This is the one part of the contract a caller cannot recover any other way,
+/// and the only part that is wholly undocumented today (`sec-5`).
+fn region_block(table: &SelectorTable) -> Vec<String> {
+    let mut lines = vec![
+        format!(
+            "extern {source}{GAP}{UNKNOWN_KEYS}: {token}{GAP} {note}",
+            source = table.source,
+            token = unknown_keys_token(table.unknown_keys),
+            note = unknown_keys_note(table.unknown_keys),
+        ),
+        format!("{GAP}{REGION_INTRO}"),
+    ];
+
+    let token_width = table
+        .rows
+        .iter()
+        .map(|row| row.token.chars().count())
+        .max()
+        .unwrap_or_default();
+    let (key_width, type_width) = key_widths(table.rows.iter().flat_map(|row| row.keys.iter()));
+
+    for row in &table.rows {
+        if row.keys.is_empty() {
+            lines.push(format!(
+                "{GAP}{token:<token_width$}{GAP}{NO_KEYS}",
+                token = row.token
+            ));
+            continue;
+        }
+        for (at, key) in row.keys.iter().enumerate() {
+            let column = if at == 0 { row.token } else { "" };
+            lines.push(
+                format!(
+                    "{GAP}{column:<token_width$}{GAP}{}",
+                    key_line(key, key_width, type_width)
+                )
+                .trim_end()
+                .to_owned(),
+            );
+        }
+    }
+    lines
+}
+
+/// The contract as the lines an agent reads — one block per described type,
+/// then one per externally supplied region.
+///
+/// Blocks come in reading order rather than walk order: the root first, then the
+/// remaining structs, then the enums, then the regions. The *contents* of each
+/// are the closure's own declaration order, because field order is the
+/// commitment (`sec-5`).
+pub(crate) fn render_prompt(extern_contracts: &ExternContracts) -> Vec<String> {
+    // The root's block leads, wherever the walk met it — asked for by name
+    // rather than assumed from the walk's first entry.
+    let mut root = Vec::new();
+    let mut structs = Vec::new();
+    let mut enums = Vec::new();
+
+    for contract in closure_types(&PAYLOAD) {
+        match contract.form {
+            TypeForm::Struct { unknown_keys, keys } if contract.name == PAYLOAD.name => {
+                root = struct_block(ROOT_LEAD, contract, unknown_keys, keys);
+            }
+            TypeForm::Struct { unknown_keys, keys } => {
+                structs.push(struct_block(TYPE_LEAD, contract, unknown_keys, keys));
+            }
+            TypeForm::Enum { tagging, variants } => {
+                enums.push(enum_block(contract, tagging, variants));
+            }
+        }
+    }
+
+    let mut lines = Vec::new();
+    for block in std::iter::once(root).chain(structs).chain(enums).chain(
+        ExternRegion::ALL
+            .into_iter()
+            .map(|region| region_block(extern_contracts.region(region))),
+    ) {
+        if !lines.is_empty() {
+            lines.push(String::new());
+        }
+        lines.extend(block);
+    }
+    lines
+}
+
+// --- The published document (sec-5) -----------------------------------------
+
+/// The document's provenance banner and intro.
+///
+/// It states **provenance, not an edit procedure**, on `ARTIFACT_HEADER`'s
+/// pattern — change-the-table-and-re-render wording is correct in this
+/// repository and useless in a client project, where the file is a read-only
+/// artefact of an installed binary. And it cites **no id**: the constraint the
+/// rendering is held to applies to the banner first.
+const DOCUMENT_HEADER: &str = "\
+<!-- GENERATED — rendered from the wire-payload contract your installed
+     `doctrine` binary parses with, and pinned to it by test. Not hand-editable,
+     and not overridable: an edited copy would describe a payload the binary
+     does not accept. -->
+
+# Design run — the apply payload contract
+
+Every key a design-run submission may carry, what may be sent under it, whether
+it may be omitted and what omission means, and what happens to a key this
+contract does not list. Where a variant's payload sits is a function of the
+enum's tagging and that variant's payload together, so the rendering states it
+per variant rather than per type.
+";
+
+/// The fence the rendering sits in, opened and closed.
+const FENCE_OPEN: &str = "\n```text\n";
+const FENCE_CLOSE: &str = "```\n";
+
+/// The contract as one Markdown page.
+///
+/// **Not a third emission of the rows**: a banner, an intro, and
+/// [`render_prompt`]'s lines inside a fence. Two renderings that restate each
+/// other is what `STD-001` forbids, and the rows have one producer.
+pub(crate) fn render_document(extern_contracts: &ExternContracts) -> String {
+    let mut out = String::from(DOCUMENT_HEADER);
+    out.push_str(FENCE_OPEN);
+    for line in render_prompt(extern_contracts) {
+        out.push_str(&line);
+        out.push('\n');
+    }
+    out.push_str(FENCE_CLOSE);
+    out
+}
+
+// ---------------------------------------------------------------------------
 // The test-time seam (sec-8 pins 2, 3 and 4)
 // ---------------------------------------------------------------------------
 //
@@ -2629,6 +3429,550 @@ mod tests {
     // -----------------------------------------------------------------------
     // The extern seam (sec-3)
     // -----------------------------------------------------------------------
+
+    /// A leaf-local [`ExternContracts`], generalising the one-row fixture in
+    /// `every_extern_region_resolves_to_its_own_supply` below (`PHASE-05/D3`).
+    ///
+    /// **Two rows, and the second has none of its own keys.** `concept`
+    /// legitimately opens no facet fields in the real table
+    /// (`knowledge.rs`'s `CONCEPT_FACET_FIELDS`), so the empty-key path runs in
+    /// production on every invocation and a `for` loop that silently emits
+    /// nothing is the failure it hides. Built here rather than imported from the
+    /// command tier: this file names `crate::` nowhere, in production and in
+    /// tests alike (ADR-001).
+    fn extern_fixture() -> ExternContracts {
+        ExternContracts {
+            knowledge_record: SelectorTable {
+                source: ExternRegion::KnowledgeRecord.label(),
+                rows: vec![
+                    SelectedKeys {
+                        token: "assumption",
+                        keys: vec![
+                            KeyContract {
+                                key: "claim",
+                                ty: WireType::Text,
+                                presence: Presence::Optional,
+                            },
+                            KeyContract {
+                                key: "confidence",
+                                ty: WireType::Token(TokenSource::Fixed(&["low", "medium", "high"])),
+                                presence: Presence::Optional,
+                            },
+                        ],
+                    },
+                    // The zero-key row: a real shape, not a degenerate one.
+                    SelectedKeys {
+                        token: "concept",
+                        keys: Vec::new(),
+                    },
+                ],
+                unknown_keys: UnknownKeys::Refused,
+            },
+        }
+    }
+
+    /// Every string in `value` that sits in a **wire-type position** and is
+    /// shaped like a type name — the rendered document's own edge relation,
+    /// read back out of the JSON rather than out of [`PAYLOAD`].
+    ///
+    /// Reading it out of the output is the point: `VT-1` is a claim about what a
+    /// consumer receives, and a walk over the table would pass over a renderer
+    /// that emitted nothing at all.
+    fn named_edges(value: &Value, into: &mut BTreeSet<String>) {
+        match value {
+            Value::Object(map) => {
+                for (key, child) in map {
+                    if matches!(key.as_str(), "type" | "seq" | "value" | "shape" | "inlines")
+                        && let Some(name) = child.as_str()
+                        && name.starts_with(|first: char| first.is_ascii_uppercase())
+                    {
+                        into.insert(name.to_owned());
+                    }
+                    named_edges(child, into);
+                }
+            }
+            Value::Array(items) => {
+                for item in items {
+                    named_edges(item, into);
+                }
+            }
+            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+        }
+    }
+
+    /// The parsed `types` table of a rendered JSON document.
+    fn types_of(document: &Value) -> Map<String, Value> {
+        document
+            .get("types")
+            .and_then(Value::as_object)
+            .expect("the rendered contract carries a `types` table")
+            .clone()
+    }
+
+    /// `sec-8` pin 9 (`VT-1`, first half) — the JSON is a **flat** table, every
+    /// `Named` edge lands in it as a name, and every entry is reachable from the
+    /// root.
+    ///
+    /// The count and the multi-parent assertion are not decoration. "Every edge
+    /// resolves" is vacuously true over an empty table and "no type is inlined"
+    /// is vacuously true over a closure that never meets one type twice, so the
+    /// verdict is asserted beside its evidence: twenty-five types, and
+    /// `AcceptanceDeclaration` reached from more than one parent.
+    #[test]
+    fn the_json_is_a_flat_table_every_edge_lands_in() {
+        let rendered = render_json(&extern_fixture());
+        let document: Value = serde_json::from_str(&rendered).expect("the rendering is JSON");
+
+        // 1. The envelope: schema, version, root.
+        assert_eq!(
+            document.get("schema").and_then(Value::as_str),
+            Some(PAYLOAD_CONTRACT_SCHEMA)
+        );
+        assert_eq!(
+            document.get("version").and_then(Value::as_u64),
+            Some(PAYLOAD_CONTRACT_VERSION)
+        );
+        assert_eq!(
+            document.get("root").and_then(Value::as_str),
+            Some(PAYLOAD.name)
+        );
+        assert_eq!(PAYLOAD.name, "ApplyRequest");
+
+        // 2. The evidence count — eleven struct contracts and fourteen enums.
+        //    `SubmissionEnvelope` is in the closure and has no contract: its
+        //    three keys are flattened into the root (`fnd-16`).
+        let types = types_of(&document);
+        assert_eq!(
+            types.len(),
+            25,
+            "the closure is twenty-five described types"
+        );
+
+        // 3. Every name in a type position is a key of `types` — the half that
+        //    catches an edge pointing at nothing.
+        let mut edges = BTreeSet::new();
+        for entry in types.values() {
+            named_edges(entry, &mut edges);
+        }
+        let described: BTreeSet<String> = types.keys().cloned().collect();
+        let dangling: BTreeSet<&String> = edges.difference(&described).collect();
+        assert!(
+            dangling.is_empty(),
+            "these edges name a type the table does not describe: {dangling:?}"
+        );
+
+        // 4. Every key of `types` is reachable from `root` — the half that
+        //    catches a type the walk dropped, or one it invented.
+        let mut reached = BTreeSet::from([PAYLOAD.name.to_owned()]);
+        let mut frontier = vec![PAYLOAD.name.to_owned()];
+        while let Some(name) = frontier.pop() {
+            let Some(entry) = types.get(&name) else {
+                continue;
+            };
+            let mut out = BTreeSet::new();
+            named_edges(entry, &mut out);
+            for target in out {
+                if reached.insert(target.clone()) {
+                    frontier.push(target);
+                }
+            }
+        }
+        assert_eq!(
+            reached, described,
+            "the table and the closure reachable from the root disagree"
+        );
+
+        // 5. Nothing is inlined — and the fixture can tell: `AcceptanceDeclaration`
+        //    is reached from more than one parent, so "emitted once" has
+        //    something to be wrong about.
+        let parents: Vec<&String> = types
+            .iter()
+            .filter(|(_, entry)| {
+                let mut out = BTreeSet::new();
+                named_edges(entry, &mut out);
+                out.contains("AcceptanceDeclaration")
+            })
+            .map(|(name, _)| name)
+            .collect();
+        assert!(
+            parents.len() > 1,
+            "the closure must reach AcceptanceDeclaration more than once, got {parents:?}"
+        );
+        assert_eq!(
+            types
+                .keys()
+                .filter(|name| name.as_str() == "AcceptanceDeclaration")
+                .count(),
+            1,
+            "a type reached twice is still described once"
+        );
+
+        // 6. `EX-3`'s three expressibility claims, each read out of the output:
+        //    a silently-dropped disclosure, a sparse presence, and tagging
+        //    carried *as* tagging rather than encoded structurally.
+        assert_eq!(
+            types
+                .get("ApplyRequest")
+                .and_then(|entry| entry.get("unknown-keys"))
+                .and_then(Value::as_str),
+            Some("silently-dropped")
+        );
+        assert!(
+            rendered.contains("\"presence\": \"sparse\""),
+            "Sparse is a third presence, not a boolean required"
+        );
+        assert_eq!(
+            types
+                .get("Dispose")
+                .and_then(|entry| entry.get("tagging"))
+                .and_then(|tagging| tagging.get("internal"))
+                .and_then(Value::as_str),
+            Some("form")
+        );
+    }
+
+    /// `sec-8` pin 9 (`VT-1`, second half) — `CreateRecord.facet`'s map key
+    /// names `kind` as its selector, and `kind` is a sibling key **of the same
+    /// type**.
+    ///
+    /// Both sides are read out of the *rendered* document rather than out of
+    /// [`CREATE_RECORD`], because the pin is that the promise a consumer
+    /// receives is actionable. `sec-8` records that no other pin reads this
+    /// claim: a mis-typed selector is otherwise a promise nothing can act on.
+    #[test]
+    fn the_facet_maps_selector_names_a_sibling_key_of_the_same_type() {
+        let document: Value =
+            serde_json::from_str(&render_json(&extern_fixture())).expect("the rendering is JSON");
+        let types = types_of(&document);
+        let rows = types
+            .get("CreateRecord")
+            .and_then(|entry| entry.get("struct"))
+            .and_then(Value::as_array)
+            .expect("CreateRecord is described as a struct")
+            .clone();
+
+        let facet = rows
+            .iter()
+            .find(|row| row.get("key").and_then(Value::as_str) == Some("facet"))
+            .expect("CreateRecord carries a facet row");
+        let selector = facet
+            .get("type")
+            .and_then(|ty| ty.get("map"))
+            .and_then(|map| map.get("key"))
+            .and_then(|key| key.get("selector"))
+            .and_then(Value::as_str)
+            .expect("the facet map's key names its selector");
+        assert_eq!(selector, "kind");
+
+        assert_eq!(
+            facet
+                .get("type")
+                .and_then(|ty| ty.get("map"))
+                .and_then(|map| map.get("key"))
+                .and_then(|key| key.get("region"))
+                .and_then(Value::as_str),
+            Some(ExternRegion::KnowledgeRecord.label()),
+            "the map key names the region it is supplied from"
+        );
+
+        let siblings: BTreeSet<&str> = rows
+            .iter()
+            .filter_map(|row| row.get("key").and_then(Value::as_str))
+            .collect();
+        assert!(
+            siblings.contains(selector),
+            "the selector {selector:?} is a key of the same type, got {siblings:?}"
+        );
+    }
+
+    /// One block of the prompt rendering: its header and the rows under it, up
+    /// to the blank line that ends it.
+    fn block(lines: &[String], header: &str) -> Vec<String> {
+        lines
+            .iter()
+            .skip_while(|line| !line.starts_with(header))
+            .take_while(|line| !line.is_empty())
+            .cloned()
+            .collect()
+    }
+
+    /// `EX-4` — the root's header line stays inside the 100 columns the rest of
+    /// the corpus holds to. The measured sample's ran to 104, and `sec-5` says
+    /// which way to fix it: shorten the parenthetical, not the disclosure.
+    #[test]
+    fn the_root_header_line_fits_the_corpus_width() {
+        let lines = render_prompt(&extern_fixture());
+        let header = lines.first().expect("the rendering opens with the root");
+        assert!(
+            header.starts_with("payload ApplyRequest"),
+            "the root block comes first, got {header:?}"
+        );
+        assert!(
+            header.contains(unknown_keys_token(UnknownKeys::SilentlyDropped)),
+            "the root still discloses that a misspelt key is dropped: {header:?}"
+        );
+        assert!(
+            header.chars().count() <= 100,
+            "the root header runs to {} columns: {header:?}",
+            header.chars().count()
+        );
+    }
+
+    /// `EX-9` — a parenthetical is one fixed string per [`Presence`] /
+    /// [`UnknownKeys`] variant, never per key, so two rows cannot word the same
+    /// fact differently.
+    ///
+    /// Asserted as a *set size* over the whole render rather than by comparing
+    /// against a literal: a per-key parenthetical would still contain the right
+    /// words and would fail here for the right reason.
+    #[test]
+    fn each_presence_parenthetical_is_one_fixed_string() {
+        let lines = render_prompt(&extern_fixture());
+
+        // The *trailing* parenthetical: `id(inq-|sec-)` is a rendered type, not
+        // a gloss, and a leading-paren reading would collect those instead.
+        let parenthetical = |line: &String| -> Option<String> {
+            let at = line.rfind('(')?;
+            let tail = line.get(at..)?;
+            tail.ends_with(')').then(|| tail.to_owned())
+        };
+
+        let sparse: BTreeSet<String> = lines
+            .iter()
+            .filter(|line| line.contains(presence_token(Presence::Sparse)))
+            .filter_map(parenthetical)
+            .collect();
+        assert_eq!(
+            sparse.len(),
+            1,
+            "every sparse row carries the same parenthetical, got {sparse:?}"
+        );
+
+        let disclosures: BTreeSet<String> = lines
+            .iter()
+            .filter(|line| line.contains("unknown-keys:"))
+            .filter_map(parenthetical)
+            .collect();
+        assert_eq!(
+            disclosures.len(),
+            2,
+            "one fixed string per UnknownKeys variant, got {disclosures:?}"
+        );
+    }
+
+    /// `EX-8` / `VT-3` — the three semantic rules `sec-5` names, each asserted
+    /// on the marker rather than on the column layout. Layout is `PHASE-06`'s
+    /// golden; what is pinned here is what the rendering *says*.
+    ///
+    /// These are the two failures that cost this slice's own design run a round
+    /// trip (`sec-1`): a payload rendered where the tagging does not put it, and
+    /// `AgentAct::DraftingReady` — an externally tagged unit variant — rendered
+    /// as an object rather than as the bare string it is.
+    #[test]
+    fn a_variants_payload_is_rendered_where_the_tagging_puts_it() {
+        let lines = render_prompt(&extern_fixture());
+
+        // 1. Internally tagged: the variant's keys sit BESIDE the tag, and an
+        //    inlining variant names the type it inlines rather than re-listing
+        //    its keys.
+        let dispose = block(&lines, "enum Dispose ");
+        let dispose_text = dispose.join("\n");
+        assert!(
+            dispose_text.contains(r#"tagging: internal("form")"#),
+            "{dispose_text}"
+        );
+        assert!(dispose_text.contains("BESIDE"), "{dispose_text}");
+        assert!(
+            dispose_text.contains("→ CreateRecord's keys, inlined"),
+            "{dispose_text}"
+        );
+        assert!(
+            !dispose_text.contains("title"),
+            "the inlined type is named, never re-listed: {dispose_text}"
+        );
+
+        // 2. Externally tagged, and *mixed*: one variant nests under its token,
+        //    the other is the bare string `"drafting-ready"` — not
+        //    `{"drafting-ready":{}}`, which is discarded in silence.
+        let agent_act = block(&lines, "enum AgentAct ");
+        let agent_text = agent_act.join("\n");
+        assert!(agent_text.contains("tagging: external"), "{agent_text}");
+        assert!(agent_text.contains("UNDER the token"), "{agent_text}");
+        let nests = agent_act
+            .iter()
+            .find(|line| line.contains("blocking-set-declared"))
+            .expect("the nesting variant renders");
+        assert!(nests.contains('{') && nests.contains('}'), "{nests}");
+        let bare = agent_act
+            .iter()
+            .find(|line| line.contains("drafting-ready"))
+            .expect("the bare-string variant renders");
+        assert!(bare.contains(BARE_STRING), "{bare}");
+        assert!(
+            !bare.contains('{'),
+            "a bare string is not an object: {bare}"
+        );
+
+        // 3. Untagged: the token column is struck out, and no Rust variant name
+        //    — which is not on the wire — appears anywhere in the rendering.
+        let untagged = block(&lines, "enum WireFacetValue ");
+        let untagged_text = untagged.join("\n");
+        assert!(
+            untagged_text.contains("tagging: untagged"),
+            "{untagged_text}"
+        );
+        assert_eq!(
+            untagged
+                .iter()
+                .filter(|line| line.contains(NO_TOKEN))
+                .count(),
+            2,
+            "both shapes render with no token: {untagged_text}"
+        );
+        let whole = lines.join("\n");
+        for rust_only in ["WireFacetValue::", "List", "Text"] {
+            assert!(
+                !whole.contains(rust_only),
+                "{rust_only} is a Rust variant name and is not on the wire"
+            );
+        }
+
+        // 4. `EX-5` — `bare` is a word this renderer prints, derived from every
+        //    payload being Absent. `Stage` is stored as `External` and has no
+        //    `Tagging::Bare` to read.
+        let TypeForm::Enum { tagging, .. } = STAGE.form else {
+            panic!("Stage is described as an enum");
+        };
+        assert_eq!(
+            tagging,
+            Tagging::External,
+            "bare is derived from the model, never stored beside the variants"
+        );
+        let stage = block(&lines, "enum Stage ");
+        let stage_text = stage.join("\n");
+        assert!(stage_text.contains("tagging: bare"), "{stage_text}");
+        assert!(!stage_text.contains("tagging: external"), "{stage_text}");
+    }
+
+    /// The zero-key row renders as a row that *says* it opens no keys, and the
+    /// block survives it.
+    ///
+    /// `concept` legitimately opens no facet fields in the real table, so this
+    /// path runs in production on every invocation: a `for` loop over an empty
+    /// key list emits nothing, and nothing is indistinguishable from a row that
+    /// failed to render (`PHASE-04/F-2`).
+    #[test]
+    fn a_token_that_opens_no_keys_renders_a_row_that_says_so() {
+        let lines = render_prompt(&extern_fixture());
+        let region = block(&lines, "extern ");
+        let region_text = region.join("\n");
+
+        let empty = region
+            .iter()
+            .find(|line| line.contains("concept"))
+            .expect("the zero-key row renders at all");
+        assert!(empty.contains(NO_KEYS), "{empty}");
+
+        // The row before it is intact — an empty key list did not swallow the
+        // rest of the block.
+        assert!(region_text.contains("assumption"), "{region_text}");
+        assert!(region_text.contains("confidence"), "{region_text}");
+        assert!(
+            region_text.contains("one of: low | medium | high"),
+            "{region_text}"
+        );
+        assert!(
+            region_text.contains(ExternRegion::KnowledgeRecord.label()),
+            "the block names the region it supplies: {region_text}"
+        );
+    }
+
+    /// `sec-8` pin 10 (`VT-2`) — **no rendered surface cites a repo-private
+    /// id.**
+    ///
+    /// The detector is `artifact.rs`'s, reached at module level rather than
+    /// reimplemented here: one predicate and one fourteen-prefix list, so a
+    /// second copy would be a description free to drift (STD-001). This is a
+    /// sibling-module path, not a `crate::` one — `payload_contract` names
+    /// `crate::` nowhere, in tests as in production (ADR-001).
+    ///
+    /// **The positive control comes first, and the non-vacuity assertion with
+    /// it.** A probe whose passing observation is an absence cannot tell "not
+    /// there" from "I never looked": `!cites_a_repo_private_id(&document)`
+    /// passes just as happily over the empty string.
+    #[test]
+    fn no_rendered_surface_cites_a_repo_private_id() {
+        use super::super::artifact::cites_a_repo_private_id;
+
+        // 1. The control: the sample's own root parenthetical, which is exactly
+        //    what must not ship.
+        assert!(
+            cites_a_repo_private_id("(ISS-333 — a misspelt key is discarded)"),
+            "the detector fires on a known citation, or the assertions below are unfalsified"
+        );
+
+        // 2. Non-vacuity: the surfaces under test are real documents.
+        let contracts = extern_fixture();
+        let document = render_document(&contracts);
+        let prompt = render_prompt(&contracts).join("\n");
+        let json = render_json(&contracts);
+        for (surface, rendered) in [
+            ("document", &document),
+            ("prompt", &prompt),
+            ("json", &json),
+        ] {
+            assert!(
+                rendered.len() > 1000 && rendered.contains(PAYLOAD.name),
+                "the {surface} rendering is {} bytes and must be a whole contract",
+                rendered.len()
+            );
+        }
+
+        // 3. The whole published document, and 4. both renderings it is built
+        //    from — pin 10 covers all three surfaces.
+        assert!(
+            !cites_a_repo_private_id(&document),
+            "the published document cites a per-repo sequential id"
+        );
+        assert!(
+            !cites_a_repo_private_id(&prompt),
+            "the prompt rendering cites a per-repo sequential id"
+        );
+        assert!(
+            !cites_a_repo_private_id(&json),
+            "the json rendering cites a per-repo sequential id"
+        );
+    }
+
+    /// The published document is a banner, an intro and the prompt rendering in
+    /// a fence — not a third emission of the rows (STD-001).
+    #[test]
+    fn the_document_carries_the_prompt_rendering_and_adds_no_second_table() {
+        let contracts = extern_fixture();
+        let document = render_document(&contracts);
+        let lines = render_prompt(&contracts);
+
+        assert!(
+            document.starts_with("<!-- GENERATED"),
+            "the document opens with the provenance banner"
+        );
+        assert!(document.contains(&lines.join("\n")), "{document}");
+        assert_eq!(
+            document.matches("payload ApplyRequest").count(),
+            1,
+            "the rows are rendered once"
+        );
+    }
+
+    /// `PHASE-06`'s golden rests on this, and a `HashMap` slipped into the walk
+    /// would make it flap there — a phase later, on someone else's time.
+    #[test]
+    fn both_renderings_are_deterministic() {
+        let contracts = extern_fixture();
+        assert_eq!(render_json(&contracts), render_json(&contracts));
+        assert_eq!(render_prompt(&contracts), render_prompt(&contracts));
+        assert_eq!(render_document(&contracts), render_document(&contracts));
+    }
 
     /// Every region resolves to a supply, and the supply names the region's own
     /// spelling rather than a second one (STD-001).

@@ -375,3 +375,41 @@ immutable and `VT-1`/`VT-2` are spent, so this is `VT-3`.
   header alone at 100 columns and the design chose that scope deliberately; a
   `Closed` token list wrapped mid-vocabulary is harder to read and to grep than
   one long line, and no criterion asks for it.
+
+## PHASE-05 execution, 2026-08-16 — one criterion appended
+
+**`EX-10`: the JSON carries a fifth top-level key.** `EX-3` enumerates
+`{schema, version, root, types}`; the rendering also carries `extern`. This is
+an accepted departure, and the reason is the scope's, not the compiler's.
+
+Execution offered two arguments and only one of them is load-bearing. The weak
+one: `render_json(&ExternContracts)` with the parameter unread is a hard error
+under `unused = "deny"`. That is a consequence of `EX-1`'s signature, and *the
+compiler left me nowhere else to put it* would be a poor reason to widen a wire
+shape — if that were the whole case, the right move would be to revisit the
+signature.
+
+The real one is `DEC-227` and `DEC-224` together. Scope §3 commits the surface
+to being **total over the payload**, and `DEC-224` makes the JSON the *primary*
+rendering. `sec-5` says the extern region is the one part of the contract a
+caller cannot recover any other way — `CreateRecord.kind`'s seven admissible
+tokens and `facet`'s per-kind keys exist nowhere in the type closure. A JSON
+that omits them is not total, and it makes the primary surface strictly less
+informative than the secondary one: a machine consumer would have to fall back
+to parsing the prompt rendering to learn what a `kind` may be. That reproduces
+this slice's founding defect — *the contract is knowable only by reading
+something not meant to be read as a contract* — inside the artefact built to
+cure it. `EX-3`'s four keys were enumerated against the type closure, before
+the extern region was in view; the appended criterion records the fifth rather
+than letting the JSON quietly out-run its own exit criterion.
+
+The region is carried **once**, at top level, keyed by `ExternRegion::label()`
+over an iteration of `ExternRegion::ALL` — not inlined at its two referencing
+sites, which would state it twice (`STD-001`) and would make a second region
+a two-site edit.
+
+**Also appended by execution, and not a criterion:** `TYPE_COLUMN_CAP = 40`.
+One `FieldShape::Closed` token list is 105 characters, and without a cap it
+padded thirty sibling rows out to 105 columns of whitespace. With it, a wide
+type overflows its own column and its siblings stay narrow. This is padding,
+not content — plan disposition 5 accepts long *content* lines and is untouched.
