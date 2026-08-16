@@ -1,0 +1,51 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 239
+slug = "readable-and-emittable-change-event-vocabularies-are-different-sets"
+title = "Readable and emittable change-event vocabularies are different sets"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-16"
+updated = "2026-08-16"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "answers 'strict on write, tolerant on read' for the change-event vocabulary — a worked precedent on an adjacent surface, not a ruling on submission keys"
+target = "QUE-219"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the live breakage this roster split makes routine to avoid"
+target = "ISS-315"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the defect this decision resolves"
+target = "ISS-355"
+
+[[relation]]
+label = "shapes"
+target = "SL-256"

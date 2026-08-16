@@ -75,9 +75,11 @@ a submission which records one says so.
    `payload_terms` kept in step.
 2. Emit the row from `record_declaration`, and from `record_act` on the path
    that currently emits nothing.
-3. Settle the `AcceptanceAttested` asymmetry — either it becomes an instance of
-   the new event or the design states why it stays distinct. Two spellings for
-   one thing is what the no-parallel-implementation rule is about.
+3. Split `ChangeEvent`'s single `ALL` roster into `READABLE` and `EMITTABLE`,
+   and retire `AcceptanceAttested` into the readable-only half as
+   `LegacyAcceptanceAttested` (serde name and rendered token unchanged, stored
+   payload shape preserved). Scope widened here by explicit decision —
+   see `DEC-239` and the amended Non-Goal.
 4. Pin the behaviour where it broke: an apply that records an act renders a row
    through the existing `commands/design.rs:1649` path.
 
@@ -111,7 +113,13 @@ extends the output with every row in `Applied::rows`.
   the capsule's files rather than a merge discovering it.
 - **Making the envelope name the next act.** That is `IMP-390`, sequenced after
   `SL-251`.
-- **Retiring or renaming any existing `ChangeEvent` member.**
+- ~~**Retiring or renaming any existing `ChangeEvent` member.**~~ **Amended
+  2026-08-16 by explicit human decision** (`DEC-239`). Retiring
+  `AcceptanceAttested` is now **in scope**, via the readable/emittable roster
+  split rather than an alias. The boundary was moved deliberately, not admitted
+  sideways: `AcceptanceAttested` is redundant once acceptance flows through the
+  shared record seam, and the only honest migrations both require touching the
+  member. Retiring or renaming any *other* member remains out of scope.
 
 ## Risks & Assumptions
 
