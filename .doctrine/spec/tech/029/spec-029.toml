@@ -24,7 +24,7 @@ responsibilities = [
   "Own the reserved-materialisation seam — a caller-visible midpoint in the entity engine's fresh-creation path between the id claim and the byte write — introduced additively so every existing caller stays behaviour-unchanged.",
   "Own the design prompt pack: a closed, design-specific fragment store addressed by stable identity with content binding, composing the delivered turn prompt from one invariant stage fragment, at most one coarse obligation fragment, and the dynamic envelope, riding the existing cascade rather than a parallel composition mechanism.",
   "Derive every read from one canonical turn envelope, projected by the command shell as prompt, machine-readable, or human status — one type with three renderings, never three models — and bounded on the ordinary path by named limits held in a single module.",
-  "Front the capability through one command family — start, show, apply, resume — carrying the sparse mutation contract in which an omitted key persists, an explicit null clears a nullable scalar, an empty collection clears a collection, a stable-identity object partially updates its subject, and one unordered batch refuses duplicate subjects.",
+  "Front the capability through one command family — start, show, apply, resume, materialise, contract — carrying the sparse mutation contract in which an omitted key persists, an explicit null clears a nullable scalar, an empty collection clears a collection, a stable-identity object partially updates its subject, and one unordered batch refuses duplicate subjects.",
 ]
 
 [[source]]

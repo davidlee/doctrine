@@ -961,6 +961,20 @@ as its own reason for existing:
 
 All six are `const fn`, so the token array stays a const:
 
+**Corrected at reconcile (`RV-362` `F-8`, item 1): four of the six, and the
+division below is four / eight / two.** `Provenance` and `ReviewDisposition`
+carry a field on *every* variant, so naming a token through the authority in a
+`const` initialiser drops a temporary (`E0493`) — and two of those variants are
+not constructible from this leaf at all, `ImportedProse` needing a `DesignId`
+and `Conducted` a `ReviewRef`, both private fields behind non-`const`
+constructors. `PHASE-01` found this and appended `EX-9`: the two move to the
+naming arm, and the single source the table above names is recovered at *test*
+time instead of compile time — `tokens_match_serde_renames` walks each variant
+and asserts the named token equals that variant's own `label()` / `arm()`, with
+the barrier making the walk total. So the authority arm takes `Stage`,
+`ActKind`, `ReviewPolicy` and `InquiryLifecycle`; the naming arm takes those two
+alongside the six named below (`payload_contract.rs:165-265`).
+
 ```rust
 payload_variants! {
     // Six: the type names its own tokens; take them.
@@ -1613,6 +1627,14 @@ it.
 (`commands/design.rs:118-130`), with its arm in the dispatch match (`242-246`) and
 its classification in `guard.rs:430`.
 
+**Corrected at reconcile (`RV-362` `F-8`, item 5): the sixth, not the fifth.**
+`DesignCommand` already carried `Start`, `Show`, `Apply`, `Resume` and
+`Materialise` when this was written (`design.rs:132-149`) — the family had been
+five since `materialise` shipped, and this design counted the four `SPEC-029`
+names rather than the enum. The miscount is arithmetic only; nothing downstream
+of it changes. Its governance half — `SPEC-029` still naming a four-verb family
+— is the same finding's spec leg and is carried by `REV-054`.
+
 **`Read`-classed.** It touches neither the runtime nor the authored tier, which is
 the split the existing comment there already states. Two consequences worth
 naming: the worker-mode guard refuses `Write`-classed verbs by process, so
@@ -1807,7 +1829,9 @@ Three chains, stated as dependency rather than as a plan — phase boundaries ar
 
 - **`SPEC-029`** names the verb set as *start, show, apply, resume*. A fifth verb
   makes that line stale — a prose update at reconcile, not an amendment
-  (`DEC-224`).
+  (`DEC-224`). **Corrected at reconcile (`RV-362` `F-7`/`F-8`): the line was
+  already stale by `materialise` before this slice was written, so `contract`
+  makes it stale by two, and the family is six. Landed as `REV-054`.**
 - **`publication/manifest.toml`** gains one entry with all seven required fields
   and `customization = "fixed"` (`DEC-226`). Compelled, not elective:
   `asset_source.rs:132` is a build gate.
@@ -2054,6 +2078,23 @@ engine's admissible set is already computed, rather than against a slice the
 table asserts about itself. `declare` admits five of the eight and
 `AdoptAuthored.sections` admits `sec-` alone (`sec-2`), and those are the two
 claims worth failing on.
+
+**Corrected at reconcile (`RV-362` `F-8`, item 3): one rule was wrong; it is
+two.** `IdKind::declarable` (`ids.rs:82-91`) is a predicate over *declaration
+subjects*, not the admissible-kind set of an arbitrary `Id` row — `DelegationAct`
+legitimately declares `Id(&[IdKind::Delegation])` while `declarable(Delegation)`
+is `false` (`ids.rs:90`), so a single rule checking every `Id` row against
+`declarable` fails four **correct** rows. `PHASE-03` hit this and appended
+`EX-10`, which splits the claim: (a) the descent's generic `Id(kinds)` arm checks
+that the value's own parsed kind is a member of *that row's* `kinds` — structural,
+per row, and nothing to do with `declarable`; and (b) the two engine-derived
+claims this paragraph correctly identifies as worth failing on are asserted at
+their own sites, `Declaration.subject`'s kind set against
+`{k ∈ IdKind::ALL | k.declarable()}` and `AdoptAuthored.sections`' map key
+against `Section` alone. The two claims survive; what does not survive is
+generalising them into a rule over every `Id` row. The table row above
+(`Id(kinds)` → "string, and `kinds` against `IdKind::declarable`") is stale for
+the same reason and reads as (a).
 
 A `Map` row is two claims rather than one, because `sec-2` gave the key a
 description: the object's **values** match the declared value type, and its

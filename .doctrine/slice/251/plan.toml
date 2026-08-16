@@ -318,11 +318,30 @@ exit_criteria = [
 specs        = []
 requirements = []
 
+# VT-1 retired at audit (2026-08-16, RV-362 F-1): its keyword
+# `CARGO_MANIFEST_DIR` is a proxy for "read from disk, not from the embed", and
+# the golden reaches that property through `crate::test_support::repo_root()`,
+# which resolves the RUNTIME env var (test_support.rs:31) — the artifact.rs
+# precedent's own reasoning. Spelling the var a second time in design.rs to
+# satisfy a grep would be an STD-001 violation raised to pass a test. The
+# criterion's substance is MET and was checked, not assumed: commit cba1f257f
+# records the decisive experiment (redirect CARGO_MANIFEST_DIR at one
+# already-built binary → the golden reds while the embed is byte-identical
+# across both runs). The id is spent; VT-3 carries the obligation with keywords
+# that name the seam actually used.
 [[phase.verification]]
 id = "VT-1"
-expects = "sec-8 pin 6 — the published document golden: render_document() equals the committed install/design-payload-contract.md read from disk, with an #[ignore]d regeneration test named in the failure message."
+expects = "RETIRED — keyword proxy defeated by the DRY seam. See PHASE-06/VT-3 and RV-362 F-1."
 test_file = "src/commands/design.rs"
 keywords = ["PAYLOAD_CONTRACT_PATH", "CARGO_MANIFEST_DIR", "ignore"]
+waived = true
+waived_reason = "The keyword `CARGO_MANIFEST_DIR` names an implementation token the golden legitimately routes through `crate::test_support::repo_root()` (test_support.rs:31, runtime env var — not `env!`). EX-5's property (disk, never embed) is met and mutation-verified in cba1f257f. Retired at audit, 2026-08-16; VT-3 carries the obligation. See RV-362 F-1."
+
+[[phase.verification]]
+id = "VT-3"
+expects = "VT-1's obligation, keyed on the seam the code actually uses: sec-8 pin 6's published-document golden — render_document(&extern_contracts()) equals the committed install/design-payload-contract.md read FROM DISK at runtime via `crate::test_support::repo_root()`, never through the embed, with an #[ignore]d regeneration test named in the failure message. `repo_root` is the keyword because it is the single-sourced disk-resolution seam (STD-001); `PAYLOAD_CONTRACT_PATH` and `ignore` carry over from VT-1 unchanged. Appended at audit, 2026-08-16."
+test_file = "src/commands/design.rs"
+keywords = ["PAYLOAD_CONTRACT_PATH", "repo_root", "ignore"]
 waived = false
 
 [[phase.verification]]

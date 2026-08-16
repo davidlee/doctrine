@@ -113,8 +113,9 @@ integration is in the sections themselves. Ids only — the run holds the text.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-16 · **closed** · `RV-361` resolved (9 findings, no
-blockers), reconciled, `done · 7/7`, landed on `main` at `0ea962268`
+fresh-as-of: 2026-08-16 · **closed, then reconciled a second time** · two audits,
+`RV-362` (12 findings) and `RV-361` (9), the first recovered from an unmerged
+capsule ref after close and its four delegated findings discharged
 
 ### Produced
 
@@ -135,8 +136,18 @@ blockers), reconciled, `done · 7/7`, landed on `main` at `0ea962268`
   this slice's two items were re-minted as `IMP-438` and `ISS-439`. Anything in
   this slice's record naming `IMP-434` before that merge means `IMP-438`.
 - `doctrine check gate` exit 0 on the merged tree. `doctrine slice verify-vt 251`
-  is clean but for `PHASE-06/VT-1`, a keyword-grep artefact adjudicated as
-  `aligned` — see `RV-361` `F-1`.
+  is **clean, two waivers, no FAIL** — `PHASE-06/VT-1` named the implementation
+  token `CARGO_MANIFEST_DIR` that the golden legitimately routes through
+  `test_support::repo_root()`. `RV-361` `F-1` adjudicated the FAIL `aligned` and
+  left the criterion red; `RV-362` `F-1` retired it with its reason and appended
+  `VT-3` on the seam the code actually uses, which is what cleared it.
+- **Two audits, not one.** `RV-362` ran first (2026-08-16 04:31, twelve findings)
+  on the capsule ref `refs/capsule/d/heads/work`, which was never merged; `RV-361`
+  ran second (18:51, nine) on `edge`, blind to it, and the slice closed under
+  `RV-361` alone. The first ledger was recovered afterwards and landed as
+  `RV-362` — id 358 was already `SL-238`'s design review, so the ledger is
+  re-minted, not merged. Its four delegated findings were discharged in a second
+  reconcile pass; see *Open*. The two agree everywhere they overlap.
 - Seven criteria appended and one VT retired **at execution**: `PHASE-01/EX-9`;
   `PHASE-02/EX-10`, `EX-11`, `VT-4`; `PHASE-03/EX-10`, `EX-11`; `PHASE-07/EX-10`;
   `PHASE-02/VT-2` waived. Ids only — the whole rationale for each is authored in
@@ -379,6 +390,72 @@ blockers), reconciled, `done · 7/7`, landed on `main` at `0ea962268`
   residual defect — that refusal naming no remedy — is `IMP-390`'s fourth
   candidate and a Non-Goal here. `DEC-225` inherits no bug.
 
+**Execution, PHASE-04..07 — swept from the phase sheets and commits at the first
+audit (`RV-362`), since the sheets are runtime and three of them were never
+written back.**
+
+- **A VT's `test_file` was mis-sited four times in this slice, and the fourth
+  would have gone GREEN.** `PHASE-01/VT-1`, `PHASE-03/VT-3` and `PHASE-04/VT-1`
+  each named a leaf file for a test that must name command-tier symbols — a
+  layering violation `just check` reds loudly. `PHASE-06/VT-1` was different: a
+  leaf-sited golden can only pass `extern_fixture()`, PHASE-05's two-row stub, so
+  it would have pinned the *shipped, published* document to a test fixture and
+  passed. `DEC-140` (verification evidence lives at the tier that can produce its
+  subject) decided this in the general case on 2026-08-04; `/plan` does not
+  enforce it. Carried out of the slice as `IMP-438`. **A defect class that usually
+  fails loudly and occasionally fails silently is the one worth mechanising** —
+  vigilance calibrates to the usual case.
+- **A grep-keyword VT is a proxy, and a correct DRY refactor can defeat it.**
+  `PHASE-06/VT-1` also named `CARGO_MANIFEST_DIR`; the golden reaches that
+  property through `crate::test_support::repo_root()` (`test_support.rs:31`,
+  runtime env var, not `env!`). Spelling the var a second time to satisfy the
+  grep would be an `STD-001` violation raised to pass a test. Retired at audit,
+  `VT-3` appended on the seam actually used. `RV-362` `F-1`.
+- **`sec-` is LIVE WIRE VOCABULARY in the shipped contract, not a design-section
+  leak.** PHASE-06 planned `!shipped.contains("sec-")` as the `POL-002` probe; it
+  reds a *correct* document, because the rendering carries `{id(sec-): text}` and
+  `id(inq-|sec-|att-|fnd-|cp-)` — which a client needs in order to send a
+  well-formed payload. The probe needs a following **digit**, matching
+  `cites_a_repo_private_id`'s own prefix+hyphen+digit shape. Re-checked at audit:
+  zero repo-private ids and zero `sec-[0-9]` in the 210-line shipped document.
+- **Doctrine replaces clap's help renderer, so reasoning from clap's behaviour is
+  reasoning about a renderer this project does not run.** `main.rs:285-292` routes
+  every `--help` and every `help` subcommand through `render_subcommand_help`,
+  which read `get_about()` alone (`cli.rs:1427`); `long_about` occurred **zero**
+  times in the tree. `PHASE-07/EX-4`'s named mechanism would have rendered
+  nothing. This is a third instance of the class this slice named after `A3` —
+  *an unverified claim about what a tool does, load-bearing on a design decision*
+  — and the first two were also about clap. The fix widened the touch-set to
+  `cli.rs` and the widening was **measured**: 281 help renderings before and
+  after, 251 byte-identical, 27 differing by exactly one restored trailing full
+  stop, 3 by a PID in a pre-existing panic (`ISS-439`, raised from that sweep —
+  three broken `--help` renderings had been sitting in plain sight because
+  whole-tree help sweeps are not something this project does).
+- **The golden must read disk, and PHASE-06 found the sheet's stated REASON for
+  that false while the conclusion stood.** The sheet said an `install/`-only edit
+  does not trigger a rebuild; it does, here. Execution replaced the argument with
+  an experiment instead of keeping a true conclusion on a false premise:
+  redirecting `CARGO_MANIFEST_DIR` at one already-built binary reds the golden
+  while the embed is byte-identical across both runs. The doc comment now carries
+  the reason that survives the evidence.
+- **The `#[expect(dead_code)]` ladder ran in both directions, one phase at a
+  time.** `extern_contracts()`'s gate came *off* at PHASE-06 (first production
+  caller); `PAYLOAD_CONTRACT_PATH`'s became `cfg_attr(not(test), …)` at the same
+  phase (first `cfg(test)` reader); `PAYLOAD_CONTRACT_POINTER`'s was *deleted* at
+  PHASE-07 (production readers). Under `warnings = "deny"` an `expect` that stops
+  firing is itself a hard error, so each move belongs to the phase that lands its
+  first reader — never early, never optional tidy-up. See
+  `mem.fact.build.dead-code-fires-only-under-test-compile` for why nothing
+  accumulates silently: the gate runs the test compile.
+- **An audit parked on an unmerged ref is an audit that did not happen.** The
+  capsule driver committed `RV-362` to `refs/capsule/d/heads/work` and never
+  merged it; fourteen hours later a second audit ran on `edge` with no way to
+  know the first existed, and the slice closed on the second alone. Nothing was
+  lost in the end — the ledger was recovered — but four delegated findings sat
+  undischarged through `done`, and the recovery cost a full second reconcile
+  pass. The lesson is not about capsules: **any ledger whose reachability depends
+  on a ref nobody merges is invisible to the lifecycle that gates on it.**
+
 ### Open
 
 - **`/reconcile` obligations are now enumerated on `RV-361`'s Reconciliation
@@ -393,10 +470,25 @@ blockers), reconciled, `done · 7/7`, landed on `main` at `0ea962268`
   which `PHASE-02/VT-2`'s waiver caught at execution and the design never
   absorbed. Corrected at both sites plus the selector registry (`RV-361` `F-2`);
   `slice conformance 251` now reports **undelivered 0, conformant 12**.
+- **`RV-362`'s brief was discharged after close, in a second reconcile pass**
+  (2026-08-16, post-`21746a11d`). Two of its four delegated findings were already
+  satisfied by `RV-361`'s pass — `F-5`/`F-6`, the selector registry, and two of
+  `F-8`'s five design.md claims. The rest were owed and are now landed:
+  `PHASE-06/VT-1` retired with `VT-3` appended (`F-1`, which is what cleared
+  `verify-vt`); `SPEC-029`'s command family corrected from four verbs to six by
+  `REV-054` (`F-7`); the three remaining `design.md` claims — the `const fn`
+  count in `sec-4`, the single `Id`/`declarable` rule in `sec-8`, and `contract`
+  as the fifth rather than sixth `DesignCommand` variant (`F-8`); `ISS-346`
+  closed `duplicate` against `ISS-333` (`F-9`); the
+  `mem.fact.design-run.apply-payload-vocabulary` falsehood about `Declaration`'s
+  `deny_unknown_fields` corrected at source (`F-10`); and the orphaned
+  `.doctrine/workflows/drive-slice.js` pruned (`F-12`). `F-11`'s stray root-level
+  `capsule-*.md` files were already gone by another route.
 - **Nothing about this slice is owed.** What remains open is owned elsewhere:
   `ISS-333` on its serde axis, `IMP-390` on its other three faces (both linked
-  `fulfils … degree = partial`), and the three items carried out — `IMP-438`,
-  `ISS-439`, `ISS-440`. The standing risks below are recorded, not scheduled.
+  `fulfils … degree = partial`), and the four items carried out — `IMP-438`,
+  `IMP-439`, `ISS-439`, `ISS-440`. The standing risks below are recorded, not
+  scheduled.
 
 - **Two obligations open, both the user's** — section attestations (all nine
   outstanding; human review is the v1 default per `reviewing.md`) and the review

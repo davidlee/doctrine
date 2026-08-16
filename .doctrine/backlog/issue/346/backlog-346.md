@@ -55,3 +55,30 @@ Worth considering alongside: widen `declaration_example` (or add a
 from the envelope rather than from the source. That is arguably the root cause —
 (1) and (2) turn a silent wrong turn into a loud one, but only discoverability
 stops the guessing.
+
+## Closed as a duplicate of ISS-333 (2026-08-16)
+
+`SL-251`'s reconciliation audit (`RV-362` `F-9`) found this item and `ISS-333`
+recording the same defect — `design apply` discarding an unknown **top-level**
+key, bumping the revision, writing a receipt, printing no change row and exiting
+0 — under two ids, both open, so the slice's discharge statement had two places
+to land and no way to choose. `ISS-333` is the survivor: it is the older split
+(out of `ISS-318` at `SL-249`'s close), it already carries the serde `flatten` /
+`deny_unknown_fields` constraint that makes this structural, and it is the id
+`SL-251` is linked to.
+
+The third suggestion above — *widen `declaration_example` or add a
+`--format schema` so the shape is discoverable from the envelope rather than the
+source* — is the one thing here that shipped. `SL-251` delivered it as
+`doctrine design contract [--format json|prompt]` plus the published
+`reference/design-payload-contract.md`. The two refusal candidates (1) and (2)
+did **not** ship and stay open on `ISS-333`.
+
+One correction worth carrying across, because this item states the opposite of
+what the code does: **`Declaration` already denies unknown fields**
+(`submission.rs:123`), as do `CheckpointActDeclaration` and
+`AgentActDeclaration`. Three of the twelve wire structs refuse; the other nine
+discard. So a misspelling *inside* a `declare` entry is refused with serde's own
+message, while the same misspelling one level up is swallowed — and that
+asymmetry is the whole of `ISS-333`. (`RV-362` `F-10` corrected the same
+falsehood in `mem.fact.design-run.apply-payload-vocabulary`.)

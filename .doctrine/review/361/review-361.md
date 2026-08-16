@@ -296,3 +296,30 @@ a dispositioned finding at every site rather than at the one the auditor
 happened to cite. Nothing else was re-audited.
 
 Reconcile pass complete — handoff to `/close`.
+
+## Addendum — this was the second audit of SL-251, not the first (2026-08-16)
+
+`RV-362` audited the same slice on the same code fourteen hours earlier, raised
+twelve findings, wrote its own `## Synthesis` and `## Reconciliation Brief`, and
+advanced `SL-251` to `reconcile`. This review never saw it, because the capsule
+driver committed that ledger to `refs/capsule/d/heads/work` and the ref was
+never merged — so `edge` carried nothing of it, and this pass was run and closed
+believing it was the first.
+
+Nothing here is retracted. The two ledgers agree on every fact they both
+establish and neither is a superset of the other: `RV-362` found `SPEC-029`'s
+stale verb family, three further `design.md` claims execution had disproved, the
+`ISS-346`/`ISS-333` duplicate, a memory asserting the opposite of
+`submission.rs:123`, and an orphaned `drive-slice.js`; this review found the
+`IMP-434` id-collision residue in the recorded source-deltas (`F-6`), the
+`skills-lock.json` drift inside `PHASE-02`'s boundary (`F-8`), and `slice
+selector doctor`'s intent conflation (`F-9`, carried out as `ISS-440`).
+
+One disagreement, on remedy rather than fact. `F-1` here read `PHASE-06/VT-1`'s
+FAIL, established that `EX-5`'s substance holds, and disposed it `aligned` —
+leaving the criterion red on `doctrine slice verify-vt 251`. `RV-362` `F-1`
+reached the same conclusion about the code and additionally retired the spent
+criterion with its reason, appending `VT-3` on the seam the golden actually uses.
+The second reconcile pass took that answer, so `verify-vt` is now clean. Read
+`RV-362`'s `## Reconciliation Outcome` for what the recovery landed and what this
+pass had already satisfied.
