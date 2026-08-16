@@ -1081,3 +1081,29 @@ routes around: it does not care who authored the signature.
   direction — not *write the assertion*, but *count the population the criterion
   quantifies over*. A prose reviewer reads "three call sites" and has no reason to
   run the grep; the compiler does it for free the moment the signature moves.
+
+- **PHASE-07 must decide `run_after_prune`'s echo prefix deliberately — the
+  prototype changes it silently.** Found in PHASE-06's oracle pass. The fork's
+  `run_after_prune` echoes `{source_id}` (canonical) on all three of its output
+  lines where today's code echoes `{source}` — the source string **as typed**.
+
+  PHASE-02 `VT-2` pinned that as a *divergence to preserve*: the backlog copy
+  echoes the canonical id, the top-level copy echoes as typed. Neither PHASE-07's
+  exit criteria nor §7's named-output-change set carries a unification, and
+  PHASE-08 `EX-6` covers only the routed `backlog after` legs. So the prototype
+  makes an unnamed output change inside the same edit that does PHASE-07's
+  legitimate work.
+
+  It bears on PHASE-06 only as a hazard: `T1` must touch `run_after_prune`'s
+  `dep_seq::remove` call at `:254` because the signature reshape forces it, and
+  the fork shows how easily an echo change rides along. PHASE-06's `R2` holds the
+  line — reshape the argument, change nothing else.
+
+  **Action for PHASE-07 planning:** decide the echo explicitly. Unify (and name it
+  in the reconciliation brief as an output change), or preserve (and say why the
+  divergence survives the collapse). Do not inherit it.
+
+  Third prototype defect logged forward from a `DEC-242` oracle pass; the two from
+  PHASE-02 (`phase-02.md ## Findings F-3` — the `eprintln!` against
+  `print_stderr = "deny"`, and the `Terminal` branch minting reasons for states
+  `authored_class` may make unreachable) were both re-confirmed still present.
