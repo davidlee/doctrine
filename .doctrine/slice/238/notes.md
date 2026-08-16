@@ -754,3 +754,19 @@ routes around: it does not care who authored the signature.
   completeness against `doctor`. One string if accepted; zero cost if declined.
 
   Raised at PHASE-04 blind planning. Fourth defect at the same seam.
+
+- **`kref_for` is duplicated in `catalog/scan.rs:1372` — follow-up, deliberately
+  outside PHASE-04.** PHASE-04 `D-1` promotes the generic entity-seeding helpers
+  (`seed_toml`, `seed_status_bearing`, `seed_status_less`, `kref_for`) out of
+  `authored_status.rs`'s private `mod tests` into a `pub(crate) mod test_support`
+  beside the reader whose input they author, and collapses `backlog.rs:5716`'s
+  slice-hardcoded `seed_slice_entity` into it. That leaves one copy uncollapsed:
+  `catalog/scan.rs`'s private `kref_for`.
+
+  Left deliberately. PHASE-08 `EX-9` requires the `search` / `map` / `catalog`
+  suites green **unmodified**, and re-pointing that helper's import is precisely
+  the churn that makes "unmodified" ambiguous at audit. Cheapest resolution is to
+  fold it in during PHASE-08, when that file is open for other reasons and the
+  criterion can be stated to permit an import-only move — or to leave it and
+  accept one duplicated four-line function. Owner's call; no correctness impact
+  either way.
