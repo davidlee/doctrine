@@ -161,6 +161,22 @@ extends the output with every row in `Applied::rows`.
   behaviour (an apply asserting an empty row set). `SL-251`'s planned VTs are
   contract-table tests, so this is unlikely — and it would surface as a red test
   on import, not as silent divergence.
+- **R6 — two build/test footguns this change's *shape* invites.** Surfaced by
+  the `explore.memory` retrieve over the affected surface; neither is a design
+  choice, both are for the plan and the phase sheets.
+  - A vocabulary change plus a fixture ladder is the exact setup of
+    `mem.pattern.jail.stale-test-fixture-vocabulary-change`: the integration-test
+    binary embeds its fixture corpus, so an un-rebuilt test binary asserts new
+    parser behaviour against old fixture data and the failure reads as a logic
+    regression in the emit path. Touch `tests/*.rs` before the test run. That
+    memory also carries the `| tail` exit-status footgun — never judge a gate
+    through a pipe.
+  - Do **not** record an e2e test-count baseline in a phase sheet:
+    `mem.fact.design-run.e2e-counts-embed-the-unit-suite` — `e2e_design_state.rs`
+    `#[path]`-includes `src/design_run/mod.rs`, so its count is the file's own
+    tests *plus* the whole `design_run` unit suite, and adding any unit test in
+    this slice moves it with nothing wrong. `SL-244` lost two phases to exactly
+    this.
 - **A1 — no spec requirement is at stake.** SPEC-029's roster (`REQ-428` …
   `REQ-438`) covers schema versioning, CAS, submission replay, id reservation,
   adoption, the single envelope, the watermark, and prompt composition. None

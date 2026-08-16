@@ -4,9 +4,28 @@ Durable per-slice scratchpad — tracked in git. The place to lift anything from
 disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 `rm -rf` before the slice close-out audit harvests it.
 
+## Design surface triage
+<!-- `explore.triage`, run rev 11. An index into where each element lives, not a
+     second copy of it — the scope doc is the authority for all five columns. -->
+
+| element | where it lives | state |
+|---|---|---|
+| open questions | `slice-256.md` § Open Questions — `OQ-1`…`OQ-3` | all settled, each annotated with the DEC that settled it |
+| in-run questions | design run `dr-01a0088b` — `inq-1`…`inq-5` | 5/5 resolved |
+| risks | `slice-256.md` § Risks & Assumptions — `R1`…`R6` | `R3` retired by research; `R6` added from the `explore.memory` retrieve |
+| assumptions | same section — `A1` | discharged by `DEC-240` |
+| shaping decisions | `DEC-237` (event shape + terms), `DEC-238` (emit seam), `DEC-239` (roster split), `DEC-240` (durable statement) | all `proposed`, all bound to the node that asked |
+| constraining governance | `research.md` § Thread 1 — binding: `STD-001`, `REQ-437`, `REQ-436`, `ADR-001`; checked-not-applicable: `STD-002`, `STD-003`, `POL-001`, `POL-002`, `ADR-019`, and an ADR sweep | confirmed by the canon pass; `STD-003` subsequently ruled on rather than merely noted |
+
+The one live tension left for drafting is not a question but a sequencing fact:
+`DEC-239` widened scope to retire a member whose legacy rows appear in `SL-251`'s
+own design-run snapshot. Read-path only by design — the roster split exists to
+keep exactly those rows parsing — but it wants re-checking at `SL-251`'s
+integration rather than assuming.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 6, stage `exploring`) · pending
+fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 11, stage `exploring`) · pending
 
 ### Produced
 
