@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0083d-3a98-71c2-9e08-231f2c2348ae"
+recorded_at = "2026-08-16T01:43:45.560662572Z"
+kind = "friction"
+summary = "a sheet's absence probe was a prefix of live wire vocabulary, so it redded a correct artefact"
+detail = """SL-251 PHASE-06 (capsule-phase-planner then capsule-worker, /phase-plan + /execute). The sheet's D11 prescribed assert!(!shipped.contains("sec-")) to keep design-section annotations out of the published document. It reds on a CORRECT document: 'sec-' is also the design run's section-id namespace and appears in the shipped contract as load-bearing wire vocabulary — {id(sec-): text} and id(inq-|sec-|att-|fnd-|cp-) — which a client project needs in order to send a well-formed payload. Suppressing it would corrupt the artefact. Cost: a full red/diagnose cycle at the keyboard. The correct shape was one file away and already solved: cites_a_repo_private_id requires prefix + hyphen + DIGIT for exactly this reason. Generalisable: an absence probe over a generated artefact must be at least as specific as the detector it sits beside, because generated artefacts contain the vocabulary the probe is written in."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

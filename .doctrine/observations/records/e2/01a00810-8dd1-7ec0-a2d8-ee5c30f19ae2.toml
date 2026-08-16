@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00810-8dd1-7ec0-a2d8-ee5c30f19ae2"
+recorded_at = "2026-08-16T00:54:57.74561627Z"
+kind = "friction"
+summary = "a specified signature had no destination in the specified output shape"
+detail = 'SL-251 PHASE-05 (capsule-phase-planner). The sheet specified render_json(&ExternContracts) (from EX-1) alongside a JSON document shape of exactly {schema, version, root, types} (from EX-3) — with nowhere for the parameter to go. Under `unused = "deny"` that is not a style question but a hard error, so the conflict surfaced at the keyboard as a forced departure rather than at planning as a question. Cheap planning-time check: every parameter in a specified signature needs a named destination in the specified output. Resolved by appending PHASE-05/EX-10.'
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

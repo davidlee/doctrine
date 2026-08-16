@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a007db-0dd6-7df3-a2c8-6f390035dea5"
+recorded_at = "2026-08-15T23:56:31.574328037Z"
+kind = "friction"
+summary = "cargo test --lib silently tests nothing under src/commands/ — those live in the bin target"
+detail = "SL-251 PHASE-04 worker (capsule-worker, /execute). The worker's first focused run of a new src/commands/design.rs test printed 'running 0 tests ... 212 filtered out' in 0.06s with no recompilation, which reads as green. commands::design is in the BIN target, not the lib; the correct focused form is 'cargo test --bin doctrine <filter>'. AGENTS.md carries 'cargo --bin doctrine memory # focused tests; don't use --lib' but it reads as advice about the memory subsystem rather than the general rule it is. Cost here was low because the worker noticed the timing; the failure mode is a worker that does not, and hands back a green it never ran."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

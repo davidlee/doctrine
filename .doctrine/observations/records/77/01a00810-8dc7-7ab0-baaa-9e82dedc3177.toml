@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00810-8dc7-7ab0-baaa-9e82dedc3177"
+recorded_at = "2026-08-16T00:54:57.735978838Z"
+kind = "friction"
+summary = "a phase sheet specified a mutation arm that cannot compile — it stops reading a bound variable under -D unused"
+detail = """SL-251 PHASE-05 (capsule-phase-planner then capsule-worker). The sheet's T9 arm M4 was 'emit the selector as the row's own key name', which stops reading `selector` and is therefore `unused variable` -> hard error under `unused = "deny"`. The sheet cites mem_019fe6ccc6ad7b23bc8bf746351f9a09 ('a mutant must compile or it is not a mutant') three sections above the table specifying the arm. Knowing the rule did not stop the planner writing an arm of exactly the class it names, because the rule is stated as a property of mutants and the arm was written as a description of behaviour. Generalisable fix for sheet authors: state a mutant as a VALUE substitution on an expression that still reads all its inputs (here selector.replace("kind","facet")), never as 'stop doing X'."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

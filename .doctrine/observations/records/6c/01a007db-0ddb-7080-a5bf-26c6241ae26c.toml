@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a007db-0ddb-7080-a5bf-26c6241ae26c"
+recorded_at = "2026-08-15T23:56:31.579468082Z"
+kind = "friction"
+summary = "a mutation-battery runner that greps ^error scores an ordinary test failure as 'did not compile'"
+detail = '''SL-251 PHASE-04 worker (capsule-worker, /execute). cargo prints 'error: test failed, to rerun pass --bin doctrine' on a normal test failure, so a runner matching ^error cannot tell a non-compiling mutant from a convicting one. The correct discriminator is '^error\[E|^error: could not compile'. This is the missing operational half of mem_019fe6ccc6ad7b23bc8bf746351f9a09 (a mutant must compile or it is not a mutant): that memory says to check compilation but not that cargo's own failure line is a false positive for the obvious grep. Both directions are wrong — it discards a genuine conviction, and it can credit a mutant that really did fail to build.'''
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

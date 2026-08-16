@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0083d-3a9c-7323-aaf9-1a677d2e0cd9"
+recorded_at = "2026-08-16T01:43:45.56486599Z"
+kind = "friction"
+summary = "a phase sheet's stated rationale for a correct decision was factually false, and the worker had to re-derive it"
+detail = "SL-251 PHASE-06 (capsule-phase-planner, /phase-plan). Four sheet elements (T6, EX-5 commentary, R-D, and the golden's prescribed doc comment) rested on 'install/ is a RustEmbed root with no rerun-if-changed, so an embed comparison false-greens'. An install/-only edit demonstrably DOES trigger a rebuild in this tree, so the perturb-the-file experiment cannot distinguish a disk read from an embed read — both hypotheses predict red. The DECISION (read from disk) is right; only its stated reason was wrong. The worker found a decisive experiment instead — redirect CARGO_MANIFEST_DIR at one already-built binary, so the embed is byte-identical across both runs and only the disk read moves — and corrected the doc comment. Worth capturing because a false rationale attached to a correct decision is more durable than a wrong decision: it survives review, gets copied into the next sheet, and quietly invalidates any experiment built on it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

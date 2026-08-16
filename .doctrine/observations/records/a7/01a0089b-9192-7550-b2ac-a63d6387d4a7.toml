@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0089b-9192-7550-b2ac-a63d6387d4a7"
+recorded_at = "2026-08-16T03:26:48.210876139Z"
+kind = "friction"
+summary = "two sheet claims about what compiles were asserted from reading rather than from compiling, one of them a mutation arm — third occurrence of that class in three phases"
+detail = "SL-251 PHASE-07 (capsule-phase-planner). T2 asserted its test 'compiles — every symbol it names already exists'; it did not (a bare const not yet imported, plus an unconditional expect(dead_code) that becomes unfulfilled the moment any reader appears). And M3's mutation arm orphaned an import, which -D unused makes a hard error — not a mutant. This is the THIRD consecutive phase with a non-compiling arm (PHASE-05 M4, PHASE-06 M7, PHASE-07 M3), each time in a sheet whose own Memory section distils mem_019fe6ccc6ad7b23bc8bf746351f9a09, and this time also against an explicit spawn-prompt instruction naming the two prior failures. What is notable is that the same planner DID compile D3's concat!/macro_rules! shape at planning before writing it down, and that claim was correct. So the planner has the capability and applies it selectively — to shapes it is unsure of, not to arms it believes are obvious. The rule that would work is mechanical rather than advisory: compile every specified mutation arm at planning, the way D3 was compiled."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

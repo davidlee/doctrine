@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00821-bb2d-73d2-8632-ae0874726a05"
+recorded_at = "2026-08-16T01:13:43.469635339Z"
+kind = "friction"
+summary = "a plan's VT test_file was wrong four times in one slice, always the same way, and DEC-140 already decided it"
+detail = "SL-251, observed across PHASE-01/VT-1, PHASE-03/VT-3, PHASE-04/VT-1 and PHASE-06/VT-1 (skills: /plan, /phase-plan). A criterion is authored where its SUBJECT MATTER lives; tests/architecture_layering.rs sites tests by IMPORT LEGALITY. They disagree whenever a leaf-tier subject needs a command-tier oracle, and nothing surfaces the disagreement until someone sits down to write the test — after plan approval. DEC-140 ('verification evidence lives at the tier that can produce its subject') decided the general case on 2026-08-04; it is accepted governance /plan does not enforce, so each instance costs a planner's discovery plus an orchestrator's authored-plan amendment. Three of the four would have redded the build. The fourth would have gone GREEN while pinning the shipped, published document to a two-row test fixture — a knowledge region that does not exist, with a passing test underneath. Carried out of the slice as IMP-434."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

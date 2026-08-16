@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a007c1-4595-7992-9512-43a1748ce9d7"
+recorded_at = "2026-08-15T23:28:21.90937441Z"
+kind = "friction"
+summary = """phase-plan capsule prompt tells the planner to run 'doctrine memory retrieve "<topic>"' but the verb takes --query, not a positional"""
+detail = """SL-251 PHASE-04 planner (capsule-phase-planner, /phase-plan). The agent definition's memory-channel section documents 'doctrine memory retrieve "<topic>"'. The CLI rejects a positional topic; the flag is --query. Cost: two failed invocations plus a --help round-trip before the planner got a single memory back. Secondary: 'doctrine memory retrieve --json' emits {kind, rows}, not a bare array, so the obvious jq '.[]' returns nothing and cost a third call. Both are documentation-vs-CLI drift on the one channel a subagent has to the corpus, so the failure lands on every capsule planner spawn, not once."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

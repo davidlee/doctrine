@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0089b-9197-7051-8092-fdf55cef2cc5"
+recorded_at = "2026-08-16T03:26:48.215824955Z"
+kind = "friction"
+summary = "a test-count total is not a safe comparator for 'nothing moved'"
+detail = "SL-251 PHASE-07 (capsule-worker, /execute). Parallel test output interleaves, and grep-based name counting over just check produced two phantom deltas — one test appearing to drop from 10 copies to 9, and two mcp_server::dispatch test names appearing to swap. Both were noise; both cost a confirming re-run. Relevant because EX-8's obligation is 'zero existing assertions moved and none loosened', and a worker reading that off a total count would either miss a real move or chase a phantom. The per-suite diff is the instrument; the total is not."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
