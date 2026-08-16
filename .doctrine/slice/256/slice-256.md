@@ -92,7 +92,14 @@ a submission which records one says so.
    payload shape preserved). Scope widened here by explicit decision —
    see `DEC-239` and the amended Non-Goal.
 4. Pin the behaviour where it broke: an apply that records an act renders a row
-   through the existing `commands/design.rs:1649` path.
+   through the existing shell render — `commands/design.rs:1649` on `edge`,
+   `:1771` in `SL-251`'s landed capsule.
+5. Accept the one change to an **existing** observable this implies. A
+   review-disposing act goes from one row to two, keeping `ReviewDisposed` and
+   gaining `ActRecorded` beside it — **decided by `DEC-241`**, on the grounds
+   that they are different claims and that suppressing the first on that one arm
+   would carve the original asymmetry back into the seam `DEC-238` unified.
+   Everywhere else this slice adds rows that do not exist today.
 
 ### Affected surface
 
@@ -260,18 +267,40 @@ deleted, because `R3` above cites `OQ-3` by id.
 - `doctrine slice conformance` reports no edit outside the fenced surface — in
   particular none inside `SL-251`'s design-targets.
 - `ISS-355` closed; the `SL-251` coordination note discharged or handed on.
-- **`REQ-478` covered.** Its three acceptance criteria are already discharged by
-  the bullets above — no new test is owed. The mapping, since it is not
-  one-to-one: criterion 1 (*an apply that records an act emits a row naming its
-  subject and kind*) by bullets 1–2; criterion 2 (*every emittable member is
-  driven by the ladder*) by bullet 3; criterion 3 (*retired vocabulary is
-  readable-only and carries no emission obligation*) by bullet 5's legacy-
-  fragment round-trip, plus bullet 3's roster test iterating `EMITTABLE` alone.
-  What *is* owed is the coverage cell binding them — `doctrine coverage record
-  --slice 256 --requirement REQ-478 --change 256 --mode VT` against those e2e
-  checks — recorded once they exist rather than now. `REQ-478` moves `pending` →
-  `active` at close, on that evidence.
+- **`REQ-478` covered.** Its three acceptance criteria are discharged by the
+  bullets above plus two checks added at `RV-360` integration. The full mapping
+  lives in design `sec-4` rather than being restated here; the part worth
+  carrying at scope altitude is that criterion 3 (*retired vocabulary is
+  readable-only and carries no emission obligation*) takes three checks, not one,
+  because the roster array alone evidences neither half.
+
+  What is owed is the coverage cell binding them, **and it must name a runnable
+  check**. ~~`doctrine coverage record --slice 256 --requirement REQ-478 --change
+  256 --mode VT`~~ — that form records no `VT` check at all: with no alias,
+  command or matcher, `has_check` is false, the record takes the attestation
+  branch, and the cell stores a `Verified` status with no test bound to it
+  (`RV-360` `F-3`). The corrected recipe, with its positive-control matcher, is
+  in design `sec-4`. Recorded once the checks exist rather than now; `REQ-478`
+  moves `pending` → `active` at close, on that evidence.
 
 ## Summary
 
 ## Follow-Ups
+
+- **`ISS-367`** — *`live_acts` is blind to same-kind replacement, so
+  `ActInvalidated` under-reports.* Raised from this slice's design run,
+  `concerns DEC-238`, sequenced `after SL-256`. It is the other end of the act
+  lifecycle: this slice makes every recording observable and leaves invalidation
+  reporting only the deaths visible in the live-set difference. Design `sec-1`
+  and `sec-3` both state that boundary so the design promises no symmetry it does
+  not deliver.
+- **The `SL-251` coordination note has three sites, not two.** Its `design.md`
+  ¶ 422–428, its ledger row at 2289, and — found when the capsule landed —
+  `payload_contract.rs:501`, on `UnknownKeys::SilentlyDropped`. Each takes the
+  same one-clause touch at `SL-251`'s reconcile; the conclusion survives in all
+  three, only the unqualified premise moves.
+- **`DEC-238` carries an appended correction** weakening its cannot-forget claim
+  to what the code supports (`RV-360` `F-1`). Making the seam genuinely
+  unbypassable needs visibility changes in `fixture.rs` and `tests.rs`, the
+  latter an `SL-251` design-target — so it is out of scope here and available as
+  future work if the convention proves insufficient.

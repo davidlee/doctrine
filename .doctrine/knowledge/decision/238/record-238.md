@@ -95,3 +95,33 @@ Reached in the `SL-256` design run with GPT-5.5 (codex) as peer advisor. The
 occurrence-vs-delta proof is codex's sharpening of a concrete finding made on
 this side; the seam design is codex's, accepted after pushback removed an
 `ActRows` wrapper type.
+## Correction, 2026-08-16 — the cannot-forget property is weaker than claimed
+
+Raised as `RV-360` `F-1` by an external adversarial reviewer during `SL-256`'s
+design review. The claim above — *"a future third record kind cannot be added
+without going through it"* — is **false**, and it is left standing because it is
+what the decision was taken against.
+
+`CheckpointActGroup::record` (`snapshot.rs:361`) and
+`AgentDeclarationGroup::record` (`:387`) are `pub(crate)`. They are therefore
+reachable from anywhere in the `design_run` module tree, so a future production
+caller can store an act without passing through `admit_and_record` and without
+producing a row. Wrapping them in `ActRecord::insert` does not remove that route;
+it only stops using it.
+
+What the seam actually buys, stated at the strength the evidence supports:
+
+- The three **production** recording paths collapse to one, so the split this
+  slice exists to delete cannot re-form by a caller choosing differently.
+- A new record kind added *through the seam* cannot omit its row, because the
+  return type is `Pending` and not `Option<Pending>`.
+- It does **not** prevent a future caller from bypassing the seam entirely. That
+  is one obvious route rather than the only route, and it is a convention held by
+  visibility, not by the type system.
+
+Making the sink genuinely unreachable would require restricting visibility across
+`fixture.rs` and `tests.rs`, neither of which `SL-256` may edit — `tests.rs` is
+one of `SL-251`'s design-targets. So the invariant is weakened here rather than
+enforced there. The decision's substance is unaffected: explicit emission at a
+unified seam is still correct, and the occurrence-vs-delta proof that justifies
+it does not rest on this claim.
