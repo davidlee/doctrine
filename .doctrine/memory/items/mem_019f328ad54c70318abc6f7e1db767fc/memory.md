@@ -23,3 +23,5 @@ own Bash turns. See [[mem.fact.dispatch.confined-orchestrator-driveloop-realizab
 and [[mem.fact.dispatch.confined-subagent-cwd-resets-breaks-positional-arming]].
 Related: [[mem.fact.workflow.isolated-fork-reaches-doctrine-mcp]]. Context: CHR-039,
 RFC-011; findings `.doctrine/rfc/011/chr-039-findings.md`.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the workflow + create-fork dispatch path. Body retained for the audit trail only.

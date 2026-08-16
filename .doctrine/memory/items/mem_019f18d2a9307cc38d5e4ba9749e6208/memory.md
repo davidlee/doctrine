@@ -87,3 +87,5 @@ the wrapper; egress stays a separate wall.
 rw, host ro) so `agent_id`-absent pass-through fails to *repo-confined*, not
 god-mode. Design detail: RSK-014 backlog OQ-5 (orchestrator jail), OQ-6 (socket
 peers). Related OS-floor confinement on the pi arm: [[mem_019ec345c2d879f3bab52aa1dad7a401]].
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the PreToolUse(Bash)+bwrap wall; confinement is now spawn-confined.sh bwrap/sandbox-exec. Body retained for the audit trail only.

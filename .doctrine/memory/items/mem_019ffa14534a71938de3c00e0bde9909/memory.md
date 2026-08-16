@@ -31,3 +31,5 @@ which cannot be true of an arm that never lands a row — treat that line as
 suspect until it is corrected.
 
 Related: [[mem.signpost.doctrine.dispatch]].
+
+> **Updated 2026-08-16 (CHR-063, SL-254 sweep).** Mode A/B distinction survives; correct the stale claim that worker_commit still writes funnel Spawn rows.

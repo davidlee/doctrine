@@ -7,7 +7,7 @@ status = "active"
 title = "Jail RO .git is the bwrap wrap on confined Bash, not an fs permission — PassThrough commits"
 summary = "The worktree-jail's RO .git is the bwrap wrap on a CONFINED subagent's Bash, not an fs permission. PassThrough (main thread, or an agent_id nominated via a SubagentStart allowlist) runs Bash unwrapped => RW .git everywhere => commits. SL-206 P1 proven."
 created = "2026-07-06"
-updated = "2026-07-06"
+updated = "2026-08-16"
 
 [scope]
 paths = ["/workspace/doctrine/src/worktree/pretooluse.rs", "/workspace/doctrine/src/worktree/jail.rs"]

@@ -43,3 +43,5 @@ harness strips MCP from leaves.
 Relates: [[mem_019f331005d776c1a65c65bfe59581bf]] (armed fork mints at base),
 [[mem_019f361983617d529a054e52617c5f55]] (unarmed unknown-agent, the contrast),
 [[mem_019f36028bca7411b33fde4981aaba85]] (workflow strips Agent, keeps MCP).
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the workflow arm + worker_commit self-commit. Body retained for the audit trail only.

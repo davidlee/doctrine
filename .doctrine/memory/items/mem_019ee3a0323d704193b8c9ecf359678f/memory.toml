@@ -2,11 +2,11 @@ memory_uid = "mem_019ee3a0323d704193b8c9ecf359678f"
 memory_key = "mem.pattern.dispatch.subagentstart-hook-cwd-is-worker-worktree"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "retracted"
 title = "SubagentStart hook process cwd is the worker worktree, breaking auto-stamp provision"
 summary = "Claude Code runs the SubagentStart hook with process cwd = the spawned subagent's own worktree, not the orchestrator tree — so the auto stamp's source==fork guard trips and the worker is never stamped."
 created = "2026-06-20"
-updated = "2026-06-20"
+updated = "2026-08-16"
 
 [scope]
 paths = []

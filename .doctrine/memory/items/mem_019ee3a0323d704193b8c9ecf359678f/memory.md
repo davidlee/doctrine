@@ -41,3 +41,5 @@ Related: [[mem_019ebfd16f8e7d61bcc01d2050c9db1a]] (Agent worktree is harness-bor
 not fork-provisioned), [[mem_019ec84b97407b40a04e595d16dd1f06]] (stamp hook
 silently no-fires for nested-session workers), [[mem_019ec0a5bdb274b3a7cc1d5eaf4e34c5]]
 (SubagentStart is un-failclosable).
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the SubagentStart stamp; the hook-cwd source-resolution defect is moot. Body retained for the audit trail only.

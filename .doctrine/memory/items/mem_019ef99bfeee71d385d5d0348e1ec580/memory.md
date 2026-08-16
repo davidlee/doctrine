@@ -45,3 +45,5 @@ necessarily run AFTER it lands. Trust these checks, not the worker's self-report
 If those hold, ACCEPT the commit in place — a reset/re-dispatch only risks the tree
 for an already-correct delta. See [[mem.pattern.dispatch.agent-worktree-forks-bash-cwd-head]]
 for placing the worker at B (cd the Bash cwd into the coord tree before spawn).
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the claude arm's worker marker and commit-onto-coord behaviour. Body retained for the audit trail only.

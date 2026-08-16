@@ -22,3 +22,5 @@ the narrow surface it needs (dispatch-worker grants just `worker_commit`).
 [[mem.fact.workflow.agent-worktree-fires-create-fork-hook]],
 [[mem.fact.dispatch.confined-orchestrator-driveloop-realizable]]. Context: RFC-011;
 findings `.doctrine/rfc/011/chr-039-findings.md`.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the workflow-orchestrator + worker_commit MCP-funnel shape. Body retained for the audit trail only.

@@ -27,3 +27,5 @@ itself → knows the name pre-spawn) or a future per-spawn correlation token.
   (Fork/Passthrough), `dispatch-agent/SKILL.md`, 2026-07-01. Origin: SL-182
   RV-200 F-1.
 - See [[mem.fact.claude.worktree-remove-auto-teardown]].
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired `dispatch arm-spawn` and single-slot arming. Body retained for the audit trail only.

@@ -53,3 +53,5 @@ fail-closed, folding in ADR-006 D9 provisioning + the worker-marker stamp as one
 trusted act ([[mem_019ebfd16f8e7d61bcc01d2050c9db1a]]). With **no** marker (a
 benign isolated subagent), the hook must **pass through** — replicate default
 creation (`git worktree add <path> HEAD`) so non-dispatch subagents still work.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired create-fork as a dispatch worker fork (base-control hook); now benign only. Body retained for the audit trail only.

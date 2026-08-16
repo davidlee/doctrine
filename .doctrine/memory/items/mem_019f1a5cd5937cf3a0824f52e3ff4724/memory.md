@@ -20,3 +20,5 @@ shim that `exit 2`s on exec/`not-found`, so a missing binary **denies**.
 - See [[mem.fact.claude.worktree-remove-auto-teardown]],
   [[mem.pattern.dispatch.claude-worktree-subagent-bwrap-confinement]]. Origin:
   SL-182 RV-200 F-2.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the PreToolUse confinement wall; fail-open semantics are version-fragile harness fact. Body retained for the audit trail only.

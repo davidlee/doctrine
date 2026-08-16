@@ -40,3 +40,5 @@ Claude's default worktree creation; treat WorktreeCreate as observe/replace-only
 with no type/path/base. Revisit if a future harness version enriches the payload or
 an IDE-004 env channel lands. See [[mem.pattern.dispatch.claude-subagentstart-worker-identity]]
 and [[mem.pattern.dispatch.claude-agent-worktree-not-fork-provisioned]].
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the WorktreeCreate-hook dispatch path; `worktree create-fork` is now a benign detached-tree creator only. Body retained for the audit trail only.

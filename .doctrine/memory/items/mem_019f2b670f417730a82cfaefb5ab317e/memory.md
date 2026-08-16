@@ -52,3 +52,5 @@ subagent-orchestrator-design.md`) — Mode B routes privileged writes through un
 MCP tools; IMP-253 (gated `worker_commit`). Version-sensitive: re-probe on harness
 upgrades. See [[mem_019f18d2a9307cc38d5e4ba9749e6208]] (confine subagents via
 PreToolUse+bwrap).
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the PreToolUse wall (Bash/Edit/Write mediation). Body retained for the audit trail only.

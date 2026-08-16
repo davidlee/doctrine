@@ -52,3 +52,5 @@ nested spawn DID fire. Treat that older claim as version-fragile.
 
 See `.doctrine/slice/206/unjail-direction.md` §5 (security), and
 [[mem.fact.dispatch.confined-orchestrator-nested-worker-machinery-works]] (same probe).
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the SubagentStart seam. Body retained for the audit trail only.

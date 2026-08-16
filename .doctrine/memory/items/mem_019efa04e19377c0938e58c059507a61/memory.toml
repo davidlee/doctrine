@@ -2,11 +2,11 @@ memory_uid = "mem_019efa04e19377c0938e58c059507a61"
 memory_key = "mem.pattern.dispatch.worktreecreate-replace-base-control"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "retracted"
 title = "WorktreeCreate hook-replace gives deterministic dispatch base control (proven 2.1.181)"
 summary = "WorktreeCreate hook replaces native worktree creation; doctrine sets the base out-of-band — proven on claude-code 2.1.181 (worker landed at chosen base, overriding worktree.baseRef=head). Thin payload (no agent_type/base/path) does NOT block it: the hook is the creator, not an observer."
 created = "2026-06-24"
-updated = "2026-06-24"
+updated = "2026-08-16"
 
 [scope]
 paths = []

@@ -2,11 +2,11 @@ memory_uid = "mem_019f1d2d48a07d12bc22025929576e3f"
 memory_key = "mem.pattern.dispatch.pretooluse-macos-seatbelt-wiring"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "retracted"
 title = "macOS pretooluse consumer wires to Seatbelt via cfg-split probe_backend"
 summary = "The claude pretooluse consumer reaches the SL-183 Seatbelt jailer via a cfg(macos)-split probe_backend calling seatbelt_backend(resolve_inputs(...)); pre-SL-183 it only produced Bwrap/Deny."
 created = "2026-07-01"
-updated = "2026-07-01"
+updated = "2026-08-16"
 
 [scope]
 paths = ["src/worktree/pretooluse.rs", "src/worktree/jail.rs"]

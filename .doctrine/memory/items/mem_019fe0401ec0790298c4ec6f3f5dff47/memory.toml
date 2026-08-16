@@ -6,7 +6,7 @@ status = "active"
 title = "Claude Code worktree isolation is tool-layer only until /sandbox, and its layers disagree"
 summary = "isolation:worktree applies no kernel confinement in default or auto mode — Write blocks the parent checkout while a plain shell redirect to it succeeds; /sandbox mode does apply real namespaces, with the parent read-only and reads passed through"
 created = "2026-08-08"
-updated = "2026-08-08"
+updated = "2026-08-16"
 
 [scope]
 paths = []

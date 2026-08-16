@@ -2,11 +2,11 @@ memory_uid = "mem_019f1dd12b5571b1bdbda3a436a19a36"
 memory_key = "mem.thread.sl-183.ex2-live-battery-resolved-macos"
 schema_version = 1
 memory_type = "thread"
-status = "active"
+status = "retracted"
 title = "SL-183 EX-2 live containment battery PASSED on macOS: proper plugin install + plain-task framing cleared both walls"
 summary = "EX-2 live in-situ battery ran both legs (deny + allow-and-confine) through the firing pretooluse hook on a nested Haiku subagent; canaries intact. Supersedes the blocked thread."
 created = "2026-07-01"
-updated = "2026-07-01"
+updated = "2026-08-16"
 
 [scope]
 paths = [".doctrine/backlog/risk/014/probe-h2-seatbelt/", ".harness/probe/h2-live-ex2/", "src/worktree/pretooluse.rs", "src/worktree/create.rs"]

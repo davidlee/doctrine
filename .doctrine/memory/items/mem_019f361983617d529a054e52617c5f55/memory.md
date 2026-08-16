@@ -84,3 +84,5 @@ workflow can be.
 - [[mem_019f331005d776c1a65c65bfe59581bf]] — the fork DOES mint at the armed base;
   positional arming is real, but the fork it mints is still commit-walled.
 - [[mem_019f328ad54c70318abc6f7e1db767fc]] — WorktreeCreate hook / placement.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the workflow leaf arm; RO-.git residue lives in AGENTS.md. Body retained for the audit trail only.

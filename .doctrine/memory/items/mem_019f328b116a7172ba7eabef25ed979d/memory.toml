@@ -3,11 +3,11 @@ memory_key = "mem.fact.workflow.isolated-fork-reaches-doctrine-mcp"
 schema_version = 1
 lifespan = "semantic"
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "isolation:worktree forks reach doctrine MCP with a clean binary — MCP-funnel viable for a workflow-spawned orchestrator"
 summary = "No isolation limit: a fork agent reaches doctrine MCP fine when DOCTRINE_BIN is a real binary, so a workflow-spawned confined orchestrator can drive the funnel via its granted dispatch_* MCP tools."
 created = "2026-07-05"
-updated = "2026-07-05"
+updated = "2026-08-16"
 
 [scope]
 paths = []

@@ -58,3 +58,5 @@ See [[mem.fact.dispatch.unjail-nomination-round-trip]] (nomination leg proof),
 [[mem.fact.claude.pretooluse-agent-carries-spawner-id]] (the gate leg), the
 confined-viability counter-evidence (Mode-B *works*, it just costs per-capability),
 and SL-206 `design.md` §5.6 (amendment ledger) / §7 D8.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 resolved the confined-vs-unjail decision: unconfined orchestrator + confined subprocess workers (Mode A). Body retained for the audit trail only.

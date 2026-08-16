@@ -3,11 +3,11 @@ memory_key = "mem.fact.dispatch.claude-worker-no-per-worktree-env"
 schema_version = 1
 lifespan = "semantic"
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "Claude dispatch worker cannot get per-worktree env via hooks"
 summary = "Claude Agent-tool workers cannot receive per-worktree env vars via hooks; they inherit the orchestrator's frozen env at spawn."
 created = "2026-06-26"
-updated = "2026-06-26"
+updated = "2026-08-16"
 
 [scope]
 paths = []

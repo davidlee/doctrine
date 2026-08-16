@@ -3,11 +3,11 @@ memory_key = "mem.fact.claude.subagentstart-fires-from-child-session"
 schema_version = 1
 lifespan = "semantic"
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "SubagentStart fires for Agent-tool spawn from a child-session main thread"
 summary = 'SubagentStart DOES fire for an Agent-tool spawn even when the spawning session has CLAUDE_CODE_CHILD_SESSION=1 — narrows/corrects the "child session silently no-fires" claim.'
 created = "2026-07-06"
-updated = "2026-07-06"
+updated = "2026-08-16"
 
 [scope]
 paths = ["/workspace/doctrine/.doctrine/slice/206/unjail-direction.md"]

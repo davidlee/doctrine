@@ -2,11 +2,11 @@ memory_uid = "mem_019f1cafd8737421a1d7f2c68e56fe44"
 memory_key = "mem.fact.dispatch.claude-fork-path-persist-footer-proven"
 schema_version = 1
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "Claude-arm dispatch Fork path: worktree persists + footer worktreePath — proven live (VH-1)"
 summary = "SL-182 VH-1: armed-branch Fork-path worker tree persists post-return; footer carries worktreePath; full funnel green."
 created = "2026-07-01"
-updated = "2026-07-01"
+updated = "2026-08-16"
 
 [scope]
 paths = []

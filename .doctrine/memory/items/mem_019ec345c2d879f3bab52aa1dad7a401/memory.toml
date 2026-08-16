@@ -6,7 +6,7 @@ status = "active"
 title = "Nested bwrap userns confines the dispatch worker at the OS floor (D6 LAND)"
 summary = "Nested unprivileged userns IS permitted in the doctrine jail; dispatch-worker bwrap profile confines codex/pi worker at the OS floor (D6) — ro-bind / / + rw worktree/target + ro-overlay marker, settings.local.json stays writable"
 created = "2026-06-13"
-updated = "2026-06-13"
+updated = "2026-08-16"
 
 [scope]
 paths = ["plugins/doctrine/skills/dispatch-subprocess"]

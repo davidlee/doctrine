@@ -31,3 +31,5 @@ stale baked binaries) — the natural state of SL-206 PHASE-16's green e2e rig.
 Surfaced: SL-206 PHASE-08 P5 probe (`wf_9829cbac-a41`).
 Relates: [[mem_019f376ddf9e7a618bbe453c73c66989]] (the P5 mode-B result this
 artifact blocked the clean-tip witness of).
+
+> **Updated 2026-08-16 (CHR-063, SL-254 sweep).** Stale CARGO_MANIFEST_DIR baked-binary rig artifact survives; it now surfaces at check gate/dispatch verify, not worker_commit.

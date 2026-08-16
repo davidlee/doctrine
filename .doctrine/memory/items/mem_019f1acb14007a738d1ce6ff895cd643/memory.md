@@ -50,3 +50,5 @@ snapshot possible without racing the remove.
   (never block the stop) — gate any blocking assertion behind a one-shot sentinel.
 - See [[pattern.dispatch.claude-worktree-subagent-bwrap-confinement]] for the
   PreToolUse(Bash)+bwrap confinement wall that runs alongside this.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the SubagentStop capture seam for the claude arm. Body retained for the audit trail only.

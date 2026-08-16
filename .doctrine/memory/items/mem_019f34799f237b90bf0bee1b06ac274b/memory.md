@@ -100,3 +100,5 @@ asserts and never fixes) in the fork before amending — this is the same
 reject-and-halt posture the CLI's `--from-worktree` fallback applies, done by
 hand. Scope-check too: `dispatch_import` hard-refuses `undeclared-scope`, and a
 path the slice *writes* needs a `design-target` selector, not `scope-relevant`.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired worker_commit + the claude-arm correction recipe. Body retained for the audit trail only.

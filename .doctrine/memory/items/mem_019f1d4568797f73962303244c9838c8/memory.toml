@@ -2,11 +2,11 @@ memory_uid = "mem_019f1d4568797f73962303244c9838c8"
 memory_key = "mem.pattern.seatbelt.profile-materialization-command-tier"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "retracted"
 title = "macOS Seatbelt jail needs the .sb profile written to disk by the command tier — bwrap parity doesn't cover it"
 summary = "The Seatbelt wrap argv references sandbox-exec -f <wt>/.tmp/jail.sb; that file must be materialized by pretooluse::materialize_seatbelt_profile (command tier, fail-closed) — the pure leaf never writes it, and the bwrap arm has no analog (inline flags)."
 created = "2026-07-01"
-updated = "2026-07-01"
+updated = "2026-08-16"
 
 [scope]
 paths = ["src/worktree/pretooluse.rs", "src/worktree/jail.rs"]

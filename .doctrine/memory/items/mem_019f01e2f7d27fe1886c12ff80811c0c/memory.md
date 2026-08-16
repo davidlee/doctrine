@@ -29,3 +29,5 @@ General principle: worker identity / config cannot ride a free env seam
 ([[mem_019ebeeda9c27f03808fdeeafb0e93cc]]); orchestrator-controlled per-spawn
 channels are the WorktreeCreate payload cwd
 ([[mem_019efe28d60b7d51998f1f7912b8e7b8]]) and the prompt, not env.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 inverted the env seam: the confining argv now SETS DOCTRINE_WORKER/TMPDIR via --setenv. Body retained for the audit trail only.

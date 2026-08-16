@@ -2,11 +2,11 @@ memory_uid = "mem_019fe00afa8f70a1974227f097f7ec6a"
 memory_key = "mem.fact.worktree.gitdir-pointer-unresolvable-in-sandboxed-subagent"
 schema_version = 1
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "A worktree subagent's filesystem view lies in both directions"
 summary = "Inside doctrine's worktree jail a subagent sees phantom absence (git reports the parent repo gone) and phantom success (a shell write outside returns 0 and lands nowhere); exit codes are not evidence"
 created = "2026-08-08"
-updated = "2026-08-08"
+updated = "2026-08-16"
 
 [scope]
 paths = ["src/worktree/create.rs", "src/worktree/dispatch_record.rs"]

@@ -65,3 +65,5 @@ broken.
 Related: [[mem.fact.dispatch.single-slot-arming-rendezvous]] (Agent blocks; no
 turn between spawn and completion), [[mem.pattern.dispatch.claude-arm-coord-placement]]
 (cwd-placement rules for the main arm), [[mem.fact.dispatch.arm-spawn-path-targets-cwd-root]].
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired positional arming (cwd-discriminated create-fork). Body retained for the audit trail only.

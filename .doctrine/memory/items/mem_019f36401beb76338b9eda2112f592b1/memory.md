@@ -31,3 +31,5 @@ jailed worker); nomination is the direct one.
 
 See `.doctrine/slice/206/unjail-direction.md` §2 / §6, and
 [[mem.fact.claude.subagentstart-fires-from-child-session]] (the nomination trigger).
+
+> **Updated 2026-08-16 (CHR-063, SL-254 sweep).** RO .git = bwrap wrap (not fs permission) is still true and non-obvious; the PassThrough-nomination vehicle is retired.

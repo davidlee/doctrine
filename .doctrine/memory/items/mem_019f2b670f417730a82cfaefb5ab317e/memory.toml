@@ -3,11 +3,11 @@ memory_key = "mem.fact.dispatch.pretooluse-wall-mediates-write-tools-only"
 schema_version = 1
 lifespan = "semantic"
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "SL-182 PreToolUse jail only walls Bash/Edit/Write; other tools pass through"
 summary = "SL-182 jail mediates only Bash|Edit|Write; MCP/Agent/Read pass through even under Reject (Claude Code 2.1.198)"
 created = "2026-07-04"
-updated = "2026-07-04"
+updated = "2026-08-16"
 
 [scope]
 paths = ["src/worktree/pretooluse.rs", "src/worktree/jail.rs"]

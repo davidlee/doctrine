@@ -52,3 +52,5 @@ Trigger the empirical test by spawning an `isolation: worktree` subagent and
 checking whether its worktree path is `.worktrees/agent-<id>` (hook fired) vs
 `.claude/worktrees/<name>` (native, hook did not). Clean up with `git worktree
 remove --force`.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired create-fork as a dispatch worker fork. Body retained for the audit trail only.

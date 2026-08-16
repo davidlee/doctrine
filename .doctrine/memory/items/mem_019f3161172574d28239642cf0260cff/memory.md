@@ -30,3 +30,5 @@ mechanism ([[mem_019ec6142d3b71008f2149a6d84ba981]]).
 step 2 frames isolation as a call-param. Both need the amendment above; §6 probe
 was primitive-correct. Full detail: `.doctrine/state/ex3-scaffold.md` (F1–F13) and
 the SL-199 PHASE-05 replan brief.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the confined-orchestrator (Mode B) claude arm. Body retained for the audit trail only.

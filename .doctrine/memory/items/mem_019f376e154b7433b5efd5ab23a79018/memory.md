@@ -35,3 +35,5 @@ hole. The blanket subagent-deny matcher remains the correct authored posture.
 Relates: [[mem_019f36028bca7411b33fde4981aaba85]] (workflow strips Agent — the
 Agent-seam half), [[mem.fact.claude.pretooluse-agent-carries-spawner-id]]
 (the Agent-seam active-deny gate, P3/P4).
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the workflow-orchestrator spawn-seam security model. Body retained for the audit trail only.

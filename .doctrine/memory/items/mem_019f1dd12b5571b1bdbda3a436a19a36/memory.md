@@ -60,3 +60,5 @@ spawn-path seam, not a containment gap.
 
 Pairs with [[mem.pattern.seatbelt.profile-materialization-command-tier]] and
 [[mem.pattern.macos.doctrine-hook-reinstall-resign]].
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). Thread records the SL-183 pretooluse-wall battery; the wall is retired. Body retained for the audit trail only.

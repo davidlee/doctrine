@@ -42,3 +42,5 @@ fail-closed arm — and why the WorktreeCreate `run_create_fork` (fail-closed-ca
 but lacking type/path in its payload, see
 `mem.pattern.dispatch.claude-worktreecreate-payload-minimal-no-type-no-path`)
 remains the only fail-closed-capable claude seam, deferred until its payload grows.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the SubagentStart stamp seam entirely. Body retained for the audit trail only.

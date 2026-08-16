@@ -55,3 +55,5 @@ harness knowledge; its role as *the* funnel seam is superseded).
   Origin: SL-182 RV-200 F-3 (original, wrong); PHASE-05 probe (correction).
 - See [[mem.fact.claude.pretooluse-hook-fail-open]],
   [[mem.fact.dispatch.single-slot-arming-rendezvous]].
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the claude arm's worktree teardown dependency. Body retained for the audit trail only.

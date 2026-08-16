@@ -33,3 +33,5 @@ Related: [[mem.system.dispatch.orchestrator-on-shared-main-contention-cost]] (th
 dedicated-coordination-worktree open question SL-064 picks up),
 [[mem.pattern.dispatch.glob-add-sweeps-foreign-untracked-on-shared-main]] (the
 exact-path-staging discipline), [[mem.pattern.tooling.stale-lsp-diagnostics-after-build]].
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the in-session claude Agent arm (its commit-collapse-onto-parent behaviour is gone). Body retained for the audit trail only.

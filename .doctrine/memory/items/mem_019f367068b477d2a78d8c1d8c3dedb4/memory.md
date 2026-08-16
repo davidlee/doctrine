@@ -73,3 +73,5 @@ load-bearing; Option A holds either way.)
 
 See `.doctrine/slice/206/unjail-direction.md` §5, and the memory it refines:
 [[mem.fact.claude.subagentstart-fires-nested-no-parent-discriminator]].
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the PreToolUse wall. Body retained for the audit trail only.

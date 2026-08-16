@@ -3,11 +3,11 @@ memory_key = "mem.fact.claude.worktreecreate-hook-fires"
 schema_version = 1
 lifespan = "semantic"
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "WorktreeCreate plugin hook fires on 2.1.198; -w bypasses it"
 summary = "CC WorktreeCreate plugin hook registers+fires (proven 2.1.198 via isolation:worktree); native -w bypasses it; the plugin-hooks Set is telemetry, not the gate"
 created = "2026-07-02"
-updated = "2026-07-02"
+updated = "2026-08-16"
 
 [scope]
 paths = []
@@ -26,12 +26,12 @@ tree = "1f67cdd2f619f9c74eb69cf61e7ba82c9db0d3e3"
 ref_name = "refs/heads/edge"
 checkout_state_id = "03938197e33744004f505da724a74dde3c691da766c6f6ed46f865d92d2826d9"
 base_commit = "71d0f2691618105bb9b1c059aa4a88b6d0b253a3"
-verified_sha = "7592eee5bd810e24fbf2869b093d96bcd95681e7"
+verified_sha = ""
 normalizer = "forget.checkout.v1"
 
 [review]
-verification_state = "verified"
-reviewed = "2026-07-02"
+verification_state = "unverified"
+reviewed = ""
 review_by = ""
 
 [trust]

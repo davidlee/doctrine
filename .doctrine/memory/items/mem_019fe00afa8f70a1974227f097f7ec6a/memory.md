@@ -117,3 +117,5 @@ doctrine-free control, 2026-08-08.
 
 Full harness characterisation, including the modes where nothing confines at all:
 [[mem.fact.claude.native-worktree-isolation-is-tool-layer-only]].
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the pretooluse wrap whose scoped view caused the "lies in both directions"; spawn-confined.sh --ro-bind / / shows the parent RO, not hidden. Body retained for the audit trail only.

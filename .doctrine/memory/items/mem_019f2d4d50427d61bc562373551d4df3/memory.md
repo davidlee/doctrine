@@ -53,3 +53,5 @@ coord-tree symptom, there attributed to skipping `arm-spawn`; the deeper necessa
 condition is the flag). See also [[mem.fact.claude.worktreecreate-hook-fires]],
 [[mem.pattern.dispatch.worktreecreate-replace-base-control]].
 Fuller writeup: `.doctrine/slice/199/dispatch-harness-findings.md`.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the claude-arm Agent spawn + isolation:worktree flag dependency. Body retained for the audit trail only.

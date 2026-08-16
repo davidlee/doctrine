@@ -65,3 +65,27 @@ decay: the further the corpus drifts, the harder each item is to adjudicate.
 - `RV-356` `F-5` — the audit finding and its measurement.
 - `SL-254` — the slice that deleted the mechanisms.
 - Recorded in `RV-356`'s `## Reconciliation Outcome` as deferred-to-card.
+
+---
+
+## Outcome (2026-08-16, done)
+
+Swept. The grep's "104 live" was a **file-count conflation**: 105 matching
+*lines* were `.md`+`.toml` of **74 unique items** (69 case-sensitive, +4
+case-variant, +1 `dispatch_agent` variant). All 74 were adjudicated per-item,
+not find-and-replaced.
+
+| disposition | count | what |
+|---|---|---|
+| **retract** | 47 | whole subject is a mechanism SL-254 deleted (SubagentStart stamp, pretooluse wall, `worker_commit`, `arm-spawn`, in-session claude `Agent` arm, `create-fork`-as-worker-fork, disk marker). Status → `retracted`, body carries a `⛔ RETRACTED` note naming the mechanism and its post-SL-254 replacement. |
+| **re-anchor** | 5 | still-true lesson, deleted-mechanism vehicle — updated in place (status `active`): nested-bwrap now the single arm; RO-`.git` = bwrap wrap; stale `CARGO_MANIFEST_DIR` rig-artifact now at `check gate`; harness-native isolation is tool-layer-only; Mode-A/B funnel (correct the `worker_commit`-writes-Spawn-rows claim). |
+| **leave** | 22 | 7 already terminal (retracted/superseded/archived) + 15 whose primary subject is unrelated/incidental or whose mechanism mention is a citation of history. |
+
+Shipped corpus (`memory/`) was **not** touched (already clean at zero, per the
+card's measurement). No boot-snapshot signpost was retracted beyond the one
+already handled at SL-254 reconcile (`mem.signpost.doctrine.dispatch-claude-arm-wrong-base`).
+
+Verification: `doctrine memory validate` shows no new dangling relations from the
+sweep (the one dangling row predates it). Retracted items remain in the corpus
+(marked), so inbound `[[wikilink]]`/`[[relation]]` references resolve to the
+retraction note rather than dangling.

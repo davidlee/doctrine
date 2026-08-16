@@ -56,3 +56,5 @@ by payload `cwd` position (orchestrator-controlled), carry only base out-of-band
 in a file the hook reads, and read the worker location back from the footer's
 `worktreePath`. Don't reach for `SubagentStart` stamping for base control — it
 fires *after* `WorktreeCreate` and cannot feed base selection.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired positional arming via WorktreeCreate payload cwd. Body retained for the audit trail only.

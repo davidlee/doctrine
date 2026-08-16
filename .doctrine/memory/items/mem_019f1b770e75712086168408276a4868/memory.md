@@ -33,3 +33,5 @@ substitute for a session-start restart for the plugin-hooks registration surface
 at least on macOS this build. Prefer a full restart + confirm the hook actually
 fires (materialized `.sb` / a shim log), never trust the "N hooks" count as proof
 of live interception.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the PreToolUse wall; /reload-plugins registration fact is moot. Body retained for the audit trail only.

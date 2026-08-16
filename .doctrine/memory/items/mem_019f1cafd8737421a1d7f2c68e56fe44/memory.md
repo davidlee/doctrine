@@ -45,3 +45,5 @@ still runs real against the live tree.
 Supersedes the "pinned at VH-1" hedge in SL-182 design §5.5 ASM / §6 OQ-2 residual.
 Related: [[mem.fact.claude.worktree-remove-auto-teardown]],
 [[mem.pattern.doctrine.phase-complete-clobbers-boundary]].
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the claude-arm Fork path (footer worktreePath + persist). Body retained for the audit trail only.

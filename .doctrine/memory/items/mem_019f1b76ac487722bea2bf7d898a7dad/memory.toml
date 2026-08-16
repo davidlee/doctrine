@@ -2,11 +2,11 @@ memory_uid = "mem_019f1b76ac487722bea2bf7d898a7dad"
 memory_key = "mem.fact.claude.project-dir-in-worktree-subagent-hook-env"
 schema_version = 1
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "CLAUDE_PROJECT_DIR present in worktree-subagent hook env"
 summary = "CLAUDE_PROJECT_DIR IS set in the PreToolUse hook process env for isolation:worktree subagents (points at the project root) — but NOT in the subagent tool-exec env"
 created = "2026-07-01"
-updated = "2026-07-01"
+updated = "2026-08-16"
 
 [scope]
 paths = []

@@ -45,3 +45,5 @@ path silently drops the isolation the funnel's Claude arm advertises — the
 `.doctrine`/`.claude` belt and combined-tree verify run POST-hoc on the coord tree,
 not pre-commit on an isolated fork. Fine when the orchestrator hand-verifies scope,
 but it is a real narrowing of the funnel's guarantees worth surfacing in the survey.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the claude-arm arming ritual (unarmed -> coord tree). Body retained for the audit trail only.

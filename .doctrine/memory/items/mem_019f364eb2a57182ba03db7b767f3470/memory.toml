@@ -3,11 +3,11 @@ memory_key = "mem.fact.claude.subagentstart-fires-nested-no-parent-discriminator
 schema_version = 1
 lifespan = "semantic"
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "SubagentStart fires for nested (subagent-initiated) spawns; payload has no parent discriminator"
 summary = "SubagentStart fires for subagent-initiated Agent-tool spawns too; payload carries no spawner id, so a hook cannot tell main- from subagent-initiated — nomination needs an intent token, not type-match alone."
 created = "2026-07-06"
-updated = "2026-07-06"
+updated = "2026-08-16"
 
 [scope]
 paths = ["src/worktree/pretooluse.rs"]

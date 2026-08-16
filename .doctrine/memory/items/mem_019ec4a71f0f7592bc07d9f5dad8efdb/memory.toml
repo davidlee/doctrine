@@ -2,11 +2,11 @@ memory_uid = "mem_019ec4a71f0f7592bc07d9f5dad8efdb"
 memory_key = "mem.pattern.dispatch.claude-agent-worktree-integrates-commit-onto-parent"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "retracted"
 title = "Claude dispatch-agent worker commit integrates onto the parent branch, not an isolated fork"
 summary = "Claude /dispatch-agent worker (isolation:worktree) integrates its commit onto the parent branch — orchestrator verifies R-5 + green POST-landing, not before"
 created = "2026-06-14"
-updated = "2026-06-14"
+updated = "2026-08-16"
 
 [scope]
 paths = [".claude/skills/dispatch-agent/SKILL.md"]

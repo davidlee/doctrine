@@ -3,11 +3,11 @@ memory_key = "mem.concept.dispatch.confinement-posture-cost-trajectory"
 schema_version = 1
 lifespan = "semantic"
 memory_type = "concept"
-status = "active"
+status = "retracted"
 title = "Dispatch confinement posture: unjail charges once, confined charges per-capability"
 summary = "Unjail vs confined orchestrator: unjail charges security complexity ONCE (fixed nomination+gate); confined charges per-capability forever. Buy unjail with 2 amendment clauses."
 created = "2026-07-06"
-updated = "2026-07-06"
+updated = "2026-08-16"
 
 [scope]
 paths = [".doctrine/adr/008/adr-008.toml"]
@@ -26,12 +26,12 @@ tree = "6395e4eb3fe4ce1e1710ee74905eb2bad6881efb"
 ref_name = "refs/heads/edge"
 checkout_state_id = ""
 base_commit = "87257763bc6385a82920dcc19550642aae82f7ae"
-verified_sha = "fce7c8146658da6626715d5c500020ad4e668398"
+verified_sha = ""
 normalizer = ""
 
 [review]
-verification_state = "verified"
-reviewed = "2026-07-06"
+verification_state = "unverified"
+reviewed = ""
 review_by = ""
 
 [trust]

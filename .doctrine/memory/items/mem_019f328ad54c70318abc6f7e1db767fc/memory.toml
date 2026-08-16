@@ -3,11 +3,11 @@ memory_key = "mem.fact.workflow.agent-worktree-fires-create-fork-hook"
 schema_version = 1
 lifespan = "semantic"
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "Workflow agent(isolation:worktree) fires the doctrine WorktreeCreate hook; payload cwd = session working-dir"
 summary = "A Workflow-script agent(isolation:worktree) spawn DOES fire create-fork; payload cwd tracks the driver's working dir, so a confined fork is reachable from a workflow."
 created = "2026-07-05"
-updated = "2026-07-05"
+updated = "2026-08-16"
 
 [scope]
 paths = []

@@ -2,11 +2,11 @@ memory_uid = "mem_019f34799f237b90bf0bee1b06ac274b"
 memory_key = "mem.pattern.dispatch.correct-worker-delta-in-place"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "retracted"
 title = "Correct a claude-arm worker delta in place (orchestrator resets fork branch, commits worker's staged bytes) — no re-dispatch"
 summary = "When a claude-arm worker's already-committed delta needs a small fix, the orchestrator lands the worker's corrected working-tree bytes as a fresh single commit instead of rejecting+re-dispatching."
 created = "2026-07-05"
-updated = "2026-07-29"
+updated = "2026-08-16"
 
 [scope]
 paths = []

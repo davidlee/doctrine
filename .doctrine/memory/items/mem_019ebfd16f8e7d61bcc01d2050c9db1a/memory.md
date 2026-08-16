@@ -46,3 +46,5 @@ never the hook's own process cwd. Relates to
 facts + the unnamed-subagent caveat) and
 [[mem.pattern.dispatch.spawn-backend-harness-agnostic-no-free-env-seam]] (the agnostic
 floor). SL-056 design.md §4b.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the in-session claude Agent arm and its WorktreeCreate provision+stamp; `worktree fork --worker` provisions at fork time. Body retained for the audit trail only.

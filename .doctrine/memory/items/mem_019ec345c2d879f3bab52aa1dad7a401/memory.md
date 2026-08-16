@@ -40,3 +40,5 @@ flake.nix wrapper (design line 639 makes the flake change conditional; the inlin
 arg-vector suffices). See [[mem.pattern.dispatch.spawn-backend-harness-agnostic-no-free-env-seam]]
 (the per-harness floor) and [[mem.pattern.dispatch.claude-subagentstart-worker-identity]]
 (the claude arm has no bwrap, marker-only).
+
+> **Updated 2026-08-16 (CHR-063, SL-254 sweep).** Nested-bwrap confinement is now the SINGLE arm (both pi and claude via spawn-confined.sh), not "codex/pi subprocess arm only".

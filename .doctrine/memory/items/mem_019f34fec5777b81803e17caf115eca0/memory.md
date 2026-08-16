@@ -64,3 +64,5 @@ false-red. Same orchestrator move, different trigger.
 - Filed backlog: the `worker_commit` belt's `doctrine doctor` should resolve
   from the build/coord binary, not PATH — else every phase that teaches the
   binary a check its predecessor shipped will false-red until promotion.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired worker_commit; the fresh-vs-stale-binary rule lives in AGENTS.md DOCTRINE_BIN. Body retained for the audit trail only.

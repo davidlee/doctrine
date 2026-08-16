@@ -47,3 +47,5 @@ control mechanism.
 
 Related: [[mem.pattern.dispatch.fork-rung3-base-not-session-head]],
 [[verify-harness-behavior-empirically]].
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the in-session claude Agent isolation:worktree arm and its base-placement control. Body retained for the audit trail only.

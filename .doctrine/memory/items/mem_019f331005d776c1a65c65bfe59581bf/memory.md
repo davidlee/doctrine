@@ -30,3 +30,5 @@ schema-returned `show_toplevel` equal to the coord root.
 Builds on [[mem.fact.workflow.agent-worktree-fires-create-fork-hook]] (hook fires,
 cwd = session dir) and [[mem.fact.dispatch.confined-orchestrator-driveloop-realizable]].
 See also [[mem.pattern.dispatch.unarmed-agent-worker-runs-in-coord-tree]].
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired positional arming (workflow mints at armed base). Body retained for the audit trail only.

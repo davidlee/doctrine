@@ -3,11 +3,11 @@ memory_key = "mem.fact.claude.workflow-leaf-cannot-commit"
 schema_version = 1
 lifespan = "semantic"
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "Workflow isolation:worktree leaf cannot commit in the jail"
 summary = "A workflow isolation:worktree leaf gets a linked worktree on the RO jail .git — cannot commit by any path"
 created = "2026-07-06"
-updated = "2026-07-06"
+updated = "2026-08-16"
 
 [scope]
 paths = []

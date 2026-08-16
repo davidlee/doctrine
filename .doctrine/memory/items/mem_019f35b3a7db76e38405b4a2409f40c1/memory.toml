@@ -2,11 +2,11 @@ memory_uid = "mem_019f35b3a7db76e38405b4a2409f40c1"
 memory_key = "mem.pattern.dispatch.confined-orchestrator-placement-not-permission"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "retracted"
 title = "Confined dispatch orchestrator is proven-realizable (SL-199 Mode B); RO shared .git is by-design — /drive-slice's defect was PLACEMENT (fresh fork) not permission, and the fix is coord-tree placement, NOT unconfining"
 summary = "Confined orchestrator RO .git is BY DESIGN (SL-199 Mode B, proven): it writes coord .git via server-side MCP tools, never directly. /drive-slice failed on PLACEMENT not permission — isolation:'worktree' forks a fresh tree; the orchestrator must be jailed to the coord tree (cwd=coord-root) so the coord-root arming discriminator fires."
 created = "2026-07-06"
-updated = "2026-07-06"
+updated = "2026-08-16"
 
 [scope]
 paths = ["install/workflows/drive-slice.js"]

@@ -2,11 +2,11 @@ memory_uid = "mem_019f1b770e75712086168408276a4868"
 memory_key = "mem.fact.claude.reload-plugins-registers-pretooluse"
 schema_version = 1
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "/reload-plugins registers plugin PreToolUse hooks, no restart"
 summary = "macOS: /reload-plugins does NOT reliably make skill-dir-discovered pretooluse hooks intercept SUBAGENT Bash. The working surface is a PROPERLY INSTALLED plugin (installed_plugins.json, project scope) — that fires for isolation:worktree subagents. See mem.thread.sl-183.ex2-live-battery-resolved-macos."
 created = "2026-07-01"
-updated = "2026-07-01"
+updated = "2026-08-16"
 
 [scope]
 paths = []

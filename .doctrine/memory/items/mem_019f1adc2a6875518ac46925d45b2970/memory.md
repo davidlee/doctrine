@@ -46,3 +46,5 @@ then restart, then run. Fail-closed binding unchanged from the bwrap arm: pass
 through ⟺ `agent_id` absent (orchestrator); present ⇒ `cwd` must be a git worktree
 ≠ main checkout, else deny. Never trust the red-team vector's self-report — the
 independent canary checksum verifier is truth (F-D).
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the macOS PreToolUse(Seatbelt) wall; macOS confinement is now jail-prefix sandbox-exec. Body retained for the audit trail only.

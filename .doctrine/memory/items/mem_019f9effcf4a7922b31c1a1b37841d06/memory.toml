@@ -2,11 +2,11 @@ memory_uid = "mem_019f9effcf4a7922b31c1a1b37841d06"
 memory_key = "mem.pattern.dispatch.half-arm-unprovable-fork"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "retracted"
 title = "arm-spawn --slice without --phase yields an unbound fork and worker_commit refuses unprovable-fork"
 summary = "A claude-arm spawn armed with --slice but no --phase binds nothing; the worker does the whole job, then worker_commit refuses unprovable-fork with a detail that names only the branch."
 created = "2026-07-26"
-updated = "2026-07-26"
+updated = "2026-08-16"
 
 [scope]
 paths = []

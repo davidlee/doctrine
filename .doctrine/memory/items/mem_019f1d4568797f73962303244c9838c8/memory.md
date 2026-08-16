@@ -28,3 +28,5 @@ builder", audit for per-arm SIDE EFFECTS (disk writes, env) the shared funnel do
 carry — a pure builder that returns a path is not the same as one that writes it.
 See [[mem.pattern.macos.doctrine-hook-reinstall-resign]] (the other macOS live-run
 footgun).
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired pretooluse; Seatbelt profile materialization is now jail-prefix's job. Body retained for the audit trail only.

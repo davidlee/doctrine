@@ -3,11 +3,11 @@ memory_key = "mem.fact.claude.workflow-seam-closed-by-absence"
 schema_version = 1
 lifespan = "semantic"
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "Workflow spawn seam is closed by absence — no subagent holds the Workflow tool"
 summary = "Neither an Agent-tool-spawned subagent nor a workflow-agent() leaf receives the Workflow tool (not in toolset, not ToolSearch-loadable), so the second spawn seam is closed by absence for every jailed caller — the escalation gate has no reachable seam to guard at runtime."
 created = "2026-07-06"
-updated = "2026-07-06"
+updated = "2026-08-16"
 
 [scope]
 paths = ["src/doctor_checks.rs"]
@@ -26,12 +26,12 @@ tree = "1f37532d3c3884e74b5cab6446f61daf8e2e180b"
 ref_name = "refs/heads/edge"
 checkout_state_id = "5dd256adb4376b468eef46d7415e8265d35729f56b46d5e64191950c1a48fa1a"
 base_commit = "ff8c61db6537171945b3604637f01f58253775a4"
-verified_sha = "ce705f5592c07cab39d916f1dc3e9b98bfc581e2"
+verified_sha = ""
 normalizer = "forget.checkout.v1"
 
 [review]
-verification_state = "verified"
-reviewed = "2026-07-06"
+verification_state = "unverified"
+reviewed = ""
 review_by = ""
 
 [trust]

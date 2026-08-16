@@ -2,11 +2,11 @@ memory_uid = "mem_019ec6142d3b71008f2149a6d84ba981"
 memory_key = "mem.pattern.dispatch.claude-isolation-worktree-forks-orchestrator-session-head"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "retracted"
 title = "Claude Agent isolation:worktree forks the spawning orchestrator session's local HEAD under baseRef=head — base controllable by placement, not ref-redirect"
 summary = "claude Agent isolation:worktree forks the spawning orchestrator session's local HEAD when worktree.baseRef=head; base is controllable by PLACING the orchestrator session on B (inside the dispatch/<slice> worktree at its tip), not by redirecting origin/main; serial-dependent phases ARE dispatchable (advance orchestrator HEAD between phases)"
 created = "2026-06-14"
-updated = "2026-06-14"
+updated = "2026-08-16"
 
 [scope]
 paths = []

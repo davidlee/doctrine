@@ -105,3 +105,5 @@ doctrine's posture makes a worker's own instruments lie, in both directions.
 
 Linux/NixOS only; macOS Seatbelt not probed. Build not pinned — re-probe after a
 harness upgrade, since this is exactly the kind of gap a vendor closes quietly.
+
+> **Updated 2026-08-16 (CHR-063, SL-254 sweep).** Harness-native isolation is tool-layer-only (still true); note that doctrine's own wrap is now spawn-confined.sh bwrap, which differs from the retired pretooluse wrap it compares.

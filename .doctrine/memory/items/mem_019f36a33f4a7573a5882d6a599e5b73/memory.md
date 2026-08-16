@@ -27,3 +27,5 @@ Invariants the design must hold: gate privileged-set ≡ nomination-eligible-set
 allowlist/hook config outside every jail (main-thread-write only).
 
 See `.doctrine/slice/206/unjail-direction.md` §6 (P1 RESULT).
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the PreToolUse/SubagentStart unjail-nomination machinery. Body retained for the audit trail only.

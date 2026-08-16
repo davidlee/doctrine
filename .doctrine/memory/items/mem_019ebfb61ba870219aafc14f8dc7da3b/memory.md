@@ -69,3 +69,5 @@ payload shapes + the missing `CLAUDE_ENV_FILE` as version-fragile harness facts 
 spike-gate them (cf. [[mem.pattern.parse.toml-error-classification-fragile]]). Relates to
 [[mem.pattern.dispatch.spawn-backend-harness-agnostic-no-free-env-seam]] (the agnostic
 floor still cannot rely on a free env seam; claude's is confirmed *absent* for subagents).
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the SubagentStart stamp; worker identity is now the DOCTRINE_WORKER env leg set by the confining argv. Body retained for the audit trail only.

@@ -31,3 +31,5 @@ orchestrator spawn. Strengthens A2; further weakens D' (workflow-form revival).
 See [[mem_019ee3a08...]] (SubagentStart fires + is matchable), [[mem_019ec0a5...]]
 (sync-blocking, not fail-closeable), and `.doctrine/slice/206/unjail-direction.md`
 §4.3 / §6 P1 RESULT.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the SubagentStart seam. Body retained for the audit trail only.

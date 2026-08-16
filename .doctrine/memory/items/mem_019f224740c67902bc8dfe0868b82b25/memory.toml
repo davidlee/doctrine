@@ -2,11 +2,11 @@ memory_uid = "mem_019f224740c67902bc8dfe0868b82b25"
 memory_key = "mem.fact.dispatch.arm-spawn-path-targets-cwd-root"
 schema_version = 1
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "Claude-arm dispatch: arm-spawn writes the arming base to CWD-detected root, not the coord tree"
 summary = "dispatch arm-spawn auto-detects root from CWD; run from session root it arms the session-root spawn dir, not the coord tree — pass --path .dispatch/SL-N or the worker forks the wrong base."
 created = "2026-07-02"
-updated = "2026-07-02"
+updated = "2026-08-16"
 
 [scope]
 paths = []

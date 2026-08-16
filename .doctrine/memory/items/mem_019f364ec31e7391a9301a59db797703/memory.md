@@ -38,3 +38,5 @@ whole transcript.
 See `.doctrine/slice/206/unjail-direction.md` §6/§7, and
 [[mem.fact.claude.subagentstart-fires-nested-no-parent-discriminator]] (same probe;
 the escalation finding that makes the *unjail* path costlier than confined-A2).
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the confined-orchestrator + worker_commit machinery. Body retained for the audit trail only.

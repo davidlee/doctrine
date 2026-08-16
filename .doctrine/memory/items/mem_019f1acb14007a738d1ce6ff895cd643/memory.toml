@@ -2,11 +2,11 @@ memory_uid = "mem_019f1acb14007a738d1ce6ff895cd643"
 memory_key = "mem.fact.claude.subagentstop-awaited-tree-intact-capture-seam"
 schema_version = 1
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "SubagentStop fires awaited and tree-intact before WorktreeRemove — the capture seam"
 summary = "SubagentStop runs to completion (honours exit 2) while the isolation:worktree subagent's tree is still on disk, before git worktree remove — the diff-capture point. Payload has agent_id+transcript+cwd, no worktree_path."
 created = "2026-06-30"
-updated = "2026-06-30"
+updated = "2026-08-16"
 
 [scope]
 paths = []

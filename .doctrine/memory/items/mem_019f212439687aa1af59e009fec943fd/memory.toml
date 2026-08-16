@@ -2,11 +2,11 @@ memory_uid = "mem_019f212439687aa1af59e009fec943fd"
 memory_key = "mem.pattern.dispatch.unarmed-agent-worker-runs-in-coord-tree"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "retracted"
 title = "Un-armed dispatch-worker Agent runs in the coord tree (native isolation), not an isolated fork"
 summary = "A dispatch-worker Agent spawned WITHOUT arm-spawn (no cd into spawn dir) is a native isolation:worktree — no WorktreeCreate hook, no footer, runs in the coord tree; a non-committing prompt leaves the delta as clean coord-tree working changes, importable in place"
 created = "2026-07-02"
-updated = "2026-07-02"
+updated = "2026-08-16"
 
 [scope]
 paths = []

@@ -3,11 +3,11 @@ memory_key = "mem.fact.dispatch.confined-orchestrator-nested-worker-machinery-wo
 schema_version = 1
 lifespan = "semantic"
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "Confined orchestrator can drive the shipped nested-worker machinery"
 summary = "A jailed-at-coord-root dispatch-orchestrator nest-spawns a worker: WorktreeCreate fires, worker forks at correct base, worker_commit resolves + runs the full gate, in-jail state writes work — confined-A2 is viable, unjail may be unnecessary."
 created = "2026-07-06"
-updated = "2026-07-06"
+updated = "2026-08-16"
 
 [scope]
 paths = ["src/worktree/pretooluse.rs", "src/worktree/jail.rs"]

@@ -3,11 +3,11 @@ memory_key = "mem.fact.claude.worktree-remove-auto-teardown"
 schema_version = 1
 lifespan = "semantic"
 memory_type = "fact"
-status = "active"
+status = "retracted"
 title = "isolation:worktree teardown is conditional on the WorktreeCreate hook"
 summary = "When an isolation:worktree subagent finishes, Claude auto-`git worktree remove`s it; the hook has NO decision control. Capture any diff before teardown."
 created = "2026-06-30"
-updated = "2026-07-01"
+updated = "2026-08-16"
 
 [scope]
 paths = []
@@ -26,12 +26,12 @@ tree = "c04d5d70b334b3f1608a94019e35d9f5c079cd3d"
 ref_name = "refs/heads/edge"
 checkout_state_id = "656c6acfa8a75a4a053714f8c83059c19638ce8dd189c3a29ada30a18e39c504"
 base_commit = "8513f7526e9be14a629863251bc0552d57e30cc9"
-verified_sha = "441d0b1233192d81c94d3ace459b5dc7b86d0510"
+verified_sha = ""
 normalizer = "forget.checkout.v1"
 
 [review]
-verification_state = "verified"
-reviewed = "2026-06-30"
+verification_state = "unverified"
+reviewed = ""
 review_by = ""
 
 [trust]

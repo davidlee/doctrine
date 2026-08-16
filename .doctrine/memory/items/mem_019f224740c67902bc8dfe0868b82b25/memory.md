@@ -31,3 +31,5 @@ reached by operator mis-arming rather than lock contention.
 Observed SL-189 dispatch (claude arm): bare `arm-spawn --slice 189` from session
 root armed `/workspace/doctrine/.doctrine/state/dispatch/spawn`; corrected with
 `--path .dispatch/SL-189`.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired `dispatch arm-spawn`. Body retained for the audit trail only.

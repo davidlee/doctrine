@@ -59,3 +59,5 @@ The RO shared `.git` for a jailed linked worktree is the SAME constraint behind
 is the WORKER (correct; the server lands its bytes). For the orchestrator, RO
 `.git` is ALSO correct — it writes via server-side tools. The earlier retracted
 memory misread this shared constraint as "the orchestrator needs RW `.git`."
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the confined-orchestrator (Mode B) arm; orchestrator is unconfined sole writer. Body retained for the audit trail only.

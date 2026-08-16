@@ -73,3 +73,5 @@ templated `arm-spawn --path .` with neither half.
 
 Observed driving SL-228 PHASE-09 (2026-07-27); the worker's delta was green and
 was landed via option 2.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired `dispatch arm-spawn` and worker_commit's unprovable-fork. Body retained for the audit trail only.

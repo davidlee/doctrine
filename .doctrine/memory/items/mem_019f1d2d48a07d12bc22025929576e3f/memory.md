@@ -44,3 +44,5 @@ arm-neutral over whichever `Backend` is returned.
   floor. Deliberate. Sibling: [[mem.pattern.dispatch.seatbelt-insitu-subagent-nesting]],
   [[mem.pattern.dispatch.jail-resolve-inputs-injected-env]],
   [[mem.pattern.dispatch.claude-worktree-subagent-bwrap-confinement]].
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the macOS pretooluse->Seatbelt consumer. Body retained for the audit trail only.

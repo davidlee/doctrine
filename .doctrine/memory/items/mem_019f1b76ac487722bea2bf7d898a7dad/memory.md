@@ -20,3 +20,5 @@ env via hooks"): the project-root anchor is available; per-worktree/per-worker
 state is not. Pairs with the confinement mechanism
 [[mem_019f18d2a9307cc38d5e4ba9749e6208]] and the fail-open caveat
 `mem.fact.claude.pretooluse-hook-fail-open`.
+
+> ⛔ RETRACTED 2026-08-16 (CHR-063, SL-254 sweep). SL-254 retired the PreToolUse wall; CLAUDE_PROJECT_DIR hook-env anchor is moot. Body retained for the audit trail only.

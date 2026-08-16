@@ -3,11 +3,11 @@ memory_key = "mem.pattern.dispatch.claude-arm-isolation-fallback"
 schema_version = 1
 lifespan = "procedural"
 memory_type = "pattern"
-status = "active"
+status = "retracted"
 title = "Claude-arm dispatch worker stamps a worker marker on the coord tree"
 summary = "The /dispatch-agent worker stamps a worker marker into the coord tree (bricks authored writes) and commits onto the coord branch (expected, no isolated fork). Cure: marker --clear --operator; verify the landed commit; beat the stale-bin footgun."
 created = "2026-06-24"
-updated = "2026-06-24"
+updated = "2026-08-16"
 
 [scope]
 paths = []
@@ -26,12 +26,12 @@ tree = "e5a8da4a2e3d0888aef14a4f741bd29ba3c9da78"
 ref_name = "refs/heads/edge"
 checkout_state_id = ""
 base_commit = "6e6388b37a40ea6446f082baee26d649a2e0a8ba"
-verified_sha = "b6b6af6ccd1f13641983940ef76127db2822965a"
+verified_sha = ""
 normalizer = ""
 
 [review]
-verification_state = "verified"
-reviewed = "2026-06-24"
+verification_state = "unverified"
+reviewed = ""
 review_by = ""
 
 [trust]

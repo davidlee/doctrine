@@ -6,7 +6,7 @@ status = "active"
 title = "Dispatch has two orchestration modes; only Mode B uses the funnel record"
 summary = "dispatch next and funnel rows are Mode B (confined orchestrator, MCP); Mode A drives the pi arm by hand and never lands a row"
 created = "2026-08-13"
-updated = "2026-08-13"
+updated = "2026-08-16"
 
 [scope]
 paths = ["src/funnel_machine.rs", "src/dispatch.rs", "src/mcp_server/dispatch.rs"]
