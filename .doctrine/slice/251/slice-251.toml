@@ -67,6 +67,16 @@ selector = "src/design_run/artifact.rs"
 intent = "design-target"
 
 [[relation]]
+label = "fulfils"
+degree = "partial"
+target = "IMP-390"
+
+[[relation]]
+label = "fulfils"
+degree = "partial"
+target = "ISS-333"
+
+[[relation]]
 label = "governed_by"
 target = "ADR-001"
 

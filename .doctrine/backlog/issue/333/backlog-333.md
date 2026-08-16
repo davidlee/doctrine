@@ -67,6 +67,32 @@ outlive the binary that wrote them
 converts previously-readable stored state into a parse failure at exactly the
 moment someone is resuming.
 
+## What SL-251 discharged, and what this item still owns (2026-08-16)
+
+**Option 3 is gone; the mechanism is untouched.** This item listed three
+candidate fixes, the third being *"accept the limit and close the
+discoverability half instead — a schema dump would defeat the probing loop that
+made this cost three revisions, without touching serde."* `SL-251` is that
+option, closed 2026-08-16: `doctrine design contract [--format json|prompt]`
+and the published `reference/design-payload-contract.md` make the accepted key
+set fetchable, so nobody has to discover it by submitting and reading the
+refusal.
+
+**What did not change.** `ApplyRequest` still carries `#[serde(flatten)]
+envelope`, serde still cannot reconcile `flatten` with `deny_unknown_fields`,
+and a nonsense top-level key is still discarded silently: the revision bumps, a
+receipt is written, no change row prints, and the command exits 0. `SL-251`
+touched no wire type's definition or behaviour, and its own scope document
+records that it *"must not be recorded as having"* repaired this. It is linked
+`fulfils … degree = partial` for that reason.
+
+The contract does not paper over the hole — it **states** it. `doctrine design
+contract --format prompt` renders the header
+`payload ApplyRequest  unknown-keys: silently-dropped   (a misspelt key is
+discarded, exit 0)`, so the defect is now disclosed at the point of use instead
+of being discovered. Disclosure is not repair; the serde axis stays open here,
+and options 1 and 2 stand as written.
+
 ## Related
 
 - `ISS-318` — the parent class; its declaration axis, closed by `SL-249`.

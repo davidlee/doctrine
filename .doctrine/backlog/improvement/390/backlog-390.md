@@ -132,7 +132,27 @@ Not delivered, and still this item's:
   or the render. The `DEC-064` v1-wire-change constraint recorded above is
   untouched, as is the open question of whether this face or `IMP-367` owns the
   disposition.
-- **The payload contract is still exemplified, not fetchable** — face 2, the
-  fifteen `submission.rs` reads, and the `declare` hint that omits `cursor`.
 - **Unmet conditions for the *next* stage are still not rendered** in the
   envelope; the receipt is delivered at stage entry, not as a forward look.
+
+## What SL-251 discharged (2026-08-16)
+
+**Face 2 is delivered.** `SL-251` took the payload-contract candidate and
+nothing else, and closed against it: the contract for every act on
+`ApplyRequest` is now fetchable from the binary — `doctrine design contract
+[--format json|prompt]`, a Read-classed verb needing no slice and no root, plus
+the published `reference/design-payload-contract.md` — pinned against the serde
+key set rather than against review, so a payload field cannot be added, removed
+or renamed without the contract following. The address is pushed at three
+points (the payload-parse refusal, the turn envelope's `contract_pointer`, and
+`design apply`'s long help) rather than waiting to be asked for. `DEC-228`'s
+correction to the worked example rode with it, so the `declare` hint no longer
+omits `cursor`.
+
+Retired from the list above: *"The payload contract is still exemplified, not
+fetchable — face 2, the fifteen `submission.rs` reads, and the `declare` hint
+that omits `cursor`."*
+
+The other two faces stand exactly as written — `SL-251` is recorded as
+`fulfils … degree = partial` for that reason. Its scope document says so in its
+own words: *"`IMP-390` stays open on its other three candidates."*
