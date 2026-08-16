@@ -15,8 +15,8 @@ disclosed and never suppressed. That is deliberately conservative and correct as
 a failure mode, but it means a cross-kind `needs` onto an `RV` can never say
 whether the review is open or concluded.
 
-No backlog item references an `RV` or `REC` target today — all 30 authored
-cross-kind `needs`/`after` edges target `QUE` or `SL` — so this is a correctness
+No backlog item references an `RV` or `REC` target today — every authored
+cross-kind `needs`/`after` edge targets `QUE` or `SL` — so this is a correctness
 edge with no live instance, which is why `SL-238` did not fold it in.
 
 ## What would close it

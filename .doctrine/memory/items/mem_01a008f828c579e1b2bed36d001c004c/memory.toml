@@ -1,0 +1,50 @@
+memory_uid = "mem_01a008f828c579e1b2bed36d001c004c"
+memory_key = "mem.pattern.layering.locate-helper-before-routing-repair"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Locate a helper before routing a layering repair through it"
+summary = "A repair that removes a back edge can reinstate it through a helper whose module was assumed, not read"
+created = "2026-08-16"
+updated = "2026-08-16"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["area:review", "area:layering", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1607f999942af171fdef8d1ef9da4afc00ad3573"
+ref_name = "refs/heads/edge"
+checkout_state_id = "99c01004562e57ceac671a1ee84fed446b0b3979172d2976f52c97851958f079"
+base_commit = "95fdcd115f47d10194979b599d57c69e75c73902"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-358"
+
+[[source]]
+kind = "slice"
+ref = "SL-238"
+

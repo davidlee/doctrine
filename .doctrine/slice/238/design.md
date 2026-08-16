@@ -10,9 +10,17 @@ appears above the item that depends on it. Two authored axes feed that sort —
 sort itself is delegated to the `backlog_order` cordage adapter.
 
 A backlog item may declare either axis on an entity that is **not** a backlog item:
-a slice, an open question, a decision. The corpus carries **30 such edges** today
-(measured 2026-08-15, re-counted 2026-08-16), 16 of them on the `needs` axis and 14
-on `after`. The ordering machinery cannot represent them: its node key `ItemId` is a
+a slice, an open question, a decision. The corpus carries **31 such edges**
+(re-scanned 2026-08-16), 16 of them on the `needs` axis and 15 on `after`.
+
+Every corpus figure in this design is a **dated snapshot of a moving population**,
+not an invariant, and is quoted to show scale rather than to be depended on. The
+count was 30 earlier the same day; `ISS-367` was authored with an `after` edge onto
+`SL-256` in between. Nothing here breaks when it moves again — the tests fixture
+the *classes*, never the counts (§7) — and a later reader finding a different total
+has found drift, not an error.
+
+The ordering machinery cannot represent them: its node key `ItemId` is a
 `(backlog kind, number)` pair over exactly five prefixes, so a `QUE-219` or `SL-251`
 target has no node to be, no rank to hold, and no row to appear above.
 
@@ -116,7 +124,7 @@ remembered:
   its single row-membership meaning (`DEC-234`).
 - **No relation vocabulary change.** No new label, no new axis, no widening of which
   kinds may author dep/seq. `doctrine unlink` stays tier-1-only.
-- **No corpus edit.** The 30 authored refs are legal data, and none of them is
+- **No corpus edit.** The 31 authored refs are legal data, and none of them is
   broken today — a full scan on 2026-08-16 found **zero** unresolvable authored
   `needs`/`after` refs. Clearing individual spent edges is a judgement call for
   after the tooling can make it honestly.
@@ -157,7 +165,7 @@ flowchart LR
   D --> BL
   CLI --> BL
   CLI --> CD
-  CLI -.->|injects AfterOps fn-ptrs| BL
+  CLI -.->|injects DepSeqOps fn-ptrs| BL
   BL -.->|refused: closes a command cycle| CD
 ```
 
@@ -174,7 +182,7 @@ holding on to.
 The first draft sited the per-kind status read in `meta` and defended the resulting
 `meta → kinds` edge as safe because it pointed downward. True, and beside the point:
 `meta`'s charter is that it carries *zero per-kind knowledge*, which is what makes
-it safe for its seventeen consumers (§3). A second draft had `backlog` call the
+it safe for the fifteen modules that consume it (§3). A second draft had `backlog` call the
 dep/seq operations where they happen to live, inside `commands`, and defended it as
 reuse. Also true, also beside the point: `backlog` does not import `commands` at
 all, and that edge closes a command-tier cycle (§6).
@@ -257,10 +265,13 @@ Both legs it loses are legs that were never about the render:
 - The **`Dangling` leg** is deleted. A `Dangling` override means the ref parsed to
   an `ItemId` that is not a live node, which is only ever one of two things: a
   terminal backlog item (already suppressed today by the IDE-019 rule, and still
-  suppressed — a satisfied prerequisite explains nothing) or an absent one (now a
-  `doctor` finding). `project` admits every non-terminal item as a node and
-  pre-filters no edges (`backlog.rs:742`), so there is no third case. With both
-  arms routed elsewhere the leg has nothing left to print.
+  suppressed — a satisfied prerequisite explains nothing) or an absent one, which
+  `project` now records as an `AbsentDrop` in its own right (§4) so that it reaches
+  `doctor` — and the advisory below — by the same route every other unresolvable
+  ref takes, rather than by an inference from the adapter's verdict. `project`
+  admits every non-terminal item as a node and pre-filters no edges
+  (`backlog.rs:742`), so there is no third case. With both arms routed elsewhere
+  the leg has nothing left to print.
 
 `Override::from` stays the predecessor, `Override::to` stays the dependent, and the
 surviving lines keep the arrow. Nothing in `backlog_order.rs` is touched.
@@ -268,7 +279,7 @@ surviving lines keep the arrow. Nothing in `backlog_order.rs` is touched.
 ## `boundary:` — edges that were never in this order's universe
 
 A separate block, below `overrides:`, in the same footer. On the live corpus it is
-exactly these four lines plus six more of the same shape:
+exactly these four lines plus seven more of the same shape:
 
 ```
 boundary:
@@ -302,10 +313,10 @@ deterministic for goldens — which is why the sample above reads `IMP` before `
 
 Two suppressions, both consequences of the contract rather than noise heuristics:
 
-- **A terminal target prints nothing.** On the live corpus that is 15 of the 25
-  edges that reach the footer, so the default block is 10 lines, not 25.
+- **A terminal target prints nothing.** On the live corpus that is 15 of the 26
+  edges that reach the footer, so the default block is 11 lines, not 26.
 - **A terminal *dependent* never reaches the footer at all**, because the ordering
-  projection only admits live items as nodes. Five of the 30 edges are in that
+  projection only admits live items as nodes. Five of the 31 edges are in that
   position. Their refs are still checked by `doctor`, which walks the authored
   corpus rather than the live node set (§5).
 
@@ -331,7 +342,7 @@ single count-only advisory to stderr:
 backlog list: 3 authored needs/after refs name nothing — run `doctrine doctor`
 ```
 
-Three properties make this a signpost rather than a second report, and keep
+Four properties make this a signpost rather than a second report, and keep
 `DEC-232` intact:
 
 - **It names no ref.** The footer's contract is untouched, because this is not in
@@ -344,6 +355,16 @@ Three properties make this a signpost rather than a second report, and keep
   the same ref on `needs` and on `after` is one occurrence, and the count would say
   one repair where there are two edges to remove. `needs` and `after` are stored as
   separate authored arrays (`backlog.rs:628-635`), so they are two facts.
+- **It counts all three broken-ref classes, not the two the projection notices
+  first.** A malformed ref and an unresolvable cross-kind ref both fail
+  `backlog::parse_ref` and are `AbsentDrop`s already. A well-formed ref to an
+  **absent backlog id** (`ISS-999`) parses cleanly and would otherwise reach only
+  the adapter, as the `Dangling` override whose leg is deleted above — leaving the
+  one class that produces a `doctor` error and no signpost at all. §4 closes that
+  by recording it as an `AbsentDrop` too, so the advisory's count and §5's check
+  report the same population. A signpost that points at `doctor` for a subset of
+  what `doctor` will say is worse than no signpost, because the reader who follows
+  it once and finds it complete will trust it when it is not.
 - **It fires only under `--by sequence`**, because `--by id` never composes and so
   never probes. That matches today's footer behaviour exactly, and adding a probe to
   `--by id` purely to emit the line would buy a warning at the cost of the very read
@@ -426,9 +447,9 @@ Not `meta`, whose module doc forbids it in as many words: *"The reader, status
 filter, and aligned formatter are status/path-parametric — they carry **zero
 per-kind knowledge** — so they live here once and every kind calls them"*, and
 *"deliberately not `entity.rs`, which stays a kind-blind scaffold engine"*
-(`src/meta.rs:3-13`). A reader that branches on `RV` and `REC` is per-kind
-knowledge by definition, and `meta` has some seventeen consumers whose safety
-rests on that blindness. An earlier draft of this design routed the read through
+(`src/meta.rs:3-14`). A reader that branches on `RV` and `REC` is per-kind
+knowledge by definition, and fifteen modules consume `meta` on the strength of
+that blindness. An earlier draft of this design routed the read through
 `meta` and argued the resulting `meta → kinds` edge was safe because it pointed
 downward. The direction was never the question.
 
@@ -453,7 +474,7 @@ and is disclosed by its ref verbatim; no consumer needs to special-case it, and
 §6 names the one place where the distinction bites.
 
 **Status is engine.** The new module, one toml parse per **distinct** target —
-about 15 in the live corpus, ~8ms against a 190ms baseline.
+about 16 in the live corpus, ~8ms against a 190ms baseline.
 
 **Classification is policy.** `priority::partition::status_class` stays the sole
 per-kind terminality authority, which is what REQ-238 requires and what makes
@@ -498,10 +519,17 @@ pub(crate) struct Authored {
 
 pub(crate) fn read(
     root: &Path,
-    kref: &'static kinds::KindRef,
+    kref: &kinds::KindRef,
     id: u32,
 ) -> anyhow::Result<Authored>
 ```
+
+The `kref` is a plain borrow, deliberately **not** `&'static`. The overlay below
+delegates from `catalog::scan::status_and_title_for`, whose own parameter carries
+no `'static` bound (`scan.rs:412`), so a `'static` requirement here would be
+unmeetable at the one call site this design commits to writing. Nothing in `read`
+needs it: it borrows nothing out of the `kref`, and the `&'static entity::Kind`
+the projections carry (§4) comes from `parse_resolvable_ref`, not from here.
 
 The title rides along rather than being a second read: `meta::Meta` already
 carries both fields, and SL-050 `F-1` collapsed precisely this pair into one
@@ -647,7 +675,7 @@ this design widens what gates work. It changes only what is *disclosed*.
 | `commands → priority` | exists (`commands::inspect`, `commands::compare`) | command → command |
 | `commands → backlog`, `commands → dep_seq`, `commands → kinds` | exist | command → command / leaf |
 | `priority → kinds` | exists (`partition` already imports it) | command → leaf |
-| `backlog → authored_status`, `commands → authored_status` | **new module** | command → engine, downward |
+| `backlog → authored_status`, `commands → authored_status`, `catalog → authored_status` | **new module** | command → engine, downward |
 | `authored_status → {kinds, meta, entity}` | **new module**, precedented by `integrity` | engine → engine / leaf, downward |
 | `backlog → commands` | **refused** — see §6 | command → command, closes a cycle |
 
@@ -659,11 +687,16 @@ module, beside the comment inventory every other module carries.
 
 The last row is the one that shaped §6, and the reason it is stated as an edge
 rather than as a note is that it is easy to reach for by accident. The gate
-measures at **top-level-module** granularity: reaching a new *function* inside a
-module the source already imports adds nothing, which is why the `authored_status`
-consumers cost no edge — but reaching into a module the source does not import at
-all is a new edge no matter how deep inside it the target sits, and no
-sub-classification row can make it otherwise. §6 carries the measurement.
+measures at **top-level-module** granularity, and the two halves of that cut both
+matter here. Reaching a new *function* inside a module the source already imports
+adds nothing — which is why `partition::authored_class` costs no edge at all:
+`backlog` and `commands` already import `priority` (rows 1 and 3). Reaching into a
+module the source does not import is a new edge no matter how deep inside it the
+target sits, and no sub-classification row can make it otherwise — which is why
+`authored_status`'s three consumers each *do* cost an edge. What none of the three
+costs is **tangle**: an edge into an engine-tier module joins no command-tier
+cycle, so the count the gate asserts is unmoved while the graph legitimately grows.
+§6 carries the measurement.
 
 
 <!-- doctrine:section sec-4 -->
@@ -702,7 +735,9 @@ question a different way.
 
 ## What `project` gains
 
-Exactly one field. The `boundary:` line must name the relation word, and an
+One field and one case.
+
+**The field.** The `boundary:` line must name the relation word, and an
 `AbsentDrop` does not currently record which axis it came from:
 
 ```rust
@@ -717,14 +752,37 @@ pub(crate) struct AbsentDrop {
 }
 ```
 
-The resolve closure inside `project` takes the axis it is called for. Nothing else
-about the projection changes: the node set is still the non-terminal items, the
-`A-distinct` keying still holds, and a ref that fails `parse_ref` still contributes
-no edge.
+The resolve closure inside `project` takes the axis it is called for.
 
-`AbsentDrop` keeps its name. It is no longer a *footer* input — it is the set of
-refs the ordering universe could not represent, which is precisely what the
-boundary probe consumes.
+**The case.** An `AbsentDrop` is also recorded when the ref *parses* but its
+`ItemId` matches no item in the corpus — the absent-backlog-id class (`ISS-999`)
+that §2 routes to `doctor`. Without it that class reaches only the adapter, as the
+`Dangling` override whose leg §2 deletes, and it would be the single broken-ref
+class the stderr advisory could not count.
+
+Three properties keep it cheap and keep §7's preservation claims true:
+
+- **Pure.** `project` already holds the whole corpus — terminal items included —
+  so membership is a lookup, not a disk touch. The probe's later stat on the ref
+  is the same one every other `AbsentDrop` gets.
+- **A record, not a filter.** The edge is still emitted to the adapter, so the
+  adapter's inputs are byte-identical: row order and row membership cannot move,
+  because nothing the adapter sees has changed.
+- **Corpus membership, not node membership.** `project`'s standing contract is
+  that it *never pre-filters edges by node membership* (`backlog.rs:728-731`), and
+  this does not touch it: the two sets differ by exactly the terminal items, and it
+  is the wider one being asked. So a ref to a terminal item is not an `AbsentDrop`
+  — it is the satisfied-prerequisite case, which §2 keeps silent by deleting the
+  leg that would have printed it, not by suppressing a row this probe emitted.
+
+Nothing else about the projection changes: the node set is still the non-terminal
+items, the `A-distinct` keying still holds, and a ref that fails `parse_ref` still
+contributes no edge.
+
+`AbsentDrop` keeps its name, and the added case is what makes the name exact. It
+is no longer a *footer* input — it is the set of refs the ordering universe could
+not represent, and a ref naming an item that does not exist is as unrepresentable
+as one that will not parse.
 
 ## The probe's output is the rendered answer
 
@@ -773,14 +831,17 @@ struct BoundaryProbe {
 /// sorted, with terminal targets dropped and unresolvable refs counted, not shown.
 fn probe_boundary(root: &Path, absent: &[AbsentDrop]) -> BoundaryProbe
 
-/// IMPURE. The RECORD projection, for `show` / `inspect`: classify every cross-kind
-/// ref this item declares, keyed by the axis it was declared on. Nothing is
-/// dropped — a terminal target and an unresolvable ref are both part of the record.
+/// IMPURE. The RECORD projection, for `show` / `inspect`: classify EVERY ref this
+/// item declares, keyed by the axis it was declared on. Nothing is dropped — a
+/// terminal target and an unresolvable ref are both part of the record. Backlog-
+/// shaped refs are probed too, not filtered out ahead of the probe: `ISS-999`
+/// parses as an `ItemId` and still names nothing, and only resolving it says so.
+/// Which of the results earn a rendered annotation is the renderer's rule below.
 fn probe_item_refs(root: &Path, item: &BacklogItem) -> BTreeMap<(Axis, String), RefState>
 ```
 
 Per distinct ref, `probe_ref` is `kinds::parse_resolvable_ref` → `authored_status::read`
-→ `partition::authored_class`. About 15 distinct targets on the live corpus, one stat and
+→ `partition::authored_class`. About 16 distinct targets on the live corpus, one stat and
 one parse each.
 
 **Two projections, one classification, and the split is load-bearing.** An earlier
@@ -876,8 +937,12 @@ relationships:
 
 Five rules on that rendering:
 
-- **Only cross-kind targets are annotated.** A backlog target's status is already
-  carried by the rows of every listing the reader has.
+- **Cross-kind targets are annotated, and so is any ref that does not resolve.** A
+  backlog target's status is already carried by the rows of every listing the
+  reader has — which is exactly why the second clause is needed rather than being
+  a widening: a ref that names nothing has no row *anywhere* to carry it. So
+  `needs: ISS-999` and `needs: not-a-ref` are annotated here despite being
+  backlog-shaped, and a resolvable backlog target still is not.
 - **Never deduplicated.** `needs: SL-154` and `after: SL-154` are two authored
   facts under two labels — which is why the map is keyed by `(Axis, String)` and
   not by the ref alone. `DEC-232`'s dedup is a *footer* rule, where one line's
@@ -994,7 +1059,7 @@ Three properties worth stating because each is a deliberate divergence from how 
 footer sees the same corpus:
 
 - **Terminal dependents are included.** The footer structurally cannot see them —
-  `project` admits only live items as nodes, which is why 5 of the 30 authored
+  `project` admits only live items as nodes, which is why 5 of the 31 authored
   cross-kind edges never reach it. A broken ref on a closed issue is still broken
   data.
 - **Both axes, undeduplicated.** The same bad ref on both axes is two authored
@@ -1077,7 +1142,7 @@ kind-neutral clearing verb, and neither was needed. Probed on a scratch corpus:
 - `doctrine unlink IMP-172 needs SL-154` **refuses**: `unlink` operates on tier-1
   relation rows, and the dep/seq leaf implements removal for `after` only. The
   `needs` axis is append-only **for every kind**, not merely for cross-kind targets
-  — and 16 of the 30 authored cross-kind edges are on it.
+  — and 16 of the 31 authored cross-kind edges are on it.
 
 So the work is subtraction plus one small addition. `backlog::parse_ref` is not
 touched, and its five other hard-failing callers keep their contract.
@@ -1200,25 +1265,43 @@ The dependency is inverted instead. `commands` already depends on `backlog`
 downward, so `commands` supplies the operations and `backlog` receives them:
 
 ```rust
-// src/backlog.rs — the three kind-neutral operations, as the caller supplies them.
-pub(crate) struct AfterOps {
+// src/backlog.rs — every command-tier operation backlog's dep/seq verbs need, as
+// the caller supplies them. NOT the withdrawn `src/dep_seq_ops.rs` below: this is
+// a struct of function pointers held at command tier, and it relocates no code.
+pub(crate) struct DepSeqOps {
     pub edge:   fn(Option<PathBuf>, &str, &str, Option<i32>) -> anyhow::Result<()>,
     pub remove: fn(Option<PathBuf>, &str, &str)              -> anyhow::Result<()>,
     pub prune:  fn(Option<PathBuf>, &str)                    -> anyhow::Result<()>,
+    /// The admissible-target gate `backlog needs` is missing — see below.
+    pub admit_target: fn(&'static entity::Kind) -> anyhow::Result<()>,
 }
 
-fn run_after(path: Option<PathBuf>, …, ops: &AfterOps) -> anyhow::Result<()>
+pub(crate) fn dispatch(cmd: BacklogCommand, color: bool, ops: &DepSeqOps) -> anyhow::Result<()>
+fn run_after(path: Option<PathBuf>, …, ops: &DepSeqOps) -> anyhow::Result<()>
+fn run_needs(path: Option<PathBuf>, …, ops: &DepSeqOps) -> anyhow::Result<()>
 ```
 
-`cli.rs`'s existing `Command::Backlog` arm fills it with
-`commands::dep_seq::run_after_{edge,remove,prune}`. Every leg then runs one
-implementation, `backlog` gains no import, and the tangle baseline is untouched.
+**The injection point is `dispatch`, and naming it matters.** `cli.rs`'s
+`Command::Backlog` arm calls `crate::backlog::dispatch(command, color)`
+(`cli.rs:1705`) and reaches no `run_*` function itself — `dispatch` is what fans
+out to them (`backlog.rs:275`, `:283`). So the struct is filled in `cli.rs`, where
+`commands::dep_seq` is already in scope, and threaded through the single entry
+point to the two verbs that need it. Every leg then runs one implementation,
+`backlog` gains no import, and the tangle baseline is untouched.
 
 **This is an established idiom in this file, not a device invented for the gate.**
 `run_show_inspect` already takes `BacklogTableFn` (`backlog.rs:1636-1643`) — a
 renderer injected by the command layer for the same reason. `SL-238` is the second
 use, and the pattern is recorded as
 `mem.pattern.lint.back-edge-tangle-inject-fnptr`.
+
+**The rule, not the membership.** Every command-tier operation `backlog` needs
+arrives through `DepSeqOps`; `backlog` gains no `crate::commands` path in
+production code, and §7 asserts *that* rather than asserting which operations the
+struct happens to carry. Stating it as a rule is what makes `admit_target` a
+consequence rather than a second decision: a design that had enumerated three
+operations would have had to re-argue the layering question the moment the
+`backlog needs` gate below needed a fourth.
 
 **The alternative, and why it lost.** An earlier revision of this design moved the
 operations into a new engine module, `src/dep_seq_ops.rs`, so both callers could
@@ -1240,6 +1323,7 @@ legitimately consumes command-tier policy, so command tier is where it belongs.
 dependency and `meta`'s charter forbade it there; the dep/seq operations stay
 because they do have one. The two seams got different answers because they are
 different seams, not because the rule bent.
+
 ### `backlog needs` is routed for its target gate, and keeps its cycle oracle
 
 `backlog needs` (append) is **not** collapsed into the kind-neutral verb: it takes
@@ -1255,12 +1339,28 @@ accepts *any* resolvable kind — an `RV`, a `REC`, a governance doc — where
 verb creates edges its kind-neutral sibling would not, which is `DEC-235`'s
 complaint verbatim, one axis over.
 
-So the prerequisite loop gains the shared gate:
+So the prerequisite loop gains the shared gate — and it arrives by injection, for
+the reason the section has just finished making. `is_admissible_dep_target` is not
+in `kinds`: it is `commands::dep_seq`'s (`dep_seq.rs:34`), built from that module's
+`is_work_like`, and its refusal message interpolates `record_kind_list_slash()`,
+which reads `knowledge::RecordKind::ALL` (`:40-46`). Calling it from `backlog`
+would be the `backlog → commands` edge this section refuses; re-authoring
+the message in `backlog` would be a second refusal vocabulary drifting from the
+first, and would drag `knowledge` in behind it. So it rides `DepSeqOps` as the
+fourth member:
 
 ```rust
+// src/commands/dep_seq.rs — the existing ensure! at :92-97, extracted and named,
+// so `resolve_dep_seq_src` and the injected pointer refuse in one voice.
+pub(crate) fn ensure_admissible_dep_target(kind: &'static entity::Kind) -> anyhow::Result<()>
+
+// src/backlog.rs — run_needs' prerequisite loop
 let (tkref, _tid) = kinds::parse_resolvable_ref(&root, prereq)?;
-anyhow::ensure!(kinds::is_admissible_dep_target(tkref.kind), …);
+(ops.admit_target)(tkref.kind)?;
 ```
+
+One gate, one message, no import — and `knowledge::RecordKind::ALL` stays exactly
+where §8 commits to leaving it.
 
 This refuses input that was previously accepted, and it is named here as a
 behaviour change rather than absorbed as a tidy-up (§9). It also closes the gap §2
@@ -1279,21 +1379,21 @@ collapse to one probe in one function:
 
 ```
 for each `after` edge of SRC:
-    parse_canonical_ref(edge.to)
+    kinds::parse_resolvable_ref(root, edge.to)
       Err                      -> prunable  (a ref that names nothing)
       Ok(kref, id):
-        entity dir absent      -> prunable
-        present:
-          authored_status::read(root, kref, id)
-            Err                -> KEEP, and say so on stderr  (STD-003)
-            Ok(a) -> authored_class(kind, &a.status)
-              Terminal         -> prunable
-              anything else    -> keep
+        authored_status::read(root, kref, id)
+          Err                  -> KEEP, and say so on stderr  (STD-003)
+          Ok(a) -> authored_class(kref.kind, &a.status)
+            Terminal           -> prunable
+            anything else      -> keep
 ```
 
-One read per edge instead of two, and the terminality question routes through
-`partition::status_class` — closing the STD-001 duplicated-table violation and the
-REQ-238 routing breach together, which is why the vocabulary bug could exist at all.
+One read per edge instead of two, one resolver instead of a hand-rolled
+parse-then-stat, and the terminality question routes through
+`partition::authored_class` onto `status_class` — closing the STD-001
+duplicated-table violation and the REQ-238 routing breach together, which is why
+the vocabulary bug could exist at all.
 
 The collapse also closes four instances of the pattern STD-003 forbids. All four
 copies (`backlog.rs:2019-2022`, `:2043-2046`; `commands/dep_seq.rs:202-206`,
@@ -1304,7 +1404,7 @@ from a legitimate live status. The replacement keeps the edge, which is the righ
 conservative call, and **says why on stderr**: a repair verb that quietly declines
 to repair is the same class of dishonesty this slice is about.
 
-Three consequences, each of which must be tested as what it is:
+Four consequences, each of which must be tested as what it is:
 
 - **A behaviour change, not a refactor.** An `after` edge onto a `done` slice or an
   `answered` question becomes prunable where today it is not. `IMP-172 → SL-154` is
@@ -1316,9 +1416,20 @@ Three consequences, each of which must be tested as what it is:
 - **The reason word loses its `/resolution` suffix.** Today's leg re-reads the raw
   toml to render `closed/wont-do`; `Meta` carries no `resolution` field, and adding
   one to a type this widely shared to decorate an untested repair message is not the
-  trade. Output becomes `dropped (dangling: closed)`. The two copies' divergent
-  unparseable wording (`(unparseable)` against `absent (unparseable ref)`) unifies
-  on one form at the same time.
+  trade. Output becomes `dropped (dangling: closed)`.
+- **A bare ref resolves instead of being deleted.** Both copies probe with
+  `parse_canonical_ref` (`backlog.rs:2014`, `commands/dep_seq.rs:197`), which does
+  not accept the bare form, and route its `Err` to *prunable* — so a hand-authored
+  `after = [{ to = "154" }]` onto a live `SL-154` is silently removed by a verb
+  asked to drop only spent edges. `parse_resolvable_ref` accepts both forms and is
+  the resolver every other surface in this design already routes through (§3, §5),
+  so the bare ref resolves and is judged on its target's status like any other.
+  This is what §3 means when it says no consumer needs to special-case the bare
+  form; today exactly one consumer does, wrongly. The `Err` arm keeps its meaning —
+  *the ref names nothing* — and absorbs the missing-directory case with it, so the
+  three reason strings the two copies render today (`absent`, `(unparseable)`,
+  `absent (unparseable ref)`) collapse to one: `dropped (dangling: unresolved)`,
+  reusing the token §4 already gives that state rather than minting a fourth.
 
 `--prune` has **no test coverage at all, in either copy**. Characterisation tests
 land before the probe is replaced, so the collapse can be shown to be
@@ -1366,6 +1477,12 @@ Three different kinds of claim, and they need different evidence:
   both axes counts twice, matching §5's undeduplicated check rather than the footer's
   dedup. The axis is in the key, and this test is what forces it to be: under a
   `(dependent, ref)` key the case it asserts is unreachable.
+- `the advisory counts an absent backlog id` — `needs: ISS-999` on a live item,
+  where the ref parses to an `ItemId` and names no entity. One `doctor` finding,
+  no footer line, and **one on the advisory's count**. Under a projection that
+  recorded only `parse_ref` failures this case reaches the adapter alone, so the
+  count reads zero while `doctor` reports one; this test is what forces §4's added
+  projection case, and it is red without it.
 - `a corpus with no unresolvable refs emits no advisory` — the positive control, and
   the state of the live corpus.
 - `--by id emits neither footer nor advisory` — the order mode never probes.
@@ -1399,6 +1516,10 @@ Three different kinds of claim, and they need different evidence:
   unresolvable ref both annotated by `probe_item_refs`, both absent from
   `probe_boundary`'s rows. This is the divergence that made one shared projection
   impossible, stated as a test so a later tidy-up cannot quietly re-merge them.
+- `inspect annotates a backlog ref that names nothing` — `needs: ISS-999` renders
+  `(unresolved)` while a resolvable `needs: ISS-084` renders bare. The pair is one
+  test because the rule has two halves: only cross-kind targets carry a status
+  annotation, and a ref with no row anywhere carries one regardless of prefix.
 
 The `Unavailable` case is fixtured **twice, from both routes it can arrive by**:
 
@@ -1452,6 +1573,10 @@ pins the shutting:
 - `after prune keeps an edge onto a live target`.
 - `after prune keeps an edge whose target toml is unreadable, and says so on
   stderr` — conservative on uncertainty, and not silently so (STD-003).
+- `after prune resolves a bare ref rather than dropping it` — a hand-authored
+  `to = "154"` onto a live `SL-154` survives, and the same ref onto a `done`
+  `SL-154` is pruned with the ordinary terminal reason. Red against both copies
+  today, which delete it either way without reading the target at all.
 - `needs remove clears one edge and reports the count`, `needs remove bails when no
   edge matches`.
 - `needs remove clears a ref that does not resolve` and `after remove clears a ref
@@ -1490,11 +1615,13 @@ it should be, or intentional where it should not.
   today, so the back edge merges two clusters and every edge inside the merged
   component becomes cyclic. `layering.toml:185-187` says to measure rather than
   predict, which is why this bullet names a number.
-- `backlog gains no new module import` — the injection's own assertion. `AfterOps`
-  is a struct of `fn` pointers filled by `cli.rs`, so the shared operations are
-  reached without an edge; a later "tidy-up" that replaces it with a direct
-  `crate::commands::dep_seq` call fails the layering gate, which is the intended
-  guard.
+- `backlog gains no new module import` — the injection's own assertion.
+  `DepSeqOps` is a struct of `fn` pointers filled by `cli.rs`, so the three shared
+  operations *and* the admissible-target gate are reached without an edge; a later
+  "tidy-up" that replaces any of them with a direct `crate::commands::dep_seq` call
+  fails the layering gate, which is the intended guard. The assertion is over the
+  module, not over the struct's membership, so a fifth injected operation inherits
+  it without a new test.
 - `src/meta.rs` is **unmodified**, and that is an assertion about the design rather
   than an accident: the module's kind-blindness is what makes it safe for its
   consumers (§3).
@@ -1546,12 +1673,12 @@ it should be, or intentional where it should not.
 | `src/authored_status.rs` | **NEW, engine tier.** `Authored { status, title }` and `read(root, kref, id)` — the sole per-kind status reader, three arms static on the two kind sets, one `meta::read_meta` on the common path. Absorbs `catalog::scan::title_for`, the lenient title reader. |
 | `src/catalog/scan.rs` | `status_and_title_for` becomes the command-tier **overlay**: delegate to `authored_status::read`, then map `Unavailable` to `review::derived_status_string`. Its two inline `"REC"`/`"RV"` arms and `title_for` go. |
 | `src/priority/partition.rs` | `authored_class(kind, &AuthoredStatus)` over the existing `status_class`; the `Unavailable → Unrecognised` rule stated once, in the policy module; the `None`-arm comment re-sources from `kinds::STATUS_LESS`. |
-| `src/backlog.rs` | `AbsentDrop` gains an axis; `project` hoisted out of `compose` into `list_rows`; `probe_ref` plus the two projections `probe_boundary` / `probe_item_refs` (the one new read); `render_overrides` takes `BoundaryRow`s, **loses its `corpus` parameter**, loses the `AbsentDrop` leg and the `Dangling` arm, gains the `boundary:` block; `compose` loses the `cmap` build; `classify_dangling` deleted; the stderr advisory; `dep_seq_ref_findings` and `read_all_tolerant` / `ReadFailure` added; `run_after` takes `AfterOps` and its three legs run the injected operations; `run_needs`'s prerequisite loop gains the admissible-target gate; `run_show_inspect` / `format_metadata` thread the target-state annotation. |
-| `src/commands/dep_seq.rs` | Stays at command tier, unmoved. `run_after_prune`'s probe replaced, its internal double-read collapsed, and its two laundered reads repaired; `run_after_remove` gates the source only and canonicalises through the three-tier needle; `run_needs_remove` added. |
+| `src/backlog.rs` | `AbsentDrop` gains an axis and a second recording case (a parsed ref matching no corpus item); `project` hoisted out of `compose` into `list_rows`; `probe_ref` plus the two projections `probe_boundary` / `probe_item_refs` (the one new read); `render_overrides` takes `BoundaryRow`s, **loses its `corpus` parameter**, loses the `AbsentDrop` leg and the `Dangling` arm, gains the `boundary:` block; `compose` loses the `cmap` build; `classify_dangling` deleted; the stderr advisory; `dep_seq_ref_findings` and `read_all_tolerant` / `ReadFailure` added; `DepSeqOps` declared and threaded through `dispatch` into `run_after` (whose three legs run the injected operations) and `run_needs` (whose prerequisite loop gains the injected admissible-target gate); `run_show_inspect` / `format_metadata` thread the target-state annotation. |
+| `src/commands/dep_seq.rs` | Stays at command tier, unmoved. `run_after_prune`'s probe replaced (one resolver, one read), its internal double-read collapsed, and its two laundered reads repaired; `run_after_remove` gates the source only and canonicalises through the three-tier needle; `run_needs_remove` added; the existing admissible-target `ensure!` (`:92-97`) extracted as `ensure_admissible_dep_target`, called by `resolve_dep_seq_src` and injected into `backlog` (§6). |
 | `src/dep_seq.rs` | `remove_needs` core; `RelRemove`; `remove` re-shaped to take it. |
-| `src/commands/cli.rs` | `--remove` on the `needs` verb and its dispatch arm; the `Command::Backlog` arm fills `AfterOps` with the three `commands::dep_seq` operations (§6). |
+| `src/commands/cli.rs` | `--remove` on the `needs` verb and its dispatch arm; the `Command::Backlog` arm fills `DepSeqOps` with the three `commands::dep_seq` operations plus `ensure_admissible_dep_target`, and passes it to `backlog::dispatch` (§6). |
 | `src/commands/doctor.rs` | one `extend` for the new check under `RelationIntegrity`. |
-| `src/main.rs` | one `mod authored_status;` declaration. The binary owns its own module tree (`main.rs:3-19`), so a new root module is unreachable until declared here; the file carries 95 such lines today and this is one more. |
+| `src/main.rs` | one `mod authored_status;` declaration. The binary owns its own module tree (`main.rs:3-19`), so a new root module is unreachable until declared here; the file carries 94 such lines today and this is one more. |
 | `.doctrine/adr/001/layering.toml` | one authored row classifying `authored_status` as engine, beside the comment inventory every other module carries. No tier change, no accepted-violation entry, no baseline movement. |
 
 Test modules move with their subjects: `src/backlog.rs`'s footer goldens and
@@ -1563,7 +1690,7 @@ canary and the record-predicate test stay green untouched — and new pins in `s
 
 - **`src/meta.rs`** — and this one is a design commitment, not an omission. Its
   charter is that it carries zero per-kind knowledge, which is what makes it safe
-  for its seventeen consumers. An earlier draft sited the status read here; §3
+  for the fifteen modules that consume it. An earlier draft sited the status read here; §3
   records why that was wrong and §7 pins the file as unmodified.
 - **`src/backlog_order.rs`** — no widening of `ItemId`, no phantom node, no
   comparator change. `Override::from` stays the predecessor. This is what keeps the
@@ -1666,8 +1793,12 @@ verification round contested the first repair.
    advisory naming no individual ref (§2) closes that without reopening the
    footer's contract. This began as an overrun no decision covered and is no longer
    one: **`DEC-236` was minted for it and is accepted**, and it is the authority for
-   the three properties §2 states — names no ref, counts occurrences rather than
-   pairs, fires only under `--by sequence`.
+   three of the four properties §2 states — names no ref, counts occurrences rather
+   than pairs, fires only under `--by sequence`. The fourth, that the count covers
+   every broken-ref class rather than the two the projection notices first, is not
+   a further property but what `DEC-236`'s own *"drops one or more unresolvable
+   refs"* requires of an implementation; §4 carries the projection case that makes
+   it true, and §7 the test that fails without it.
 
 7. **`backlog show` gains the annotation alongside `backlog inspect`.** They share
    one renderer, and both print the authored record.
@@ -1688,13 +1819,15 @@ verification round contested the first repair.
    It is disclosed here because the decision's wording forbids it on its face and a
    reader holding `DEC-233` would otherwise have to notice the contradiction alone.
 
-10. **`backlog` receives the kind-neutral operations by injection, not by import.**
-    `DEC-235` says the backlog-scoped verb routes through the kind-neutral one and
-    does not say how it reaches it — which was fine until the routing made the
-    reach load-bearing. `backlog → commands` closes a command-tier cycle and merges
-    two SCCs (§6, §7), so `cli.rs` supplies the three operations as an `AfterOps`
-    struct of `fn` pointers instead. `DEC-235`'s goal is unchanged; only the calling
-    convention is. Found by `RV-358` `F-1`.
+10. **`backlog` receives every command-tier dep/seq operation by injection, not by
+    import.** `DEC-235` says the backlog-scoped verb routes through the kind-neutral
+    one and does not say how it reaches it — which was fine until the routing made
+    the reach load-bearing. `backlog → commands` closes a command-tier cycle and
+    merges two SCCs (§6, §7), so `cli.rs` supplies them as a `DepSeqOps` struct of
+    `fn` pointers threaded through `backlog::dispatch` instead. Stated as a rule
+    over the module rather than as a list of operations, because item 11 needed a
+    fourth. `DEC-235`'s goal is unchanged; only the calling convention is. Found by
+    `RV-358` `F-1`.
 
 11. **`backlog needs` gains the admissible-target gate, refusing input it accepts
     today.** No decision covers this. `DEC-235` is about `backlog after`, and the
@@ -1704,7 +1837,10 @@ verification round contested the first repair.
     refuses (§2, §6). This is a **behaviour change that refuses previously valid
     input**, which is why it is named rather than folded in: it is the same
     inconsistency `DEC-235` was minted to remove, and leaving it would have left §2
-    and §3 resting on a reachability claim that was simply false.
+    and §3 resting on a reachability claim that was simply false. The gate itself
+    is `commands::dep_seq`'s, so it arrives as item 10's fourth injected operation
+    rather than as a `backlog → commands` import — the repair for this item would
+    otherwise have reintroduced the defect `F-1` raised, one axis over.
 
 ## Governance this design produced
 
@@ -1719,12 +1855,17 @@ cites it rather than arguing it from first principles. `SL-238` and `RSK-013` ar
 
 ## Facts found in drafting that the records do not hold
 
-- **The axis split is 16 `needs` / 14 `after`, not 21 / 9.** A full re-scan on
-  2026-08-16 reproduces every other figure in the scope exactly — 30 cross-kind
-  edges, 5 hanging off terminal dependents, 25 reaching the footer, 10 boundary
-  lines, 15 silent, 15 distinct targets probed — but the axis split was wrong in
-  both `slice-238.md` and §1. `needs --remove` still serves the majority of the
-  population; the argument is narrower than the record claimed.
+- **The axis split is 16 `needs` / 15 `after`, not 21 / 9.** Three artefacts carried
+  the miscount, not one: `slice-238.md`, an earlier §1, and `DEC-235`'s `context`,
+  which argued from it. All three are corrected — `DEC-235` by an appended note that
+  leaves the original figure standing, since it is what the decision was taken
+  against, and its choice does not turn on the margin. `needs --remove` still serves
+  the larger half of the population, but by one edge rather than by two to one. The
+  re-scan of 2026-08-16 that found it reads 31 cross-kind edges, 5 hanging off
+  terminal dependents, 26 reaching the footer, 15 silent, 11 boundary lines, 16
+  distinct targets probed. Those are a **snapshot, not a fact about the design**
+  (§1): the same day's earlier scan read 30/14, and `ISS-367` `after` `SL-256`
+  arrived between the two. The split's *shape* is what the argument rests on.
 - **There are zero unresolvable authored refs today.** Every authoring path already
   gates on `ensure_ref_resolves`, so the `doctor` check is a drift guard against
   hand-edits and deleted targets, not a cleanup with known defects waiting (§5).
@@ -1753,9 +1894,9 @@ cites it rather than arguing it from first principles. `SL-238` and `RSK-013` ar
   deliberately, one of them on two counts. Every other intentional output change is
   enumerated in §7 and must be named in the reconciliation brief.
 - **R3 — untested leg.** `--prune` has no coverage in either copy, and this design
-  changes its behaviour three times over (vocabulary, reason word, and the
-  unreadable-target keep becoming loud). Characterisation tests precede the probe
-  replacement.
+  changes its behaviour four times over (vocabulary, reason word, the
+  unreadable-target keep becoming loud, and a bare ref resolving instead of being
+  deleted). Characterisation tests precede the probe replacement.
 - **R4 — soft-axis over-reach. Held by non-goal.** An `after` edge onto an
   unrecognised-status target must not withhold or order; `priority/channels.rs` is
   untouched, and the boundary block has no ordering effect to over-reach with.

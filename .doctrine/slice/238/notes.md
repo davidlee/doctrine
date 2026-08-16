@@ -267,18 +267,129 @@ wants the second repair adversarially tested the way the first one was. What it
 should probe, in priority order:
 
 1. **The injection repair itself, which no reviewer has seen.** `F-1`'s first
-   repair was contested and withdrawn; its replacement (`AfterOps` fn-pointer
-   injection, §6) was authored after the verification round and has had no
-   adversarial read. It is the highest-value target by construction — the same
-   position the withdrawn repair occupied when it looked fine.
+   repair was contested and withdrawn; its replacement (fn-pointer injection, §6)
+   was authored after the verification round and has had no adversarial read. It
+   is the highest-value target by construction — the same position the withdrawn
+   repair occupied when it looked fine.
 2. **`RefState`'s rendering table** (§4) — the `Absent` → no-parenthesis rule is
-   new and interacts with `inspect`'s "annotate every cross-kind target" rule.
-   Is a `REC` target distinguishable from an un-annotated one?
-3. **Cross-section drift from three rewrites.** Nine sections have now been
-   declared three times. `F-5` was exactly this failure — a claim corrected in two
-   sections and left standing in a third.
+   new and interacts with `inspect`'s target-annotation rule. Is a `REC` target
+   distinguishable from an un-annotated one?
+3. **Cross-section drift from repeated rewrites.** `F-5` was exactly this failure
+   — a claim corrected in two sections and left standing in a third.
 4. **§7's evidence claims**, since `F-10` found one that was simply false. Every
    "this existing test already proves X" assertion deserves the same check.
+
+### Self-attack round (2026-08-16, revisions 53 → 57)
+
+A read-only self-attack over all ten dispositions and the whole document, before
+any section attestation was spent. Priority 1 above was correct: **the unseen
+injection repair carried the most defects.** Nine repairs landed; the corpus
+figures were re-derived from scratch. Nothing here has been adversarially read.
+
+- **The `backlog needs` gate reproduced `F-1`.** §6's repair for `F-5` called
+  `kinds::is_admissible_dep_target`, which does not exist — the function is
+  `commands::dep_seq`'s (`dep_seq.rs:34`), and its message reads
+  `knowledge::RecordKind::ALL`. Calling it is the `backlog → commands` edge `F-1`
+  ruled out. Repaired by injection: `AfterOps` becomes `DepSeqOps` with a fourth
+  member, and §6 now states the **rule** (every command-tier operation arrives by
+  injection) rather than enumerating three operations.
+- **The injection had no route.** `cli.rs`'s `Command::Backlog` arm calls
+  `backlog::dispatch(command, color)` (`cli.rs:1705`) and reaches no `run_*`
+  function, so "cli.rs fills `AfterOps`" was unimplementable as written.
+  `dispatch` is now the named injection point.
+- **The stderr advisory could not count one of its three classes.** A ref to an
+  absent backlog id (`ISS-999`) parses and reaches the adapter, so it was never an
+  `AbsentDrop` and never counted — a `doctor` error with no signpost. `project`
+  now records it (§4), pure and without changing adapter inputs.
+- **`inspect`'s two annotation rules contradicted each other** on that same class.
+- **`--prune` deleted live bare refs.** The probe kept `parse_canonical_ref`,
+  which rejects the bare form and routes `Err` to *prunable*.
+- **§3's layering table omitted `catalog → authored_status`**, which §1's diagram
+  draws and §8 commits to — and its prose said the `authored_status` consumers
+  "cost no edge", which is true of `authored_class`, not of them.
+- **`read`'s `&'static KindRef` was uncallable** from the one consumer §8 names.
+- **Two counts were wrong** (`main.rs` 95→94 root `mod` lines; `meta` seventeen→
+  fifteen consumer modules), and **every corpus figure had drifted** — 31 edges,
+  not 30, after `ISS-367 after SL-256` landed the same day. Swept into
+  `slice-238.md` and `DEC-235` (whose `context` argued from the 21/9 miscount and
+  now carries an appended correction). §1 now says the figures are a dated
+  snapshot, so the next drift reads as drift rather than as an error.
+
+**What a third pass should probe first, now:** the four repairs above that
+*added* something — the `DepSeqOps` fourth member, the `project` case, the
+`inspect` rule's second clause, and `--prune`'s resolver swap. Each is a
+self-authored repair to a self-authored repair, which is the position `F-1`'s
+withdrawn module occupied. Per `mem.pattern.review.bind-scope-bar-and-never-self-rule`,
+authoring the bar disqualifies the author from ruling on compliance with it.
+
+### Type prototype (2026-08-16, fork `proto/SL-238-types`)
+
+The owner ran the design's type model through a compiler instead of through more
+prose: a throwaway implementation by a third agent (Deepseek) in
+`.worktrees/proto-SL-238-types`, uncommitted, ~626 insertions over 9 files plus a
+new `src/authored_status.rs`. Reported `cargo check --bin doctrine` clean,
+`architecture_layering` green (tangle baseline 76, `authored_status` classified
+engine), with live smoke-tests of the footer, `inspect`, `--prune`, the clearing
+verbs and the stderr advisory. The `doctor` check (§5) was not written; test
+modules do not compile, by design — call-site churn from the signature changes.
+
+**It implements revision 57, not the fork's checked-out design.** The fork sits at
+`0691a8c4c`, whose committed `design.md` predates every self-attack repair; the
+prototype nonetheless carries `DepSeqOps`, the `dispatch` injection point,
+`AbsentDrop`, `admit_target`, `prune_verdict` and `authored_class`, so it was
+built from the main tree's uncommitted working copy. Anyone re-entering that fork
+will read a stale design beside current code.
+
+**It found two real defects, both inside the injection repair** — the region the
+section above named as priority 1 for a third pass, and both on the `DepSeqOps`
+fourth-member / signature surface that list called out first. Verified against
+source here, not taken on report:
+
+1. **`DepSeqOps`'s rank types do not match the functions they must hold**
+   (design.md:1272-1274). `run_after_edge` takes `rank: i32`, not `Option<i32>` —
+   `rank == 0` is already the "no rank" sentinel (`dep_seq.rs:166`,
+   `cli.rs:741`), so the `Option` invents a `None`/`Some(0)` distinction nothing
+   consumes and the pointer cannot hold the function. Worse on the other leg:
+   `run_after_remove` takes `rank: i32` as an **upper bound** — "only edges with
+   rank ≤ N are removed" (`cli.rs:738-740`) — and the design's
+   `remove: fn(Option<PathBuf>, &str, &str)` drops it, so routing
+   `backlog after --remove --rank N` through `ops.remove` would silently discard
+   the documented ceiling. That is a behaviour regression §7's preservation
+   clause would not have named. `run_needs_remove`'s rankless signature
+   (design.md:1186) is correct — the `needs` array carries no rank.
+2. **`ensure_admissible_dep_target(kind)` cannot render its own message**
+   (design.md:1355). The `ensure!` it extracts (`dep_seq.rs:92-97`) interpolates
+   `{target}` — the caller's ref string — *and* `tkref.kind.prefix`. A signature
+   carrying only `&'static Kind` has lost the ref, so the refusal renders
+   `` `ADR` is a ADR entity `` with the prefix doubled. The stated goal at
+   design.md:1354 is that both paths "refuse in one voice"; the signature defeats
+   it. Widening to `fn(&'static Kind, &str)` fixes it.
+
+Three lesser findings, reasoned but not source-verified to the same depth:
+
+3. **Non-padded stored refs are unremovable.** §6's three-tier needle
+   (design.md:1209-1212) canonicalises through `kinds::canonical_id`, so a
+   hand-authored `needs = ["SL-1"]` is sought as `SL-001` and never matches — the
+   verbatim tier only fires when *both* parses fail, and `SL-1` parses. Bare
+   `154` → `SL-154` works. Narrow: such a ref resolves, so §5's check would not
+   report it. Worth one line in §7 rather than a mechanism.
+4. **`prune_verdict`'s `Unavailable` reason arm is unreachable** —
+   `authored_class(Unavailable) == Unrecognised ≠ Terminal`. Consistent with
+   design.md:1412-1414, which already says `Unrecognised` covers that case and
+   keeps the edge; a prototype artefact, not a design defect.
+5. **The absent-backlog-id fact is carried twice.** The adapter still computes a
+   `Dangling` override *and* `project` now records the `AbsentDrop` (§4's second
+   case, added in the self-attack round). Correct per §2 — `render_overrides`
+   drops `Dangling` — but the adapter's computation is only un-rendered, not
+   retired. Worth stating where §4 claims the class is counted once.
+
+**What the experiment establishes about method, separate from the findings.** The
+two confirmed defects are both type-level and both sat in prose that had already
+survived a nine-repair self-attack by its own author. Neither was findable by
+re-reading; both fell out of a compiler in one pass, at a token cost the owner
+puts on par with one round of design-text editing. The self-rule bar
+(`mem.pattern.review.bind-scope-bar-and-never-self-rule`) is what the prototype
+routes around: it does not care who authored the signature.
 
 ### Open
 

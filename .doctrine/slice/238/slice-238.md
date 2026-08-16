@@ -27,11 +27,14 @@ hardcoded the word `absent`. `74b773690` silenced those lines as an interim —
 the footer is now empty repo-wide — which removed the lie without supplying the
 truth.
 
-Measured on the corpus, 2026-08-15: **30 authored cross-kind `needs`/`after`
-edges**. Five hang off already-terminal dependents, which `project` never admits
-as nodes, so **25 reach the footer** — 10 with a non-terminal target, 15 with a
-terminal one. Sixteen of the thirty are on the `needs` axis, fourteen on `after`
-(re-counted 2026-08-16; an earlier 21/9 split was a miscount).
+Re-scanned 2026-08-16: **31 authored cross-kind `needs`/`after` edges**. Five hang
+off already-terminal dependents, which `project` never admits as nodes, so **26
+reach the footer** — 11 with a non-terminal target, 15 with a terminal one. Sixteen
+of the thirty-one are on the `needs` axis, fifteen on `after`. An earlier 21/9
+split was a miscount; the 30/14 figures this paragraph carried were a correct
+earlier-the-same-day count, overtaken when `ISS-367 after SL-256` was authored.
+These are a dated snapshot of a moving population — design.md §1 says why nothing
+depends on them holding.
 
 Four defects, of which the first is the one that survives `DEC-231`:
 
