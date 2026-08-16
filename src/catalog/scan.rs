@@ -3,13 +3,14 @@
 //! the all-kind raw scan (SL-071). Re-homed from `relation_graph.rs`; consumed
 //! by both `relation_graph` (via re-exports) and the richer `catalog` types.
 //!
-//! Six items moved here:
+//! Five items moved here:
 //! - `outbound_for` — the outbound relation dispatch over `crate::kinds::KINDS`
 //! - `EntityKey` — the corpus-wide identity type
 //! - `ScannedEntity` — the reusable scan record
 //! - `scan_entities` — the KINDS-walk entry point
-//! - `status_and_title_for` — one parse per entity (private helper)
-//! - `title_for` — lenient title-only read (private helper)
+//! - `status_and_title_for` — the command-tier overlay over the sole per-kind
+//!   status reader (private helper). SL-238 moved its lenient `title_for` to
+//!   `crate::authored_status`, which now owns both readers.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -111,10 +112,10 @@ pub(crate) struct ScannedEntity {
     pub(crate) kind: &'static entity::Kind,
     pub(crate) status: Option<String>,
     /// The entity's authored `title`, captured in the scan so the priority display
-    /// surfaces need no second read (SL-047 PHASE-03). Read leniently
-    /// ([`title_for`]) so a status-less kind (RV/REC, whose strict
-    /// [`crate::meta::Meta`] read fails for lack of a top-level `status`) still yields
-    /// its title.
+    /// surfaces need no second read (SL-047 PHASE-03). Read leniently by
+    /// [`crate::authored_status::read`] (SL-238) so a status-less kind (RV/REC,
+    /// whose strict [`crate::meta::Meta`] read fails for lack of a top-level
+    /// `status`) still yields its title.
     pub(crate) title: String,
     pub(crate) outbound: Vec<RelationEdge>,
     /// NOTE: `[estimate]`/`[value]` facets are no longer parsed or consumed
@@ -392,60 +393,39 @@ where
     }
 }
 
-/// One entity's AUTHORED `(status, title)` for the cross-kind scan, dispatched by
-/// canonical prefix (the same data-driven shape as [`outbound_for`]). For the COMMON
-/// (non-RV/REC) path this is ONE parse: the shared `meta::read_meta` deserializes the
-/// full [`crate::meta::Meta`], which already carries BOTH `status` and `title`, so the
-/// status and title come from a single toml read (SL-050 F1 — collapsing the former
-/// `status_for` + `title_for` double-parse).
+/// One entity's AUTHORED `(status, title)` for the cross-kind scan — the
+/// command-tier **overlay** over the sole per-kind status reader
+/// [`crate::authored_status::read`] (SL-238 §3).
 ///
-/// REC is genuinely status-less (one record per act, no lifecycle) ⇒ `None` status,
-/// and its title comes from the lenient [`title_for`] (its toml authors no top-level
-/// `status`, so strict `read_meta` would fail). RV authors no `status` field either,
-/// but carries a status DERIVED at read time from its authored finding ledger
-/// (`review::derived_status_string`, D-C8) — authored-tier, not a runtime read — with
-/// its title likewise read leniently. RV/REC therefore still take two reads each
-/// (derived/ledger status + lenient title); that residual is scope-sanctioned (F1).
-/// The `kref` carries both the tree dir and the toml `stem`.
+/// The engine reader answers the three-way [`crate::kinds::AuthoredStatus`] and
+/// stops where its tier does. This overlay sits above it and can see one thing
+/// further: `RV`'s status is DERIVED from its authored finding ledger
+/// (`review::derived_status_string`, D-C8), and `review` is command tier. So
+/// [`crate::kinds::AuthoredStatus::Unavailable`] — the engine's honest "not
+/// readable from down there" — is the arm this overlay resolves, and it is the
+/// only one it touches.
+///
+/// One reader underneath, so the two tiers cannot drift: the former inline
+/// `"REC"`/`"RV"` arms here and the engine's would have been a parallel
+/// implementation reconciled only by two string constants. The COMMON path stays
+/// ONE parse (SL-050 F1) — `meta::read_meta` carries both fields — and the
+/// lenient title reader moved with it. The `kref` carries the tree dir and stem.
 fn status_and_title_for(
     root: &Path,
     kref: &crate::kinds::KindRef,
     id: u32,
 ) -> anyhow::Result<(Option<String>, String)> {
-    match kref.kind.prefix {
-        // Status-less by design — no diagnostic, just absent; lenient title.
-        "REC" => Ok((None, title_for(root, kref, id)?)),
-        // Derived (authored-tier) status over the finding ledger; lenient title.
-        "RV" => Ok((
-            Some(crate::review::derived_status_string(root, id)?),
-            title_for(root, kref, id)?,
-        )),
-        // Every other kind stores both `status` and `title` top-level — ONE parse.
-        _ => {
-            let tree_root = root.join(kref.kind.dir);
-            let m = crate::meta::read_meta(&tree_root, kref.kind.stem, id, kref.kind.prefix)?;
-            Ok((Some(m.status), m.title))
+    let authored = crate::authored_status::read(root, kref, id)?;
+    let status = match authored.status {
+        // The one arm this tier can do better on.
+        crate::kinds::AuthoredStatus::Unavailable => {
+            Some(crate::review::derived_status_string(root, id)?)
         }
-    }
-}
-
-/// One entity's authored `title` for the cross-kind scan, read leniently. Every
-/// kind authors a top-level `title` in its `<stem>-NNN.toml` (slice/governance/spec/
-/// requirement/backlog) or beside its `[review]`/`[rec]` table (RV/REC) — but the
-/// strict [`crate::meta::read_meta`] also demands `status`, which RV/REC do NOT
-/// author top-level. So a `title`-only deserialize (ignoring every other key) is the
-/// one reader that works across ALL kinds. The `kref` carries the tree dir + stem.
-fn title_for(root: &Path, kref: &crate::kinds::KindRef, id: u32) -> anyhow::Result<String> {
-    #[derive(serde::Deserialize)]
-    struct TitleOnly {
-        title: String,
-    }
-    let path = entity::id_path(root, kref.kind, id, entity::Ext::Toml);
-    let text = std::fs::read_to_string(&path)
-        .map_err(|e| anyhow::anyhow!("read {} for title: {e}", path.display()))?;
-    let parsed: TitleOnly = toml::from_str(&text)
-        .map_err(|e| anyhow::anyhow!("parse title from {}: {e}", path.display()))?;
-    Ok(parsed.title)
+        // Status-less by design — no diagnostic, just absent.
+        crate::kinds::AuthoredStatus::Absent => None,
+        crate::kinds::AuthoredStatus::Known(s) => Some(s),
+    };
+    Ok((status, authored.title))
 }
 
 // ---------------------------------------------------------------------------
@@ -1349,14 +1329,15 @@ mod tests {
     }
 
     /// VT-4: non-array tags value → empty vec (graceful). Seeded on a REC
-    /// entity — REC's `status_and_title_for` reads title leniently via
-    /// [`title_for`], so the non-array `tags` key survives to `read_facets`
-    /// (a slice/ADR's `Meta` deserialization would reject it first).
+    /// entity — REC's `status_and_title_for` reads title leniently (via
+    /// [`crate::authored_status::read`]'s status-less arm since SL-238), so the
+    /// non-array `tags` key survives to `read_facets` (a slice/ADR's `Meta`
+    /// deserialization would reject it first).
     #[test]
     fn read_facets_tags_non_array_is_empty() {
         let dir = tmp();
         let root = dir.path();
-        // REC-001: a reconciliation record whose title_for only reads `title`.
+        // REC-001: a reconciliation record whose lenient title read only reads `title`.
         write(
             root,
             ".doctrine/rec/001/rec-001.toml",
@@ -1384,5 +1365,133 @@ mod tests {
             vec!["  unpadded  ".to_string(), String::new()],
             "tags pass through byte-identical — no normalize_tag in read path"
         );
+    }
+
+    // == SL-238 PHASE-01: the command-tier overlay over `authored_status::read` ==
+
+    fn kref_for(prefix: &str) -> &'static crate::kinds::KindRef {
+        crate::kinds::kind_by_prefix(prefix).unwrap_or_else(|| panic!("no KindRef for `{prefix}`"))
+    }
+
+    /// The `<dir>/<NNN>/<stem>-<NNN>.toml` path for a kind, relative to root — so a
+    /// fixture names the KIND and lets the `KindRef` supply the tree path.
+    fn rel_toml(kref: &crate::kinds::KindRef, id: u32) -> String {
+        format!("{}/{id:03}/{}-{id:03}.toml", kref.kind.dir, kref.kind.stem)
+    }
+
+    /// Seed a `review-NNN.toml` whose derived status is `active` — one `open`
+    /// finding, read straight from the authored ledger (ADR-007 D-C8). The file
+    /// carries NO top-level `status`, which is the whole point of the fixture:
+    /// `active` exists only above the engine tier.
+    fn seed_review_with_open_finding(root: &Path, id: u32, title: &str) {
+        write(
+            root,
+            &rel_toml(kref_for("RV"), id),
+            &format!(
+                "id = {id}\nslug = \"rv{id}\"\ntitle = \"{title}\"\n\n\
+                 [review]\nfacet = \"design\"\nraiser = \"agent\"\nresponder = \"human\"\n\n\
+                 [target]\nref = \"SL-001\"\n\n\
+                 [[finding]]\nid = \"F-1\"\nstatus = \"open\"\nseverity = \"major\"\n\
+                 title = \"t\"\ndetail = \"d\"\n"
+            ),
+        );
+    }
+
+    /// SL-238 VT-6: `status_and_title_for` becomes the command-tier OVERLAY over
+    /// `authored_status::read`. Asserted by BEHAVIOUR — one `RV` fixture observed
+    /// through both tiers:
+    ///
+    /// - the ENGINE reader sits below `review` (command tier, `layering.toml`), so
+    ///   it can only name the gap: `Unavailable`;
+    /// - the OVERLAY can reach `review::derived_status_string`, so it reports the
+    ///   derived `active`.
+    ///
+    /// They differ exactly as the tiering predicts, and they AGREE on the title
+    /// because there is one reader underneath them. That agreement is the
+    /// observable that makes VT-5's `DERIVED_STATUS` pin bind behaviour rather
+    /// than a membership list.
+    #[test]
+    fn status_and_title_for_delegates_to_authored_status() {
+        let dir = tmp();
+        let root = dir.path();
+        let kref = kref_for("RV");
+        seed_review_with_open_finding(root, 1, "RV One");
+
+        // This fixture is RV-shaped because `derived_status_string` is RV's. A
+        // second derived-status kind would need its own overlay arm AND its own
+        // fixture here; fail loudly rather than silently covering one of two.
+        assert_eq!(
+            crate::kinds::DERIVED_STATUS,
+            &[crate::kinds::RV],
+            "a new derived-status kind needs an overlay arm and a fixture beside this one"
+        );
+
+        let (status, title) = status_and_title_for(root, kref, 1).unwrap();
+        assert_eq!(
+            status.as_deref(),
+            Some("active"),
+            "the overlay reaches command tier and reports the DERIVED status"
+        );
+
+        let engine = crate::authored_status::read(root, kref, 1).unwrap();
+        assert_eq!(
+            engine.status,
+            crate::kinds::AuthoredStatus::Unavailable,
+            "the engine reader is below `review`'s tier and can only name the gap"
+        );
+
+        assert_eq!(
+            title, engine.title,
+            "one reader underneath: both tiers see the same title from the same read path"
+        );
+        assert_eq!(title, "RV One");
+    }
+
+    /// SL-238 VT-7 — PRESERVATION (SL-050 `F-1`), carried across the move of the
+    /// lenient title reader into `authored_status`. On the COMMON arm, status and
+    /// title come from ONE strict `meta::Meta` parse — "same parse", not two reads
+    /// that happen to agree. The observable is that they cannot be obtained
+    /// independently: a common-arm toml with no `status` yields NEITHER, because
+    /// the parse that would have supplied the title is the one that failed.
+    ///
+    /// The third case is the boundary that gives the second its meaning. The
+    /// lenient reader still serves the STATUS-LESS arm, where a title without a
+    /// status is the authored shape rather than corruption. Two readers, three
+    /// arms — and relocating the lenient one must not blur them by making the
+    /// common arm lenient too. A regression here is a doubled parse, or a leaked
+    /// leniency, on a 24-kind corpus walk.
+    #[test]
+    fn status_and_title_for_yields_status_and_title_from_one_parse() {
+        let dir = tmp();
+        let root = dir.path();
+        let sl = kref_for("SL");
+
+        // Common arm: one parse yields both halves.
+        seed_slice(root, 1, &[]);
+        let (status, title) = status_and_title_for(root, sl, 1).unwrap();
+        assert_eq!(status.as_deref(), Some("proposed"));
+        assert_eq!(title, "S1", "the title rides the same parse as the status");
+
+        // Common arm with no `status`: the title is NOT independently reachable.
+        write(
+            root,
+            &rel_toml(sl, 2),
+            "id = 2\nslug = \"s2\"\ntitle = \"S2\"\n",
+        );
+        assert!(
+            status_and_title_for(root, sl, 2).is_err(),
+            "a status-less common-arm toml is corruption — strict parse, no lenient fallback"
+        );
+
+        // Status-less arm: the lenient reader still yields a title with no status.
+        let rec = kref_for("REC");
+        write(
+            root,
+            &rel_toml(rec, 1),
+            "id = 1\nslug = \"r\"\ntitle = \"R One\"\n",
+        );
+        let (status, title) = status_and_title_for(root, rec, 1).unwrap();
+        assert_eq!(status, None, "REC authors no status — absent, not corrupt");
+        assert_eq!(title, "R One");
     }
 }

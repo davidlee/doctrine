@@ -19,6 +19,7 @@
 // mitigation, not a test (`EX-13`, `VA-3`).
 mod adr;
 mod asset_source;
+mod authored_status;
 mod backlog;
 mod backlog_order;
 mod boot;

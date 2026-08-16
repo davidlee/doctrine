@@ -517,13 +517,37 @@ mod tests {
     #[test]
     fn the_derived_status_kind_set_is_pinned() {
         assert_eq!(
-            DERIVED_STATUS, &[RV],
+            DERIVED_STATUS,
+            &[RV],
             "a kind whose status is derived above engine tier must be listed here"
         );
         assert_eq!(
-            STATUS_LESS, &[REC],
+            STATUS_LESS,
+            &[REC],
             "a kind that authors no top-level status must be listed here"
         );
+    }
+
+    /// SL-238 §3: the invariants the reader's three-arm dispatch presupposes but
+    /// does not state — each set names a real numbered kind, and the two never
+    /// overlap, so arm ORDER cannot silently decide a kind that appears in both.
+    ///
+    /// Unlike [`the_derived_status_kind_set_is_pinned`] this is an invariant, not
+    /// a red-first assertion: it is green the moment the constants exist. That is
+    /// deliberate, not a test that failed to go red by accident.
+    #[test]
+    fn the_status_kind_sets_are_disjoint_and_name_known_kinds() {
+        for &k in DERIVED_STATUS {
+            assert!(ALL_KINDS.contains(&k), "{k} is not a numbered kind");
+            assert!(
+                !STATUS_LESS.contains(&k),
+                "{k} cannot be both derived-status and status-less — the reader's \
+                 arm order would decide it silently"
+            );
+        }
+        for &k in STATUS_LESS {
+            assert!(ALL_KINDS.contains(&k), "{k} is not a numbered kind");
+        }
     }
 
     /// IMP-184: every combined constant that claims to cover RECORD must
