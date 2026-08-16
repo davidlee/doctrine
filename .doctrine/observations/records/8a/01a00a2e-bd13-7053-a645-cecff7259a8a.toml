@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00a2e-bd13-7053-a645-cecff7259a8a"
+recorded_at = "2026-08-16T10:47:10.355197987Z"
+kind = "friction"
+summary = "design: a prose repair looks like adopt_authored but is a declare+body; section fingerprints are undiscoverable"
+detail = "Integrating a prototype finding into SL-256's design run cost three refused submissions. (1) adopt_authored reads as the verb for 'design.md was hand-edited' — its doc calls it the sole lawful crossing of an authored-watermark divergence — but it reconciles the WATERMARK only: the section marker map must still match what the run stores, so it cannot carry a content change. A prose repair is declare[{subject: sec-N, body: <full section prose>}] then materialise. (2) The section fingerprints the marker map needs are not obtainable from the tool: design show prints them truncated to 12 chars in BOTH prompt and json formats, and there is no verb that emits the full digest. I recovered the rule by reverse-engineering it — sha256 of the raw inter-marker body, validated against three unmodified sections — which worked but should not have been necessary. Compounds mem_019ff439bede7fb29c7c09b7fd76d893 (design apply payload vocabulary is undiscoverable from the tool)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

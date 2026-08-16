@@ -81,6 +81,66 @@ fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 42, stage `reviewing`)
   serde attribute cannot take a `const`; this is the way round that (`RV-360`
   `F-4`).
 
+### Prototype probe (2026-08-16, fork `proto/SL-256`)
+
+The design's type model was run through a compiler instead of through more prose:
+a disposable implementation by a third agent (deepseek-v4-pro, confined via
+`scripts/spawn-confined.sh pi`) in `.worktrees/proto-SL-256`, uncommitted, 359
+insertions across exactly the four `src/` files `sec-4`'s code-impact table
+names. The mandate is `proto-prompt.md`, authored blind — the run needed no
+steering. Report: `PROTO-FINDINGS.md` in that fork.
+
+Unlike `SL-238`'s equivalent, the fork carried the **current** design: rev 42 was
+committed at `c0099efa0` and the tree was clean, so nobody re-entering it reads a
+stale design beside current code.
+
+**It confirmed all three load-bearing claims, which is evidence and not merely an
+absence of findings.** `cargo check --bin doctrine` clean and the bin's own unit
+suite green at 4363 tests, which corroborates `sec-4`'s claim that `tests.rs` and
+`fixture.rs` need no edit. A throwaway test drove all four emission paths and
+confirmed the contractual `[ActRecorded, ReviewDisposed]` order — the trap
+`RV-360` `F-10` named, where construction order runs opposite to vector order.
+The compiler found exactly two `ChangeEvent::ALL` sites in `e2e_design_state.rs`
+(`:1090`, `:1220`), matching "the two roster enumerations re-pointed" exactly.
+
+**One finding, verified here by reproduction rather than taken on report.**
+`ChangeEvent::ALL`'s only `src/` consumer is the compile-time widest-name assert
+(`change_log.rs:46`). `READABLE` inherits it and gains `TryFrom`; `EMITTABLE`
+inherits nothing, because both its consumers are in `e2e_design_state.rs`, a
+separate compilation unit. The module dead-code gate is `not(test)`-scoped
+(`mod.rs:68`) and the crate denies `unused` (`Cargo.toml:224`), so `cargo check`
+passes and `cargo test --bin doctrine` fails. Gating the prototype's own
+throwaway test out reproduced it: `error: associated constant EMITTABLE is never
+used`.
+
+**Disposition.** The observation is adopted as a fourth note under `sec-4`'s
+code-impact table (rev 43 declare, rev 44 materialise, 13 lines, no other section
+touched). No attestation was spent — all four sections were already
+`review=outstanding`. The proposed *repair* — a specific `cfg_attr` — was
+declined at that altitude: a design declares no attributes, and
+`mem.pattern.lint.dead-code-derives-count-as-reads` records that `expect`
+hard-errors when unfulfilled, so freezing that form would forbid any future
+bin-side test from naming `EMITTABLE`. The design states the constraint and
+leaves the form to the implementor. A second admissible repair — giving
+`EMITTABLE` a production consumer — is **not** taken here because it would reopen
+`RV-360` `F-2`'s ruling that the converse is bought with evidence rather than
+types; that reopening should be deliberate, not smuggled in under a lint fix.
+
+**Class swept, and it is empty.** The class is *a constant whose only consumers
+live in the integration-test compilation unit*. Nothing else this slice
+introduces qualifies — `ActRecorded`, `LegacyAcceptanceAttested` and
+`UnknownChangeEvent` all have production readers — and the class cannot exist
+latently elsewhere, since the current corpus compiles.
+
+**What the round establishes about method.** Yield was one lint-layer consequence
+against `SL-238`'s two type-level defects. That is not the method
+underperforming: this design had already absorbed 14 `RV-360` findings and is
+unusually explicit about its signatures, which is precisely what makes it
+compile-clean. Against a design this hardened, confirming three claims at runtime
+and returning one consequence nobody had reasoned to is the shape of success. The
+finding was also *not* findable by re-reading — it is a property of the crate's
+lint configuration meeting a compilation-unit boundary, three files apart.
+
 ### Open
 
 - **Four sections outstanding review, and the run's `review_pass` is STALE** —

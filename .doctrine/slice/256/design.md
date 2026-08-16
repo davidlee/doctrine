@@ -674,6 +674,18 @@ references `ChangeEvent::ALL`, `admit_against`, or any event this slice renames.
 `tests.rs` is one of `SL-251`'s design-targets, so if that answer ever changes it
 is a scope question, not an edit.
 
+**`EMITTABLE` is dead in the bin's test build.** Its only consumers are in
+`tests/e2e_design_state.rs`, a separate compilation unit, so after the split
+nothing in `src/` names it — `READABLE` inherits the compile-time widest-name
+assert and gains `TryFrom`, `EMITTABLE` inherits neither. The module's dead-code
+gate is `#![cfg_attr(not(test), expect(dead_code, …))]` (`mod.rs:68`), stripped
+exactly where the constant is dead, while the crate denies `unused`
+(`Cargo.toml:224`). So `cargo check` passes and `cargo test --bin doctrine`
+fails to compile. The constant needs an exemption scoped to `test` — the inverse
+of this codebase's usual staging gate. Its form is the implementor's call, with
+one constraint: `expect` is a hard error when unfulfilled, so writing the
+exemption as `expect` forbids any future bin-side test from naming `EMITTABLE`.
+
 ## What is verified, and how
 
 Everything below is `VT`. The behaviour is a rendered row on a command's output
@@ -930,4 +942,5 @@ exit fails the command outright.
 Recorded once those checks exist, not now — a coverage cell pointing at a test
 that has not been written is the same empty claim again. `REQ-478` moves
 `pending` → `active` at close, on that evidence.
+
 
