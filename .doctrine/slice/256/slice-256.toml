@@ -1,7 +1,7 @@
 id = 256
 slug = "recording-an-act-emits-a-change-row"
 title = "Recording an act emits a change row"
-status = "proposed"
+status = "design"
 created = "2026-08-16"
 updated = "2026-08-16"
 tags = ["area:correctness", "area:design-run", "cluster:design-run", "footgun"]
@@ -24,6 +24,14 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/design_run/bounds.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_design_state.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/design_run/snapshot.rs"
 intent = "scope-relevant"
 
 [[relation]]

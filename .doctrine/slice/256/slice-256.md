@@ -90,6 +90,8 @@ a submission which records one says so.
 | `src/design_run/render/mod.rs` | `render_row` (line 358) and its tests, if the new terms need rendering work |
 | `src/design_run/render/change_row.rs` | row-render internals, if reached |
 | `src/design_run/bounds.rs` | only if a new event name outgrows `DESIGN_EVENT_NAME_BYTES` |
+| `src/design_run/snapshot.rs` | the literal-fragment compat pin (test module) |
+| `tests/e2e_design_state.rs` | **mandatory** — `every_material_event_kind_persists_a_change_row` (`:1081`) enumerates `ChangeEvent::ALL` and reds on a member the `every_event_fixture` ladder (`:838`) does not drive. This is where change rows are asserted; `run.rs`'s own test module asserts only on snapshot state. Named nowhere in `SL-251`. |
 
 `src/commands/design.rs` is expected to need **no** change: line 1649 already
 extends the output with every row in `Applied::rows`.
@@ -121,18 +123,31 @@ extends the output with every row in `Applied::rows`.
   additive-and-defaulted is safe, a rename needs an alias, a retirement needs a
   decision. Design must state which of those this is and pin the compat at
   `snapshot::parse` over a literal fragment, not a unit round-trip.
-- **R2 — vocabulary closure is load-bearing.** `change_log.rs:46` asserts
-  `widest(ChangeEvent::ALL) <= DESIGN_EVENT_NAME_BYTES` at compile time, and the
-  containment check enumerates `ALL`. A new member must be added to the roster,
-  not just the enum, or the build's own proof goes stale. The current widest is
-  `section_fingerprint_changed` (27 bytes), so a plausible new token is unlikely
-  to move the bound — but "unlikely" is not the check; the assert is.
-- **R3 — the sketch says these are not members.** The projection-bounds sketch
-  §(d) closes the vocabulary deliberately: "Cursor moves, posture changes,
-  receipt eviction and fragment receipts are deliberately **not** members — they
-  are state, not delta." Design must show that recording an act is a delta on
-  that same test, and not merely useful to print. `AcceptanceAttested`'s
-  existing membership is the strongest evidence that it is.
+- **R2 — vocabulary closure discharges a requirement.** `change_log.rs:46`
+  asserts `widest(ChangeEvent::ALL) <= DESIGN_EVENT_NAME_BYTES` at compile time.
+  Research upgrades this from prudence to conformance: it is how **`REQ-437`**
+  (SPEC-029 NF-002, *hold named projection limits against a large run*) is
+  discharged, and that requirement's acceptance criteria demand named constants
+  in one place with assertions against them. `DESIGN_EVENT_NAME_BYTES = 32`
+  against a current widest of 27, so there are **five bytes of headroom** — a
+  hard constraint on naming, not a matter of taste. `ALL` also carries a
+  hardcoded arity (`[ChangeEvent; 22]`) that must move with the enum.
+- **R3 — retired by research.** *Original concern: the projection-bounds sketch
+  closes the vocabulary, so design must show a recorded act passes its
+  state-vs-delta test rather than merely being useful to print.* The round
+  answers it: the sketch (`.doctrine/slice/233/sketches/projection-bounds.md`) is
+  a slice design artefact, not governance; its §(d) table (`:428-439`) never
+  considered acts at all; and ten members have been admitted past that table
+  since — including `AcceptanceAttested` itself. Design applies the sketch's own
+  two-part test (delta, and not ceremony-exceeding-value) and cites the
+  precedent. The burden dropped. See `research.md` Thread 1 §3.
+- **R5 — a const whose name would become false.** `WIDEST_PAYLOAD_EVENT`
+  (`src/design_run/render/mod.rs:198`) hardcodes `ChangeEvent::StageMoved` as the
+  widest-payload exemplar and drives `WIDEST_PAYLOAD_SEPARATORS` / the
+  `SKETCH_WIDEST_ROW_BYTES` pin. A new member with **more than three terms**
+  leaves that const wrong while its compile-time assert stays green, because the
+  assert only tests `StageMoved`'s shape. Either hold the new row to ≤3 terms or
+  make the site programmatic. Bears directly on `OQ-3`.
 - **R4 — `SL-251` merge.** Textual overlap with the capsule is empty by the
   file list above. The residual is a test in the capsule pinning *current*
   behaviour (an apply asserting an empty row set). `SL-251`'s planned VTs are
@@ -141,9 +156,17 @@ extends the output with every row in `Applied::rows`.
 - **A1 — no spec requirement is at stake.** SPEC-029's roster (`REQ-428` …
   `REQ-438`) covers schema versioning, CAS, submission replay, id reservation,
   adoption, the single envelope, the watermark, and prompt composition. None
-  governs the change log's completeness. This is conformance against the
-  `SL-233` design sketch, not against a `REQ` — so design should decide whether
-  a requirement is owed.
+  governs the change log's completeness — `spec-029.md` contains no occurrence
+  of "change log", "change row", "material change", or "delta". Research
+  confirms: **no REV is required**, against either SPEC-029 or an ADR. If design
+  concludes that *recording an act is a material change* deserves durable
+  standing, that is a **new REQ minted under SPEC-029** — additive authoring,
+  still not a REV. Only retiring or renaming an existing member would force one,
+  and that is a non-goal. Note also that **STD-003** (*no silent skip*) misses by
+  its wording — it governs degraded *reads* of authored data, not silent
+  *emission* — while being the closest thing in the corpus to a principle that
+  covers `ISS-355`. Design decides whether the durable statement owed is a new
+  REQ or a widening of STD-003.
 
 ## Open Questions
 
@@ -162,12 +185,16 @@ extends the output with every row in `Applied::rows`.
 ## Verification & Closure Intent
 
 - A `design apply` carrying only an `agent_declaration` emits at least one
-  change row, tested at the engine (`run.rs`'s own test module) and pinned
-  through the render path.
+  change row, asserted in `tests/e2e_design_state.rs` in the idiom of
+  `a_waived_disposition_row_names_its_arm_and_carries_its_reason` (`:1110`) —
+  row found by event, subject id and ordered terms asserted.
 - The same holds for a `checkpoint_act` with no disposition.
-- The `ChangeEvent` roster, `as_str` table, and `payload_terms` table stay
-  set-equal — the existing exhaustive tests carry this and must stay green
-  unchanged where they are not about the new member.
+- `every_material_event_kind_persists_a_change_row`
+  (`tests/e2e_design_state.rs:1081`) stays green, which requires the
+  `every_event_fixture` ladder (`:838`) to drive the new member — the test that
+  makes an unwired member fail loudly rather than be quietly absent.
+- `rendered_payload_fits_its_cap_for_every_event_kind` (`:1219`) stays green,
+  which is the real guard on R5.
 - A snapshot fragment written with the new token round-trips through
   `snapshot::parse`, and the pre-existing legacy-fragment tests stay green.
 - `doctrine slice conformance` reports no edit outside the fenced surface — in
