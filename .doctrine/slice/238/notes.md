@@ -711,3 +711,46 @@ routes around: it does not care who authored the signature.
 
   Raised at PHASE-03 blind planning. Third defect at the same seam the earlier two
   sit on — a design's prose rule versus what the criterion enforcing it can carry.
+
+- **§2's "same population" claim overstates what the stderr advisory can count —
+  prose fix at reconcile; `plan.toml`'s `EN-2` restates the same claim.** §2 says
+  *"the advisory's count and §5's check report the same population"*
+  (`design.md:373-374`). They do not, on two independent counts, and neither is
+  fixable without a change §4 explicitly forbids:
+
+  1. **Terminal dependents.** `project` iterates only non-terminal items
+     (`backlog.rs:742`), so a broken ref authored on a terminal item never becomes
+     an `AbsentDrop`, never reaches `probe_boundary`, and cannot be counted. §2
+     names this class itself two paragraphs earlier — *"Five of the 31 edges are in
+     that position. Their refs are still checked by `doctor`"* (`:328-331`).
+     `dep_seq_ref_findings` walks every item including terminal ones (PHASE-03
+     `EX-4`), so `doctor` sees them and the advisory cannot.
+  2. **Unreadable items.** `dep_seq_ref_findings` emits `read_all_tolerant`'s
+     `ReadFailure`s as findings (`backlog.rs:2493-2497`); the listing path uses
+     fail-fast `read_all` (`:1208`) and has no corresponding disclosure.
+
+  What *does* hold is parity over the three broken-ref **classes** — malformed,
+  absent backlog id, unresolvable cross-kind — on the live projection, which is
+  what §2's fourth advisory bullet was actually arguing for and what `VT-7` and
+  `VT-8` assert. **No `VT` row asserts population parity**, so no criterion is
+  wrong and no code changes: §4 `:742-744` forbids the second corpus traversal
+  that closing the gap would require (*"there is no second traversal of the corpus
+  asking the same question a different way"*), so the divergence is a priced
+  tradeoff, not an oversight.
+
+  The claim is the defect, and it is this slice's own defect class: a surface
+  stating something it had not checked. §2's argument against a partial signpost
+  — *"worse than no signpost, because the reader who follows it once and finds it
+  complete will trust it when it is not"* — applies to the advisory as designed.
+
+  **Reconcile action:** narrow §2's parity sentence to the class claim, and name
+  the terminal-dependent and unreadable-item gaps as accepted costs of the
+  single-walk constraint. `design.md` is locked at rev 63, hence a reconcile
+  action rather than an edit. `EN-2`'s parenthetical in `plan.toml` carries the
+  same overstatement; left in place as an entrance criterion that is met on the
+  reading that matters (PHASE-03 landed), with the correction recorded here.
+  **Open for the owner:** whether the advisory's own wording should soften from
+  *"N authored needs/after refs name nothing"* to something that does not imply
+  completeness against `doctor`. One string if accepted; zero cost if declined.
+
+  Raised at PHASE-04 blind planning. Fourth defect at the same seam.
