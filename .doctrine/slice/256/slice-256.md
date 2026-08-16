@@ -69,12 +69,23 @@ slice does not edit `SL-251`'s artefacts.
 Make the recording of an act a member of the material-change vocabulary, so that
 a submission which records one says so.
 
-1. Decide the vocabulary shape — whether one event covers both recorded-act
-   kinds or each takes its own — and add the member(s) to `ChangeEvent`
-   (`src/design_run/change_log.rs:56`), with `ALL`, `as_str`, and
-   `payload_terms` kept in step.
+1. ~~Decide the vocabulary shape — whether one event covers both recorded-act
+   kinds or each takes its own~~ — **decided by `DEC-237`: one event.** Add
+   `ActRecorded` to `ChangeEvent` (`src/design_run/change_log.rs:56`) as the
+   exact mirror of `ActInvalidated` — subject is the record's own `DesignId`,
+   payload is the single term `act=<kind>` — with `ALL`, `as_str` and
+   `payload_terms` kept in step. It does **not** absorb `ReviewAttested`: act
+   records and section attestations are separate lifecycle families, split by
+   replacement key (act kind vs attestation id), and their inverse events
+   already encode that split.
 2. Emit the row from `record_declaration`, and from `record_act` on the path
-   that currently emits nothing.
+   that currently emits nothing — **per `DEC-238`, at one unified
+   admit-store-emit seam rather than two parallel emit sites**, and explicitly
+   *not* on `RecordedAct` (`attestation.rs:796`), whose `Section` arm carries no
+   record and whose accessors are total by design. Emission here is explicit
+   because a recording is an occurrence: `ActInvalidated`'s before/after set
+   difference cannot see it, since re-recording the same value leaves the
+   difference empty in both directions.
 3. Split `ChangeEvent`'s single `ALL` roster into `READABLE` and `EMITTABLE`,
    and retire `AcceptanceAttested` into the readable-only half as
    `LegacyAcceptanceAttested` (serde name and rendered token unchanged, stored
