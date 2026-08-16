@@ -5712,20 +5712,28 @@ tags = []
         .unwrap();
     }
 
-    /// Seed a real slice entity with the given status.
+    /// Seed a real slice entity with the given status — a thin adapter over the
+    /// shared per-kind seeder, kept for how it reads at its nine call sites.
+    /// SL-238 PHASE-04 `D-1`: the `.doctrine/slice` / `slice-` literals it used to
+    /// carry now come from the `KindRef`, which is the one place they belong.
     fn seed_slice_entity(root: &Path, id: u32, status: &str) {
-        let name = format!("{id:03}");
-        let dir = root.join(".doctrine/slice").join(&name);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join(format!("slice-{name}.toml")),
-            format!(
+        use crate::authored_status::test_support as seed;
+        let kref = seed::kref_for("SL");
+        // Body preserved byte-for-byte across the SL-238 PHASE-04 `D-1` move — only
+        // the PATH is now derived from the `KindRef` instead of the `.doctrine/slice`
+        // and `slice-` literals this used to carry. `created`/`updated` are not
+        // `meta::Meta` fields but these callers reach the entity through
+        // `relation_graph::scan_entities`, which reads more than `Meta` does.
+        seed::seed_toml(
+            root,
+            kref,
+            id,
+            &format!(
                 "id = {id}\nslug = \"s{id:03}\"\ntitle = \"Slice {id}\"\n\
                  status = \"{status}\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n"
             ),
-        )
-        .unwrap();
-        std::fs::write(dir.join(format!("slice-{name}.md")), "scope\n").unwrap();
+        );
+        seed::seed_md(root, kref, id, "scope\n");
     }
 
     #[test]

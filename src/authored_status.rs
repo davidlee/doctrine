@@ -90,18 +90,31 @@ fn title_for(root: &Path, kref: &kinds::KindRef, id: u32) -> anyhow::Result<Stri
     Ok(parsed.title)
 }
 
+/// Entity-seeding fixtures — the inverse of [`read`], and sited beside it for
+/// that reason. Every helper is generic over `KindRef`, which carries both halves
+/// of the path the reader resolves (the tree `dir` and the file `stem`), so one
+/// helper seeds any numbered kind and a test can loop over a kind SET rather than
+/// naming kinds by hand.
+///
+/// Promoted to `pub(crate)` in place (SL-238 PHASE-04 `D-1`) so the cross-kind
+/// probe fixtures in `backlog` can author what this module reads, instead of
+/// re-rolling a fourth copy. Three copies existed at promotion: this set, a second
+/// `kref_for` in `catalog::scan`, and a slice-hardcoded `seed_slice_entity` in
+/// `backlog` — the last is collapsed into `seed_status_bearing` here. The
+/// `catalog::scan` copy is deliberately left (PHASE-08 `EX-9` requires those
+/// suites green unmodified); `notes.md` carries it as a follow-up.
+///
+/// Sited here rather than in `backlog::test_support`, whose charter is the single
+/// source of the *backlog*-NNN.toml fixture literal and which is already reached
+/// crate-wide — a non-backlog entity is not that literal.
 #[cfg(test)]
-mod tests {
-    use super::*;
+pub(crate) mod test_support {
     use std::path::Path;
 
-    use crate::kinds::{self, AuthoredStatus, KindRef};
+    use crate::kinds::{self, KindRef};
 
     /// Write `body` as the whole of `<dir>/<NNN>/<stem>-<NNN>.toml` for `kref`.
-    /// The `KindRef` carries both halves of the path the reader resolves — the
-    /// tree `dir` and the file `stem` — so one helper seeds any numbered kind and
-    /// the tests below can loop over a kind SET rather than naming kinds by hand.
-    fn seed_toml(root: &Path, kref: &KindRef, id: u32, body: &str) {
+    pub(crate) fn seed_toml(root: &Path, kref: &KindRef, id: u32, body: &str) {
         let name = format!("{id:03}");
         let dir = root.join(kref.kind.dir).join(&name);
         std::fs::create_dir_all(&dir).unwrap();
@@ -110,7 +123,13 @@ mod tests {
 
     /// Seed a status-BEARING toml: the four fields `meta::Meta` requires, and
     /// nothing else — a true unit fixture, independent of any kind's scaffold.
-    fn seed_status_bearing(root: &Path, kref: &KindRef, id: u32, status: &str, title: &str) {
+    pub(crate) fn seed_status_bearing(
+        root: &Path,
+        kref: &KindRef,
+        id: u32,
+        status: &str,
+        title: &str,
+    ) {
         seed_toml(
             root,
             kref,
@@ -123,7 +142,7 @@ mod tests {
     /// actually author. `meta::read_meta` hard-fails on this (pinned by
     /// `meta::tests::read_meta_still_hard_fails_on_a_missing_status`), so it is
     /// also the fixture that proves the lenient title read is in play.
-    fn seed_status_less(root: &Path, kref: &KindRef, id: u32, title: &str) {
+    pub(crate) fn seed_status_less(root: &Path, kref: &KindRef, id: u32, title: &str) {
         seed_toml(
             root,
             kref,
@@ -132,9 +151,45 @@ mod tests {
         );
     }
 
-    fn kref_for(prefix: &str) -> &'static KindRef {
+    /// Write the `.md` sibling of `<dir>/<NNN>/<stem>-<NNN>.toml`.
+    ///
+    /// [`seed_status_bearing`] deliberately writes the toml alone — it is the unit
+    /// fixture for [`super::read`], which never opens the `.md`. A *corpus scan*
+    /// is a different, stricter consumer.
+    ///
+    /// **Measured, SL-238 PHASE-04 T0**, against `backlog::tests::lifecycle_*`
+    /// (which reach their fixture through `relation_graph::scan_entities`). Two
+    /// conditions are independently necessary, each isolated with the other held
+    /// fixed, and neither is required by `meta::Meta`:
+    ///
+    /// 1. **the `.md` sibling** — toml-only, the entity is invisible to the scan;
+    /// 2. **`created` and `updated` keys in the toml** — absent, likewise.
+    ///
+    /// Either omission takes `lifecycle_findings` from one finding to **zero with
+    /// no error**, because the reverse-`fulfils` appender skips a file it cannot
+    /// read rather than failing. So the symptom is a wrong count, not a failure —
+    /// budget for that when a scan-backed fixture misbehaves.
+    ///
+    /// So: seed the toml alone when testing a reader; add this, and the two date
+    /// keys, when the entity has to survive a scan.
+    pub(crate) fn seed_md(root: &Path, kref: &KindRef, id: u32, body: &str) {
+        let name = format!("{id:03}");
+        let dir = root.join(kref.kind.dir).join(&name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(format!("{}-{name}.md", kref.kind.stem)), body).unwrap();
+    }
+
+    pub(crate) fn kref_for(prefix: &str) -> &'static KindRef {
         kinds::kind_by_prefix(prefix).unwrap_or_else(|| panic!("no KindRef for `{prefix}`"))
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_support::*;
+    use super::*;
+
+    use crate::kinds::{self, AuthoredStatus};
 
     /// SL-238 VT-1, the common arm: every kind admissible as a dep/seq target is
     /// status-bearing, so `read` yields `Known(status)` for each — asserted over
