@@ -86,6 +86,37 @@ pub(crate) const ADMISSIBLE_DEP_TARGETS: &[&str] = &[
 /// knowledge records are excluded.
 pub(crate) const VALUE_BEARING: &[&str] = &[SL, ISS, IMP, CHR, RSK, IDE];
 
+/// Kinds that author no top-level `status` because they have no lifecycle
+/// (SL-238 §3). `priority::partition::status_class` defines these `Terminal` —
+/// context-only, no diagnostic.
+pub(crate) const STATUS_LESS: &[&str] = &[REC];
+
+/// Kinds whose status is DERIVED above the tier an engine-tier reader can reach
+/// (`RV` — `review::derived_status_string` reads the finding ledger at command
+/// tier). A reader below that tier can only report the gap, never the status
+/// (SL-238 §3, DEC-233).
+pub(crate) const DERIVED_STATUS: &[&str] = &[RV];
+
+/// What an entity's authored status is, as far as the kind vocabulary and an
+/// engine-tier read can say (SL-238 §3). The shared three-way that the engine
+/// reader (`authored_status::read`) and the policy classifier
+/// (`priority::partition::authored_class`) both speak — the vocabulary lives in
+/// leaf `kinds` so each depends only on leaf for the type.
+///
+/// A read or parse FAILURE is never one of these: it is an `Err` from the
+/// reader (STD-003), so a broken file and a tooling limit can never share a
+/// signal. Detection of `Absent`/`Unavailable` is static from the parsed kind,
+/// never inferred from a failed read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AuthoredStatus {
+    /// Read from the entity's own toml.
+    Known(String),
+    /// The kind is genuinely status-less — `status_class` defines this `Terminal`.
+    Absent,
+    /// The kind's status is derived above this tier. NEVER `Terminal`.
+    Unavailable,
+}
+
 pub(crate) fn is_value_bearing(prefix: &str) -> bool {
     VALUE_BEARING.contains(&prefix)
 }
@@ -474,6 +505,25 @@ mod tests {
         assert_eq!(GOV, &[ADR, POL, STD]);
         assert_eq!(BACKLOG, &[ISS, IMP, CHR, RSK, IDE]);
         assert_eq!(RECORD, &[ASM, DEC, QUE, CON, EVD, HYP, CPT]);
+    }
+
+    /// SL-238 §3: the two kind sets the per-kind status reader dispatches on are
+    /// pinned. `DERIVED_STATUS` names the kinds whose status is derived ABOVE the
+    /// tier an engine-tier reader can reach, and `STATUS_LESS` the kinds that
+    /// author no status at all. A future kind that derives its status and is not
+    /// added must fail here rather than degrade quietly into a status the reader
+    /// cannot see. The behavioural half of the pin is `catalog::scan`'s overlay
+    /// test — one reader, so the set binds what every caller does.
+    #[test]
+    fn the_derived_status_kind_set_is_pinned() {
+        assert_eq!(
+            DERIVED_STATUS, &[RV],
+            "a kind whose status is derived above engine tier must be listed here"
+        );
+        assert_eq!(
+            STATUS_LESS, &[REC],
+            "a kind that authors no top-level status must be listed here"
+        );
     }
 
     /// IMP-184: every combined constant that claims to cover RECORD must
