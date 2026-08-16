@@ -113,8 +113,8 @@ integration is in the sections themselves. Ids only — the run holds the text.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-16 · audit/`RV-361` · all 7 phases complete, merged to
-`edge` at `eddb971c1`
+fresh-as-of: 2026-08-16 · **closed** · `RV-361` resolved (9 findings, no
+blockers), reconciled, `done · 7/7`, landed on `main` at `0ea962268`
 
 ### Produced
 
@@ -386,10 +386,17 @@ fresh-as-of: 2026-08-16 · audit/`RV-361` · all 7 phases complete, merged to
   `plan.md`'s per-phase headings remain the reasoning; the brief is the
   actionable list, because `plan.toml` is immutable-append and is not a reconcile
   write surface. Query one of those two, never a count carried in prose.
-- **The `attestation.rs` trap was real and reached the audit** — `design.md` §7
-  attributes closure-struct fixtures to a file that defines none, which
-  `PHASE-02/VT-2`'s waiver caught at execution and the design never absorbed.
-  `RV-361` `F-2`.
+  **Discharged at reconcile** — `RV-361`'s `## Reconciliation Outcome` records
+  what landed; nothing is owed.
+- **The `attestation.rs` trap was real, reached the audit, and is fixed** —
+  `design.md` §7 attributed closure-struct fixtures to a file that defines none,
+  which `PHASE-02/VT-2`'s waiver caught at execution and the design never
+  absorbed. Corrected at both sites plus the selector registry (`RV-361` `F-2`);
+  `slice conformance 251` now reports **undelivered 0, conformant 12**.
+- **Nothing about this slice is owed.** What remains open is owned elsewhere:
+  `ISS-333` on its serde axis, `IMP-390` on its other three faces (both linked
+  `fulfils … degree = partial`), and the three items carried out — `IMP-438`,
+  `ISS-439`, `ISS-440`. The standing risks below are recorded, not scheduled.
 
 - **Two obligations open, both the user's** — section attestations (all nine
   outstanding; human review is the v1 default per `reviewing.md`) and the review
