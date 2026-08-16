@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00ade-65d3-7c63-9b1d-c2f39a52ed4f"
+recorded_at = "2026-08-16T13:59:02.355983386Z"
+kind = "friction"
+summary = "phase-plan: a high-trust memory attributes today's grep corruption to rtk, which was removed months ago"
+detail = "mem.fact.rtk.output-filter-rewrites-identifiers (high trust, CRITICAL severity, scope.commands [rg, grep, sed]) blames an rtk output proxy for identifier mangling and non-deterministic line numbers, both dated 2026-08-16. rtk was removed from this environment months ago: not on PATH in the jail, and no PreToolUse hook rewrites commands to it (global PreToolUse is empty; the project's only Bash-matched hook runs 'doctrine memory surface'). So rtk is a plausible cause of the ORIGINAL historical sighting and cannot be the cause of either dated observation. Reproduced the memory's own case today - grep -n, rg -n and awk NR all agree on 1094/1099/1104 in src/design_run/tests.rs, matching the answer the memory records as correct, and both tools matched Read on every line number used to plan SL-238 PHASE-03. Cost: the memory surfaces on every Bash call touching rg/grep/sed at critical severity, and it propagates into execution-protocol.md section 5 (authored, binding on PHASE-03..08) and this slice's phase-03 sheet. The deeper cost is that it gives a likely agent transcription error a respectable mechanical name, so the next misread gets filed as 'rtk did it' rather than investigated. The practice it recommends (confirm identifiers with Read, use positive controls) is cheap and sound regardless of cause; only the attribution is wrong. The memory also contradicts itself: its What-to-do section recommends multi-line sed -n 'A,Bp' range reads, which its own later section says are corrupted by elision."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

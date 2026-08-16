@@ -60,3 +60,24 @@ range.** Derive it with `awk '/pattern/ {print NR": "$0}'` and confirm at least
 one anchor with the Read tool before asserting a set of them. When a reviewer's
 anchors disagree with yours by a consistent offset, assume yours are wrong and
 re-derive — do not argue from the earlier output.
+
+---
+
+## CORRECTION 2026-08-17 — the mechanism named above was not present
+
+**Superseded by [[mem.pattern.verification.suspect-transcription-before-tool]].
+Do not act on the account above.**
+
+`rtk` was real but had been **removed from this environment months before either
+sighting recorded here**. Verified 2026-08-17: not on `PATH` in the jail; the
+global `PreToolUse` hook array is empty; the project's only `Bash`-matched hook
+runs `doctrine memory surface`, which injects context rather than rewriting
+commands. There was no proxy in the path on 2026-08-16.
+
+Re-running the line-number case the same way it was recorded — `grep -n`, `rg -n`
+and an independent `awk NR` over `src/design_run/tests.rs` — returned
+**1094/1099/1104** from all three, the value this memory records as correct.
+
+The observations were most likely agent transcription errors, and this record is
+the pattern it warns against: a documented mechanism sitting in context supplied a
+diagnosis for a surprise nobody had traced. Retained for lineage only.

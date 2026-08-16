@@ -2,7 +2,7 @@ memory_uid = "mem_01a005e5794671c2a0a80bb7fecbfc52"
 memory_key = "mem.fact.rtk.output-filter-rewrites-identifiers"
 schema_version = 1
 memory_type = "fact"
-status = "active"
+status = "superseded"
 title = "rtk-proxied grep output can silently rewrite source identifiers"
 summary = "Identifiers in rg/grep results came back substituted (title_for rendered as n) with no marker — a claim read from that output is wrong and looks right."
 created = "2026-08-15"
@@ -37,10 +37,14 @@ review_by = ""
 trust_level = "high"
 
 [ranking]
-severity = "critical"
+severity = "medium"
 weight = 0
 
 [[source]]
 kind = "slice"
 ref = "SL-238"
+
+[[relation]]
+label = "superseded_by"
+target = "mem_01a00ae17d2f78c1b2a27f94335de866"
 

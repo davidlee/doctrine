@@ -191,21 +191,38 @@ gitignored and `rm -rf`-able. PHASE-01's two reconcile actions live in
 
 ## 5. Environment hazards that bit, or nearly did
 
-**Proxied grep rewrites identifiers *and* line numbers, silently and
-non-deterministically** (`mem.fact.rtk.output-filter-rewrites-identifiers`).
-`fn status_and_title_for` has been observed rendering as `fn status_and_n`. The
-same `grep -n` returned different line numbers for an unchanged file within one
-session. Multi-line `sed -n 'A,Bp'` *elides* lines. Single-line `sed -n 'Np'` and
-the `Read` tool are reliable.
+**Confirm a quoted identifier or line number with `Read`; suspect your own
+transcription before the tool**
+(`mem.pattern.verification.suspect-transcription-before-tool`).
+
+**Corrected 2026-08-17 — this entry previously said the opposite, and the
+correction is the point.** It read *"proxied grep rewrites identifiers and line
+numbers, silently and non-deterministically"*, citing an `rtk` output filter as
+the mechanism and `fn status_and_title_for` rendering as `fn status_and_n` as the
+evidence. **`rtk` was real but had been removed months before those sightings** —
+not on `PATH` in the jail, no hook rewriting commands to it. Re-running the
+recorded case, `grep -n` / `rg -n` / `awk NR` agree with each other and with
+`Read`. The sightings were most likely agent misreads, and a documented mechanism
+sitting in context supplied a diagnosis nobody had traced. `grep` is
+deterministic; the agent quoting it is not.
+
+The practice below is **unchanged** — it was always cheap and it never depended
+on the mechanism. Only the reason for it changed.
 
 Consequences to work around, not just know:
 
-- Never quote an identifier, signature or line number from grep. Locate with it;
-  confirm with `Read` or single-line `sed`.
+- Never quote an identifier, signature or line number from grep *out of working
+  memory*. Locate with grep; confirm the quote with `Read` before it enters a
+  finding, a criterion, or a memory.
 - `VA-1` is a grep-shaped criterion. Run it **with a positive control** — a
   search that must return hits — so an empty result is a demonstrated absence
-  rather than a broken search.
-- Every `file:line` in this slice's PHASE-01 records was reconfirmed that way.
+  rather than a broken search. This rule stands on its own footing
+  (`mem.pattern.harness.grep-negative-needs-positive-control`) and is untouched
+  by the correction above.
+- Every `file:line` in this slice's PHASE-01 records was reconfirmed that way, as
+  was every one in PHASE-03's sheet.
+- **Do not name a mechanism in a durable record without evidence it was present.**
+  "I may have misread" is a legitimate and usually correct entry.
 
 **Shell working directory persists between tool calls.** A `cd` into the
 prototype worktree silently redirected three later "production" greps in

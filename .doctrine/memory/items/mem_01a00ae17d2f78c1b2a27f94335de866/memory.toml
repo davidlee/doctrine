@@ -1,0 +1,47 @@
+memory_uid = "mem_01a00ae17d2f78c1b2a27f94335de866"
+memory_key = "mem.pattern.verification.suspect-transcription-before-tool"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "Suspect your transcription before you suspect the tool"
+summary = "grep/rg/sed are deterministic; an agent's re-rendering of their output is not. Confirm a quoted identifier or line number with Read before asserting it — and never file a surprise under a mechanism you have not shown is present."
+created = "2026-08-16"
+updated = "2026-08-16"
+
+[scope]
+paths = []
+globs = []
+commands = ["rg", "grep", "sed"]
+tags = ["verification", "tooling", "footgun", "hallucination", "attribution"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d9f279c38b4d62077c56788293173c252324d0d4"
+ref_name = "refs/heads/edge"
+checkout_state_id = "49f53ab2d07a8e9bc9ca4d7fcbfefaaa01eb0edc3fcfc2dc8e7ed7d9928f68be"
+base_commit = "efdcb82db7834df9517d1488e8765e95469a8894"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-238"
+
