@@ -1,0 +1,142 @@
+# Implementation plan for SL-256 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-256"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = ["SPEC-029"]
+collaborators = []
+
+[requirements]
+targets      = ["REQ-478"]
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber, so the id
+# sequence goes non-monotonic after a split and that is expected. Criterion ids
+# are local to their phase, bare, and equally immutable (glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance. The prefix is
+# the only mode marker; there is no mode field. Reference a criterion from
+# another phase phase-qualified (PHASE-03/EX-8) — bare EX-8 is ambiguous.
+[[phase]]
+id        = "PHASE-01"
+name      = "The shared record seam emits ActRecorded"
+objective = """
+Make storing an act and reporting it one operation. Add `ActRecorded` to the
+change-event vocabulary, funnel the three production recording paths through a
+single `admit_and_record` seam over a new `ActRecord` sum, and delete
+`admit_against` so there is no second way to admit a record without emitting a
+row (design `sec-3`, `DEC-238`, `DEC-237`, `DEC-241`).
+
+The retirement of `AcceptanceAttested` is deliberately NOT in this phase. Its
+push at `run.rs:407` stays, so `ALL` remains one roster with every member still
+driven and `every_material_event_kind_persists_a_change_row` stays green at the
+phase boundary. The acceptance arm therefore emits two rows for the duration of
+one phase; PHASE-02 deletes the push.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "The design run for SL-256 is locked and `design.md` is materialised current." },
+  { id = "EN-2", text = "`sec-3`'s anchors resolve in the current tree: `record_declaration`, `record_act`, `admit_against`, `act_id`, `live_acts`, `invalidation_rows` in `src/design_run/run.rs`, and the three call sites in `apply`." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`ChangeEvent::ActRecorded` exists with token `act_recorded` and payload terms `[(PayloadKey::Act, ValueKind::Token)]`, and is a member of the roster the writer-coverage test enumerates." },
+  { id = "EX-2", text = "`ActRecord` — a two-arm owned sum over `CheckpointAct` and `AgentDeclaration` — is sited in `src/design_run/run.rs`, with `admission_view`, `id`, `kind` and `insert`. `attestation.rs` is not edited." },
+  { id = "EX-3", text = "`admit_and_record` admits through `admission_view()` before inserting, and returns `Pending` — not `Option<Pending>`. `admit_against` is deleted, and both of its former callers route through the seam." },
+  { id = "EX-4", text = "`record_declaration` takes `&AgentActDeclaration` (its caller hoists the `Option`) and returns `Result<Pending, Refusal>`; `record_act` returns `Result<Vec<Pending>, Refusal>` with `ActRecorded` first and `ReviewDisposed` second." },
+  { id = "EX-5", text = "The three call sites in `apply` read as `sec-3`'s after-block, including the acceptance arm's `extend`. The `AcceptanceAttested` push is left in place for PHASE-02 to delete, and the build order — declaration before act — does not move." },
+  { id = "EX-6", text = "`doctrine check gate` is green and `doctrine slice conformance 256` reports no edit outside the fenced selectors." },
+]
+verification = [
+  { id = "VT-1", expects = "An apply carrying only an `agent_declaration` renders a change row: event `ActRecorded`, subject `agd-<kind>`, terms `[<kind>]`. ISS-355's exact report, and the red this phase starts from.", test_file = "tests/e2e_design_state.rs", keywords = ["an_agent_declaration_alone_renders_a_change_row", "ActRecorded"], waived = false },
+  { id = "VT-2", expects = "A `checkpoint_act` carrying no disposition renders `ActRecorded` with subject `cpa-<kind>` — the sibling path ISS-355 did not report.", test_file = "tests/e2e_design_state.rs", keywords = ["a_checkpoint_act_without_a_disposition_renders_a_change_row"], waived = false },
+  { id = "VT-3", expects = "A disposing act renders two rows for one act, asserted as an ordered pair — `ActRecorded` then `ReviewDisposed` (DEC-241, DEC-238). Catches an implementor letting the vector follow construction order, which runs opposite.", test_file = "tests/e2e_design_state.rs", keywords = ["a_disposing_act_renders_both_its_recording_and_its_disposition", "ReviewDisposed"], waived = false },
+  { id = "VT-4", expects = "The seam exists in `run.rs` as designed: an `ActRecord` sum and an `admit_and_record` returning a mandatory `Pending`.", test_file = "src/design_run/run.rs", keywords = ["enum ActRecord", "fn admit_and_record", "ActRecord::Checkpoint", "ActRecord::Agent"], waived = false },
+  { id = "VA-1", text = "`admit_against` has no remaining definition or call site anywhere under `src/` — the second admission route is gone, not merely unused." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Split the roster: readable is not emittable"
+objective = """
+Replace `ChangeEvent::ALL` with two rosters — `READABLE` (23, everything a
+persisted snapshot may contain) and `EMITTABLE` (22, everything this binary may
+newly write) — and prove the subset relation at compile time rather than at
+runtime (design `sec-2`, `DEC-239`). Delete the `AcceptanceAttested` push in
+`apply` so the acceptance arm reports through PHASE-01's shared row and the
+retired member becomes readable-only in fact.
+
+The Rust identifier does not move in this phase. Renaming the variant while
+`#[serde(rename_all)]` is still deriving its token would drift the wire spelling
+away from `as_str`; PHASE-03 single-sources the token first and renames after.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 is complete: the acceptance arm already emits `ActRecorded` through `record_act`, so deleting the `AcceptanceAttested` push loses no observable." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`ChangeEvent::ALL` is replaced by `READABLE` (23 members) and `EMITTABLE` (22 — `READABLE` less `AcceptanceAttested`). No `ALL` remains." },
+  { id = "EX-2", text = "A `const fn is_subset` in the module's existing slice-recursion idiom (beside `widest`), comparing members by `as_str()`, backs `const _: () = assert!(is_subset(&EMITTABLE, &READABLE));`. The widest-name assert is re-quantified over `READABLE`." },
+  { id = "EX-3", text = "The explicit `Pending::run_wide(ChangeEvent::AcceptanceAttested, …)` push is deleted from `apply`'s acceptance arm; nothing under `src/` emits the member." },
+  { id = "EX-4", text = "`bounds.rs:49`'s doc reference to `ChangeEvent::ALL` follows the rename to `READABLE`." },
+  { id = "EX-5", text = "`every_material_event_kind_persists_a_change_row` iterates `EMITTABLE`; `rendered_payload_fits_its_cap_for_every_event_kind` iterates `READABLE`. The `every_event_fixture` narration at the review-vocabulary comment is corrected — it names `acceptance_attested` as live and does not mention `ActRecorded`." },
+  { id = "EX-6", text = "`doctrine check gate` is green and `doctrine slice conformance 256` reports no edit outside the fenced selectors." },
+]
+verification = [
+  { id = "VT-1", expects = "The run-level `acceptance` field yields `ActRecorded` with subject `cpa-design_accepted` and term `act=design_accepted`, and NO `acceptance_attested` row. The one check that catches a half-done retirement.", test_file = "tests/e2e_design_state.rs", keywords = ["an_acceptance_reports_through_the_shared_act_row", "cpa-design_accepted"], waived = false },
+  { id = "VT-2", expects = "The retired member is present in `READABLE` and absent from `EMITTABLE`. Roster membership only — the subset half is proved at compile time, not asserted here.", test_file = "tests/e2e_design_state.rs", keywords = ["the_retired_event_is_readable_but_not_emittable", "EMITTABLE"], waived = false },
+  { id = "VT-3", expects = "No row the `every_event_fixture` ladder produces carries an event absent from `EMITTABLE`. Defence in depth against a retired member still being pushed on a path the ladder reaches — NOT a discharge of any REQ-478 criterion (RV-360 F-2).", test_file = "tests/e2e_design_state.rs", keywords = ["no_row_the_ladder_produces_carries_a_non_emittable_event"], waived = false },
+  { id = "VT-4", expects = "The two rosters and the compile-time subset proof exist in the vocabulary module.", test_file = "src/design_run/change_log.rs", keywords = ["const READABLE", "const EMITTABLE", "const fn is_subset", "is_subset(&ChangeEvent::EMITTABLE"], waived = false },
+  { id = "VA-1", text = "`ChangeEvent::ALL` has no remaining reader anywhere under `src/` or `tests/` — the split is complete, not additive." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "One source for the wire token; AcceptanceAttested retires"
+objective = """
+Give every event token exactly one source, then retire the variant that the
+single-sourcing makes safe to rename (design `sec-2`, `STD-001`).
+
+Order within the phase is load-bearing. First replace `#[serde(rename_all)]` and
+the `evidence_invalidated` alias with `#[serde(try_from = "String", into =
+"String")]` over `as_str`, adding `Refusal::UnknownChangeEvent` and the single
+named `LEGACY_ACT_INVALIDATED` literal. Only then rename `AcceptanceAttested` to
+`LegacyAcceptanceAttested`: with `as_str` the only source, the Rust identifier
+moves and the wire token, the rendered token and the stored payload shape all
+stay put — which is the whole of `DEC-239`.
+
+Close the phase by binding REQ-478's coverage cell to a runnable positive
+control, per `sec-4`'s corrected recipe.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 is complete: `READABLE` exists for the round-trip check to quantify over, and nothing emits the member about to be renamed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`ChangeEvent` carries `#[serde(try_from = \"String\", into = \"String\")]` with `From<ChangeEvent> for String` delegating to `as_str` and `TryFrom<String>` resolving over `READABLE` plus the alias arm. `rename_all`, `alias` and `rename` are all off the enum." },
+  { id = "EX-2", text = "`Refusal::UnknownChangeEvent { raw }` exists in `src/design_run/refusal.rs` and is what `TryFrom` returns for a token no member spells — strictness preserved, not relaxed." },
+  { id = "EX-3", text = "The one remaining legacy literal, `evidence_invalidated`, is named once as `LEGACY_ACT_INVALIDATED` and referenced from the alias arm (STD-001)." },
+  { id = "EX-4", text = "`AcceptanceAttested` is renamed `LegacyAcceptanceAttested` with `payload_terms() => &[]` and `as_str() => \"acceptance_attested\"`. The wire token, the rendered token and the run-wide term-free payload shape are unchanged." },
+  { id = "EX-5", text = "`change_log.rs:69-70`'s doc correction lands: the eight legacy `evidence_invalidated` rows are attributed to SL-244's run, not to SL-243's and SL-244's." },
+  { id = "EX-6", text = "The REQ-478 coverage cell is recorded with `sec-4`'s corrected recipe — a `--command`-bearing check with a `--matcher-pattern` naming one test as a positive control, never `--mode VT` alone." },
+  { id = "EX-7", text = "`doctrine check gate` is green and `doctrine slice conformance 256` reports no edit outside the fenced selectors." },
+]
+verification = [
+  { id = "VT-1", expects = "For each `READABLE` member, `TryFrom(Into(event))` returns that member; the retired `evidence_invalidated` alias resolves to `ActInvalidated`; and a token no member spells is refused. Guards the alias arm and the refusal — the round trip itself is true by construction after single-sourcing.", test_file = "tests/e2e_design_state.rs", keywords = ["every_readable_event_token_round_trips_through_serde", "evidence_invalidated"], waived = false },
+  { id = "VT-2", expects = "A snapshot fragment written before the retirement — a run-wide, term-free `acceptance_attested` row — still parses, and the row keeps that shape rather than acquiring a manufactured subject. ISS-315's defect class, pinned at the whole-file tier because `ChangeEvent` deserialises strictly.", test_file = "src/design_run/snapshot.rs", keywords = ["a_snapshot_written_before_the_acceptance_attested_retirement_still_parses", "acceptance_attested"], waived = false },
+  { id = "VT-3", expects = "The vocabulary module carries the single-source seam and the retired identifier.", test_file = "src/design_run/change_log.rs", keywords = ["try_from = \"String\"", "into = \"String\"", "LegacyAcceptanceAttested", "LEGACY_ACT_INVALIDATED"], waived = false },
+  { id = "VA-1", text = "`#[serde(rename_all = …)]`, `#[serde(alias = …)]` and `#[serde(rename = …)]` no longer appear on the `ChangeEvent` enum or its variants — `as_str` is the token's only source. (They stay on unrelated types in the module.)" },
+  { id = "VA-2", text = "`doctrine coverage verify` passes for REQ-478's cell: the recorded command runs the e2e target and the matcher finds the named test's own pass line, so the cell fails if that test was never compiled." },
+]
+specs             = []
+requirements      = []
