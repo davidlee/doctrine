@@ -883,6 +883,24 @@ mod write_class_tests {
         assert_eq!(cls(&["doctrine", "observation", "search", "query"]), None);
     }
 
+    /// SL-251 PHASE-06 `VT-2` (sec-8 pin 7) — `design contract` is Read-classed, so
+    /// a confined worker can fetch the contract: the worker-mode guard refuses
+    /// Write-classed verbs by process.
+    #[test]
+    fn design_contract_is_read_classed() {
+        assert_eq!(cls(&["doctrine", "design", "contract"]), None);
+        assert_eq!(
+            cls(&["doctrine", "design", "contract", "--format", "json"]),
+            None
+        );
+        // The control: a sibling design verb still classifies Write, so `None`
+        // above is a classification and not a collapsed match.
+        assert_eq!(
+            cls(&["doctrine", "design", "apply", "SL-001", "--input", "{}"]),
+            Some("design apply")
+        );
+    }
+
     // ── PHASE-01: Behaviour-preservation verification net (SL-115) ──────────────
 
     #[test]

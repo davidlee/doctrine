@@ -60,8 +60,8 @@ use crate::design_run::delegation::Delegation;
 use crate::design_run::gate::ObservedFact;
 use crate::design_run::ids::{DesignId, Fingerprint, IdKind};
 use crate::design_run::payload_contract::{
-    ExternContracts, ExternRegion, KeyContract, Presence, SelectedKeys, SelectorTable, TokenSource,
-    UnknownKeys, WireType,
+    self, ExternContracts, ExternRegion, KeyContract, Presence, SelectedKeys, SelectorTable,
+    TokenSource, UnknownKeys, WireType,
 };
 use crate::design_run::render::envelope::{self, Detail, OutstandingBySeverity};
 use crate::design_run::run::{Admission, DerivedInput, ObservedReview, Resolution};
@@ -131,6 +131,8 @@ pub(crate) enum DesignCommand {
     Resume(ResumeArgs),
     /// Render runtime sections into authored prose.
     Materialise(MaterialiseArgs),
+    /// Print the payload contract `design apply` parses with.
+    Contract(ContractArgs),
 }
 
 /// Which rendering of the turn envelope to emit (DEC-064).
@@ -148,6 +150,21 @@ pub(crate) enum ShowFormat {
     Json,
     /// The same envelope, for a human at a terminal.
     Status,
+}
+
+/// Which rendering of the payload contract to emit.
+///
+/// **Not [`ShowFormat`].** That enum's third member, `status`, is "the same
+/// envelope, for a human at a terminal", and there is no per-run status to
+/// render for a static document. Admitting a token the renderer must then refuse
+/// is the failure this surface exists to end (`sec-6`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum ContractFormat {
+    /// The rendering an agent reads.
+    #[default]
+    Prompt,
+    /// The machine surface.
+    Json,
 }
 
 /// Arguments for `design start`.
@@ -240,6 +257,23 @@ pub(crate) struct MaterialiseArgs {
     path: Option<PathBuf>,
 }
 
+/// Arguments for `design contract`.
+///
+/// `--format` **alone**: no positional slice and no `-p/--path`. The contract is
+/// a property of the binary, not of a run, so there is no root to resolve
+/// (`sec-6`).
+///
+/// `Copy`, unlike its siblings: each of those owns a `String` slice reference
+/// and a `PathBuf` root that its handler consumes, while this one holds a single
+/// enum token and consumes nothing. Deriving it keeps the dispatch arm the same
+/// shape as every other arm rather than singling this verb out with a borrow.
+#[derive(clap::Args, Clone, Copy, Debug)]
+pub(crate) struct ContractArgs {
+    /// Which rendering of the payload contract to emit.
+    #[arg(long, value_enum, default_value_t = ContractFormat::Prompt)]
+    format: ContractFormat,
+}
+
 /// Route a design verb.
 pub(crate) fn dispatch(command: DesignCommand) -> Result<()> {
     match command {
@@ -248,6 +282,7 @@ pub(crate) fn dispatch(command: DesignCommand) -> Result<()> {
         DesignCommand::Apply(args) => run_apply(args),
         DesignCommand::Resume(args) => run_resume(args),
         DesignCommand::Materialise(args) => run_materialise(args),
+        DesignCommand::Contract(args) => run_contract(args),
     }
 }
 
@@ -967,13 +1002,6 @@ fn raw_facet(create: &CreateRecord) -> Vec<crate::knowledge::RawEdit<'_>> {
 /// emit a table missing it in silence. That residue is carried by pin 5's
 /// kind-set equality, whose oracle is an exhaustive match over `RecordKind`
 /// written in the test and never `ALL` itself.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-251 PHASE-05 renderers / PHASE-06 run_contract"
-    )
-)]
 pub(crate) fn extern_contracts() -> ExternContracts {
     use crate::knowledge::FieldShape;
 
@@ -2009,6 +2037,29 @@ fn run_show(args: ShowArgs) -> Result<()> {
     }
 }
 
+// ── contract ──────────────────────────────────────────────────────────────
+
+/// The contract as lines, for a format. Pure — no root, no snapshot, no I/O.
+///
+/// Split out of [`run_contract`] so the dispatch on the format is testable
+/// without a process boundary. The match is **wildcard-free**: a third format
+/// would be a compile error here rather than a silently-defaulted rendering.
+fn contract_text(format: ContractFormat, contracts: &ExternContracts) -> Vec<String> {
+    match format {
+        ContractFormat::Prompt => payload_contract::render_prompt(contracts),
+        ContractFormat::Json => vec![payload_contract::render_json(contracts)],
+    }
+}
+
+/// Print the payload contract.
+///
+/// The one design verb that resolves **no root**: the contract is a pure
+/// function of the binary, so it answers in a project with no design run, and
+/// outside a doctrine project entirely (`sec-6`).
+fn run_contract(args: ContractArgs) -> Result<()> {
+    emit(&contract_text(args.format, &extern_contracts()))
+}
+
 // ── resume ────────────────────────────────────────────────────────────────
 
 fn run_resume(args: ResumeArgs) -> Result<()> {
@@ -2480,6 +2531,228 @@ mod tests {
         for line in crate::design_run::payload_contract::render_prompt(&extern_contracts()) {
             println!("{line}");
         }
+    }
+
+    // --- SL-251 PHASE-06: the pull surface and the published document ---------
+    //
+    // The golden below is sited here rather than beside the renderers for a
+    // mechanical reason, the same one that sited pin 5's kind-set equality and
+    // PHASE-05's printer here: the committed document must be `render_document`'s
+    // output over the **real** extern table, and only this tier can build one —
+    // `payload_contract.rs` names `crate::` nowhere (ADR-001). A leaf-sited golden
+    // could only pass the two-row `extern_fixture()`, and would then pin the
+    // *shipped* document to a stub, describing a knowledge region that does not
+    // exist with a passing test underneath it.
+
+    use clap::Parser as _;
+
+    use crate::design_run::payload_contract::{
+        PAYLOAD_CONTRACT_PATH, PAYLOAD_CONTRACT_SCHEMA, render_document,
+    };
+
+    /// A parser harness for the design verbs alone, so this module's private
+    /// argument fields are readable from the parse result.
+    #[derive(clap::Parser, Debug)]
+    struct ContractCli {
+        #[command(subcommand)]
+        command: DesignCommand,
+    }
+
+    /// The parsed `contract` args, or a panic naming what was expected.
+    fn parse_contract(args: &[&str]) -> ContractArgs {
+        let parsed = ContractCli::try_parse_from(args).expect("the contract verb parses");
+        let DesignCommand::Contract(args) = parsed.command else {
+            panic!("the contract verb")
+        };
+        args
+    }
+
+    /// `EX-2` — `--format` alone, defaulting to `prompt`.
+    ///
+    /// The two `is_err()` rows are the half a reviewer would otherwise take on
+    /// trust: the contract is a property of the binary, so there is no slice to
+    /// name and no root to point at.
+    #[test]
+    fn contract_takes_format_alone_and_defaults_to_prompt() {
+        assert_eq!(
+            parse_contract(&["x", "contract"]).format,
+            ContractFormat::Prompt
+        );
+        assert_eq!(
+            parse_contract(&["x", "contract", "--format", "json"]).format,
+            ContractFormat::Json
+        );
+        assert!(
+            ContractCli::try_parse_from(["x", "contract", "SL-001"]).is_err(),
+            "no positional slice"
+        );
+        assert!(
+            ContractCli::try_parse_from(["x", "contract", "-p", "/tmp"]).is_err(),
+            "no -p/--path: there is no root to resolve"
+        );
+    }
+
+    /// `EX-3` — the format dispatch, over the real extern table.
+    ///
+    /// Both line counts are asserted, so a transposed pair of arms cannot pass by
+    /// producing *some* output on each side.
+    #[test]
+    fn contract_text_dispatches_on_the_format() {
+        let contracts = extern_contracts();
+
+        let prompt = contract_text(ContractFormat::Prompt, &contracts);
+        assert!(
+            prompt.len() > 100,
+            "the prompt rendering is the whole closure, not a stub ({} lines)",
+            prompt.len()
+        );
+        assert!(
+            prompt
+                .first()
+                .is_some_and(|line| line.starts_with("payload ApplyRequest")),
+            "the root block leads: {:?}",
+            prompt.first()
+        );
+
+        let json = contract_text(ContractFormat::Json, &contracts);
+        assert_eq!(json.len(), 1, "the machine surface is one document");
+        let document: serde_json::Value =
+            serde_json::from_str(&json[0]).expect("the json arm emits a JSON document");
+        assert_eq!(
+            document.get("schema").and_then(serde_json::Value::as_str),
+            Some(PAYLOAD_CONTRACT_SCHEMA)
+        );
+    }
+
+    /// `VT-1` — the published document's golden.
+    ///
+    /// Read from **disk** at runtime, never through the embed. The committed file
+    /// is the artefact being published; the embed is a copy of it that this same
+    /// build produced, so comparing the renderer against the embed could only
+    /// confirm the build agreed with itself. Whether an `install/` edit currently
+    /// invalidates the embed is a build-system detail this pin deliberately does
+    /// not rest on — if it ever stops holding, an embed comparison false-greens
+    /// after every edit, and silently.
+    #[test]
+    fn the_published_payload_contract_matches_the_renderer() {
+        let path = crate::test_support::repo_root().join(PAYLOAD_CONTRACT_PATH);
+        let shipped = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read the shipped contract at {}: {e}", path.display()));
+        assert_eq!(
+            render_document(&extern_contracts()),
+            shipped,
+            "the shipped payload contract has drifted from the table — re-render with \
+             `cargo test --bin doctrine regen_payload_contract -- --ignored`, never hand-edit ({})",
+            path.display()
+        );
+
+        // The shipped surface goes to client projects (POL-002), where a
+        // per-repo sequential id resolves to an unrelated record. The positive
+        // control fires the detector on a known citation first, or the two
+        // absence assertions below are unfalsified.
+        assert!(
+            crate::design_run::artifact::cites_a_repo_private_id("rendered from ISS-333"),
+            "the detector fires on a known citation"
+        );
+        assert!(
+            shipped.len() > 1000 && shipped.contains("ApplyRequest"),
+            "a whole contract, not an empty or truncated file ({} bytes)",
+            shipped.len()
+        );
+        assert!(
+            !crate::design_run::artifact::cites_a_repo_private_id(&shipped),
+            "the shipped contract cites no per-repo sequential id"
+        );
+        // A design-section annotation is lowercase and unlisted, so the detector
+        // above cannot see it — and it means nothing in a client project.
+        assert!(
+            cites_a_design_section("as (sec-6) explains"),
+            "the annotation detector fires on a known citation"
+        );
+        assert!(
+            !cites_a_design_section(&shipped),
+            "a design-section annotation shipped"
+        );
+    }
+
+    /// Whether `text` carries a design-section annotation — `sec-` followed by a
+    /// **digit**, e.g. `(sec-6)`.
+    ///
+    /// Digit-sensitive for the same reason
+    /// [`crate::design_run::artifact::cites_a_repo_private_id`] is: a bare
+    /// `sec-` also opens the design run's own section-**id namespace**, which the
+    /// contract renders as `id(sec-)` in five places and which a client project
+    /// needs in order to send a well-formed payload at all. Only the digit
+    /// distinguishes a citation of *this repository's* design document from wire
+    /// vocabulary.
+    fn cites_a_design_section(text: &str) -> bool {
+        const ANNOTATION: &str = "sec-";
+        text.match_indices(ANNOTATION).any(|(at, _)| {
+            text.get(at + ANNOTATION.len()..)
+                .and_then(|rest| rest.chars().next())
+                .is_some_and(|char| char.is_ascii_digit())
+        })
+    }
+
+    /// `EX-8` — the published contract is sealed `fixed`, asserted rather than
+    /// merely written.
+    ///
+    /// Fail-closed admission already rejects an **absent** or out-of-vocabulary
+    /// `customization`, but `fixed` and `customizable` are both admissible and
+    /// the manifest runs the majority the other way, so a drift to that majority
+    /// is silent and the seal would otherwise have no enforcement anywhere. It is
+    /// sealed because an edited copy would describe a payload the binary does not
+    /// accept — the same reason the document's own banner gives.
+    ///
+    /// The backing is derived from [`PAYLOAD_CONTRACT_PATH`] rather than spelled
+    /// again (STD-001); `install/` is enumerated flat, so a backing key is the
+    /// path's file name.
+    #[test]
+    fn the_published_contract_is_sealed_fixed() {
+        let manifest = crate::publication::PublicationManifest::admit(
+            &crate::asset_source::publication_manifest_bytes_from_disk(),
+        )
+        .expect("shipped publication manifest admits from disk");
+
+        let backing = Path::new(PAYLOAD_CONTRACT_PATH)
+            .file_name()
+            .and_then(std::ffi::OsStr::to_str)
+            .expect("the contract path names a file");
+        assert!(
+            manifest.declares_backing(backing),
+            "{backing} is published by backing, not only addressed"
+        );
+
+        let entry = manifest
+            .entries()
+            .iter()
+            .find(|entry| entry.address().as_str() == PUBLISHED_CONTRACT_ADDRESS)
+            .unwrap_or_else(|| panic!("{PUBLISHED_CONTRACT_ADDRESS} is published"));
+        assert_eq!(
+            entry.customization(),
+            crate::publication::CustomizationStatus::Fixed,
+            "the published contract is sealed: an edited copy would describe a \
+             payload the binary does not accept"
+        );
+    }
+
+    /// The stable logical address the published contract answers to — the row
+    /// this module's seal assertion selects. Deliberately distinct from both the
+    /// on-disk path and the embed key (`sec-5`).
+    const PUBLISHED_CONTRACT_ADDRESS: &str = "reference/design-payload-contract.md";
+
+    /// Re-render the shipped document.
+    ///
+    /// A test rather than a CLI verb, and named so the golden's failure message
+    /// can point at it: re-rendering is a dev act in this repository and
+    /// meaningless in a client project, where the file is a read-only artefact of
+    /// an installed binary.
+    #[test]
+    #[ignore = "writes the shipped contract; run deliberately after a table or renderer change"]
+    fn regen_payload_contract_writes_the_shipped_file() {
+        let path = crate::test_support::repo_root().join(PAYLOAD_CONTRACT_PATH);
+        std::fs::write(&path, render_document(&extern_contracts()))
+            .unwrap_or_else(|e| panic!("write the shipped contract to {}: {e}", path.display()));
     }
 
     /// A repo root with a slice tree and a started run. Returns the root.

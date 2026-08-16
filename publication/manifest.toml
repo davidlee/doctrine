@@ -243,6 +243,15 @@ provenance    = "declared"
 customization = "fixed"
 
 [[entry]]
+address       = "reference/design-payload-contract.md"
+backing       = "design-payload-contract.md"
+kind          = "reference"
+title         = "Design apply payload contract"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
 address       = "reference/design-run-stages.md"
 backing       = "design-run-stages.md"
 kind          = "reference"

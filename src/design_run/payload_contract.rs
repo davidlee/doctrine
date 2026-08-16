@@ -1535,9 +1535,12 @@ pub(crate) const PAYLOAD_CONTRACT_POINTER: &str = "doctrine design contract --fo
 
 /// The committed file the generated contract is pinned to, relative to the repo
 /// root — [`super::artifact::ARTIFACT_PATH`]'s pattern. Spelled once (STD-001).
-#[expect(
-    dead_code,
-    reason = "SL-251 PHASE-06/07 land the first readers — the generator and its golden test"
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-251: the golden and the regeneration test are the only readers; the path never ships"
+    )
 )]
 pub(crate) const PAYLOAD_CONTRACT_PATH: &str = "install/design-payload-contract.md";
 
