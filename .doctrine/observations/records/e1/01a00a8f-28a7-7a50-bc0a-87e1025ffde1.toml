@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00a8f-28a7-7a50-bc0a-87e1025ffde1"
+recorded_at = "2026-08-16T12:32:29.351604531Z"
+kind = "friction"
+summary = "CHR-063 card overstated the sweep size (104 vs 74 items)"
+detail = "The card said '104 live (105 files)' items to sweep. The grep for its 6 terms yields 105 FILES = 74 unique items (memory.md+memory.toml per item, plus case-variant misses). '104' conflated files with items. Cost several tool calls to reconcile the count, rebuild the candidate list with case variants (subagentStart/worker-commit/arm_spawn/dispatch_agent), and confirm the shipped corpus was already clean — before the actual per-item adjudication could start. A card that records a sweep should state its candidate-generation command, not a derived item count."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
