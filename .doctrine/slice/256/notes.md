@@ -198,6 +198,29 @@ test build and any integration-test crate that `#[path]`-includes a module, so n
 (b) `just gate` runs clippy without `--all-targets`, so clippy restriction lints
 — `allow_attributes` among them — do not see `tests/` or the bin's test cfg.
 
+### Further review passes (written after `RV-360` concluded)
+
+**A further *design* pass is not needed; the residual risk has moved downstream to
+`/plan`.** The design has now taken four independent attacks — `RV-359` (empty),
+`RV-360` (16 findings, external, concluded), a prototype that ran the type model
+through a compiler, and an internal adversarial pass over the rev 43/44 repairs
+whose two findings `codex` re-derived rather than accepted. The last two rounds
+each returned exactly one class of defect and the last returned none at all on
+re-derivation, which is the shape of a surface that has stopped yielding to
+reading.
+
+If one were run anyway, the two things it should probe are:
+
+- **`sec-3`, the emit seam.** It drew findings in `RV-360` and has been
+  byte-identical since rev 44, so it is the section with the most attention paid
+  and the least recently. Its non-bypassability is a convention rather than a
+  guarantee, which the design states plainly — but `IMP-437` carries that and is
+  deliberately out of scope, so a pass would be re-confirming a known boundary.
+- **Whether `REQ-478`'s three criteria survive phase decomposition.** Every
+  criterion is discharged by tests nobody has written yet, and the coverage cell
+  is deliberately deferred until they exist. A design pass cannot test that; the
+  phase plan can, and `/phase-plan` is where an under-specified section shows.
+
 ### Open
 
 - **Four sections still need the human-only section attestations, and the run's
