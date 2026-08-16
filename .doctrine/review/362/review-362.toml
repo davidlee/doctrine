@@ -1,0 +1,254 @@
+id    = 362
+slug  = "sl-251-reconciliation-the-payload-contract-surface-vs-design-governance"
+title = "SL-251 reconciliation: the payload contract surface vs design + governance"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-251"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "PHASE-06/VT-1 is red at audit: its keyword proxy `CARGO_MANIFEST_DIR` is defeated by the DRY seam the golden legitimately uses"
+detail = """
+Expected: `doctrine slice verify-vt 251` clean across all seven phases, the evidence surface /close reads. Observed: PHASE-06 VT-1 FAIL — keyword `CARGO_MANIFEST_DIR` absent from `src/commands/design.rs`.
+
+The BEHAVIOUR the criterion exists to pin is met, and was checked rather than assumed. PHASE-06/EX-5 requires the golden compare `render_document()` against the committed file read FROM DISK at runtime, never from the embed. `src/commands/design.rs:2660` does exactly that via `crate::test_support::repo_root()`, and `src/test_support.rs:31` resolves it from the RUNTIME `CARGO_MANIFEST_DIR` env var (not `env!`), which is the artifact.rs precedent's own reasoning (`artifact.rs:311-316`). The PHASE-06 commit (cba1f257f) records a decisive experiment for it: redirecting CARGO_MANIFEST_DIR at one already-built binary reds the golden while the embed is byte-identical across both runs.
+
+So the defect is the criterion's keyword list, not the code: `keywords = ["PAYLOAD_CONTRACT_PATH", "CARGO_MANIFEST_DIR", "ignore"]` names an implementation token that a correct DRY refactor routes through a shared helper. Grep-keyword VT gates are proxies; this is the failure mode where the proxy punishes the better implementation. Spelling `std::env::var("CARGO_MANIFEST_DIR")` a second time in design.rs to satisfy the keyword would be a STD-001 violation raised to pass a test.
+
+Plan criteria are immutable-append and off-reconcile's write surface, so this is a plan escalation, not a brief item."""
+disposition = "fix-now"
+response = """Fixed at audit, on the slice's own established pattern for a void-on-contact criterion (PHASE-02/VT-2 did exactly this at execution, and the boot rule mandates append-never-renumber). PHASE-06/VT-1 is waived with its reason recorded in plan.toml; VT-3 appended carrying the same obligation with keywords naming the seam the code actually uses — ["PAYLOAD_CONTRACT_PATH", "repo_root", "ignore"]. `doctrine slice verify-vt 251` now reports no FAIL across all seven phases (two waivers, PHASE-02/VT-2 and PHASE-06/VT-1). No code changed: the golden was already correct and mutation-verified."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "PHASE-07/VA-1 is void on contact: a misspelt TOP-LEVEL key produces no refusal to read, by the slice's own Non-Goal"
+detail = """
+Expected (VA-1 as authored): 'Submit a payload with a misspelt top-level key and read the refusal as a caller would: serde's message intact, the address on an indented continuation.' Observed, live, on a freshly installed client project at /tmp/sl251-audit/proj:
+
+  payload {"run_uid":"dr-01a008c9-…","known_revision":1,"submission_id":"probe-a","declrae":[…]}
+  → stdout 'revision 2 stage exploring', EXIT 0. No refusal, no change row, revision bumped.
+
+That is ISS-333's mechanism exactly, and SL-251's Non-Goals state it survives this slice ('the unknown-key discard survives this slice; only the probing loop it caused is removed'). So the one input VA-1 names is the one input that cannot produce the artefact VA-1 asks the agent to read. The criterion contradicts the slice's own scope.
+
+The satisfiable form is VT-3's — an unknown key on a `Declaration`, which carries `deny_unknown_fields` (submission.rs:123). Discharged here in the same project:
+
+  …"declare":[{"subject":"inq-1","question":"x","cursour":"inq-1"}]
+  → EXIT 1
+  Error: parse the apply payload as JSON: unknown field `cursour`, expected one of `subject`, `question`, … at line 1 column 152
+    doctrine design contract --format prompt
+
+Serde's message verbatim, the address on an indented continuation, and the pasted invocation answers (verified: exit 0, 195 lines / 8937 B). The substance of VA-1 IS met; PHASE-07's commit message (d7001375c) records the worker discharging it against a Declaration rather than a top-level key — the correct input, substituted silently. Same class as PHASE-02/VT-2, which the slice retired explicitly for the same reason; this one was never noticed because the sheet's VA result was left unfilled (see the sibling finding)."""
+disposition = "tolerated"
+response = "Tolerated, with the substance discharged rather than assumed. The criterion id is spent and immutable; appending a corrective VA at audit would buy a reader nothing this ledger does not already carry, because a VA has no mechanical gate — its whole value is a recorded reading, and the reading is recorded here: the refusal was reproduced live on a freshly installed client project, serde's message verbatim with the address on an indented continuation, and the pasted invocation answered. The accepted drift is one wrong noun in a spent criterion ('top-level' where 'Declaration' was meant). What is NOT tolerated and is carried to the brief: the discharge statement on ISS-333 must keep saying that a misspelt top-level key still exits 0 (F-9)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "PHASE-05/06/07 phase sheets were never written back at execution — every VA-1 result and mutation battery is still a '(fill at execution: …)' placeholder"
+detail = """
+Expected: a completed phase's sheet carries its execution findings, because `VA-` criteria are verification BY AGENT and the sheet is where an auditor re-derives them. PHASE-04's sheet does this — it has an execution-findings block ('F-6 — VA-1 met, all three clauses', 'F-7 — the barrier was demonstrated, not argued', with the E0004 message quoted).
+
+Observed: phase-05.md, phase-06.md and phase-07.md carry ONLY a '### Planning-time findings' section, and it ends in unfilled placeholders:
+  phase-05 F-8 'T9 mutation battery results. (fill at execution: M1-M11 …)', F-9 'VA-1 result. (fill at execution: line count, byte count, widest line, and the shape/completeness comparison against render-sample.md 105-314.)'
+  phase-06 F-7 (M1-M10), F-8 'VA-1 result. (fill at execution: three exit codes …)', F-9 'the shipped document, measured.'
+  phase-07 F-4 'T5's help diff. (fill at execution: the diff -r result across the ten captured families …)', F-5 (M1-M8), F-6 'VA-1 result.', F-7 'EX-8 reality check.'
+Their task checkboxes are likewise still '[ ]'. All three phases are status=completed.
+
+MITIGATION, and it is substantial: the evidence largely exists in the COMMIT MESSAGES, which are authored and diffable where the sheets are disposable runtime state. d7001375c records PHASE-07's help-diff bound in full — '281 help renderings before and after, of which 251 are byte-identical, 27 differ by exactly one restored trailing full stop, and 3 differ only in a PID inside a pre-existing panic (now ISS-366)' — which is precisely F-4's owed measurement and the evidence for EX-10's HALT condition not firing. cba1f257f records PHASE-06's no-root run and a mutation conviction; 01f757571 records PHASE-05's.
+
+RESIDUE, discharged at this audit rather than left open:
+- PHASE-05/VA-1 (unrecorded anywhere): rendered the full closure from the built binary. 25 types, and the type-name set is IDENTICAL to render-sample.md's 25 — 10 structs + 14 enums + the ApplyRequest root, zero on either side only. 195 lines / 8937 B against the sample's 202 / 8826. Shape and completeness match; ordering and whitespace differ, which VA-1 explicitly permits. F-7's disposition holds: no '(sec-3)' annotation on the extern header.
+- PHASE-06/VA-1 (recorded in commit prose, re-derived here): from /tmp/sl251-audit, no .doctrine ancestor — `--format prompt` exit 0 with empty stderr, `--format json` exit 0 (1058 lines / 23102 B), and the bare invocation byte-identical to `--format prompt`, confirming the Prompt default.
+- PHASE-07/VA-1: see the sibling finding.
+
+The cost is not the evidence, it is that an auditor cannot tell an unrecorded discharge from an unperformed one without re-running it."""
+disposition = "fix-now"
+response = "Fixed at audit by discharging the residue and sweeping it to a durable sink, which is what the phase-sheet leg of the audit harvest is for. PHASE-05/VA-1 was unrecorded anywhere and is now discharged (25 types, type-name set identical to render-sample.md's 25, zero on either side only; 195 lines / 8937 B against the sample's 202 / 8826); PHASE-06/VA-1 re-derived from outside a doctrine project (three invocations, all exit 0, empty stderr, bare == --format prompt); PHASE-07/VA-1 in F-2. notes.md's Produced leg now names where each phase's evidence actually lives — the commit messages — and its Learned leg carries the six durable gotchas the three sheets would have taken with them. The sheets themselves are runtime state and are deliberately left as they are."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "The slice's durable harvest in notes.md is four phases stale — stamped PHASE-03, and its Open section still reads 'PHASE-04..07 unstarted'"
+detail = """
+Expected: notes.md's '## Harvest' is single-copy and brought current at each harvest moment; it is the sink that survives `rm -rf` of the runtime phase sheets, and /audit's tail is where the last sweep lands.
+
+Observed: the section header still reads 'fresh-as-of: 2026-08-15 · PHASE-03 · 00295be85'. Its Produced leg says 'PHASE-04..07 not started'; its Open leg leads with '**PHASE-04..07 unstarted**, and their criteria are authoritative only as far as the design is'. All four have since landed (cc64a24c2, 01f757571, cba1f257f, d7001375c).
+
+The last commit to touch notes.md is be679d544; the commit that CALLS itself a harvest — b90577f75 'chore(SL-251): harvest — ISS-366, two memories, one supersede' — minted ISS-366 and three memories and did not restamp notes.md at all. So the harvest ran on the memory and backlog legs and skipped the notes leg.
+
+Consequence, and it is not cosmetic: notes.md's Learned section is where PHASE-04+ was warned to expect a void-on-contact criterion ('Expect the same error to void a PHASE-04+ criterion'). It did — twice (F-1's VT keyword, F-2's VA-1) — and neither is recorded there. The next agent reading this slice's notes is told the slice stopped at PHASE-03."""
+disposition = "fix-now"
+response = "Fixed at audit — this is precisely the audit harvest tail's job. notes.md's '## Harvest' is restamped 'fresh-as-of: 2026-08-16 · audit (RV-362) · eca2c9a11'; Produced gains the PHASE-04..07 block (the four commits, where their evidence actually lives, the four criteria appended at execution, the two retired at audit, and the audit-time gate/verify-vt state); Learned gains six PHASE-04..07 entries swept from the sheets and commits; Open's 'PHASE-04..07 unstarted' is struck and replaced with the reconcile obligations now carried on this ledger."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Two source files were edited outside every design-target selector: src/commands/cli.rs and src/design_run/artifact.rs read as undeclared scope creep"
+detail = """
+Expected: `doctrine slice conformance 251` reports no undeclared SOURCE path, or each one is a conscious, recorded widening.
+
+Observed: 8 undeclared paths, of which two are source —
+  M src/commands/cli.rs
+  M src/design_run/artifact.rs
+(the other six are the slice's own authored artefacts — plan.md, plan.toml, slice-251.toml — and the IMP-438 backlog item, all legitimate.)
+
+BOTH edits are correct and already argued in the plan; what is missing is the registry row that makes them declared rather than creep:
+- `cli.rs`: PHASE-07/EX-10 authorises `render_subcommand_help` to prefer `get_long_about().or_else(get_about())`, and says so in terms — 'This widens the touch-set to src/commands/cli.rs, which sec-7's table does not list. BOUND'. Without it EX-4's named mechanism renders nothing (long_about occurred zero times in the tree; main.rs:285-292 routes every --help through doctrine's renderer, so clap's never runs). The widening was measured, not trusted (281 renderings, 27 differing by a restored full stop alone).
+- `artifact.rs`: PHASE-05 hoisted `cites_a_repo_private_id` and its fourteen-prefix const out of `mod tests` to module level as `#[cfg(test)] pub(crate)`, so PHASE-06's VT-2 shares the detector rather than copying it. That is STD-001 being obeyed — PHASE-05's own D12 planned a COPY and was superseded by the hoist.
+
+So the fix is the SELECTOR REGISTRY, which is what `slice conformance` reads (`doctrine slice selector add`), with sec-7's touch table as the human mirror. A prose-only edit to the design leaves conformance red."""
+disposition = "verified"
+response = "Observation confirmed; remediation delegated to /reconcile via the Reconciliation Brief. Both edits are correct and already argued in plan.md — what is missing is the registry row. Two surfaces, and the registry is the load-bearing one: `doctrine slice selector add` for src/commands/cli.rs and src/design_run/artifact.rs (that is what `slice conformance` reads), with sec-7's touch table as the human mirror. A prose-only edit leaves conformance red. Not fixed at audit because the selector registry lives in slice-251.toml and the mirror in design.md — both reconcile's per-slice direct-edit surface, not audit's."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "The src/design_run/attestation.rs design-target selector is spurious — the slice never touched it, and PHASE-02 proved it never could"
+detail = """
+Expected: every `design-target` selector names a file the slice writes.
+
+Observed: `doctrine slice conformance 251` reports one undelivered selector, `src/design_run/attestation.rs` — declared, matched by no edit across PHASE-01..07.
+
+This is not a dropped deliverable; the declaration was wrong from the start, and the slice discovered it at execution. PHASE-02/EX-10 (appended 2026-08-15): 'All twelve closure structs are defined in src/design_run/submission.rs; src/design_run/attestation.rs holds none of them — CheckpointActDeclaration is submission.rs:825 and AgentActDeclaration submission.rs:855, and attestation.rs contributes enums plus ReviewRef alone.' That is the same discovery that made PHASE-02/VT-2 void on contact and cost it a waiver. attestation.rs contributes CLOSURE ENUMS, which `payload_variants!` consumes from payload_contract.rs without editing them, and the near-namesake `CheckpointAct` that makes the mistake easy.
+
+The load-bearing fix is `doctrine slice selector rm` on the registry — that is what `slice conformance` reads. sec-7's touch table and sec-8 pin 1's 'those fixtures live in submission.rs and attestation.rs' are the prose mirror and are wrong in the same place; design.md:600-601 already says 'submission.rs (every wire struct)' and contradicts them internally."""
+disposition = "verified"
+response = "Observation confirmed; remediation delegated to /reconcile via the Reconciliation Brief. `doctrine slice selector rm` on src/design_run/attestation.rs is the load-bearing change — the selector was wrong when it was written, not a deliverable that was dropped, and PHASE-02/EX-10 proved it at execution. sec-7's touch table and sec-8 pin 1's 'those fixtures live in submission.rs and attestation.rs' are the prose mirror and are wrong in the same place; they ride F-8's design.md pass. Note design.md:600-601 already says 'submission.rs (every wire struct)', so the design contradicts itself and the correction has a witness inside the same document."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "SPEC-029 names the design command family as four verbs; it is now six — the slice shipped the sixth and the governing spec still says four"
+detail = """
+Expected: after `doctrine design contract` lands, SPEC-029 (Design run engine, the governing tech spec) describes the command family it governs.
+
+Observed: `.doctrine/spec/tech/029/spec-029.toml:27` — 'Front the capability through one command family — start, show, apply, resume — carrying the sparse mutation contract …'. Verified against the tree: `DesignCommand` now carries SIX variants (Start, Show, Apply, Resume, Materialise, Contract), classified at guard.rs. The line was ALREADY stale by `materialise` before this slice; `contract` makes it stale by two.
+
+The design and plan both saw this and both routed it here deliberately rather than treating it as an amendment — plan.md: 'the prose update /reconcile owes is a two-verb correction, not one … it is the first thing /reconcile owes'. Raised on the ledger so it is a tracked obligation with a target and a write surface rather than a sentence in a plan note.
+
+Related and in the same stale-count class, but a different surface: design.md sec-6:1591 says `contract` is 'a fifth variant beside the existing four'. It is the sixth. PHASE-06/EX-1 already carries the correction in the plan ('sec-6 and this plan both said fifth, and the count was wrong in both'); design.md itself does not.
+
+Governance/spec surface, so REV — not a direct edit."""
+disposition = "verified"
+response = "Observation confirmed; remediation delegated to /reconcile via the Reconciliation Brief. SPEC-029 is governance/spec, so the write surface is a REV, not a direct edit — `spec-029.toml:27`'s 'start, show, apply, resume' becomes the six-verb family (start, show, apply, resume, materialise, contract). A two-verb correction: the line was already stale by `materialise` before this slice. design.md sec-6:1591's 'fifth variant' is the same stale-count class on the per-slice surface and rides F-8's direct-edit pass. Audit does not write spec or governance."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "design.md carries five claims execution disproved against source — four of them load-bearing enough that a phase had to append a corrective criterion to proceed"
+detail = """
+Expected: design.md is canon for this slice; after implementation it should state what was built, not what was predicted.
+
+Observed: five statements in design.md are contradicted by the tree, each already convicted at execution with evidence, each recorded in plan.md and plan.toml but NOT in design.md:
+
+1. **sec-4** — 'All six are const fn, so the token array stays a const.' False for two of the six. `Provenance` and `ReviewDisposition` have a field on EVERY variant, so a const initialiser must drop a temporary (E0493), and two of the four cannot be constructed from the leaf at all (`DesignId.raw` and `ReviewRef`'s tuple field are private, non-const constructors). Those two take the naming arm; the single source is recovered at TEST time by VT-1's per-variant walk. (PHASE-01/EX-9.)
+
+2. **sec-7's touch table and sec-8 pin 1** — 'those fixtures live in submission.rs and attestation.rs.' All twelve closure structs are in submission.rs; attestation.rs holds none. design.md:600-601 already says 'submission.rs (every wire struct)' and contradicts them internally. This voided PHASE-02/VT-2 outright. (PHASE-02/EX-10; see also the spurious-selector finding.)
+
+3. **sec-8:2012-2016's Id rule** — checking every `Id` row against `IdKind::declarable` is wrong: `declarable` is a predicate over DECLARATION SUBJECTS, and `DelegationAct`'s `id` keys correctly declare `Id(&[IdKind::Delegation])` while `declarable(Delegation)` is false (ids.rs:90). The single rule fails four CORRECT rows. Implemented as two rules — a per-row structural membership check, plus the two engine-derived claims asserted at their own sites. (PHASE-03/EX-10.)
+
+4. **sec-6:1518-1522 and sec-8 pin 7's help bullet** — both reason from CLAP's help renderer. This project replaces it: `main.rs:285-292` routes every `--help` and every `help` subcommand through `render_subcommand_help`, which read `get_about()` and nothing else (cli.rs:1427), and `long_about` occurred zero times in the tree. EX-4's named mechanism would have rendered NOTHING. Sound about clap, wrong about doctrine — which overrides clap here. (PHASE-07/EX-10.)
+
+5. **sec-6:1591** — `contract` as 'a fifth variant beside the existing four'; it is the sixth. (Bundled with the SPEC-029 finding, which owns the spec half.)
+
+Grouped as one finding because they share one write surface (design.md, per-slice direct edit) and one class — a prediction about a tool or a file layout, asserted without checking, that survived to the page. The slice named this class itself in notes.md ('an unverified claim about what a TOOL cannot do, load-bearing on a design decision … Cite the source whenever asserting a limit of clap, serde or cargo') after A3 and the clap cost-estimate cost it two rounds. It then produced two more instances."""
+disposition = "verified"
+response = "Observation confirmed on all five, each against source; remediation delegated to /reconcile via the Reconciliation Brief. design.md is a per-slice artefact, so this is one direct-edit pass, not a REV. Every correction already has its evidence written and its convicting criterion cited (PHASE-01/EX-9, PHASE-02/EX-10, PHASE-03/EX-10, PHASE-07/EX-10, PHASE-06/EX-1), so reconcile is transcribing settled findings, not re-adjudicating them. Audit does not write the design — that is the whole point of the audit/reconcile split, and doing it here would put the correction and its review in the same hand."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "ISS-346 and ISS-333 record the same defect and are both still open, so this slice's discharge statement has two ids to land on"
+detail = """
+Expected: the slice's ISS-333 discharge statement lands on one id. SL-251's scope leans on ISS-333 explicitly — it is a `references(originates_from)` relation, and the scope argues at length that this slice takes ISS-333's THIRD candidate fix ('accept the limit and close the discoverability half instead').
+
+Observed: both are open —
+  ISS-333 'ApplyRequest cannot deny unknown fields, so a top-level key is discarded' (created 2026-08-09)
+  ISS-346 'design apply silently absorbs unknown payload keys' (created 2026-08-12)
+Same mechanism, same cluster:design-run, both `needs: QUE-219`, both tagged footgun. ISS-346 is the later duplicate.
+
+The slice knew: notes.md records 'ISS-346 duplicates ISS-333 (minted 2026-08-12 vs 2026-08-09) — merge so closure lands on one id', and plan.md routes it to close ('Both are harvest and close work, not implementation'). Neither has happened.
+
+Note what the discharge may and may NOT say. Verified live at this audit: a misspelt TOP-LEVEL key still parses, bumps the revision and exits 0. Neither issue is FIXED by this slice; the mechanism is an explicit Non-Goal. What SL-251 closes is the probing loop — the contract is now fetchable, so nobody needs to submit-and-read-the-refusal to learn the shape. The surviving memory `mem.fact.design-run.payload-contract-is-fetchable` states this correctly ('it states what the slice did NOT close as well'); the merged issue must keep saying it."""
+disposition = "fix-now"
+response = "Half fixed at audit, half delegated. FIXED: `doctrine supersede` refuses backlog kinds ('supersession not yet supported for ISS'), so the merge went through the verbs that do exist — `doctrine link ISS-346 related ISS-333` then `doctrine backlog edit ISS-346 --status closed --resolution duplicate`. Closure can now only land on ISS-333, which is what notes.md asked for and what the slice's own `references(originates_from)` relation already points at. DELEGATED to the brief: the discharge STATEMENT on ISS-333 — what SL-251 closed (the probing loop; the contract is fetchable) and what it did not (the silent top-level discard, verified live at this audit to still exit 0). That is prose about the slice's outcome and belongs with reconcile's other closure writing, not with a status transition."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "The superseded memory mem.fact.design-run.apply-payload-vocabulary still asserts a false claim about Declaration's deny_unknown_fields"
+detail = """
+Expected: a memory that survives in the corpus does not carry a factual error the slice disproved.
+
+Observed: `mem.fact.design-run.apply-payload-vocabulary` (mem_019ff439bede7fb29c7c09b7fd76d893) still reads 'Neither `ApplyRequest` nor `Declaration` denies unknown fields, so a guessed or …'. The second half is wrong: `Declaration` carries `#[serde(deny_unknown_fields)]` (submission.rs:123). Demonstrated live at this audit — an unknown key on a Declaration is REFUSED with serde's message, while the same misspelling at top level is silently discarded. That asymmetry is the whole of ISS-333, and the memory flattens it.
+
+PARTIALLY MITIGATED: `doctrine inspect` shows mem_01a0089b06ba7260925dd75fe1d5e424 (`mem.fact.design-run.payload-contract-is-fetchable`, minted by the b90577f75 harvest) SUPERSEDES it, and the superseding memory is correct on both halves. So retrieval should prefer the new one.
+
+Residual, and the reason this is raised rather than left to the supersede edge: the false sentence is still the stored text of a memory that `memory show` renders in full, and the slice flagged it twice as a correction owed at close (notes.md 'Corrections found while exploring' and again under Learned; plan.md routes it to reconcile). Either correct the sentence at source or confirm the supersede edge suppresses it from retrieval — the second is a cheaper answer if true, but it should be an answer, not an assumption."""
+disposition = "fix-now"
+response = "Fixed at source rather than left to the supersede edge, because the error was never merely stale — 'Neither ApplyRequest nor Declaration denies unknown fields' was wrong on the day it was written, and supersession expresses 'superseded', not 'was false'. The Trap section now states the asymmetry that is the whole of ISS-333: ApplyRequest discards a top-level key silently, while Declaration, CheckpointActDeclaration and AgentActDeclaration deny — three of twelve wire structs refuse and nine discard. The correction names its own provenance (RV-362 F-10) so a reader can see the memory was repaired rather than always right, and the trailing citation is repointed ISS-346 → ISS-333 to match the merge in F-9."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "minor"
+title = "Commit be679d544 'doctrine' landed three stray root-level capsule-*.md duplicates and stripped .claude/settings.json's trailing newline, inside SL-251's range but attributed to no phase"
+detail = '''
+Expected: commits inside a slice's range are conventional-commit scoped by slice id, and land in the tree's own layout.
+
+Observed, commit be679d544, whose entire message is the word 'doctrine':
+  .claude/settings.json      | 2 +- (trailing newline STRIPPED — '\ No newline at end of file')
+  .doctrine/slice/251/notes.md | 82 +
+  capsule-orchestrator.md    | 76 +  (repo ROOT)
+  capsule-phase-planner.md   | 55 +  (repo ROOT)
+  capsule-worker.md          | 59 +  (repo ROOT)
+
+The three root files are agent definitions with `name:`/`description:`/`tools:` frontmatter whose home is `.claude/agents/`, where copies already exist. Diffed: capsule-orchestrator.md and capsule-worker.md are BYTE-IDENTICAL to the `.claude/agents/` copies; capsule-phase-planner.md is the same but for one line the `.claude/agents/` copy has and the root copy lacks — i.e. the root copies are stale duplicates, and one has already drifted.
+
+WHY `slice conformance` never saw any of it: the source-delta registry has PHASE-03 ending at 017c59742 and PHASE-04 STARTING at be679d544 (`boundaries.toml`). Since a boundary is the exclusive range (start, end], be679d544's own patch — and 18e35c2e5's before it — falls in the gap between two phases and is attributed to nothing. The mechanical drift signal is blind here by construction, which is the honest reason this needed a manual read.
+
+NOT SL-251's work — this is capsule-driver scaffolding that rode the slice's commit range. Raised because it is inside the range an auditor is accountable for and would otherwise close unremarked, and because `settings.json`'s missing newline is a live nuisance for the next tool that appends to it.'''
+disposition = "fix-now"
+response = "Fixed at audit; all three root files removed with `git rm` and .claude/settings.json's trailing newline restored. Checked before deleting rather than after: capsule-orchestrator.md and capsule-worker.md are byte-identical to their .claude/agents/ copies, capsule-phase-planner.md differs only by a trailing blank line the .claude/agents/ copy has, and nothing in the tree references the root paths (grep across .json/.md/.rs/.toml returns only this ledger). The .claude/agents/ copies are what the harness resolves, and they are untouched. Reversible in full — every deletion is git-tracked."
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "minor"
+title = "Commit 18e35c2e5 resurrected .doctrine/workflows/drive-slice.js, which SL-254 PHASE-10 had deliberately deleted — an orphan with no embedded source to regenerate it"
+detail = """
+Expected: an artefact a prior slice deleted on purpose stays deleted.
+
+Observed: `18e35c2e5 chore(SL-251): keep the memory item and the slice-driving workflow` added `.doctrine/workflows/drive-slice.js` (353 lines) back to the tree. `src/install.rs` says three times over that it should not be there:
+  :476  '`workflows/drive-slice.js`, its only caller, was deleted with Mode B.'
+  :1882 'deleted the only payload (`drive-slice.js`, Mode B's driver)'
+  :1900 'SL-254 PHASE-10 deleted `drive-slice.js`, its only payload.'
+The EMBEDDED source under `install/workflows/` is gone, so the materialised copy is an orphan: nothing regenerates it, nothing links it (`.claude/workflows/` does not exist), and `install`'s workflows leg now ships no payload at all. It is a stale copy of Mode B's driver, and Mode B's shipped implementation surface was itself deleted by SL-254 PHASE-10 (`dc7347152`).
+
+Reported by the user during this audit: 'reintroduced by the old installer in this slice; it's legacy and should be pruned out.'
+
+Same provenance and same blind spot as the stray root `capsule-*.md` files: it rode the PHASE-03→PHASE-04 boundary gap (017c59742 → be679d544), so `slice conformance` was structurally unable to see it. Two unrelated regressions in that one two-commit gap is the argument for reading the range by hand rather than trusting the mechanical delta alone."""
+disposition = "fix-now"
+response = "Fixed at audit at the user's direction — `git rm .doctrine/workflows/drive-slice.js` and the now-empty .doctrine/workflows/ removed. Verified an orphan before deleting: no embedded source under install/workflows/, no .claude/workflows/ link dir, and install.rs's own comments (:476, :1882, :1900) name SL-254 PHASE-10 as having deleted it deliberately. Nothing regenerates it, so this is a prune, not a change of policy. The user reported it mid-audit and asked for it pruned; the deletion had not reached the tree, so it is carried out here."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

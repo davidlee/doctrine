@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a008d5-ec70-7c20-ada3-f70c1e07797e"
+recorded_at = "2026-08-16T04:30:32.560875079Z"
+kind = "friction"
+summary = "/audit: backlog tag flags are positional, not --add"
+detail = "Guessed `doctrine backlog tag IMP-439 --add area:cli --add cluster:conformance` by analogy with every other add/remove verb in the CLI; tags are POSITIONAL and removal alone is a flag (`-d`). Cost two failed invocations plus a --help read. The asymmetry (positional add, flagged remove) is unusual enough that the analogy is the natural guess."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

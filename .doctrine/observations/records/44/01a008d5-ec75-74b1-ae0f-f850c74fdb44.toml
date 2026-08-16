@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a008d5-ec75-74b1-ae0f-f850c74fdb44"
+recorded_at = "2026-08-16T04:30:32.565287417Z"
+kind = "friction"
+summary = "/audit: doctrine review paths emits no trailing newline, so its last path runs into the next command's output"
+detail = "`doctrine review paths RV-362` printed '.doctrine/review/358/review-358.md' with no trailing newline; in a compound shell invocation the next echo landed on the same line ('review-358.md=== raise help ==='). Cosmetic, but it makes the output unsafe to pipe or read positionally without normalising, and every sibling `paths` verb should be checked for the same."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

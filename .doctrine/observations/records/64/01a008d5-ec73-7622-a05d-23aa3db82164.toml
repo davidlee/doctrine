@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a008d5-ec73-7622-a05d-23aa3db82164"
+recorded_at = "2026-08-16T04:30:32.563214843Z"
+kind = "friction"
+summary = "/audit: doctrine supersede refuses backlog kinds, and the merge needs two other verbs instead"
+detail = "notes.md and plan.md both recorded 'merge ISS-346 into ISS-333' as owed work. `doctrine supersede ISS-333 ISS-346` refuses: 'supersession not yet supported for ISS (follow-up F2)'. The working route is two verbs — `doctrine link ISS-346 related ISS-333` then `doctrine backlog edit ISS-346 --status closed --resolution duplicate` — neither of which the refusal names. A refusal that names the remedy would have cost nothing here; this is IMP-390's fourth candidate (refusals naming remedies) biting outside the design run."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
