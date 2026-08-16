@@ -242,7 +242,8 @@ const BACKLOG_TERMINAL: &[&str] = &["resolved", "closed"];
 /// node-attr lives, not folded into the status class.
 pub(crate) fn status_class(kind: &entity::Kind, status: Option<&str>) -> StatusClass {
     let Some(status) = status else {
-        // The only status-less kind is REC: context-only, default-excluded, expected.
+        // The status-less kinds are `kinds::STATUS_LESS` (REC alone today):
+        // context-only, default-excluded, expected.
         return StatusClass::Terminal;
     };
     let Some(part) = PARTITION.iter().find(|p| p.prefix == kind.prefix) else {
@@ -257,6 +258,44 @@ pub(crate) fn status_class(kind: &entity::Kind, status: Option<&str>) -> StatusC
         StatusClass::Terminal
     } else {
         StatusClass::Unrecognised
+    }
+}
+
+/// Classify a cross-kind target's [`kinds::AuthoredStatus`] (SL-238 §3). Four
+/// lines over [`status_class`], and it exists rather than being inlined at each
+/// consumer so the `Unavailable` rule is stated **once**, in the module REQ-238
+/// designates as the home of per-kind terminality policy.
+///
+/// - `Known(s)` → `status_class(kind, Some(s))` — the ordinary table lookup.
+/// - `Absent` → `status_class(kind, None)`, which the table already documents
+///   as `Terminal`: the kind has no status *field*, which is a fact about the
+///   kind, not a failure to read one.
+/// - `Unavailable` → `Unrecognised`. NEVER `Terminal` — that is the precise path
+///   by which an open prerequisite would vanish from a work order, and removing
+///   it rather than relocating it is what SL-238 is for.
+///
+/// **And never `Gating` either**, which is the less obvious half. `Gating` means
+/// *a status was read and this kind treats it as unsettled* — a claim about the
+/// target (`ADR-017`). `Unavailable` means no status was read at all, because
+/// the kind derives its status above the tier the probe can reach (`DEC-233`).
+/// Classing an unread status `Gating` would assert unsettledness nobody
+/// observed — `ADR-017`'s vocabulary spent on absence of evidence.
+/// `Unrecognised` is the honest class: *this tool could not place this*.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-238 PHASE-01 lands the policy adapter; its first production \
+                  consumer is the boundary: suppression rule in PHASE-04. \
+                  Self-clearing — the expectation goes unfulfilled once that \
+                  consumer arrives, which is the signal to remove this."
+    )
+)]
+pub(crate) fn authored_class(kind: &entity::Kind, status: &kinds::AuthoredStatus) -> StatusClass {
+    match status {
+        kinds::AuthoredStatus::Known(s) => status_class(kind, Some(s)),
+        kinds::AuthoredStatus::Absent => status_class(kind, None),
+        kinds::AuthoredStatus::Unavailable => StatusClass::Unrecognised,
     }
 }
 
@@ -729,5 +768,77 @@ mod tests {
             status_class(&review::REVIEW_KIND, Some("done")),
             StatusClass::Terminal
         );
+    }
+
+    // -- SL-238 VT-4: `authored_class`, the AuthoredStatus adapter over the table --
+
+    /// SL-238 §3 standing rule 1, stated as an assertion. `Unavailable` means no
+    /// status was read at all — the kind derives its status above the tier the
+    /// engine reader reaches. It classifies `Unrecognised`, and the two classes it
+    /// must NOT get are each wrong in their own way:
+    ///
+    /// - `Terminal` is the one class the `boundary:` footer suppresses, so an
+    ///   unread status classed `Terminal` is precisely how an open prerequisite
+    ///   vanishes from a work order — the failure this slice exists to remove
+    ///   rather than relocate.
+    /// - `Gating` (ADR-017) asserts *a status was read, and this kind treats it as
+    ///   unsettled*. Nobody observed that. Reaching for it here would claim a fact
+    ///   about the target on the strength of absent evidence.
+    ///
+    /// Quantified over every numbered kind rather than over the one kind that
+    /// reaches `Unavailable` today: the rule is about what a reader may conclude
+    /// from a status it could not read, which is kind-independent.
+    #[test]
+    fn authored_class_never_returns_terminal_for_unavailable() {
+        for kref in kinds::KINDS {
+            assert_eq!(
+                authored_class(kref.kind, &kinds::AuthoredStatus::Unavailable),
+                StatusClass::Unrecognised,
+                "{}: an unread status is `Unrecognised` — never `Terminal` (the class \
+                 the footer suppresses), never `Gating` (which would claim an \
+                 unsettledness nobody observed)",
+                kref.kind.prefix
+            );
+        }
+    }
+
+    /// The positive control for the rule above, and the adapter's other two arms.
+    /// Without it, a function that answered `Unrecognised` for everything would
+    /// satisfy VT-4 exactly.
+    ///
+    /// `Known(s)` is a pass-through to `status_class(kind, Some(s))`, asserted over
+    /// each kind's WHOLE authored vocabulary plus an off-vocabulary word, so the
+    /// arm cannot be a constant. `Absent` is `status_class(kind, None)` — which the
+    /// table already documents as `Terminal`.
+    ///
+    /// The pairing is the design's distinction in one place: a kind with no status
+    /// FIELD is `Terminal`; a status this tier CANNOT READ is not. Same adapter,
+    /// opposite verdicts, and conflating them is the bug.
+    #[test]
+    fn authored_class_delegates_known_and_absent_to_status_class() {
+        for p in PARTITION {
+            let kref =
+                kinds::kind_by_prefix(p.prefix).expect("a partitioned prefix is a numbered kind");
+            let mut statuses: Vec<&str> = vocab(p.prefix).into_iter().collect();
+            statuses.push("not-a-status");
+            for s in statuses {
+                assert_eq!(
+                    authored_class(kref.kind, &kinds::AuthoredStatus::Known(s.to_string())),
+                    status_class(kref.kind, Some(s)),
+                    "{}/{s}: `Known` is a pass-through to `status_class`",
+                    p.prefix
+                );
+            }
+        }
+
+        for kref in kinds::KINDS {
+            assert_eq!(
+                authored_class(kref.kind, &kinds::AuthoredStatus::Absent),
+                StatusClass::Terminal,
+                "{}: a kind that authors NO status field is `Terminal` — unlike one \
+                 whose status this tier cannot read",
+                kref.kind.prefix
+            );
+        }
     }
 }
