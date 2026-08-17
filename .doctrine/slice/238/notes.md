@@ -160,7 +160,7 @@ Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-17 · **PHASE-08 implemented — all 8 phases done, slice ready for `/audit`.** Both inherited obligations discharged: `QUE-221`'s cross-kind pin was found RED and rewritten in place into its opposite, and `EX-3` removed `src/backlog.rs`'s duplicate prune leg (149 lines). Command tangle **measured 76**, unchanged. `ISS-368` closed · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `df6185164`, plus this harvest
+fresh-as-of: 2026-08-17 · **PHASE-08 harvested — all 8 phases done; slice at `audit`, awaiting `/audit`.** Both inherited obligations discharged: `QUE-221`'s cross-kind pin was found RED and rewritten in place into its opposite, and `EX-3` removed `src/backlog.rs`'s duplicate prune leg (149 lines). Command tangle **measured 76**, unchanged. `ISS-368` closed, `ISS-446` minted · slice/`audit` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `e240f9424`, plus this harvest
 
 ### Produced
 
@@ -827,6 +827,26 @@ it lacked only what state each declared target was in.
   test-only constructor hides the lint from the inner loop**; only a non-test build
   surfaces it, which is why `execution-protocol.md` §5's "add it bare, compile, let
   rustc name the set" means *build*, not *test*.
+- `mem.fact.layering.ratchet-green-is-one-sided`
+  (`mem_01a00e1bb4d178729f2624d3e9a1c794`) — **PHASE-08, minted at harvest.** The
+  tangle ratchet raises `TangleGrew` only when `actual > baseline`, so a **green
+  layering suite proves `<=` the baseline and nothing more.** `VA-3` asked whether
+  the count was *unchanged at 76*, which is the stronger question, and running the
+  suite does not answer it. The recipe is in the memory: set the tier's baseline to
+  `0`, run the gate once, read `actual` out of the violation, revert, and confirm
+  with `git diff --stat` before committing anything. The asymmetry is correct for a
+  *ratchet* — a drop must never fail a build — so this is a limit to work around,
+  not a defect to file. It matters precisely where a phase's deliverable IS the
+  number, which is this phase and `mem.pattern.lint.mcp-server-entangled-with-core`'s
+  −2-predicted/−4-measured case. Same family as
+  `mem.pattern.search.negative-grep-needs-a-positive-control`: a passing check whose
+  pass condition is weaker than the claim being made on it.
+
+  The workaround's cost is real enough to fix rather than only remember —
+  **`IMP-444`**, print `count_tangle_edges` per tier from the reporter so the
+  measurement is a *read* instead of a mutation of an authored governance file. A
+  friction observation is recorded beside it: reverting that mutation is guarded by
+  nothing but the author's care.
 - `mem.pattern.verification.removal-claim-attributes-every-survivor`
   (`mem_01a00b2334c07380bedc64a3b9d93383`) — **PHASE-04, minted at harvest.**
   Before recording that an output form was deleted, count its producers in the
@@ -1092,13 +1112,28 @@ routes around: it does not care who authored the signature.
 ### Open
 
 - **`ISS-441` — `verify-vt` `PASS`es rows for phases that have not been
-  implemented.** Raised at PHASE-03. Once a phase modifies a file that later
+  implemented.** Raised at PHASE-03: once a phase modifies a file that later
   phases also name as `test_file`, those later rows leave `UNATTRIBUTABLE` and
   land on `PASS` whenever their keywords happen to occur anywhere in the file —
-  `PHASE-04/VT-2` (`terminal`, `boundary`) is the clearest case. This slice's own
-  eighteen landed rows are genuine, but the summary it presents at audit now
-  interleaves true negatives with false positives. **Understand before closing
-  `SL-238`**; do not read later phases' `PASS` rows as evidence.
+  `PHASE-04/VT-2` (`terminal`, `boundary`) was the clearest case.
+
+  **Defused for this slice as of PHASE-08, but not fixed.** Every phase is now
+  implemented, so there is no unimplemented row left for the defect to produce a
+  false positive on: the all-`PASS` summary the audit reads is now true of the
+  tree. That is a property of the slice having finished, not of `ISS-441` being
+  resolved — the issue stands for the next slice, and a mid-flight `PASS` here is
+  still not evidence. What the audit should re-derive independently is the
+  handful of rows whose keywords are common words; the phase records name the
+  tests directly.
+- **The PHASE-08 conformance span carries a foreign commit, and it cannot be
+  tightened out.** The boundary is `7be8b55d2..d95f45cb8`, four commits, of which
+  `e84b6d9d3` (`slice(SL-258): scope the governing-commitment vertical
+  experiment`) belongs to another agent working the shared tree. It sits
+  **between** this phase's first and last own commits (`1b3b90775`, `d95f45cb8`),
+  and `slice record-delta` takes one contiguous range, so no tightening excludes
+  it — it lands in `slice conformance`'s undeclared cell, which is where it is
+  meant to be visible. PHASE-08's own delta is exactly the three `SL-238`
+  commits; nothing in `e84b6d9d3` touches `src/` or this slice.
 - `DEC-236` — accepted, but folded into `design.md` §9 as an overrun; confirm the
   reviewer reads it as covered rather than as an uncovered divergence.
 - **`IDE-019` divergences (2), for reconcile** — footer-vs-`doctor` siting, and
@@ -1172,20 +1207,10 @@ routes around: it does not care who authored the signature.
   `mem.pattern.testing.grep-for-the-pin-before-characterising`: **before pinning
   a before-state, grep for the pin.**
 
-- ~~`QUE-221`~~ — **answered 2026-08-17: pin it.** Landed as
-  `backlog_after_pins_the_cross_kind_target_refusal_on_both_legs`
-  (`tests/e2e_dep_seq_verbs.rs`, `c84966546`), inside the only window where a
-  before-state pin could still be written. Owner's reasoning: the only argument
-  against was cost-versus-vacuity risk, and nothing made this one expensive.
-  **~~`PHASE-08` must find this test RED and rewrite it in place into its opposite
-  — cross-kind target accepted, edge written — not delete it.~~ DISCHARGED
-  2026-08-17 at `df6185164`.** It was found red on exactly the assertion it was
-  written for (`append accepts a cross-kind target: Error: unknown backlog prefix
-  \`SL\` in \`SL-154\``) and rewritten in place as
-  `backlog_after_accepts_a_cross_kind_target_on_every_leg` — same `SL-154`
-  fixture, same positive control, now covering the `--prune` leg too, with the old
-  name kept in its doc comment so the supersession reads in the file rather than
-  only in git.
+`QUE-221` dropped from this section at the PHASE-08 harvest — answered, and its
+PHASE-08 obligation discharged at `df6185164`. The discharge is recorded on the
+record itself and in `### Produced`; the durable half is
+`mem.pattern.testing.pin-the-refusal-reason-not-the-refusal`.
 
   The one thing worth carrying: the pin asserts the refusal **message** by
   equality, and that is load-bearing rather than fastidious. Mutation-tested by

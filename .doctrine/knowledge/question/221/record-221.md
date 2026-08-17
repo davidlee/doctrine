@@ -36,3 +36,21 @@ Raised as `D4` in PHASE-02's runtime sheet
 (`.doctrine/state/slice/238/phases/phase-02.md`, `## Decisions`), deliberately
 not decided by the planning agent: it is a scope call, and scaling the phase
 down or up is the owner's.
+
+
+## Obligation discharged — SL-238 PHASE-08, 2026-08-17 (`df6185164`)
+
+The answer above closes with *"PHASE-08 must find this test RED and rewrite it in
+place into its opposite, not delete it."* It did, and the pin earned its keep: it
+was found red on precisely the assertion it was written for — `append accepts a
+cross-kind target: Error: unknown backlog prefix `SL` in `SL-154`` — rather than on
+an incidental one.
+
+It now reads `backlog_after_accepts_a_cross_kind_target_on_every_leg` in
+`tests/e2e_dep_seq_verbs.rs`: same `SL-154` fixture, same positive control, extended
+to the `--prune` leg that PHASE-08 also routed, with the superseded name kept in its
+doc comment so the inversion is legible in the file and not only in git.
+
+The mutation evidence recorded in the answer generalised into
+`mem.pattern.testing.pin-the-refusal-reason-not-the-refusal` — pin the reason, and
+mutation-test the pin before trusting it.

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00e1f-3a4e-7033-8029-5c710cda0979"
+recorded_at = "2026-08-17T05:08:42.702952271Z"
+kind = "friction"
+summary = "execute skill: reading the measured layering tangle requires forcing a violation"
+detail = "SL-238 PHASE-08's VA-3 asked whether the command tangle was UNCHANGED at 76. The ratchet in tests/architecture_layering.rs only raises TangleGrew when actual > baseline, so a green suite answers a weaker question (<= 76) than the criterion asks, and nothing in the suite reports the measured number. dump_real_graph (#[ignore]) prints units and edges but no SCC/tangle count. The only route to the number was: edit .doctrine/adr/001/layering.toml's baseline to 0, run the gate, read 'actual: 76' out of the failure struct, revert, and verify with git diff --stat — mutating an authored governance file to perform a read. Cost: three extra tool rounds plus the care needed to guarantee the revert. Filed as IMP for the 3-line fix; the workaround is recorded in mem.fact.layering.ratchet-green-is-one-sided."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
