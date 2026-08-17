@@ -1193,6 +1193,37 @@ routes around: it does not care who authored the signature.
   quantifies over*. A prose reviewer reads "three call sites" and has no reason to
   run the grep; the compiler does it for free the moment the signature moves.
 
+- **§6 names four `--prune` consequences; there is a FIFTH — design-text fix at
+  reconcile, owner accepted 2026-08-17. `plan.toml`'s `EX-4` is already
+  amended.** `authored_class(kind, AuthoredStatus::Absent)` returns `Terminal`
+  (`src/priority/partition.rs:244-248`), and `Absent` is what
+  `authored_status::read` returns for `STATUS_LESS`, which is `[REC]`
+  (`src/authored_status.rs:55-56`). So under the collapsed probe an `after` edge
+  onto a `REC` becomes **prunable**. Today it is **kept**: a `REC` toml carries no
+  `status` key, so `unwrap_or("")` matches neither terminal literal
+  (`src/commands/dep_seq.rs:292-293`).
+
+  Two problems, and the second is the one that blocked the implementer: it is an
+  unnamed behaviour change, and `EX-4` had no string for it — the terminal reason
+  is the status word, and `Absent` has no status word.
+
+  **Resolved by rendering the class, not the status: `dropped (dangling:
+  status-less)`.** It stays honest and reuses no token that already means
+  something else (`unresolved` means *the ref names nothing*, which is a
+  different claim). The alternative — treat `Absent` as *keep* — was refused: it
+  contradicts `status_class`'s own documented meaning (a status-less kind is
+  context-only and default-excluded, which is why the table returns `Terminal`)
+  and would need §3's rule restated to accommodate one caller.
+
+  Reachability is low but not nil, and the shape matters: `REC` is not an
+  admissible `after` target (`src/commands/dep_seq.rs:114-133` — work-like or
+  *knowledge* record; `REC` and `RV` are both excluded), so the authoring gate
+  will never create such an edge. Only a hand-authored one reaches the probe —
+  which is exactly the population §6's bare-ref consequence exists to serve.
+
+  **Reconcile actions:** §6 gains the fifth consequence; the brief's
+  named-output-change list gains `dropped (dangling: status-less)`.
+
 - **§6's `--prune` census is wrong in two ways — prose fix at reconcile.** Found
   at PHASE-07 planning by re-deriving the count before planning against it
   (`mem.pattern.planning.let-the-compiler-recount-the-call-sites`), the second
