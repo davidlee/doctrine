@@ -1,0 +1,46 @@
+memory_uid = "mem_01a00d11d24d70a1bf531fe6561c426b"
+memory_key = "mem.pattern.planning.let-the-compiler-recount-the-call-sites"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A design's call-site census ages — make the compiler recount it"
+summary = "A criterion that enumerates call sites is a claim about the tree at authoring time; re-derive it, and prefer a signature change that forces the compiler to enumerate them for you."
+created = "2026-08-17"
+updated = "2026-08-17"
+
+[scope]
+paths = ["src/"]
+globs = []
+commands = []
+tags = ["planning", "verification", "refactor"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "375c89ce10d9c1d44818a7b5449097b432bd5032"
+ref_name = "refs/heads/edge"
+checkout_state_id = "8bb586a5458d2f58e6c318469fa0312cf3c38c8b71b15caa1977b550a6606e9b"
+base_commit = "a792b44327d3fea8ef9c14b8d8e310ee5593da92"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-238"
+

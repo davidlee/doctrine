@@ -160,7 +160,7 @@ Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-17 · **PHASE-05 completed and harvested** (5 of 8) · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `42c835b0e`, clean of mine
+fresh-as-of: 2026-08-17 · **PHASE-06 completed and harvested** (6 of 8) · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `a792b4432`, clean of mine
 
 ### Produced
 
@@ -545,8 +545,87 @@ even a space), and `--json` is byte-identical because the map is never built on
 that path. **Why:** `DEC-234` puts the full authored record on this surface, and
 it lacked only what state each declared target was in.
 
+- **PHASE-06 done — §6's clearing half, minus `--prune`** (`b48cd2341` plan,
+  `0d191d6e6` oracle, `2e7a481c9` T1–T2, `a792b4432` T3). `EX-1`…`EX-4` and
+  `VT-1`…`VT-6` all discharged; `just gate` and `doctrine check gate` both exit 0
+  on **verified, unpiped** codes. Two code commits, **both this phase's own** — the
+  flip warned as always, no `record-delta` tightening owed.
+- **The leaf's remove seam now mirrors its append seam.** `remove_needs` beside
+  `remove_after`, `RelRemove` beside `RelEdit`, and `remove(path, &RelRemove)` as
+  the single IO wrapper. `rel_array_mut(doc, axis)` is the one navigation body
+  behind both cores, and its message is **byte-identical** to `remove_after`'s of
+  today for `axis == "after"` — which is what lets `EX-1`'s "`remove_after`'s own
+  logic is unchanged" hold through a refactor. `append` keeps its own copy
+  deliberately: its message interpolates the path and reads "before adding edges".
+- **`EX-1`'s call-site census was wrong, and the compiler said so.** Amended at
+  planning from three to four (`### Open` carries the design half); reshaping
+  `remove`'s signature then produced exactly four caller errors, no more and no
+  fewer. The fourth was `run_after_prune`'s removal loop, which took the **argument
+  reshape and nothing else** — its `{source}`-as-typed echo is PHASE-07's decision,
+  not this phase's inheritance. Minted as
+  `mem.pattern.planning.let-the-compiler-recount-the-call-sites`.
+- **`after --remove` gates the source only — the phase's deliberate behaviour
+  change, and its commit says so.** `a792b4432`'s body names `EX-3`, §6's own
+  "deliberate behaviour change" sentence, the PHASE-03 repair path it unblocks, and
+  PHASE-02/`VT-3` as what it supersedes. The pin was **rewritten in place**, not
+  deleted and re-added, so the diff reads as the supersession it is. Three
+  author-time guarantees are given up on the remove path only — the target's
+  on-disk resolution, its kind gate, the self-edge refusal — and the replacement
+  test asserts the **author-time** gate is untouched, so the widening cannot be
+  misread as general.
+- **A second e2e test moved for the same reason, and it is not a supersession
+  gap.** `after_remove_nonexistent` (SL-105 era) still refuses and still exits
+  non-zero; only the *reason* moved, from the author-time gate to the zero-count
+  bail. The sheet's STOP condition was watching for a refusal that *disappears*;
+  this is a refusal that *relocates*. Comment says so in place.
+- **`EX-4`'s bug is preserved on purpose and now has a red test guarding it.** A
+  stored `needs = ["SL-1"]` is not cleared by `--remove SL-1` — both parse tiers
+  hand off to `canonical_id`, so the needle is `SL-001`, and the verbatim tier does
+  not rescue it because `SL-1` *parses*. Closing it later is a `kinds` change with
+  five other callers, and is now necessarily deliberate.
+- **The oracle pass poked no hole in the plan — fourth run of `R1`, fourth
+  no-hole.** It corroborated the leaf shape and `D-1` (it too made the needle one
+  shared function, whose name `canonicalise_target` the plan adopted), and it
+  diverged once in a way worth keeping: it met the same "the remove path needs the
+  canonical source id" requirement with a wrapper that parses the source a second
+  time. The plan's reshape removes that double parse instead — one it has carried
+  since SL-158. Both PHASE-02-era prototype defects re-confirmed still present; one
+  new one logged forward (`### Open`). The prototype still has **no tests** and has
+  still **never been compiled** under this repo's denials.
+- **§6's own code snippet does not pass this repo's lints** — it renders the needle
+  as `.map(..).unwrap_or_else(..)`, which `clippy::pedantic` denies
+  (`map_unwrap_or`). Written as `map_or_else`; identical tiers, identical order. Not
+  worth a reconcile action, but it is the first instance of the "never linted"
+  class found in the **design text** rather than in the fork.
+- **`ISS-441` fired again, exactly where the sheet predicted.** PHASE-06 is the
+  first phase to touch `src/dep_seq.rs` / `src/commands/dep_seq.rs`, so after its
+  `completed` flip **PHASE-07 `VT-4` and PHASE-08 `VT-6` both read `PASS`** on
+  keyword coincidence alone. Neither phase exists. Their siblings still `FAIL`
+  honestly, which is what makes the two `PASS`es legible as the defect.
+
 ### Learned
 
+- `mem.pattern.planning.let-the-compiler-recount-the-call-sites`
+  (`mem_01a00d11d24d70a1bf531fe6561c426b`) — **PHASE-06, minted at harvest.** A
+  criterion that enumerates call sites is a claim about the tree *at authoring
+  time*, and it rots in two ways: line numbers visibly, the **count** silently.
+  Re-derive it with a positive-control grep before planning against it. Then the
+  stronger move: when the change reshapes a **signature**, the compiler enumerates
+  every caller for free and cannot miss one — which is a reason to prefer the
+  reshape over an additive overload that leaves old callers compiling. The grep
+  lets you plan correctly; the reshape *proves* it. Sibling of
+  `mem.pattern.testing.grep-for-the-pin-before-characterising` (PHASE-02): a
+  design's account of what it *counted* ages exactly as badly as its account of
+  what is *untested*, and neither is a claim a prose reviewer thinks to check.
+- **The `dead_code` staging window has an asymmetry worth naming, though the
+  corpus already carries it from the other side.** `RelRemove::Needs` compiled
+  clean under `cargo test` — the tests construct it — and failed `cargo build`
+  with *variant is never constructed*. That is
+  `mem.pattern.lint.dead-code-staged-whole-module-three-scopes`'s two-compilations
+  point read in reverse, so no new memory was minted. The operational form: **a
+  test-only constructor hides the lint from the inner loop**; only a non-test build
+  surfaces it, which is why `execution-protocol.md` §5's "add it bare, compile, let
+  rustc name the set" means *build*, not *test*.
 - `mem.pattern.verification.removal-claim-attributes-every-survivor`
   (`mem_01a00b2334c07380bedc64a3b9d93383`) — **PHASE-04, minted at harvest.**
   Before recording that an output form was deleted, count its producers in the

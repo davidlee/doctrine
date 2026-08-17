@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00d04-a25e-74a3-8f05-6959686b256b"
+recorded_at = "2026-08-17T00:00:02.654750099Z"
+kind = "friction"
+summary = "phase-plan: research drift advisory is structural noise on every phase of a long slice"
+detail = "SL-238 PHASE-06. /phase-plan step 4 mandates checking 'doctrine slice research <id>'. It has reported drift since PHASE-01 and will until close: the four 'changed/added' paths are design.md, plan.md, plan.toml and slice-238.md — the artefacts the research FED, not inputs that moved under it. Authoring the design necessarily dirties the baseline, so the advisory fires on every phase-plan of every multi-phase slice and is dismissed identically each time. Six dismissals so far. A baseline that excluded the slice's own downstream artefacts, or a --restamp prompt at design lock, would make the signal mean something."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
