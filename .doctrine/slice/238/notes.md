@@ -609,6 +609,69 @@ it lacked only what state each declared target was in.
   green** — it must find
   `backlog_after_pins_the_cross_kind_target_refusal_on_both_legs` RED and rewrite
   it in place into its opposite. Detail and the mutation evidence in `### Open`.
+- **PHASE-07 landed `--prune`'s probe in two commits, split on what each has to
+  explain.** `17e25df18` (T1 red suite + T2 the collapse, batched per `R4` because
+  the superseded pins go red the instant the behaviour changes) and `c3d67f773`
+  (T3, the canonical source echo). `EX-1`…`EX-5` discharged; `VT-1`…`VT-5` green;
+  31/31 in `tests/e2e_dep_seq_verbs.rs`; `just gate` exit 0 at both.
+- **The SL-105 goldens' fixtures encoded the very bug the phase fixes.**
+  `after_prune_drops_resolved` and `after_prune_mixed` set a **slice**'s status to
+  `resolved` — a BACKLOG word, outside ADR-009's slice vocabulary. They only ever
+  passed because the old probe applied one hardcoded table to every kind alike, so
+  they were asserting the cross-kind leak rather than the intended behaviour.
+  Fixtures moved to `done`; the behaviour they pin is unchanged. `STOP-2` was
+  checked and did not fire — the red is §6's second consequence (`Unrecognised`
+  keeps the edge). Worth keeping: §6 names the *widening* (`done`/`answered` become
+  prunable) and never says "and a cross-kind status word stops working", but both
+  are the same routing change.
+- **The stderr disclosure wording is ours, not the design's — a SIXTH named output
+  change for the reconciliation brief.** `EX-3` mandates that the unreadable-target
+  keep says why and states no string, so T2 authored
+  `{source_id} after {to} (rank {r}) kept (unreadable: {err:#})`, mirroring the drop
+  line's shape. `{err:#}` renders the cause chain, which carries an absolute path, so
+  `VT-3` pins the stable prefix with `starts_with` rather than a byte-exact stderr.
+- **Two PHASE-02 pins were REMOVED rather than rewritten** — a disposition `EX-5`
+  permits but does not spell out. Each was fully subsumed by a replacement whose doc
+  comment names it, with a marker comment left at the removal site so the deletion
+  is visible in the file and not only in git. PHASE-08 `EX-3` establishes removal as
+  an accepted disposition for pins whose *code* goes away; here the code stayed and
+  the *assertion* went away, which is the weaker case. Flagged deliberately so a
+  reviewer can disagree cheaply.
+- **T3 canonicalised the source echo, and the refactor it forced removed a
+  third copy of a line.** All three of `run_after_prune`'s output lines now echo the
+  canonical source id (`### Open` carries why the decision was forced, not tasteful,
+  and the reconcile action). `resolve_dep_seq_src_path` now returns
+  `(PathBuf, String)` — path plus canonical id — because all three of its callers
+  canonicalised the returned parts on the very next line and this phase would have
+  written the third copy, in the slice whose purpose is removing duplicated tables.
+  `resolve_dep_seq_src`'s self-edge refusal compares canonical ids instead of the
+  `(prefix, id)` pair; exactly equivalent, since a canonical id carries its prefix.
+- **`VA-1` / `VA-2` evidence, recorded here because a phase sheet is `rm -rf`-able**
+  (`mem_019fd1d862887d42b7a1f88c28fd28a7`: a `VA` over runtime state leaves an audit
+  nothing to re-derive). Measured at `c3d67f773`, each grep with a positive control
+  so an empty result is a demonstrated absence:
+  - `VA-2` — `"resolved"`/`"closed"` literals in `src/commands/dep_seq.rs`: **0**.
+    Positive control, same needle in `src/backlog.rs`: **24** (PHASE-08's leg).
+  - `VA-1` — `unwrap_or_default()` in `src/commands/dep_seq.rs`: **0**. Positive
+    control, `src/backlog.rs`: **5**.
+  - `VA-1`'s second needle, `Err(_) =>` arms, returns **one** hit in
+    `src/commands/dep_seq.rs` — `Err(_) => Some("unresolved".to_string())` at `:314`.
+    It is **not** a laundered default: the error IS the verdict (a ref that names
+    nothing is prunable), which is exactly `EX-4`'s collapse of three reason strings
+    onto one token, and the outcome is disclosed on the drop line rather than
+    swallowed. Recorded because a literal reading of the criterion returns a hit and
+    the next reader should not have to re-derive that it is a false positive.
+    Positive control: **41** `Err(_) =>` arms across `src/`.
+- **The class sweep found two siblings outside the slice's surfaces, both filed.**
+  The classes are *hardcoded terminal vocabulary* and *laundered read*
+  (`mem.pattern.review.sweep-defect-class-not-instance`). `ISS-445` — `lazyspec.rs:193`
+  spells `"resolved" | "closed"` as the backlog terminal set, the same STD-001 /
+  REQ-238 pair SL-238 removes from `--prune`, though its repair differs because it is
+  a projection to a foreign wire vocabulary rather than a terminality test. `IMP-443`
+  — the 11-site census of `unwrap_or_default()` reads outside `src/backlog.rs`, with
+  the discriminating question written down (an absent *optional* body defaulting is a
+  total function, not a laundered read; a failed *parse* never is). Neither is
+  SL-238's to fix; the census is the deliverable, so nobody re-runs the grep.
 
 ### Learned
 
