@@ -1394,3 +1394,45 @@ routes around: it does not care who authored the signature.
   PHASE-02 (`phase-02.md ## Findings F-3` — the `eprintln!` against
   `print_stderr = "deny"`, and the `Terminal` branch minting reasons for states
   `authored_class` may make unreachable) were both re-confirmed still present.
+
+- **A shipped memory recommends the module this design withdrew — corpus
+  correction, not a reconcile action.** `mem.fact.layering.gate-measures-top-level-modules`
+  (trust `high`) closes its *"the repair that works"* section with: *"`SL-238` did
+  this twice — `src/authored_status.rs` for the per-kind status read,
+  `src/dep_seq_ops.rs` for the kind-neutral dep/seq operations."*
+
+  The first half landed. The second names a module that does not exist
+  (`ls src/dep_seq_ops.rs` → no such file) and that `design.md:1345-1364` records
+  as the alternative which **lost**: an engine-tier module calling command-tier
+  `partition::authored_class` is an *upward* edge, worse than the cycle it was
+  introduced to remove, and no sub-classification row launders it. The design's
+  answer for this seam is fn-pointer injection.
+
+  So the memory offers a rejected repair, for this exact seam, at high trust, to
+  any future agent planning a layering fix — and it does so inside the section a
+  reader consults precisely when they have stopped reading the design. Corrected
+  at PHASE-08 harvest: drop the `dep_seq_ops` clause, keep `authored_status`, and
+  name the injection idiom (`mem.pattern.lint.back-edge-tangle-inject-fnptr`) as
+  what SL-238 did on the second seam.
+
+  Raised at PHASE-08 blind planning. The seam is a familiar one — a record written
+  mid-slice against a decision that later reversed — but this is the first instance
+  in the *memory corpus* rather than in `design.md` or `plan.toml`, and the corpus
+  has no reconcile pass to catch it.
+
+- **`notes.md`'s `kref_for` entry cites a criterion PHASE-08 does not have.** The
+  `catalog/scan.rs:1372` follow-up above says *"PHASE-08 `EX-9` requires the
+  `search` / `map` / `catalog` suites green **unmodified**"*. PHASE-08 carries
+  `EX-1`…`EX-6`. `EX-9` is **PHASE-01**'s (`plan.toml:56`), and it is discharged.
+
+  The disposition does not change — leave the duplication — but the reason does,
+  and the difference matters to whoever picks it up. It is not "a criterion forbids
+  the churn until PHASE-08"; it is that PHASE-08 opens `src/backlog.rs`,
+  `src/commands/dep_seq.rs` and `src/commands/cli.rs` and nothing else, so the
+  entry's *"when that file is open for other reasons"* never comes true in this
+  slice. The `kref_for` collapse wants its own backlog item, not a phase.
+
+  Raised at PHASE-08 blind planning. Fourth stale cross-reference in this slice's
+  records (after `EX-1`'s call-site census, `EX-3`'s four line numbers, and the
+  `--prune` echo attribution) — the class `execution-protocol.md` §5 is about, and
+  the cheapest falsifier remains the same: resolve the id before repeating it.
