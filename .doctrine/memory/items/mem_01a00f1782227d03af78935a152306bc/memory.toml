@@ -1,0 +1,50 @@
+memory_uid = "mem_01a00f1782227d03af78935a152306bc"
+memory_key = "mem.pattern.reconcile.edit-design-out-of-band"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Reconcile edits design.md out of band — do not regress the locked run"
+summary = "At /reconcile the design run is spent: edit design.md directly and let section fingerprints diverge. The regress/adopt/re-lock protocol is for a run still in flight."
+created = "2026-08-17"
+updated = "2026-08-17"
+
+[scope]
+paths = [".doctrine/slice"]
+globs = []
+commands = ["doctrine design resume"]
+tags = ["reconcile", "design-run", "locked", "audit", "close"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ee6b86d11bac3522312ff769759177c24ee72ba6"
+ref_name = "refs/heads/edge"
+checkout_state_id = "11fd23ed8274ddc76d3afaedef012e0c7028f891a9c6ed1d078e341e92f04fcd"
+base_commit = "649bfc97c5c4c9ba226585e574b82f97488ff246"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-238"
+
+[[source]]
+kind = "review"
+ref = "RV-363"
+

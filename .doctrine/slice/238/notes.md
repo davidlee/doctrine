@@ -160,7 +160,7 @@ Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-17 · **Audited — `RV-363` `done`, ten findings, no blocker; slice moves to `reconcile`.** The disclosure was re-derived against the live corpus (32 authored cross-kind edges → exactly the 10 rendered `boundary:` rows; all 13 suppressed targets individually confirmed terminal), `doctrine check gate` exit 0, command tangle **measured 76**. `RV-358`'s five `answered` findings — including its `F-1` blocker — verified terminal against the built tree, so that ledger is `done` rather than waived. Two findings fixed in the audit (`annotated` guard collapsed; `CHR-071` minted), two accepted as owned drift (`ISS-441` extended, `QUE-222`), five routed to the reconciliation brief · slice/`reconcile` · design/**locked** (run `dr-01a00475`, rev 63; all nine sections attested human-lane; `design-accepted` current; gate cleared; 9/9 sections `review=current`, nothing outstanding) · `85a4cf569`
+fresh-as-of: 2026-08-17 · **Reconciled — every `RV-363` brief item written; slice moves to `close`.** `649bfc97c`. Ten findings terminal, remediation in `RV-363`'s `## Reconciliation Outcome` (never by mutating a disposition). Written: the selector registry (`F-1` — `tests/e2e_dep_seq_verbs.rs` now **conformant**, `undelivered` 0) plus its §8 mirror; eight `design.md` prose corrections (`F-6`), each attributed inline; PHASE-05 `EX-2` accepted as agent-verified in §7 (`F-7`, `plan.toml` untouched — immutable-append); `QUE-222` **answered: soften**, settled with `F-4` in one string edit (TDD red/green, four `contains` assertions not the three both records estimated); `IMP-099`/`IDE-019` → `resolved · done` with `IDE-019`'s two DECLINED mechanisms written into its own body. **No REV owed.** `doctrine check gate` exit 0; footer unchanged at 10 boundary rows; `doctor` unchanged at 55 pre-existing findings. Prior audit line: **`RV-363` `done`, ten findings, no blocker.** The disclosure was re-derived against the live corpus (32 authored cross-kind edges → exactly the 10 rendered `boundary:` rows; all 13 suppressed targets individually confirmed terminal), `doctrine check gate` exit 0, command tangle **measured 76**. `RV-358`'s five `answered` findings — including its `F-1` blocker — verified terminal against the built tree, so that ledger is `done` rather than waived. Two findings fixed in the audit (`annotated` guard collapsed; `CHR-071` minted), two accepted as owned drift (`ISS-441` extended, `QUE-222`), five routed to the reconciliation brief · slice/`reconcile` · design/**locked** (run `dr-01a00475`, rev 63; all nine sections attested human-lane; `design-accepted` current; gate cleared; 9/9 sections `review=current`, nothing outstanding) · `85a4cf569`
 
 ### Produced
 
@@ -170,6 +170,17 @@ fresh-as-of: 2026-08-17 · **Audited — `RV-363` `done`, ten findings, no block
   response recorded).
 - `CHR-071` — the `catalog::scan::kref_for` collapse, minted from `notes.md`'s
   reasoning (`F-5`); `references SL-238 --role originates_from`.
+- **`RV-363` `## Reconciliation Outcome`** — minted at reconcile; the authoritative
+  record of what was written and where, including the eight-entry
+  named-output-change list (`F-8`) and the two corrections to the brief's own
+  arithmetic (four count assertions, not three; eight output changes, not seven).
+- `QUE-222` — **`answered`: soften.** Disposition on the record, prose half in
+  `record-222.md`, wording and reasoning in `design.md` §2.
+- `IDE-019` — body now carries both DECLINED mechanisms (`DEC-232` footer→`doctor`,
+  `DEC-234` flag→`inspect`) and answers its own two open questions. Transitioned
+  `resolved · done` with `IMP-099` on the `fulfils` edges (`ADR-018`).
+- `mem.pattern.reconcile.edit-design-out-of-band`
+  (`mem_01a00f1782227d03af78935a152306bc`) — **minted at close.** See `### Learned`.
 - `ISS-441` extended — a **second route** to its false `PASS`, one its two
   leading candidate fixes both miss: a superseded test's name survives inside
   its successor's mandated supersession comment, so the retired row passes
@@ -790,6 +801,42 @@ it lacked only what state each declared target was in.
 
 ### Learned
 
+- `mem.pattern.reconcile.edit-design-out-of-band`
+  (`mem_01a00f1782227d03af78935a152306bc`) — **minted at close, from a conflict
+  this slice was the first to hit.** `mem.pattern.design-run.correcting-a-locked-run`
+  is high-trust, tagged `locked`/`design`, and prescribes regress → hand-edit →
+  `adopt_authored` → **re-lock** — a cycle whose final beat costs a fresh
+  attestation per changed section plus **two user acts an agent must not author on
+  its own initiative**. It is right for a run still in flight. At *reconcile* it is
+  pure ceremony: the phases are implemented and audited, the run has finished
+  governing, and `/reconcile` owns `design.md` by **direct edit** with fingerprint
+  divergence expected. **The discriminator is the stage, not the lock.** Without
+  this, an agent reaching reconcile with eight corrections either burns the whole
+  re-lock cycle or reads the expected divergence as corruption. The new memory
+  wikilinks the old one, so the backlink lands on the in-flight protocol where the
+  bound is needed.
+
+  It carries the two write surfaces reconcile does **not** own, because both were
+  live traps here: `plan.toml` criteria (immutable-append — `F-7`'s acceptance goes
+  to `design.md` §7, never to `EX-2`), and the conformance registry (`F-1` — the
+  `selector add` is load-bearing, the §8 table row is only the mirror; edit the
+  prose alone and conformance stays red).
+- **Settle an open question and the finding that rides its string in one edit.**
+  `QUE-222` (does the advisory overclaim completeness?) and `RV-363` `F-4` (the
+  template hardcodes the plural) were separate records against one constant.
+  Answered together, they cost one edit and two test-assertion updates; answered
+  apart they would have spent the same pinning tests twice, and the second pass
+  would have had to re-derive why the first chose its wording. The audit saw this
+  and deliberately declined to fix `F-4` in isolation — the right call, and the
+  cheap general form is: **before fixing a nit, check whether an open question
+  governs the same bytes.**
+
+  Sharpened by what the fix found: both records estimated the count was pinned in
+  **three** assertions; it is four. Neither had re-derived it. The `contains`
+  rather than `assert_eq!` shape is what made that harmless — the *"at least"*
+  prefix broke none of the four — but the estimate was load-bearing in both
+  records' cost arguments. Fourth instance in this slice of a census transcribed
+  rather than re-run, and the first *inside the audit's own records*.
 - `mem.pattern.testing.a-golden-can-pass-because-of-the-bug`
   (`mem_01a00d78626974b3b585d0bb18aca669`) — **PHASE-07, minted at harvest.** A
   characterisation golden proves the behaviour it asserts; it does not prove its
