@@ -3,13 +3,13 @@ version = 1
 
 id = 69
 slug = "repair-evd-019-and-evd-025-for-cross-corpus-coherence"
-title = "Repair EVD-019 and EVD-025 for cross-corpus coherence"
+title = "Repair EVD-019 and EVD-025 for peer-corpus coherence"
 kind = "chore"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-08-17"
 updated = "2026-08-17"
-tags = ["area:knowledge", "cross-corpus", "oubliette"]
+tags = ["area:knowledge", "oubliette", "peer-corpus"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are

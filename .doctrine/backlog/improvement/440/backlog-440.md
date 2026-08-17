@@ -1,6 +1,6 @@
 # IMP-440: Lint doctrine evidence for records whose subject is a neighbouring repo
 
-Oubliette's `ADR-003` clause 1 — evidence whose subject is oubliette's own
+`oubliette:ADR-003` clause 1 — evidence whose subject is oubliette's own
 machinery is minted in oubliette's corpus, not doctrine's — is prose on both
 sides and enforced by nothing. Its own *Verification* section says so. This is
 the cheap half of making it more than prose.
@@ -28,5 +28,5 @@ own verb. Prefer an existing gate over a new one.
 **Do not build before `CHR-070`.** A lint enforces a rule; doctrine has not
 adopted the rule yet, only oubliette has, and a check that cites a neighbouring
 repo's ADR as its authority is the wrong dependency direction. `CHR-069` is the
-content repair a lint would have caught. Oubliette's `CHR-012` names this as
+content repair a lint would have caught. `oubliette:CHR-012` names this as
 doctrine's to build.

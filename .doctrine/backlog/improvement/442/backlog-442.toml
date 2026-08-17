@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 70
-slug = "doctrine-side-rule-for-who-mints-evidence-about-a-neighbouring-repo"
-title = "Doctrine-side rule for who mints evidence about a neighbouring repo"
-kind = "chore"
+id = 442
+slug = "evidence-records-cannot-state-what-they-deliberately-do-not-prove"
+title = "Evidence records cannot state what they deliberately do not prove"
+kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-08-17"
 updated = "2026-08-17"
-tags = ["area:governance", "oubliette", "peer-corpus"]
+tags = ["area:knowledge", "evidence", "knowledge-record"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -24,15 +24,5 @@ triggers = []                   # watched source globs: { globs, note? }
 [[relation]]
 label = "references"
 role = "concerns"
-descriptor = "candidate host for the doctrine-side evidence-ownership rule"
-target = "SL-257"
-
-[[relation]]
-label = "references"
-role = "concerns"
-descriptor = "the ADR this item exists to author"
-target = "ADR-022"
-
-[[relation]]
-label = "related"
-target = "QUE-217"
+descriptor = "the EVD facet has no field for an unasserted direction or an unestablished neighbour"
+target = "SPEC-019"

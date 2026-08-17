@@ -3,13 +3,13 @@ version = 1
 
 id = 441
 slug = "relation-targets-do-not-resolve-across-corpora"
-title = "Relation targets do not resolve across corpora"
+title = "Relation targets do not resolve across peer corpora"
 kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-08-17"
 updated = "2026-08-17"
-tags = ["area:relations", "cross-corpus", "oubliette"]
+tags = ["area:relations", "oubliette", "peer-corpus"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
