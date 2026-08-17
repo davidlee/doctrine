@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00d50-4c7b-7943-8e1f-f04a1ee85207"
+recorded_at = "2026-08-17T01:22:41.404004933Z"
+kind = "friction"
+summary = "backlog inspect drops label-only relation rows; /backlog capture could not verify its own link"
+detail = "Authored 'doctrine link CHR-069 related EVD-019' and EVD-025; the command reported 'linked' and the [[relation]] rows are present in backlog-069.toml. But 'doctrine backlog inspect CHR-069' prints only the header (title/slug/kind/status/dates/tags) with no relationships block at all. On sibling items the same verb DOES render typed axes and role-refined edges (IMP-440 'needs: CHR-070', CHR-070 'references(concerns): SL-257') — but CHR-070's bare 'related: QUE-217' is dropped there too. So backlog inspect renders needs/after and references-with-role, and silently omits label-only [[relation]] rows. Positive control: 'doctrine inspect CHR-069' renders them correctly ('outbound: related: EVD-019, EVD-025'). Cost: the natural verify-my-edge command reads as a no-op write, inviting a re-link or a hand-edit of the toml. The seeded comment in backlog-NNN.toml itself says 'doctrine inspect ITEM-NNN renders them', which is true only of the explore verb, not the kind verb the agent is already in."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
