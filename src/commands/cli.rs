@@ -717,6 +717,10 @@ pub(crate) enum Command {
         source: String,
         /// The prerequisite target's canonical ref, e.g. `SL-047`.
         target: String,
+        /// Remove the needs edge instead of appending. Gates the SOURCE only, so a
+        /// ref that no longer resolves is still clearable.
+        #[arg(long)]
+        remove: bool,
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -1854,8 +1858,15 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Needs {
             source,
             target,
+            remove,
             path,
-        } => crate::commands::dep_seq::run_needs_edge(path, &source, &target),
+        } => {
+            if remove {
+                crate::commands::dep_seq::run_needs_remove(path, &source, &target)
+            } else {
+                crate::commands::dep_seq::run_needs_edge(path, &source, &target)
+            }
+        }
         Command::After {
             source,
             target,

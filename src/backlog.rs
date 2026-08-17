@@ -2350,7 +2350,13 @@ pub(crate) fn run_after(
         }
 
         for target_id in &to_drop {
-            let _ = dep_seq::remove(&item_path, target_id, None)?;
+            let _ = dep_seq::remove(
+                &item_path,
+                &dep_seq::RelRemove::After {
+                    to: target_id,
+                    rank_ceiling: None,
+                },
+            )?;
         }
 
         for (target_id, r, reason) in &dropped {
@@ -2372,7 +2378,13 @@ pub(crate) fn run_after(
             .join(&name)
             .join(format!("{BACKLOG_STEM}-{name}.toml"));
         let ceiling = if rank == 0 { None } else { Some(rank) };
-        let removed = dep_seq::remove(&item_path, to, ceiling)?;
+        let removed = dep_seq::remove(
+            &item_path,
+            &dep_seq::RelRemove::After {
+                to,
+                rank_ceiling: ceiling,
+            },
+        )?;
         if removed == 0 {
             anyhow::bail!(
                 "{} has no after edge to {to}",

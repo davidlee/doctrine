@@ -184,6 +184,31 @@ pub(crate) fn append(toml_path: &Path, edit: &RelEdit<'_>) -> anyhow::Result<()>
     Ok(())
 }
 
+/// Navigate to one seeded `[relationships]` array for mutation, or refuse (F-1).
+///
+/// The ONE body behind both removal cores: `[relationships]` and the target axis
+/// array are scaffold-seeded, so their absence means a malformed (hand-edited)
+/// entity. The refuse is NON-DESTRUCTIVE — it points at restoring the seeded
+/// arrays, never at recreating the file.
+///
+/// [`append`] keeps its own copy deliberately: its message interpolates the file
+/// path and reads "before adding edges", and trading a specific message for a
+/// third caller here would be a worse deal than the duplication.
+fn rel_array_mut<'d>(
+    doc: &'d mut toml_edit::DocumentMut,
+    axis: &str,
+) -> anyhow::Result<&'d mut toml_edit::Array> {
+    doc.get_mut("relationships")
+        .and_then(toml_edit::Item::as_table_mut)
+        .and_then(|t| t.get_mut(axis))
+        .and_then(toml_edit::Item::as_array_mut)
+        .with_context(|| {
+            format!(
+                "malformed entity: missing seeded `[relationships].{axis}` array — restore the seeded arrays before removing edges; the file is left untouched"
+            )
+        })
+}
+
 /// Remove `after` edges from `[relationships].after` matching `to`.
 /// `rank_ceiling`: `None` → all ranks; `Some(n)` → only edges where rank ≤ n.
 ///
@@ -196,14 +221,7 @@ pub(crate) fn remove_after(
     to: &str,
     rank_ceiling: Option<i32>,
 ) -> anyhow::Result<usize> {
-    let array = doc
-        .get_mut("relationships")
-        .and_then(toml_edit::Item::as_table_mut)
-        .and_then(|t| t.get_mut("after"))
-        .and_then(toml_edit::Item::as_array_mut)
-        .with_context(|| {
-            "malformed entity: missing seeded `[relationships].after` array — restore the seeded arrays before removing edges; the file is left untouched"
-        })?;
+    let array = rel_array_mut(doc, "after")?;
 
     // Collect matching indices in forward order (remove in reverse to avoid shift).
     let indices: Vec<usize> = array
@@ -233,19 +251,57 @@ pub(crate) fn remove_after(
     Ok(count)
 }
 
-/// IO wrapper for [`remove_after`]: read→parse→core→write-once.
+/// Remove `needs` refs matching `to` from `[relationships].needs`.
+///
+/// `needs` is a plain string array, so this is the simpler sibling of
+/// [`remove_after`]: membership matching, no inline-table walk and no rank
+/// ceiling. Returns the number of refs removed (0 if none matched).
+///
+/// **F-1**: `[relationships].needs` array absent → bail with a non-destructive
+/// message (malformed entity, never create), exactly as [`remove_after`] does.
+pub(crate) fn remove_needs(doc: &mut toml_edit::DocumentMut, to: &str) -> anyhow::Result<usize> {
+    let array = rel_array_mut(doc, "needs")?;
+
+    // Collect matching indices in forward order (remove in reverse to avoid shift).
+    let indices: Vec<usize> = array
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, v)| (v.as_str() == Some(to)).then_some(idx))
+        .collect();
+
+    let count = indices.len();
+    for idx in indices.into_iter().rev() {
+        array.remove(idx);
+    }
+    Ok(count)
+}
+
+/// One removal against one dep/seq axis — the mirror of [`RelEdit`], which
+/// [`append`] takes. The axis moves into the argument so there is ONE
+/// read-parse-write wrapper rather than two names for it (SL-238 §6).
+pub(crate) enum RelRemove<'a> {
+    /// Remove `needs` refs matching this string.
+    Needs(&'a str),
+    /// Remove `after` edges matching `to`, optionally bounded by `rank_ceiling`.
+    After {
+        to: &'a str,
+        rank_ceiling: Option<i32>,
+    },
+}
+
+/// IO wrapper for [`remove_needs`] / [`remove_after`]: read→parse→core→write-once,
+/// dispatching on the [`RelRemove`] axis.
 /// If count == 0, returns `Ok(0)` without writing (mtime holds).
-pub(crate) fn remove(
-    toml_path: &Path,
-    to: &str,
-    rank_ceiling: Option<i32>,
-) -> anyhow::Result<usize> {
+pub(crate) fn remove(toml_path: &Path, rm: &RelRemove<'_>) -> anyhow::Result<usize> {
     let text = std::fs::read_to_string(toml_path)
         .with_context(|| format!("dep/seq entity not found at {}", toml_path.display()))?;
     let mut doc = text
         .parse::<toml_edit::DocumentMut>()
         .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
-    let count = remove_after(&mut doc, to, rank_ceiling)?;
+    let count = match rm {
+        RelRemove::Needs(to) => remove_needs(&mut doc, to)?,
+        RelRemove::After { to, rank_ceiling } => remove_after(&mut doc, to, *rank_ceiling)?,
+    };
     if count > 0 {
         crate::fsutil::write_atomic(toml_path, doc.to_string().as_bytes())
             .with_context(|| format!("Failed to write {}", toml_path.display()))?;
@@ -846,7 +902,14 @@ mod tests {
                      after = [{ to = \"Y\", rank = 0 }]\n";
         let (_dir, path) = write_tmp(body);
         let before_mtime = std::fs::metadata(&path).unwrap().modified().unwrap();
-        let count = remove(&path, "X", None).unwrap();
+        let count = remove(
+            &path,
+            &RelRemove::After {
+                to: "X",
+                rank_ceiling: None,
+            },
+        )
+        .unwrap();
         assert_eq!(count, 0, "no match");
         assert_eq!(
             std::fs::metadata(&path).unwrap().modified().unwrap(),
@@ -874,7 +937,14 @@ after = [
 ]
 "#;
         let (_dir, path) = write_tmp(body);
-        let count = remove(&path, "X", None).unwrap();
+        let count = remove(
+            &path,
+            &RelRemove::After {
+                to: "X",
+                rank_ceiling: None,
+            },
+        )
+        .unwrap();
         assert_eq!(count, 1);
         let written = std::fs::read_to_string(&path).unwrap();
         assert!(written.contains("# keep this comment"), "comment survives");
@@ -889,6 +959,113 @@ after = [
             "Y edge survives"
         );
         assert!(!written.contains("{ to = \"X\""), "X edge removed");
+    }
+
+    // --- remove_needs — SL-238 PHASE-06 -----------------------------------------
+
+    /// Seeded entity with 3 `needs` refs: two to X, one to Y.
+    fn seeded_with_needs() -> String {
+        "id = 1\nslug = \"a\"\ntitle = \"A\"\n\n[relationships]\n\
+         needs = [\"X\", \"Y\", \"X\"]\nafter = []\n"
+            .to_string()
+    }
+
+    #[test]
+    fn remove_needs_clears_every_matching_ref() {
+        // VT-6 sibling: `needs` is a plain string array, so removal is membership
+        // matching — every occurrence of the needle goes, non-matches stay put.
+        let (_dir, path) = write_tmp(&seeded_with_needs());
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut doc = text.parse::<toml_edit::DocumentMut>().unwrap();
+        let count = remove_needs(&mut doc, "X").unwrap();
+        assert_eq!(count, 2, "both refs to X removed");
+        let array = doc
+            .get("relationships")
+            .and_then(|v| v.as_table())
+            .and_then(|t| t.get("needs"))
+            .and_then(|v| v.as_array())
+            .unwrap();
+        let refs: Vec<&str> = array.iter().filter_map(toml_edit::Value::as_str).collect();
+        assert_eq!(refs, vec!["Y"], "only the non-matching ref remains");
+    }
+
+    #[test]
+    fn remove_needs_no_match() {
+        // Count 0 and the array is untouched — the wrapper's no-write path.
+        let (_dir, path) = write_tmp(&seeded_with_needs());
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut doc = text.parse::<toml_edit::DocumentMut>().unwrap();
+        let count = remove_needs(&mut doc, "Z").unwrap();
+        assert_eq!(count, 0, "no match → zero removed");
+        let array = doc
+            .get("relationships")
+            .and_then(|v| v.as_table())
+            .and_then(|t| t.get("needs"))
+            .and_then(|v| v.as_array())
+            .unwrap();
+        assert_eq!(array.len(), 3, "every ref survives");
+    }
+
+    #[test]
+    fn remove_needs_f1_refuse_leaves_the_file_untouched() {
+        // VT-6: the leaf's F-1 posture, matching `remove_after` — a missing seeded
+        // `[relationships].needs` array is a malformed (hand-edited) entity, so
+        // refuse rather than create, and refuse NON-destructively.
+        //
+        // Asserted through the IO wrapper as well as the core: `remove_needs` is
+        // doc-level and cannot speak to what happened on disk, so "without touching
+        // the file" is a claim only `remove` can carry.
+        let body = "id = 1\nslug = \"a\"\ntitle = \"A\"\n";
+        let (_dir, path) = write_tmp(body);
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut doc = text.parse::<toml_edit::DocumentMut>().unwrap();
+        let err = remove_needs(&mut doc, "X").expect_err("absent needs array refuses");
+        // The alternate flag renders the whole cause chain; `to_string()` would show
+        // only the outermost context.
+        let msg = format!("{err:#}").to_lowercase();
+        assert!(
+            msg.contains("malformed") || msg.contains("missing seeded"),
+            "F-1 refuse message: {msg}"
+        );
+        assert!(
+            !msg.contains("regenerate") && !msg.contains("recreate"),
+            "non-destructive: {msg}"
+        );
+
+        let before = std::fs::read_to_string(&path).unwrap();
+        remove(&path, &RelRemove::Needs("X")).expect_err("the wrapper refuses too");
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            before,
+            "the file is left untouched by the refuse"
+        );
+    }
+
+    #[test]
+    fn remove_needs_io_roundtrip_preserves_inert_content() {
+        // The `needs` axis gets the same edit-preserving guarantee `after` has:
+        // comments and inert tables survive because the file is mutated in place,
+        // never reserialised.
+        let body = r#"id = 1
+slug = "a"
+title = "A"
+# keep this comment
+[notes]
+info = "survive"
+
+[relationships]
+needs = ["X", "Y"]
+after = []
+"#;
+        let (_dir, path) = write_tmp(body);
+        let count = remove(&path, &RelRemove::Needs("X")).unwrap();
+        assert_eq!(count, 1);
+        let written = std::fs::read_to_string(&path).unwrap();
+        assert!(written.contains("# keep this comment"), "comment survives");
+        assert!(written.contains("[notes]"), "inert table survives");
+        assert!(written.contains("\"Y\""), "the non-matching ref survives");
+        assert!(!written.contains("\"X\""), "the matching ref is gone");
     }
 
     // --- apply_scalar — SL-153 PHASE-01 ---------------------------------------

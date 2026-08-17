@@ -46,20 +46,53 @@ fn record_kind_list_slash() -> String {
 }
 
 /// Resolve a dep/seq source to its TOML path. Validates: canonical-ref parse,
-/// work-like kind (slice or backlog). Returns the resolved path.
-fn resolve_dep_seq_src_path(root: &std::path::Path, source: &str) -> anyhow::Result<PathBuf> {
+/// work-like kind (slice or backlog). Returns the resolved path plus the kind and
+/// id it resolved to, so a caller that needs the canonical source id does not pay
+/// a second [`crate::kinds::parse_resolvable_ref`] (SL-238 §6 — the remove paths
+/// gate the source only, and still have to echo it).
+fn resolve_dep_seq_src_path(
+    root: &std::path::Path,
+    source: &str,
+) -> anyhow::Result<(PathBuf, &'static crate::kinds::KindRef, u32)> {
     let (skref, sid) = crate::kinds::parse_resolvable_ref(root, source)?;
     anyhow::ensure!(
         is_work_like(skref.kind),
         "`{source}` is a {} entity, which cannot author needs/after — only a slice or a backlog item (issue/improvement/chore/risk/idea) carries dep/seq",
         skref.kind.prefix
     );
-    Ok(crate::entity::id_path(
-        root,
-        skref.kind,
+    Ok((
+        crate::entity::id_path(root, skref.kind, sid, crate::entity::Ext::Toml),
+        skref,
         sid,
-        crate::entity::Ext::Toml,
     ))
+}
+
+/// Canonicalise an authored dep/seq TARGET on the remove path, through §6's three
+/// tiers in order (SL-238):
+///
+/// 1. [`crate::kinds::parse_resolvable_ref`] — so today's **bare-id** tolerance
+///    survives (`after SL-100 154 --remove` resolves `154` to `SL-154`). Its disk
+///    stat failing is NOT fatal here; falling through is the whole point.
+/// 2. [`crate::kinds::parse_canonical_ref`] — pure and disk-free, so a well-formed
+///    ref to a *deleted* target still canonicalises and can be cleared.
+/// 3. verbatim — a ref that names nothing is still a string in an array that has
+///    to come out.
+///
+/// **Known bound, deliberate (§6).** Both parse tiers hand off to `canonical_id`,
+/// so the needle is always canonical: a hand-authored `needs = ["SL-1"]` is sought
+/// as `SL-001` and never matches, and tier 3 does not rescue it because `SL-1`
+/// *parses*. Narrow by construction — such a ref resolves, so the doctor check does
+/// not report it either, and every CLI-authored ref is stored canonical. Closing it
+/// means normalising on read in `kinds`, which has five other callers.
+fn canonicalise_target(root: &std::path::Path, target: &str) -> String {
+    // `map_or_else`, not `map(..).unwrap_or_else(..)` — clippy::pedantic denies the
+    // latter, which is the shape §6's snippet uses. Same three tiers, same order.
+    crate::kinds::parse_resolvable_ref(root, target)
+        .or_else(|_| crate::kinds::parse_canonical_ref(target))
+        .map_or_else(
+            |_| target.to_string(),
+            |(kref, id)| crate::listing::canonical_id(kref.kind.prefix, id),
+        )
 }
 
 /// Resolve a generic dep/seq `(SRC, TGT)` pair against the author-time gate (§5.4),
@@ -83,8 +116,7 @@ fn resolve_dep_seq_src(
     source: &str,
     target: &str,
 ) -> anyhow::Result<(PathBuf, String, String)> {
-    let toml_path = resolve_dep_seq_src_path(root, source)?;
-    let (skref, sid) = crate::kinds::parse_resolvable_ref(root, source)?;
+    let (toml_path, skref, sid) = resolve_dep_seq_src_path(root, source)?;
     // TGT must resolve on disk — a free-text or dangling target is refused here
     // (never write an edge to a non-entity). The resolver first so a
     // free-text target surfaces the ref-shape error, then a dir probe.
@@ -164,13 +196,50 @@ pub(crate) fn run_after_remove(
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (toml_path, source_id, target_id) = resolve_dep_seq_src(&root, source, target)?;
     let ceiling = if rank == 0 { None } else { Some(rank) };
-    let removed = crate::dep_seq::remove(&toml_path, &target_id, ceiling)?;
+    let removed = crate::dep_seq::remove(
+        &toml_path,
+        &crate::dep_seq::RelRemove::After {
+            to: &target_id,
+            rank_ceiling: ceiling,
+        },
+    )?;
     if removed == 0 {
         anyhow::bail!("{source_id} has no after edge to {target_id}");
     }
     writeln!(
         std::io::stdout(),
         "{source_id} after {target_id} removed ({} edge{})",
+        removed,
+        if removed == 1 { "" } else { "s" }
+    )?;
+    Ok(())
+}
+
+/// `doctrine needs <SRC> <TGT> --remove` (SL-238 §6) — the `needs` axis's first
+/// removal verb, mirroring [`run_after_remove`]: gate the SOURCE only, canonicalise
+/// the target through the three-tier needle, bail when nothing matched.
+///
+/// There is deliberately no `needs --prune`: a satisfied *hard* prerequisite is
+/// meaningful history, and dropping it unasked is a judgement the tool should not
+/// make. `--remove` is explicit and sufficient.
+pub(crate) fn run_needs_remove(
+    path: Option<PathBuf>,
+    source: &str,
+    target: &str,
+) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (toml_path, skref, sid) = resolve_dep_seq_src_path(&root, source)?;
+    let source_id = crate::listing::canonical_id(skref.kind.prefix, sid);
+    let target_id = canonicalise_target(&root, target);
+    let removed =
+        crate::dep_seq::remove(&toml_path, &crate::dep_seq::RelRemove::Needs(&target_id))?;
+    if removed == 0 {
+        anyhow::bail!("{source_id} has no needs edge to {target_id}");
+    }
+    writeln!(
+        std::io::stdout(),
+        "{source_id} needs {target_id} removed ({} edge{})",
         removed,
         if removed == 1 { "" } else { "s" }
     )?;
@@ -184,7 +253,10 @@ pub(crate) fn run_after_remove(
 pub(crate) fn run_after_prune(path: Option<PathBuf>, source: &str) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let toml_path = resolve_dep_seq_src_path(&root, source)?;
+    // SL-238 PHASE-06: argument shape only. This copy echoes `{source}` AS TYPED,
+    // which PHASE-02/VT-2 pinned as a deliberate divergence from the backlog copy's
+    // canonical echo — PHASE-07 decides that, not this phase.
+    let (toml_path, _, _) = resolve_dep_seq_src_path(&root, source)?;
 
     // 1. Read DepSeq
     let ds = crate::dep_seq::read(&toml_path)?;
@@ -251,7 +323,13 @@ pub(crate) fn run_after_prune(path: Option<PathBuf>, source: &str) -> anyhow::Re
     // 3. Remove all edges per unique dangling target (one pass each) via shared leaf
     for target in &to_drop {
         // `None` ceiling → remove every edge matching the target wildcard
-        let _ = crate::dep_seq::remove(&toml_path, target, None)?;
+        let _ = crate::dep_seq::remove(
+            &toml_path,
+            &crate::dep_seq::RelRemove::After {
+                to: target,
+                rank_ceiling: None,
+            },
+        )?;
     }
 
     // 4. Report dropped edges
@@ -477,6 +555,127 @@ mod tests {
             ),
         )
         .unwrap();
+    }
+
+    /// Helper: a project root with the doctrine marker, ready for `root::find`.
+    fn seed_root(tmp: &tempfile::TempDir) -> &std::path::Path {
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join(".doctrine")).unwrap();
+        std::fs::write(root.join(crate::dtoml::DOCTRINE_TOML), "").unwrap();
+        root
+    }
+
+    /// Helper: seed a slice TOML carrying PRE-PLANTED dep/seq edges on either axis
+    /// (SL-238 PHASE-06).
+    ///
+    /// The removal tests need edges the author-time gate REFUSES to write —
+    /// `SL-9999` (parses, resolves to nothing), `not-a-ref` (does not parse),
+    /// `SL-1` (well-formed but unpadded). There is no route to them through
+    /// `run_*_edge`, so they are planted directly. One helper, both axes; do not
+    /// hand-roll a second.
+    fn seed_sl_with_edges(root: &std::path::Path, id: u32, needs: &[&str], after: &[(&str, i32)]) {
+        let padded = format!("{id:03}");
+        let dir = root.join(".doctrine").join("slice").join(&padded);
+        std::fs::create_dir_all(&dir).unwrap();
+        let needs_refs = needs
+            .iter()
+            .map(|r| format!("\"{r}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let after_edges = after
+            .iter()
+            .map(|(to, rank)| format!("{{ to = \"{to}\", rank = {rank} }}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        std::fs::write(
+            dir.join(format!("slice-{padded}.toml")),
+            format!(
+                "id = {id}\nslug = \"s{padded}\"\ntitle = \"Test S{padded}\"\n\
+                 status = \"proposed\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+                 [relationships]\nsupersedes = []\nsuperseded_by = []\n\
+                 needs = [{needs_refs}]\nafter = [{after_edges}]\n",
+            ),
+        )
+        .unwrap();
+    }
+
+    /// Helper: the source slice's TOML text, for asserting what survived a removal.
+    fn slice_toml(root: &std::path::Path, id: u32) -> String {
+        let padded = format!("{id:03}");
+        std::fs::read_to_string(
+            root.join(".doctrine")
+                .join("slice")
+                .join(&padded)
+                .join(format!("slice-{padded}.toml")),
+        )
+        .unwrap()
+    }
+
+    // --- `needs --remove` — SL-238 PHASE-06 EX-2 --------------------------------
+
+    /// VT-1: the `needs` axis gains its first removal. One edge of two goes, the
+    /// other stays, and the call succeeds.
+    ///
+    /// The count itself is echoed to `io::stdout()`, which these in-module tests do
+    /// not capture — the rendered line is pinned black-box in
+    /// `tests/e2e_dep_seq_verbs.rs` instead. Here the assertion is over the state.
+    #[test]
+    fn needs_remove_clears_one_edge_and_reports_the_count() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = seed_root(&tmp);
+        seed_sl_with_edges(root, 1, &["SL-002", "SL-003"], &[]);
+        seed_sl_toml(root, 2);
+        seed_sl_toml(root, 3);
+
+        run_needs_remove(Some(root.to_path_buf()), "SL-001", "SL-002").unwrap();
+
+        let toml = slice_toml(root, 1);
+        assert!(
+            !toml.contains("SL-002"),
+            "the named edge is cleared:\n{toml}"
+        );
+        assert!(toml.contains("SL-003"), "the other edge survives:\n{toml}");
+    }
+
+    /// VT-1: nothing matched → bail, and the file is untouched. Mirrors
+    /// `run_after_remove`'s zero-count refusal.
+    #[test]
+    fn needs_remove_bails_when_no_edge_matches() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = seed_root(&tmp);
+        seed_sl_with_edges(root, 1, &["SL-003"], &[]);
+        seed_sl_toml(root, 2);
+        seed_sl_toml(root, 3);
+
+        let before = slice_toml(root, 1);
+        let err = run_needs_remove(Some(root.to_path_buf()), "SL-001", "SL-002")
+            .expect_err("no matching edge refuses");
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("SL-001") && msg.contains("SL-002") && msg.contains("no needs edge"),
+            "the refusal names both endpoints: {msg}"
+        );
+        assert_eq!(slice_toml(root, 1), before, "the file is untouched");
+    }
+
+    /// VT-2 (`needs` half): a ref that does not resolve is still clearable — the
+    /// repair path PHASE-03's Error-severity check depends on. `needs` had no
+    /// removal at all before this phase, so there is no before-state to supersede
+    /// here; the `after` half of VT-2 is where the deliberate change lives.
+    #[test]
+    fn needs_remove_clears_a_ref_that_does_not_resolve() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = seed_root(&tmp);
+        seed_sl_with_edges(root, 1, &["SL-9999", "not-a-ref"], &[]);
+
+        run_needs_remove(Some(root.to_path_buf()), "SL-001", "SL-9999").unwrap();
+        run_needs_remove(Some(root.to_path_buf()), "SL-001", "not-a-ref").unwrap();
+
+        let toml = slice_toml(root, 1);
+        assert!(
+            !toml.contains("SL-9999") && !toml.contains("not-a-ref"),
+            "both unresolvable refs are cleared:\n{toml}"
+        );
     }
 
     /// Helper: seed an ADR TOML (local copy — identical to relation.rs's helper).

@@ -513,6 +513,19 @@ fn push_raw_after_edge(toml_path: &Path, to: &str, rank: i64) {
     fs::write(toml_path, doc.to_string()).unwrap();
 }
 
+/// Push a raw string onto an entity's `needs` array, bypassing the canonicalising
+/// author-time gate — the `needs`-axis twin of [`push_raw_after_edge`], and the only
+/// route to a planted `"SL-9999"` / `"not-a-ref"` / `"SL-1"` prerequisite.
+fn push_raw_needs_ref(toml_path: &Path, to: &str) {
+    let text = fs::read_to_string(toml_path).unwrap();
+    let mut doc: toml_edit::DocumentMut = text.parse().unwrap();
+    doc["relationships"]["needs"]
+        .as_array_mut()
+        .unwrap()
+        .push(to);
+    fs::write(toml_path, doc.to_string()).unwrap();
+}
+
 /// Resolve a backlog item's TOML path from kind and id.
 fn backlog_toml(root: &Path, kind: &str, id: u32) -> std::path::PathBuf {
     let name = format!("{id:03}");
@@ -1032,5 +1045,61 @@ fn after_remove_pins_the_refusal_of_an_unresolvable_target_leaving_the_edge() {
     assert!(
         toml.contains("\"SL-9999\"") && toml.contains("\"not-a-ref\""),
         "both unremovable edges survive their own removal:\n{toml}"
+    );
+}
+
+/// SL-238 PHASE-06 / `VT-1` — the rendered echo of `needs --remove`.
+///
+/// The in-module tests in `src/commands/dep_seq.rs` assert the *state* a removal
+/// leaves behind; they cannot assert this line, because the unit tests write to
+/// `io::stdout()` without capturing it. The count is only observable black-box, so
+/// the "reports the count" half of `VT-1` is pinned here.
+#[test]
+fn needs_remove_echoes_the_canonical_ids_and_the_edge_count() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 215, "Oscar", "oscar"); // SL-215
+    seed_slice(root, 216, "Papa", "papa"); // SL-216
+
+    assert!(run(root, &["needs", "SL-215", "SL-216"]).status.success());
+
+    let rm = run(root, &["needs", "SL-215", "SL-216", "--remove"]);
+    assert!(rm.status.success(), "remove: {}", stderr(&rm));
+    assert_eq!(
+        stdout(&rm),
+        "SL-215 needs SL-216 removed (1 edge)\n",
+        "canonical ids both ends, singular edge"
+    );
+
+    // Nothing left to remove — bail, naming both endpoints.
+    let again = run(root, &["needs", "SL-215", "SL-216", "--remove"]);
+    assert!(!again.status.success(), "second remove should fail");
+    assert_eq!(
+        stderr(&again),
+        "Error: SL-215 has no needs edge to SL-216\n",
+        "the refusal mirrors `after --remove`'s"
+    );
+}
+
+/// SL-238 PHASE-06 / `VT-1` — the plural, and that a non-canonical source input
+/// normalises in the echo the same way the append path already does.
+#[test]
+fn needs_remove_echoes_the_plural_and_normalises_a_bare_source() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 217, "Quebec", "quebec"); // SL-217
+
+    // Two refs to the same target: only reachable by planting, since `append` is
+    // idempotent on string membership.
+    let src = root.join(".doctrine/slice/217/slice-217.toml");
+    push_raw_needs_ref(&src, "SL-9999");
+    push_raw_needs_ref(&src, "SL-9999");
+
+    let rm = run(root, &["needs", "217", "SL-9999", "--remove"]);
+    assert!(rm.status.success(), "remove: {}", stderr(&rm));
+    assert_eq!(
+        stdout(&rm),
+        "SL-217 needs SL-9999 removed (2 edges)\n",
+        "bare source normalises to canonical; plural on 2"
     );
 }
