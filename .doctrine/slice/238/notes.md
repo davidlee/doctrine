@@ -160,7 +160,7 @@ Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-17 · **PHASE-07 completed and harvested** (7 of 8); PHASE-08 is the last, and inherits two obligations — `QUE-221`'s cross-kind pin to find RED and rewrite in place, and `EX-3`'s removal of `src/backlog.rs`'s duplicate prune leg · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `803206b6f`, plus this harvest
+fresh-as-of: 2026-08-17 · **PHASE-08 implemented — all 8 phases done, slice ready for `/audit`.** Both inherited obligations discharged: `QUE-221`'s cross-kind pin was found RED and rewritten in place into its opposite, and `EX-3` removed `src/backlog.rs`'s duplicate prune leg (149 lines). Command tangle **measured 76**, unchanged. `ISS-368` closed · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `df6185164`, plus this harvest
 
 ### Produced
 
@@ -673,6 +673,103 @@ it lacked only what state each declared target was in.
   total function, not a laundered read; a failed *parse* never is). Neither is
   SL-238's to fix; the census is the deliverable, so nobody re-runs the grep.
 
+- **PHASE-08 landed in three commits: `7be8b55d2` (T0, pre-flip), `1b3b90775`
+  (T1, the extracted gate) and `df6185164` (T2, the injection).** T2 is red and
+  green together per `R4` — the struct's three edge fields have no production
+  reader until `run_after` takes them, so splitting meant adding and removing a
+  `dead_code` attribute inside one phase. `EX-1`…`EX-6` discharged; `VT-1`…`VT-6`
+  green; 30/30 in `tests/e2e_dep_seq_verbs.rs`, 4410 in the bin suite.
+
+- **`VA-3`, the phase's live result: the command tangle measures 76, unchanged,
+  no new accepted violation.** `STOP-1` did not fire — the injection did not leak
+  into an import.
+
+  **A green layering suite is NOT evidence for this criterion, and that is worth
+  keeping.** The ratchet at `tests/architecture_layering.rs:782-792` raises
+  `TangleGrew` only when `actual > baseline`, so green proves ≤ 76 and `VA-3` says
+  *unchanged at 76*. The number was read by temporarily setting
+  `layering.toml`'s `command` baseline to `0`, running the gate once, reading
+  `TangleGrew { baseline: 0, actual: 76 }` out of the violation, and reverting
+  (`git diff --stat` clean before the commit). Any future phase asserting an
+  *unchanged* tangle needs this, or something like it; asserting a green suite
+  answers a weaker question than the one asked.
+
+- **`VA-1` — `backlog` reaches `commands` nowhere in production code.** Measured at
+  `df6185164`, with `src/status.rs` (**1** hit) as the positive control so the
+  empty result is a demonstrated absence. `crate::commands` occurs six times in
+  `src/backlog.rs` and every one is exempt by construction, reported rather than
+  filtered away: `:231` and `:5084`/`:5087` are doc prose, and `:5099`-`:5102` are
+  the `dep_seq_ops()` fill helper inside `#[cfg(test)] mod tests`. The layering
+  visitor collects with `skip_cfg_test` and returns early on a `#[cfg(test)] mod`
+  body, so none of them records an edge — which the measurement above then
+  confirms empirically rather than by reading the visitor.
+
+- **The slice-wide `all four` laundered-read claim holds, and one of `O-2`'s three
+  residuals was misclassified.** After the leg's deletion `unwrap_or_default()`
+  returns **3** in `src/backlog.rs` (`:2411`, `:2728`, `:3565`), down from 5; the
+  two that died (`:2295`, `:2319`) were the prune-leg target reads, so §7's own
+  wording — *`unwrap_or_default()` **on a read or parse*** — reads **0** and the
+  four-copy claim is exactly discharged (`commands/dep_seq.rs` reached 0 at
+  PHASE-07). Terminal literals in `src/backlog.rs`: **23**, down from 24 with
+  `:2301`; the survivors are backlog's own status *vocabulary* (`:507`, `:508`,
+  `:526` — it is the authority for those words, not a copy of them) and test
+  fixtures. The discriminator, both times, is *a probe of a cross-kind target's
+  terminality*, never the literal.
+
+  `O-2` characterised the three residual `unwrap_or_default()` calls as
+  "`Option`-chain defaults over no read at all". True of `:2411` and `:3565`;
+  **false of `:2728`**, which is `meta::read_metas(…).unwrap_or_default()` in
+  `lifecycle_findings` — a real STD-003 silent skip, in a `doctor` path, where a
+  degraded read renders as a clean bill of health. Filed as **`ISS-446`** rather
+  than folded in: PHASE-08 owns the dep/seq routing seam, and the four reads this
+  slice enumerated are all gone. Third time this slice has met a grep-shaped
+  criterion whose literal reading misleads, and the first where the *oracle note's*
+  discriminator was the thing that was wrong.
+
+- **`VT-2` was GREEN before the change — a preservation pin, not a red.** The
+  deleted backlog leg computed its own `rank_ceiling`, so the ceiling already
+  worked; the plan expected three reds and got two (`VT-1`, `VT-3`). This does not
+  weaken it: after the injection it is the one assertion that catches a
+  `DepSeqOps::remove` filled with a rank-dropping wrapper — expressible as a
+  non-capturing closure coerced to the `fn` type — which would silently widen every
+  backlog-scoped delete. Recorded because "the red suite went red" is the usual
+  evidence and here it is only two-thirds true.
+
+- **`VA-2` — PHASE-08's additions to the named-output-change list.** Five, not the
+  one `EX-6` anticipated. Each is mandated by the criterion beside it:
+  1. **`backlog after` accepts a cross-kind target on all three legs** (`EX-3`,
+     §9 item 10). `backlog after ISS-001 SL-154` was `unknown backlog prefix
+     \`SL\``; it now writes the edge. `QUE-221`'s pin is the before-state.
+  2. **`backlog after --remove` accepts an unresolvable target** (`EX-3`, §9 item
+     4). The routed remove leg gates the source only, so a ref the doctor reports
+     at Error severity is now clearable — the repair-vs-authoring split PHASE-06
+     made at the top level, inherited here.
+  3. **`backlog needs` refuses `RV`, `REC` and governance targets** (`EX-4`,
+     `ISS-368`, §9 item 11). A deliberate refusal of input accepted today, and the
+     one item in this list that *narrows* rather than widens.
+  4. **The `after` legs' TARGET echo canonicalises** — beyond `EX-6`, which names
+     only the source. Probed against `7be8b55d2`: the old append leg echoed `{to}`
+     as typed, so `backlog after ISS-1 ISS-2` printed `ISS-001 after ISS-2`; it now
+     prints `ISS-001 after ISS-002`.
+  5. **`backlog after --prune` inherits every PHASE-07 output change at once** —
+     reason words collapse to `unresolved`, the `/resolution` suffix is gone,
+     status-less targets become prunable, and an unreadable target is disclosed on
+     stderr instead of silently kept. Named separately because a `backlog`-verb
+     user sees all five arrive in this phase, not in PHASE-07.
+
+- **Three PHASE-02 pins were REMOVED with the leg they pinned** (`EX-3`, `D-2`),
+  each leaving a marker comment naming its replacement. This is the *strong* case
+  PHASE-07 flagged its own weaker one against: there the code stayed and the
+  assertion went; here the code ceased to exist, so leaving them failing was never
+  an option and rewriting them would have pinned a second implementation that no
+  longer has a first.
+
+- **The in-module `DepSeqOps` fill is deliberately a second copy of `cli.rs`'s.**
+  A shared constructor would make a wrong fill invisible to every test using it.
+  What actually guards the production fill is `VT-2`, black-box through the CLI —
+  which is `D-1`'s whole argument, and the reason all three of `VT-1`/`VT-2`/`VT-3`
+  retargeted out of `src/backlog.rs` at planning.
+
 ### Learned
 
 - `mem.pattern.testing.a-golden-can-pass-because-of-the-bug`
@@ -1080,8 +1177,15 @@ routes around: it does not care who authored the signature.
   (`tests/e2e_dep_seq_verbs.rs`, `c84966546`), inside the only window where a
   before-state pin could still be written. Owner's reasoning: the only argument
   against was cost-versus-vacuity risk, and nothing made this one expensive.
-  **`PHASE-08` must find this test RED and rewrite it in place into its opposite
-  — cross-kind target accepted, edge written — not delete it.**
+  **~~`PHASE-08` must find this test RED and rewrite it in place into its opposite
+  — cross-kind target accepted, edge written — not delete it.~~ DISCHARGED
+  2026-08-17 at `df6185164`.** It was found red on exactly the assertion it was
+  written for (`append accepts a cross-kind target: Error: unknown backlog prefix
+  \`SL\` in \`SL-154\``) and rewritten in place as
+  `backlog_after_accepts_a_cross_kind_target_on_every_leg` — same `SL-154`
+  fixture, same positive control, now covering the `--prune` leg too, with the old
+  name kept in its doc comment so the supersession reads in the file rather than
+  only in git.
 
   The one thing worth carrying: the pin asserts the refusal **message** by
   equality, and that is load-bearing rather than fastidious. Mutation-tested by

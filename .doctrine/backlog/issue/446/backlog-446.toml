@@ -1,13 +1,13 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 368
-slug = "backlog-needs-accepts-targets-doctrine-needs-refuses"
-title = "backlog needs accepts targets doctrine needs refuses"
+id = 446
+slug = "lifecycle-findings-silent-skip"
+title = "lifecycle_findings reports a clean corpus on a degraded read"
 kind = "issue"
-status = "resolved"
-resolution = "fixed"
-created = "2026-08-16"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-08-17"
 updated = "2026-08-17"
 tags = []
 
@@ -20,9 +20,3 @@ tags = []
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
-
-[[relation]]
-label = "references"
-role = "concerns"
-descriptor = "SL-238 §6 closes this gate as a side-effect of DEC-235's collapse"
-target = "SL-238"
