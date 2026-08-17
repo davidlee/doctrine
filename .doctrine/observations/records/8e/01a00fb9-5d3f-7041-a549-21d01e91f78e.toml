@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00fb9-5d3f-7041-a549-21d01e91f78e"
+recorded_at = "2026-08-17T12:36:41.407653345Z"
+kind = "friction"
+summary = "evidence cannot dispute an RFC finding"
+detail = "Authoring RFC-030's evidence trail: EVD-026 re-measures RFC-026 E8.3's zero-edge finding and contradicts its inference. `doctrine link EVD-026 disputes RFC-026` is refused — `disputes` targets only [ASM DEC QUE CON EVD HYP CPT]. So evidence bearing against a *deliberation* artefact has no edge to ride; the fallback is `references --role concerns` on the gating QUE, which loses the polarity. RFCs carry measured findings (the whole E8 series), so the gap is reachable in normal use, not exotic."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

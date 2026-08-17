@@ -1,0 +1,37 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 26
+slug = "sl-258-map-exercises-both-edge-kinds"
+title = "SL-258 map exercises both edge kinds"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-17"
+updated = "2026-08-17"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum = "SL-258's design run (dr-01a00e5b, revision 5) holds 14 inquiry nodes, 10 parent edges, and 25 needs edges spread over 13 of 14 nodes — multi-target and non-root (inq-9 needs inq-1/2/5/7/8; inq-6 needs inq-5/7/8). RFC-026 E8.3's subject (SL-243) held 9 nodes and 0 edges of either kind across 17 revisions, with needs_in_degree=0 throughout. Measured on the same instrument (edge counts over run state), with ISS-360 still open."
+provenance = "inspection"
+confidence = "medium"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "re-measurement bearing on the semantic-tier question"
+target = "QUE-218"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the run measured"
+target = "SL-258"

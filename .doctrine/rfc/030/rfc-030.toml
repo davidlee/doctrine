@@ -1,0 +1,84 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 30
+slug = "inquiry-map-as-a-general-interview-substrate"
+title = "Inquiry map as a general interview substrate"
+status = "open"
+created = "2026-08-17"
+updated = "2026-08-17"
+tags = []
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "QUE-218"
+
+[[relation]]
+label = "related"
+target = "QUE-206"
+
+[[relation]]
+label = "related"
+target = "EVD-026"
+
+[[relation]]
+label = "related"
+target = "RFC-026"
+
+[[relation]]
+label = "related"
+target = "RFC-009"
+
+[[relation]]
+label = "related"
+target = "SL-233"
+
+[[relation]]
+label = "related"
+target = "PRD-019"
+
+[[relation]]
+label = "related"
+target = "IMP-386"
+
+[[relation]]
+label = "related"
+target = "IMP-387"
+
+[[relation]]
+label = "related"
+target = "IMP-388"
+
+[[relation]]
+label = "related"
+target = "IMP-389"
+
+[[relation]]
+label = "related"
+target = "IMP-390"
+
+[[relation]]
+label = "related"
+target = "ISS-299"
+
+[[relation]]
+label = "related"
+target = "ISS-300"
+
+[[relation]]
+label = "related"
+target = "ISS-303"
+
+[[relation]]
+label = "related"
+target = "ISS-360"
+
+[[relation]]
+label = "related"
+target = "CHR-065"
+
