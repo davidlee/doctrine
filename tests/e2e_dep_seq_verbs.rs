@@ -464,6 +464,81 @@ fn after_remove_backlog() {
     );
 }
 
+/// SL-238 QUE-221 — the before-state pin for `backlog after`'s cross-kind target
+/// refusal, which SL-238 §6 deliberately removes.
+///
+/// Today both target-bearing legs of `backlog after` gate the TARGET through
+/// `require_item` (`src/backlog.rs:2406` append, `:2374` remove), and that resolves
+/// via `parse_ref`, which knows only backlog kinds. So a slice target is refused
+/// even when it exists on disk. §6 routes those legs through the kind-neutral
+/// `commands::dep_seq` operations, whose canonicaliser accepts any resolvable ref —
+/// the refusal goes away, on purpose, in PHASE-08.
+///
+/// **This test is written to be superseded.** §7's rule is that deliberately changed
+/// behaviour needs its before-state pinned first, so the change is visible AS a
+/// change; without the pin, PHASE-08's widening lands as a fresh green test that
+/// cannot distinguish "I made this work" from "this always worked". PHASE-08 must
+/// find this red and rewrite it in place into its opposite — cross-kind target
+/// ACCEPTED, edge written — rather than deleting it.
+///
+/// Raised as `D4` in PHASE-02's runtime sheet and left to the owner as a scope call;
+/// accepted 2026-08-17, between PHASE-06 and PHASE-07, because after PHASE-08 lands
+/// the pin cannot be written at all.
+///
+/// **The refusal text is pinned by EQUALITY, deliberately.** A `contains("SL-154")`
+/// assertion is vacuous here: once §6's canonicaliser accepts the ref, the remove leg
+/// falls through to the zero-count bail and emits `ISS-001 has no after edge to
+/// SL-154` — still non-zero, still naming the target. A loose pin would stay green
+/// across the exact change it exists to catch. Only the message distinguishes
+/// "refused because the KIND is inadmissible" from "refused because there is no such
+/// edge", so only the message is load-bearing.
+#[test]
+fn backlog_after_pins_the_cross_kind_target_refusal_on_both_legs() {
+    /// The author-time kind gate's refusal — `require_item` → `parse_ref`, which
+    /// knows only backlog prefixes. PHASE-08 deletes this reason from both legs.
+    const KIND_REFUSAL: &str =
+        "Error: unknown backlog prefix `SL` in `SL-154` (expected ISS/IMP/CHR/RSK/IDE)\n";
+
+    let t = tmp();
+    let root = t.path();
+    new_issue(root, "One", "one"); // ISS-001
+    new_issue(root, "Two", "two"); // ISS-002
+    // A REAL slice on disk: the refusal below is provably the kind gate, not absence.
+    seed_slice(root, 154, "Cross kind", "cross-kind");
+
+    // Positive control — the same verb, same source, a backlog target: succeeds.
+    // Without this, the two refusals below could equally be a broken fixture.
+    let ok = run(root, &["backlog", "after", "ISS-001", "ISS-002"]);
+    assert!(
+        ok.status.success(),
+        "backlog target accepted: {}",
+        stderr(&ok)
+    );
+
+    // Append leg: refused on the target's KIND.
+    let append = run(root, &["backlog", "after", "ISS-001", "SL-154"]);
+    assert!(
+        !append.status.success(),
+        "append refuses a cross-kind target"
+    );
+    assert_eq!(stderr(&append), KIND_REFUSAL, "append refused on the KIND");
+
+    // Remove leg: refused at the same gate, before the edge lookup is even reached.
+    let remove = run(root, &["backlog", "after", "ISS-001", "SL-154", "--remove"]);
+    assert!(
+        !remove.status.success(),
+        "remove refuses a cross-kind target"
+    );
+    assert_eq!(stderr(&remove), KIND_REFUSAL, "remove refused on the KIND");
+
+    // The refused append left no edge behind — the ISS-002 control edge is the only one.
+    let iss1 = fs::read_to_string(backlog_toml(root, "issue", 1)).unwrap();
+    assert!(
+        !iss1.contains("SL-154"),
+        "refused append wrote nothing: {iss1}"
+    );
+}
+
 #[test]
 fn after_append_still_works() {
     let t = tmp();
