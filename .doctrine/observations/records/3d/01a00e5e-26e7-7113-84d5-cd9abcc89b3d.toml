@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00e5e-26e7-7113-84d5-cd9abcc89b3d"
+recorded_at = "2026-08-17T06:17:26.50345946Z"
+kind = "friction"
+summary = "/design: design apply refuses a needs edge to a node declared in the same submission when the target sorts later lexically"
+detail = "Declaring the SL-258 inquiry graph in one apply failed with 'Error: unknown node: inq-5'. The declare array was in logical order (inq-1..inq-14) but the engine appears to process declarations in lexical id order (inq-1, inq-10, inq-11, ... inq-2, ...), so inq-11's needs edge to inq-5 resolved before inq-5 existed. Cost: one refused apply plus a two-pass split of the payload. The payload contract (design contract --format prompt) documents needs as [id(inq-)] with no ordering constraint, and the refusal names the target rather than the rule, so neither surface tells the author the graph must be declared needs-target-first in LEXICAL order. Either resolve needs after the whole batch is created, or say so in the refusal."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

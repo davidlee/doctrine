@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00f25-2704-7af3-aebc-5ed4b4da3309"
+recorded_at = "2026-08-17T09:54:48.196123102Z"
+kind = "friction"
+summary = "/design: no CLI surface prints an inquiry node's question text"
+detail = "User asked to see inq-1..inq-13. 'doctrine design show --full --format json' returns blockers as {id, reason, needs_in_degree} only — no question field — and the prompt format prints ids plus blocker reasons. The only place the question text exists is the gitignored runtime snapshot .doctrine/state/slice/258/design.toml, which the project's own guardrail says not to read directly ('read entities via show, not raw files'). So the agent must either violate that guidance or reconstruct the questions from its own submission payloads, which is unavailable to a resumed cold context. 'design resume' is the documented cold re-entry projection but is scoped to re-entry, not to reviewing the graph's content. A run whose whole purpose is to hold shaping questions has no read verb for them."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
