@@ -7,8 +7,8 @@ phases, selectors, evidence, review findings — but no representation of **a
 normative commitment travelling through the development process**. That
 object is currently smeared across design prose, plan prose, criteria,
 selectors, implementation notes, review responses, and evidence. The seed
-analysis (`research/raw/gordian-seed.md` — preserved from the gitignored
-`gordian.local.md`) decomposes the missing object into:
+analysis (`gordian-seed.md` in this slice folder — preserved from the
+gitignored `gordian.local.md`) decomposes the missing object into:
 
 - **Claim** — "I assert X should/must/is true"; has provenance and basis; may
   be proposed, contested, superseded, rejected.
@@ -98,9 +98,10 @@ selectors; the exact touch-set is design's job.
   follow-up once challenge/refine mechanics exist?
 - **OQ-2** — does the "contract revision" framing ride the existing Revision
   kind (ADR-013) or is the dispatched governing set its own projection?
-- **OQ-3** — altitude: does the conceptual model (claim / commitment /
-  obligation decomposition) need an RFC home of its own, RFC-027/029-style,
-  with this slice as its first prove-value stage? Settle before design locks.
+- **OQ-3** — altitude, *adjudicated at scoping*: RFCs carry no binding
+  authority; canon is encoded as ADR / POL / Spec. Expected vehicle: author
+  governance (exact form TBD in planning) as a **Revision** and apply it
+  during reconciliation. Planning owns the call on which instrument(s).
 - **OQ-4** — sequencing against RFC-029: can the discharge link land before
   the `VT`→`EX` binding, or do they share a criterion-row surface that forces
   an order?
