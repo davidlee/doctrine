@@ -922,12 +922,13 @@ fn top_level_needs_after_echo_canonical_id() {
 /// sharper statement of what this phase fixed than any new fixture would be: the
 /// cross-kind vocabulary leak WAS the STD-001 violation.
 ///
-/// The source stays typed UNPADDED (`SL-9`): this copy still echoes the source AS
-/// TYPED, where the *append* verb two tests above echoes the canonical `SL-001` for
-/// the same input. PHASE-07's `T3` supersedes that divergence — PHASE-08 `EX-3`
-/// routes `backlog after --prune` through this very function and `EX-6` requires the
-/// routed legs to echo canonically — so this line moves to `SL-009` with `T3`, and
-/// PHASE-02's note that the divergence is "PRESERVED" is retracted (`notes.md`).
+/// The source is typed UNPADDED (`SL-9`) and echoes CANONICALLY (`SL-009`), which is
+/// PHASE-07 `T3` and supersedes PHASE-02's pin of the opposite. The divergence it
+/// pinned — this copy echoing as typed where the *append* verb two tests above and
+/// `backlog after --prune` both echo canonically — could not be preserved: PHASE-08
+/// `EX-3` routes `backlog after --prune` through this very function, and `EX-6`
+/// requires the routed legs to echo the canonical source id. Preserving as-typed
+/// would have regressed backlog's existing canonical echo (`notes.md`, `D-3`).
 #[test]
 fn after_prune_no_longer_applies_backlog_vocabulary_to_a_slice() {
     let t = tmp();
@@ -951,7 +952,7 @@ fn after_prune_no_longer_applies_backlog_vocabulary_to_a_slice() {
     assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
     assert_eq!(
         stdout(&prune),
-        "SL-9: nothing to prune\n",
+        "SL-009: nothing to prune\n",
         "`closed` is Unrecognised for a SLICE — conservative, so the edge is kept"
     );
     assert!(

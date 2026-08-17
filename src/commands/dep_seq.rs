@@ -45,15 +45,16 @@ fn record_kind_list_slash() -> String {
         .join("/")
 }
 
-/// Resolve a dep/seq source to its TOML path. Validates: canonical-ref parse,
-/// work-like kind (slice or backlog). Returns the resolved path plus the kind and
-/// id it resolved to, so a caller that needs the canonical source id does not pay
-/// a second [`crate::kinds::parse_resolvable_ref`] (SL-238 §6 — the remove paths
-/// gate the source only, and still have to echo it).
+/// Resolve a dep/seq source to its TOML path and its CANONICAL id. Validates:
+/// canonical-ref parse, work-like kind (slice or backlog). Every caller echoes the
+/// source, and every one of them echoes it canonically (SL-238 §6 — the remove paths
+/// gate the source only, and still have to echo it; `T3` brought `--prune`'s echo
+/// onto the same footing), so the canonicalisation belongs here rather than repeated
+/// at each call site.
 fn resolve_dep_seq_src_path(
     root: &std::path::Path,
     source: &str,
-) -> anyhow::Result<(PathBuf, &'static crate::kinds::KindRef, u32)> {
+) -> anyhow::Result<(PathBuf, String)> {
     let (skref, sid) = crate::kinds::parse_resolvable_ref(root, source)?;
     anyhow::ensure!(
         is_work_like(skref.kind),
@@ -62,8 +63,7 @@ fn resolve_dep_seq_src_path(
     );
     Ok((
         crate::entity::id_path(root, skref.kind, sid, crate::entity::Ext::Toml),
-        skref,
-        sid,
+        crate::listing::canonical_id(skref.kind.prefix, sid),
     ))
 }
 
@@ -116,7 +116,7 @@ fn resolve_dep_seq_src(
     source: &str,
     target: &str,
 ) -> anyhow::Result<(PathBuf, String, String)> {
-    let (toml_path, skref, sid) = resolve_dep_seq_src_path(root, source)?;
+    let (toml_path, source_id) = resolve_dep_seq_src_path(root, source)?;
     // TGT must resolve on disk — a free-text or dangling target is refused here
     // (never write an edge to a non-entity). The resolver first so a
     // free-text target surfaces the ref-shape error, then a dir probe.
@@ -127,12 +127,13 @@ fn resolve_dep_seq_src(
         tkref.kind.prefix,
         record_kind_list_slash(),
     );
+    let target_id = crate::listing::canonical_id(tkref.kind.prefix, tid);
+    // Canonical ids carry the prefix, so id equality IS same-kind-and-same-id — the
+    // pair comparison this replaced, spelled once.
     anyhow::ensure!(
-        !(skref.kind.prefix == tkref.kind.prefix && sid == tid),
+        source_id != target_id,
         "a {source} edge to itself is not a dependency — self-edges are refused"
     );
-    let source_id = crate::listing::canonical_id(skref.kind.prefix, sid);
-    let target_id = crate::listing::canonical_id(tkref.kind.prefix, tid);
     Ok((toml_path, source_id, target_id))
 }
 
@@ -205,8 +206,7 @@ pub(crate) fn run_after_remove(
 ) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let (toml_path, skref, sid) = resolve_dep_seq_src_path(&root, source)?;
-    let source_id = crate::listing::canonical_id(skref.kind.prefix, sid);
+    let (toml_path, source_id) = resolve_dep_seq_src_path(&root, source)?;
     let target_id = canonicalise_target(&root, target);
     let ceiling = if rank == 0 { None } else { Some(rank) };
     let removed = crate::dep_seq::remove(
@@ -242,8 +242,7 @@ pub(crate) fn run_needs_remove(
 ) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let (toml_path, skref, sid) = resolve_dep_seq_src_path(&root, source)?;
-    let source_id = crate::listing::canonical_id(skref.kind.prefix, sid);
+    let (toml_path, source_id) = resolve_dep_seq_src_path(&root, source)?;
     let target_id = canonicalise_target(&root, target);
     let removed =
         crate::dep_seq::remove(&toml_path, &crate::dep_seq::RelRemove::Needs(&target_id))?;
@@ -291,10 +290,12 @@ fn terminal_reason(status: &crate::kinds::AuthoredStatus) -> String {
 pub(crate) fn run_after_prune(path: Option<PathBuf>, source: &str) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    // SL-238 PHASE-06: argument shape only. This copy echoes `{source}` AS TYPED,
-    // which PHASE-02/VT-2 pinned as a deliberate divergence from the backlog copy's
-    // canonical echo — PHASE-07 decides that, not this phase.
-    let (toml_path, _, _) = resolve_dep_seq_src_path(&root, source)?;
+    // SL-238 PHASE-07 `T3`: the echo is the CANONICAL source id, as on every other
+    // dep/seq leg. PHASE-02/VT-2 pinned this copy's as-typed echo as a divergence to
+    // preserve; PHASE-08 `EX-3` routes `backlog after --prune` through this very
+    // function and `EX-6` requires the routed legs to echo canonically, so preserving
+    // as-typed would regress backlog's existing canonical echo (`notes.md`, `D-3`).
+    let (toml_path, source_id) = resolve_dep_seq_src_path(&root, source)?;
 
     // 1. Read DepSeq
     let ds = crate::dep_seq::read(&toml_path)?;
@@ -318,7 +319,7 @@ pub(crate) fn run_after_prune(path: Option<PathBuf>, source: &str) -> anyhow::Re
                 Err(err) => {
                     writeln!(
                         std::io::stderr(),
-                        "{source} after {} (rank {}) kept (unreadable: {err:#})",
+                        "{source_id} after {} (rank {}) kept (unreadable: {err:#})",
                         edge.to,
                         edge.rank
                     )?;
@@ -344,7 +345,7 @@ pub(crate) fn run_after_prune(path: Option<PathBuf>, source: &str) -> anyhow::Re
     }
 
     if dropped.is_empty() {
-        writeln!(std::io::stdout(), "{source}: nothing to prune")?;
+        writeln!(std::io::stdout(), "{source_id}: nothing to prune")?;
         return Ok(());
     }
 
@@ -364,7 +365,7 @@ pub(crate) fn run_after_prune(path: Option<PathBuf>, source: &str) -> anyhow::Re
     for (target, rank, reason) in &dropped {
         writeln!(
             std::io::stdout(),
-            "{source} after {target} (rank {rank}) dropped (dangling: {reason})"
+            "{source_id} after {target} (rank {rank}) dropped (dangling: {reason})"
         )?;
     }
     Ok(())
