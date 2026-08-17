@@ -109,7 +109,17 @@ fn seed_adr(root: &Path, id: u32, title: &str) {
 }
 
 fn slice_toml(root: &Path, id: u32) -> String {
-    fs::read_to_string(root.join(format!(".doctrine/slice/{id:03}/slice-{id:03}.toml"))).unwrap()
+    fs::read_to_string(slice_toml_path(root, id)).unwrap()
+}
+
+/// A slice's authored TOML path — the twin of [`backlog_toml`] (SL-238 PHASE-08).
+///
+/// The same `.doctrine/slice/NNN/slice-NNN.toml` expression is hand-rolled at a
+/// dozen other sites in this file. They are NOT swept here: this phase does not
+/// otherwise touch those tests, and a cosmetic sweep would bury its real diff. Fold
+/// them onto this as each is next opened.
+fn slice_toml_path(root: &Path, id: u32) -> std::path::PathBuf {
+    root.join(format!(".doctrine/slice/{id:03}/slice-{id:03}.toml"))
 }
 
 /// Hand-seed ANY entity's authored pair with FIXED dates, given its kind directory
@@ -165,6 +175,19 @@ fn seed_question(root: &Path, id: u32, status: &str) {
 /// [`push_raw_after_edge`] can point an edge at it.
 fn seed_rec(root: &Path, id: u32) {
     seed_entity(root, ".doctrine/rec", "rec", id, "A record", None);
+}
+
+/// Seed a review (`RV-NNN`) — resolvable on disk and NOT an admissible dep/seq
+/// target, so `VT-3`'s refusal is provably the kind gate rather than absence.
+fn seed_review(root: &Path, id: u32) {
+    seed_entity(
+        root,
+        ".doctrine/review",
+        "review",
+        id,
+        "A review",
+        Some("open"),
+    );
 }
 
 // --- VT-1: slice→slice needs/after round-trips through show + show --json ---
@@ -519,50 +542,35 @@ fn after_remove_backlog() {
     );
 }
 
-/// SL-238 QUE-221 — the before-state pin for `backlog after`'s cross-kind target
-/// refusal, which SL-238 §6 deliberately removes.
+/// SL-238 PHASE-08 `VT-1` — `backlog after` accepts a cross-kind target on EVERY
+/// leg: append, `--remove`, `--prune`.
 ///
-/// Today both target-bearing legs of `backlog after` gate the TARGET through
-/// `require_item` (`src/backlog.rs:2406` append, `:2374` remove), and that resolves
-/// via `parse_ref`, which knows only backlog kinds. So a slice target is refused
-/// even when it exists on disk. §6 routes those legs through the kind-neutral
-/// `commands::dep_seq` operations, whose canonicaliser accepts any resolvable ref —
-/// the refusal goes away, on purpose, in PHASE-08.
+/// **This is `backlog_after_pins_the_cross_kind_target_refusal_on_both_legs`
+/// rewritten in place into its opposite, per §7 and PHASE-02's `D4`.** Until
+/// PHASE-08 both target-bearing legs gated the TARGET through `require_item` →
+/// `parse_ref`, which knows only backlog prefixes, so a slice target was refused
+/// with `unknown backlog prefix \`SL\` in \`SL-154\`` even though the slice exists
+/// on disk. The pin was written to be superseded: §7's rule is that deliberately
+/// changed behaviour has its before-state pinned first, so the change is visible AS
+/// a change rather than landing as a fresh green test that cannot distinguish "I
+/// made this work" from "this always worked". §6 routes all three legs onto the
+/// kind-neutral `commands::dep_seq` operations, whose canonicaliser accepts any
+/// resolvable ref, so the refusal is gone on purpose (§9 item 10).
 ///
-/// **This test is written to be superseded.** §7's rule is that deliberately changed
-/// behaviour needs its before-state pinned first, so the change is visible AS a
-/// change; without the pin, PHASE-08's widening lands as a fresh green test that
-/// cannot distinguish "I made this work" from "this always worked". PHASE-08 must
-/// find this red and rewrite it in place into its opposite — cross-kind target
-/// ACCEPTED, edge written — rather than deleting it.
-///
-/// Raised as `D4` in PHASE-02's runtime sheet and left to the owner as a scope call;
-/// accepted 2026-08-17, between PHASE-06 and PHASE-07, because after PHASE-08 lands
-/// the pin cannot be written at all.
-///
-/// **The refusal text is pinned by EQUALITY, deliberately.** A `contains("SL-154")`
-/// assertion is vacuous here: once §6's canonicaliser accepts the ref, the remove leg
-/// falls through to the zero-count bail and emits `ISS-001 has no after edge to
-/// SL-154` — still non-zero, still naming the target. A loose pin would stay green
-/// across the exact change it exists to catch. Only the message distinguishes
-/// "refused because the KIND is inadmissible" from "refused because there is no such
-/// edge", so only the message is load-bearing.
+/// The same `SL-154` the pin refused is the fixture here, and the same positive
+/// control is kept: without it, a green result could equally be a fixture that no
+/// longer exercises the gate at all.
 #[test]
-fn backlog_after_pins_the_cross_kind_target_refusal_on_both_legs() {
-    /// The author-time kind gate's refusal — `require_item` → `parse_ref`, which
-    /// knows only backlog prefixes. PHASE-08 deletes this reason from both legs.
-    const KIND_REFUSAL: &str =
-        "Error: unknown backlog prefix `SL` in `SL-154` (expected ISS/IMP/CHR/RSK/IDE)\n";
-
+fn backlog_after_accepts_a_cross_kind_target_on_every_leg() {
     let t = tmp();
     let root = t.path();
     new_issue(root, "One", "one"); // ISS-001
     new_issue(root, "Two", "two"); // ISS-002
-    // A REAL slice on disk: the refusal below is provably the kind gate, not absence.
+    // The same REAL slice the superseded pin refused.
     seed_slice(root, 154, "Cross kind", "cross-kind");
 
     // Positive control — the same verb, same source, a backlog target: succeeds.
-    // Without this, the two refusals below could equally be a broken fixture.
+    // It also plants the live edge that `--prune` below must KEEP.
     let ok = run(root, &["backlog", "after", "ISS-001", "ISS-002"]);
     assert!(
         ok.status.success(),
@@ -570,27 +578,161 @@ fn backlog_after_pins_the_cross_kind_target_refusal_on_both_legs() {
         stderr(&ok)
     );
 
-    // Append leg: refused on the target's KIND.
+    // Append leg: the cross-kind target is accepted, and the edge is written.
     let append = run(root, &["backlog", "after", "ISS-001", "SL-154"]);
     assert!(
-        !append.status.success(),
-        "append refuses a cross-kind target"
+        append.status.success(),
+        "append accepts a cross-kind target: {}",
+        stderr(&append)
     );
-    assert_eq!(stderr(&append), KIND_REFUSAL, "append refused on the KIND");
+    assert_eq!(stdout(&append), "ISS-001 after SL-154\n");
+    let iss1 = fs::read_to_string(backlog_toml(root, "issue", 1)).unwrap();
+    assert!(
+        iss1.contains("{ to = \"SL-154\", rank = 0 }"),
+        "the cross-kind edge is on disk: {iss1}"
+    );
 
-    // Remove leg: refused at the same gate, before the edge lookup is even reached.
+    // Remove leg: the same target clears, rather than being refused at a gate.
     let remove = run(root, &["backlog", "after", "ISS-001", "SL-154", "--remove"]);
     assert!(
-        !remove.status.success(),
-        "remove refuses a cross-kind target"
+        remove.status.success(),
+        "remove accepts a cross-kind target: {}",
+        stderr(&remove)
     );
-    assert_eq!(stderr(&remove), KIND_REFUSAL, "remove refused on the KIND");
-
-    // The refused append left no edge behind — the ISS-002 control edge is the only one.
+    assert_eq!(stdout(&remove), "ISS-001 after SL-154 removed (1 edge)\n");
     let iss1 = fs::read_to_string(backlog_toml(root, "issue", 1)).unwrap();
     assert!(
         !iss1.contains("SL-154"),
-        "refused append wrote nothing: {iss1}"
+        "the cross-kind edge is gone: {iss1}"
+    );
+
+    // Prune leg: re-author the edge, make the slice terminal in ITS OWN vocabulary
+    // (`done`, not the backlog `resolved` the deleted copy hardcoded), and prune.
+    assert!(
+        run(root, &["backlog", "after", "ISS-001", "SL-154"])
+            .status
+            .success()
+    );
+    set_entity_status(&slice_toml_path(root, 154), "done");
+    let prune = run(root, &["backlog", "after", "ISS-001", "--prune"]);
+    assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
+    assert_eq!(
+        stdout(&prune),
+        "ISS-001 after SL-154 (rank 0) dropped (dangling: done)\n",
+        "the cross-kind edge is probed and dropped; the live ISS-002 edge is kept"
+    );
+    let iss1 = fs::read_to_string(backlog_toml(root, "issue", 1)).unwrap();
+    assert!(
+        !iss1.contains("SL-154") && iss1.contains("{ to = \"ISS-002\", rank = 0 }"),
+        "prune cleared only the terminal cross-kind edge: {iss1}"
+    );
+}
+
+/// SL-238 PHASE-08 `VT-2` — `backlog after --remove` honours the rank ceiling on
+/// the routed leg exactly as the kind-neutral verb does (`after_remove_rank_ceiling`
+/// is the twin).
+///
+/// **This is the assertion that guards the injection itself.** `--remove`'s rank is
+/// an upper bound — "only edges with rank ≤ N are removed" — and a `DepSeqOps::remove`
+/// pointer filled with a rank-dropping wrapper is expressible as a non-capturing
+/// closure coerced to the `fn` type. Such a pointer would silently widen every
+/// `--remove` to "delete them all" and pass every other test in this file. Only a
+/// run through the real CLI exercises `cli.rs`'s actual fill, which is why this is
+/// black-box rather than an in-module test constructing its own struct.
+#[test]
+fn backlog_after_remove_honours_the_rank_ceiling() {
+    let t = tmp();
+    let root = t.path();
+    new_issue(root, "Rank source", "rank-source"); // ISS-001
+    new_issue(root, "Rank target", "rank-target"); // ISS-002
+
+    for rank in ["1", "5"] {
+        let out = run(
+            root,
+            &["backlog", "after", "ISS-001", "ISS-002", "--rank", rank],
+        );
+        assert!(out.status.success(), "append rank {rank}: {}", stderr(&out));
+    }
+
+    let rm = run(
+        root,
+        &[
+            "backlog", "after", "ISS-001", "ISS-002", "--remove", "--rank", "3",
+        ],
+    );
+    assert!(rm.status.success(), "ceiling remove: {}", stderr(&rm));
+    assert_eq!(
+        stdout(&rm),
+        "ISS-001 after ISS-002 removed (1 edge)\n",
+        "exactly ONE edge cleared — a rank-dropping pointer would report two"
+    );
+
+    let iss1 = fs::read_to_string(backlog_toml(root, "issue", 1)).unwrap();
+    assert!(
+        iss1.contains("{ to = \"ISS-002\", rank = 5 }") && !iss1.contains("rank = 1"),
+        "the rank-5 edge survives the ceiling and the rank-1 edge is gone: {iss1}"
+    );
+}
+
+/// SL-238 PHASE-08 `VT-3` — `backlog needs` refuses an inadmissible target kind
+/// with the BYTE-IDENTICAL message `doctrine needs` gives for the same target
+/// (`EX-4`, `ISS-368`, §9 item 11).
+///
+/// Identity, not similarity, and asserted by comparing two live runs rather than
+/// against a transcribed literal. A gate handed only the kind renders `` `RV` is a
+/// RV entity `` — the prefix twice, the ref nowhere — and a `contains`-shaped
+/// assertion would have accepted it; a type prototype of this design shipped
+/// exactly that signature. Comparing the two verbs' stderr is only expressible
+/// where both run as processes, which is the other half of why this is black-box.
+///
+/// Each target is resolvable ON DISK, so the refusal is provably the kind gate and
+/// not the resolver, and `QUE-001` is the positive control: the same loop, an
+/// admissible record, accepted.
+#[test]
+fn backlog_needs_refuses_an_inadmissible_target_kind() {
+    let t = tmp();
+    let root = t.path();
+    new_issue(root, "Gate source", "gate-source"); // ISS-001
+    seed_slice(root, 1, "Neutral source", "neutral-source"); // SL-001
+    seed_review(root, 1); // RV-001
+    seed_rec(root, 1); // REC-001
+    seed_adr(root, 1, "A governance doc"); // ADR-001
+    seed_question(root, 1, "open"); // QUE-001 — admissible
+
+    for target in ["RV-001", "REC-001", "ADR-001"] {
+        let scoped = run(root, &["backlog", "needs", "ISS-001", target]);
+        assert!(
+            !scoped.status.success(),
+            "backlog needs refuses {target}: {}",
+            stdout(&scoped)
+        );
+        let neutral = run(root, &["needs", "SL-001", target]);
+        assert!(!neutral.status.success(), "needs refuses {target}");
+        assert_eq!(
+            stderr(&scoped),
+            stderr(&neutral),
+            "one gate, one voice — {target} refused with the same bytes by both verbs"
+        );
+        assert!(
+            stderr(&scoped).contains(&format!("`{target}`")),
+            "the message names the target REF, not just its prefix: {}",
+            stderr(&scoped)
+        );
+    }
+
+    // Positive control: the gate admits what it should, so the refusals above are
+    // the kind assertion rather than a loop that rejects everything.
+    let ok = run(root, &["backlog", "needs", "ISS-001", "QUE-001"]);
+    assert!(
+        ok.status.success(),
+        "record target admitted: {}",
+        stderr(&ok)
+    );
+
+    let iss1 = fs::read_to_string(backlog_toml(root, "issue", 1)).unwrap();
+    assert!(
+        !iss1.contains("RV-001") && !iss1.contains("REC-001") && !iss1.contains("ADR-001"),
+        "nothing was written for the refused prerequisites: {iss1}"
     );
 }
 
@@ -978,113 +1120,26 @@ fn after_prune_no_longer_applies_backlog_vocabulary_to_a_slice() {
 // directions — bare-onto-live survives, bare-onto-terminal is pruned with the
 // ordinary reason — where the old pin could only assert the first.
 
-/// SUPERSEDED BY PHASE-07 + PHASE-08 (design §6 "`--prune`'s probe, collapsed";
-/// PHASE-08/EX-3 removes `backlog.rs`'s duplicate leg outright, so this test is
-/// removed WITH the code it pins, not left failing).
-///
-/// The paired top-level pin is
-/// `after_prune_pins_the_closed_vocabulary_and_the_resolution_suffix`. Same
-/// unpadded source (`ISS-1`), and the echo diverges: this copy renders
-/// `target.0.canonical_id(..)`, so it prints `ISS-001`. That divergence is
-/// PRESERVED across the collapse — do not align the two lines.
-#[test]
-fn backlog_after_prune_pins_the_closed_vocabulary_and_the_resolution_suffix() {
-    let t = tmp();
-    let root = t.path();
-    new_issue(root, "Prune Kilo", "prune-kilo"); // ISS-001 — the source
-    new_issue(root, "Prune Lima", "prune-lima"); // ISS-002 — the target
+// `backlog_after_prune_pins_the_closed_vocabulary_and_the_resolution_suffix`
+// (SL-238 PHASE-02) was REMOVED here by PHASE-08, not left failing: `EX-3` deletes
+// `backlog.rs`'s duplicate prune leg outright, so the code it pinned no longer
+// exists. Its two claims are now covered by the surviving top-level pins —
+// `after_prune_pins_the_closed_vocabulary_and_the_resolution_suffix` for the
+// vocabulary (PHASE-07 collapsed the `/resolution` suffix), and
+// `backlog_after_accepts_a_cross_kind_target_on_every_leg`'s prune leg for the
+// CANONICAL echo, which PHASE-07 `T3` brought both copies onto.
 
-    let append = run(root, &["backlog", "after", "ISS-1", "ISS-002"]);
-    assert!(append.status.success(), "append: {}", stderr(&append));
-    set_entity_fields(&backlog_toml(root, "issue", 2), "closed", Some("wont-do"));
+// `backlog_after_prune_pins_the_silent_keep_on_an_unreadable_target` (SL-238
+// PHASE-02) was REMOVED here by PHASE-08 with the leg it pinned. It asserted
+// `stderr == ""` on an unreadable target — the defect, not an endorsed behaviour.
+// The routed leg discloses instead (STD-003), pinned by
+// `after_prune_keeps_an_unreadable_target_and_says_so_on_stderr` below.
 
-    let prune = run(root, &["backlog", "after", "ISS-1", "--prune"]);
-    assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
-    assert_eq!(
-        stdout(&prune),
-        "ISS-001 after ISS-002 (rank 0) dropped (dangling: closed/wont-do)\n",
-        "today: same reason wording as the top-level copy, but the echo is CANONICAL"
-    );
-}
-
-/// SUPERSEDED BY PHASE-07 + PHASE-08 — see
-/// `after_prune_pins_the_silent_keep_on_an_unreadable_target` for the behaviour;
-/// this is the duplicate leg's copy of it, pinned so the collapse can be shown
-/// behaviour-preserving here. Removed with the leg by PHASE-08/EX-3.
-#[test]
-fn backlog_after_prune_pins_the_silent_keep_on_an_unreadable_target() {
-    let t = tmp();
-    let root = t.path();
-    new_issue(root, "Prune Mike", "prune-mike"); // ISS-001
-    new_issue(root, "Prune November", "prune-november"); // ISS-002
-
-    let append = run(root, &["backlog", "after", "ISS-001", "ISS-002"]);
-    assert!(append.status.success(), "append: {}", stderr(&append));
-    // Corrupt, never delete — a deleted file takes the `absent` arm instead.
-    let target = backlog_toml(root, "issue", 2);
-    fs::write(&target, "not = = toml\n").unwrap();
-    assert!(
-        target.exists(),
-        "the fixture corrupts the target, never deletes it"
-    );
-
-    let prune = run(root, &["backlog", "after", "ISS-001", "--prune"]);
-    assert!(prune.status.success(), "prune exit 0: {}", stderr(&prune));
-    assert_eq!(
-        stdout(&prune),
-        "ISS-001: nothing to prune\n",
-        "the unreadable target is kept, and reported as an ordinary no-op"
-    );
-    assert_eq!(
-        stderr(&prune),
-        "",
-        "today the keep is SILENT in this copy too"
-    );
-    let src = fs::read_to_string(backlog_toml(root, "issue", 1)).unwrap();
-    assert!(
-        src.contains("{ to = \"ISS-002\", rank = 0 }"),
-        "the edge survives: {src}"
-    );
-}
-
-/// SUPERSEDED BY PHASE-07 + PHASE-08 (design §6 "`--prune`'s probe, collapsed",
-/// fourth consequence) — the bare ref will resolve to the live `SL-154` and be
-/// KEPT. Pinned separately from the top-level copy because the reason wording
-/// DIVERGES: this leg renders `(unparseable)` where the top-level one renders
-/// `absent (unparseable ref)`. Both collapse to `unresolved`, so the divergence is
-/// closed by PHASE-07 — unlike the echo divergence above, which is preserved.
-#[test]
-fn backlog_after_prune_pins_a_bare_ref_dropped_with_the_divergent_unparseable_reason() {
-    let t = tmp();
-    let root = t.path();
-    new_issue(root, "Prune Oscar", "prune-oscar"); // ISS-001 — the source
-    seed_slice(root, 154, "Live", "live"); // SL-154 — a LIVE target
-
-    push_raw_after_edge(&backlog_toml(root, "issue", 1), "154", 0);
-    let target_before = slice_toml(root, 154);
-    assert!(
-        target_before.contains("status = \"proposed\""),
-        "the target of the dropped edge is live, not terminal"
-    );
-
-    let prune = run(root, &["backlog", "after", "ISS-001", "--prune"]);
-    assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
-    assert_eq!(
-        stdout(&prune),
-        "ISS-001 after 154 (rank 0) dropped (dangling: (unparseable))\n",
-        "today: this copy's unparseable reason is `(unparseable)`, not `absent (unparseable ref)`"
-    );
-    let src = fs::read_to_string(backlog_toml(root, "issue", 1)).unwrap();
-    assert!(
-        src.contains("after    = []"),
-        "the edge onto a LIVE target is removed: {src}"
-    );
-    assert_eq!(
-        slice_toml(root, 154),
-        target_before,
-        "the target was never consulted — it is untouched and still live"
-    );
-}
+// `backlog_after_prune_pins_a_bare_ref_dropped_with_the_divergent_unparseable_reason`
+// (SL-238 PHASE-02) was REMOVED here by PHASE-08 with the leg it pinned. It
+// characterised this copy's `(unparseable)` reason word AND its refusal to resolve a
+// bare ref; both die with the duplicate leg, and the routed probe resolves the bare
+// ref instead — `after_prune_resolves_a_bare_ref_instead_of_dropping_it` below.
 
 /// **SL-238 PHASE-06 / `VT-2` — supersedes PHASE-02's
 /// `after_remove_pins_the_refusal_of_an_unresolvable_target_leaving_the_edge`.**

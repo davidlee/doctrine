@@ -225,7 +225,43 @@ pub(crate) enum BacklogCommand {
     },
 }
 
-pub(crate) fn dispatch(cmd: BacklogCommand, color: bool) -> anyhow::Result<()> {
+/// Every command-tier dep/seq operation `backlog`'s `needs`/`after` verbs need, as
+/// the CALLER supplies them (SL-238 §6, `EX-2`).
+///
+/// **Injection, not import.** `backlog` reaches `crate::commands` nowhere, and it
+/// must stay that way: the layering gate records edges between TOP-LEVEL modules
+/// (`tests/architecture_layering.rs`), `backlog` and `commands` sit in different
+/// SCCs, so one `backlog → commands` path merges two clusters rather than adding one
+/// edge. `commands` already depends on `backlog` downward, so `commands` supplies
+/// the operations and `backlog` receives them, filled in `cli.rs`'s `Command::Backlog`
+/// arm and threaded through [`dispatch`] — the single entry point to both verbs.
+///
+/// **The rule, not the membership.** *Every* command-tier operation these verbs need
+/// arrives this way; a fifth operation joins the struct rather than re-opening the
+/// layering question. `run_show_inspect`'s [`BacklogTableFn`] is the same idiom's
+/// first use in this file (`mem.pattern.lint.back-edge-tangle-inject-fnptr`).
+///
+/// Rank is `i32` on both edge-writing members and `remove` KEEPS it: on `--remove`
+/// that argument is an upper bound ("only edges with rank ≤ N are removed"), so a
+/// rankless pointer would silently widen every backlog-scoped delete. `rank == 0` is
+/// already the callee's "unset" sentinel, so an `Option` would invent a distinction
+/// no consumer reads. `run_needs_remove` is deliberately not a member — the `needs`
+/// array carries no rank, and the struct's `remove` serves the `after` leg only.
+pub(crate) struct DepSeqOps {
+    /// `after <SRC> <TGT> [--rank N]` — append one soft-sequence edge.
+    pub edge: fn(Option<PathBuf>, &str, &str, i32) -> anyhow::Result<()>,
+    /// `after <SRC> <TGT> --remove [--rank N]` — clear edges up to the rank ceiling.
+    pub remove: fn(Option<PathBuf>, &str, &str, i32) -> anyhow::Result<()>,
+    /// `after <SRC> --prune` — probe every target and drop the dangling edges.
+    pub prune: fn(Option<PathBuf>, &str) -> anyhow::Result<()>,
+    /// The admissible-target gate `backlog needs` was missing. It is
+    /// `commands::dep_seq`'s, built from that module's `is_work_like` and rendering a
+    /// message that reads `knowledge::RecordKind::ALL`; re-authoring it here would be
+    /// a second refusal vocabulary drifting from the first (§6, `EX-4`).
+    pub admit_target: fn(&'static crate::entity::Kind, &str) -> anyhow::Result<()>,
+}
+
+pub(crate) fn dispatch(cmd: BacklogCommand, color: bool, ops: &DepSeqOps) -> anyhow::Result<()> {
     match cmd {
         BacklogCommand::New {
             kind,
@@ -272,7 +308,7 @@ pub(crate) fn dispatch(cmd: BacklogCommand, color: bool) -> anyhow::Result<()> {
             resolution,
             path,
         } => run_edit(path, &id, status, resolution),
-        BacklogCommand::Needs { id, prereqs, path } => run_needs(path, &id, &prereqs),
+        BacklogCommand::Needs { id, prereqs, path } => run_needs(path, &id, &prereqs, ops),
         BacklogCommand::After {
             id,
             to,
@@ -280,7 +316,7 @@ pub(crate) fn dispatch(cmd: BacklogCommand, color: bool) -> anyhow::Result<()> {
             remove,
             prune,
             path,
-        } => run_after(path, &id, to.as_deref(), rank, remove, prune),
+        } => run_after(path, &id, to.as_deref(), rank, remove, prune, ops),
         BacklogCommand::Tag {
             id,
             tags,
@@ -2232,12 +2268,20 @@ pub(crate) fn run_needs(
     path: Option<PathBuf>,
     reference: &str,
     prereqs: &[String],
+    ops: &DepSeqOps,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let target = require_item(&root, reference)?;
     for prereq in prereqs {
-        crate::kinds::ensure_ref_resolves(&root, prereq)
+        // SL-238 `EX-4`: resolve, then apply the SHARED admissible-target gate this
+        // verb was missing. `parse_resolvable_ref` is what `ensure_ref_resolves`
+        // literally wraps, so the resolve failure keeps its message byte-for-byte;
+        // the gate's `?` sits OUTSIDE that context deliberately — an anyhow frame
+        // over it would prepend `prerequisite … does not resolve` and break the
+        // byte-identity with `doctrine needs` that `VT-3` asserts.
+        let (tkref, _tid) = crate::kinds::parse_resolvable_ref(&root, prereq)
             .with_context(|| format!("prerequisite `{prereq}` does not resolve"))?;
+        (ops.admit_target)(tkref.kind, prereq)?;
     }
 
     // refuse a closing cycle BEFORE any write (the adapter is the single oracle).
@@ -2271,151 +2315,31 @@ pub(crate) fn run_after(
     rank: i32,
     remove: bool,
     prune: bool,
+    ops: &DepSeqOps,
 ) -> anyhow::Result<()> {
-    let root = crate::root::find(path, &crate::root::default_markers())?;
-    let target = require_item(&root, reference)?;
+    // The SOURCE gate stays, and it is what keeps this backlog-scoped verb
+    // backlog-scoped: `require_item` → `parse_ref` knows only the five backlog
+    // prefixes, so `backlog after SL-001 …` is still refused here. Only the TARGET
+    // gates went (SL-238 §6, `EX-3`) — the routed operations gate the target
+    // themselves, admitting any resolvable kind on append and any string on remove.
+    let root = crate::root::find(path.clone(), &crate::root::default_markers())?;
+    let source = require_item(&root, reference)?;
+    // Hoisted before the branch: every leg echoes the source, and every one of them
+    // echoes it CANONICALLY (`EX-6`). Passing the canonical id rather than the ref as
+    // typed makes that true at the call site instead of by trust in the callee.
+    let source_id = source.0.canonical_id(source.1);
 
+    // Exactly one leg ever runs, so the owned `path` is handed to it — one clone for
+    // the root probe above, never one per leg.
     if prune {
-        let name = format!("{:03}", target.1);
-        let item_path = root
-            .join(target.0.kind().dir)
-            .join(&name)
-            .join(format!("{BACKLOG_STEM}-{name}.toml"));
-        let ds = dep_seq::read(&item_path)?;
-
-        let mut dropped: Vec<(String, i32, String)> = Vec::new();
-        let mut to_drop: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-
-        for edge in &ds.after {
-            let is_dangling = match crate::kinds::parse_canonical_ref(&edge.to) {
-                Ok((kref, tid)) => {
-                    let target_path =
-                        crate::entity::id_path(&root, kref.kind, tid, crate::entity::Ext::Toml);
-                    if target_path.exists() {
-                        let body = std::fs::read_to_string(&target_path).unwrap_or_default();
-                        let val: toml::Value = match toml::from_str(&body) {
-                            Ok(v) => v,
-                            Err(_) => toml::Value::Table(toml::Table::new()),
-                        };
-                        let status = val.get("status").and_then(|s| s.as_str()).unwrap_or("");
-                        status == "resolved" || status == "closed"
-                    } else {
-                        true
-                    }
-                }
-                Err(_) => true,
-            };
-
-            if is_dangling {
-                let reason = match crate::kinds::parse_canonical_ref(&edge.to) {
-                    Ok((kref2, tid2)) => {
-                        let target_path = crate::entity::id_path(
-                            &root,
-                            kref2.kind,
-                            tid2,
-                            crate::entity::Ext::Toml,
-                        );
-                        if target_path.exists() {
-                            let body = std::fs::read_to_string(&target_path).unwrap_or_default();
-                            let val: toml::Value = match toml::from_str(&body) {
-                                Ok(v) => v,
-                                Err(_) => toml::Value::Table(toml::Table::new()),
-                            };
-                            let status = val.get("status").and_then(|s| s.as_str()).unwrap_or("");
-                            let resolution =
-                                val.get("resolution").and_then(|s| s.as_str()).unwrap_or("");
-                            if resolution.is_empty() {
-                                status.to_string()
-                            } else {
-                                format!("{status}/{resolution}")
-                            }
-                        } else {
-                            "absent".to_string()
-                        }
-                    }
-                    Err(_) => "(unparseable)".to_string(),
-                };
-                dropped.push((edge.to.clone(), edge.rank, reason));
-                to_drop.insert(edge.to.clone());
-            }
-        }
-
-        if dropped.is_empty() {
-            writeln!(
-                io::stdout(),
-                "{}: nothing to prune",
-                target.0.canonical_id(target.1)
-            )?;
-            return Ok(());
-        }
-
-        for target_id in &to_drop {
-            let _ = dep_seq::remove(
-                &item_path,
-                &dep_seq::RelRemove::After {
-                    to: target_id,
-                    rank_ceiling: None,
-                },
-            )?;
-        }
-
-        for (target_id, r, reason) in &dropped {
-            writeln!(
-                io::stdout(),
-                "{} after {target_id} (rank {r}) dropped (dangling: {reason})",
-                target.0.canonical_id(target.1),
-            )?;
-        }
-        return Ok(());
+        return (ops.prune)(path, &source_id);
     }
-
     if remove {
         let to = to.ok_or_else(|| anyhow::anyhow!("--remove requires a target"))?;
-        require_item(&root, to)?;
-        let name = format!("{:03}", target.1);
-        let item_path = root
-            .join(target.0.kind().dir)
-            .join(&name)
-            .join(format!("{BACKLOG_STEM}-{name}.toml"));
-        let ceiling = if rank == 0 { None } else { Some(rank) };
-        let removed = dep_seq::remove(
-            &item_path,
-            &dep_seq::RelRemove::After {
-                to,
-                rank_ceiling: ceiling,
-            },
-        )?;
-        if removed == 0 {
-            anyhow::bail!(
-                "{} has no after edge to {to}",
-                target.0.canonical_id(target.1)
-            );
-        }
-        writeln!(
-            io::stdout(),
-            "{} after {to} removed ({} edge{})",
-            target.0.canonical_id(target.1),
-            removed,
-            if removed == 1 { "" } else { "s" }
-        )?;
-        return Ok(());
+        return (ops.remove)(path, &source_id, to, rank);
     }
-
-    // Original append path
     let to = to.ok_or_else(|| anyhow::anyhow!("after requires a target"))?;
-    require_item(&root, to)?;
-    append_relationship(&root, target.0, target.1, &RelEdit::After { to, rank })?;
-    let suffix = if rank == 0 {
-        String::new()
-    } else {
-        format!(" (rank {rank})")
-    };
-    writeln!(
-        io::stdout(),
-        "{} after {to}{suffix}",
-        target.0.canonical_id(target.1),
-    )?;
-    Ok(())
+    (ops.edge)(path, &source_id, to, rank)
 }
 
 // ---------------------------------------------------------------------------
@@ -5157,6 +5081,28 @@ tags = []
 
     // --- PHASE-03 T3: `run_needs` shell (VT-5 set-refuse) ---
 
+    /// A REAL [`DepSeqOps`], filled from `crate::commands::dep_seq` exactly as
+    /// `cli.rs` fills it (SL-238 PHASE-08).
+    ///
+    /// Naming `crate::commands` is legal HERE and nowhere else in this file: the
+    /// layering visitor collects edges with `skip_cfg_test` set and returns early on
+    /// a `#[cfg(test)] mod` body, so this records no `backlog → commands` edge.
+    /// Filling the real operations rather than test doubles makes these in-module
+    /// tests exercise the routing they now run through.
+    ///
+    /// Deliberately a second copy of `cli.rs`'s fill rather than a shared
+    /// constructor: sharing one would make a wrong fill invisible to every test that
+    /// used it. What the production fill is actually asserted by is the black-box
+    /// `backlog_after_remove_honours_the_rank_ceiling` (`VT-2`), which runs the CLI.
+    fn dep_seq_ops() -> DepSeqOps {
+        DepSeqOps {
+            edge: crate::commands::dep_seq::run_after_edge,
+            remove: crate::commands::dep_seq::run_after_remove,
+            prune: crate::commands::dep_seq::run_after_prune,
+            admit_target: crate::commands::dep_seq::ensure_admissible_dep_target,
+        }
+    }
+
     #[test]
     fn run_needs_appends_a_validated_prereq() {
         let dir = tempfile::tempdir().unwrap();
@@ -5168,6 +5114,7 @@ tags = []
             Some(root.to_path_buf()),
             "ISS-001",
             &["ISS-002".to_string()],
+            &dep_seq_ops(),
         )
         .unwrap();
 
@@ -5188,6 +5135,7 @@ tags = []
             Some(root.to_path_buf()),
             "ISS-001",
             &["ISS-099".to_string()],
+            &dep_seq_ops(),
         );
         assert!(
             err.is_err(),
@@ -5209,7 +5157,13 @@ tags = []
         let sl_dir = root.join(".doctrine/slice/001");
         fs::create_dir_all(&sl_dir).unwrap();
 
-        run_needs(Some(root.to_path_buf()), "ISS-001", &["SL-001".to_string()]).unwrap();
+        run_needs(
+            Some(root.to_path_buf()),
+            "ISS-001",
+            &["SL-001".to_string()],
+            &dep_seq_ops(),
+        )
+        .unwrap();
 
         let item = read_item(root, ItemKind::Issue, 1).unwrap();
         assert_eq!(item.relationships.needs, vec!["SL-001"]);
@@ -5229,6 +5183,7 @@ tags = []
             Some(root.to_path_buf()),
             "ISS-002",
             &["ISS-001".to_string()],
+            &dep_seq_ops(),
         )
         .unwrap_err();
         let msg = err.to_string();
@@ -5262,6 +5217,7 @@ tags = []
             0,
             false,
             false,
+            &dep_seq_ops(),
         )
         .unwrap();
 
@@ -5302,6 +5258,7 @@ tags = []
             5,
             false,
             false,
+            &dep_seq_ops(),
         )
         .unwrap();
         let item = read_item(root, ItemKind::Issue, 2).unwrap();

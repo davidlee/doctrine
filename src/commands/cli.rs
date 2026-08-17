@@ -1714,7 +1714,20 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 Ok(())
             }
         },
-        Command::Backlog { command } => crate::backlog::dispatch(command, color),
+        // SL-238 §6: `backlog`'s dep/seq verbs run the kind-neutral operations, and
+        // they arrive as `fn` pointers filled HERE — where `commands::dep_seq` is
+        // already in scope — rather than through a `backlog → commands` import,
+        // which would merge two SCCs and move the command tangle baseline.
+        Command::Backlog { command } => crate::backlog::dispatch(
+            command,
+            color,
+            &crate::backlog::DepSeqOps {
+                edge: crate::commands::dep_seq::run_after_edge,
+                remove: crate::commands::dep_seq::run_after_remove,
+                prune: crate::commands::dep_seq::run_after_prune,
+                admit_target: crate::commands::dep_seq::ensure_admissible_dep_target,
+            },
+        ),
         Command::Knowledge { command } => crate::knowledge::dispatch(command, color),
         Command::Tag { command } => crate::commands::tag::dispatch(command),
         Command::Reservation { command } => crate::commands::reservation::dispatch(command),
