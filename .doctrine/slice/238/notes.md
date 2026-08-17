@@ -1221,17 +1221,28 @@ routes around: it does not care who authored the signature.
   a route to the shared operation. Scoped to this phase's two; the slice-wide
   claim survives as `VA-1`'s grep at PHASE-08, where it is actually checkable.
 
-- **PHASE-07 must decide `run_after_prune`'s echo prefix deliberately — the
-  prototype changes it silently.** Found in PHASE-06's oracle pass. The fork's
-  `run_after_prune` echoes `{source_id}` (canonical) on all three of its output
-  lines where today's code echoes `{source}` — the source string **as typed**.
+- **PHASE-07 must decide `run_after_prune`'s echo prefix deliberately.**
 
-  PHASE-02 `VT-2` pinned that as a *divergence to preserve*: the backlog copy
-  echoes the canonical id, the top-level copy echoes as typed. Neither PHASE-07's
-  exit criteria nor §7's named-output-change set carries a unification, and
-  PHASE-08 `EX-6` covers only the routed `backlog after` legs. So the prototype
-  makes an unnamed output change inside the same edit that does PHASE-07's
-  legitimate work.
+  > **RETRACTED IN PART, 2026-08-17 (PHASE-07 oracle pass) — the prototype does
+  > NOT change the echo.** This entry was headed *"the prototype changes it
+  > silently"* and claimed *"the fork's `run_after_prune` echoes `{source_id}`
+  > (canonical) on all three of its output lines"*. That is false. The fork's
+  > `run_after_prune` echoes `{source}` **as typed**, at
+  > `proto/SL-238-types:src/commands/dep_seq.rs:247` and `:261` — byte-identical
+  > to today. The `{source_id}` echoes I saw are on the *append* and *remove*
+  > legs (`:125`, `:152`, `:169`, `:173`), which canonicalise today as well.
+  >
+  > I attributed a grep hit in the file to the function I was thinking about,
+  > without confirming the quote with `Read` before it entered a finding. That is
+  > precisely what `execution-protocol.md` §5 says not to do, and §5's own
+  > correction has the diagnosis: **grep is deterministic; the agent quoting it is
+  > not.** The fork was never the evidence for anything here.
+  >
+  > **The decision below is unaffected** — it rests on PHASE-08 `EX-3`/`EX-6`,
+  > which are plan authority. Only the *reason to look* was spurious.
+
+  PHASE-02 `VT-2` pinned the divergence as one to preserve: the backlog copy
+  echoes the canonical id, the top-level copy echoes as typed.
 
   It bears on PHASE-06 only as a hazard: `T1` must touch `run_after_prune`'s
   `dep_seq::remove` call at `:254` because the signature reshape forces it, and
