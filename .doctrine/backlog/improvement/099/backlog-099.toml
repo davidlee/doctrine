@@ -5,10 +5,10 @@ id = 99
 slug = "after-prune-cross-kind-actionability"
 title = "Extend after/prune and overrides-adapter across entity kinds (actionability graph admission)"
 kind = "improvement"
-status = "triaged"
-resolution = ""
+status = "resolved"
+resolution = "done"
 created = "2026-06-18"
-updated = "2026-07-03"
+updated = "2026-08-17"
 tags = ["area:backlog", "area:quality", "area:relations"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

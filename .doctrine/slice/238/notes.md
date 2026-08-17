@@ -1129,7 +1129,42 @@ routes around: it does not care who authored the signature.
 
 ### Open
 
-> **Collected and routed, 2026-08-17.** Every entry below is now carried by
+> **CLOSED AT RECONCILE, 2026-08-17.** Every entry below is dispositioned. The
+> authoritative record of what was written, and where, is `RV-363`'s
+> `## Reconciliation Outcome`; this section stays as the evidence trail of how
+> each divergence was *found*. Dispositions in one place, for a reader who starts
+> here:
+>
+> | entry | disposition |
+> |---|---|
+> | `ISS-441` — `verify-vt` false `PASS` | **not this slice's.** Extended at audit with a second route (`RV-363` `F-2`), its measurements, and a fourth candidate fix. Open. |
+> | PHASE-08's foreign commit in the conformance span | **accepted as-is.** Untightenable; `slice record-delta` takes one contiguous range. |
+> | `DEC-236` | **no action.** Confirmed at audit as covered by §9's overrun fold, not an uncovered divergence. |
+> | `IDE-019` divergences (2) | **written into `IDE-019`'s own body** (`DEC-232` footer→`doctor`; `DEC-234` flag→`inspect`), and the item transitioned `resolved · done`. Its proposer reads `IDE-019`, not this file. |
+> | `RSK-013` / `catalog::scan` STD-003 violations | **outside this slice.** Left standing; `IMP-443` carries the 11-site census. |
+> | `A2` unverified | **left unverified, deliberately** — see the entry below. |
+> | Scope grew five times | **recorded, no action.** §9 folds the overruns. |
+> | §3 rule 2 + §7 `VT-5` gloss overclaim | **corrected in `design.md`** (`F-6` item 1). |
+> | §6/§7 "`--prune` has no coverage" | **corrected in `design.md`**, and the five goldens added to §7 `Preservation` with `after_prune_absent_target` marked superseded (`F-6` item 5). |
+> | §7's `VT-2` bullet vs §3's arm table | **corrected in `design.md`** (`F-6` item 2). |
+> | §5's two-reason taxonomy vs a bare ref | **noted in `design.md` §5**, owner's call taken to *note* rather than decline (`F-6` item 8). |
+> | §2's "same population" claim | **narrowed in `design.md` §2** to the class claim, both gaps named (`F-6` item 3). `EN-2`'s parenthetical left in place. |
+> | `QUE-222` — soften the advisory? | **answered: soften.** Settled with `F-4` in one string edit. See below. |
+> | PHASE-05 `EX-2` unobservable | **accepted as agent-verified**, recorded in `design.md` §7 (`F-7`). See below. |
+> | `kref_for` duplication | **`CHR-071`**, minted at audit and linked `originates_from SL-238` (`F-5`). |
+> | §6's "three call sites" | **corrected to four in `design.md`** (`F-6` item 4). |
+> | §6's fifth `--prune` consequence | **added to `design.md` §6** (`F-6` item 7). |
+> | §6's `--prune` census (two literals / four blocks, stale lines) | **corrected in `design.md` §6 and §7** (`F-6` item 6). |
+> | `after --prune`'s echo becomes canonical | **on the named-output-change list** — entry 7 of 8 in the Reconciliation Outcome. |
+> | `mem.fact.layering.gate-measures-top-level-modules` cites a withdrawn module | **corrected at PHASE-08 harvest**, re-read at audit to confirm. |
+> | `notes.md`'s `kref_for` entry cites PHASE-01's `EX-9` as PHASE-08's | **corrected in `CHR-071`'s body** at audit. |
+>
+> **Two additions made after this list was written**, both by the audit:
+> `tests/e2e_dep_seq_verbs.rs` was missing from the selector registry (`F-1` —
+> repaired at reconcile, the registry *and* its §8 mirror), and the
+> named-output-change list is **eight** entries, not seven (`F-8`).
+
+> **Original routing note, 2026-08-17.** Every entry below is now carried by
 > `RV-363`'s `## Reconciliation Brief` with a write surface named — read the
 > brief, not this list, when driving `/reconcile`. This section stays as the
 > evidence trail: each entry records *how* the divergence was found, which the
@@ -1171,6 +1206,15 @@ routes around: it does not care who authored the signature.
   violations outside this slice's surfaces.
 - **A2 unverified** — whether any non-backlog entity authors a `needs`/`after`
   edge whose *target* is a backlog item. Inert either way.
+
+  **Left unverified at reconcile, deliberately.** Nothing in this slice branches
+  on the answer: §5's check walks backlog items as *dependents* and resolves
+  whatever their refs name, so a hypothetical `SL → ISS` edge is out of its
+  population regardless; the footer's projection admits backlog items only; and no
+  `VT` row quantifies over the class. Verifying it would be a corpus census whose
+  result changes no code, no criterion and no prose — the definition of work this
+  slice should not buy. Recorded here rather than dropped so a future reader knows
+  it was *decided*, not missed.
 - **Scope grew five times now** — the three owner-accepted at inquiry, plus the
   `catalog::scan` collapse and the two stderr notices. Phase plan should be built
   against §8's file list, not "make the footer honest".
@@ -1391,6 +1435,19 @@ record itself and in `### Produced`; the durable half is
   So what remains for reconcile is only the disposition — accept `EX-2` as
   agent-verified and record it, or commission the e2e file. Nothing further is
   owed in code.
+
+  **DISPOSITIONED AT RECONCILE, 2026-08-17 (`RV-363` `F-7`): `EX-2` is accepted as
+  agent-verified.** The e2e file was declined — `tests/e2e_inspect_golden.rs` is
+  about `doctrine inspect`, not `backlog inspect`, so pinning three lines of wiring
+  buys a whole new e2e file — and the two mitigations above are what the acceptance
+  rests on: misthreading is a compile error rather than a silent mis-wire, and the
+  suite does not read stronger than it is.
+
+  **The record lives in `design.md` §7 `Agent-verified`, not here and not in
+  `plan.toml`.** `EN-`/`EX-`/`VT-` ids are immutable-append and are not a reconcile
+  write surface, so `EX-2` is not edited; §7 is where the slice states what an
+  agent verified by reading, which is exactly what this is. This note is the
+  pointer.
 
 - **`kref_for` is duplicated in `catalog/scan.rs:1372` — follow-up, deliberately
   outside PHASE-04.** PHASE-04 `D-1` promotes the generic entity-seeding helpers

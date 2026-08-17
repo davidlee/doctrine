@@ -50,3 +50,22 @@ remove a surface that stated something it had not checked.
 
 The narrowing of §2's parity sentence is a **separate, already-accepted**
 reconcile action and does not depend on this answer.
+
+## Settled: soften (SL-238 reconcile, 2026-08-17)
+
+The disposition is on the record (`answered`); this is the prose half. The
+advisory now declares its count a lower bound and its pointer the complete check:
+
+```
+backlog list: at least 3 authored needs/after refs name nothing — run `doctrine doctor` for the full check
+```
+
+Settled **together with `RV-363` `F-4`** — the same template hardcoded the plural
+and rendered *"1 … refs name nothing"* — because both defects rode one string and
+splitting them would have spent the same tests twice. The shape is one template
+plus two agreement constants (`STD-001`), and four `contains` assertions in
+`src/backlog.rs`, of which the *"at least"* prefix broke none and the singular
+broke two. Note for the record: the count was pinned in **four** places, not the
+three this item and `F-4` both estimated.
+
+`design.md` §2 carries the same wording and the reasoning.

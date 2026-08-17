@@ -315,3 +315,150 @@ and `STD-003` were all satisfied as written.
   fourth candidate fix.
 - `RV-358` — the design ledger's five `answered` findings, including the `F-1`
   blocker, verified terminal against the built tree. `RV-358` is `done`.
+
+## Reconciliation Outcome
+
+Written 2026-08-17 against head `ae2e1f195`. Every brief item is resolved; nothing
+is escalated to design and no REV is owed. Findings keep their `verified`
+disposition — remediation is recorded here, never by mutating a finding.
+
+### Direct edits applied
+
+**The selector registry, and its mirror** (`F-1`). `doctrine slice selector add 238
+tests/e2e_dep_seq_verbs.rs --intent design-target` — the registry in
+`slice-238.toml` is what `slice conformance` reads, and it now reports the file
+**conformant** rather than undeclared, with `undelivered` still 0. The 135
+remaining undeclared paths are authored `.doctrine/` entities, memories and
+observation records: expected noise, no source among them. `design.md` §8 gains
+the matching row in the change table *and* in the design-target selector block —
+the mirror, not the fix.
+
+**`design.md`, eight prose corrections** (`F-6`). Each edit carries an inline
+`RV-363 F-6 item N` attribution so a future reader finds the reconciliation
+without leaving the artefact.
+
+| item | section | correction |
+|---|---|---|
+| 1 | §3 rule 2, §7 `The probe` | The `DERIVED_STATUS` equality pin is a tripwire on *intent*; it fires on addition and never on omission. `meta::read_meta`'s strict read under STD-003 is what actually protects an omitted kind. Owner accepted 2026-08-16. |
+| 2 | §7 `The probe`, `VT-2` | Re-fixtured to a derived-status kind **whose toml carries a status**; *"without reading"* names the status read, never the title read. §3's arm table decides it. Owner accepted 2026-08-16. |
+| 3 | §2 parity sentence | Narrowed from population parity to **class** parity, naming both accepted gaps — terminal dependents (`project` never admits them) and unreadable items (fail-fast `read_all`) — as priced costs of §4's single-walk constraint. §5's mirror sentence narrowed to *counting convention* in the same pass, so the two sections no longer disagree. Unconditional. |
+| 4 | §6 (`:1187`) | Three call sites → **four**; the fourth is `run_after_prune`'s removal loop, broken at compile time by the signature reshape and rewritten a second time by PHASE-07. Stale line numbers dropped rather than refreshed. |
+| 5 | §6 (`:1487`), §7 (`:1665`), §7 `Preservation` | `--prune` **had** coverage: five SL-105-era goldens. Both sentences now say those goldens pin the *decision*, not the *rendered reason*. The five are added to `Preservation` with `after_prune_absent_target` marked superseded by PHASE-07 — the supersession the design should have declared. |
+| 6 | §6 opening, §7 agent-verified | **Two** literal terminal comparisons inside **four** read-parse blocks, which §6's next paragraph already said correctly. Four stale line numbers restated (`backlog.rs:2295`/`:2319`; `commands/dep_seq.rs:287`/`:307`). |
+| 7 | §6 | Gains the **fifth** `--prune` consequence: `authored_class(kind, Absent)` is `Terminal`, so an `after` edge onto a `REC` becomes prunable, rendering `dropped (dangling: status-less)`. The refused alternative (treat `Absent` as *keep*) is recorded with its reason. Owner accepted 2026-08-17. |
+| 8 | §5 | **Owner's call taken: note it.** A non-canonical stored ref reports under `not a canonical ref` regardless of why it failed; a dangling **bare** ref is that case. Measured zero bare refs in the corpus, so exhaustive in practice, imprecise in principle. |
+
+Six of the eight had their corresponding `plan.toml` criterion amended in place at
+planning time; those two artefacts now agree again.
+
+**PHASE-05 `EX-2` accepted as agent-verified** (`F-7`). Recorded in `design.md` §7
+`Agent-verified` and pointed to from `notes.md`. The e2e golden was declined —
+`tests/e2e_inspect_golden.rs` is about `doctrine inspect`, not `backlog inspect`,
+so pinning three lines of wiring costs a new e2e file — and the acceptance rests on
+the two mitigations that landed at PHASE-05 (the `Table` arm's single inline
+expression; `VT-3`'s doc comment stating what it does not prove). **`plan.toml` was
+not edited**: `EN-`/`EX-`/`VT-` ids are immutable-append and are not a reconcile
+write surface.
+
+**`notes.md` `### Open` closed.** Every entry now carries a disposition in a
+summary table at the head of the section, with the evidence trail left intact
+below it. `A2` is recorded as **deliberately left unverified** — no code, criterion
+or prose branches on the answer, so the census would change nothing.
+
+### Code change
+
+**The unresolvable-refs advisory: softened and pluralised** — `QUE-222` settled
+`answered` in favour of softening, together with `F-4`, because both defects rode
+one string.
+
+```
+backlog list: at least {n} authored needs/after {ref names|refs name} nothing — run `doctrine doctor` for the full check
+```
+
+*At least* declares the count a lower bound; *for the full check* declares the
+pointer complete. This is §2's own argument turned on the advisory — a signpost
+trusted as complete when it is not is worse than no signpost — and the two gaps
+that make it incomplete are the ones §2's narrowing now names. Shape: one template
+plus two agreement constants (`STD-001`), TDD red→green. **Correction to the
+brief's arithmetic:** the count was pinned in **four** `contains` assertions
+(`src/backlog.rs:6255`, `:6292`, `:6328`, `:6420`), not three — both `F-4` and
+`QUE-222` estimated three. The *"at least"* prefix broke none of them; the singular
+broke the two at `n = 1`. `design.md` §2's rendered example updated to match.
+
+### Intake dispositions
+
+- **`IMP-099`** → `resolved · done`. Fulfilment burndown on the `fulfils` edge
+  already authored in `slice-238.toml` (`ADR-018`; no degree recorded, so `None ≡
+  Full`).
+- **`IDE-019`** → `resolved · done`, **and its body now records both declined
+  mechanisms**, because its proposer reads `IDE-019` and not this slice's notes:
+  the `--verbose`/`--explain` flag was declined (`DEC-234` — per-item detail went
+  to `backlog inspect`/`show`), and the dangling-ref report was **resited rather
+  than gated** (`DEC-232` — authored data that is wrong is `doctor`'s business).
+  The item's two open questions are answered by that siting. Intent delivered,
+  mechanism declined twice.
+- **`QUE-222`** → `answered`, disposition on the record, prose half in
+  `record-222.md`.
+- **`DEC-236`** — no action, as the brief found: covered by §9's overrun fold.
+
+### The named output changes — eight (`F-8`)
+
+The authoritative list. `F-8`'s response on the ledger says *seven* and omits
+entry 6; the ledger is append-only, so the count stands there and this is the
+correction.
+
+1. **`dropped (… absent)` no longer renders anywhere.** The footer's project-level
+   `AbsentDrop` leg is deleted and `classify_dangling` with it. This was the
+   slice's founding defect — the word `absent` hardcoded for a case the resolver
+   could not name.
+2. **A new `boundary:` block**, dependent-first, no arrow. Ten lines on the live
+   corpus, each one an edge whose dependent *and* target are both non-terminal.
+3. **A new count-only stderr advisory** on `backlog list --by sequence`, silent on
+   the live corpus (zero unresolvable refs). Wording as settled above.
+4. **`after --prune`'s three reason strings collapse to one** — `absent`,
+   `(unparseable)` and `absent (unparseable ref)` all become `dropped (dangling:
+   unresolved)` — and the terminal reason **loses its `/resolution` suffix**
+   (`dropped (dangling: closed)`, not `closed/wont-do`).
+5. **A fifth reason token, `dropped (dangling: status-less)`**, for an `after` edge
+   onto a `REC`.
+6. **A new `--prune` stderr line**, `{source_id} after {to} (rank {r}) kept
+   (unreadable: {err:#})`. PHASE-07 `EX-3` mandated the disclosure without
+   specifying wording. *This is the entry the ledger's response undercounted;*
+   PHASE-07's phase sheet flagged it as "a sixth output change for the
+   reconciliation brief" and `notes.md:630` carries it.
+7. **`after --prune`'s source echo becomes canonical** where it was as-typed. Note
+   for release notes: this is a change to the **top-level** verb, which PHASE-08
+   `EX-6` covers only for the routed `backlog after` legs.
+8. **`backlog needs` refuses `RV`, `REC` and governance targets**, with the
+   byte-identical message the kind-neutral verb gives (`ISS-368`, PHASE-08 `EX-4`).
+   Correct, and a **compatibility break** — input accepted yesterday is refused
+   today.
+
+### Governance/spec (REV)
+
+**None owed, as briefed.** `SL-238` amended no ADR, policy, standard or spec.
+`ADR-001`'s layering table gained one authored classification row
+(`authored_status = "engine"`) under its own existing mechanism with the tangle
+baseline unmoved — data the ADR expects, not a governance amendment. `ADR-017`,
+`STD-001` and `STD-003` were satisfied as written.
+
+### Carried, not fixed here
+
+- `F-2` / **`ISS-441`** (`open`) — `verify-vt`'s false `PASS`. Extended at audit
+  with the second route, its measurements and a fourth candidate fix. The defect is
+  in the evidence tool, not this slice.
+- `F-5` / **`CHR-071`** (`open`) — the `kref_for` collapse, minted at audit and
+  linked `originates_from SL-238`.
+- `F-10` — confirmed correct as-is; no criterion was lost. No action.
+- **`RSK-013`** and the `catalog::scan` STD-003 sites — outside this slice's
+  surfaces; `IMP-443` carries the census.
+
+### Note on the design run
+
+`design.md` is edited **out of band**: the run is locked at rev 63 with a
+materialised watermark, so its section fingerprints now diverge from the run. That
+is the reconcile write surface working as designed — the locked run is why eight
+falsified claims had to accumulate through execution instead of being fixed in
+flight, and `RV-363`'s standing-risks section records the seam as still open.
+
+Reconcile pass complete — handoff to `/close`.

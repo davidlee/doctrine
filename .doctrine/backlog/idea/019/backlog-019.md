@@ -41,7 +41,42 @@ Candidate: `--verbose` (consistent with unix conventions). Alternative:
    without `--verbose`? Arguably yes — a live target matters.
 2. Should `--verbose` also control other warnings, or only overrides?
 
+## Outcome: intent delivered, mechanism declined twice (SL-238, 2026-08-17)
+
+`SL-238` fulfils this item. The problem it names is fixed — `backlog list` no
+longer buries actionable dangling references in noise about terminal ones — but
+**neither of the two mechanisms proposed above was adopted**, and the divergences
+are recorded here rather than only in the slice's notes, because a reader of this
+item is who they concern.
+
+- **The flag was declined (`DEC-234`).** No `--verbose`/`--explain` was added to
+  `backlog list`. The per-item detail this item wanted behind an opt-in went to
+  `doctrine backlog inspect` / `show` instead, which annotate each `needs`/`after`
+  ref with its target's state. A flag would have made the listing surface answer
+  two questions at two verbosities; a second verb already existed for the second
+  question.
+
+- **The dangling-ref report was resited, not gated (`DEC-232`).** The proposal
+  assumed the warnings belong in the footer and only need suppressing. `SL-238`
+  ruled the other way: **authored data that is wrong is `doctor`'s business, not
+  the listing surface's.** Unresolvable `needs`/`after` refs are now reported by
+  `doctrine doctor`'s ref-integrity leg, over every item including terminal ones —
+  a wider population than any footer flag could have reached. `backlog list` keeps
+  only a count-only stderr signpost pointing at `doctor`.
+
+What replaced the suppression heuristics is a stricter version of the same
+instinct: the footer's `boundary:` block discloses exactly the edges whose
+dependent **and** target are both non-terminal, having checked both — which is the
+"surfaced when at least one side is non-terminal" rule above, tightened, and made
+true rather than asserted. The founding defect `SL-238` fixed was the old footer
+claiming `dropped (dangling: SL-182 absent)` about an entity that existed.
+
+The two open questions above are answered by that siting: `doctor` reports every
+broken authored ref regardless of either side's status (Q1), and the resiting
+applies to dep/seq refs only — no other warning class moved (Q2).
+
 ## Related
 
 - CHR-021: Audit and improve shipped memory corpus
 - IMP-148: MCP memory tool inline help
+- SL-238: fulfils this item — see the outcome above (`DEC-232`, `DEC-234`)

@@ -349,8 +349,16 @@ So when the probe drops **one or more** unresolvable refs, `backlog list` emits 
 single count-only advisory to stderr:
 
 ```
-backlog list: 3 authored needs/after refs name nothing — run `doctrine doctor`
+backlog list: at least 3 authored needs/after refs name nothing — run `doctrine doctor` for the full check
 ```
+
+The count is a **lower bound**, and the wording says so — *at least*, and *for the
+full check*. That is `QUE-222`, settled at reconcile in favour of softening, on the
+gaps the parity bullet below names: this advisory cannot see a broken ref on a
+terminal dependent or an unreadable item, `doctor` can, and a reader who takes the
+count as complete is misled by exactly the mechanism this slice exists to remove.
+The noun phrase agrees with the count (`ref names` / `refs name`) — `RV-363` `F-4`,
+settled in the same edit because it is the same string.
 
 Four properties make this a signpost rather than a second report, and keep
 `DEC-232` intact:
@@ -371,10 +379,27 @@ Four properties make this a signpost rather than a second report, and keep
   **absent backlog id** (`ISS-999`) parses cleanly and would otherwise reach only
   the adapter, as the `Dangling` override whose leg is deleted above — leaving the
   one class that produces a `doctor` error and no signpost at all. §4 closes that
-  by recording it as an `AbsentDrop` too, so the advisory's count and §5's check
-  report the same population. A signpost that points at `doctor` for a subset of
-  what `doctor` will say is worse than no signpost, because the reader who follows
-  it once and finds it complete will trust it when it is not.
+  by recording it as an `AbsentDrop` too, so the advisory and §5's check cover the
+  same three broken-ref **classes**.
+
+  **That is class parity, not population parity**, and the difference is a priced
+  cost of §4's single-walk constraint rather than an oversight. Two classes of
+  occurrence reach `doctor` and cannot reach the advisory: a broken ref authored on
+  a **terminal dependent**, because `project` admits only live items — this section
+  names those five edges itself, two paragraphs above — and an **unreadable item**,
+  because the listing path's fail-fast `read_all` has no counterpart to
+  `dep_seq_ref_findings`' `ReadFailure` disclosure. Closing either needs the second
+  corpus traversal §4 forbids in terms, so both are accepted. No `VT` row asserts
+  more than the class claim.
+
+  The reason to state the bound rather than leave it implied is the next sentence's
+  own argument: a signpost that points at `doctor` for a subset of what `doctor`
+  will say is worse than no signpost, because the reader who follows it once and
+  finds it complete will trust it when it is not. The advisory is evidence that at
+  least one repair is owed, not a complete count of what `doctor` will report.
+  *(Narrowed at reconcile — `RV-363` `F-6` item 3, unconditional. `plan.toml`'s
+  `EN-2` carries the same overstatement and is left in place: it is met on the
+  reading that matters.)*
 - **It fires only under `--by sequence`**, because `--by id` never composes and so
   never probes. That matches today's footer behaviour exactly, and adding a probe to
   `--by id` purely to emit the line would buy a warning at the cost of the very read
@@ -663,10 +688,19 @@ this design widens what gates work. It changes only what is *disclosed*.
 1. **`Unavailable` never suppresses.** It classifies `Unrecognised`; only
    `Terminal` is suppressed. The edge is always disclosed, with a token that
    reads as a tooling gap.
-2. **The derived-status set is pinned by a test.** A future kind that derives its
-   status and is not added to `DERIVED_STATUS` must fail a test, not degrade
-   quietly — and because there is now one reader, the pin binds what every
-   caller does, not just what one of them lists.
+2. **The derived-status set is pinned by a test — as a tripwire on intent, not
+   as a completeness check.** `DERIVED_STATUS == ["RV"]` is an *equality* pin, so
+   it fires when a kind **is** added and stays green when one is **omitted**;
+   omission leaves the assertion true. What actually protects an omitted
+   derived-status kind is rule 3: it takes the common arm, `meta::read_meta`
+   fails on its missing top-level `status`, and STD-003 turns that into a
+   disclosed `Err` — loud, not silent. The pin's value is that a deliberate
+   change to the set has to be deliberate twice, and because there is now one
+   reader, it binds what every caller does rather than what one of them lists.
+   *(Corrected at reconcile — `RV-363` `F-6` item 1. The original claim, that an
+   omitted kind "must fail a test, not degrade quietly", is what an equality pin
+   cannot do. Owner accepted 2026-08-16; the alternative — 24 per-kind fixtures
+   to make an already-loud failure louder — was declined.)*
 3. **A read failure is a corpus defect, not a tooling gap — STD-003.** `read`
    returns `Err`, never `Unavailable` and never `Absent`, so a broken file and a
    tooling limit can never share a signal; detection is static from the parsed
@@ -1060,6 +1094,20 @@ call: `parse_canonical_ref` failing means *not a canonical ref*, succeeding mean
 *no such entity*. Two reasons, deterministic, path-free, and no shared function is
 touched to get them.
 
+**The first reason names the classifier's verdict, not the cause.** A stored ref
+that is not canonical reports under *not a canonical ref* regardless of *why* it
+failed to resolve — and the case that makes them diverge is a dangling **bare**
+ref. `run_needs` gates on `ensure_ref_resolves`, which accepts the bare form, and
+`append_relationship` writes the string **as typed** with no canonicalisation, so
+`after = [{ to = "154" }]` is storable; once `SL-154` is deleted,
+`parse_canonical_ref("154")` fails and the finding reads *not a canonical ref*
+where the cause was *no such entity*. The statement is literally true, the repair
+is identical either way, and the taxonomy stays two-valued deliberately — measured
+2026-08-16, the corpus holds **zero** bare refs, so this is exhaustive in practice
+and imprecise only in principle. *(Noted at reconcile — `RV-363` `F-6` item 8;
+recording the bound rather than widening the check, which PHASE-03 declined to
+chase.)*
+
 What is shared is the decision. `parse_resolvable_ref` is the same function the
 authoring gate resolves through, so what this check reports and what authoring
 refuses cannot drift apart — one resolver, both directions — even though each states
@@ -1073,7 +1121,8 @@ footer sees the same corpus:
   cross-kind edges never reach it. A broken ref on a closed issue is still broken
   data.
 - **Both axes, undeduplicated.** The same bad ref on both axes is two authored
-  facts needing two repairs — and it is the same count §2's advisory reports.
+  facts needing two repairs — the same *counting convention* §2's advisory uses,
+  over a wider population than the advisory can reach (§2 names the two gaps).
 - **Resolution only.** A ref that resolves is not further judged here, even if its
   kind is one the authoring gate would refuse (`ADMISSIBLE_DEP_TARGETS` excludes
   governance docs, `RV`, and `REC`). Admissibility is a different claim from
@@ -1184,7 +1233,20 @@ ceiling. `remove_after` is unchanged; the enum exists so there is one IO wrapper
 rather than two names for one read-parse-write, and so the leaf's remove seam is
 shaped like its append seam.
 
-Three call sites move to the new form, two of which are being rewritten anyway.
+**Four** call sites move to the new form, three of which are being rewritten
+anyway. The two `backlog.rs` sites and `commands/dep_seq.rs`'s `run_after_remove`
+are the three an earlier census named; the fourth is the removal loop inside
+`run_after_prune`, and it is not optional — reshaping `remove` to take a
+`&RelRemove` breaks it at compile time, so it moves whether or not the design
+counted it. PHASE-07 then rewrites that site a second time when it collapses the
+prune probe. The leaf's own two test call sites move with them.
+
+*(Corrected at reconcile — `RV-363` `F-6` item 4. Nothing about the substance
+changes: `run_after_prune` is being rewritten wholesale anyway, exactly as the two
+`backlog.rs` sites are. `plan.toml`'s `EX-1` was already amended in place at
+PHASE-06 planning. The line numbers an earlier draft quoted here were stale and
+are dropped rather than refreshed — the compiler enumerates this population for
+free the moment the signature moves, which is how the miscount was found.)*
 
 ## `doctrine needs <SRC> <TGT> --remove`
 
@@ -1425,10 +1487,18 @@ hand-authored one.
 
 ## `--prune`'s probe, collapsed
 
-Four hardcoded copies of `status == "resolved" || status == "closed"` — two
-functions that are near-verbatim duplicates of each other, each of which reads and
-parses the target twice internally, once to decide and once to describe. They
-collapse to one probe in one function:
+**Four hardcoded read-parse blocks** carrying **two** copies of
+`status == "resolved" || status == "closed"` — two functions that are
+near-verbatim duplicates of each other, each of which reads and parses the target
+twice internally, once to decide and once to describe. Only the *decide* pass
+re-tests terminality; the *describe* pass re-reads to render `status`/`resolution`.
+They collapse to one probe in one function:
+
+*(Label corrected at reconcile — `RV-363` `F-6` item 6. An earlier draft opened
+"four hardcoded copies of `status == …`", conflating the two populations that the
+next paragraph already distinguishes correctly, and a planner hunting four terminal
+literals finds two and has to decide whether the search is broken. `plan.toml`'s
+PHASE-07 objective and `EX-3` were already amended in place at PHASE-07 planning.)*
 
 ```
 for each `after` edge of SRC:
@@ -1449,15 +1519,19 @@ duplicated-table violation and the REQ-238 routing breach together, which is why
 the vocabulary bug could exist at all.
 
 The collapse also closes four instances of the pattern STD-003 forbids. All four
-copies (`backlog.rs:2019-2022`, `:2043-2046`; `commands/dep_seq.rs:202-206`,
-`:222-226`) do `read_to_string(..).unwrap_or_default()` then fall back to an empty
+read-parse blocks (`backlog.rs:2295`, `:2319`; `commands/dep_seq.rs:287`, `:307`
+— line numbers restated at reconcile, `RV-363` `F-6` item 6; the earlier
+`backlog.rs:2019`/`:2043` and `dep_seq.rs:202`/`:222` went stale as PHASE-05 grew
+`backlog.rs`) do `read_to_string(..).unwrap_or_default()` then fall back to an empty
 `toml::Table`, yielding `status == ""` — so a corrupt target is silently exempted
 from a prune the user explicitly asked for, and the exemption is indistinguishable
 from a legitimate live status. The replacement keeps the edge, which is the right
 conservative call, and **says why on stderr**: a repair verb that quietly declines
 to repair is the same class of dishonesty this slice is about.
 
-Four consequences, each of which must be tested as what it is:
+**Five** consequences, each of which must be tested as what it is (the fifth added
+at reconcile — `RV-363` `F-6` item 7, owner accepted 2026-08-17; `plan.toml`'s
+`EX-4`/`VT-5` were already amended in place at planning):
 
 - **A behaviour change, not a refactor.** An `after` edge onto a `done` slice or an
   `answered` question becomes prunable where today it is not. `IMP-172 → SL-154` is
@@ -1483,10 +1557,41 @@ Four consequences, each of which must be tested as what it is:
   three reason strings the two copies render today (`absent`, `(unparseable)`,
   `absent (unparseable ref)`) collapse to one: `dropped (dangling: unresolved)`,
   reusing the token §4 already gives that state rather than minting a fourth.
+- **A status-less target becomes prunable, and the class is rendered rather than
+  invented.** `authored_class(kind, AuthoredStatus::Absent)` returns `Terminal`
+  (`priority/partition.rs`), and `Absent` is what `authored_status::read` returns
+  for `STATUS_LESS`, which is `[REC]`. So under the collapsed probe an `after` edge
+  onto a `REC` is **pruned** where today it is **kept** — today's leg reads the raw
+  toml, finds no `status` key, and `unwrap_or("")` matches neither terminal
+  literal. There is no status word to render, so the reason names the class:
+  `dropped (dangling: status-less)`. It reuses no token that already means
+  something else — `unresolved` means *the ref names nothing*, a different claim.
 
-`--prune` has **no test coverage at all, in either copy**. Characterisation tests
-land before the probe is replaced, so the collapse can be shown to be
-behaviour-preserving where it should be and intentional where it should not.
+  Treating `Absent` as *keep* was the alternative and was refused: it contradicts
+  `status_class`'s own documented meaning (a status-less kind is context-only and
+  default-excluded, which is why the table returns `Terminal`) and would need §3's
+  rule restated to accommodate one caller. Reachability is low but not nil, and the
+  shape is the point — `REC` is not an admissible `after` target, so the authoring
+  gate will never create such an edge and only a hand-authored one reaches the
+  probe. That is exactly the population the bare-ref consequence above exists to
+  serve.
+
+`--prune`'s existing coverage pins the **decision**, not the **rendered reason**.
+`tests/e2e_dep_seq_verbs.rs` carries five SL-105-era goldens —
+`after_prune_drops_resolved`, `after_prune_noop`, `after_prune_mixed`,
+`after_prune_absent_target`, `backlog_after_prune` — and each asserts
+`contains("resolved")` / `contains("dropped")` rather than the reason string, so
+the `resolved`/`closed` split, the `/resolution` suffix, the silent keep on an
+unreadable target and the bare-ref deletion all pass through them unobserved.
+Every behaviour the five consequences above name is therefore genuinely unpinned.
+Characterisation tests land before the probe is replaced, so the collapse can be
+shown to be behaviour-preserving where it should be and intentional where it
+should not — and they extend the goldens rather than starting from nothing.
+
+*(Corrected at reconcile — `RV-363` `F-6` item 5. An earlier draft said `--prune`
+had "no test coverage at all, in either copy", which was false as of `7958af7ca`
+and, read literally, made PHASE-02 look greenfield. The substance survives; see
+§7 `Preservation` for the supersession the design should have declared.)*
 
 
 <!-- doctrine:section sec-7 -->
@@ -1544,16 +1649,26 @@ Three different kinds of claim, and they need different evidence:
 
 - `authored_status read returns a known status for each admissible target kind`.
 - `authored_status read returns Unavailable for a derived status kind without
-  reading` — the read is not attempted, so a fixture with no toml at all still
-  returns `Unavailable`.
+  reading` — fixtured as a derived-status kind **whose toml does carry a status**,
+  which is still reported `Unavailable`. *"Without reading"* names the **status**
+  read, which is never attempted; it never names the title read, which always is.
+  So an absent or corrupt toml is `Err` on this arm as on every other (§3's arm
+  table gives both special arms a lenient title read, and rule 3 forbids a broken
+  file and a tooling limit sharing one signal). *(Corrected at reconcile —
+  `RV-363` `F-6` item 2; the original fixture, "no toml at all", is unreachable
+  under that arm table. `plan.toml`'s `VT-2` was already amended in place at
+  planning. Owner accepted 2026-08-16.)*
 - `authored_status read returns Err on a present but unparseable toml` — never
   `Unavailable`, never `Absent`. The two signals are distinct at the type level and
   this is what holds them apart (STD-003).
 - `authored_class never returns Terminal for Unavailable` — the standing rule stated as
   an assertion; `Terminal` is the one class the footer suppresses.
-- `the derived status kind set is pinned` — `DERIVED_STATUS == ["RV"]`, so a future
-  kind that derives its status and is not added fails here rather than degrading
-  quietly. `STATUS_LESS` pinned the same way.
+- `the derived status kind set is pinned` — `DERIVED_STATUS == ["RV"]`, an equality
+  pin, so **adding** a kind without deciding to fails here. It does not fire on an
+  *omitted* kind, and does not claim to: an omitted derived-status kind is caught by
+  `meta::read_meta`'s strict read failing loudly under STD-003 (§3, rule 2).
+  `STATUS_LESS` pinned the same way. *(Corrected at reconcile — `RV-363` `F-6`
+  item 1.)*
 - `catalog scan status_and_title_for delegates to authored_status` — the overlay,
   asserted by behaviour: an `RV` fixture yields its derived status through
   `catalog::scan` and `Unavailable` through the engine reader, from one read path.
@@ -1662,11 +1777,14 @@ pins the shutting:
 - `remove_needs refuses a malformed entity without touching the file` — the leaf's
   F-1 posture, matching `remove_after`.
 
-**Characterisation first.** `--prune` has no coverage in either copy, so its
-current behaviour — including the reason wording, the `resolved`/`closed`
-vocabulary, and the silent keep on an unreadable target — is pinned before the probe
-is replaced. Otherwise the collapse cannot be shown to be behaviour-preserving where
-it should be, or intentional where it should not.
+**Characterisation first.** `--prune`'s five existing goldens pin which edges
+survive, not what the drop *says* (§6), so the behaviour this collapse changes —
+the reason wording, the `resolved`/`closed` vocabulary, the `/resolution` suffix,
+the silent keep on an unreadable target, and the bare-ref deletion — is unpinned
+and is characterised before the probe is replaced. Otherwise the collapse cannot be
+shown to be behaviour-preserving where it should be, or intentional where it should
+not. *(Corrected at reconcile — `RV-363` `F-6` item 5; this sentence read "`--prune`
+has no coverage in either copy".)*
 
 ## Preservation, and the changes that must be named
 
@@ -1699,6 +1817,16 @@ it should be, or intentional where it should not.
   `cmap`. Enforced by the compiler under this repo's `dead_code`/`unused` denials
   rather than by a test — but named here because it is a deliberate deletion, not
   fallout.
+- **The five SL-105-era `--prune` goldens in `tests/e2e_dep_seq_verbs.rs` are
+  preserved as decision pins** — `after_prune_drops_resolved`, `after_prune_noop`,
+  `after_prune_mixed`, `after_prune_absent_target`, `backlog_after_prune`. They
+  assert which edges survive, which the collapse does not change except where §6
+  names a consequence. One exception, declared here rather than discovered at
+  execution: **`after_prune_absent_target` is superseded by PHASE-07**, because its
+  `absent` reason becomes `unresolved` under the collapsed probe. The replacement
+  states what it replaced. *(Added at reconcile — `RV-363` `F-6` item 5; the design
+  should have declared this supersession and did not, having recorded the file as
+  having no coverage.)*
 - Two interim tests from `74b773690` are **superseded, not relaxed**:
   `list_sequence_stays_silent_on_a_cross_kind_drop_but_names_a_malformed_ref`
   asserts both that a live cross-kind target is silent (now disclosed) and that a
@@ -1712,7 +1840,10 @@ it should be, or intentional where it should not.
 - **No second terminal-status vocabulary survives.** Every inline
   `resolved`/`closed` status probe is gone from `src/backlog.rs` and
   `src/commands/dep_seq.rs`, with `partition::status_class` the sole classifier —
-  established by grep over the tree, with the four known sites named.
+  established by grep over the tree, with the known sites named: **two** terminal
+  literal comparisons inside **four** read-parse blocks (§6). *(Count corrected at
+  reconcile — `RV-363` `F-6` item 6; this bullet repeated §6's conflated "four
+  known sites".)*
 - **One per-ref status reader survives.** `grep` shows no second `match` on
   `kref.kind.prefix` selecting a status strategy: `catalog::scan::status_and_title_for`
   delegates to `authored_status::read` rather than repeating its arms, and the
@@ -1729,7 +1860,26 @@ it should be, or intentional where it should not.
 - **Every intentional output change is named in the reconciliation brief with its
   reason**, including the two superseded tests, `--prune`'s dropped `/resolution`
   suffix, the unified unparseable wording, the new stderr advisory and prune notice,
-  and the canonical-id echo on the routed `backlog after` legs.
+  the new `dropped (dangling: status-less)` token, and the canonical-id echo on
+  `after --prune` — the **top-level** verb as well as the routed `backlog after`
+  legs. *(Extended at reconcile — `RV-363` `F-8`; the authoritative list is eight
+  entries and lives in that review's `## Reconciliation Outcome`.)*
+- **PHASE-05 `EX-2` is accepted as agent-verified, and this bullet is the record.**
+  `EX-2` requires that `run_show_inspect` threads the probe map into
+  `format_metadata`. It writes straight to `io::stdout()` with no render seam, so
+  no in-module test can observe the threading — `VT-3`/`VT-4` compose
+  `probe_item_refs` and the renderer themselves, which proves both halves work and
+  not that the shell wires them. The wiring is verified by reading, on two
+  mitigations that landed at PHASE-05: the `Table` arm passes
+  `&probe_item_refs(&root, &item)` as a **single inline expression**, so
+  misthreading is a compile error rather than a silent mis-wire, and `VT-3`'s doc
+  comment states that it does not observe the wiring, so the suite does not read
+  stronger than it is. Commissioning a `tests/e2e_backlog_inspect` golden was
+  declined: `tests/e2e_inspect_golden.rs` is about `doctrine inspect`, not `backlog
+  inspect`, so pinning three lines of wiring means a new e2e file. *(Recorded at
+  reconcile — `RV-363` `F-7`. `plan.toml` is deliberately **not** edited: `EN-`/`EX-`/`VT-`
+  ids are immutable-append and are not a reconcile write surface, so the acceptance
+  is recorded here and in `notes.md`, never by editing `EX-2`.)*
 
 
 <!-- doctrine:section sec-8 -->
@@ -1750,6 +1900,7 @@ it should be, or intentional where it should not.
 | `src/commands/doctor.rs` | one `extend` for the new check under `RelationIntegrity`. |
 | `src/main.rs` | one `mod authored_status;` declaration. The binary owns its own module tree (`main.rs:3-19`), so a new root module is unreachable until declared here; the file carries 94 such lines today and this is one more. |
 | `.doctrine/adr/001/layering.toml` | one authored row classifying `authored_status` as engine, beside the comment inventory every other module carries. No tier change, no accepted-violation entry, no baseline movement. |
+| `tests/e2e_dep_seq_verbs.rs` | The black-box home for every assertion over rendered CLI output. Carries the five SL-105-era `--prune` goldens this slice supersedes, and gains PHASE-02 `VT-1`…`VT-3`, PHASE-07 `VT-1`…`VT-5` and PHASE-08 `VT-1`…`VT-3` — 14 of the slice's 48 verification rows. **Added at reconcile** (`RV-363` `F-1`): three phases retargeted rows here at planning time precisely because an in-module test cannot observe rendered output, and the design never declared it. |
 
 Test modules move with their subjects: `src/backlog.rs`'s footer goldens and
 `backlog list` fixtures, `src/commands/dep_seq.rs`'s module — unmoved, so the `P4`
@@ -1796,6 +1947,7 @@ src/authored_status.rs
 src/main.rs
 src/priority/partition.rs
 src/catalog/scan.rs
+tests/e2e_dep_seq_verbs.rs
 ```
 
 `src/meta.rs` is absent from this set on purpose — it moved from a target to a

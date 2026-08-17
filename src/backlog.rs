@@ -2471,12 +2471,34 @@ fn run_paths(
 /// check rather than the footer's per-pair dedup; it counts all three broken-ref
 /// classes, not the two the projection notices first; and it fires only under
 /// `--by sequence`, because `--by id` never composes and so never probes.
-const UNRESOLVED_ADVISORY: &str =
-    "backlog list: {n} authored needs/after refs name nothing — run `doctrine doctor`";
+///
+/// The count is a **lower bound**, and the wording says so (`QUE-222`, settled at
+/// `SL-238` reconcile). It is class parity with §5's check, not population parity:
+/// `project` admits only non-terminal items, so a broken ref authored on a terminal
+/// dependent never reaches this count, and the listing path's fail-fast read has no
+/// counterpart to the check's `ReadFailure` disclosure. Closing either gap needs a
+/// second corpus traversal §4 forbids. `doctor` is complete and this points at it —
+/// so it must not read as a complete count, on §2's own argument that a signpost
+/// trusted as complete when it is not is worse than no signpost.
+const UNRESOLVED_ADVISORY: &str = "backlog list: at least {n} authored needs/after {refs} — run `doctrine doctor` for the full check";
 
-/// The advisory with its count substituted.
+/// The advisory's plural agreement (`RV-363` `F-4`). `n = 1` is the commonest
+/// non-zero case — one bad ref authored, one advisory — so the singular is not a
+/// nicety. Split from the template rather than duplicating it: agreement is the
+/// only thing that varies.
+const UNRESOLVED_ADVISORY_ONE: &str = "ref names nothing";
+const UNRESOLVED_ADVISORY_MANY: &str = "refs name nothing";
+
+/// The advisory with its count substituted and its noun phrase agreed.
 fn advisory_line(n: usize) -> String {
-    UNRESOLVED_ADVISORY.replace("{n}", &n.to_string())
+    let agreement = if n == 1 {
+        UNRESOLVED_ADVISORY_ONE
+    } else {
+        UNRESOLVED_ADVISORY_MANY
+    };
+    UNRESOLVED_ADVISORY
+        .replace("{n}", &n.to_string())
+        .replace("{refs}", agreement)
 }
 
 /// Render the footer's two blocks (SL-238 §2/§4). `DEC-232` gives the footer one
@@ -6252,7 +6274,7 @@ tags = []
 
         let (out, err) = list_seq(root, list_args());
         assert!(
-            err.contains("2 authored needs/after refs name nothing"),
+            err.contains("at least 2 authored needs/after refs name nothing"),
             "one ref on two axes is two repairs: {err:?}"
         );
         assert!(
@@ -6289,8 +6311,8 @@ tags = []
         );
         let (out, err) = list_seq(root, list_args());
         assert!(
-            err.contains("1 authored needs/after refs name nothing"),
-            "and the advisory counts it: {err:?}"
+            err.contains("at least 1 authored needs/after ref names nothing"),
+            "and the advisory counts it, in agreement at n=1: {err:?}"
         );
         assert!(!out.contains("ISS-999"), "no footer line for it: {out}");
     }
@@ -6325,7 +6347,7 @@ tags = []
             );
         }
         assert!(
-            err.contains("3 authored needs/after refs name nothing"),
+            err.contains("at least 3 authored needs/after refs name nothing"),
             "the control: this corpus DOES fire: {err:?}"
         );
 
@@ -6417,7 +6439,7 @@ tags = []
         );
         assert!(
             out.stderr
-                .contains("1 authored needs/after refs name nothing"),
+                .contains("at least 1 authored needs/after ref names nothing"),
             "and so is the advisory: {:?}",
             out.stderr
         );

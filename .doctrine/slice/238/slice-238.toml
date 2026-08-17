@@ -66,6 +66,10 @@ intent = "design-target"
 selector = "src/main.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "tests/e2e_dep_seq_verbs.rs"
+intent = "design-target"
+
 [[relation]]
 label = "fulfils"
 target = "IMP-099"
