@@ -1,0 +1,50 @@
+memory_uid = "mem_01a00d4c61e27de29fba501edf9b29b7"
+memory_key = "mem.pattern.testing.pin-the-refusal-reason-not-the-refusal"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Pin the refusal reason, not the refusal"
+summary = "A before-state pin on a refusal must assert the message by equality — the post-change tree usually still refuses, just for a different reason"
+created = "2026-08-17"
+updated = "2026-08-17"
+
+[scope]
+paths = ["tests"]
+globs = []
+commands = []
+tags = ["testing", "characterisation", "tdd"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e83a6d8b2d88184d44d8db8b6803831f30e25a9b"
+ref_name = "refs/heads/edge"
+checkout_state_id = "67bd2c9a9b5050d69f89f53bf04970094cf3cb9df09ad69036ce9e2143d32805"
+base_commit = "c84966546d17955759a96eeaa8f8ff7f32830f16"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-238"
+
+[[source]]
+kind = "question"
+ref = "QUE-221"
+

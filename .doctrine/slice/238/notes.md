@@ -160,7 +160,7 @@ Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-17 · **PHASE-06 completed and harvested** (6 of 8) · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `a792b4432`, clean of mine
+fresh-as-of: 2026-08-17 · **PHASE-06 completed and harvested** (6 of 8); `QUE-221` answered and its pin landed between PHASE-06 and PHASE-07 · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `c84966546`, clean of mine
 
 ### Produced
 
@@ -602,9 +602,29 @@ it lacked only what state each declared target was in.
   `completed` flip **PHASE-07 `VT-4` and PHASE-08 `VT-6` both read `PASS`** on
   keyword coincidence alone. Neither phase exists. Their siblings still `FAIL`
   honestly, which is what makes the two `PASS`es legible as the defect.
+- **`QUE-221` answered — the cross-kind pin landed** (`c84966546`), between
+  PHASE-06 and PHASE-07, outside any phase's conformance span. That placement is
+  deliberate: it is a PHASE-02 debt paid late, not PHASE-07 work, and the window
+  closes when PHASE-08 lands. **`PHASE-08` inherits an obligation, not a free
+  green** — it must find
+  `backlog_after_pins_the_cross_kind_target_refusal_on_both_legs` RED and rewrite
+  it in place into its opposite. Detail and the mutation evidence in `### Open`.
 
 ### Learned
 
+- `mem.pattern.testing.pin-the-refusal-reason-not-the-refusal`
+  (`mem_01a00d4c61e27de29fba501edf9b29b7`) — **minted answering `QUE-221`.** A
+  before-state pin on a *refusal* is the vacuity-prone case, because after the
+  change the command usually **still refuses**, just from a later layer. Here,
+  deleting both `require_item` target gates moved the `--remove` leg's refusal
+  from the kind gate to the zero-count bail: exit code unchanged, target still
+  named, `!success` and `contains` both still green. Only `assert_eq!` on the
+  message goes red. So: pin the **reason**, and **mutation-test the pin before
+  trusting it** — a characterisation test that is green on first write has proven
+  nothing until you have seen it red, and for a before-state pin the natural red
+  arrives in a *later* phase, so you must manufacture it now. Completes
+  `mem.pattern.testing.grep-for-the-pin-before-characterising`: find the pin,
+  then make sure the pin can actually fail.
 - `mem.pattern.planning.let-the-compiler-recount-the-call-sites`
   (`mem_01a00d11d24d70a1bf531fe6561c426b`) — **PHASE-06, minted at harvest.** A
   criterion that enumerates call sites is a claim about the tree *at authoring
@@ -971,11 +991,23 @@ routes around: it does not care who authored the signature.
   `mem.pattern.testing.grep-for-the-pin-before-characterising`: **before pinning
   a before-state, grep for the pin.**
 
-- `QUE-221` — whether `backlog after`'s cross-kind target refusal needs a
-  before-state pin. Deliberately changed behaviour by §6, but outside §7's named
-  characterisation set and outside PHASE-02's `EX-1`/`EX-2`, so PHASE-02 raised it
-  rather than deciding it. **Answerable only before PHASE-07 lands** — after that
-  the pin cannot be written at all. One test if accepted; zero cost if declined.
+- ~~`QUE-221`~~ — **answered 2026-08-17: pin it.** Landed as
+  `backlog_after_pins_the_cross_kind_target_refusal_on_both_legs`
+  (`tests/e2e_dep_seq_verbs.rs`, `c84966546`), inside the only window where a
+  before-state pin could still be written. Owner's reasoning: the only argument
+  against was cost-versus-vacuity risk, and nothing made this one expensive.
+  **`PHASE-08` must find this test RED and rewrite it in place into its opposite
+  — cross-kind target accepted, edge written — not delete it.**
+
+  The one thing worth carrying: the pin asserts the refusal **message** by
+  equality, and that is load-bearing rather than fastidious. Mutation-tested by
+  removing both `require_item(&root, to)?` target gates — the remove leg then
+  emits `ISS-001 has no after edge to SL-154`, still non-zero and still naming
+  the target, so `!success` and `contains("SL-154")` **both survive the exact
+  change the pin exists to catch**. A before-state pin on a refusal must
+  discriminate the *reason*, because the post-change tree usually still refuses,
+  just elsewhere. Generalised into
+  `mem.pattern.testing.pin-the-refusal-reason-not-the-refusal`.
 - **§7's VT-2 bullet contradicts §3's own arm table — design-text fix at
   reconcile, owner accepted 2026-08-16. `plan.toml`'s VT-2 row is already
   amended.** §7 says a derived-status kind *"with no toml at all still returns
