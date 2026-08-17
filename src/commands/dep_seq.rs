@@ -35,6 +35,29 @@ pub(crate) fn is_admissible_dep_target(kind: &'static crate::entity::Kind) -> bo
     is_work_like(kind) || is_record(kind)
 }
 
+/// The admissible-target gate as a *refusal*, named so both callers speak with one
+/// voice (SL-238 §6, `EX-1`): [`resolve_dep_seq_src`] on the kind-neutral verbs, and
+/// `backlog needs`' prerequisite loop through the injected `DepSeqOps::admit_target`
+/// pointer. `backlog` cannot call this directly — that would be the `backlog →
+/// commands` edge §6 refuses — and re-authoring the message there would be a second
+/// refusal vocabulary drifting from the first.
+///
+/// Takes the target REF as well as its kind because the message interpolates both;
+/// a signature carrying only the kind can render no better than `` `ADR` is a ADR
+/// entity ``, which is a different message, not the same one.
+pub(crate) fn ensure_admissible_dep_target(
+    kind: &'static crate::entity::Kind,
+    target: &str,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        is_admissible_dep_target(kind),
+        "`{target}` is a {} entity — needs/after may only target work (a slice or a backlog item) or a knowledge record ({}); governance docs are excluded",
+        kind.prefix,
+        record_kind_list_slash(),
+    );
+    Ok(())
+}
+
 /// SL-197 P4: the `RecordKind` vocabulary joined with "/" for the `dep_seq` error
 /// message. When a 7th kind is added in PHASE-02, the message auto-includes it.
 fn record_kind_list_slash() -> String {
@@ -121,12 +144,7 @@ fn resolve_dep_seq_src(
     // (never write an edge to a non-entity). The resolver first so a
     // free-text target surfaces the ref-shape error, then a dir probe.
     let (tkref, tid) = crate::kinds::parse_resolvable_ref(root, target)?;
-    anyhow::ensure!(
-        is_admissible_dep_target(tkref.kind),
-        "`{target}` is a {} entity — needs/after may only target work (a slice or a backlog item) or a knowledge record ({}); governance docs are excluded",
-        tkref.kind.prefix,
-        record_kind_list_slash(),
-    );
+    ensure_admissible_dep_target(tkref.kind, target)?;
     let target_id = crate::listing::canonical_id(tkref.kind.prefix, tid);
     // Canonical ids carry the prefix, so id equality IS same-kind-and-same-id — the
     // pair comparison this replaced, spelled once.
@@ -435,6 +453,45 @@ mod tests {
                 k.kind.prefix
             );
         }
+    }
+
+    /// SL-238 PHASE-08 `VT-4`: `ensure_admissible_dep_target` is the ONE gate, and
+    /// the injected pointer and [`resolve_dep_seq_src`] refuse **in one voice** —
+    /// the same bytes, the target ref included.
+    ///
+    /// Identity, not shape. A gate handed only the kind has thrown the ref away by
+    /// the time the message is built and can render no better than
+    /// `` `ADR` is a ADR entity `` — the prefix twice, the ref nowhere (§6, *Why the
+    /// ref rides along*; a type prototype of this design shipped exactly that).
+    /// A `contains`-style assertion would have accepted it, so the equality of the
+    /// two callers' rendered errors is the assertion that matters.
+    ///
+    /// ADR stands in for the governance exclusion here because its fixture already
+    /// exists; `RV` and `REC` are covered black-box by `VT-3`, which is where the
+    /// byte-identity against `doctrine needs` is asserted.
+    #[test]
+    fn ensure_admissible_dep_target_refuses_in_one_voice_with_resolve() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = seed_root(&tmp);
+        seed_sl_toml(root, 1);
+        seed_adr_toml(root, 1);
+
+        let (kref, _tid) = crate::kinds::parse_resolvable_ref(root, "ADR-001").unwrap();
+        let direct = ensure_admissible_dep_target(kref.kind, "ADR-001")
+            .expect_err("ADR is a governance doc — inadmissible as a dep/seq target");
+        let via_resolve = resolve_dep_seq_src(root, "SL-001", "ADR-001")
+            .expect_err("the same pair must be refused through the resolver");
+
+        assert_eq!(
+            direct.to_string(),
+            via_resolve.to_string(),
+            "one gate, one voice: the extracted gate and its only production caller \
+             must render byte-identical refusals"
+        );
+        assert!(
+            direct.to_string().contains("`ADR-001`"),
+            "the message interpolates the target REF, not just its prefix: {direct}"
+        );
     }
 
     /// SL-158 D2 / VT-6: resolve_dep_seq_src accepts a record (QUE) as target.
