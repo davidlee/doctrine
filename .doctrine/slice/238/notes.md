@@ -160,9 +160,27 @@ Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-17 · **PHASE-08 harvested — all 8 phases done; slice at `audit`, awaiting `/audit`.** Both inherited obligations discharged: `QUE-221`'s cross-kind pin was found RED and rewritten in place into its opposite, and `EX-3` removed `src/backlog.rs`'s duplicate prune leg (149 lines). Command tangle **measured 76**, unchanged. `ISS-368` closed, `ISS-446` minted · slice/`audit` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `e240f9424`, plus this harvest
+fresh-as-of: 2026-08-17 · **Audited — `RV-363` `done`, ten findings, no blocker; slice moves to `reconcile`.** The disclosure was re-derived against the live corpus (32 authored cross-kind edges → exactly the 10 rendered `boundary:` rows; all 13 suppressed targets individually confirmed terminal), `doctrine check gate` exit 0, command tangle **measured 76**. `RV-358`'s five `answered` findings — including its `F-1` blocker — verified terminal against the built tree, so that ledger is `done` rather than waived. Two findings fixed in the audit (`annotated` guard collapsed; `CHR-071` minted), two accepted as owned drift (`ISS-441` extended, `QUE-222`), five routed to the reconciliation brief · slice/`reconcile` · design/**locked** (run `dr-01a00475`, rev 63; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `RV-363`
 
 ### Produced
+
+- `RV-363` — the reconciliation audit ledger: brief, ten findings, `## Synthesis`
+  and `## Reconciliation Brief`. The brief is the authority on the
+  named-output-change list (**eight**, not the seven `F-8`'s append-only
+  response recorded).
+- `CHR-071` — the `catalog::scan::kref_for` collapse, minted from `notes.md`'s
+  reasoning (`F-5`); `references SL-238 --role originates_from`.
+- `ISS-441` extended — a **second route** to its false `PASS`, one its two
+  leading candidate fixes both miss: a superseded test's name survives inside
+  its successor's mandated supersession comment, so the retired row passes
+  forever. Measured over `tests/e2e_dep_seq_verbs.rs` with a positive control.
+- `src/backlog.rs` — `render_overrides`' boundary line now composes the shared
+  `annotated` guard instead of open-coding it (`F-3`); doc comment corrected
+  from "one guard, both axes" to name both surfaces. −5 lines, footer
+  byte-identical.
+- `RV-358` closed out — `F-1` (blocker), `F-3`, `F-5`, `F-9`, `F-10` verified
+  against the built tree rather than waived. The close-gate is clear on
+  evidence, not on a disposition.
 
 - `design.md` — all nine sections rewritten against a nine-finding critical read,
   then **all nine revised again** against `RV-358`'s nine findings. Materialised at
@@ -1110,6 +1128,16 @@ puts on par with one round of design-text editing. The self-rule bar
 routes around: it does not care who authored the signature.
 
 ### Open
+
+> **Collected and routed, 2026-08-17.** Every entry below is now carried by
+> `RV-363`'s `## Reconciliation Brief` with a write surface named — read the
+> brief, not this list, when driving `/reconcile`. This section stays as the
+> evidence trail: each entry records *how* the divergence was found, which the
+> brief deliberately does not repeat. Two entries are discharged rather than
+> routed — the `kref_for` follow-up is now `CHR-071`, and `ISS-441` gained a
+> second route the audit measured. The audit added one the list did not have:
+> `tests/e2e_dep_seq_verbs.rs` is missing from the selector registry
+> (`RV-363` `F-1`).
 
 - **`ISS-441` — `verify-vt` `PASS`es rows for phases that have not been
   implemented.** Raised at PHASE-03: once a phase modifies a file that later

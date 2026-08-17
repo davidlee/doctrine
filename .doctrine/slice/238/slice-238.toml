@@ -1,7 +1,7 @@
 id = 238
 slug = "cross-kind-backlog-ordering-admission-and-override-footer"
 title = "Cross-kind dep/seq edges: disclose, check, and clear"
-status = "audit"
+status = "reconcile"
 created = "2026-07-29"
 updated = "2026-08-17"
 tags = ["next"]

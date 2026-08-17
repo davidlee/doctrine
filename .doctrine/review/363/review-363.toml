@@ -1,0 +1,106 @@
+id    = 363
+slug  = "sl-238-implementation-audit-cross-kind-edges-disclosed-checked-and-clearable"
+title = "SL-238 implementation audit — cross-kind edges disclosed, checked and clearable"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-238"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "the conformance registry omits tests/e2e_dep_seq_verbs.rs, the file carrying 14 of the slice's 48 VT rows"
+detail = "Expected: every source file the slice deliberately changed appears in the design-target selector set, so `slice conformance` can report a clean delta. Observed: `doctrine slice conformance 238` puts `tests/e2e_dep_seq_verbs.rs` in the UNDECLARED cell. Re-derived: `git diff c546a9ae0..HEAD -- src/ tests/` shows the file grew by 872 lines — the largest single change in the slice after src/backlog.rs — and `slice selector list 238` names 14 selectors, none of them under tests/. It is not incidental churn: PHASE-02 VT-1/VT-2/VT-3, PHASE-07 VT-1..VT-5 and PHASE-08 VT-1/VT-2/VT-3 all name it as their `test_file`, and three of those rows were RETARGETED to it at planning time precisely because the assertion is over rendered CLI output that an in-module test cannot observe. So the slice's black-box evidence lives entirely in a file the design never declared it would touch. The other 135 undeclared paths are authored .doctrine/ entities, memories and observation records — expected noise; this one is source. Consequence: the conformance signal reads red for a reason that has nothing to do with the mechanism it is meant to police, and a future reader cannot tell the two apart."
+disposition = "verified"
+response = "Upheld and routed to reconcile. The load-bearing repair is the REGISTRY, not the prose: `doctrine slice selector add 238 tests/e2e_dep_seq_verbs.rs --intent design-target` is what `slice conformance` reads (slice-238.toml), and a design.md-only edit would leave the delta red. design.md §8's change table gains the same row as its human mirror. Not fixed here because slice-238.toml is a per-slice authored artefact and /reconcile is the sole writer of reconciled truth. No code consequence: the file's contents are correct and its 14 VT rows are green; what was missing is the declaration that the slice would touch it."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "three verify-vt rows report PASS against test names that survive only inside their successors' supersession comments"
+detail = "Expected: `slice verify-vt 238` reporting 48/48 PASS is evidence that each VT row's assertion exists. Observed: PHASE-02's three rows (VT-1 `after_prune_pins`, VT-2 `backlog_after_prune_pins`, VT-3 `after_remove_pins`) PASS, and none of those tests exists. Re-derived: `grep -nE '^fn ' tests/e2e_dep_seq_verbs.rs` lists no name containing `_pins`; `grep -c` finds the strings 9, 3 and 2 times respectively, all inside the doc comments of the tests that SUPERSEDED them (PHASE-06 EX-3, PHASE-07 EX-5, PHASE-08 EX-3 each require the replacement to name what it replaced). Positive control: `after_prune_noop`, a live test, matches twice. So the plan's own supersession discipline is what keeps the superseded rows green forever. This is condition 2 of ISS-441 (`the row's keywords happen to already appear somewhere in that file`) reached by a second route the issue does not describe: ISS-441 is about phases not yet implemented, and this fires on a phase that IS implemented and whose criteria were deliberately retired. No SL-238 behaviour is unpinned — the successors assert the post-change behaviour and I ran them — but 3 of 48 PASS rows are not evidence, and an audit that read the summary alone would not know which."
+disposition = "tolerated"
+response = "Observation confirmed; accepted as drift owned elsewhere. Nothing in SL-238 is unpinned — the superseding tests assert the post-change behaviour and the whole suite is green, which the audit re-ran rather than inferred. The defect is in `slice verify-vt`, not in this slice, and it is a genuinely NEW route into ISS-441: that issue's two leading candidate fixes (gate on phase status, attribute per-phase) both miss this case, because the phase IS completed and the file IS in its delta. Appended to ISS-441 as 'Second route to the same failure' with the measurements and a fourth candidate (report SUPERSEDED rather than PASS). Not fixed now: repairing verify-vt inside an audit of an unrelated slice would put the evidence tool and the evidence in the same change."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "the empty-annotation guard is extracted as annotated() and then re-implemented inline on the boundary line"
+detail = "Expected: one guard for the rule that an empty status annotation must not be appended (else a trailing space freezes into a golden). Observed: two. `annotated(base, annotation)` at src/backlog.rs:1352 has exactly two callers, both in the record view (format_metadata, :1826 and :1863); `render_overrides` at :2548-2551 open-codes the same if-non-empty-then-push-space. The duplication is small but it is the slice's own defect class, and `annotated`'s doc comment makes the claim explicit and false: 'PHASE-04's O-2 was exactly this bug on the boundary line; one guard, both axes' — the boundary line is the one path that does not use the guard. Historically explainable (the inline form landed at PHASE-04, the helper at PHASE-05) but the comment was written after both."
+disposition = "fix-now"
+response = "Fixed in this audit. `render_overrides`' boundary line now composes `annotated(&base, &render_ref_state(&row.status))` instead of open-coding the if-non-empty push, and `annotated`'s doc comment is corrected from 'one guard, both axes' to 'one guard, both surfaces', naming the two call paths. Net −5 lines. `doctrine check commit` green and the live `backlog list --by sequence` footer is byte-identical (10 boundary rows, unchanged)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "the unresolvable-refs advisory hardcodes the plural and renders '1 ... refs name nothing'"
+detail = "Expected: a count-only signpost that reads correctly at every count, since n=1 is the commonest non-zero case (one bad ref authored, one advisory). Observed: src/backlog.rs:2474 is a single format template — 'backlog list: {n} authored needs/after refs name nothing — run `doctrine doctor`' — with no plural agreement. The n=1 rendering is pinned as-is by src/backlog.rs:6296, which asserts `1 authored needs/after refs name nothing`. Not reachable on the live corpus today (zero unresolvable refs, confirmed by both doctor and an empty stderr on `backlog list --by sequence`), so this is cosmetic. It is however coupled to QUE-222, the open owner call on whether this advisory's wording overclaims completeness against `doctor` — one edit to the template settles both, and the count is load-bearing in three tests, so touching it is not free."
+disposition = "tolerated"
+response = "Accepted as cosmetic, and deliberately NOT fixed in isolation. The template is one string and QUE-222 — open, explicitly scoped as answerable at reconcile — asks whether that same string overclaims completeness against `doctor`. Editing it twice for two reasons wastes the three tests that pin the count. Carried to the brief as an input to QUE-222 so the plural and the completeness wording are settled in one edit. Unreachable on the live corpus today (zero unresolvable refs), so nothing renders wrong to a user now."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "the kref_for duplication follow-up was reasoned to a backlog item and the item was never minted"
+detail = "Expected: a deliberately-deferred cleanup leaves a durable owner. Observed: notes.md's closing entry concludes 'The kref_for collapse wants its own backlog item, not a phase' — and no such item exists. Re-derived: `doctrine search kref_for` returns seven unrelated entities; `grep -rn 'fn kref_for' src/` shows the surviving copy at src/catalog/scan.rs and the promoted `test_support` helper beside authored_status. The entry also self-corrects an earlier stale citation in the same paragraph (it had blamed PHASE-08 'EX-9', which is PHASE-01's), so the reasoning is sound and complete — only the capture is missing. Without it the finding dies with this slice's notes, which is precisely the loss `backlog new` exists to prevent."
+disposition = "fix-now"
+response = "Fixed in this audit. Minted CHR-071 'Collapse catalog::scan's private kref_for onto the shared test_support helper', carrying the reasoning from notes.md (why it was left, that PHASE-01 EX-9's constraint is now discharged, and that four duplicated lines do not earn a visit of their own). Linked CHR-071 references SL-238 --role originates_from. The notes entry's own stale citation (it blamed PHASE-08 'EX-9', which is PHASE-01's) is corrected in the item body."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "design.md carries eight prose claims that execution falsified; the design run locked at rev 63 so none could be fixed in flight"
+detail = "Expected: design.md, the canonical artefact, tells the truth about the tree it governs. Observed: eight statements do not, each found by a phase-planning seat that re-derived the claim instead of transcribing it, each recorded in notes.md '### Open' with its evidence, and none repairable in flight because the design run locked at rev 63. Confirmed against the tree at audit; enumerated here so the reconciliation brief has one finding id to cite. (1) §3 'The three standing rules' rule 2 and §7's VT-5 gloss both say a future derived-status kind that is NOT added to DERIVED_STATUS 'must fail a test, not degrade quietly' — an equality pin fires when a kind IS added and never when one is omitted; the real protection is meta::read_meta's strict read failing loudly under STD-003. Owner accepted 2026-08-16. (2) §7's VT-2 bullet fixtures 'a derived-status kind with no toml at all still returns Unavailable', which §3's own arm table makes unreachable — both special arms take a lenient title read, so an absent file is Err. plan.toml's VT-2 is already amended in place; the design half is not. Owner accepted 2026-08-16. (3) §2 claims 'the advisory's count and §5's check report the same population'; they cannot, on two counts §4 forbids closing — project iterates only non-terminal items so a broken ref on a terminal dependent never reaches the advisory, and the listing path's fail-fast read_all has no counterpart to dep_seq_ref_findings' ReadFailure disclosure. What holds is parity over the three broken-ref CLASSES; no VT row asserts more. (4) §6's 'Three call sites move to the new form' (design.md:1187) is four — commands/dep_seq.rs's --prune removal loop is the fourth and breaks at compile time; two of the three quoted line numbers were also stale. plan.toml EX-1 already amended. (5) §6 (design.md:1487) and §7 (:1665) both say --prune has 'no test coverage at all, in either copy'; tests/e2e_dep_seq_verbs.rs carried five SL-105-era goldens throughout. The substance survives — those goldens assert the decision, not the rendered reason — but §7 'Preservation' does not list them, and after_prune_absent_target was superseded without the design declaring it. (6) §6 opens with 'Four hardcoded copies of status == resolved || closed'; there are two such literal comparisons and four read-parse blocks, which §6's own next paragraph states correctly. All four cited line numbers are stale. §7 repeats the error as 'the four known sites named'. plan.toml's PHASE-07 objective and EX-3 already amended. (7) §6 names four --prune consequences; there is a fifth — authored_class(kind, Absent) is Terminal and Absent is what STATUS_LESS returns, so an after edge onto a REC becomes prunable where today it is kept. Rendered as 'dropped (dangling: status-less)'. Owner accepted 2026-08-17; plan.toml EX-4/VT-5 already amended. (8) §5's two-reason taxonomy reports a dangling BARE ref as 'not a canonical ref' when the cause is 'no such entity' — literally true, immaterial in practice (measured: zero bare refs in the corpus), owner's call whether to note or decline. §8's change table is separately incomplete — see F-1."
+disposition = "verified"
+response = "All eight upheld and routed to reconcile as design.md direct edits — the write surface /reconcile owns for per-slice artefacts. None is a code defect: every one is the design's prose disagreeing with a tree the implementation got right, and in six of the eight the corresponding plan.toml criterion was already amended in place at planning time (immutable id kept, reasoning inline, per execution-protocol.md R5), so the two artefacts currently disagree with each other. Items 1, 2 and 7 carry explicit owner acceptance dated in notes.md; item 3's narrowing is unconditional; items 4, 5 and 6 are pure census/citation corrections; item 8 is the owner's call to note or decline. Deliberately NOT fixed here: design.md is locked at rev 63 and the audit is not its writer."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "PHASE-05 EX-2 is an exit criterion no verification row can observe, and no disposition was recorded for it"
+detail = "Expected: every exit criterion is either verified by a VT/VA/VH row or explicitly accepted as unverified with a reason. Observed: PHASE-05 EX-2 requires that 'run_show_inspect threads the map into format_metadata', and run_show_inspect writes straight to io::stdout() (src/backlog.rs:1879) with no render seam — so no in-module test can observe the threading. VT-3/VT-4 compose probe_item_refs and the renderer themselves, which proves both halves work and not that the shell wires them. §7 lists no assertion for it either. Both mitigations were implemented at PHASE-05 (the Table arm passes &probe_item_refs(&root, &item) as a single inline expression; VT-3's doc comment states it does not observe the wiring), so nothing is owed in code — what is owed is the owner's disposition: accept EX-2 as agent-verified and record it, or commission a tests/e2e_backlog_inspect golden. Note the surface constraint: plan.toml criteria are immutable-append and are NOT a /reconcile direct-edit surface, so the acceptance has to be recorded in design.md §7 or the slice notes, not by editing EX-2. Fifth instance in this slice of a criterion stated in prose that the verification set cannot carry."
+disposition = "verified"
+response = "Upheld; the disposition is owed and belongs to reconcile. Recommendation carried forward: accept EX-2 as agent-verified rather than commission tests/e2e_backlog_inspect — the existing e2e golden file is about `doctrine inspect`, not `backlog inspect`, so pinning three lines of wiring means a new e2e file, and both mitigations that make misthreading hard already landed at PHASE-05. Surface named explicitly because the obvious one is wrong: plan.toml's EN-/EX-/VT- ids are immutable-append and are NOT a reconcile direct-edit surface, so the acceptance is recorded in design.md §7 (its verification narrative) and in notes.md, never by editing EX-2."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "the slice makes six user-visible output changes; only some are named in a durable place"
+detail = "Expected: a slice whose whole subject is what a surface says must hand /reconcile a complete list of what it changed the surfaces to say. Observed: six changes, scattered across three phases' notes entries and two VA rows, never collected. Re-derived from the tree: (1) the footer's project-level AbsentDrop leg is gone and 'dropped (… absent)' no longer renders anywhere — render_overrides' Dangling arm is a `continue` (src/backlog.rs:2518) and classify_dangling is deleted; (2) a new 'boundary:' block renders 10 lines on the live corpus, dependent-first, no arrow; (3) a new count-only stderr advisory on `backlog list --by sequence` (silent today, zero unresolvable refs); (4) `after --prune`'s reason strings collapse from three (absent / (unparseable) / absent (unparseable ref)) to 'dropped (dangling: unresolved)', and the terminal reason loses its /resolution suffix; (5) a new fifth reason token 'dropped (dangling: status-less)' for a REC target; (6) `after --prune`'s source echo becomes the CANONICAL id where it was as-typed, and the routed `backlog after` legs unify on the same — PHASE-08 EX-6 names only the routed legs, not the top-level verb's own change at PHASE-07. Plus one behavioural refusal that is an output change to a user: `backlog needs` now refuses RV, REC and governance targets (ISS-368, PHASE-08 EX-4). None of this is a defect; the defect would be closing without the list."
+disposition = "verified"
+response = "Upheld — the list is owed and this finding IS the list. All seven re-derived against the built tree at audit rather than collected from the phase records, and carried verbatim into the brief's named-output-change section. Two are worth flagging to whoever writes release notes: item 6 (`after --prune`'s source echo becoming canonical) is a change to the TOP-LEVEL verb that PHASE-08 EX-6's wording covers only for the routed backlog legs, and the `backlog needs` refusal is a deliberate rejection of input accepted today, which is a compatibility break however correct it is."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "three intake records the slice claims to discharge are still open, and IDE-019's two divergences are unrecorded"
+detail = "Expected: a slice carrying `fulfils` edges leaves its sources dispositioned at close, and a subsumed proposal whose MECHANISM was declined says so where the proposer will read it. Observed: slice-238.toml authors fulfils→IMP-099 and fulfils→IDE-019 (verified in the toml), and both remain untransitioned — IMP-099 is 'triaged', IDE-019 is 'open'. IDE-019 proposed a --verbose/--explain flag to gate footer noise; SL-238 delivered its INTENT and declined its mechanism twice, and neither divergence is written anywhere but this slice's notes: (a) ref-integrity moved to `doctrine doctor` rather than being gated behind a footer flag (DEC-232), and (b) the per-item detail landed on `backlog inspect`/`show` rather than behind a listing flag (DEC-234). Separately QUE-222 — 'should the unresolvable-refs advisory soften its wording?' — is still open and was explicitly scoped as answerable at reconcile; it is one string if accepted and zero cost if declined, and F-4's plural defect rides the same template. Nothing here blocks; all four are dispositions the reconcile/close pass owes."
+disposition = "verified"
+response = "Upheld; four dispositions owed, each with its verb named so the brief does not stall. IMP-099 and IDE-019: `doctrine backlog` status transition to their fulfilled state, driven by the fulfils edges already authored in slice-238.toml — this is /close's fulfilment burndown (ADR-018), not a design edit. IDE-019 additionally needs its two declined mechanisms written into its own body, because the proposer reads IDE-019 and not this slice's notes: ref-integrity went to `doctrine doctor` rather than behind a footer flag (DEC-232), and per-item detail went to `backlog inspect`/`show` rather than behind a listing flag (DEC-234). QUE-222: `doctrine knowledge settle`, answering it together with F-4's plural so the advisory template is edited once. DEC-236 is separately fine — accepted and folded into §9 as an overrun, confirmed at audit as covered rather than uncovered."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "nit"
+title = "PHASE-08's verification ids skip VT-5 and order VA-1, VA-3, VA-2"
+detail = "Expected: a gap in an immutable id sequence signals a withdrawal, and a reader should be able to find what was withdrawn. Observed: plan.toml PHASE-08 runs VT-1, VT-2, VT-3, VT-4, VT-6, then VA-1, VA-3, VA-2. Re-derived: `git show 65e5867db:.doctrine/slice/238/plan.toml` shows the same set at the plan's critical-pass revision, so nothing was authored and later removed — no criterion was lost, the sequence was simply mis-numbered at authoring and correctly left alone afterwards under the immutable-ids rule. Recorded only so a future reader who notices the gap does not spend the same twenty minutes reconstructing it."
+disposition = "aligned"
+response = "Confirmed and correct as-is — no criterion was lost. The gap and the VA misordering were present in the plan's own critical-pass revision (65e5867db), so nothing was authored and withdrawn, and the immutable-ids rule is why they were rightly left alone afterwards. Recorded on the ledger only so the next reader who spots the gap can stop looking. No action."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

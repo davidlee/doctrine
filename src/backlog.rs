@@ -1348,7 +1348,8 @@ fn ref_annotation(state: Option<&RefState>) -> String {
 /// non-empty**. `AuthoredStatus::Absent` renders the empty string (§4 — a
 /// status-less kind has no status to state), and a naive `format!("{base} {a}")`
 /// would freeze `SL-154 ` — with a trailing space — into a golden. PHASE-04's
-/// `O-2` was exactly this bug on the boundary line; one guard, both axes.
+/// `O-2` was exactly this bug on the boundary line; one guard, both surfaces —
+/// [`render_overrides`]' `boundary:` block and the record view's metadata lines.
 fn annotated(base: &str, annotation: &str) -> String {
     if annotation.is_empty() {
         base.to_string()
@@ -2535,22 +2536,17 @@ fn render_overrides(boundary: &[BoundaryRow], overrides: &[Override]) -> String 
                     Axis::After => "after",
                 })
                 .collect();
-            // The annotation is APPENDED only when non-empty: `AuthoredStatus::Absent`
-            // renders nothing, and a naive trailing `{}` would leave a trailing space
-            // before the newline for every status-less target.
-            let mut line = format!(
+            // The annotation is APPENDED only when non-empty — through the SAME
+            // guard the record view uses ([`annotated`]), because the trailing-space
+            // bug it exists to prevent (PHASE-04 `O-2`) is one bug on two surfaces.
+            let base = format!(
                 "  {} {} {}",
                 row.dependent.render(),
                 axes.join(", "),
                 row.target
             );
-            let annotation = render_ref_state(&row.status);
-            if !annotation.is_empty() {
-                line.push(' ');
-                line.push_str(&annotation);
-            }
-            line.push('\n');
-            out.push_str(&line);
+            out.push_str(&annotated(&base, &render_ref_state(&row.status)));
+            out.push('\n');
         }
     }
     out

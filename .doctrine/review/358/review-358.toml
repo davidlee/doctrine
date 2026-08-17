@@ -14,7 +14,7 @@ ref   = "SL-238"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "backlog delegation creates an unaccounted command cycle"
 detail = "Observation: design section 3 at design.md:552-570 claims every new edge is downward and the command tangle remains 76, while section 6 at design.md:986-1000 requires backlog::run_after to call commands::dep_seq. The edge table omits that required backlog -> commands edge. Source verification: src/commands/cli.rs:495 and :1705 already establish commands -> backlog; src/backlog.rs contains no production commands edge today; tests/architecture_layering.rs:162-171 extracts top-level crate-module edges; .doctrine/adr/001/layering.toml:91 and :94 classify both modules as command and :190 freezes the tangle at 76. Adding the reverse edge closes a new command-tier cycle, so section 7 at design.md:1186-1190 cannot pass as specified and the design is not lockable as written. Suggestion: place the reusable operation below both command shells or otherwise redesign the delegation, then measure the gate rather than asserting an unchanged baseline."
@@ -32,7 +32,7 @@ response = "Upheld. Verified: src/main.rs:3-19 states the binary owns its own mo
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "one probe contract cannot serve both listing and inspect"
 detail = "Observation: design section 4 at design.md:632-679 defines probe_boundary(root, &[AbsentDrop]) to consume only projection drops and to discard terminal and unresolvable targets. The same section at design.md:724-756 then requires run_show_inspect to use the same probe while retaining terminal targets and rendering unresolvable targets. Source verification: src/backlog.rs:1639-1684 starts show/inspect from one BacklogItem and never produces the list projection AbsentDrop input. The stated function has neither the input domain nor the output cases required by that caller, forcing planning to invent an unrecorded second seam or mode. Suggestion: specify a lower-level per-reference probe and two explicit projections, or give the probe a mode whose retention rules are fully stated."
@@ -50,7 +50,7 @@ response = "Upheld. Verified read_kind at backlog.rs:915 does items.push(read_it
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Unavailable is reachable through the backlog needs CLI"
 detail = "Observation: design sections 2 and 3 at design.md:334-342 and :507-514, plus section 7 at :1129-1131, claim RV and REC targets can reach listing only through hand-edited or legacy TOML because the authoring gate refuses them. Source verification: src/backlog.rs:1955-1977 implements backlog needs with only kinds::ensure_ref_resolves at :1963-1964 and never applies ADMISSIBLE_DEP_TARGETS; unlike src/commands/dep_seq.rs:81-97, it accepts any resolvable kind. Section 6 at design.md:1002-1006 deliberately leaves that append path unrouted. A resolvable RV or REC can therefore be authored through the CLI, invalidating the reachability statement and the mandated hand-authored-only fixture strategy. Suggestion: either govern and change that authoring path or document and test the real CLI-reachable case."
@@ -86,7 +86,7 @@ response = "Upheld. Verified DEC-236 is accepted and its record specifies exactl
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "the status classification omits its governing ADR"
 detail = "Observation: ADR-017 governs this slice and defines Gating as a known unsettled record status in src/priority/partition.rs, yet design.md never cites ADR-017. Section 3 at design.md:516-538 chooses Unavailable -> Unrecognised and explains only why it must not become Terminal; it does not ground why Gating is also the wrong class. Source verification: src/priority/partition.rs:243-260 implements the four-way class table whose Gating branch this design extends around, and ADR-017 names that file as the sole engine delta for actionability gating. The chosen mapping is conservative, but its governance reasoning is incomplete and must be reconstructed from outside the design. Suggestion: cite ADR-017 at class_of and state that Gating denotes a known authored unsettled status, whereas Unavailable proves no such status."
@@ -95,7 +95,7 @@ response = "Contest upheld on the stated consequence; the conclusion stands on a
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "record vocabulary equality proof is self-referential"
 detail = "Observation: SL-238 section 6 at design.md:1207-1209 and section 7 at :1475-1477 claim is_record_predicate_matches_kinds_record proves the old knowledge::RecordKind::ALL vocabulary and replacement kinds::RECORD vocabulary are set-equal, making the substitution membership-preserving. Source verification: src/commands/dep_seq.rs:293-302 builds from_pred by calling is_record; is_record at :25-26 delegates to kinds::is_record; kinds::is_record at kinds/mod.rs:96-97 directly tests kinds::RECORD. The test therefore compares a predicate backed by kinds::RECORD with kinds::RECORD itself and never references RecordKind::ALL. The two source sets happen to contain the same seven kinds today, but the cited test neither proves that nor catches drift between them. Add an explicit equality against RecordKind::ALL prefixes or correct the verification claim and provide another enforceable proof."
