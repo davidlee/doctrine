@@ -47,3 +47,16 @@ mention, a test name, a config key — gets no such oracle. There, the grep with
 positive control is the whole method, and
 [[mem.pattern.verification.removal-claim-attributes-every-survivor]] applies:
 count the producers in the pre-state, and attribute every post-state survivor.
+
+## The census also ages WITHIN a phase, by your own hand
+
+SL-238 PHASE-07's sheet named two `{source}` echo sites for its T3 task. By the
+time T3 ran there were three: T2, an earlier task in the **same phase**, had
+authored a new stderr disclosure line carrying the same interpolation. Nothing
+external moved — the population grew because of work the plan itself mandated.
+
+So the re-derivation is not a once-per-phase planning ritual. Run the grep
+**immediately before the task that edits the population**, not when the sheet is
+written, and treat any site your own earlier tasks created as in-scope by
+default: a verb whose output echoes an identifier two different ways is
+incoherent whichever way the plan counted.

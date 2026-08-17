@@ -160,7 +160,7 @@ Fix the scope directly; it is outside the design run.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-17 · **PHASE-06 completed and harvested** (6 of 8); `QUE-221` answered and its pin landed between PHASE-06 and PHASE-07 · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `c84966546`, clean of mine
+fresh-as-of: 2026-08-17 · **PHASE-07 completed and harvested** (7 of 8); PHASE-08 is the last, and inherits two obligations — `QUE-221`'s cross-kind pin to find RED and rewrite in place, and `EX-3`'s removal of `src/backlog.rs`'s duplicate prune leg · slice/`started` · design/**locked** (run `dr-01a00475`, rev 63; `RV-358` **waived** with a reasoned disposition; all nine sections attested human-lane; `design-accepted` current; gate cleared) · `803206b6f`, plus this harvest
 
 ### Produced
 
@@ -675,6 +675,27 @@ it lacked only what state each declared target was in.
 
 ### Learned
 
+- `mem.pattern.testing.a-golden-can-pass-because-of-the-bug`
+  (`mem_01a00d78626974b3b585d0bb18aca669`) — **PHASE-07, minted at harvest.** A
+  characterisation golden proves the behaviour it asserts; it does not prove its
+  own **fixture** is valid, and where the code applies one rule to every kind an
+  invalid fixture is *invisible* — the code never consults the vocabulary the
+  fixture violates. Two SL-105 goldens set a slice's status to `resolved`, a
+  backlog word, and passed only because the old probe hardcoded one table for all
+  kinds. So when a cross-cutting hardcoded rule becomes a per-kind routed one,
+  treat every red golden as a **fixture suspect first**: read its literals against
+  the entity's real vocabulary, not against what makes the test pass. The failure
+  mode it prevents is adjusting production code until an invalid fixture goes
+  green — re-implementing the defect. Linked to
+  `mem.pattern.testing.grep-for-the-pin-before-characterising` and the stale-test-
+  binary memory, both of which are the same shape: a red that is not a regression.
+- `mem.pattern.planning.let-the-compiler-recount-the-call-sites` **extended at
+  PHASE-07** rather than duplicated — the census also ages **within a phase, by
+  your own hand**. The sheet named two `{source}` echo sites for `T3`; by the time
+  `T3` ran there were three, because `T2` — an earlier task in the same phase —
+  had authored a new stderr line carrying the same interpolation. Re-derive the
+  population immediately before the task that edits it, not when the sheet is
+  written.
 - `mem.pattern.testing.pin-the-refusal-reason-not-the-refusal`
   (`mem_01a00d4c61e27de29fba501edf9b29b7`) — **minted answering `QUE-221`.** A
   before-state pin on a *refusal* is the vacuity-prone case, because after the

@@ -1,0 +1,55 @@
+memory_uid = "mem_01a00d78626974b3b585d0bb18aca669"
+memory_key = "mem.pattern.testing.a-golden-can-pass-because-of-the-bug"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "A golden can pass because of the bug it fails to name"
+summary = "When a hardcoded cross-kind rule is replaced by a per-kind routed one, a red golden is as likely an invalid fixture as a regression"
+created = "2026-08-17"
+updated = "2026-08-17"
+
+[scope]
+paths = []
+globs = ["tests/**", "src/**"]
+commands = []
+tags = ["testing", "characterisation", "fixtures"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "803206b6faa62d2915b19cf03bbcea3e52c9e8eb"
+tree = "5090dcd19e35c347cb2c101a758e5ba8977d8529"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "803206b6faa62d2915b19cf03bbcea3e52c9e8eb"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-238"
+
+[[relation]]
+label = "related"
+target = "mem_019ef8c35b407a738b66e1fa5eaaa0f3"
+
+[[relation]]
+label = "related"
+target = "mem_01a00aad82ad74d1a99a464572c3bb3b"
+
