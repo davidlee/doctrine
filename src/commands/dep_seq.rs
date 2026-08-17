@@ -185,7 +185,18 @@ pub(crate) fn run_after_edge(
     Ok(())
 }
 
-/// `doctrine after <SRC> <TGT> --remove [--rank N]`
+/// `doctrine after <SRC> <TGT> --remove [--rank N]` — gate the SOURCE only, and
+/// treat the target as an authored string canonicalised through
+/// [`canonicalise_target`] (SL-238 §6).
+///
+/// **Deliberate behaviour change, superseding PHASE-02/VT-3.** This used to resolve
+/// both endpoints through [`resolve_dep_seq_src`], which requires the target to
+/// exist on disk and be an admissible kind. Right for authoring, wrong for repair:
+/// it made the refs the doctor check reports at Error severity precisely the refs
+/// `--remove` would not touch. Three author-time guarantees are given up ON THIS
+/// PATH ONLY — the target's on-disk resolution, its kind gate, and the self-edge
+/// refusal — because an edge that is already in the array has to be removable
+/// whatever it says. [`run_after_edge`] and [`run_needs_edge`] keep the full gate.
 pub(crate) fn run_after_remove(
     path: Option<PathBuf>,
     source: &str,
@@ -194,7 +205,9 @@ pub(crate) fn run_after_remove(
 ) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let (toml_path, source_id, target_id) = resolve_dep_seq_src(&root, source, target)?;
+    let (toml_path, skref, sid) = resolve_dep_seq_src_path(&root, source)?;
+    let source_id = crate::listing::canonical_id(skref.kind.prefix, sid);
+    let target_id = canonicalise_target(&root, target);
     let ceiling = if rank == 0 { None } else { Some(rank) };
     let removed = crate::dep_seq::remove(
         &toml_path,
@@ -675,6 +688,134 @@ mod tests {
         assert!(
             !toml.contains("SL-9999") && !toml.contains("not-a-ref"),
             "both unresolvable refs are cleared:\n{toml}"
+        );
+    }
+
+    // --- the remove path gates the SOURCE only — SL-238 PHASE-06 EX-3 ----------
+
+    /// VT-2 (`after` half) — **the deliberate behaviour change of this phase.**
+    ///
+    /// `after --remove` used to resolve BOTH endpoints through
+    /// `resolve_dep_seq_src`, so the very refs the doctor check reports at Error
+    /// severity — `SL-9999`, `not-a-ref` — were exactly the refs `--remove` would
+    /// not touch, leaving hand-editing the TOML as the only repair path.
+    ///
+    /// Supersedes **PHASE-02/VT-3**, which pinned that refusal precisely so this
+    /// flip would read as intentional rather than as a regression. Authorised by
+    /// design.md §6 `The remove path gates the source, not the target`, which calls
+    /// it "a deliberate behaviour change ... and it is what makes §5's check
+    /// repairable".
+    #[test]
+    fn after_remove_clears_a_ref_that_does_not_resolve() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = seed_root(&tmp);
+        seed_sl_with_edges(root, 1, &[], &[("SL-9999", 0), ("not-a-ref", 0)]);
+
+        run_after_remove(Some(root.to_path_buf()), "SL-001", "SL-9999", 0).unwrap();
+        run_after_remove(Some(root.to_path_buf()), "SL-001", "not-a-ref", 0).unwrap();
+
+        let toml = slice_toml(root, 1);
+        assert!(
+            !toml.contains("SL-9999") && !toml.contains("not-a-ref"),
+            "both previously-unremovable edges are cleared:\n{toml}"
+        );
+    }
+
+    /// VT-3 — the regression guard, and it is **green before and after** by design.
+    ///
+    /// Bare-id targets work today through `resolve_dep_seq_src`; resolving is what
+    /// turns `154` into `SL-154`. The risk this phase introduces is losing that
+    /// when the gate goes, so tier 1 of the needle is `parse_resolvable_ref`
+    /// specifically to keep it. A test that never goes red looks weak unless its
+    /// staying green IS the assertion — §7 calls this "the regression the
+    /// three-tier needle exists to prevent".
+    #[test]
+    fn remove_accepts_a_bare_id_target() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = seed_root(&tmp);
+        seed_sl_with_edges(root, 1, &[], &[("SL-154", 0)]);
+        seed_sl_toml(root, 154);
+
+        run_after_remove(Some(root.to_path_buf()), "SL-001", "154", 0)
+            .expect("a bare id resolves to the canonical ref it names");
+
+        assert!(
+            !slice_toml(root, 1).contains("SL-154"),
+            "the bare-id removal cleared the canonical edge"
+        );
+    }
+
+    /// VT-4 — tier 2. `SL-9999` does not resolve on disk but still *parses*, so it
+    /// canonicalises and a stale edge onto a deleted target stays clearable.
+    /// Distinct from VT-2's case in what it exercises: here the stored ref is
+    /// UNPADDED-safe canonical and the target is genuinely gone.
+    #[test]
+    fn remove_canonicalises_a_parseable_ref_to_a_deleted_target() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = seed_root(&tmp);
+        // Stored canonical; removal requested in the equivalent bare-hyphen form
+        // that `parse_canonical_ref` normalises to the same needle.
+        seed_sl_with_edges(root, 1, &["SL-9999"], &[("SL-9999", 0)]);
+
+        run_needs_remove(Some(root.to_path_buf()), "SL-001", "SL-9999").unwrap();
+        run_after_remove(Some(root.to_path_buf()), "SL-001", "SL-9999", 0).unwrap();
+
+        let toml = slice_toml(root, 1);
+        assert!(
+            !toml.contains("SL-9999"),
+            "the stale edge is clearable on both axes:\n{toml}"
+        );
+    }
+
+    /// VT-4 — tier 3. A ref that does not parse at all is still a string in an
+    /// array that has to come out, so it is matched verbatim.
+    #[test]
+    fn remove_matches_an_unparseable_ref_verbatim() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = seed_root(&tmp);
+        seed_sl_with_edges(root, 1, &["not-a-ref"], &[("not-a-ref", 0)]);
+
+        run_needs_remove(Some(root.to_path_buf()), "SL-001", "not-a-ref").unwrap();
+        run_after_remove(Some(root.to_path_buf()), "SL-001", "not-a-ref", 0).unwrap();
+
+        let toml = slice_toml(root, 1);
+        assert!(
+            !toml.contains("not-a-ref"),
+            "the free-text ref is matched verbatim and removed:\n{toml}"
+        );
+    }
+
+    /// VT-5 / EX-4 — **the known bound, asserted rather than fixed.**
+    ///
+    /// A stored `needs = ["SL-1"]` is NOT cleared by `--remove SL-1`. Both parse
+    /// tiers hand off to `canonical_id`, so the needle is `SL-001`; and tier 3 does
+    /// not rescue it, because `SL-1` *parses*. The bare form is fine (`154` →
+    /// `SL-154`); it is the short HYPHENATED form that is unreachable.
+    ///
+    /// Narrow by construction — such a ref resolves, so the doctor check does not
+    /// report it either, and every CLI-authored ref is stored canonical. §6 names
+    /// it rather than fixing it because normalising on read is a `kinds` change
+    /// with five other callers, outside this slice. Pinned here so that closing it
+    /// later is a deliberate change with a red test, not an accident.
+    #[test]
+    fn remove_does_not_match_a_well_formed_unpadded_ref() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = seed_root(&tmp);
+        seed_sl_with_edges(root, 1, &["SL-1"], &[("SL-1", 0)]);
+
+        let needs_err = run_needs_remove(Some(root.to_path_buf()), "SL-001", "SL-1")
+            .expect_err("the unpadded ref is not matched");
+        assert!(
+            format!("{needs_err:#}").contains("SL-001"),
+            "the needle canonicalised to SL-001, which is why it missed: {needs_err:#}"
+        );
+        run_after_remove(Some(root.to_path_buf()), "SL-001", "SL-1", 0)
+            .expect_err("the same bound holds on the after axis");
+
+        let toml = slice_toml(root, 1);
+        assert!(
+            toml.contains("\"SL-1\"") && toml.contains("to = \"SL-1\""),
+            "both unpadded refs survive — the bound, not a capability:\n{toml}"
         );
     }
 

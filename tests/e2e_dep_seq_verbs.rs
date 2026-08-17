@@ -416,19 +416,27 @@ fn after_remove_rank_ceiling() {
 /// on the message, not on the exit status — annotated under SL-238 PHASE-02 D2.
 /// `after_remove_pins_the_refusal_of_an_unresolvable_target_leaving_the_edge` is
 /// the pin that demonstrates the actual gap this one misses.
+/// SL-105 origin; **reason superseded by SL-238 PHASE-06 / EX-3.**
+///
+/// The removal still fails and the exit code is unchanged — but the reason moved.
+/// It used to fail at the author-time gate ("`SL-999` does not resolve to an
+/// entity"); now the remove path gates the SOURCE only, so `SL-999` canonicalises
+/// happily and the refusal comes one layer later, from the zero-count bail. The
+/// distinction matters: refusing because the TARGET is unknown blocks repair, while
+/// refusing because there is NO SUCH EDGE is the honest answer to this input.
 #[test]
 fn after_remove_nonexistent() {
     let t = tmp();
     let root = t.path();
     seed_slice(root, 105, "Five", "five"); // SL-105
 
-    // Try to remove an edge to non-existent SL-999
+    // Try to remove an edge to non-existent SL-999 — SL-105 has no edges at all.
     let rm = run(root, &["after", "SL-105", "SL-999", "--remove"]);
-    assert!(!rm.status.success(), "non-existent target refused");
-    assert!(
-        stderr(&rm).contains("does not resolve"),
-        "error names unresolvable target: {}",
-        stderr(&rm)
+    assert!(!rm.status.success(), "non-existent edge refused");
+    assert_eq!(
+        stderr(&rm),
+        "Error: SL-105 has no after edge to SL-999\n",
+        "refused for the absent EDGE, not the unresolvable target"
     );
 }
 
@@ -996,55 +1004,78 @@ fn backlog_after_prune_pins_a_bare_ref_dropped_with_the_divergent_unparseable_re
     );
 }
 
-/// SUPERSEDED BY PHASE-06 (design §6 "The remove path gates the source, not the
-/// target", and PHASE-06/VT-2) — `after --remove` will gate the SOURCE only and
-/// treat the target as an authored string to be canonicalised where possible and
-/// matched verbatim otherwise, so both refusals below become successful clears.
+/// **SL-238 PHASE-06 / `VT-2` — supersedes PHASE-02's
+/// `after_remove_pins_the_refusal_of_an_unresolvable_target_leaving_the_edge`.**
 ///
-/// This is the pin `after_remove_nonexistent` cannot be: that test refuses a target
-/// with NO edge present, so it never demonstrates the gap. Here the edges exist and
-/// survive their own removal — which is the design's claim, that the refs §5's
-/// check reports at Error severity are exactly the refs `--remove` will not touch,
-/// leaving hand-editing the toml as the only path.
+/// The old test pinned today's behaviour: both refs below were unremovable, for
+/// different reasons — `SL-9999` parses but resolves to nothing (refused by the
+/// author-time gate's disk probe), `not-a-ref` does not parse at all (refused one
+/// tier earlier, by the ref-shape parse). It asserted the refusals AND that both
+/// edges survived them, because that is the gap: the refs the doctor check reports
+/// at Error severity were exactly the refs `--remove` would not touch, leaving
+/// hand-editing the TOML as the only repair path.
+///
+/// **Why the old assertion no longer holds.** `EX-3` moves both remove paths onto
+/// a source-only gate, canonicalising the target through the three-tier needle
+/// instead of resolving it. Neither refusal survives that by construction — they
+/// were the same gate. design.md §6 calls this "a deliberate behaviour change on
+/// `after --remove` ... and it is what makes §5's check repairable"; PHASE-02
+/// pinned it precisely so this flip would read as intentional rather than as a
+/// regression at audit.
+///
+/// The `needs` axis gets the same repair through
+/// `needs_remove_clears_a_ref_that_does_not_resolve` (in-module), which supersedes
+/// nothing — that axis had no removal at all before this phase.
 #[test]
-fn after_remove_pins_the_refusal_of_an_unresolvable_target_leaving_the_edge() {
+fn after_remove_clears_an_unresolvable_target_the_gate_used_to_refuse() {
     let t = tmp();
     let root = t.path();
     seed_slice(root, 214, "November", "november"); // SL-214
 
-    // Both refs are unremovable today, for different reasons — one parses but
-    // resolves to nothing, one does not parse at all. The author-time gate refuses
-    // to write either, so they are planted directly.
+    // The author-time gate still refuses to WRITE either ref, so they are planted
+    // directly — which is the situation this repair path exists for.
     let src = root.join(".doctrine/slice/214/slice-214.toml");
     push_raw_after_edge(&src, "SL-9999", 0);
     push_raw_after_edge(&src, "not-a-ref", 0);
 
-    // (a) well-formed, absent on disk.
+    // (a) well-formed, absent on disk — tier 1 misses, tier 2 canonicalises.
     let rm = run(root, &["after", "SL-214", "SL-9999", "--remove"]);
-    assert!(!rm.status.success(), "unresolvable target refused");
-    // The message interpolates the probed ABSOLUTE path, so the volatile middle is
-    // carved out and both stable ends are pinned instead.
-    let err = stderr(&rm);
     assert!(
-        err.starts_with("Error: `SL-9999` does not resolve to an entity (no SL-9999 at ")
-            && err.ends_with("/.doctrine/slice/9999)\n"),
-        "the refusal names the target and where it looked: {err}"
+        rm.status.success(),
+        "was refused, now clears: {}",
+        stderr(&rm)
     );
-
-    // (b) free text — refused one tier earlier, by the ref-shape parse.
-    let rm2 = run(root, &["after", "SL-214", "not-a-ref", "--remove"]);
-    assert!(!rm2.status.success(), "free-text target refused");
     assert_eq!(
-        stderr(&rm2),
-        "Error: unknown kind prefix `not-a` in `not-a-ref`\n",
-        "free text is refused by the ref parse, before any disk probe"
+        stdout(&rm),
+        "SL-214 after SL-9999 removed (1 edge)\n",
+        "the canonicalised needle matched the stored ref"
     );
 
-    // The gap itself: neither edge moved.
+    // (b) free text — tiers 1 and 2 both miss, tier 3 matches it verbatim.
+    let rm2 = run(root, &["after", "SL-214", "not-a-ref", "--remove"]);
+    assert!(
+        rm2.status.success(),
+        "free text clears too: {}",
+        stderr(&rm2)
+    );
+    assert_eq!(
+        stdout(&rm2),
+        "SL-214 after not-a-ref removed (1 edge)\n",
+        "a ref that names nothing is still a string that has to come out"
+    );
+
+    // The gap is closed: neither edge survives its own removal any more.
     let toml = slice_toml(root, 214);
     assert!(
-        toml.contains("\"SL-9999\"") && toml.contains("\"not-a-ref\""),
-        "both unremovable edges survive their own removal:\n{toml}"
+        !toml.contains("SL-9999") && !toml.contains("not-a-ref"),
+        "both previously-unremovable edges are gone:\n{toml}"
+    );
+
+    // The AUTHOR-time gate is untouched — this widening is remove-only.
+    let append = run(root, &["after", "SL-214", "SL-9999"]);
+    assert!(
+        !append.status.success(),
+        "appending an edge to a non-entity is still refused"
     );
 }
 
