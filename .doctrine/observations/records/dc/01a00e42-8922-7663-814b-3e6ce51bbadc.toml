@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00e42-8922-7663-814b-3e6ce51bbadc"
+recorded_at = "2026-08-17T05:47:16.642505255Z"
+kind = "friction"
+summary = "/audit: no read-back verb renders a review's findings — the ledger must be read raw"
+detail = "Driving /audit for SL-238 I needed the disposition and status of every finding on the prior design ledger RV-358 (five were non-terminal and one was a blocker gating the audit→reconcile move). `doctrine review show RV-358` renders the derived status, the reviews edge and the prose Brief — but not one finding. `doctrine review status` gives a count and an await, and refuses --json. `doctrine review list` is per-review, not per-finding. So the only way to read severity/status/disposition/response is to open .doctrine/review/358/review-358.toml directly with grep and sed, which is precisely what the boot guardrail forbids ('read entities via doctrine <kind> show <ID>, not raw files') — and the raise/dispose/verify verbs write into a tier with no reader. Cost here: four extra tool calls plus a grep whose field names I had to guess (my first grep for 'state' missed; the field is 'status'). The write side of the review kind is complete and the read side stops at the summary."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

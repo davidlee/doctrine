@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00f14-64a7-7d81-95f8-1bd198bdd591"
+recorded_at = "2026-08-17T09:36:29.863342178Z"
+kind = "friction"
+summary = "/reconcile: no read-back verb for a review's findings, or a knowledge record's body"
+detail = "Driving /reconcile on RV-363 I had to read .doctrine/review/363/review-363.toml raw to get each finding's detail/response — 'doctrine review show RV-363' renders the prose companion (Brief, Synthesis) but not the findings, and no verb prints them. Same class one step later: 'doctrine knowledge inspect QUE-222' is metadata-only by design and there is no 'knowledge show', so the record's body came from a raw Read too. Both contradict the standing guardrail 'read entities via doctrine <kind> show <ID>, not raw files' — for these two kinds the guardrail has no implementation, so the correct action is the forbidden one. Cost here was low only because the orchestrator's handoff pre-warned me about the review half; an agent without that warning either misses the findings entirely (the Brief reads complete) or burns a turn discovering the gap. Note the review case is worse than a missing convenience: findings carry disposition + response, which is exactly what /reconcile must not get wrong."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

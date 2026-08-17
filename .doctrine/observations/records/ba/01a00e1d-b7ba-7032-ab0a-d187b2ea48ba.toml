@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a00e1d-b7ba-7032-ab0a-d187b2ea48ba"
+recorded_at = "2026-08-17T05:07:03.738129433Z"
+kind = "friction"
+summary = "research skill: authored seed input has no sanctioned home in the research folder"
+detail = "During /research for SL-258, a user-authored seed analysis (gitignored gordian.local.md) was copied into research/raw/ for durability — but .doctrine/slice/*/research/ is wholly gitignored (runtime tier), so the 'preserved' copy silently stayed untracked; the path-limited commit carried 3 files and the omission was only caught later by counting. Cost: a wrong durability claim to the user plus a correction round. The research skill mandates raw/<thread>.md for thread output but names no home for authored *inputs*; the working answer is the slice root (authored tier, like design.md)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
