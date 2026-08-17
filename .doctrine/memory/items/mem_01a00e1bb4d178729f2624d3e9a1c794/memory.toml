@@ -1,0 +1,46 @@
+memory_uid = "mem_01a00e1bb4d178729f2624d3e9a1c794"
+memory_key = "mem.fact.layering.ratchet-green-is-one-sided"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Tangle ratchet green proves a bound, not the number"
+summary = "The layering tangle ratchet only fires when actual > baseline, so a green suite proves <= baseline; to assert an UNCHANGED count, measure it."
+created = "2026-08-17"
+updated = "2026-08-17"
+
+[scope]
+paths = ["tests/architecture_layering.rs", ".doctrine/adr/001/layering.toml"]
+globs = []
+commands = []
+tags = ["layering", "verification"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "d95f45cb826aa228dbf8db051ee2c27b7d137392"
+tree = "cdca1fe7bb97d296695cde6c2d70bc925756b9ab"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "d95f45cb826aa228dbf8db051ee2c27b7d137392"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-238"
+
