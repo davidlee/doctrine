@@ -259,6 +259,31 @@ pub(crate) fn run_needs_remove(
     Ok(())
 }
 
+/// The reason word for a target the probe judged `Terminal` (SL-238 §6, `EX-4`).
+///
+/// `Known` renders the status verbatim. Today's copies append a `/resolution`
+/// suffix by re-reading the raw toml; that is deliberately dropped — `Meta` carries
+/// no `resolution` field, and adding one to a type this widely shared in order to
+/// decorate a repair message is not the trade (§6, third consequence).
+///
+/// `Absent` is `Terminal` by the partition table — a status-less kind is
+/// context-only and default-excluded — but has no word to render, so it names the
+/// CLASS. This is §6's unnamed FIFTH consequence: an `after` edge onto a `REC`
+/// becomes prunable where today it is kept, because today's `unwrap_or("")` matches
+/// neither hardcoded literal (`EX-4`, owner accepted 2026-08-17).
+///
+/// `Unavailable` cannot reach here: [`crate::priority::partition::authored_class`]
+/// maps it to `Unrecognised`, never `Terminal`, and that rule is precisely what
+/// SL-238 exists to enforce. It is spelled out rather than `unreachable!()` so a
+/// future change to that mapping degrades to an honest string instead of a panic.
+fn terminal_reason(status: &crate::kinds::AuthoredStatus) -> String {
+    match status {
+        crate::kinds::AuthoredStatus::Known(s) => s.clone(),
+        crate::kinds::AuthoredStatus::Absent => "status-less".to_string(),
+        crate::kinds::AuthoredStatus::Unavailable => "status-unavailable".to_string(),
+    }
+}
+
 /// `doctrine after <SRC> --prune` (SL-105 PHASE-03) — probe every `after` target
 /// of SRC for dangling edges (absent or terminal target) and remove them. Reads
 /// the `DepSeq` ONCE before any modifications (collecting dangling targets), then
@@ -274,55 +299,45 @@ pub(crate) fn run_after_prune(path: Option<PathBuf>, source: &str) -> anyhow::Re
     // 1. Read DepSeq
     let ds = crate::dep_seq::read(&toml_path)?;
 
-    // 2. Probe each after-edge target: absent (dir missing) or terminal (resolved/closed) → dangling
+    // 2. Probe each after-edge target — ONE resolver, ONE read per edge (SL-238 §6,
+    //    EX-1). Terminality routes through `partition::authored_class` onto the
+    //    single `status_class` table; no status literal is spelled here.
     let mut dropped: Vec<(String, i32, String)> = Vec::new();
     let mut to_drop: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
 
     for edge in &ds.after {
-        let is_dangling = match crate::kinds::parse_canonical_ref(&edge.to) {
-            Ok((kref, tid)) => {
-                let target_path =
-                    crate::entity::id_path(&root, kref.kind, tid, crate::entity::Ext::Toml);
-                if target_path.exists() {
-                    let body = std::fs::read_to_string(&target_path).unwrap_or_default();
-                    let val: toml::Value = match toml::from_str(&body) {
-                        Ok(v) => v,
-                        Err(_) => toml::Value::Table(toml::Table::new()),
-                    };
-                    let status = val.get("status").and_then(|s| s.as_str()).unwrap_or("");
-                    status == "resolved" || status == "closed"
-                } else {
-                    true
+        let reason = match crate::kinds::parse_resolvable_ref(&root, &edge.to) {
+            // The ref names nothing. Absorbs the missing-directory case with it, so
+            // the three reason strings the old copies rendered (`absent`,
+            // `(unparseable)`, `absent (unparseable ref)`) collapse to §4's token.
+            Err(_) => Some("unresolved".to_string()),
+            Ok((kref, tid)) => match crate::authored_status::read(&root, kref, tid) {
+                // KEEP on an unreadable target — the conservative call — and say so
+                // (STD-003). A repair verb that quietly declines to repair is the
+                // dishonesty this slice is about. `{err:#}` renders the cause chain.
+                Err(err) => {
+                    writeln!(
+                        std::io::stderr(),
+                        "{source} after {} (rank {}) kept (unreadable: {err:#})",
+                        edge.to,
+                        edge.rank
+                    )?;
+                    None
                 }
-            }
-            Err(_) => true,
-        };
-
-        if is_dangling {
-            let reason = match crate::kinds::parse_canonical_ref(&edge.to) {
-                Ok((kref2, tid2)) => {
-                    let target_path =
-                        crate::entity::id_path(&root, kref2.kind, tid2, crate::entity::Ext::Toml);
-                    if target_path.exists() {
-                        let body = std::fs::read_to_string(&target_path).unwrap_or_default();
-                        let val: toml::Value = match toml::from_str(&body) {
-                            Ok(v) => v,
-                            Err(_) => toml::Value::Table(toml::Table::new()),
-                        };
-                        let status = val.get("status").and_then(|s| s.as_str()).unwrap_or("");
-                        let resolution =
-                            val.get("resolution").and_then(|s| s.as_str()).unwrap_or("");
-                        if resolution.is_empty() {
-                            status.to_string()
-                        } else {
-                            format!("{status}/{resolution}")
+                Ok(authored) => {
+                    match crate::priority::partition::authored_class(kref.kind, &authored.status) {
+                        crate::priority::partition::StatusClass::Terminal => {
+                            Some(terminal_reason(&authored.status))
                         }
-                    } else {
-                        "absent".to_string()
+                        // `Workable`, `Gating` and `Unrecognised` all keep the edge.
+                        // `Unrecognised` is where `Unavailable` lands (§3, rule 3).
+                        _ => None,
                     }
                 }
-                Err(_) => "absent (unparseable ref)".to_string(),
-            };
+            },
+        };
+
+        if let Some(reason) = reason {
             dropped.push((edge.to.clone(), edge.rank, reason));
             to_drop.insert(edge.to.clone());
         }

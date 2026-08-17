@@ -112,6 +112,61 @@ fn slice_toml(root: &Path, id: u32) -> String {
     fs::read_to_string(root.join(format!(".doctrine/slice/{id:03}/slice-{id:03}.toml"))).unwrap()
 }
 
+/// Hand-seed ANY entity's authored pair with FIXED dates, given its kind directory
+/// and file stem — the generalisation of [`seed_slice`], added by SL-238 PHASE-07.
+///
+/// `--prune`'s collapsed probe judges its target through `authored_class`, so the
+/// fixtures now have to span kinds with *different* terminal vocabularies (a slice's
+/// `done`, a question's `answered`) and the status-LESS kind whose class is decided
+/// without reading a status at all. Three more near-copies of `seed_slice` was the
+/// alternative.
+///
+/// `status: None` authors no `status` key — the on-disk shape of a `kinds::STATUS_LESS`
+/// kind (`REC`), and the fixture behind the fifth consequence (`EX-4`, `VT-5`).
+fn seed_entity(root: &Path, dir: &str, stem: &str, id: u32, title: &str, status: Option<&str>) {
+    let name = format!("{id:03}");
+    let d = root.join(dir).join(&name);
+    fs::create_dir_all(&d).unwrap();
+    let status_line = match status {
+        Some(s) => format!("status = \"{s}\"\n"),
+        None => String::new(),
+    };
+    fs::write(
+        d.join(format!("{stem}-{name}.toml")),
+        format!(
+            "id = {id}\n\
+             slug = \"{stem}-{name}\"\n\
+             title = \"{title}\"\n\
+             {status_line}\
+             created = \"2026-06-14\"\n\
+             updated = \"2026-06-14\"\n"
+        ),
+    )
+    .unwrap();
+    fs::write(d.join(format!("{stem}-{name}.md")), format!("# {title}\n")).unwrap();
+}
+
+/// Seed a knowledge question (`QUE-NNN`) — `gating: ["open"]`,
+/// `terminal: ["answered", "obsolete"]` per `priority::partition`. An admissible
+/// `after` target, and the second vocabulary `VT-1` needs.
+fn seed_question(root: &Path, id: u32, status: &str) {
+    seed_entity(
+        root,
+        ".doctrine/knowledge/question",
+        "record",
+        id,
+        "A question",
+        Some(status),
+    );
+}
+
+/// Seed a reconciliation record (`REC-NNN`) — the one `kinds::STATUS_LESS` kind,
+/// authoring no `status` key. Not an admissible `after` target, so only
+/// [`push_raw_after_edge`] can point an edge at it.
+fn seed_rec(root: &Path, id: u32) {
+    seed_entity(root, ".doctrine/rec", "rec", id, "A record", None);
+}
+
 // --- VT-1: slice→slice needs/after round-trips through show + show --json ---
 
 #[test]
@@ -619,8 +674,22 @@ fn backlog_toml(root: &Path, kind: &str, id: u32) -> std::path::PathBuf {
 
 // --- VT-1: after_prune_drops_resolved ---
 
+/// SUPERSEDED ON ITS FIXTURE BY SL-238 PHASE-07 (design §6 "`--prune`'s probe,
+/// collapsed", first consequence) — was `after_prune_drops_resolved`.
+///
+/// The behaviour it pins is unchanged: a terminal target's edges are dropped, at
+/// every rank. What changed is that the fixture was **invalid for its kind**. It
+/// set a SLICE's status to `resolved`, which is a backlog word — ADR-009's slice
+/// vocabulary is `proposed…reconcile`, `done`, `abandoned`. It only ever passed
+/// because the old probe hardcoded `resolved || closed` and applied it to every
+/// kind alike; that cross-kind leak IS the STD-001 duplicated-table violation and
+/// the REQ-238 routing breach this phase closes.
+///
+/// So the fixture moves to `done`, the slice's real terminal word. Under the
+/// collapsed probe the old fixture would now be `Unrecognised` and KEPT — which is
+/// §6's second consequence working, not a regression.
 #[test]
-fn after_prune_drops_resolved() {
+fn after_prune_drops_a_terminal_target() {
     let t = tmp();
     let root = t.path();
     seed_slice(root, 201, "Alpha", "alpha"); // SL-201
@@ -638,9 +707,9 @@ fn after_prune_drops_resolved() {
         "after rank 3"
     );
 
-    // Resolve SL-202
+    // Settle SL-202 — `done` is the SLICE terminal word (ADR-009); see the doc above.
     let sl202 = root.join(".doctrine/slice/202/slice-202.toml");
-    set_entity_status(&sl202, "resolved");
+    set_entity_status(&sl202, "done");
 
     // Prune
     let prune = run(root, &["after", "SL-201", "--prune"]);
@@ -652,7 +721,10 @@ fn after_prune_drops_resolved() {
             && out.contains("SL-201 after SL-202 (rank 3) dropped"),
         "both edges dropped: {out}"
     );
-    assert!(out.contains("resolved"), "reason contains resolved: {out}");
+    assert!(
+        out.contains("done"),
+        "reason is the kind's own terminal word: {out}"
+    );
 
     // Verify SL-201 after array is empty
     let toml = slice_toml(root, 201);
@@ -699,9 +771,11 @@ fn after_prune_mixed() {
     assert!(run(root, &["after", "SL-205", "SL-206"]).status.success());
     assert!(run(root, &["after", "SL-205", "SL-207"]).status.success());
 
-    // Resolve SL-207
+    // Settle SL-207. `done`, not `resolved`: SL-238 PHASE-07 routes terminality
+    // through each kind's own table, and `resolved` is a backlog word that only
+    // ever worked here via the hardcoded cross-kind literal this phase removes.
     let sl207 = root.join(".doctrine/slice/207/slice-207.toml");
-    set_entity_status(&sl207, "resolved");
+    set_entity_status(&sl207, "done");
 
     // Prune
     let prune = run(root, &["after", "SL-205", "--prune"]);
@@ -723,14 +797,16 @@ fn after_prune_mixed() {
 
 // --- after_prune_absent_target (bonus) ---
 
-/// SUPERSEDED BY PHASE-07 (SL-238, design §6 "`--prune`'s probe, collapsed",
-/// fourth consequence) — the drop survives, its REASON WORD does not. The three
-/// strings today's two copies render (`absent`, `(unparseable)`,
-/// `absent (unparseable ref)`) collapse to one, `unresolved`, so the
-/// `contains("absent")` assertion below goes red by design. A later reader must
-/// not mistake that for a regression. Annotated under SL-238 PHASE-02 D2: §7's
-/// preservation list does not name this SL-105 test, because the design believed
-/// `--prune` had no coverage at all (see SL-238 `notes.md`, F-1).
+/// SUPERSEDED BY SL-238 PHASE-07 (design §6 "`--prune`'s probe, collapsed", fourth
+/// consequence) — DONE. The drop survives; its reason word did not. The three
+/// strings the two copies rendered (`absent`, `(unparseable)`,
+/// `absent (unparseable ref)`) collapsed to one, `unresolved`, reusing §4's token
+/// for that state rather than minting a fourth. The `contains("absent")` assertion
+/// this test used to carry is what went red, exactly as PHASE-02 predicted.
+///
+/// PHASE-02 annotated this under D2: §7's preservation list does not name this
+/// SL-105 test, because the design believed `--prune` had no coverage at all
+/// (SL-238 `notes.md`, F-1).
 #[test]
 fn after_prune_absent_target() {
     let t = tmp();
@@ -745,7 +821,10 @@ fn after_prune_absent_target() {
     let prune = run(root, &["after", "SL-208", "--prune"]);
     assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
     let out = stdout(&prune);
-    assert!(out.contains("absent"), "absent in reason: {out}");
+    assert!(
+        out.contains("unresolved"),
+        "the three reason strings collapsed to one: {out}"
+    );
 
     // Edge is gone
     let toml = fs::read_to_string(&toml_path).unwrap();
@@ -826,26 +905,31 @@ fn top_level_needs_after_echo_canonical_id() {
 // vocabulary, the `/resolution` reason suffix, the silent keep on an unreadable
 // target, and the bare ref deleted without the target being read at all.
 
-/// SUPERSEDED BY PHASE-07 (design §6 "`--prune`'s probe, collapsed", third
-/// consequence) — the `/resolution` suffix is deliberately dropped. `Meta` carries
-/// no `resolution` field, and the collapsed probe judges terminality through
-/// `authored_class` instead of re-reading the raw toml, so the line becomes
-/// `dropped (dangling: closed)`.
+/// SUPERSEDED BY SL-238 PHASE-07 — DONE. Was
+/// `after_prune_pins_the_closed_vocabulary_and_the_resolution_suffix`, which pinned
+/// `dropped (dangling: closed/wont-do)`.
 ///
-/// This is the assertion that pins the suffix at all: `after_prune_drops_resolved`
-/// asserts `out.contains("resolved")`, which passes with or without it, which is
-/// how the suffix stayed unpinned across three slices.
+/// **Both halves of that assertion are gone, and for the same reason.** The old
+/// probe hardcoded `resolved || closed` and applied it to every kind, then re-read
+/// the raw toml to append a `/resolution` suffix. §6 routes terminality through
+/// `partition::authored_class` onto each kind's OWN table, and `closed` is not in
+/// ADR-009's slice vocabulary — so a slice carrying it is `Unrecognised`, and
+/// `Unrecognised` keeps the edge (§6, second consequence). The suffix went with the
+/// re-read: `Meta` carries no `resolution` field, and adding one to decorate a
+/// repair message was not the trade (§6, third consequence).
 ///
-/// The source is typed UNPADDED (`SL-9`) on purpose. The top-level copy echoes the
-/// source string AS TYPED — note that the *append* verb, two tests above, echoes
-/// the canonical `SL-001` for the same input — whereas the backlog copy echoes the
-/// canonical id (see the paired
-/// `backlog_after_prune_pins_the_closed_vocabulary_and_the_resolution_suffix`).
-/// That divergence is PRESERVED across the collapse, not superseded (PHASE-08
-/// delegates with the already-resolved canonical source id on the backlog side
-/// only), so neither line should be "fixed" to match the other.
+/// So the test now asserts the *opposite verdict* on the same fixture, which is a
+/// sharper statement of what this phase fixed than any new fixture would be: the
+/// cross-kind vocabulary leak WAS the STD-001 violation.
+///
+/// The source stays typed UNPADDED (`SL-9`): this copy still echoes the source AS
+/// TYPED, where the *append* verb two tests above echoes the canonical `SL-001` for
+/// the same input. PHASE-07's `T3` supersedes that divergence — PHASE-08 `EX-3`
+/// routes `backlog after --prune` through this very function and `EX-6` requires the
+/// routed legs to echo canonically — so this line moves to `SL-009` with `T3`, and
+/// PHASE-02's note that the divergence is "PRESERVED" is retracted (`notes.md`).
 #[test]
-fn after_prune_pins_the_closed_vocabulary_and_the_resolution_suffix() {
+fn after_prune_no_longer_applies_backlog_vocabulary_to_a_slice() {
     let t = tmp();
     let root = t.path();
     seed_slice(root, 9, "Nine", "nine"); // SL-009 — the source
@@ -854,8 +938,9 @@ fn after_prune_pins_the_closed_vocabulary_and_the_resolution_suffix() {
     let append = run(root, &["after", "SL-9", "SL-10"]);
     assert!(append.status.success(), "append: {}", stderr(&append));
 
-    // `closed` is the second half of the hardcoded `resolved || closed` table; the
-    // resolution word is what the reason string interpolates after the slash.
+    // `closed/wont-do` — the exact fixture the old pin used, kept deliberately.
+    // These are BACKLOG words. A slice authoring them is out-of-vocabulary, and the
+    // point is that the probe now says so instead of pruning on them.
     set_entity_fields(
         &root.join(".doctrine/slice/010/slice-010.toml"),
         "closed",
@@ -864,112 +949,33 @@ fn after_prune_pins_the_closed_vocabulary_and_the_resolution_suffix() {
 
     let prune = run(root, &["after", "SL-9", "--prune"]);
     assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
-    // Byte-exact, whole line. A `contains` on any one token here would pass under
-    // the PHASE-07 wording too, and pin nothing.
     assert_eq!(
         stdout(&prune),
-        "SL-9 after SL-010 (rank 0) dropped (dangling: closed/wont-do)\n",
-        "today: reason is status/resolution, and the echo is the source as typed"
+        "SL-9: nothing to prune\n",
+        "`closed` is Unrecognised for a SLICE — conservative, so the edge is kept"
     );
     assert!(
-        slice_toml(root, 9).contains("after = []"),
-        "the terminal edge is dropped: {}",
+        slice_toml(root, 9).contains("{ to = \"SL-010\", rank = 0 }"),
+        "the edge survives: {}",
         slice_toml(root, 9)
     );
 }
 
-/// SUPERSEDED BY PHASE-07 (design §6 "`--prune`'s probe, collapsed" — the four
-/// `read_to_string(..).unwrap_or_default()` sites, and the second consequence,
-/// "conservative on uncertainty"). The KEEP survives the collapse; the SILENCE
-/// does not. The replacement keeps the edge and says why on stderr (STD-003), so
-/// the empty-stderr assertion below goes red by design.
-///
-/// The `stderr is empty` assertion is the defect being pinned, not the behaviour
-/// being endorsed: today a corrupt target is exempted from a prune the user
-/// explicitly asked for, and the exemption is indistinguishable from a live status
-/// (`unwrap_or_default()` → empty table → `status == ""`).
-#[test]
-fn after_prune_pins_the_silent_keep_on_an_unreadable_target() {
-    let t = tmp();
-    let root = t.path();
-    seed_slice(root, 211, "Kilo", "kilo"); // SL-211 — the source
-    seed_slice(root, 212, "Lima", "lima"); // SL-212 — the target
+// `after_prune_pins_the_silent_keep_on_an_unreadable_target` (SL-238 PHASE-02) was
+// REMOVED here by PHASE-07, not left failing. It pinned `stderr == ""` — the defect,
+// not an endorsed behaviour — and its replacement is
+// `after_prune_keeps_an_unreadable_target_and_says_so_on_stderr` below, which
+// asserts the surviving half (the KEEP) and the changed half (the disclosure, EX-3
+// / STD-003) on the same fixture. Two tests over one behaviour is duplication; the
+// replacement's doc names what it supersedes.
 
-    // Author the edge through the CLI while the target is HEALTHY, then corrupt it.
-    // The target file must still EXIST: deleting it takes the `!target_path.exists()`
-    // arm and is pruned as `absent`, which is a different behaviour and is already
-    // covered by `after_prune_absent_target`.
-    let append = run(root, &["after", "SL-211", "SL-212"]);
-    assert!(append.status.success(), "append: {}", stderr(&append));
-    let target = root.join(".doctrine/slice/212/slice-212.toml");
-    fs::write(&target, "not = = toml\n").unwrap();
-    assert!(
-        target.exists(),
-        "the fixture corrupts the target, never deletes it"
-    );
-
-    let prune = run(root, &["after", "SL-211", "--prune"]);
-    assert!(prune.status.success(), "prune exit 0: {}", stderr(&prune));
-    assert_eq!(
-        stdout(&prune),
-        "SL-211: nothing to prune\n",
-        "the unreadable target is kept, and reported as an ordinary no-op"
-    );
-    assert_eq!(
-        stderr(&prune),
-        "",
-        "today the keep is SILENT — no disclosure that a target could not be read"
-    );
-    assert!(
-        slice_toml(root, 211).contains("{ to = \"SL-212\", rank = 0 }"),
-        "the edge survives: {}",
-        slice_toml(root, 211)
-    );
-}
-
-/// SUPERSEDED BY PHASE-07 (design §6 "`--prune`'s probe, collapsed", fourth
-/// consequence) — the probe moves from `parse_canonical_ref`, which rejects the
-/// bare form and routes its `Err` to *prunable*, to `parse_resolvable_ref`, which
-/// accepts it. So this edge will RESOLVE to the live `SL-154` and be KEPT, and the
-/// reason string disappears with the drop. Every assertion below goes red by design.
-///
-/// The final pair of assertions is what makes "without reading the target" an
-/// assertion rather than a comment: `SL-154` exists, is `proposed` (not terminal),
-/// and is byte-identical after the prune — the edge onto it is deleted anyway.
-#[test]
-fn after_prune_pins_a_bare_ref_dropped_without_reading_the_target() {
-    let t = tmp();
-    let root = t.path();
-    seed_slice(root, 213, "Mike", "mike"); // SL-213 — the source
-    seed_slice(root, 154, "Live", "live"); // SL-154 — a LIVE target
-
-    // Hand-authored: the author-time gate canonicalises, so `154` can only reach
-    // the array by writing it directly.
-    push_raw_after_edge(&root.join(".doctrine/slice/213/slice-213.toml"), "154", 0);
-    let target_before = slice_toml(root, 154);
-    assert!(
-        target_before.contains("status = \"proposed\""),
-        "the target of the dropped edge is live, not terminal"
-    );
-
-    let prune = run(root, &["after", "SL-213", "--prune"]);
-    assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
-    assert_eq!(
-        stdout(&prune),
-        "SL-213 after 154 (rank 0) dropped (dangling: absent (unparseable ref))\n",
-        "today: the bare ref is dropped, and the top-level copy calls it `absent (unparseable ref)`"
-    );
-    assert!(
-        slice_toml(root, 213).contains("after = []"),
-        "the edge onto a LIVE target is removed: {}",
-        slice_toml(root, 213)
-    );
-    assert_eq!(
-        slice_toml(root, 154),
-        target_before,
-        "the target was never consulted — it is untouched and still live"
-    );
-}
+// `after_prune_pins_a_bare_ref_dropped_without_reading_the_target` (SL-238 PHASE-02)
+// was REMOVED here by PHASE-07, not left failing. Every assertion in it went red by
+// design: the probe moved to `parse_resolvable_ref`, so a bare ref resolves and is
+// judged on its target's status. Its replacement is
+// `after_prune_resolves_a_bare_ref_instead_of_dropping_it` below, which covers both
+// directions — bare-onto-live survives, bare-onto-terminal is pruned with the
+// ordinary reason — where the old pin could only assert the first.
 
 /// SUPERSEDED BY PHASE-07 + PHASE-08 (design §6 "`--prune`'s probe, collapsed";
 /// PHASE-08/EX-3 removes `backlog.rs`'s duplicate leg outright, so this test is
@@ -1207,5 +1213,237 @@ fn needs_remove_echoes_the_plural_and_normalises_a_bare_source() {
         stdout(&rm),
         "SL-217 needs SL-9999 removed (2 edges)\n",
         "bare source normalises to canonical; plural on 2"
+    );
+}
+
+// --- SL-238 PHASE-07: the collapsed --prune probe -----------------------------
+//
+// Red-first against today's tree, EXCEPT where noted. Each names the consequence
+// of design §6 "`--prune`'s probe, collapsed" it verifies, and the PHASE-02 pin it
+// supersedes. The source is typed CANONICALLY throughout so that T3's echo change
+// (`D-3` — `{source}` as typed becomes the canonical id) cannot move these tests:
+// they assert the probe, not the prefix.
+
+/// `VT-1` — the first consequence: the deliberate vocabulary change. Terminality
+/// stops being the hardcoded `resolved || closed` pair and routes through
+/// `partition::authored_class`, so each kind's OWN terminal set applies — a slice's
+/// `done`, a question's `answered`.
+///
+/// RED today: neither word is in the hardcoded pair, so both edges are kept and the
+/// verb reports `nothing to prune`.
+///
+/// Two kinds, not one, on purpose. A single slice fixture would pass against a
+/// probe that had merely swapped one hardcoded literal for another; the question is
+/// what makes "the table decides" an assertion rather than a hope.
+#[test]
+fn after_prune_clears_a_done_slice_and_an_answered_question() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 20, "Source", "source"); // SL-020
+    seed_slice(root, 21, "Target", "target"); // SL-021
+    seed_question(root, 1, "answered"); // QUE-001
+
+    for tgt in ["SL-021", "QUE-001"] {
+        let a = run(root, &["after", "SL-020", tgt]);
+        assert!(a.status.success(), "append {tgt}: {}", stderr(&a));
+    }
+    // Terminal AFTER the append, so this cannot be read as the gate refusing a
+    // terminal target — the edge was legitimately authored, then the target settled.
+    set_entity_status(&root.join(".doctrine/slice/021/slice-021.toml"), "done");
+
+    let prune = run(root, &["after", "SL-020", "--prune"]);
+    assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
+    assert_eq!(
+        stdout(&prune),
+        "SL-020 after SL-021 (rank 0) dropped (dangling: done)\n\
+         SL-020 after QUE-001 (rank 0) dropped (dangling: answered)\n",
+        "each kind's own terminal vocabulary, and the reason word carries no /resolution suffix"
+    );
+    assert!(
+        slice_toml(root, 20).contains("after = []"),
+        "both terminal edges are gone: {}",
+        slice_toml(root, 20)
+    );
+}
+
+/// `VT-2` — the second consequence, the conservative half: `Workable`, `Gating` and
+/// `Unrecognised` all KEEP the edge.
+///
+/// **Declared: GREEN from the start, not red-first.** Today's probe also keeps all
+/// three, for a different reason (none of the statuses is `resolved`/`closed`). It
+/// earns its place by pinning the conservative half *across* the collapse — but
+/// nobody should read its green as evidence that this phase changed something.
+#[test]
+fn after_prune_keeps_workable_gating_and_unrecognised_targets() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 30, "Source", "source"); // SL-030
+    seed_slice(root, 31, "Live", "live"); // SL-031 — proposed  => Workable
+    seed_slice(root, 32, "Odd", "odd"); // SL-032 — see below   => Unrecognised
+    seed_question(root, 2, "open"); // QUE-002 — open           => Gating
+
+    for tgt in ["SL-031", "SL-032", "QUE-002"] {
+        let a = run(root, &["after", "SL-030", tgt]);
+        assert!(a.status.success(), "append {tgt}: {}", stderr(&a));
+    }
+    // A status in NO partition bucket for its kind — the `Unrecognised` arm. Set
+    // after the append for the same reason as VT-1's `done`.
+    set_entity_status(
+        &root.join(".doctrine/slice/032/slice-032.toml"),
+        "not-a-lifecycle-word",
+    );
+
+    let prune = run(root, &["after", "SL-030", "--prune"]);
+    assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
+    assert_eq!(
+        stdout(&prune),
+        "SL-030: nothing to prune\n",
+        "a live, a gating and an unclassifiable target are all kept"
+    );
+    let src = slice_toml(root, 30);
+    for tgt in ["SL-031", "SL-032", "QUE-002"] {
+        assert!(src.contains(tgt), "{tgt} edge survives: {src}");
+    }
+}
+
+/// `VT-3` — the second consequence's other half, and `EX-3`: the unreadable target
+/// keeps its edge (conservative) **and says why on stderr** (STD-003).
+///
+/// SUPERSEDES `after_prune_pins_the_silent_keep_on_an_unreadable_target`. The KEEP
+/// survives the collapse; the SILENCE does not — that pin asserted `stderr == ""`,
+/// which is the defect, not the endorsed behaviour.
+///
+/// RED today on the stderr half only. The disclosure WORDING is this phase's to
+/// author — `EX-3` mandates that it says why, and the design states no string — so
+/// it is shaped to mirror the drop line (`... kept (unreadable: ...)` against
+/// `... dropped (dangling: ...)`). The error detail carries a tempdir path, so the
+/// stable prefix is pinned and the cause is asserted as present, not byte-exact.
+#[test]
+fn after_prune_keeps_an_unreadable_target_and_says_so_on_stderr() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 40, "Source", "source"); // SL-040
+    seed_slice(root, 41, "Corrupt", "corrupt"); // SL-041
+
+    let append = run(root, &["after", "SL-040", "SL-041"]);
+    assert!(append.status.success(), "append: {}", stderr(&append));
+    // Corrupt, never delete: a deleted target takes the unresolvable arm, which is a
+    // different consequence (and VT-4's second half).
+    let target = root.join(".doctrine/slice/041/slice-041.toml");
+    fs::write(&target, "not = = toml\n").unwrap();
+    assert!(target.exists(), "the fixture corrupts, never deletes");
+
+    let prune = run(root, &["after", "SL-040", "--prune"]);
+    assert!(prune.status.success(), "prune exit 0: {}", stderr(&prune));
+    assert_eq!(
+        stdout(&prune),
+        "SL-040: nothing to prune\n",
+        "the unreadable target is KEPT — uncertainty never causes a removal"
+    );
+    let err = stderr(&prune);
+    assert!(
+        err.starts_with("SL-040 after SL-041 (rank 0) kept (unreadable:"),
+        "the keep is DISCLOSED, naming the edge it declined to judge: {err}"
+    );
+    assert!(
+        slice_toml(root, 40).contains("{ to = \"SL-041\", rank = 0 }"),
+        "the edge survives: {}",
+        slice_toml(root, 40)
+    );
+}
+
+/// `VT-4` — the fourth consequence: the probe moves from `parse_canonical_ref`,
+/// which rejects the bare form and routes its `Err` to *prunable*, onto
+/// `parse_resolvable_ref`, which accepts it. So a bare ref is judged on its
+/// target's status like any other ref.
+///
+/// SUPERSEDES `after_prune_pins_a_bare_ref_dropped_without_reading_the_target`.
+///
+/// RED today on both halves: today's probe deletes a bare ref either way, without
+/// reading the target at all. Both halves are needed — a probe that merely stopped
+/// deleting bare refs would pass the first and fail the second.
+#[test]
+fn after_prune_resolves_a_bare_ref_instead_of_dropping_it() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 50, "Live source", "live-source"); // SL-050
+    seed_slice(root, 154, "Live", "live"); // SL-154 — proposed
+    seed_slice(root, 51, "Done source", "done-source"); // SL-051
+    seed_slice(root, 155, "Settled", "settled"); // SL-155 — set done below
+
+    // Hand-authored: the author-time gate canonicalises, so the bare form can only
+    // reach the array by writing it directly.
+    push_raw_after_edge(&root.join(".doctrine/slice/050/slice-050.toml"), "154", 0);
+    push_raw_after_edge(&root.join(".doctrine/slice/051/slice-051.toml"), "155", 0);
+    set_entity_status(&root.join(".doctrine/slice/155/slice-155.toml"), "done");
+
+    // Half 1 — the bare ref RESOLVES to a live target, and survives.
+    let live = run(root, &["after", "SL-050", "--prune"]);
+    assert!(live.status.success(), "prune exit: {}", stderr(&live));
+    assert_eq!(
+        stdout(&live),
+        "SL-050: nothing to prune\n",
+        "a bare ref onto a LIVE target is no longer deleted for being bare"
+    );
+    assert!(
+        slice_toml(root, 50).contains("to = \"154\""),
+        "the edge survives verbatim: {}",
+        slice_toml(root, 50)
+    );
+
+    // Half 2 — the same bare form onto a TERMINAL target is pruned, with the
+    // ordinary terminal reason rather than a ref-shape complaint.
+    let done = run(root, &["after", "SL-051", "--prune"]);
+    assert!(done.status.success(), "prune exit: {}", stderr(&done));
+    assert_eq!(
+        stdout(&done),
+        "SL-051 after 155 (rank 0) dropped (dangling: done)\n",
+        "judged on its target's status, and echoed as authored"
+    );
+    assert!(
+        slice_toml(root, 51).contains("after = []"),
+        "the terminal edge is gone: {}",
+        slice_toml(root, 51)
+    );
+}
+
+/// `VT-5` / `EX-4`'s third token — the FIFTH consequence, which design §6 does not
+/// name (owner accepted 2026-08-17; `notes.md ### Open` carries the reconcile
+/// action).
+///
+/// `authored_class(kind, AuthoredStatus::Absent)` is `Terminal`, and `Absent` is
+/// returned for `kinds::STATUS_LESS` — `[REC]`. So an `after` edge onto a `REC`
+/// becomes prunable. The reason cannot be the status word, because there is none;
+/// it names the CLASS instead.
+///
+/// RED today: a `REC` toml carries no `status` key, so `unwrap_or("")` matches
+/// neither hardcoded literal and the edge is KEPT.
+///
+/// `REC` is not an admissible `after` target, so only a hand-authored edge reaches
+/// this path — which is the same population the bare-ref consequence serves.
+#[test]
+fn after_prune_clears_a_status_less_target_naming_the_class() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 60, "Source", "source"); // SL-060
+    seed_rec(root, 1); // REC-001 — authors no `status` key at all
+
+    push_raw_after_edge(
+        &root.join(".doctrine/slice/060/slice-060.toml"),
+        "REC-001",
+        0,
+    );
+
+    let prune = run(root, &["after", "SL-060", "--prune"]);
+    assert!(prune.status.success(), "prune exit: {}", stderr(&prune));
+    assert_eq!(
+        stdout(&prune),
+        "SL-060 after REC-001 (rank 0) dropped (dangling: status-less)\n",
+        "the class is named where no status word exists — never an empty reason"
+    );
+    assert!(
+        slice_toml(root, 60).contains("after = []"),
+        "the edge is gone: {}",
+        slice_toml(root, 60)
     );
 }
