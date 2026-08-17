@@ -20,6 +20,11 @@ Two consequences that decide designs:
    cannot site `commands::dep_seq` at engine tier to let `backlog` call it; the
    edge is recorded as `backlog → commands`, and `commands` is command tier.
 
+Test code is exempt: the edge collector sets `skip_cfg_test` and returns early on
+a `#[cfg(test)]` item or mod body, so a `crate::commands::…` path inside
+`mod tests` records no edge at all. A production-only grep is therefore not the
+same assertion as the gate, and the gate is the one that counts.
+
 ## Why it bites harder than it looks
 
 The tangle baseline is a per-tier ratchet over cyclic edges within non-trivial
@@ -31,13 +36,30 @@ module with the core, so measure, never predict*.
 Measure before designing the call, not after: build the edge set, run Tarjan,
 compare the command-tier count with and without the proposed edge.
 
-## The repair that works
+## Two repairs, and which one the seam admits
 
-Site the shared seam **below both consumers** as its own top-level module, so both
-edges point downward. `SL-238` did this twice — `src/authored_status.rs` for the
-per-kind status read, `src/dep_seq_ops.rs` for the kind-neutral dep/seq
-operations. `SL-204` is the precedent at scale: relocating kind identity into leaf
+**Relocate**, when the shared seam has no dependency on either consumer's tier.
+Site it **below both** as its own top-level module, so both edges point downward.
+`SL-238` did this for the per-kind status read (`src/authored_status.rs`), whose
+consumers are a footer shell and a doctor check and whose own reads are all
+leaf-ward. `SL-204` is the precedent at scale: relocating kind identity into leaf
 `kinds/` dropped `integrity` to engine and took the command tangle 99 → 76.
+
+**Invert**, when it does not. A seam that legitimately consumes command-tier
+policy cannot be relocated below its consumers — moving it makes the offending
+edge *upward*, which is worse than the cycle it was introduced to remove and which
+no sub-classification row launders either. Have the module that already depends
+downward **supply** the operation instead: a struct of `fn` pointers filled at the
+higher tier and threaded through the lower one's entry point. See
+[[mem.pattern.lint.back-edge-tangle-inject-fnptr]].
+
+`SL-238` met both seams and answered them differently, which is the useful part.
+Its dep/seq operations resolve refs, consult per-kind terminality policy through
+command-tier `priority::partition`, and echo — so an engine-tier `dep_seq_ops`
+module was **drafted and withdrawn** (`design.md` §6, *"The alternative, and why it
+lost"*), and `backlog` receives the operations by injection. Do not read the
+`authored_status` relocation as the general answer; ask first whether the seam's
+own dependencies point downward.
 
 See [[mem.pattern.layering.direction-is-not-cohesion]] — that one says a downward
 edge can still be the wrong siting. This one says a *deep* edge is still a
