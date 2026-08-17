@@ -258,9 +258,11 @@ requirements = []
 id        = "PHASE-07"
 name      = "--prune's probe, collapsed onto one resolver and one read"
 objective = """
-§6's `--prune` half. Four hardcoded copies of `status == \"resolved\" || status ==
-\"closed\"` — two near-verbatim duplicate functions, each doubling its own
-read-parse block — collapse to one probe routing terminality through
+§6's `--prune` half. Two near-verbatim duplicate functions, each doubling its own
+read-parse block — FOUR laundered read-parse blocks carrying TWO hardcoded copies
+of `status == \"resolved\" || status == \"closed\"` (`commands/dep_seq.rs:293`,
+`backlog.rs:2301`; the describe pass re-reads but renders rather than re-tests) —
+collapse to one probe routing terminality through
 `partition::authored_class`. That closes the STD-001 duplicated-table violation and
 the REQ-238 routing breach together, and repairs four `unwrap_or_default()` laundered
 reads (STD-003). Four consequences are behaviour changes, each tested as what it is
@@ -273,15 +275,15 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "`run_after_prune` runs ONE probe per edge: `parse_resolvable_ref` — `Err` -> prunable; `Ok` -> `authored_status::read` — `Err` -> KEEP and say so on stderr; `Ok` -> `authored_class` — `Terminal` -> prunable, anything else -> keep. One read per edge, not two; the internal double read is collapsed." },
   { id = "EX-2", text = "No hardcoded `resolved`/`closed` terminal-status literal survives in `src/commands/dep_seq.rs`; `partition::status_class` is the sole classifier reached through `authored_class`." },
-  { id = "EX-3", text = "All four `read_to_string(..).unwrap_or_default()` -> empty-`toml::Table` laundered reads are gone. The unreadable-target case keeps the edge (the conservative call) AND says why on stderr." },
+  { id = "EX-3", text = "The TWO `read_to_string(..).unwrap_or_default()` -> empty-`toml::Table` laundered reads in `src/commands/dep_seq.rs` (`:287` decide, `:307` describe) are gone. The unreadable-target case keeps the edge (the conservative call) AND says why on stderr. AMENDED at PHASE-07 planning (R5): read `all four` on the original, which is un-completable by this phase — the other two live in `src/backlog.rs` (`:2295`, `:2319`) and die with the duplicate prune leg, which PHASE-08 `EX-3` explicitly owns and which cannot be removed before PHASE-08's injection gives `backlog` a route to the shared operation. The slice-wide `all four` claim survives intact as `VA-1`'s grep at PHASE-08, where it is checkable. Design half (§6's `All four copies` sentence, plus its four stale line numbers) -> `notes.md ### Open`; the design run is locked at rev 63." },
   { id = "EX-4", text = "The three reason strings the two copies render today (`absent`, `(unparseable)`, `absent (unparseable ref)`) collapse to one — `dropped (dangling: unresolved)` — reusing §4's token, and the reason word loses its `/resolution` suffix: output becomes `dropped (dangling: closed)`." },
   { id = "EX-5", text = "PHASE-02's characterisation tests for `--prune` are superseded, each replacement naming what it now asserts and why the old assertion no longer holds." },
 ]
 verification = [
-  { id = "VT-1", expects = "`after prune clears an edge onto a done slice` and `... onto an answered question` — the deliberate vocabulary change; `IMP-172 -> SL-154` is the standing live instance.", test_file = "src/commands/dep_seq.rs", keywords = ["run_after_prune", "authored_class", "dangling"], waived = false },
-  { id = "VT-2", expects = "`after prune keeps an edge onto a live target` — the conservative half: `Workable`, `Gating` and `Unrecognised` all keep it.", test_file = "src/commands/dep_seq.rs", keywords = ["run_after_prune", "keeps"], waived = false },
-  { id = "VT-3", expects = "`after prune keeps an edge whose target toml is unreadable, and says so on stderr` — conservative on uncertainty, and not silently so (STD-003).", test_file = "src/commands/dep_seq.rs", keywords = ["unreadable", "stderr"], waived = false },
-  { id = "VT-4", expects = "`after prune resolves a bare ref rather than dropping it` — a hand-authored `to = \"154\"` onto a live `SL-154` survives, and the same ref onto a `done` `SL-154` is pruned with the ordinary terminal reason. Red against both copies today, which delete it either way without reading the target at all.", test_file = "src/commands/dep_seq.rs", keywords = ["parse_resolvable_ref", "run_after_prune"], waived = false },
+  { id = "VT-1", expects = "`after prune clears an edge onto a done slice` and `... onto an answered question` — the deliberate vocabulary change; `IMP-172 -> SL-154` is the standing live instance. AMENDED at PHASE-07 planning (R5): `test_file` was `src/commands/dep_seq.rs`. This assertion is over RENDERED CLI OUTPUT, and an in-module unit test writes to `io::stdout()` uncaptured (established at PHASE-06), so it cannot be verified there. PHASE-02 pinned these same four behaviours black-box in `tests/e2e_dep_seq_verbs.rs`, and `EX-5` obliges this phase to supersede those pins IN PLACE — so the replacement belongs in the file holding the thing it replaces. VT-2/VT-3/VT-4 amended for the same reason.", test_file = "tests/e2e_dep_seq_verbs.rs", keywords = ["run_after_prune", "authored_class", "dangling"], waived = false },
+  { id = "VT-2", expects = "`after prune keeps an edge onto a live target` — the conservative half: `Workable`, `Gating` and `Unrecognised` all keep it. AMENDED at PHASE-07 planning (R5): `test_file` retargeted black-box — see `VT-1`.", test_file = "tests/e2e_dep_seq_verbs.rs", keywords = ["run_after_prune", "keeps"], waived = false },
+  { id = "VT-3", expects = "`after prune keeps an edge whose target toml is unreadable, and says so on stderr` — conservative on uncertainty, and not silently so (STD-003). AMENDED at PHASE-07 planning (R5): `test_file` retargeted black-box — see `VT-1`.", test_file = "tests/e2e_dep_seq_verbs.rs", keywords = ["unreadable", "stderr"], waived = false },
+  { id = "VT-4", expects = "`after prune resolves a bare ref rather than dropping it` — a hand-authored `to = \"154\"` onto a live `SL-154` survives, and the same ref onto a `done` `SL-154` is pruned with the ordinary terminal reason. Red against both copies today, which delete it either way without reading the target at all. AMENDED at PHASE-07 planning (R5): `test_file` retargeted black-box — see `VT-1`.", test_file = "tests/e2e_dep_seq_verbs.rs", keywords = ["parse_resolvable_ref", "run_after_prune"], waived = false },
   { id = "VA-1", expects = "No laundered read survives in the touched surfaces: grep for `unwrap_or_default()` on a read or parse, and for `Err(_) =>` arms yielding a default value, over `src/commands/dep_seq.rs` — the four `--prune` copies are the known population and each is repaired (STD-003). Run with a positive control." },
   { id = "VA-2", expects = "No second terminal-status vocabulary survives: every inline `resolved`/`closed` status probe is gone from `src/commands/dep_seq.rs`, established by grep with the known sites named." },
 ]

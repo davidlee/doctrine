@@ -1193,6 +1193,34 @@ routes around: it does not care who authored the signature.
   quantifies over*. A prose reviewer reads "three call sites" and has no reason to
   run the grep; the compiler does it for free the moment the signature moves.
 
+- **§6's `--prune` census is wrong in two ways — prose fix at reconcile.** Found
+  at PHASE-07 planning by re-deriving the count before planning against it
+  (`mem.pattern.planning.let-the-compiler-recount-the-call-sites`), the second
+  time that habit has paid inside this slice.
+
+  1. **The count conflates two populations.** §6 opens *"Four hardcoded copies of
+     `status == "resolved" || status == "closed"` — two functions … each of which
+     reads and parses the target twice"*. There are **two** such literal
+     comparisons, not four (`commands/dep_seq.rs:293`, `backlog.rs:2301`): the
+     *describe* pass re-reads the target but renders `status`/`resolution` rather
+     than re-testing terminality. What there are four of is **read-parse blocks**,
+     which is exactly what §6's own next paragraph says, correctly. So the
+     substance is right and only the opening sentence's label is wrong — but it is
+     the sentence `plan.toml`'s PHASE-07 objective copied verbatim, and §7's
+     agent-verified bullet repeats it as *"with the four known sites named"*. A
+     planner hunting four terminal literals finds two and has to decide whether it
+     has a search bug. Both `plan.toml` halves amended in place at PHASE-07
+     planning; the two design-text instances are the reconcile action.
+  2. **All four line numbers are stale**, the same drift PHASE-06 found in `EX-1`.
+     `backlog.rs:2019-2022`/`:2043-2046` are now `:2295`/`:2319`;
+     `commands/dep_seq.rs:202-206`/`:222-226` are now `:287`/`:307`.
+
+  Also amended: `EX-3` demanded all four laundered reads be gone, which PHASE-07
+  cannot do — `backlog.rs`'s two die with the duplicate prune leg that PHASE-08
+  `EX-3` owns, and that leg cannot go before PHASE-08's injection gives `backlog`
+  a route to the shared operation. Scoped to this phase's two; the slice-wide
+  claim survives as `VA-1`'s grep at PHASE-08, where it is actually checkable.
+
 - **PHASE-07 must decide `run_after_prune`'s echo prefix deliberately — the
   prototype changes it silently.** Found in PHASE-06's oracle pass. The fork's
   `run_after_prune` echoes `{source_id}` (canonical) on all three of its output
@@ -1210,9 +1238,31 @@ routes around: it does not care who authored the signature.
   the fork shows how easily an echo change rides along. PHASE-06's `R2` holds the
   line — reshape the argument, change nothing else.
 
-  **Action for PHASE-07 planning:** decide the echo explicitly. Unify (and name it
-  in the reconciliation brief as an output change), or preserve (and say why the
-  divergence survives the collapse). Do not inherit it.
+  **DECIDED at PHASE-07 planning, 2026-08-17 — unify on the canonical source id,
+  and the decision is FORCED rather than tasteful.** The reasoning above contains
+  an error worth naming, because it is the one that made this look open: it says
+  "PHASE-08 `EX-6` covers only the routed `backlog after` legs", treating that as
+  disjoint from `run_after_prune`. It is not. PHASE-08 `EX-3` makes **all three**
+  `run_after` legs — append, `--remove`, `--prune` — run the injected operation,
+  and the injected prune operation *is* `run_after_prune`. So after PHASE-08 its
+  echo **is** the routed leg's echo, and `EX-6` ("echo strings on the routed
+  `backlog after` legs unify on the canonical source id") cannot hold unless
+  `run_after_prune` echoes canonical.
+
+  Preserving as-typed is therefore not the conservative option — it would silently
+  **regress** `backlog after --prune`'s existing canonical echo to as-typed at
+  PHASE-08, an output change in the wrong direction that no criterion names.
+
+  PHASE-07 makes the change, not PHASE-08: it rewrites both `writeln!` sites
+  anyway under `EX-4`, and `EX-5` already obliges it to supersede PHASE-02's prune
+  pins — so both output changes land in one phase, with one supersession to read.
+  The prototype reached the same shape; it simply never showed its working, which
+  is `§4`'s point about reading the fork for shapes and never for authority.
+
+  **Reconcile action:** the brief's named-output-change list must carry
+  *`after --prune`'s source echo becomes canonical* explicitly. §7 line 1732 names
+  "the canonical-id echo on the routed `backlog after` legs", which covers the leg
+  after routing but not the top-level verb's own change at PHASE-07.
 
   Third prototype defect logged forward from a `DEC-242` oracle pass; the two from
   PHASE-02 (`phase-02.md ## Findings F-3` — the `eprintln!` against
