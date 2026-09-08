@@ -774,6 +774,61 @@ mod tests {
         );
     }
 
+    /// `SL-256` `VT-2` — `AcceptanceAttested` stops being written when the
+    /// acceptance arm starts reporting through the shared `ActRecorded` row
+    /// (`PHASE-02`), and its Rust name becomes `LegacyAcceptanceAttested`
+    /// (`PHASE-03`). Neither move may touch what is already on disk.
+    ///
+    /// The same defect class and the same whole-file tier as the row above, and
+    /// the same reason: `ChangeEvent` deserialises **strictly**, so one
+    /// unrecognised `event` fails the entire snapshot rather than one row. The
+    /// population is live — nine rows across seven of this repo's own design
+    /// runs at the time of writing, `SL-256`'s among them.
+    ///
+    /// Two assertions, because `DEC-239` refused two different repairs. That the
+    /// row *parses* is what a bare serde alias would also give. That it keeps its
+    /// **run-wide, term-free shape** is what whole-row normalisation at
+    /// deserialise would have taken away — the reader would manufacture a
+    /// subject and an `act` term the writer never stored, and the next snapshot
+    /// write would persist the invention as though it had always been there.
+    #[test]
+    fn a_snapshot_written_before_the_acceptance_attested_retirement_still_parses() {
+        let pre_retirement = format!(
+            "schema = \"{DESIGN_SNAPSHOT_SCHEMA}\"\n\
+             version = {DESIGN_SNAPSHOT_VERSION}\n\
+             \n\
+             [run]\n\
+             uid = \"dr-test\"\n\
+             slice = 251\n\
+             revision = 30\n\
+             stage = \"reviewing\"\n\
+             \n\
+             [change_log]\n\
+             floor = 0\n\
+             \n\
+             [[change_log.row]]\n\
+             revision = 29\n\
+             index = 0\n\
+             event = \"acceptance_attested\"\n"
+        );
+
+        let parsed = parse(&pre_retirement).expect("a pre-retirement snapshot still parses");
+        let [row] = parsed.change_log.rows.as_slice() else {
+            panic!("one row: {:?}", parsed.change_log.rows);
+        };
+        assert_eq!(
+            row.event,
+            ChangeEvent::LegacyAcceptanceAttested,
+            "the retired token still reads as its own member — the wire spelling \
+             does not move when the Rust name does"
+        );
+        assert_eq!(
+            row.subject, None,
+            "run-wide as stored: the reader must not manufacture a subject"
+        );
+        assert!(row.terms.is_empty(), "term-free as stored: {:?}", row.terms);
+    }
+
     /// `T11` retired this test's acceptance half with [`LockAcceptance`]
     /// (`EX-11`) — a user acceptance is now a `DesignAccepted` checkpoint act,
     /// and its currency is the act's coverage, asserted at the gate. What

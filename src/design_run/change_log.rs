@@ -27,6 +27,16 @@ use super::bounds::{
 use super::ids::DesignId;
 use super::refusal::Refusal;
 
+/// The one wire token no member of the vocabulary spells — `T11`'s pre-rename
+/// spelling of [`ChangeEvent::ActInvalidated`], whose doc carries why it is still
+/// read.
+///
+/// Written here once and read once, by [`ChangeEvent::try_from`] (STD-001). It is
+/// the only token in this module not spelled by [`ChangeEvent::as_str`], and it
+/// can be without reintroducing the drift that single-sourcing removed: it spells
+/// a **retired** token, so there is no live `as_str` arm for it to disagree with.
+const LEGACY_ACT_INVALIDATED: &str = "evidence_invalidated";
+
 /// The widest member of a closed vocabulary, at compile time.
 const fn widest(rest: &[ChangeEvent]) -> usize {
     match rest {
@@ -109,7 +119,7 @@ const _: () = assert!(is_subset(&ChangeEvent::EMITTABLE, &ChangeEvent::READABLE)
 /// posture changes, receipt eviction and fragment receipts are deliberately
 /// **not** members — they are state, not delta.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(try_from = "String", into = "String")]
 pub(crate) enum ChangeEvent {
     NodeCreated,
     NodeLifecycle,
@@ -133,9 +143,13 @@ pub(crate) enum ChangeEvent {
     /// not optional: `ChangeEvent` deserialises **strictly**, so one unrecognised
     /// `event` fails the whole snapshot rather than one row, and the change log is
     /// append-only *history* — the vocabulary a run writes is not the vocabulary
-    /// it must read. Eight rows on this repo's own live `SL-243`/`SL-244` runs
-    /// carry the old token; dropping the alias is how `ISS-315` happened.
-    #[serde(alias = "evidence_invalidated")]
+    /// it must read. Eight rows on this repo's own live `SL-244` run carry the
+    /// old token; dropping the alias is how `ISS-315` happened.
+    ///
+    /// The alias is no longer a serde attribute. `SL-256` made [`ChangeEvent::as_str`]
+    /// the token's only source, so the retired spelling is resolved by
+    /// [`ChangeEvent::try_from`] against [`LEGACY_ACT_INVALIDATED`] instead — same
+    /// tokens accepted, one place they are written.
     ActInvalidated,
     SectionCreated,
     SectionFingerprintChanged,
@@ -151,7 +165,25 @@ pub(crate) enum ChangeEvent {
     ReviewDisposed,
     FindingRaised,
     FindingDisposed,
-    AcceptanceAttested,
+    /// Read-only history. Superseded by [`ChangeEvent::ActRecorded`] once
+    /// acceptance flowed through the shared record seam (`SL-256` `sec-3`);
+    /// retained because the change log is append-only history and `ChangeEvent`
+    /// deserialises strictly.
+    ///
+    /// The **Rust** name is the only thing that moved. The wire token, the
+    /// rendered token and the stored run-wide, term-free payload shape are all
+    /// unchanged, and that is the point: the type warns every future
+    /// construction site that the variant is history, while nine rows across
+    /// seven of this repo's own live design runs keep parsing exactly as
+    /// written. `DEC-239` refused both cheaper repairs on the record — a bare
+    /// serde alias renames the variant but not the row, so an old row would
+    /// render as `act_recorded` with an empty payload; whole-row normalisation
+    /// at deserialise would manufacture a subject and an `act` term the writer
+    /// never stored, and the next write would persist the invention as history.
+    ///
+    /// Member of [`ChangeEvent::READABLE`] and deliberately **not** of
+    /// [`ChangeEvent::EMITTABLE`].
+    LegacyAcceptanceAttested,
     ReviewPolicyChanged,
     CheckpointDisposed,
     ObligationDelegated,
@@ -187,7 +219,7 @@ impl ChangeEvent {
         ChangeEvent::ReviewDisposed,
         ChangeEvent::FindingRaised,
         ChangeEvent::FindingDisposed,
-        ChangeEvent::AcceptanceAttested,
+        ChangeEvent::LegacyAcceptanceAttested,
         ChangeEvent::ReviewPolicyChanged,
         ChangeEvent::CheckpointDisposed,
         ChangeEvent::ObligationDelegated,
@@ -239,6 +271,12 @@ impl ChangeEvent {
     /// name (STD-001). Bounded at admission by
     /// [`super::bounds::DESIGN_EVENT_NAME_BYTES`]: the vocabulary is closed, so
     /// membership *is* the admission check.
+    ///
+    /// **The only source.** Serde reads this rather than deriving a second
+    /// spelling from the Rust identifier, so a variant can be renamed without
+    /// moving the wire token — see the [`From`] and [`TryFrom`] impls below.
+    /// Editing an arm here changes what is written to disk and what already-stored
+    /// snapshots are matched against; it is not a cosmetic change.
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             ChangeEvent::NodeCreated => "node_created",
@@ -256,7 +294,7 @@ impl ChangeEvent {
             ChangeEvent::ReviewDisposed => "review_disposed",
             ChangeEvent::FindingRaised => "finding_raised",
             ChangeEvent::FindingDisposed => "finding_disposed",
-            ChangeEvent::AcceptanceAttested => "acceptance_attested",
+            ChangeEvent::LegacyAcceptanceAttested => "acceptance_attested",
             ChangeEvent::ReviewPolicyChanged => "review_policy_changed",
             ChangeEvent::CheckpointDisposed => "checkpoint_disposed",
             ChangeEvent::ObligationDelegated => "obligation_delegated",
@@ -334,7 +372,7 @@ impl ChangeEvent {
             }
             // Run-wide and term-free: an acceptance has no run-local id at all —
             // its basis and authority are snapshot state, not delta.
-            ChangeEvent::AcceptanceAttested => &[],
+            ChangeEvent::LegacyAcceptanceAttested => &[],
             // Both policies are closed tokens rendered by name, so the row reads
             // as the change it is — `human-only → adversarial-only` — rather than
             // requiring the reader to fetch the run to learn what moved.
@@ -390,6 +428,43 @@ impl ChangeEvent {
                 .unwrap_or(usize::MAX)
         });
         terms
+    }
+}
+
+/// Serialisation reads [`ChangeEvent::as_str`], so the wire token has exactly one
+/// source (STD-001).
+///
+/// `#[serde(rename_all)]` used to derive a second one from the Rust identifier,
+/// and nothing held the two together: renaming a variant moved serde's token
+/// while `as_str`'s stayed, and both halves still compiled. That is why
+/// `AcceptanceAttested` could not be renamed until this impl existed — see
+/// [`ChangeEvent::LegacyAcceptanceAttested`].
+impl From<ChangeEvent> for String {
+    fn from(event: ChangeEvent) -> String {
+        event.as_str().to_owned()
+    }
+}
+
+/// Deserialisation resolves against [`ChangeEvent::READABLE`] — everything a
+/// persisted snapshot may contain — plus the one retired spelling.
+///
+/// **Strictness is preserved, not relaxed.** An unmatched token is a
+/// [`Refusal::UnknownChangeEvent`], exactly as the derive refused it. A change
+/// log that quietly accepted an event it could not name would be a change log
+/// that lies about what the run did, and `ChangeEvent` deserialising strictly is
+/// what makes the roster split load-bearing rather than cosmetic (`ISS-315`).
+///
+/// The same seam three other types in this leaf already cross: [`PayloadTerm`],
+/// `DesignId` and `IntentSubject`.
+impl TryFrom<String> for ChangeEvent {
+    type Error = Refusal;
+
+    fn try_from(raw: String) -> Result<ChangeEvent, Refusal> {
+        ChangeEvent::READABLE
+            .into_iter()
+            .find(|event| event.as_str() == raw)
+            .or_else(|| (raw == LEGACY_ACT_INVALIDATED).then_some(ChangeEvent::ActInvalidated))
+            .ok_or(Refusal::UnknownChangeEvent { raw })
     }
 }
 

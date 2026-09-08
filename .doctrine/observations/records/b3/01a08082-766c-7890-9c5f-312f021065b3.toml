@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a08082-766c-7890-9c5f-312f021065b3"
+recorded_at = "2026-09-08T10:13:48.780278556Z"
+kind = "friction"
+summary = "/phase-plan: no read-only verb for per-phase status"
+detail = "Reading which phase is planned/in_progress/completed cost three calls. 'doctrine slice phase SL-256' is write-only (errors demanding --status and PHASE_ID); 'slice phases' answers materialisation ('Phases up to date.'); 'slice status' gives only a 2/3 rollup. The per-phase status lives in gitignored .doctrine/state/.../phase-NN.toml, which the guardrail says not to read raw. A 'slice phase list <ID>' or per-phase rows under 'slice status' would collapse it to one call."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

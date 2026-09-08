@@ -171,6 +171,15 @@ pub(crate) enum Refusal {
     NotARegression { from: Stage, to: Stage },
     /// A run-local id is malformed — unknown prefix, or an empty body.
     MalformedId { raw: String },
+    /// A stored `event` token no member of the change-event vocabulary spells.
+    ///
+    /// The strictness `#[serde(rename_all)]` used to supply, kept when `SL-256`
+    /// made `as_str` the token's only source: a snapshot naming an event this
+    /// binary cannot resolve fails the parse rather than deserialising into
+    /// something plausible. One unrecognised token therefore costs the whole
+    /// snapshot, which is why a retired spelling is carried rather than dropped
+    /// (`ISS-315`).
+    UnknownChangeEvent { raw: String },
     /// A run-local id exceeds its admission bound. A refusal, never a trim: a
     /// truncated identity is a *wrong* identity rather than a shorter one.
     IdTooLong { raw: String, limit: usize },
@@ -582,6 +591,9 @@ impl fmt::Display for Refusal {
                 write!(f, "{} → {} is not a regression", from.as_str(), to.as_str())
             }
             Refusal::MalformedId { raw } => write!(f, "malformed run-local id: `{raw}`"),
+            Refusal::UnknownChangeEvent { raw } => {
+                write!(f, "unknown change event: `{raw}`")
+            }
             Refusal::IdTooLong { raw, limit } => write!(
                 f,
                 "run-local id is {} bytes, over the {limit}-byte admission bound: `{raw}` \

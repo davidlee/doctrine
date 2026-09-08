@@ -49,6 +49,7 @@ use design_run::attestation::{ActKind, AgentAct, ReviewDisposition};
 use design_run::bounds::{DESIGN_ID_BYTES, DESIGN_STAGE_LABEL_BYTES};
 use design_run::change_log::{ChangeEvent, ChangeRow, PayloadTerm, ValueKind};
 use design_run::ids::{DesignId, IdKind};
+use design_run::refusal::Refusal;
 use design_run::render::{ELISION_MARKER_UNDER_TEST, ENVELOPE_PAYLOAD_BYTES_UNDER_TEST};
 use design_run::snapshot::{self, DesignSnapshot};
 
@@ -1117,12 +1118,12 @@ fn every_material_event_kind_persists_a_change_row() {
 #[test]
 fn the_retired_event_is_readable_but_not_emittable() {
     assert!(
-        ChangeEvent::READABLE.contains(&ChangeEvent::AcceptanceAttested),
+        ChangeEvent::READABLE.contains(&ChangeEvent::LegacyAcceptanceAttested),
         "the change log is append-only history and `ChangeEvent` deserialises \
          strictly, so the retired member stays readable"
     );
     assert!(
-        !ChangeEvent::EMITTABLE.contains(&ChangeEvent::AcceptanceAttested),
+        !ChangeEvent::EMITTABLE.contains(&ChangeEvent::LegacyAcceptanceAttested),
         "nothing in this binary may newly write the retired member"
     );
 }
@@ -1149,6 +1150,56 @@ fn no_row_the_ladder_produces_carries_a_non_emittable_event() {
     assert!(
         strays.is_empty(),
         "the writer emitted events no roster admits: {strays:?}"
+    );
+}
+
+/// `SL-256` `VT-1` — every `READABLE` token survives a serde round trip, the
+/// retired `evidence_invalidated` alias still resolves, and a token no member
+/// spells is refused.
+///
+/// **Not a drift guard.** Before this slice the enum had two sources for every
+/// token — `as_str` hand-wrote one and `#[serde(rename_all)]` derived a second —
+/// and a round trip would have been the way to catch them disagreeing. `sec-2`
+/// removed the second source instead, so the round trip is now true by
+/// construction and proves nothing on its own (`RV-360` `F-4`).
+///
+/// What it does guard is the part construction does not give for free, and both
+/// halves are load-bearing history. The **alias arm** is the only reader of
+/// `evidence_invalidated`, which eight rows on this repo's own `SL-244` run
+/// still carry — dropping it is how `ISS-315` happened. The **refusal** is the
+/// strictness the derive used to supply: an unknown token must fail the parse,
+/// not deserialise into some default, because a silently-accepted event is a
+/// change log that lies about what the run did.
+#[test]
+fn every_readable_event_token_round_trips_through_serde() {
+    for event in ChangeEvent::READABLE {
+        let token = String::from(event);
+        assert_eq!(
+            token,
+            event.as_str(),
+            "the wire spelling is `as_str`'s and nothing else's"
+        );
+        assert_eq!(
+            ChangeEvent::try_from(token),
+            Ok(event),
+            "`{}` must read back as the member that wrote it",
+            event.as_str()
+        );
+    }
+
+    assert_eq!(
+        ChangeEvent::try_from("evidence_invalidated".to_owned()),
+        Ok(ChangeEvent::ActInvalidated),
+        "the retired token reads as the member that replaced it — the alias \
+         outlived the rename because the change log is append-only history"
+    );
+
+    assert_eq!(
+        ChangeEvent::try_from("no_such_event".to_owned()),
+        Err(Refusal::UnknownChangeEvent {
+            raw: "no_such_event".to_owned(),
+        }),
+        "a token no member spells is refused, never defaulted"
     );
 }
 
@@ -1292,7 +1343,7 @@ fn an_acceptance_reports_through_the_shared_act_row() {
     assert!(
         !log.rows
             .iter()
-            .any(|row| row.event == ChangeEvent::AcceptanceAttested),
+            .any(|row| row.event == ChangeEvent::LegacyAcceptanceAttested),
         "the retired member is readable history, never newly written"
     );
 }
