@@ -39,11 +39,68 @@ const fn widest(rest: &[ChangeEvent]) -> usize {
     }
 }
 
+/// Whether two tokens are the same string, at compile time. `PartialEq` is not
+/// `const`, so the bytes are walked in `widest`'s slice-recursion idiom — which
+/// is also what keeps this clear of `clippy::indexing_slicing`.
+const fn same_token(left: &[u8], right: &[u8]) -> bool {
+    match (left, right) {
+        ([], []) => true,
+        ([left_head, left_tail @ ..], [right_head, right_tail @ ..]) => {
+            *left_head == *right_head && same_token(left_tail, right_tail)
+        }
+        _ => false,
+    }
+}
+
+/// Whether a roster holds an event spelling `needle`'s token.
+const fn holds_token(roster: &[ChangeEvent], needle: ChangeEvent) -> bool {
+    match roster {
+        [] => false,
+        [head, tail @ ..] => {
+            same_token(head.as_str().as_bytes(), needle.as_str().as_bytes())
+                || holds_token(tail, needle)
+        }
+    }
+}
+
+/// Whether every member of `subset` is also spelled by a member of `superset`.
+///
+/// Compared by [`ChangeEvent::as_str`] because the token is the event's identity
+/// everywhere else (STD-001). Two shorter spellings are closed off by the
+/// workspace lint gate and are named here so nobody re-derives them: comparing
+/// discriminants trips `clippy::as_conversions`, and deriving one roster from the
+/// other by a const-block copy trips `clippy::indexing_slicing`.
+const fn is_subset(subset: &[ChangeEvent], superset: &[ChangeEvent]) -> bool {
+    match subset {
+        [] => true,
+        [head, tail @ ..] => holds_token(superset, *head) && is_subset(tail, superset),
+    }
+}
+
 /// The provenance of [`DESIGN_EVENT_NAME_BYTES`], **proved rather than
 /// asserted** (EX-16(a)): the event vocabulary is closed, so the bound is
 /// derivable from it, and a new event name that outgrew the bound would stop the
 /// build rather than quietly widen a rendered row.
-const _: () = assert!(widest(&ChangeEvent::ALL) <= DESIGN_EVENT_NAME_BYTES);
+///
+/// Quantified over [`ChangeEvent::READABLE`] (SL-256 `EX-2`): a historical row
+/// must stay renderable within the same budget, so the bound is owed by every
+/// event a snapshot may *contain*, not only by those this binary may write.
+const _: () = assert!(widest(&ChangeEvent::READABLE) <= DESIGN_EVENT_NAME_BYTES);
+
+/// `sec-2`'s roster relation — everything this binary may write is something a
+/// snapshot may contain — **proved rather than asserted at runtime** (`DEC-239`),
+/// in the same idiom as the bound above.
+///
+/// It is also load-bearing against the lint gate, which is why it must not later
+/// be deleted as redundant: this is the only reader of
+/// [`ChangeEvent::EMITTABLE`] in `src/`, both roster tests living in
+/// `tests/e2e_design_state.rs`, a separate compilation unit. The module's
+/// dead-code exemption is `not(test)`-scoped and the crate denies `unused`, so
+/// without this line `cargo check` passes and `cargo test --bin doctrine` fails
+/// to compile. No attribute substitutes: `cfg(test)` holds in **both** units, so
+/// a `cfg_attr(test, expect(dead_code, …))` is unfulfilled in the e2e unit and
+/// stops that build instead.
+const _: () = assert!(is_subset(&ChangeEvent::EMITTABLE, &ChangeEvent::READABLE));
 
 /// The closed material-change vocabulary (projection-bounds sketch §(d) table).
 ///
@@ -106,10 +163,15 @@ pub(crate) enum ChangeEvent {
 }
 
 impl ChangeEvent {
-    /// Every event, in the sketch's declaration order — the closed vocabulary,
-    /// single-sourced so an exhaustive table test cannot silently miss a variant
-    /// (STD-001).
-    pub(crate) const ALL: [ChangeEvent; 23] = [
+    /// Every event a persisted snapshot may **contain**, in the sketch's
+    /// declaration order — the closed read vocabulary, single-sourced so an
+    /// exhaustive table test cannot silently miss a variant (STD-001).
+    ///
+    /// Governs rendering and bounds: a historical row must stay renderable
+    /// within the payload budget, so the widest-name assert and the containment
+    /// check both quantify over this roster rather than over what a writer may
+    /// still produce ([`ChangeEvent::EMITTABLE`], `sec-2`).
+    pub(crate) const READABLE: [ChangeEvent; 23] = [
         ChangeEvent::NodeCreated,
         ChangeEvent::NodeLifecycle,
         ChangeEvent::NodeReparented,
@@ -126,6 +188,44 @@ impl ChangeEvent {
         ChangeEvent::FindingRaised,
         ChangeEvent::FindingDisposed,
         ChangeEvent::AcceptanceAttested,
+        ChangeEvent::ReviewPolicyChanged,
+        ChangeEvent::CheckpointDisposed,
+        ChangeEvent::ObligationDelegated,
+        ChangeEvent::ProposalRecorded,
+        ChangeEvent::ProposalAccepted,
+        ChangeEvent::ProposalRefused,
+        ChangeEvent::StepDischarged,
+    ];
+    /// Every event this binary may newly **write** — [`ChangeEvent::READABLE`]
+    /// less the retired member. A strict subset, proved as one directly below
+    /// the roster (`DEC-239`).
+    ///
+    /// Governs writer coverage, and in one direction only: the coverage check
+    /// proves every member *is* driven. Nothing in the type proves the converse,
+    /// that nothing outside the roster is written — [`Pending`]'s constructors
+    /// take any [`ChangeEvent`] — so that half is bought with evidence in
+    /// `tests/e2e_design_state.rs` rather than with types (`sec-2`, `RV-360`
+    /// `F-2`).
+    ///
+    /// Written out rather than derived from `READABLE`: a const-block copy trips
+    /// `clippy::indexing_slicing`, and the subset assert is what holds the two
+    /// declarations together.
+    pub(crate) const EMITTABLE: [ChangeEvent; 22] = [
+        ChangeEvent::NodeCreated,
+        ChangeEvent::NodeLifecycle,
+        ChangeEvent::NodeReparented,
+        ChangeEvent::NeedsAdded,
+        ChangeEvent::NeedsRemoved,
+        ChangeEvent::StageMoved,
+        ChangeEvent::ActRecorded,
+        ChangeEvent::ActInvalidated,
+        ChangeEvent::SectionCreated,
+        ChangeEvent::SectionFingerprintChanged,
+        ChangeEvent::ReviewAttested,
+        ChangeEvent::ReviewInvalidated,
+        ChangeEvent::ReviewDisposed,
+        ChangeEvent::FindingRaised,
+        ChangeEvent::FindingDisposed,
         ChangeEvent::ReviewPolicyChanged,
         ChangeEvent::CheckpointDisposed,
         ChangeEvent::ObligationDelegated,

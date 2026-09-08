@@ -407,15 +407,6 @@ pub(crate) fn apply(
             derived,
             payload_digest,
         )?);
-        // Redundant with the row above, and retired in PHASE-02 rather than
-        // here: `ChangeEvent::ALL` is still one roster, so a member no writer
-        // drives fails `every_material_event_kind_persists_a_change_row`. The
-        // roster split is what makes an undriven member legal, and it must land
-        // in the same commit that stops driving this one.
-        pending.push(Pending::run_wide(
-            ChangeEvent::AcceptanceAttested,
-            Vec::new(),
-        ));
     }
 
     // Beside the acceptance and in the same shape, because it is the same kind of

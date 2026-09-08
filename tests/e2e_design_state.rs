@@ -934,8 +934,11 @@ fn every_event_fixture() -> Fixture {
             "dispose": { "form": "create", "kind": "decision", "title": "Checkpointed decision" },
         }] }),
     ));
-    // The PHASE-12 review vocabulary: finding_raised, finding_disposed,
-    // acceptance_attested. No stage move — this fixture is about the rows each
+    // The PHASE-12 review vocabulary: finding_raised, finding_disposed. The
+    // run-level acceptance below reports as `act_recorded` since SL-256 retired
+    // `acceptance_attested` — a member this ladder now reads but never writes —
+    // and that row is not this rung's alone: act submissions earlier and later
+    // drive the same event. No stage move — this fixture is about the rows each
     // declaration persists, not about the lock gate, which
     // `tests/e2e_design_review.rs` owns. `integrated_review_recorded` left this
     // vocabulary with SL-244's retirement of the `int-` declaration: the run's
@@ -1074,9 +1077,14 @@ fn every_event_fixture() -> Fixture {
 /// before doctoring it.
 const MINTED_RECORD: &str = "DEC-001";
 
-/// EX-14 — every member of the closed vocabulary persists a change row. The
-/// vocabulary is enumerated programmatically, so a new event kind nobody wired
+/// EX-14 — every member of the **emittable** vocabulary persists a change row.
+/// The roster is enumerated programmatically, so a new event kind nobody wired
 /// fails here rather than being quietly absent.
+///
+/// `EMITTABLE` and not `READABLE` (SL-256 `sec-2`): this is the check that makes
+/// an unwired member fail loudly, so it must not demand a row for a member no
+/// writer may produce. The retired member's absence from it is what makes
+/// *retain the variant but stop writing it* an available move at all.
 #[test]
 fn every_material_event_kind_persists_a_change_row() {
     let fixture = every_event_fixture();
@@ -1087,7 +1095,7 @@ fn every_material_event_kind_persists_a_change_row() {
         .iter()
         .map(|row| row.event)
         .collect();
-    let missing: Vec<&str> = ChangeEvent::ALL
+    let missing: Vec<&str> = ChangeEvent::EMITTABLE
         .into_iter()
         .filter(|event| !seen.contains(event))
         .map(ChangeEvent::as_str)
@@ -1095,6 +1103,52 @@ fn every_material_event_kind_persists_a_change_row() {
     assert!(
         missing.is_empty(),
         "no change row persisted for: {missing:?}"
+    );
+}
+
+/// `SL-256` `VT-2` — the retirement, stated as roster membership: the run may
+/// still *read* an `acceptance_attested` row out of a snapshot written before
+/// this slice, and may never write one again.
+///
+/// Membership only. The subset half of the invariant — everything emittable is
+/// readable — is proved at compile time in `change_log.rs` beside the rosters
+/// (`DEC-239`), and re-asserting it here would be the runtime form that decision
+/// refused.
+#[test]
+fn the_retired_event_is_readable_but_not_emittable() {
+    assert!(
+        ChangeEvent::READABLE.contains(&ChangeEvent::AcceptanceAttested),
+        "the change log is append-only history and `ChangeEvent` deserialises \
+         strictly, so the retired member stays readable"
+    );
+    assert!(
+        !ChangeEvent::EMITTABLE.contains(&ChangeEvent::AcceptanceAttested),
+        "nothing in this binary may newly write the retired member"
+    );
+}
+
+/// `SL-256` `VT-3` — no row the ladder produces carries an event absent from
+/// `EMITTABLE`.
+///
+/// **Defence in depth, and not the discharge of any `REQ-478` criterion**
+/// (`RV-360` `F-2`). `Pending::about` and `Pending::run_wide` accept any
+/// `ChangeEvent`, so no roster array can prove that nothing outside it is
+/// written. What this proves is narrower and worth having: on the one path that
+/// drives every emittable member, nothing else came out. A writer path the
+/// ladder never traverses stays invisible to it.
+#[test]
+fn no_row_the_ladder_produces_carries_a_non_emittable_event() {
+    let log = every_event_fixture().read().change_log;
+    let strays: Vec<&str> = log
+        .rows
+        .iter()
+        .map(|row| row.event)
+        .filter(|event| !ChangeEvent::EMITTABLE.contains(event))
+        .map(ChangeEvent::as_str)
+        .collect();
+    assert!(
+        strays.is_empty(),
+        "the writer emitted events no roster admits: {strays:?}"
     );
 }
 
@@ -1199,6 +1253,47 @@ fn a_disposing_act_renders_both_its_recording_and_its_disposition() {
         terms_of(rows[0]),
         vec![("act", ActKind::ReviewDisposed.as_str())],
         "the recording row carries the act term, not the disposition's"
+    );
+}
+
+/// `SL-256` `VT-1` — the acceptance path reports through the shared act row, and
+/// the retired `acceptance_attested` row is gone.
+///
+/// The ladder's `dispose-finding` rung carries the run-level `acceptance` field,
+/// which `apply` records as a `DesignAccepted` act by the same route as every
+/// other act (`sec-3`) — so the acceptance is reported by the act it is, not by
+/// a second vocabulary of its own.
+///
+/// Both halves are asserted because neither implies the other: the row can
+/// report the act while the retired push still stands beside it (which is where
+/// PHASE-01 left the tree), and the push can be deleted without the acceptance
+/// being recorded at all. This is the one check that catches a half-done
+/// retirement.
+///
+/// The pair is ordered `ActRecorded` then `ActInvalidated` because the ladder
+/// redrafts a section *after* accepting, which retires the `EverySection`-covered
+/// act — the same rung `act_invalidated` is driven from.
+#[test]
+fn an_acceptance_reports_through_the_shared_act_row() {
+    let log = every_event_fixture().read().change_log;
+    let subject = act_subject(IdKind::CheckpointAct, ActKind::DesignAccepted);
+    let rows = rows_about(&log, &subject);
+
+    assert_eq!(
+        rows.iter().map(|row| row.event).collect::<Vec<_>>(),
+        vec![ChangeEvent::ActRecorded, ChangeEvent::ActInvalidated],
+        "the acceptance is recorded as an act, and retired when a section moves"
+    );
+    assert_eq!(
+        terms_of(rows[0]),
+        vec![("act", ActKind::DesignAccepted.as_str())],
+        "one term: which act the run now holds"
+    );
+    assert!(
+        !log.rows
+            .iter()
+            .any(|row| row.event == ChangeEvent::AcceptanceAttested),
+        "the retired member is readable history, never newly written"
     );
 }
 
@@ -1312,8 +1407,12 @@ fn stored_change_row_keeps_full_reason_and_fingerprint() {
 }
 
 /// EX-14(c) / VA-7 — the mechanical containment check. Every member of the
-/// closed vocabulary, rendered with EVERY scalar saturated at the bound its
-/// value kind carries, fits the payload budget.
+/// **readable** vocabulary, rendered with EVERY scalar saturated at the bound
+/// its value kind carries, fits the payload budget.
+///
+/// `READABLE` and not `EMITTABLE` (SL-256 `sec-2`): a historical row must stay
+/// renderable within the same budget it was written under, so the retired
+/// member's saturated payload is still owed a place inside it.
 ///
 /// Saturation is the point: a hand-picked example proves nothing, and a check
 /// that truncated its own output to the cap could never fail. This one can —
@@ -1321,7 +1420,7 @@ fn stored_change_row_keeps_full_reason_and_fingerprint() {
 /// the admission bounds guarantee.
 #[test]
 fn rendered_payload_fits_its_cap_for_every_event_kind() {
-    for event in ChangeEvent::ALL {
+    for event in ChangeEvent::READABLE {
         let terms: Vec<PayloadTerm> = event
             .payload_terms()
             .iter()

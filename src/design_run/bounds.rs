@@ -46,7 +46,7 @@ pub(crate) const DESIGN_STAGE_LABEL_BYTES: usize = 16;
 /// Bytes of a **change-event name** at admission.
 ///
 /// Derivation: the event vocabulary is closed
-/// ([`super::change_log::ChangeEvent::ALL`]) and its longest member is
+/// ([`super::change_log::ChangeEvent::READABLE`]) and its longest member is
 /// `section_fingerprint_changed` at 27 B. 32 is the next power of two above it.
 pub(crate) const DESIGN_EVENT_NAME_BYTES: usize = 32;
 
