@@ -96,3 +96,33 @@ undeclared cell.
 audit is going to want, and nothing goes red to tell you. When you inherit a
 slice, re-run `verify-vt` over the **completed** phases before trusting that
 their criteria are attributed.
+
+## The same blind spot, seen from `slice conformance`
+
+Verified SL-256 PHASE-03 (2026-09-09). `slice conformance <id>` folds the
+**boundary registry**, and the registry only holds phases that have been
+recorded — i.e. flipped `completed`. So mid-phase it does not report your phase:
+it reports the picture as of the last completed one. Files the current phase has
+already edited and committed still read `undelivered`, and paths it has already
+added are missing from `undeclared`. Nothing says the range is stale; the output
+just looks like the phase did nothing.
+
+That is the same root as the `UNATTRIBUTABLE` rule above — the attribution
+machinery cannot see an in-flight phase — and it bites earlier, because `EX`
+criteria routinely ask for a clean conformance read *before* the completed flip.
+
+The in-phase read bypasses the registry with the boundary the flip already
+stamped:
+
+```
+doctrine slice conformance <id> --against <code_start_oid>..HEAD [--strict]
+```
+
+`code_start_oid` is in `.doctrine/state/slice/<N>/phases/phase-NN.toml`, written
+by the `in_progress` transition. Read the range as one phase's delta: `undelivered`
+will list selectors *other* phases delivered, which is not a violation.
+
+`--strict` (only valid with `--against`) exits nonzero on any undeclared path,
+including `.doctrine/` artefacts a code-selector fence does not govern — a
+coverage cell, an observation record, a backlog item. Expect the nonzero and read
+the cell, rather than treating the exit code as the verdict.

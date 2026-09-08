@@ -6,7 +6,7 @@ status = "active"
 title = "coverage record --mode VT without a check field silently stores a verified attestation"
 summary = "A coverage cell with --mode VT but no alias/command/matcher is recorded as a VA/VH attestation with Verified status and no test bound"
 created = "2026-08-16"
-updated = "2026-08-16"
+updated = "2026-09-08"
 
 [scope]
 paths = []

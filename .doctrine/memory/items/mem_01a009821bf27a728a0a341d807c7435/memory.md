@@ -29,3 +29,29 @@ compiled. Name a specific test instead:
 Found by an external adversarial reviewer on `RV-360` (`F-3`) against `SL-256`'s
 design, where the bad recipe had been written into both the design and the
 slice's closure intent. See [[mem.signpost.doctrine.requirements]].
+
+**Correction, 2026-09-09 (SL-256 PHASE-03).** The argv above **does not parse**.
+`--command --test` makes clap read `--test` as an unexpected argument, not as
+`--command`'s value:
+
+```
+error: unexpected argument '--test' found
+```
+
+Any value that itself starts with `-` must use the `=` form. The working recipe:
+
+```
+doctrine coverage record --slice N --requirement REQ-NNN --change N --mode VT \
+  --command cargo --command test --command=--test --command <target> \
+  --matcher-source stdout --matcher-pattern '<test_name> \.\.\. ok' --regex
+```
+
+Verified end to end on `SL-256`/`REQ-478`: the cell records with
+`command = ["cargo", "test", "--test", "e2e_design_state"]` at `status =
+"planned"`, and `doctrine coverage verify <slice>` then runs the target and
+transitions it `planned→verified`. The `planned→verified` transition is itself
+the evidence the check ran — a cell that stays `planned`, or one that records
+straight to `verified`, is the failure this memory is about.
+
+`SL-256`'s `design.md` `sec-4` carries the same unparseable argv; that erratum is
+carried to its `/reconcile` rather than edited into locked design prose.
