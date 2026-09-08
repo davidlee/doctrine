@@ -41,6 +41,24 @@ so mid-phase there is nothing to attribute against. `doctrine slice conformance`
 reports the same underlying condition honestly:
 `conformance unavailable — no recorded source deltas`.
 
+## Confirmed by before/after on the same tree
+
+`PHASE-01` was then flipped to `completed`, which records the phase's source
+delta and makes the rows attributable. Re-running the identical command on the
+identical source turned the boilerplate rows honest:
+
+```
+  PHASE-02:
+    ✗ FAIL        VT-4 — keyword `const READABLE` absent from `src/design_run/change_log.rs`
+```
+
+Same file, same keyword, no source change between the two runs — only the
+attribution. So the verb *can* check the mandate and does, on the attributable
+path; the `UNATTRIBUTABLE` arm simply returns before checking and prints the
+claim anyway. `PHASE-03` `VT-2` remained `UNATTRIBUTABLE` in the second run
+(`snapshot.rs` is not in the phase's delta) and still asserted *"keyword
+present"* for a keyword that is absent — a third instance.
+
 ## Suggested shape of the fix
 
 Either evaluate the keyword mandate before short-circuiting on attributability
