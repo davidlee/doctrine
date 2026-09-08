@@ -45,6 +45,16 @@ selector = "src/design_run/refusal.rs"
 intent = "design-target"
 note = "added at RV-360 raiser integration: ChangeEvent's TryFrom needs one new Refusal variant (sec-2 single-sourcing)"
 
+[[selector]]
+selector = "src/estimate/display.rs"
+intent = "scope-relevant"
+note = "not slice substance: pre-existing clippy debt surfaced by a toolchain bump (clippy 0.1.99, 2026-09-04) that reds the whole gate before tests run. Cleared in passing at PHASE-01 on the user's call; root cause is IMP-273 (pin the toolchain)."
+
+[[selector]]
+selector = "src/map_server/state.rs"
+intent = "scope-relevant"
+note = "not slice substance: pre-existing clippy debt surfaced by a toolchain bump (clippy 0.1.99, 2026-09-04) that reds the whole gate before tests run. Cleared in passing at PHASE-01 on the user's call; root cause is IMP-273 (pin the toolchain)."
+
 [[relation]]
 label = "governed_by"
 target = "STD-001"

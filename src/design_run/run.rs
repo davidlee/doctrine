@@ -537,8 +537,14 @@ pub(crate) fn apply(
     })
 }
 
-/// Construct the agent declaration this batch carries, admit it, and record it
-/// (design `sec-4`, build order step 4).
+/// Construct the agent declaration this batch carries and put it through the
+/// record seam, returning the row that says so (design `sec-4`, build order
+/// step 4).
+///
+/// The caller hoists the `Option`: *nothing was supplied* is its question, not
+/// this function's. Conflating it with *something happened* under one `Ok(())`
+/// was `ISS-355` in miniature, and separating them is what makes the mandatory
+/// row expressible in the return type.
 ///
 /// **Runs before [`record_act`]**, so an act confirming this declaration can be
 /// given the fingerprint of the record written here rather than one its caller
@@ -584,9 +590,10 @@ fn record_declaration(
 /// first. `apply` assigns `ChangeRow.index` from the vector's own order, so this
 /// ordering is the stored one and is contractual, not incidental.
 ///
-/// The disposition row is derived from the record that was just admitted rather
-/// than from the declaration, so a disposition that never became an act cannot
-/// leave a row claiming it did (`EX-13`).
+/// The disposition row is derived from the constructed **record** rather than
+/// from the declaration, so a disposition that never became an act cannot leave
+/// a row claiming it did (`EX-13`) — and because admission is inside the seam,
+/// a refusal there discards the row along with the record.
 fn record_act(
     next: &mut DesignSnapshot,
     declared: &CheckpointActDeclaration,

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a07fff-5148-7e80-89de-6ac2c0c7b418"
+recorded_at = "2026-09-08T07:50:34.056663985Z"
+kind = "friction"
+summary = "execute: slice verify-vt asserts 'keyword present' on UNATTRIBUTABLE rows without checking, producing false evidence"
+detail = "Running 'doctrine slice verify-vt 256' mid-PHASE-01 printed, for all 12 VT rows across three phases, the verdict '≈ UNATTRIBUTABLE VT-n — keyword present but <file> not modified by this slice'. For PHASE-01 the keywords genuinely are present. For PHASE-02 VT-4 they are not: 'const READABLE', 'const EMITTABLE' and 'const fn is_subset' each grep to 0 in src/design_run/change_log.rs (positive control 'const ALL' = 1), because PHASE-02 has not been implemented. The 'keyword present' clause is therefore boilerplate in the UNATTRIBUTABLE arm rather than a checked fact. Cost at audit: a reader takes it as 'the mandate is satisfied, only the attribution is missing', which is a false negative for an unimplemented phase. Adjacent to STD-003 (no silent skip / disclose a degraded read) — this is worse than silent, it affirms what it skipped. Root of the UNATTRIBUTABLE state itself is benign: the source-delta registry has no row for the slice until a phase flips to completed, same as 'slice conformance' reporting 'no recorded source deltas'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
