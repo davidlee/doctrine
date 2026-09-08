@@ -25,7 +25,7 @@ integration rather than assuming.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-08 · PHASE-02 completed (run `dr-01a0088b`, rev 57, stage `locked`), head `48a04f6a6`
+fresh-as-of: 2026-09-09 · PHASE-03 completed — all phases done, slice ready for `/audit` (run `dr-01a0088b`, rev 57, stage `locked`), head `bf22f8487`
 
 ### Produced
 
@@ -45,6 +45,24 @@ fresh-as-of: 2026-09-08 · PHASE-02 completed (run `dr-01a0088b`, rev 57, stage 
   Conformance: the four touched files all `conformant`; `undeclared` holds only
   PHASE-01's known set, `undelivered` holds PHASE-03's selectors plus
   `render/mod.rs` and `render/change_row.rs` (see Open).
+- **PHASE-03 done** (`50c41b25c` code, `95e0b52aa` coverage, `bf22f8487`
+  harvest) — `#[serde(rename_all)]` and the variant-level `evidence_invalidated`
+  alias replaced by `#[serde(try_from = "String", into = "String")]` over
+  `as_str`, so the wire token has one source; `Refusal::UnknownChangeEvent` and
+  the named `LEGACY_ACT_INVALIDATED` literal added; `AcceptanceAttested` renamed
+  `LegacyAcceptanceAttested` with token, rendered name and payload shape all
+  unmoved; the `ActInvalidated` doc's attribution corrected to `SL-244` alone.
+  `EX-1`…`EX-7`, `VT-1`…`VT-3`, `VA-1`, `VA-2` discharged; `doctrine check gate`
+  exit 0; `verify-vt` `✓ PASS` on all eleven rows across the three phases, read
+  after the `completed` flip. `--bin doctrine` 4411, `--test e2e_design_state`
+  226 — `+1`/`+2` rather than `+1`/`+1`, because the e2e binary `#[path]`-includes
+  the leaf's `#[cfg(test)]` modules ([[mem_019fcc9b571e7fe18dfd8e7fbda6e802]]).
+  Conformance: six of eight `design-target` selectors conformant.
+- **`REQ-478`'s coverage cell is bound and verified** — `sec-4`'s recipe with the
+  `=` fix (see Open), `planned→verified` under `coverage verify 256`, which is
+  itself the evidence the check ran.
+- minted at PHASE-03: `IMP-445` — the new refusal drops the accepted-token list
+  serde's derive printed; `originates_from` `SL-256`, `related` `ISS-315`.
 - No new backlog items minted at PHASE-02; nothing pending but `flake.lock`,
   which is not this slice's.
 - minted: `ISS-448` — a toolchain bump red-lights the gate on files a phase
@@ -90,7 +108,28 @@ fresh-as-of: 2026-09-08 · PHASE-02 completed (run `dr-01a0088b`, rev 57, stage 
   the fork a widening creates — leave it `undeclared` and explain it, make it a
   real `design-target`, or (never) re-intent to silence the cell — plus the
   `ISS-449` caveat, marked for deletion when that closes.
-- `mem.fact.coverage.vt-needs-a-check-field` — recorded at PHASE-01.
+- `mem.fact.coverage.vt-needs-a-check-field` — recorded at PHASE-01,
+  **corrected at PHASE-03**: the recipe it carried does not parse. Any
+  `--command` value beginning with `-` needs the `=` form
+  (`--command=--test`), or clap reads it as an unexpected argument. Corrected in
+  the memory rather than only in the slice, because a memory is precisely what
+  the next agent copy-pastes.
+- `mem_019f89125fb275a2895bf58b5e29ed95` — **extended at PHASE-03**, not added:
+  `slice conformance` folds the boundary registry, which only holds *completed*
+  phases, so mid-phase it reports the previous phase's picture with no sign the
+  range is stale. Same root as the `UNATTRIBUTABLE` rule that memory already
+  carries, and it bites earlier because `EX` criteria ask for a clean read
+  *before* the flip. In-phase read: `--against <code_start_oid>..HEAD`.
+- **The single-sourcing rests on an agreement the design never states as
+  checked** — all 23 `as_str` tokens already equalled `snake_case(identifier)`,
+  so dropping `rename_all` was wire-neutral. Had one disagreed, the swap would
+  have silently moved that member's stored token. Verified arm by arm at
+  `/phase-plan` and pinned member-by-member by `VT-1`.
+- **Verifying a read-path change against the live corpus beats verifying it
+  against fixtures**, and it is one command. `design show` over all seven runs
+  carrying a retired token found `SL-244` unreadable — which the fixture suite
+  could not have told us, and which turned out to be `ISS-315` rather than a
+  regression (see Open).
 - `mem.pattern.doctrine.vt-keywords-name-a-literal-the-file-contains` — recorded
   at PHASE-02 out of `F-2`: a `verify-vt` keyword is a raw-byte substring check,
   so a mandate naming a value the suite composes cannot pass; name the composed
@@ -290,5 +329,25 @@ If one were run anyway, the two things it should probe are:
   slice's reconcile, not here.
 - `QUE-219` — not this slice's to settle; `DEC-239` bears on it and the relation
   carries the descriptor.
-- Coverage cell for `REQ-478` — deferred by design. The recipe was **wrong** and
-  is corrected in `sec-4`; see `mem.fact.coverage.vt-needs-a-check-field`.
+- ~~Coverage cell for `REQ-478`~~ — **done at PHASE-03**, `planned→verified`.
+- **A second `design.md` erratum for `/reconcile`** — `sec-4`'s coverage recipe
+  (`:958-964`) does not parse: `--command --test` is refused by clap
+  (`unexpected argument '--test' found`) and needs `--command=--test`. The cell
+  was recorded with the `=` form and stores the argv the design intended, so
+  this is spelling, not substance. Joins the `cpa-design_accepted` erratum above;
+  the run is `locked`, so neither is an implementor's edit.
+- **Prune the two render selectors at reconcile.** PHASE-03 left
+  `src/design_run/render/mod.rs` and `render/change_row.rs` untouched, as
+  Research Thread 2 predicted — the render path is data-driven off `as_str`. The
+  conditional above is now discharged: prune, do not manufacture an edit.
+- **`ISS-315` is still live and still reproducible**, found while verifying
+  PHASE-03's read path against the real corpus. `doctrine design show SL-244`
+  fails on `integrated_review_recorded` — a retired token with no `READABLE`
+  member and no alias. **Not this slice's regression**: the pre-slice binary
+  fails identically (positive control — that same binary parses `SL-251`). Out
+  of scope here; the issue's line reference has moved `:4991` → `:4927`.
+- **`memory validate` exits 1** with six findings (five stale anchors, one
+  dangling link). None is against either memory this slice touched, and none is
+  scoped to `src/design_run/**` — the scopes are `flake.nix`, `src/dispatch.rs`,
+  `src/worktree/**`. Pre-existing corpus drift, flagged for `/audit` to rule on
+  rather than absorbed here.
