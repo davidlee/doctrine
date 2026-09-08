@@ -1098,6 +1098,110 @@ fn every_material_event_kind_persists_a_change_row() {
     );
 }
 
+/// The subject a recorded act is reported under — `agd-`/`cpa-` plus the act's
+/// own token, exactly as `act_id` mints it. One spelling for the three checks
+/// below (STD-001), so a subject convention change breaks them together.
+fn act_subject(prefix: IdKind, act: ActKind) -> String {
+    format!("{}{}", prefix.prefix(), act.as_str())
+}
+
+/// Every row the ladder recorded about one act, in stored order — `(revision,
+/// index)` is the order `apply` assigned from the pending vector, so this is the
+/// vector's own order read back off the snapshot.
+fn rows_about<'a>(log: &'a design_run::change_log::ChangeLog, subject: &str) -> Vec<&'a ChangeRow> {
+    let mut rows: Vec<&ChangeRow> = log
+        .rows
+        .iter()
+        .filter(|row| row.subject.as_ref().map(DesignId::to_string).as_deref() == Some(subject))
+        .collect();
+    rows.sort_by_key(|row| (row.revision, row.index));
+    rows
+}
+
+/// The `(key, value)` pairs a row renders, in its declared term order.
+fn terms_of(row: &ChangeRow) -> Vec<(&str, &str)> {
+    row.terms
+        .iter()
+        .map(|term| (term.key().as_str(), term.value()))
+        .collect()
+}
+
+/// `SL-256` `VT-1`, and `ISS-355`'s exact report: a successful
+/// `agent_declaration` apply exited 0 and printed only `revision N stage
+/// <stage>`, so *the declaration landed* and *the declaration was silently
+/// discarded* shared one observable.
+///
+/// The ladder's `ready` submission carries an `agent_declaration` and nothing
+/// else, which is the reported case. Event, subject and ordered terms are all
+/// asserted, because each alone is a fact the snapshot already held.
+#[test]
+fn an_agent_declaration_alone_renders_a_change_row() {
+    let log = every_event_fixture().read().change_log;
+    let subject = act_subject(IdKind::AgentDeclaration, ActKind::DraftingReady);
+    let rows = rows_about(&log, &subject);
+
+    assert_eq!(
+        rows.iter().map(|row| row.event).collect::<Vec<_>>(),
+        vec![ChangeEvent::ActRecorded],
+        "recording an agent declaration persists exactly one row, about {subject}"
+    );
+    assert_eq!(
+        terms_of(rows[0]),
+        vec![("act", ActKind::DraftingReady.as_str())],
+        "one term: which act the run now holds"
+    );
+}
+
+/// `SL-256` `VT-2` — the sibling path `ISS-355` did not report. `record_act`
+/// emitted a row only when the act carried a review disposition, so a
+/// `checkpoint_act` without one recorded just as silently as the declaration
+/// above. Found in scoping, not in the field.
+#[test]
+fn a_checkpoint_act_without_a_disposition_renders_a_change_row() {
+    let log = every_event_fixture().read().change_log;
+    let subject = act_subject(IdKind::CheckpointAct, ActKind::GovernanceConfirmed);
+    let rows = rows_about(&log, &subject);
+
+    assert_eq!(
+        rows.iter().map(|row| row.event).collect::<Vec<_>>(),
+        vec![ChangeEvent::ActRecorded],
+        "an act carrying no disposition still reports its own recording"
+    );
+    assert_eq!(
+        terms_of(rows[0]),
+        vec![("act", ActKind::GovernanceConfirmed.as_str())],
+        "one term: which act the run now holds"
+    );
+}
+
+/// `SL-256` `VT-3` / `DEC-241` — a disposing act makes two claims and keeps
+/// both rows: the run now holds the act, and the pass was disposed of.
+///
+/// Asserted as an **ordered pair** rather than as set membership, because the
+/// order is the contract (`DEC-238`: the recording is what makes the
+/// disposition addressable) and because construction order runs *opposite* to
+/// it — the disposition row is built before the record is admitted, while the
+/// `ActRecorded` row does not exist until the seam returns. An implementor who
+/// lets the vector follow construction order emits the pair backwards, and this
+/// is the check that catches it.
+#[test]
+fn a_disposing_act_renders_both_its_recording_and_its_disposition() {
+    let log = every_event_fixture().read().change_log;
+    let subject = act_subject(IdKind::CheckpointAct, ActKind::ReviewDisposed);
+    let rows = rows_about(&log, &subject);
+
+    assert_eq!(
+        rows.iter().map(|row| row.event).collect::<Vec<_>>(),
+        vec![ChangeEvent::ActRecorded, ChangeEvent::ReviewDisposed],
+        "the recording, then the disposition it makes addressable"
+    );
+    assert_eq!(
+        terms_of(rows[0]),
+        vec![("act", ActKind::ReviewDisposed.as_str())],
+        "the recording row carries the act term, not the disposition's"
+    );
+}
+
 /// SL-244 `EX-13` — the disposition row is legible on its own. It is subject to
 /// the act it reports, names the arm taken, and on the waiving arm carries the
 /// reason the pass was declined.

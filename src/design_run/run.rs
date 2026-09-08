@@ -45,8 +45,9 @@ use super::refusal::Refusal;
 use super::runbook::{Discharge, Runbook, RunbookKey, StepVerification};
 use super::snapshot::{DesignSnapshot, Finding, Pin, Receipt, Section};
 use super::submission::{
-    ApplyRequest, Batch, CheckpointActDeclaration, Declaration, DelegationAct, DischargeClaim,
-    DischargeDeclaration, Dispose, Sparse, SubmissionEnvelope, TraversalDeclaration,
+    AgentActDeclaration, ApplyRequest, Batch, CheckpointActDeclaration, Declaration, DelegationAct,
+    DischargeClaim, DischargeDeclaration, Dispose, Sparse, SubmissionEnvelope,
+    TraversalDeclaration,
 };
 use super::traversal::{Authority, Cursor, TraversalPosture};
 
@@ -377,7 +378,9 @@ pub(crate) fn apply(
     // and the declaration BEFORE the act: an act confirming a declaration names
     // the fingerprint of the record the engine has just written, so both arrive in
     // one submission with no caller-computed digest (design `sec-4`).
-    record_declaration(&mut next, request, derived)?;
+    if let Some(declared) = request.agent_declaration.as_ref() {
+        pending.push(record_declaration(&mut next, declared, derived)?);
+    }
     if let Some(declared) = request.checkpoint_act.as_ref() {
         pending.extend(record_act(&mut next, declared, derived, payload_digest)?);
     }
@@ -392,9 +395,9 @@ pub(crate) fn apply(
     // by act kind and replaces, so a payload carrying both settles the way the
     // group's own contract already settles two acts of one kind.
     if let Some(declared) = request.acceptance.as_ref() {
-        // Carries no disposition, so it owes no `review_disposed` row — the
-        // `Option` is discarded here rather than defended against.
-        record_act(
+        // The `DesignAccepted` act reports through the same `ActRecorded` row as
+        // every other act (`SL-256` `sec-3`), subject `cpa-design-accepted`.
+        pending.extend(record_act(
             &mut next,
             &CheckpointActDeclaration {
                 act: ActKind::DesignAccepted,
@@ -403,7 +406,12 @@ pub(crate) fn apply(
             },
             derived,
             payload_digest,
-        )?;
+        )?);
+        // Redundant with the row above, and retired in PHASE-02 rather than
+        // here: `ChangeEvent::ALL` is still one roster, so a member no writer
+        // drives fails `every_material_event_kind_persists_a_change_row`. The
+        // roster split is what makes an undriven member legal, and it must land
+        // in the same commit that stops driving this one.
         pending.push(Pending::run_wide(
             ChangeEvent::AcceptanceAttested,
             Vec::new(),
@@ -538,12 +546,9 @@ pub(crate) fn apply(
 /// the user confirms*, arrive in one submission.
 fn record_declaration(
     next: &mut DesignSnapshot,
-    request: &ApplyRequest,
+    declared: &AgentActDeclaration,
     derived: &DerivedInput,
-) -> Result<(), Refusal> {
-    let Some(declared) = request.agent_declaration.as_ref() else {
-        return Ok(());
-    };
+) -> Result<Pending, Refusal> {
     if declared.basis.trim().is_empty() {
         return Err(Refusal::AcceptanceBasisMissing);
     }
@@ -562,24 +567,32 @@ fn record_declaration(
         covered: rule.and_then(|rule| covered_in(next, rule.binding.coverage)),
         fingerprint,
     };
-    admit_against(RecordedAct::Agent(&record), rule, derived)?;
-    next.declarations.record(record);
-    Ok(())
+    admit_and_record(next, ActRecord::Agent(record), rule, derived)
 }
 
 /// Construct the checkpoint act this batch carries, admit it, and record it
 /// (design `sec-4`, build order step 4).
 ///
-/// Returns the disposition row this act owes the change log, if any (`EX-13`) —
-/// the row is derived from the record that was just admitted rather than from
-/// the declaration, so a disposition that never became an act cannot leave a row
-/// claiming it did.
+/// Returns one row on every path, and two on the arm that carries a review
+/// disposition: `ActRecorded` **first**, then `ReviewDisposed` (`DEC-241`,
+/// `DEC-238`) — the recording is what makes the disposition addressable.
+///
+/// **Construction order runs opposite to vector order, deliberately.** The
+/// optional disposition row is built *before* [`admit_and_record`] is called, so
+/// a row-construction failure precedes mutation — while the mandatory
+/// `ActRecorded` row does not exist until the seam returns, and has to be placed
+/// first. `apply` assigns `ChangeRow.index` from the vector's own order, so this
+/// ordering is the stored one and is contractual, not incidental.
+///
+/// The disposition row is derived from the record that was just admitted rather
+/// than from the declaration, so a disposition that never became an act cannot
+/// leave a row claiming it did (`EX-13`).
 fn record_act(
     next: &mut DesignSnapshot,
     declared: &CheckpointActDeclaration,
     derived: &DerivedInput,
     payload_digest: &str,
-) -> Result<Option<Pending>, Refusal> {
+) -> Result<Vec<Pending>, Refusal> {
     if declared.acceptance.basis.trim().is_empty() {
         return Err(Refusal::AcceptanceBasisMissing);
     }
@@ -616,8 +629,7 @@ fn record_act(
         confirms: rule.and_then(|rule| confirmation(next, rule.required.confirms)),
         disposition,
     };
-    admit_against(RecordedAct::Checkpoint(&record), rule, derived)?;
-    let row = match record.disposition.as_ref() {
+    let disposed_row = match record.disposition.as_ref() {
         None => None,
         Some(disposed) => {
             let mut terms = vec![PayloadTerm::label(
@@ -637,27 +649,115 @@ fn record_act(
             ))
         }
     };
-    next.acts.record(record);
-    Ok(row)
+    let recorded = admit_and_record(next, ActRecord::Checkpoint(record), rule, derived)?;
+    Ok([Some(recorded), disposed_row]
+        .into_iter()
+        .flatten()
+        .collect())
 }
 
-/// Check one constructed record against the rule it is written against.
+/// One act record that can be stored and named in a change row.
 ///
-/// The `None` arm is unreachable rather than a case, and
+/// **Not [`RecordedAct`]**, and the test for whether that is parallel modelling
+/// is whether the two sums answer the same question. They do not. `RecordedAct`
+/// asks *can admission and the gate interrogate this act?* — borrowed, three
+/// arms, accessors total by construction. `ActRecord` asks *can this concrete
+/// record be stored and named in a row?* — owned, two arms, addressable.
+/// `RecordedAct`'s third arm, `Section`, carries no record at all, and it is
+/// exactly the case that separates them: giving it `id() -> Option<&DesignId>`
+/// would put a question one arm cannot answer into an abstraction whose whole
+/// value is that its accessors are total (`SL-256` `sec-3`).
+///
+/// Sited here rather than beside the record types in `attestation.rs` because
+/// this exists for the *writer*, and the writer's other pieces — [`Pending`],
+/// [`act_id`], [`record_declaration`], [`record_act`] — are all in this file.
+enum ActRecord {
+    Checkpoint(CheckpointAct),
+    Agent(AgentDeclaration),
+}
+
+impl ActRecord {
+    /// The borrowed view admission and the gate interrogate.
+    fn admission_view(&self) -> RecordedAct<'_> {
+        match self {
+            ActRecord::Checkpoint(record) => RecordedAct::Checkpoint(record),
+            ActRecord::Agent(record) => RecordedAct::Agent(record),
+        }
+    }
+
+    /// The run-local id this record is written under, and the subject its row
+    /// carries.
+    fn id(&self) -> &DesignId {
+        match self {
+            ActRecord::Checkpoint(record) => &record.id,
+            ActRecord::Agent(record) => &record.id,
+        }
+    }
+
+    /// Which act was recorded.
+    fn kind(&self) -> ActKind {
+        match self {
+            ActRecord::Checkpoint(record) => record.act,
+            ActRecord::Agent(record) => ActKind::from(record.act.kind()),
+        }
+    }
+
+    /// Into whichever group holds this shape.
+    fn insert(self, next: &mut DesignSnapshot) {
+        match self {
+            ActRecord::Checkpoint(record) => next.acts.record(record),
+            ActRecord::Agent(record) => next.declarations.record(record),
+        }
+    }
+}
+
+/// Admit one constructed record against the rule it is written against, store
+/// it, and return the row saying so.
+///
+/// The one production route by which an act reaches the snapshot (`DEC-238`).
+/// Storing an act and reporting it are one operation here, so the asymmetry
+/// `SL-256` exists to delete cannot re-form by a caller choosing differently:
+/// the return type is [`Pending`], not `Option<Pending>`, so there is no arm in
+/// which emission is optional.
+///
+/// What this does **not** buy is unbypassability. `CheckpointActGroup::record`
+/// and `AgentDeclarationGroup::record` are `pub(crate)`, so the storage sinks
+/// stay reachable from anywhere in this tree; [`ActRecord::insert`] stops
+/// *using* the direct route without closing it. Restricting their visibility
+/// breaks 13 existing call sites across `fixture.rs` and `tests.rs`, both
+/// outside this slice's bounds — so what holds here is a convention backed by
+/// there being one obvious route, not a guarantee held by the type system
+/// (`IMP-437`).
+///
+/// **Admission precedes storage.** A refused record leaves the snapshot
+/// untouched, exactly as the two former `admit_against` call sites did.
+///
+/// The rule's `None` arm is unreachable rather than a case, and
 /// `every_act_kind_is_named_by_exactly_one_contract_row` is what says so: an act
 /// no contract row names is required by no condition, so there is no requirement
 /// for the record to correspond to and no gate that could ever read it. The
 /// engine slots are filled off the same `Option`, so such a record carries none of
 /// them.
-fn admit_against(
-    record: RecordedAct<'_>,
+fn admit_and_record(
+    next: &mut DesignSnapshot,
+    record: ActRecord,
     rule: Option<ActRule>,
     derived: &DerivedInput,
-) -> Result<(), Refusal> {
-    match rule {
-        Some(rule) => admit_act(record, rule, derived.observed_review.as_ref()),
-        None => Ok(()),
+) -> Result<Pending, Refusal> {
+    if let Some(rule) = rule {
+        admit_act(
+            record.admission_view(),
+            rule,
+            derived.observed_review.as_ref(),
+        )?;
     }
+    let row = Pending::about(
+        ChangeEvent::ActRecorded,
+        record.id(),
+        vec![PayloadTerm::token(PayloadKey::Act, record.kind().as_str())?],
+    );
+    record.insert(next);
+    Ok(row)
 }
 
 /// The id a recorded act is written under.

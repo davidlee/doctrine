@@ -60,6 +60,15 @@ pub(crate) enum ChangeEvent {
     NeedsAdded,
     NeedsRemoved,
     StageMoved,
+    /// The run now holds this act.
+    ///
+    /// The mirror of [`ChangeEvent::ActInvalidated`]: same subject convention,
+    /// same single `act` term. Emitted **explicitly** at the point of record
+    /// rather than derived, because a recording is an occurrence and no
+    /// before/after difference over `live_acts` can see one — for a slot already
+    /// holding `v`, *no operation* and *record the same value* both read
+    /// `before = v, after = v` (`SL-256` `DEC-238`).
+    ActRecorded,
     /// A recorded act stopped being bound to the content it was given over.
     ///
     /// **Renamed from `EvidenceInvalidated` at `T11`** (`EX-11`, `F1`), when the
@@ -100,13 +109,14 @@ impl ChangeEvent {
     /// Every event, in the sketch's declaration order — the closed vocabulary,
     /// single-sourced so an exhaustive table test cannot silently miss a variant
     /// (STD-001).
-    pub(crate) const ALL: [ChangeEvent; 22] = [
+    pub(crate) const ALL: [ChangeEvent; 23] = [
         ChangeEvent::NodeCreated,
         ChangeEvent::NodeLifecycle,
         ChangeEvent::NodeReparented,
         ChangeEvent::NeedsAdded,
         ChangeEvent::NeedsRemoved,
         ChangeEvent::StageMoved,
+        ChangeEvent::ActRecorded,
         ChangeEvent::ActInvalidated,
         ChangeEvent::SectionCreated,
         ChangeEvent::SectionFingerprintChanged,
@@ -137,6 +147,7 @@ impl ChangeEvent {
             ChangeEvent::NeedsAdded => "needs_added",
             ChangeEvent::NeedsRemoved => "needs_removed",
             ChangeEvent::StageMoved => "stage_moved",
+            ChangeEvent::ActRecorded => "act_recorded",
             ChangeEvent::ActInvalidated => "act_invalidated",
             ChangeEvent::SectionCreated => "section_created",
             ChangeEvent::SectionFingerprintChanged => "section_fingerprint_changed",
@@ -190,7 +201,15 @@ impl ChangeEvent {
                 (PayloadKey::To, ValueKind::Label),
                 (PayloadKey::Reason, ValueKind::Prose),
             ],
-            ChangeEvent::ActInvalidated => &[(PayloadKey::Act, ValueKind::Token)],
+            // One term, not more, and both halves of `DEC-237`'s reason apply to
+            // each: the subject id and the act kind together answer *did what I
+            // sent land?* completely, and a fourth term anywhere in this
+            // vocabulary would silently falsify [`super::render`]'s hardcoded
+            // widest-payload exemplar. Merged because `ActRecorded` is the exact
+            // mirror of `ActInvalidated` — one shape, stated once.
+            ChangeEvent::ActRecorded | ChangeEvent::ActInvalidated => {
+                &[(PayloadKey::Act, ValueKind::Token)]
+            }
             ChangeEvent::SectionCreated => &[(PayloadKey::Fingerprint, ValueKind::Digest)],
             ChangeEvent::ReviewAttested | ChangeEvent::ReviewInvalidated => &[
                 (PayloadKey::Section, ValueKind::Token),
