@@ -1,0 +1,55 @@
+memory_uid = "mem_01a08024f2a57f60b7606dbd24b48acf"
+memory_key = "mem.pattern.doctrine.vt-keywords-name-a-literal-the-file-contains"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "A VT keyword must be a literal the mandated file will actually contain"
+summary = "verify-vt matches keywords as raw-byte substrings, so a mandate naming a value the suite composes from enums can never pass — name the composed source instead"
+created = "2026-09-08"
+updated = "2026-09-08"
+
+[scope]
+paths = []
+globs = [".doctrine/slice/*/plan.toml", "src/vtgate.rs"]
+commands = []
+tags = ["plan", "criteria", "verify-vt", "authoring"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "56d731b8b2b0405a241fa8b241b954b89b651c25"
+ref_name = "refs/heads/edge"
+checkout_state_id = "a5ba3dcfa862f6d0528d78cee56d9a2db51a5fc77d52375876da9daafdb2bfc6"
+base_commit = "48a04f6a68bb19d613cc40dc349f502a9e1b0f46"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-256"
+
+[[relation]]
+label = "related"
+target = "mem_019fdf3ffdd175c18a6e27616694a0b2"
+
+[[relation]]
+label = "related"
+target = "mem_019f89125fb275a2895bf58b5e29ed95"
+

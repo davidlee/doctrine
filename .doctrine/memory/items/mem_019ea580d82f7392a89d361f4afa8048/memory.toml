@@ -6,7 +6,7 @@ status = "active"
 title = "Repo clippy denies indexing-slicing: use .get(range) not range-indexing"
 summary = "Repo clippy denies indexing-slicing — slice/index with .get(..), never []"
 created = "2026-06-08"
-updated = "2026-06-08"
+updated = "2026-09-08"
 
 [scope]
 paths = ["src"]

@@ -25,16 +25,28 @@ integration rather than assuming.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-08 · PHASE-01 completed (run `dr-01a0088b`, rev 57, stage `locked`), head `36b0e1326`
+fresh-as-of: 2026-09-08 · PHASE-02 completed (run `dr-01a0088b`, rev 57, stage `locked`), head `48a04f6a6`
 
 ### Produced
 
 - **PHASE-01 done** — `ActRecorded`, the `ActRecord` sum, the `admit_and_record`
   seam, `admit_against` deleted, three call sites onto one route
   (`69ce71c1b`..`36b0e1326`). `EX-1`…`EX-6`, `VT-1`…`VT-4`, `VA-1` all
-  discharged; `doctrine check gate` green on the landed tree. `--bin doctrine`
-  4410/0, unchanged from baseline — `tests.rs` and `fixture.rs` needed no edit,
-  as `sec-4` claimed.
+  discharged; `doctrine check gate` green on the landed tree.
+- **PHASE-02 done** (`48a04f6a6`, mandate settlement `7c8095664`) — `ALL` split
+  into `READABLE` (23) / `EMITTABLE` (22), the subset relation proved by a
+  `const fn is_subset` compile-time assert, the `AcceptanceAttested` push gone
+  from `apply`'s acceptance arm, both roster enumerations re-pointed and the
+  ladder narration corrected. `EX-1`…`EX-6`, `VT-1`…`VT-4`, `VA-1` discharged;
+  `doctrine check gate` exit 0 after the last code change; `verify-vt` `✓ PASS`
+  on all four rows read after the `completed` flip. `--bin doctrine` 4410/0/4
+  unchanged from baseline (`tests.rs` / `fixture.rs` needed no edit, as `sec-4`
+  claimed); `--test e2e_design_state` 224/0/1 (221 + the three new checks).
+  Conformance: the four touched files all `conformant`; `undeclared` holds only
+  PHASE-01's known set, `undelivered` holds PHASE-03's selectors plus
+  `render/mod.rs` and `render/change_row.rs` (see Open).
+- No new backlog items minted at PHASE-02; nothing pending but `flake.lock`,
+  which is not this slice's.
 - minted: `ISS-448` — a toolchain bump red-lights the gate on files a phase
   never touched, `related` to `IMP-273`; `ISS-449` — `slice verify-vt` prints
   "keyword present" on `UNATTRIBUTABLE` rows it never checked, `governed_by`
@@ -78,7 +90,16 @@ fresh-as-of: 2026-09-08 · PHASE-01 completed (run `dr-01a0088b`, rev 57, stage 
   the fork a widening creates — leave it `undeclared` and explain it, make it a
   real `design-target`, or (never) re-intent to silence the cell — plus the
   `ISS-449` caveat, marked for deletion when that closes.
-- `mem.fact.coverage.vt-needs-a-check-field` — recorded this session.
+- `mem.fact.coverage.vt-needs-a-check-field` — recorded at PHASE-01.
+- `mem.pattern.doctrine.vt-keywords-name-a-literal-the-file-contains` — recorded
+  at PHASE-02 out of `F-2`: a `verify-vt` keyword is a raw-byte substring check,
+  so a mandate naming a value the suite composes cannot pass; name the composed
+  source, and check satisfiability at `/phase-plan`.
+- `mem.pattern.lint.indexing-slicing-ban` — **extended**, not added: in a
+  `const fn` neither `v[i]` nor `.get(…).unwrap_or_default()` is available, so a
+  compile-time walk recurses on slice patterns (`widest`, `is_subset`);
+  `PartialEq` is not `const` either, and comparing discriminants instead trips
+  `as_conversions`.
 - Candidates for `/record-memory` at close, not yet written: `DEC-238`'s
   key-vs-content rule (a derived row can only report changes in the *key* of the
   set it differences); `pi-scout` line anchors drift onto the doc comment or
@@ -247,21 +268,19 @@ If one were run anyway, the two things it should probe are:
 
 ### Open
 
-- **`F-2` SETTLED at PHASE-02 `/phase-plan`; a design erratum remains for
-  `/reconcile`.** The defect: `PHASE-02` `VT-1` named the literal
-  `cpa-design_accepted`, but act subjects are kebab-case
-  (`attestation.rs:116` — `ActKind::DesignAccepted => "design-accepted"`), and
-  correcting the spelling alone would still not be satisfiable, because
-  `vtgate` matches keywords as raw-byte substrings (`src/vtgate.rs:129`) while
-  the suite composes subjects through `act_subject(prefix, act)`
-  (`e2e_design_state.rs:1104`) rather than typing them — as `STD-001` wants. So
-  a *correct* test contains neither spelling as a literal. Settlement:
-  `plan.toml` `VT-1` keeps its id and intent, its prose is corrected to kebab,
-  and its subject keyword becomes `ActKind::DesignAccepted` — the composed
-  source. **Still open:** `design.md` carries the underscore spelling at `:593`,
-  `:626` (`sec-3`'s sequence diagram) and `:708` (`sec-4` check 4). The run is
-  `locked`, so this is an erratum for `/reconcile` to write, not a mid-phase
-  edit of locked design prose. No PHASE-01 criterion was affected.
+- **`design.md` carries a token erratum for `/reconcile`** — subject and term
+  spelled `cpa-design_accepted` / `act=design_accepted` at `:593`, `:626`
+  (`sec-3`'s sequence diagram) and `:708` (`sec-4` check 4), where act tokens
+  are kebab (`ActKind::DesignAccepted => "design-accepted"`,
+  `attestation.rs:116`). `plan.toml` `VT-1` was corrected in place at PHASE-02
+  (`7c8095664`, and see `mem.pattern.doctrine.vt-keywords-name-a-literal-the-file-contains`);
+  the design half is not an implementor's edit to make, the run being `locked`.
+- **Two declared selectors are `undelivered` and may be right to prune at
+  close** — `src/design_run/render/mod.rs` and `render/change_row.rs`. Research
+  Thread 2 found the render path data-driven off `as_str` plus generic term
+  rendering, so neither PHASE-02 nor PHASE-03 has a reason to touch them. If
+  PHASE-03 leaves them untouched, prune the selectors at reconcile rather than
+  manufacture an edit to satisfy the fence.
 - `IMP-437` — the emit seam is a convention, not a guarantee; needs its own
   scope because the fix reaches `fixture.rs` and `SL-251`'s `tests.rs`.
 - `ISS-367` — `live_acts` blind to same-kind replacement. `sec-1`/`sec-3` state
