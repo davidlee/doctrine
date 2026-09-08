@@ -25,10 +25,23 @@ integration rather than assuming.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-09 · PHASE-03 completed — all phases done, slice ready for `/audit` (run `dr-01a0088b`, rev 57, stage `locked`), head `bf22f8487`
+fresh-as-of: 2026-09-09 · audit — `RV-364` done, 10 findings terminal, no blocker; reconciliation brief written, slice ready for `/reconcile` (run `dr-01a0088b`, rev 57, stage `locked`), head `c0c69f634`
 
 ### Produced
 
+- **Audit done** — `RV-364` (`reconciliation` facet, target `SL-256`): 10
+  findings raised, disposed and verified terminal; **no blocker**, so the
+  close-gate is clear. Gate green (`doctrine check gate` exit 0), 11/11 `VT`
+  rows `PASS`, `coverage verify 256` verified, boundary registry complete for
+  all three phases with no foreign commit in any recorded range. **No defect
+  found in the landed code** — five findings are canon-versus-reality
+  corrections in the slice's own artefacts (`F-2`, `F-3`, `F-4`, `F-6`, `F-7`),
+  one is a governance status field nobody moved (`F-1`), one is a knowingly
+  traded diagnostic with an owner (`F-5` → `IMP-445`), two are rulings that the
+  conformance and memory-corpus signals are behaving correctly (`F-8`, `F-9`),
+  and one lifts a declared form deviation out of a disposable phase sheet
+  (`F-10`). Synthesis and `## Reconciliation Brief` appended to
+  `review-364.md`.
 - **PHASE-01 done** — `ActRecorded`, the `ActRecord` sum, the `admit_and_record`
   seam, `admit_against` deleted, three call sites onto one route
   (`69ce71c1b`..`36b0e1326`). `EX-1`…`EX-6`, `VT-1`…`VT-4`, `VA-1` all
@@ -139,6 +152,15 @@ fresh-as-of: 2026-09-09 · PHASE-03 completed — all phases done, slice ready f
   compile-time walk recurses on slice patterns (`widest`, `is_subset`);
   `PartialEq` is not `const` either, and comparing discriminants instead trips
   `as_conversions`.
+- **A `/consult` that presents a tradeoff the repo has already settled spends
+  the human's attention on a closed question.** PHASE-01's `ISS-448` consult
+  weighed `allow` against `expect` as an open choice; `clippy::allow_attributes`
+  is denied in this crate, so only `expect` was ever available and
+  `mem.pattern.lint.expect-not-allow` already said so. Check whether the
+  repo has *chosen* before offering the fork — a consult's value is the
+  genuinely open decision, and a closed one dilutes it. Candidate for
+  `/record-memory` at close; the lint half is already durable, the consult
+  half is not.
 - Candidates for `/record-memory` at close, not yet written: `DEC-238`'s
   key-vs-content rule (a derived row can only report changes in the *key* of the
   set it differences); `pi-scout` line anchors drift onto the doc comment or
@@ -306,48 +328,58 @@ If one were run anyway, the two things it should probe are:
   phase plan can, and `/phase-plan` is where an under-specified section shows.
 
 ### Open
+<!-- settled entries drop at each pass; git holds the history -->
 
-- **`design.md` carries a token erratum for `/reconcile`** — subject and term
-  spelled `cpa-design_accepted` / `act=design_accepted` at `:593`, `:626`
-  (`sec-3`'s sequence diagram) and `:708` (`sec-4` check 4), where act tokens
-  are kebab (`ActKind::DesignAccepted => "design-accepted"`,
-  `attestation.rs:116`). `plan.toml` `VT-1` was corrected in place at PHASE-02
-  (`7c8095664`, and see `mem.pattern.doctrine.vt-keywords-name-a-literal-the-file-contains`);
-  the design half is not an implementor's edit to make, the run being `locked`.
-- **Two declared selectors are `undelivered` and may be right to prune at
-  close** — `src/design_run/render/mod.rs` and `render/change_row.rs`. Research
-  Thread 2 found the render path data-driven off `as_str` plus generic term
-  rendering, so neither PHASE-02 nor PHASE-03 has a reason to touch them. If
-  PHASE-03 leaves them untouched, prune the selectors at reconcile rather than
-  manufacture an edit to satisfy the fence.
-- `IMP-437` — the emit seam is a convention, not a guarantee; needs its own
-  scope because the fix reaches `fixture.rs` and `SL-251`'s `tests.rs`.
-- `ISS-367` — `live_acts` blind to same-kind replacement. `sec-1`/`sec-3` state
-  the boundary so the design promises no symmetry it does not deliver.
-- **`SL-251` coordination: three sites, not two** — its `design.md` ¶ 422–428,
-  its ledger row at 2289, and `payload_contract.rs:501`. Discharged at that
-  slice's reconcile, not here.
-- `QUE-219` — not this slice's to settle; `DEC-239` bears on it and the relation
-  carries the descriptor.
-- ~~Coverage cell for `REQ-478`~~ — **done at PHASE-03**, `planned→verified`.
-- **A second `design.md` erratum for `/reconcile`** — `sec-4`'s coverage recipe
-  (`:958-964`) does not parse: `--command --test` is refused by clap
-  (`unexpected argument '--test' found`) and needs `--command=--test`. The cell
-  was recorded with the `=` form and stores the argv the design intended, so
-  this is spelling, not substance. Joins the `cpa-design_accepted` erratum above;
-  the run is `locked`, so neither is an implementor's edit.
-- **Prune the two render selectors at reconcile.** PHASE-03 left
-  `src/design_run/render/mod.rs` and `render/change_row.rs` untouched, as
-  Research Thread 2 predicted — the render path is data-driven off `as_str`. The
-  conditional above is now discharged: prune, do not manufacture an edit.
-- **`ISS-315` is still live and still reproducible**, found while verifying
-  PHASE-03's read path against the real corpus. `doctrine design show SL-244`
-  fails on `integrated_review_recorded` — a retired token with no `READABLE`
-  member and no alias. **Not this slice's regression**: the pre-slice binary
-  fails identically (positive control — that same binary parses `SL-251`). Out
-  of scope here; the issue's line reference has moved `:4991` → `:4927`.
-- **`memory validate` exits 1** with six findings (five stale anchors, one
-  dangling link). None is against either memory this slice touched, and none is
-  scoped to `src/design_run/**` — the scopes are `flake.nix`, `src/dispatch.rs`,
-  `src/worktree/**`. Pre-existing corpus drift, flagged for `/audit` to rule on
-  rather than absorbed here.
+**All five design/registry corrections are now `RV-364`'s and carry a named
+write surface in its `## Reconciliation Brief`** — they are no longer loose
+notes for `/reconcile` to rediscover:
+
+- `RV-364` `F-2` — the `cpa-design_accepted` / `act=design_accepted` token
+  erratum at `design.md:593`, `:626`, `:708`; act tokens are kebab-case.
+- `RV-364` `F-3` — `design.md:951`'s coverage recipe does not parse
+  (`--command --test` → `--command=--test`).
+- `RV-364` `F-4` — prune the two `undelivered` render selectors. The
+  load-bearing surface is the **registry** (`doctrine slice selector rm`), not
+  `design.md`'s mirror table; a prose-only edit leaves the cell red.
+- `RV-364` `F-6` — one clause beside `R5` naming `ENVELOPE_CHANGE_ROWS` as the
+  second fixed budget a new event spends.
+- `RV-364` `F-7` — the retired token's census is 9 rows over 7 runs, not 7
+  over 6.
+- `RV-364` `F-1` — `REQ-478` (SPEC-029 `FR-009`) is still `pending` while its
+  coverage cell verifies. The one **governance** item: a REV, not a direct edit.
+
+Carried forward, each with an owner outside this slice:
+
+- `IMP-445` — the refusal no longer names the accepted vocabulary. `RV-364`
+  `F-5` records that the slice traded this knowingly rather than missed it, and
+  reproduces it live: `doctrine design show 244` prints the terse message today.
+- `IMP-437` — the emit seam is a convention, not a guarantee; the fix reaches
+  `fixture.rs` and `SL-251`'s `tests.rs`, so it needs its own scope.
+- `IMP-282` — conformance's `undeclared` cell counts every slice's own
+  `.doctrine/` process artefacts. `RV-364` `F-9` rules the cell fully accounted
+  for; 11 of 13 rows are this known noise.
+- `ISS-367` — `live_acts` blind to same-kind replacement; `sec-1`/`sec-3`
+  state the boundary rather than promising symmetry.
+- `ISS-315` — **still live and still reproducible**, and **not this slice's
+  regression**: the pre-slice binary fails identically on `SL-244`, and that
+  same binary parses `SL-251` (positive control). The issue's line reference
+  moved `:4991` → `:4927`.
+- `ISS-448` / `IMP-273` — the unpinned toolchain that red-lit PHASE-01's gate
+  on files the phase never touched.
+- `ISS-449` — `slice verify-vt` prints "keyword present" on `UNATTRIBUTABLE`
+  rows it never checked.
+- `QUE-219` — not this slice's to settle; `DEC-239` bears on it and the
+  relation carries the descriptor.
+- **`SL-251` coordination: three sites** — its `design.md` ¶422-428, its ledger
+  row at 2289, and `payload_contract.rs:501`. Discharged at *that* slice's
+  reconcile, not here.
+- **Memory-corpus drift stays visible, ruled not-ours** (`RV-364` `F-8`):
+  `memory validate` exits 1 with 15 findings (14 stale, one dangling link).
+  None was authored or edited by `SL-256`, and the three memories this slice did
+  touch are absent from the output, i.e. re-attested. Owner is a
+  `/reviewing-memory` or dreaming pass. The finding also corrects the test this
+  ruling should use: not *is it scoped to `src/design_run/**`* but *does any
+  stale memory's scope cover a path this slice edited* — one does (`tests`), and
+  it survives inspection anyway.
+- **`doctrine boot --check` reports `boot.md` stale.** Runtime state, regenerated
+  by `doctrine boot`; the close ritual owns it.
