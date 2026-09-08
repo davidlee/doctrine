@@ -25,9 +25,27 @@ integration rather than assuming.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 50, stage `reviewing`), head `8cda64e973`
+fresh-as-of: 2026-09-08 · PHASE-01 completed (run `dr-01a0088b`, rev 57, stage `locked`), head `36b0e1326`
 
 ### Produced
+
+- **PHASE-01 done** — `ActRecorded`, the `ActRecord` sum, the `admit_and_record`
+  seam, `admit_against` deleted, three call sites onto one route
+  (`69ce71c1b`..`36b0e1326`). `EX-1`…`EX-6`, `VT-1`…`VT-4`, `VA-1` all
+  discharged; `doctrine check gate` green on the landed tree. `--bin doctrine`
+  4410/0, unchanged from baseline — `tests.rs` and `fixture.rs` needed no edit,
+  as `sec-4` claimed.
+- minted: `ISS-448` — a toolchain bump red-lights the gate on files a phase
+  never touched, `related` to `IMP-273`; `ISS-449` — `slice verify-vt` prints
+  "keyword present" on `UNATTRIBUTABLE` rows it never checked, `governed_by`
+  `STD-003`.
+- Selectors widened by two, `scope-relevant`: `src/estimate/display.rs`,
+  `src/map_server/state.rs` — the `ISS-448` clearance, taken on explicit human
+  instruction after `/consult`. Both still read `undeclared` at conformance;
+  that is correct and intended (see Learned).
+- Two `friction` observations (`.doctrine/observations/records/{d3,18}/…`).
+- `.doctrine` changes committed alongside their code, promptly; nothing pending
+  but `flake.lock`, which is not this slice's.
 
 - `DEC-237`…`DEC-241` — minted through the run's own checkpoint dispositions
   (`cp-1`…`cp-6` over `inq-1`…`inq-6`), so each is bound to the question it
@@ -54,6 +72,12 @@ fresh-as-of: 2026-08-16 · design (run `dr-01a0088b`, rev 50, stage `reviewing`)
 
 ### Learned
 
+- `mem_019fbf791c9d71d0815d6e1fc2c9fb9f` — **extended at PHASE-01**, not added:
+  `memory record` flagged the near-duplicate on the way in, so the new memory
+  was deleted and its one novel section folded in. What it now also carries is
+  the fork a widening creates — leave it `undeclared` and explain it, make it a
+  real `design-target`, or (never) re-intent to silence the cell — plus the
+  `ISS-449` caveat, marked for deletion when that closes.
 - `mem.fact.coverage.vt-needs-a-check-field` — recorded this session.
 - Candidates for `/record-memory` at close, not yet written: `DEC-238`'s
   key-vs-content rule (a derived row can only report changes in the *key* of the
@@ -223,9 +247,15 @@ If one were run anyway, the two things it should probe are:
 
 ### Open
 
-- **Four sections still need the human-only section attestations, and the run's
-  `review_pass` remains stale.** `RV-360`'s integrated pass is concluded; `sec-2`
-  and `sec-4` moved through rev 50 while `sec-1` and `sec-3` stayed byte-identical.
+- **PHASE-02's `VT-1` keyword mandate cannot be satisfied by a correct test.**
+  It names the literal `cpa-design_accepted`, but act subjects are kebab-case —
+  `ActKind::as_str` yields `design-accepted`, and PHASE-01's run printed
+  `agd-drafting-ready` — and the suite's idiom builds subjects from
+  `IdKind::…prefix()` + `ActKind::…as_str()` rather than a literal. So the
+  mandate is satisfiable only by hardcoding a wrong string. `design.md` `sec-4`
+  carries the same underscore spelling. Settle at PHASE-02 `/phase-plan`:
+  correct the spelling or drop the keyword in favour of the test name. No
+  PHASE-01 criterion was affected.
 - `IMP-437` — the emit seam is a convention, not a guarantee; needs its own
   scope because the fix reaches `fixture.rs` and `SL-251`'s `tests.rs`.
 - `ISS-367` — `live_acts` blind to same-kind replacement. `sec-1`/`sec-3` state
