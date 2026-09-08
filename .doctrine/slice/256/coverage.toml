@@ -1,0 +1,15 @@
+[[entry]]
+slice = "SL-256"
+requirement = "REQ-478"
+contributing_change = "SL-256"
+mode = "VT"
+status = "verified"
+git_anchor = "50c41b25cd026bd9a0edbbf29d0064bf6eda716e"
+
+[entry.check]
+command = ["cargo", "test", "--test", "e2e_design_state"]
+
+[entry.check.matcher]
+source = "stdout"
+pattern = 'an_agent_declaration_alone_renders_a_change_row \.\.\. ok'
+regex = true
