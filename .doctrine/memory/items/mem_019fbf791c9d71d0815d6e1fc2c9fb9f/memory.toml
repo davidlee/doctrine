@@ -6,7 +6,7 @@ status = "active"
 title = "Only design-target selectors satisfy slice conformance --strict"
 summary = "scope-relevant selectors do not clear --strict; a path matched only by a scope-relevant selector still reports undeclared"
 created = "2026-08-01"
-updated = "2026-08-01"
+updated = "2026-09-08"
 
 [scope]
 paths = []
