@@ -247,15 +247,21 @@ If one were run anyway, the two things it should probe are:
 
 ### Open
 
-- **PHASE-02's `VT-1` keyword mandate cannot be satisfied by a correct test.**
-  It names the literal `cpa-design_accepted`, but act subjects are kebab-case —
-  `ActKind::as_str` yields `design-accepted`, and PHASE-01's run printed
-  `agd-drafting-ready` — and the suite's idiom builds subjects from
-  `IdKind::…prefix()` + `ActKind::…as_str()` rather than a literal. So the
-  mandate is satisfiable only by hardcoding a wrong string. `design.md` `sec-4`
-  carries the same underscore spelling. Settle at PHASE-02 `/phase-plan`:
-  correct the spelling or drop the keyword in favour of the test name. No
-  PHASE-01 criterion was affected.
+- **`F-2` SETTLED at PHASE-02 `/phase-plan`; a design erratum remains for
+  `/reconcile`.** The defect: `PHASE-02` `VT-1` named the literal
+  `cpa-design_accepted`, but act subjects are kebab-case
+  (`attestation.rs:116` — `ActKind::DesignAccepted => "design-accepted"`), and
+  correcting the spelling alone would still not be satisfiable, because
+  `vtgate` matches keywords as raw-byte substrings (`src/vtgate.rs:129`) while
+  the suite composes subjects through `act_subject(prefix, act)`
+  (`e2e_design_state.rs:1104`) rather than typing them — as `STD-001` wants. So
+  a *correct* test contains neither spelling as a literal. Settlement:
+  `plan.toml` `VT-1` keeps its id and intent, its prose is corrected to kebab,
+  and its subject keyword becomes `ActKind::DesignAccepted` — the composed
+  source. **Still open:** `design.md` carries the underscore spelling at `:593`,
+  `:626` (`sec-3`'s sequence diagram) and `:708` (`sec-4` check 4). The run is
+  `locked`, so this is an erratum for `/reconcile` to write, not a mid-phase
+  edit of locked design prose. No PHASE-01 criterion was affected.
 - `IMP-437` — the emit seam is a convention, not a guarantee; needs its own
   scope because the fix reaches `fixture.rs` and `SL-251`'s `tests.rs`.
 - `ISS-367` — `live_acts` blind to same-kind replacement. `sec-1`/`sec-3` state
