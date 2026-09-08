@@ -17,7 +17,10 @@ pub(crate) fn format_bound(f: f64) -> String {
     )
 )]
 pub(crate) fn format_estimate_normal(facet: Option<&EstimateFacet>, unit: &str) -> String {
-    debug_assert!(!unit.is_empty());
+    debug_assert_ne!(
+        unit, "",
+        "the unit label is the caller's, and an empty one renders a bare number"
+    );
 
     match facet {
         Some(facet) => format!(
@@ -38,7 +41,10 @@ pub(crate) fn format_estimate_normal(facet: Option<&EstimateFacet>, unit: &str) 
     )
 )]
 pub(crate) fn format_estimate_verbose(facet: Option<&EstimateFacet>, unit: &str) -> Vec<String> {
-    debug_assert!(!unit.is_empty());
+    debug_assert_ne!(
+        unit, "",
+        "the unit label is the caller's, and an empty one renders a bare number"
+    );
 
     let Some(facet) = facet else {
         return Vec::new();
@@ -74,7 +80,10 @@ pub(crate) fn format_estimate_confidence(
     upper_pct: f64,
     unit: &str,
 ) -> String {
-    debug_assert!(!unit.is_empty());
+    debug_assert_ne!(
+        unit, "",
+        "the unit label is the caller's, and an empty one renders a bare number"
+    );
     debug_assert!(lower_pct.is_finite() && upper_pct.is_finite());
     debug_assert!((0.0..=1.0).contains(&lower_pct) && (0.0..=1.0).contains(&upper_pct));
     debug_assert!(lower_pct < upper_pct);
