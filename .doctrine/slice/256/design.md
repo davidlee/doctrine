@@ -196,7 +196,7 @@ would catch moving.
 ### Why the row is redundant-looking but is not
 
 The subject already encodes the kind — `act_id` derives the id from the act
-(`run.rs:671`), so `agd-graph_reviewed` and `act=graph_reviewed` say the same
+(`run.rs:671`), so `agd-graph-reviewed` and `act=graph-reviewed` say the same
 thing twice. That is deliberate and it is inherited, not invented here:
 `ActInvalidated` carries the same pair for the same reason. A row is
 **self-contained** by contract (`change_log.rs`, module doc) — it renders without
@@ -356,8 +356,8 @@ drift between two spellings, because there is only one; it guards the alias arm
 and `TryFrom`'s refusal of an unknown token, which are what can still regress.
 
 **Migration surface, measured** — `event = "acceptance_attested"` across
-`.doctrine/state/slice/*/design.toml`: 7 rows over 6 live snapshots (243 carries
-two; 244, 248, 249, 251 and 254 one each). The predicate is given so the
+`.doctrine/state/slice/*/design.toml`: 9 rows over 7 live snapshots (243 and 256
+carry two each; 244, 248, 249, 251 and 254 one each). The predicate is given so the
 measurement can be re-run rather than trusted; live runs accrue rows, so it is a
 floor rather than a constant. The `evidence_invalidated`
 legacy that `ISS-315` broke on is 8 rows — the same order, and it is the worked
@@ -590,7 +590,7 @@ becomes an `extend` — the comment justifying the discard ("carries no
 disposition, so it owes no `review_disposed` row") described a return type that
 no longer means that. The explicit `AcceptanceAttested` push is deleted, and the
 `DesignAccepted` act now reports through the same `ActRecorded` row as every
-other act, subject `cpa-design_accepted`. That is what makes `AcceptanceAttested`
+other act, subject `cpa-design-accepted`. That is what makes `AcceptanceAttested`
 redundant and therefore retirable (`sec-2`, `DEC-239`), and it is also the arm
 whose row goes from run-wide and term-free to subject-bearing — a change in
 rendered output that `sec-1` counts and the verification section pins.
@@ -623,7 +623,7 @@ sequenceDiagram
 
     A->>K: acceptance → CheckpointActDeclaration{DesignAccepted}
     K->>S: same seam
-    S-->>K: Pending(ActRecorded, cpa-design_accepted, act=design_accepted)
+    S-->>K: Pending(ActRecorded, cpa-design-accepted, act=design-accepted)
     K-->>P: 1 row
 
     A->>A: invalidation_rows(before, after) — unchanged, still derived
@@ -662,7 +662,7 @@ directly, as above.*
 | `src/design_run/bounds.rs` | one doc reference to `ChangeEvent::ALL` (`:49`) follows the rename to `READABLE` |
 | `src/design_run/refusal.rs` | one new variant, `UnknownChangeEvent { raw }`, for `ChangeEvent`'s `TryFrom`. **A new selector** — the fence widens by one file, declared here rather than discovered at execution (`sec-2`) |
 | `src/design_run/snapshot.rs` | test module only — a legacy-fragment pin for the retired token |
-| `src/design_run/render/mod.rs`, `render/change_row.rs` | expected untouched. `change_row.rs` renders from `row.terms` and names no `ChangeEvent` at all; `mod.rs` names exactly one, `WIDEST_PAYLOAD_EVENT` (`:198`), whose exemplar this slice does not move. In the fence so a change to either reads as a conformance signal rather than a silent edit |
+| `src/design_run/render/mod.rs`, `render/change_row.rs` | expected untouched. `change_row.rs` renders from `row.terms` and names no `ChangeEvent` at all; `mod.rs` names exactly one, `WIDEST_PAYLOAD_EVENT` (`:198`), whose exemplar this slice does not move. In the fence so a change to either reads as a conformance signal rather than a silent edit. **Discharged at reconcile** (`RV-364` `F-4`): both stayed untouched as predicted, so the two `design-target` selectors were removed from the registry in `slice-256.toml` — the fence did its job and is retired, not deleted for being inconvenient. `slice conformance` computes from the registry, so this row is the mirror and the registry is the fact |
 | `tests/e2e_design_state.rs` | the two roster enumerations re-pointed; one fixture comment corrected; seven new checks |
 
 **The `render` selector narrows.** This slice currently fences
@@ -670,7 +670,9 @@ directly, as above.*
 Non-Goals separately declare out of bounds as one of `SL-251`'s design-targets,
 and one that slice has now changed. The glob and the Non-Goal contradict each
 other, and the glob is what `doctrine slice conformance` reads. It is replaced by
-the two files named above, both untouched by `SL-251`'s landed capsule.
+the two files named above, both untouched by `SL-251`'s landed capsule. Both were
+then removed from the registry at reconcile, untouched as predicted — see the
+table row above.
 
 **Two files inside the blast radius but outside the fence, both checked.**
 `src/design_run/tests.rs` and `src/design_run/fixture.rs` call the storage sinks
@@ -705,8 +707,8 @@ the snapshot already held.
    construction order runs opposite to vector order. This check is what catches
    that.
 4. **`an_acceptance_reports_through_the_shared_act_row`** — the run-level
-   `acceptance` field yields `ActRecorded` with subject `cpa-design_accepted` and
-   term `act=design_accepted`, and **no** `acceptance_attested` row. This is the
+   `acceptance` field yields `ActRecorded` with subject `cpa-design-accepted` and
+   term `act=design-accepted`, and **no** `acceptance_attested` row. This is the
    one test that would catch the retirement being half-done.
 
 ### New — the roster invariants
@@ -744,8 +746,8 @@ than acquiring a manufactured subject.
 
 Pinned at the whole-file tier for the reason that doc already gives:
 `ChangeEvent` deserialises strictly, so one unrecognised `event` fails the entire
-snapshot rather than one row. That is `ISS-315`'s defect class, and 7 rows across
-6 live runs are the population at stake.
+snapshot rather than one row. That is `ISS-315`'s defect class, and 9 rows across
+7 live runs are the population at stake.
 
 ### Amended — the two roster enumerations and one comment
 
@@ -948,7 +950,7 @@ whose guarantee `run`'s contract doc states in prose at `:125-135`. The result r
 
 ```
 doctrine coverage record --slice 256 --requirement REQ-478 --change 256 --mode VT \
-  --command cargo --command test --command --test --command e2e_design_state \
+  --command cargo --command test --command=--test --command e2e_design_state \
   --matcher-source stdout \
   --matcher-pattern 'an_agent_declaration_alone_renders_a_change_row \.\.\. ok' \
   --regex

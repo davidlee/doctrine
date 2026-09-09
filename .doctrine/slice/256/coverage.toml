@@ -4,7 +4,7 @@ requirement = "REQ-478"
 contributing_change = "SL-256"
 mode = "VT"
 status = "verified"
-git_anchor = "c0c69f634739e6268cd11552a47fd918c63d58a0"
+git_anchor = "bce1ce5c2a3e26ff7f3b40a364417b0c9f85873c"
 
 [entry.check]
 command = ["cargo", "test", "--test", "e2e_design_state"]

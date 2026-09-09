@@ -4,7 +4,7 @@ version = 1
 id = 478
 slug = "report-every-recorded-mutation-on-the-change-log"
 title = "Report every recorded mutation on the change log"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Every mutation the run records is reported by at least one change row, so a submission that landed is distinguishable from one whose payload was discarded. The emittable event vocabulary is closed and exhaustively driven: a member no path emits fails loudly rather than being silently absent. The row reports that the mutation was recorded; it is not a claim about the payload keys the mutation was built from."

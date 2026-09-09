@@ -235,3 +235,77 @@ unparseable `SL-244` snapshot, not this slice's regression), `ISS-448` / `IMP-27
 rows it never checked), and `SL-251`'s three coordination sites — `design.md`
 ¶422-428, its ledger row at 2289, and `payload_contract.rs:501` — which are
 discharged at *that* slice's reconcile.
+
+## Reconciliation Outcome
+
+Every brief item resolved. No escalation, no half-applied REV, nothing carried
+into `/close`.
+
+### Direct edits applied
+
+- **`slice-256.toml` selector registry (`F-4`).** `doctrine slice selector rm 256
+  src/design_run/render/mod.rs src/design_run/render/change_row.rs` — both
+  `design-target` selectors removed. `slice conformance 256` now reports
+  `undelivered (0)`, against `(2)` before. Mirrored in `design.md`'s code-impact
+  table (the row for the two render files) and in the tense of the *"the `render`
+  selector narrows"* paragraph below it: the fence is recorded as **discharged**,
+  with the registry named as the fact and the table as the mirror, so a later
+  reader does not repair the prose and leave the cell red.
+- **`design.md` act-token spelling (`F-2`).** `cpa-design_accepted` →
+  `cpa-design-accepted` and `act=design_accepted` → `act=design-accepted` at
+  `:593`, `:626`, `:708`/`:709`. Canon now agrees with `ActKind::as_str`
+  (`attestation.rs:110-118`), the token's only source.
+- **`design.md:951` coverage recipe (`F-3`).** `--command --test` →
+  `--command=--test`. The recipe is now copy-pasteable; the recorded cell already
+  stored the intended argv (`["cargo", "test", "--test", "e2e_design_state"]`).
+- **`design.md` census (`F-7`).** "7 rows across 6 live runs" → "9 rows across 7
+  live runs" at *both* sites carrying the figure — sec-4's compat paragraph
+  (`:747-748`, the site the brief named) and sec-2's *"migration surface,
+  measured"* (`:358-360`), whose per-run enumeration was updated with it (243 and
+  256 carry two each; 244, 248, 249, 251, 254 one each). Re-censused live against
+  `.doctrine/state/slice/*/design.toml` rather than copied from the finding, with
+  a positive control on the predicate (619 `event =` rows matched overall, so the
+  9 is a count and not a broken grep).
+- **`slice-256.md` risk register (`F-6`).** A clause added to `R5` naming
+  `ENVELOPE_CHANGE_ROWS = 10` (`render/mod.rs:78`) as the second fixed budget a
+  new event spends — consumed, not breached — and pointing at `changes()`'s
+  `omitted` / `total` disclosure (`render/envelope.rs:1073-1092`) as why no repair
+  is owed. **Surface correction:** the brief filed this against `design.md`'s risk
+  register; there is no register in `design.md` — `R1`…`R6` live in
+  `slice-256.md` § *Risks & Assumptions*, which is the same direct-edit surface,
+  so the item landed there rather than being handed back.
+
+### Beyond the brief, disclosed rather than absorbed
+
+- **A fourth site of `F-2`'s erratum.** Opening `design.md` for `F-2` surfaced
+  one more underscored act token the audit did not enumerate: `:199` spelled
+  `agd-graph_reviewed` / `act=graph_reviewed`. Same class, same cause, same fix —
+  corrected to kebab. Enumerated the whole file afterwards
+  (`agd-|cpa-|act=` followed by an underscore): zero remaining. Recorded here
+  rather than absorbed silently, and not raised as a new finding, because
+  `/reconcile` does not own discovery — had it been anything but an in-class
+  instance of a finding already on this ledger, it would have gone back to
+  `/audit`.
+
+### REVs completed
+
+- **`REV-055` (`reconcile-sl-256`) — `done`.** One row, `primary`: `REQ-478`
+  status `pending → active` (`F-1`), auto-landed by `revision apply` and recorded
+  as `REC-115`. `doctrine coverage verify 256` re-run immediately before approval:
+  `verified→verified`. Evidence table and rationale in `revision-055.md`. No row
+  needed splitting; no `modify` / `create` / `prose` row was surfaced for manual
+  landing, because there was none.
+
+### Tolerated, no write owed
+
+- **`F-5`** — the refusal's lost vocabulary list. A knowingly-traded diagnostic;
+  `IMP-445` owns the repair.
+- **`F-6`'s code half** — the budget is consumed, disclosed, and unbreached; only
+  the register was wrong, and that is edited above.
+- **`F-8`, `F-9`** — rulings, not repairs. The corpus drift is not this slice's
+  and the 13 undeclared conformance rows are fully accounted for.
+- **`F-10`** — the merged `payload_terms` arm. Form-only deviation, consciously
+  accepted; the ledger is now its durable record, which is what the finding was
+  raised to accomplish.
+
+Reconcile pass complete — handoff to `/close`.

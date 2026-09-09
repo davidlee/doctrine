@@ -176,6 +176,17 @@ extends the output with every row in `Applied::rows`.
   leaves that const wrong while its compile-time assert stays green, because the
   assert only tests `StageMoved`'s shape. Either hold the new row to ≤3 terms or
   make the site programmatic. Bears directly on `OQ-3`.
+  A **second** fixed budget rides the same change, and this one is *consumed*
+  rather than at risk of being falsified: `ENVELOPE_CHANGE_ROWS = 10`
+  (`render/mod.rs:78`) caps the delta rows an envelope renders for
+  `log.since(known_revision)`. Every apply that records an act now spends one row
+  of it, a disposing act two, so an agent resuming from an older revision reaches
+  the cap after fewer applies than before. No repair is owed and none was made:
+  `changes()` (`render/envelope.rs:1073-1092`) retains from the newest end and
+  returns `omitted` alongside `total`, so the envelope discloses that more exists
+  rather than implying ten is all — STD-003's obligation, met. Recorded here
+  because the register named the width budget and not the count one
+  (`RV-364` `F-6`, added at reconcile).
 - **R4 — `SL-251` merge.** Textual overlap with the capsule is empty by the
   file list above. The residual is a test in the capsule pinning *current*
   behaviour (an apply asserting an empty row set). `SL-251`'s planned VTs are
