@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a08527-30cb-7f92-bf70-553217e38664"
+recorded_at = "2026-09-09T07:52:13.259364492Z"
+kind = "friction"
+summary = "/close: a REV-driven close always needs a hand-authored REC — rec new seeds no --status-delta/--evidence-ref"
+detail = "SL-256 close. Applying REV-055 (one status row, REQ-478 pending→active) made 'slice status 256 done' refuse on residual status-lag drift, which is expected and well-signposted: the refusal names all three discharge clauses and cites mem.pattern.doctrine.close-drift-discharge-rec, and SL-178 already improved that legibility. The residual cost is mechanical, not epistemic: 'doctrine rec new' seeds only a skeleton, so the [[status_delta]] and [[evidence_ref]] tables must be hand-written into rec-NNN.toml — the one authored-TOML hand-edit left in an otherwise CLI-driven lifecycle, and one the CLI has all the inputs for (the refusal already prints the requirement and its authored status; the evidence keys are a grep over slice/*/coverage.toml that the recipe itself specifies, symlink-dedupe included). Cost here: reading the recipe memory, an exemplar REC, a dereferencing grep, and a python heredoc, for a discharge whose content was fully determined. Repeats at every close that applies a REV. Candidate: 'rec new --move accept --discharges REQ-NNN' computing both tables, refusing if the keys do not resolve."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
