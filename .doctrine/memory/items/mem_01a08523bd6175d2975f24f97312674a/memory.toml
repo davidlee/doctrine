@@ -1,0 +1,50 @@
+memory_uid = "mem_01a08523bd6175d2975f24f97312674a"
+memory_key = "mem.pattern.doctrine.census-of-runtime-state-dates"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A census of gitignored runtime state dates the moment you write it into an authored artefact"
+summary = "Authored prose citing a count over .doctrine/state/** is stale by the next run; record the predicate and call the number a floor."
+created = "2026-09-09"
+updated = "2026-09-09"
+
+[scope]
+paths = []
+globs = [".doctrine/slice/*/design.md"]
+commands = []
+tags = ["authoring", "runtime-state", "design"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b4d90756b7fc58ee51e8a3b7059620795c0373ed"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d90e698dc7e3ac8cee1c51468397fd2c3467d4378803bc93ab7d8a45fdc2383e"
+base_commit = "7bc7e24f4f95d935fe8ab599f565b15b7145e791"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "low"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-364"
+
+[[source]]
+kind = "slice"
+ref = "SL-256"
+

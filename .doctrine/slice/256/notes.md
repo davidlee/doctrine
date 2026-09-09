@@ -330,23 +330,37 @@ If one were run anyway, the two things it should probe are:
 ### Open
 <!-- settled entries drop at each pass; git holds the history -->
 
-**All five design/registry corrections are now `RV-364`'s and carry a named
-write surface in its `## Reconciliation Brief`** — they are no longer loose
-notes for `/reconcile` to rediscover:
+**All six `RV-364` items are discharged.** `/reconcile` wrote them on
+2026-09-09 (`7bc7e24f4`); the audit trail is `review-364.md`
+§ `## Reconciliation Outcome`.
 
-- `RV-364` `F-2` — the `cpa-design_accepted` / `act=design_accepted` token
-  erratum at `design.md:593`, `:626`, `:708`; act tokens are kebab-case.
-- `RV-364` `F-3` — `design.md:951`'s coverage recipe does not parse
-  (`--command --test` → `--command=--test`).
-- `RV-364` `F-4` — prune the two `undelivered` render selectors. The
-  load-bearing surface is the **registry** (`doctrine slice selector rm`), not
-  `design.md`'s mirror table; a prose-only edit leaves the cell red.
-- `RV-364` `F-6` — one clause beside `R5` naming `ENVELOPE_CHANGE_ROWS` as the
-  second fixed budget a new event spends.
-- `RV-364` `F-7` — the retired token's census is 9 rows over 7 runs, not 7
-  over 6.
-- `RV-364` `F-1` — `REQ-478` (SPEC-029 `FR-009`) is still `pending` while its
-  coverage cell verifies. The one **governance** item: a REV, not a direct edit.
+- `F-2` — the act-token erratum, corrected to kebab at `design.md:593`, `:626`,
+  `:708`/`:709`, **and** at `:199` (`agd-graph_reviewed`), a fourth site the audit
+  did not enumerate. Whole file re-swept afterwards: zero remaining.
+- `F-3` — `design.md:951`'s coverage recipe now parses (`--command=--test`).
+- `F-4` — the two render selectors removed from the **registry**
+  (`slice selector rm`), so `slice conformance 256` reports `undelivered (0)`;
+  `design.md`'s code-impact table updated as the mirror, recording the fence as
+  discharged rather than deleted.
+- `F-6` — `ENVELOPE_CHANGE_ROWS` named beside `R5` in `slice-256.md`. **The brief
+  filed this against `design.md`'s risk register; there is no register there** —
+  `R1`…`R6` live in `slice-256.md` § Risks & Assumptions. Same direct-edit
+  surface, so it landed rather than being handed back.
+- `F-7` — the census restated at **both** carrying sites (sec-4 `:747`, and
+  sec-2's *migration surface, measured* `:358`), re-censused live with a positive
+  control on the predicate.
+- `F-1` — the one governance item: `REV-055` (`reconcile-sl-256`), one `status`
+  row, applied → `REQ-478` `pending` → `active`, recorded as `REC-115`.
+
+Two durable lessons were taken out of the audit at close rather than left in the
+ledger:
+
+- `mem.pattern.audit.rule-drift-by-edited-paths` — `F-8`'s method point. Rule a
+  corpus-drift finding by enumerating every stale memory's scope against the paths
+  the slice **edited**, not by matching the subsystem it lives in.
+- `mem.pattern.doctrine.census-of-runtime-state-dates` — `F-7`'s. A count over
+  gitignored runtime state, written into an authored artefact, is stale by the next
+  run; record the predicate and call the number a floor.
 
 Carried forward, each with an owner outside this slice:
 

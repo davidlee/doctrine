@@ -1,0 +1,50 @@
+memory_uid = "mem_01a085211d787c71b89a2774f91db622"
+memory_key = "mem.pattern.audit.rule-drift-by-edited-paths"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Rule a corpus-drift finding by the paths the slice edited, not by its subsystem prefix"
+summary = "A stale-memory ruling must enumerate every scope against the paths the slice actually edited; matching the subsystem prefix asks the wrong question."
+created = "2026-09-09"
+updated = "2026-09-09"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["audit", "memory-corpus", "ruling"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b4d90756b7fc58ee51e8a3b7059620795c0373ed"
+ref_name = "refs/heads/edge"
+checkout_state_id = "08dfc3e9b08e093cfedd22ebce62612d091ea5d94c5893a9ea5e27b919dd4296"
+base_commit = "7bc7e24f4f95d935fe8ab599f565b15b7145e791"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-364"
+
+[[source]]
+kind = "slice"
+ref = "SL-256"
+
