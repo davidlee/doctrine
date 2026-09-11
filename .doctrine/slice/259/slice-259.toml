@@ -1,7 +1,7 @@
 id = 259
 slug = "truthful-apply"
 title = "Truthful apply"
-status = "proposed"
+status = "design"
 created = "2026-09-11"
 updated = "2026-09-11"
 tags = ["area:correctness", "area:design-run", "cluster:design-run", "footgun"]
@@ -86,6 +86,11 @@ target = "ISS-367"
 label = "references"
 role = "originates_from"
 target = "ISS-361"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "ISS-450"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

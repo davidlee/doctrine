@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a08e33-bb51-71e0-9f1a-b748fe236267"
+recorded_at = "2026-09-11T02:02:30.097557914Z"
+kind = "friction"
+summary = "/research: pi-scout and pi-research both 401 on SL-259 pre-design round"
+detail = "Both research threads (codemap, governance) for SL-259 exited with 'Authentication Fails, Your api key: ****tial is invalid' and wrote 0-byte raw/*.md. The round left research/ with baseline.toml plus empty artefacts and no research.md, and /design started with no evidence base — the interactive session has to absorb the code-map cost itself, which is exactly what pi-scout exists to avoid. Also: ~/.pi/agent/settings.json fails to parse (JSON Parse error: Property name must be a string literal), warned on both runs."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

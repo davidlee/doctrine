@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a08e14-1348-75e0-90b6-1b0d14cffe15"
+recorded_at = "2026-09-11T01:27:55.464761542Z"
+kind = "friction"
+summary = "/research: pi-scout and pi-research both fail at startup — invalid ~/.pi settings.json and 401 invalid API key"
+detail = "SL-259 research round. Both threads exited 1 with empty stdout; stderr: 'Invalid settings file /home/david/.pi/agent/settings.json: JSON Parse error: Property name must be a string literal' then '401: Authentication Fails, Your api key: ****tial is invalid'. The scripts exit non-zero but a naive '> raw/x.md' pipeline leaves an empty artefact that looks like a finished thread. Cost: one wasted round-trip."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
