@@ -37,3 +37,7 @@ label = "references"
 role = "concerns"
 descriptor = "E8.7 — payload-shape lookups as the largest source-read category"
 target = "RFC-026"
+
+[[relation]]
+label = "shapes"
+target = "SL-259"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a08e09-c90c-7210-97f1-4ea9c1d7aa51"
+recorded_at = "2026-09-11T01:16:41.10053053Z"
+kind = "friction"
+summary = "/slice: link refusal for SL→QUE names legal target kinds but not the label that would work"
+detail = "Cutting SL-259, 'doctrine link SL-259 references --role originates_from QUE-219' refused with '`references` target must be one of [ISS, IMP, CHR, RSK, IDE, SL], got a QUE'. The slice settles QUE-219 in design; no label for slice→knowledge-record was suggested and 'link --help' has no per-kind matrix. Cost: a --help grep plus a trial link from the other direction."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

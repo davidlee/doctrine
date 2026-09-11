@@ -4,9 +4,9 @@ schema_version = 1
 memory_type = "signpost"
 status = "active"
 title = "Design-run cluster: entry point"
-summary = "Where design-run work stands: the cluster, its five batches, the two gates, and what settles each"
+summary = "Entry point for managed design run work: RFC-031 is the program home (tracks, order, fitness bar); RFC-026 E8 is the evidence; cluster tag is the dedup instrument."
 created = "2026-08-15"
-updated = "2026-08-15"
+updated = "2026-09-11"
 
 [scope]
 paths = ["src/design_run/", ".doctrine/backlog/"]
