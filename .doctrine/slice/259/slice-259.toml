@@ -75,11 +75,6 @@ target = "ISS-290"
 [[relation]]
 label = "references"
 role = "originates_from"
-target = "ISS-362"
-
-[[relation]]
-label = "references"
-role = "originates_from"
 target = "ISS-367"
 
 [[relation]]

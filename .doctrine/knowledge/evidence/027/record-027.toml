@@ -1,0 +1,29 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 27
+slug = "declaration-is-both-a-wire-type-and-a-stored-type-no-live-snapshot-exercises-it"
+title = "Declaration is both a wire type and a stored type; no live snapshot exercises it"
+record_kind = "evidence"
+status = "captured"
+created = "2026-09-14"
+updated = "2026-09-14"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum = "src/design_run/delegation.rs:69 stores a delegate's declarations verbatim as Vec<Declaration> inside Proposal, which the snapshot holds via DelegationGroup — so Declaration is simultaneously the apply-payload type and a persisted type, and it already carries deny_unknown_fields. Against that: all 16 live design-run snapshots in this repo read `delegation = []`, so no stored proposal declaration exists today. Of those 16, 15 parse; SL-244 is the sole casualty, failing at line 4927 on the retired change-event token `integrated_review_recorded` — the third such retirement, after `evidence_invalidated` and `acceptance_attested`, both of which SL-256's READABLE/EMITTABLE roster split already rescued."
+provenance = "inspection"
+confidence = "high"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-259"

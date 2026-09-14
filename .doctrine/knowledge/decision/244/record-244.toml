@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 244
+slug = "write-path-strictness-is-driven-off-the-payload-contract-not-off-serde-attributes"
+title = "Write-path strictness is driven off the payload contract, not off serde attributes"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-14"
+updated = "2026-09-14"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "deny_unknown_fields cannot reach three of the places the design run needs strictness: ApplyRequest carries #[serde(flatten)] (ISS-333), Provenance / Dispose / DelegationAct are internally tagged and WireFacetValue is untagged — all buffer their content, which defeats the attribute. Meanwhile payload_contract::PAYLOAD already describes every key at every nesting level, and sec-8 pin 1 holds each struct contract's key set against a fully populated value's serde output, so the contract is not a second spelling of the schema — it is the schema, already proved equal to it."
+choice = "Enforce unknown-key refusal by walking the submitted JSON against payload_contract's key inventory before deserialisation, rather than by adding deny_unknown_fields to the eight structs that lack it. One mechanism covers every nesting level and the three places the attribute cannot go."
+alternatives = ["Sprinkle deny_unknown_fields on the eight closure structs that lack it. Leaves ApplyRequest, the internally-tagged enums and WireFacetValue uncovered — i.e. leaves ISS-333 unfixed, which is the item that motivated the leg.", "Hand-write a Deserialize impl for ApplyRequest. Fixes the root only, and is the parallel implementation the project standard refuses: a second statement of a key set that payload_contract already holds."]
+rationale = "Single-sourcing (STD-001): the contract is already the pinned inventory, so refusal derives from the same declaration the contract prints, and a key cannot be admitted by one and described by the other. It also closes ISS-333, ISS-328 and ISS-327's key axis with one change rather than three, and the contract's own rendering — which today prints 'unknown-keys: silently-dropped' on nine types — becomes true by construction instead of by audit."
+consequences = ["UnknownKeys::SilentlyDropped loses its reason to exist for submission types; the contract rendering changes from a disclosure of a defect to a statement of the rule.", "A new wire key must join payload_contract to be admitted, which the existing pin already forces in the other direction.", "Refusal happens before deserialisation, so it names the offending key and its path rather than surfacing serde's message."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-259"

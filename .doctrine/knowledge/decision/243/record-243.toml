@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 243
+slug = "strictness-refuses-the-never-known-a-retired-member-roster-carries-the-once-known"
+title = "Strictness refuses the never-known; a retired-member roster carries the once-known"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-14"
+updated = "2026-09-14"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "QUE-219 asked whether a design-run submission carrying an unknown key should be refused, and how that reconciles with stored declarations outliving the binary that wrote them. The framing assumed the answer was a write/read split. It cannot be: Declaration is both the wire type and a stored type — Proposal holds a delegate's declarations verbatim in the snapshot (delegation.rs:69) — and it already carries deny_unknown_fields, so the tension is wired in today rather than prospective. Separately, ISS-315 has now cost three retired ChangeEvent tokens, two of which SL-256's READABLE/EMITTABLE roster split already rescued."
+choice = "Strictness is defined against keys and tokens that were NEVER known, not against the write path. Tolerance covers what was known and then retired, carried by a retired-member roster declared beside the live vocabulary — READABLE/EMITTABLE generalised from change-event tokens to wire keys. Beneath it sits a backstop: a genuinely unrecognised stored token degrades its own row visibly, per STD-003, rather than failing the whole file."
+alternatives = ["Split the types: stop storing Declaration, normalising to a stored form at the delegation boundary. The clean layering fix, and it dissolves the question rather than answering it — deferred to a follow-up as known debt, because no live snapshot exercises it (all 16 read delegation = []).", "Mode split on one shared type: strictness as a property of the deserialiser. Cheapest and least trustworthy — two deserialise paths for one type desynchronise quietly, which is the failure mode this slice exists to remove."]
+rationale = "The roster is the pattern this codebase already invented and proved, so it rides an existing seam rather than adding a second idea. Keeping one type keeps the DRY property that made Declaration shared in the first place. The roster alone would not be enough: ISS-315 recurred because someone must remember to populate it, which is discipline, not construction. The STD-003 floor is what converts the remaining failure from unreadable-file into disclosed-degraded-row, so a forgotten roster entry costs legibility instead of the run."
+consequences = ["Retiring a wire key or change-event token becomes a two-part act: remove it from the emittable/admitted set, add it to the readable roster.", "An unrecognised token no longer fails a snapshot parse, so ISS-315's class cannot recur as a hard failure — only as a disclosed degraded row.", "Declaration stays both wire and stored type; that layering debt is recorded, not repaired, in this slice."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-259"

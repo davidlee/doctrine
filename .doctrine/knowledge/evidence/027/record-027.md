@@ -1,0 +1,1 @@
+Gathered while settling QUE-219 on SL-259. Two facts, opposite in sign: the wire/stored overlap is real and structural, and its exposure is currently nil. Together they are why DEC-243 rules by vocabulary rather than by type split, and why the type split is recorded as deferred debt rather than done.

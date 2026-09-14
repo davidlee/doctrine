@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a08e39-d2ab-73a2-b558-5540427ec00c"
+recorded_at = "2026-09-11T02:09:09.291250763Z"
+kind = "friction"
+summary = "/design: probe acts at the wrong stage are honoured, and a probe section cannot be withdrawn"
+detail = "Probing ISS-362 on SL-259's own run: a checkpoint dispose and a sec- body declaration both submitted at stage=exploring were HONOURED (rows emitted, state moved), not inert — so the run has no stage guard on those acts at all. Two costs. (1) The ISS-362 repro cost three submissions because the issue's premise (silently inert) is not what the engine does. (2) The sec-1 probe is unwithdrawable: body is Option<String> not Sparse, there is no section-remove verb, and sections materialise into design.md — so a probe section is permanent run state. Re-opening the probe-disposed inq-2 was possible via lifecycle:open, but a section has no equivalent."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
