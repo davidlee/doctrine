@@ -30,18 +30,27 @@ the contract. Part of the `RFC-031` (*Design run fitness*) program.
 
 One invariant, four legs:
 
-1. **Error ⇒ nothing landed.** No revision, no receipt, no change row on any
-   refused or failed submission. Establish or rule out `ISS-361`'s reported
-   mechanism by repro.
+1. **Error ⇒ nothing landed**, stated precisely (`DEC-250`). On any refused or
+   failed submission: no revision, no receipt, no change row. The **authored**
+   tier is unmoved too, except across one named late-check window that
+   `SPEC-029` specifies and whose recovery is the journal — every check that
+   *can* be hoisted ahead of the mints is. `ISS-361`'s reported mechanism is
+   ruled out by repro (`EVD-028`); the item stays open against that residual.
 2. **Success ⇒ rows that tell the truth.** Every material change emits its row;
    `ISS-367`'s same-kind replacement emits `ActInvalidated`, and `ISS-450`'s
    creation-time `needs` edge emits `needs_added`.
 3. **Unknown or inert input ⇒ typed refusal.** Unknown keys at every nesting level,
    wrong-`ValueKind` payload terms, and keys inert at the subject's state are
-   refused, naming what was expected — the keys admitted, and where.
-4. **Old snapshots stay readable.** A snapshot written by an older binary parses;
-   an unrecognised historical row degrades visibly (`STD-003`: a degraded read is
-   disclosed), never fails the whole file.
+   refused, naming what was expected — the keys admitted, and where. Refusal is
+   a property of the *request* against schema and subject state, never of
+   whether anything changed (`DEC-245`). `Outcome`'s declared kind moves to
+   `Label` (`DEC-247`).
+4. **Old snapshots stay readable**, on one line (`DEC-249`): **degrade what is
+   history, refuse what is state.** A change-log row carrying an unrecognised
+   token is *retained* — opaquely, at the row, never by widening `ChangeEvent`
+   (`DEC-251`) — and disclosed as unreadable (`STD-003`), rather than failing
+   the file. `Stage`, `IdKind` and `ActKind` keep strict parse: a run that
+   cannot read its own stage is not a degraded row.
 
 **`QUE-219` is settled** (*Submission strictness against snapshot
 forward-compatibility*), as `DEC-243`. The working hypothesis — strict write path,
@@ -74,10 +83,19 @@ or untagged `WireFacetValue`. Together they unblock `ISS-333`, `ISS-328`,
 
 ## Affected surface
 
-- `src/design_run/submission.rs` — wire structs, `ApplyRequest` flatten envelope
-- `src/design_run/snapshot.rs` — `ChangeEvent` and snapshot parse
-- `src/design_run/run.rs` — `admit`, stage admission, `live_acts` / `invalidation_rows`
-- `src/commands/design.rs` — `apply` parse → admit → persist → receipt ordering
+- `src/design_run/payload_contract.rs` — the pinned key inventory `DEC-244`
+  drives refusal from; nine `UnknownKeys::SilentlyDropped` rows become true
+  statements rather than disclosures of a defect
+- `src/design_run/submission.rs` — wire structs, `ApplyRequest`'s flatten envelope
+- `src/design_run/change_log.rs` — `ChangeEvent`'s rosters and const proofs
+  (untouched by `DEC-251`, deliberately), `ChangeLog`'s four-method surface,
+  `PayloadTerm::admit` for `DEC-247`
+- `src/design_run/snapshot.rs` — snapshot parse; the legacy-fragment compat pins
+- `src/design_run/run.rs` — `declare_node`'s create/update split, `live_acts` /
+  `invalidation_rows`, the `StepDischarged` term construction
+- `src/design_run/render/envelope.rs` — the one production reader of the log's
+  rows; gains the degraded-row disclosure
+- `src/commands/design.rs` — `apply`'s parse → admit → mint → persist ordering
 - design-run e2e suites
 
 ## Risks, assumptions, open questions
@@ -92,15 +110,25 @@ or untagged `WireFacetValue`. Together they unblock `ISS-333`, `ISS-328`,
   flatten-carrying request is a silent no-op). **Resolved by `DEC-244`**: the fix
   neither replaces nor decorates the flatten, it moves the check off serde
   entirely, so the attribute's incompatibilities stop being load-bearing.
-- **A1** — `ISS-361` collapses into the silent-absorb class. Unverified; repro
-  first. Code reading weakens it: `commands/design.rs:1624` parses **before**
-  `run::admit`, so the obvious path cannot reach a receipt. The mint/journal seam
-  (`execute_mint` writes journal entries keyed by `submission_id` before the second
-  `run::apply`, which can still refuse) is the live suspect — `inq-6`.
-- **OQ** — does a tolerant reader *preserve* an unknown row on rewrite, or drop it
-  with a disclosure? (Rewrite-loses-history vs. opaque-row carrying.) Open as
-  `inq-15`; sharpened by the fact that the change log is append-only history and
-  every apply rewrites the whole file, so "drop" means "lose on next write".
+- **A1 — refuted.** `ISS-361` does *not* collapse into the silent-absorb class.
+  `commands/design.rs:1624` parses before `run::admit`, and repro confirms a
+  malformed payload leaves the revision untouched and does not consume its
+  submission id (`EVD-028`). The surviving suspect is the late-check window
+  `DEC-250` names, and `SPEC-029` prescribes most of that ordering — so what is
+  left is narrower than the report. `ISS-361` stays open against it.
+- **OQ — closed** as `DEC-251`: preserve, at the row. Two facts closed it. The
+  change log is a bounded **32-revision window** (`CHANGE_LOG_REVISIONS`), not
+  permanent history, so an opaque row's cost is bounded and `ISS-315`
+  self-heals on an active run. And `ChangeLog` is tightly encapsulated —
+  `record` / `retain_window` / `covers` / `since`, one production reader of
+  `.rows` — so a row-level fallback leaves every `ChangeEvent` pin standing,
+  where an `Opaque(String)` variant would break `Copy`, `const fn as_str`, and
+  both compile-time proofs.
+- **R3 — new.** Do not "clean up" `change_log.rs`'s two `const _: ()` proofs.
+  The `is_subset(&EMITTABLE, &READABLE)` assert is the only reader of
+  `EMITTABLE` in `src/`, so deleting it passes `cargo check` and fails
+  `cargo test --bin doctrine`
+  (`mem.pattern.rust.expect-dead-code-is-per-compilation-unit`).
 
 ## Verification / closure intent
 
@@ -110,8 +138,10 @@ or untagged `WireFacetValue`. Together they unblock `ISS-333`, `ISS-328`,
   `ActInvalidated` and a creation-time `needs` edge emits `needs_added`; a literal
   legacy snapshot fragment containing a retired `ChangeEvent` parses and discloses.
 - VA: `doctrine design show 244` reads.
-- Closes, or records partial fulfilment of, every item in the Context table plus
-  settles `QUE-219`.
+- Closes, or records partial fulfilment of, every item in the Context table.
+  `QUE-219` is **settled** (`DEC-243`); `ISS-362` is **struck** on a disproved
+  premise; `ISS-450` **joined** during design; `ISS-361` stays **open** against
+  `DEC-250`'s residual window rather than being closed by this slice.
 
 ## Summary
 

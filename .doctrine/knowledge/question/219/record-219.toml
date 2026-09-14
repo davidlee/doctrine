@@ -5,17 +5,17 @@ id = 219
 slug = "submission-strictness-against-snapshot-forward-compatibility"
 title = "Submission strictness against snapshot forward-compatibility"
 record_kind = "question"
-status = "open"
+status = "answered"
 created = "2026-08-15"
-updated = "2026-08-15"
+updated = "2026-09-14"
 tags = ["area:design-run", "cluster:design-run", "footgun"]
 
 [facet]                         # every field typed; seeded empty (captured later)
 question = "When a design-run submission carries a key the schema does not hold, should the engine refuse it — and how does that reconcile with stored proposal declarations outliving the binary that wrote them?"
 why_matters = "Four items (ISS-290/327/328/333) are the same silent-absorption class on four surfaces, and each is blocked on the same tradeoff rather than on effort. ISS-328 states it: tightening a nested type converts previously-readable stored state into a parse failure at exactly the moment someone is resuming (mem.fact.design-run.snapshot-outlives-the-binary). ISS-315 is that failure already happening for a different reason. Answering once — strict on the write path, tolerant on the read path, or migrate — unblocks all four; answering per-item invites four inconsistent rulings."
-answer      = ""
-answered_by = ""
-answered_on = ""
+answer = "Neither strict-everywhere nor a write/read split. The axis is known-vs-retired, not write-vs-read: strictness refuses keys and tokens that were NEVER known, while a retired-member roster declared beside the live vocabulary carries what was known and then retired — READABLE/EMITTABLE generalised from change-event tokens to wire keys. Beneath the roster sits an STD-003 disclosed-degradation floor, so a forgotten roster entry costs one row's legibility rather than the file. The write/read type split the question assumed is not available: Declaration is both the wire type and a stored type (delegation.rs:69 holds a delegate's declarations verbatim in the snapshot) and already denies unknown fields, so there is no type seam to split on — EVD-027. Full ruling in DEC-243; mechanism in DEC-244 (strictness rides payload_contract's pinned key inventory, not deny_unknown_fields); read-path scope in DEC-249 (degrade what is history, refuse what is state) and DEC-251 (preserve at the row, not by an opaque ChangeEvent variant). Unblocks ISS-333, ISS-328, ISS-327, ISS-290."
+answered_by = "SL-259 design run dr-01a08e32, user-directed 2026-09-14"
+answered_on = "2026-09-14"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
