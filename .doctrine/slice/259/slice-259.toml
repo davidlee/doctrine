@@ -16,7 +16,8 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/commands/design.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "SL-259 sec-7 code impact: the seven design targets the four legs commit to"
 
 [[selector]]
 selector = "tests/design_act/**"
@@ -29,6 +30,36 @@ intent = "scope-relevant"
 [[selector]]
 selector = "tests/e2e_design_*.rs"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/design_run/payload_contract.rs"
+intent = "design-target"
+note = "SL-259 sec-7 code impact: the seven design targets the four legs commit to"
+
+[[selector]]
+selector = "src/design_run/submission.rs"
+intent = "design-target"
+note = "SL-259 sec-7 code impact: the seven design targets the four legs commit to"
+
+[[selector]]
+selector = "src/design_run/change_log.rs"
+intent = "design-target"
+note = "SL-259 sec-7 code impact: the seven design targets the four legs commit to"
+
+[[selector]]
+selector = "src/design_run/snapshot.rs"
+intent = "design-target"
+note = "SL-259 sec-7 code impact: the seven design targets the four legs commit to"
+
+[[selector]]
+selector = "src/design_run/run.rs"
+intent = "design-target"
+note = "SL-259 sec-7 code impact: the seven design targets the four legs commit to"
+
+[[selector]]
+selector = "src/design_run/render/envelope.rs"
+intent = "design-target"
+note = "SL-259 sec-7 code impact: the seven design targets the four legs commit to"
 
 [[relation]]
 label = "governed_by"
