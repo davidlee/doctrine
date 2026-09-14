@@ -27,9 +27,21 @@ Use doctrine memory (the mcp tool). DON'T use claude built-in memory.
   for the AskUserQuestion tool.
 
 ## Reviewer
-- default reviewer: codex mcp — use default (GPT-5.5) for external adversarial reviews.
-  Note: using readonly isolation prevents it raising an inquisitorial review ledger; GPT
-  has pretty good adherence so that's a poor tradeoff.
+- default reviewer: **codex-cli MCP** (`mcp__codex-cli__codex` / `…__review`) — a
+  third-party npm wrapper (`npx -y codex-mcp-server`) that shells the codex CLI.
+- the old `codex` MCP server entry is **dead** — codex-cli 0.154.0 removed the
+  `mcp-server` subcommand, so it fails `CONNECTION_CLOSED` on every reconnect.
+  Nothing to repoint it at; use codex-cli. (Verified 2026-09-14.)
+- **always pass `model`** — default to `gpt-5.6-sol`. The wrapper's own default
+  (`gpt-5.3-codex`) 400s on a ChatGPT account, and its model enum is stale; ask
+  `codex debug models` for what the account actually serves (5.5, 5.6-sol/luna/terra,
+  gpt-6-astra).
+- **never `reasoningEffort: "minimal"`** — codex attaches `web_search`
+  unconditionally and the API rejects that pairing. `low`+ works; use `high` for
+  adversarial review.
+- pass `sandbox: "workspace-write"` so the reviewer raises onto the RV ledger
+  itself; readonly isolation prevents an inquisitorial ledger and GPT's adherence
+  makes that a poor tradeoff.
 - Opus sub-agent is also useful for variety on subsequent passes.
 
 ## Research

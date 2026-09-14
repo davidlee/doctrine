@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a09e16-8b76-7970-96fc-ea0be31e6f71"
+recorded_at = "2026-09-14T04:04:32.759005993Z"
+kind = "friction"
+summary = "codex MCP reviewer unavailable: codex 0.154.0 removed the mcp-server subcommand (/design review)"
+detail = "~/.claude.json mcpServers.codex is {command: codex, args: [mcp-server]}. codex-cli 0.154.0 has no mcp-server subcommand — it parses as a PROMPT, falls through to the interactive CLI and dies with 'stdin is not a terminal', which Claude Code reports as CONNECTION_CLOSED. 'codex mcp' is now only add/remove/list/get/login/logout (managing servers FOR codex, not serving AS one); no 'mcp serve'; the binary has zero 'mcp-server' strings. Auth is healthy ('Logged in using ChatGPT') and 'codex exec' works (default model gpt-5.6-sol), so the adversarial-review capability survives only via Bash 'codex exec', not via MCP. Blocks the default reviewer for RV-365 on SL-259."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
