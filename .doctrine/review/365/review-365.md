@@ -58,3 +58,67 @@ taken against a runtime tier that moves; the design says re-probe. Any argument
 in the design that rests on a count (16 snapshots, `delegation = []`,
 `CHANGE_LOG_REVISIONS` = 32, `SL-244` at revision 92 / floor 61) is a claim to
 verify against the tree, not to accept.
+
+
+## Synthesis
+
+**Closure story.** Six findings, all raised by an external adversarial reviewer
+(codex-cli, `gpt-5.6-sol`) against design run `dr-01a08e32` at revision 40; all
+six verified independently against the source tree before disposition; all six
+disposed `design-wrong` and verified terminal by the raiser against the amended
+text at revision 48. No ruling was reversed. The design stands at revision 50.
+
+Three findings were blockers and each named the same species of failure, which
+is worth stating plainly because the design's own subject is truthfulness about
+failure:
+
+- `F-1` — `DEC-248`'s emit-at-the-seam rule was applied to one of two act
+  stores. The design argues against instance-by-instance repair and then
+  committed one, inside the section making the argument.
+- `F-2` — `DEC-250` asserted a defect with no witness. `sec-6` refuses to close
+  `ISS-361` on a plausible story; it had not held its own ruling to that
+  standard. Resolved by *withdrawing the claim*, not by hunting for a witness:
+  the hoist is restated as hygiene that makes the two-pass doc's claim true by
+  construction rather than by the accident that today's predicates do not
+  discriminate.
+- `F-3` — `sec-2` claimed a degradation floor beneath stored declarations that
+  `DEC-249` forbids it from having. Not an implementation shortfall; a claim
+  incompatible with a neighbouring ruling.
+
+`F-4` (no reason carried on `RawRow`, so `STD-003`'s *why* was unserviceable),
+`F-5` (retention arithmetic off by 24 revisions) and `F-6` (a cited source
+reader that does not exist) were the factual tail.
+
+A seventh defect — `sec-5` calling four methods the type's "whole surface" when
+`floor` is also read from outside (`envelope.rs:560`, `:1064`) — was introduced
+*by the amendments* and caught on the verification pass. Corrected at revision
+49 without reopening the ledger: it is a factual phrasing repair that touches no
+ruling, and the encapsulation conclusion it supports is unaffected because the
+field in question is a `u64` this design does not change.
+
+**Standing risks.** `sec-9` `R0` now records the general case: three of this
+design's factual claims failed external checking, none caught by the author.
+Every file:line and every count in the design is a claim to re-verify at
+implementation. `R1` (measurements taken against a moving runtime tier) is the
+specific instance.
+
+**Tradeoffs consciously accepted.**
+
+1. *The `Declaration` wire/stored split stays deferred* (`IMP-446`). Delegation
+   has zero live exposure — all 16 snapshots read `delegation = []` — and
+   protecting an untravelled path does not earn a layering change in a slice
+   already carrying four legs. The cost is honest and now stated in `sec-2`: on
+   that one path the retired-member roster is the sole guard, protecting exactly
+   the surface `sec-2` argues a roster cannot be trusted to protect alone. The
+   deferral carries a trigger, not a note.
+2. *Leg 1's promise stays conditional.* The carve-out survives on one mechanism
+   rather than two — the late watermark check, which `SPEC-029` prescribes and
+   no hoisting reaches.
+3. *No pin is written for a pass-1-clears/pass-2-fails submission.* No reachable
+   instance exists, and a pin over a manufactured predicate proves only that the
+   manufacture worked.
+
+**On the review itself.** The default reviewer changed mid-flight: the `codex`
+MCP server is dead (codex-cli 0.154.0 removed the `mcp-server` subcommand), and
+the review ran through the `codex-cli` wrapper instead. `CLAUDE.md` now records
+that and the two knobs it needs.

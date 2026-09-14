@@ -272,12 +272,15 @@ at 120 — **28 revisions away, not the four a naive subtraction gives**
 for a long time. *Dropping* would still lose on the very next write what the
 window would otherwise have kept.
 
-**`ChangeLog` is tightly encapsulated.** Its whole surface is `record`,
-`retain_window`, `covers`, `since`, and **no production code outside the type
-reads `.rows` at all** — every field read is internal (`change_log.rs:707`,
-`:721`, `:736`). The single production consumer is `render/envelope.rs:1071`,
-and it calls `since()` (`RV-365` `F-6`). The encapsulation this rests on is
-therefore tighter than an earlier draft of this section claimed.
+**`ChangeLog` is encapsulated where it counts.** Its whole *method* surface is
+`record`, `retain_window`, `covers`, `since`. One field is read from outside —
+`floor`, at `envelope.rs:560` and `:1064` — and it is a `u64` this design does
+not touch. The field that matters here is `rows`, and **no production code
+outside the type reads it at all**: every read is internal
+(`change_log.rs:707`, `:721`, `:736`). The single production consumer of the
+log's contents is `render/envelope.rs:1071`, and it calls `since()` (`RV-365`
+`F-6`). So changing `rows`' element type is contained by construction, which is
+what siting the opacity at the row depends on.
 
 So the opacity sits at the **row**:
 

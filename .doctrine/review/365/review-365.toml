@@ -14,7 +14,7 @@ ref   = "SL-259"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected same-kind replacement coverage for both act stores; observed only CheckpointActGroup is repaired"
 detail = "SL-259 design.md:169-172 and design.md:335 direct ActInvalidated emission only to CheckpointActGroup::record, and design.md:354 verifies only an undifferentiated same-kind act replacement. The second production store has the same defect: src/design_run/snapshot.rs:380-391 shows AgentDeclarationGroup::record retaining the old declaration by kind and pushing its replacement. The positive control is src/design_run/run.rs:672-708: ActRecord has both Checkpoint and Agent arms, both pass through admit_and_record, and the Agent arm calls next.declarations.record. src/design_run/run.rs:1881-1895 then includes both stores in live_acts and maps an agent declaration to the same (ActKind, DesignId) tuple before and after same-kind replacement. Consequently an agent-declaration replacement remains invisible to invalidation_rows: it emits ActRecorded through the common seam but no ActInvalidated. Leg 2's class-level truthfulness invariant is therefore not closed."
@@ -23,7 +23,7 @@ response = "Accepted. Verified independently: AgentDeclarationGroup::record (sna
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected a reachable post-mint resolved-ID refusal; observed canonical IDs cannot trip the only predicate"
 detail = "SL-259 design.md:297-307 says the two run::apply passes differ solely in Resolution and asserts that a refusal predicated on a claimed ID can clear pass 1, fail pass 2, and therefore needs hoisting. The positive-control search finds Resolution consumed at src/design_run/run.rs:359-365 (binding checkpoint IDs) and run.rs:483-490 (storing the review pass). The only refusing predicate on a bound checkpoint ID is run.rs:1556-1596: resolved_record must exist and its length must not exceed DESIGN_ID_BYTES; it is then passed through the same token bound at run.rs:1604-1610. Pass 1 already supplies the value, and every pass-2 value comes from execute_mint at src/commands/design.rs:1715-1725 as a canonical prefix-plus-u32 reference; src/design_run/bounds.rs:27-37 fixes its bound at 32 bytes, which such IDs cannot reach. The review-pass ID is stored without a value-dependent refusal. The source also orders pass 2 at commands/design.rs:1728-1729 before write_journal at :1740 and the watermark recheck at :1748, contrary to design.md:273-278's sequence. No reachable resolved-ID-dependent refusal or concrete check to hoist is identified, so DEC-250's proposed repair and Leg 1 verification have no demonstrated target; DEC-100's reachable lost-update window does not supply that missing evidence."
@@ -32,7 +32,7 @@ response = "Accepted. The provisional Resolution at commands/design.rs:1688-1701
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected the forgotten-roster floor to protect stored declarations; observed it only wraps change-log rows"
 detail = "SL-259 design.md:34-63 answers the wire/stored Declaration tension with a retired-key roster plus a floor for a genuinely unrecognised stored token, explicitly because roster maintenance is fallible. But src/design_run/delegation.rs:61-69 stores Vec<Declaration> directly inside Proposal, while src/design_run/submission.rs:122-124 deserialises Declaration with deny_unknown_fields. The only proposed floor is StoredRow/RawRow at design.md:230-258 and the code-impact table confines it to ChangeLog.rows at design.md:333-336. It cannot intercept a forgotten retired key inside Proposal.declarations: that error occurs while deserialising current snapshot state, before any change-log row fallback, and still fails the whole snapshot. The measured 16 empty delegation groups at design.md:67-71 are a point-in-time absence, not a structural guard, and design.md:406-408 explicitly allows that absence to end before the deferred split is required. Thus DEC-243 does not generalise the READABLE/EMITTABLE protection to the stored Declaration overlap it was chosen to resolve, and Leg 4's old-snapshots-readable invariant remains false once delegation stores a declaration."
@@ -41,7 +41,7 @@ response = "Accepted as stated, and the design's claim is worse than unimplement
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected degraded-row disclosure to preserve the failure reason; observed RawRow retains no cause"
 detail = "STD-003 requires a degraded read to name what was skipped and why. SL-259 design.md:230-235 proposes RawRow { revision, index, raw } after an ordered failed ChangeRow parse, but carries neither the parse error nor a classified reason. design.md:365-374 verifies parse, retention, generic disclosure, and refusal only when revision/index are missing; unlike Leg 3 at design.md:359-363, it does not pin the disclosure reason. This matters because the fallback deliberately covers distinct failures at design.md:252-258: unknown ChangeEvent, unknown PayloadKey, unknown ValueKind, and over-bound term values. Once the ordered try discards the original error, the renderer cannot satisfy STD-003's why requirement without an unmentioned second parse or classifier. The design therefore specifies tolerance but not the mandatory diagnostic half."
@@ -50,7 +50,7 @@ response = "Accepted. STD-003 requires a degraded read to disclose what was skip
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected SL-244's unreadable row to age out in four revisions; observed retention for 28 more"
 detail = "SL-259 design.md:218-224 says SL-244 is at revision 92 with floor 61 and its revision-88 row is four revisions from ageing out. The measurements are current and the arithmetic is not: .doctrine/state/slice/244/design.toml:7 records revision 92, :4214 records floor 61, and :4924-4927 records the unreadable row at revision 88. src/design_run/change_log.rs:713-721 computes floor = current_revision.saturating_sub(CHANGE_LOG_REVISIONS) + 1 and retains row.revision >= floor; src/design_run/bounds.rs:53-64 fixes CHANGE_LOG_REVISIONS at 32. Row 88 remains through current revision 119 (floor 88) and is first evicted at revision 120 (floor 89), 28 further revisions from 92, not four. The boundedness claim survives, but the asserted near-term self-healing rationale is overstated."
@@ -59,7 +59,7 @@ response = "Accepted; the arithmetic is wrong. retain_window computes floor = cu
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Expected the cited external .rows reader; observed only a since() caller"
 detail = "SL-259 design.md:226-228 and design.md:336 say src/design_run/render/envelope.rs:1071 is the only production reader of ChangeLog.rows outside the type. At that line the code is , not a .rows access. The positive-control search finds the actual field reads in src/design_run/change_log.rs:707, :721, and :736, plus snapshot test assertions at src/design_run/snapshot.rs:767-768 and :816-817; it finds no production direct field access outside ChangeLog. The encapsulation conclusion is stronger than stated, but the named source claim is stale and should cite the accessor consumer rather than a nonexistent external .rows reader."
