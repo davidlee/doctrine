@@ -119,13 +119,16 @@ this statement covers the design axis only.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-14 · design stage (locked) · 68bdc5958
+fresh-as-of: 2026-09-15 · PHASE-01 completed · 3a9b5a95e
 
 ### Produced
 
 `RV-365` (design review, concluded — 6 findings, 3 blockers, all terminal).
 `IMP-446` (deferred `Declaration` wire/stored split, trigger-bound).
 Design amendments across revisions 41-50; `DEC-243` and `DEC-250` amended.
+PHASE-01 (leg 2): `95ca9676c` closes `ISS-450`, `a4d10d216` closes `ISS-367` —
+dispose both at slice close.
+`mem.pattern.change-log.derived-difference-cannot-see-replacement`.
 
 ### Learned
 
@@ -135,8 +138,17 @@ does not catch: three of six findings were plain misstatements of the tree
 `DEC-249`'s history/state line is load-bearing in a second place nobody had
 noticed — it is what forbids widening the `DEC-251` floor to cover stored
 declarations (`RV-365` `F-3`).
+`DEC-248`'s *empty prior* under-determines the parent: a literally empty one
+emits `node_reparented` for a node that never had another parent. The create
+prior is the node its `NodeCreated` row describes (PHASE-01 `D4`).
+The create/update split hid a second silent drop of the same shape — a
+`lifecycle` declared at creation was never read (PHASE-01 `D5`), which is the
+`ISS-327` class arriving through leg 2 rather than leg 3.
 
 ### Open
 
 `ISS-361` stays open against `DEC-250`'s residual late-check window.
 `IMP-446` open, trigger-bound on first live non-empty `delegation`.
+PHASE-01 `D5` changes a refusal surface: a node declared `resolved` with no
+disposition now refuses where it used to be seated `open` silently. Worth a
+line at audit against leg 1's *error ⇒ nothing landed*.
