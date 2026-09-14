@@ -1,0 +1,29 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 29
+slug = "records-materialise-before-two-checks-that-can-still-refuse-the-apply"
+title = "Records materialise before two checks that can still refuse the apply"
+record_kind = "evidence"
+status = "captured"
+created = "2026-09-14"
+updated = "2026-09-14"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum = "In commands/design.rs::apply, the mint loop runs execute_mint for every plan — journalling an intent and materialising a knowledge record on disk — and only afterwards does the function run write_journal, recheck_watermark_before_write, and a SECOND run::apply that can itself refuse. So an authored knowledge record can exist for a revision that never landed. The two-pass structure is the intended guard and its own doc states the guarantee: pass 1 refuses 'while the authored tier is still untouched'. The guarantee holds only where pass 1 and pass 2 refuse identically — they differ solely in the Resolution (provisional ids vs claimed), so a refusal predicated on a resolved id passes pass 1 and fails pass 2, orphaning the record. recheck_watermark_before_write is the clearer hole: it is not in pass 1 at all, it reads state that can change concurrently, and it sits after the mints."
+provenance = "inspection"
+confidence = "medium"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-259"

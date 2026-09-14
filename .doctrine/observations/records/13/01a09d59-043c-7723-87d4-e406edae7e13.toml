@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a09d59-043c-7723-87d4-e406edae7e13"
+recorded_at = "2026-09-14T00:37:31.836059472Z"
+kind = "friction"
+summary = "/design: a pruned inquiry node is still reported in the blockers list"
+detail = "On SL-259's run at revision 12, inq-10 has lifecycle=pruned (totals report pruned=1, open=12) and still appears in design show's blockers list as 'inq-10 - needs inq-8'. A pruned node is out of the graph's live reasoning, so listing it among blockers overstates the outstanding work an agent reads off the turn envelope — 9 blockers reported where 8 are live. Benign but misleading; the blockers projection appears to filter on needs-edges without filtering on lifecycle."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
