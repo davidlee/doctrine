@@ -1,0 +1,209 @@
+# Implementation plan for SL-259 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-259"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber, so the id
+# sequence goes non-monotonic after a split and that is expected. Criterion ids
+# are local to their phase, bare, and equally immutable (glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance. The prefix is
+# the only mode marker; there is no mode field. Reference a criterion from
+# another phase phase-qualified (PHASE-03/EX-8) — bare EX-8 is ambiguous.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Truthful rows at the seam"
+objective = """
+Leg 2 (`DEC-248`): a material change is emitted by the code that performs it. \
+Node creation reaches the same needs diff the update path runs by diffing \
+against an empty prior instead of returning early, and BOTH retain-by-kind act \
+stores emit their replacement row. Closes `ISS-450` and `ISS-367`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "The design is locked at revision 57 and `RV-365` is concluded." },
+  { id = "EN-2", text = "`SL-256`'s unified admit-store-emit seam (`DEC-238`) is in place: `admit_and_record` at `run.rs:672-708` carries both `ActRecord` arms." },
+  { id = "EN-3", text = "Re-verified against the tree: `run.rs:1294` returns a lone `NodeCreated` before the needs diff at `run.rs:1330`; `CheckpointActGroup::record` and `AgentDeclarationGroup::record` both retain-by-kind (`snapshot.rs:382-393`)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`declare_node`'s create branch no longer returns early: it diffs the declared state against an empty prior and reaches the same row-producing code the update branch runs. The create/update branch split on the diff is gone." },
+  { id = "EX-2", text = "`CheckpointActGroup::record` emits `ActInvalidated` for the act it displaces — at the retain-then-push site that knows a replacement happened, not by a later set difference." },
+  { id = "EX-3", text = "`AgentDeclarationGroup::record` emits `ActInvalidated` on the identical retain-by-kind. Neither store is repaired without the other (`RV-365` `F-1`)." },
+  { id = "EX-4", text = "`live_acts` / `invalidation_rows` stop carrying an invalidation claim the derivation cannot keep; `live_acts`' doc comment states only what the derivation actually guarantees." },
+  { id = "EX-5", text = "No row is emitted twice: the seam is the sole emitter, and any derived row that duplicated it is removed rather than left alongside." },
+]
+verification = [
+  { id = "VT-1", expects = "A `needs` edge declared at node CREATION emits `needs_added`, with the control being the same edge declared on an existing node — the distinction that separated `ISS-450` from a dropped key.", test_file = "src/design_run/tests.rs", keywords = ["a_needs_edge_declared_at_node_creation_emits_its_row", "ChangeEvent::NeedsAdded"], waived = false },
+  { id = "VT-2", expects = "A same-kind CHECKPOINT act replacement emits `ActInvalidated`.", test_file = "src/design_run/tests.rs", keywords = ["a_same_kind_checkpoint_act_replacement_emits_its_invalidation", "ChangeEvent::ActInvalidated"], waived = false },
+  { id = "VT-3", expects = "A same-kind AGENT DECLARATION replacement emits `ActInvalidated` — pinned separately per act store, because a single undifferentiated case is what let one store go unrepaired (`sec-8` leg 2).", test_file = "src/design_run/tests.rs", keywords = ["a_same_kind_agent_declaration_replacement_emits_its_invalidation"], waived = false },
+  { id = "VA-1", expects = "Grep confirms no remaining retain-by-kind act store emits no row: every `retain(|held| held.act.kind() != …)` site in `snapshot.rs` is covered by EX-2 or EX-3." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Degrade history, disclose it"
+objective = """
+Leg 4 (`DEC-249`, `DEC-251`): a change-log row carrying an unrecognised token is \
+retained opaquely AT THE ROW and disclosed as unreadable with its classified \
+reason, rather than failing the file. `ChangeEvent` is deliberately untouched. \
+Closes `ISS-315`. Storage and disclosure land together so `STD-003` is never \
+violated at a phase boundary.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — the emission sites are settled before the row's storage type changes under them." },
+  { id = "EN-2", text = "Re-verified: `ChangeLog`'s method surface is exactly `record` / `retain_window` / `covers` / `since`; the only external field read is `floor` (`envelope.rs:560`, `:1064`), and the sole production consumer of the contents is `envelope.rs:1071` via `since()` (`RV-365` `F-6`)." },
+  { id = "EN-3", text = "Known test-only readers of `.rows` that the type change will touch: `snapshot.rs:767`, `:816` and `commands/design.rs:2878`. These are tests, not production — `sec-5`'s encapsulation claim is about production and holds." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`change_log.rs` carries `enum StoredRow { Read(ChangeRow), Unreadable(RawRow) }`, `struct RawRow { revision, index, raw, why }` and `enum Unreadable { Event, PayloadKey, ValueKind, TermTooLong }`; `ChangeLog.rows` is `Vec<StoredRow>`." },
+  { id = "EX-2", text = "`record`, `retain_window`, `covers` and `since` handle both arms. Retention and ordering read `revision`/`index` off either arm identically." },
+  { id = "EX-3", text = "Deserialisation is an ORDERED TRY that classifies the cause at the point of failure — the `why` is captured where it is known, never re-derived by the renderer (`RV-365` `F-4`, `STD-003`)." },
+  { id = "EX-4", text = "`revision` and `index` stay REQUIRED on `RawRow`: a structurally broken row still refuses. The tolerance is for vocabulary, never for rows that cannot be placed." },
+  { id = "EX-5", text = "`render/envelope.rs` discloses each degraded row as unreadable AND names its `why`. A degraded read is disclosed with what was skipped and why (`STD-003`)." },
+  { id = "EX-6", text = "`ChangeEvent` is untouched: still closed, `Copy`, `const fn as_str(self) -> &'static str`, and both `const _: ()` proofs at `change_log.rs:98` and `:113` intact. `sec-9` `R3` — `is_subset(&EMITTABLE, &READABLE)` is the only reader of `EMITTABLE` in `src/`; deleting it passes `cargo check` and fails `cargo test --bin doctrine`." },
+  { id = "EX-7", text = "The opacity reaches change-log rows and nothing else. The delegation group's `Vec<Declaration>` is NOT given `StoredRow` treatment — `DEC-249` puts stored state on the refusing side (`RV-365` `F-3`); `IMP-446` carries that repair." },
+]
+verification = [
+  { id = "VT-1", expects = "`snapshot::parse` over a LITERAL LEGACY FRAGMENT carrying a retired `ChangeEvent` token parses, retains the row, and classifies it `Unreadable::Event`. Copy the shape of `a_snapshot_written_before_the_policy_reads_as_human_only` (`snapshot.rs:677`). A unit round-trip over the inner type does NOT discharge this.", test_file = "src/design_run/snapshot.rs", keywords = ["a_snapshot_carrying_a_retired_change_event_token_retains_the_row", "Unreadable::Event"], waived = false },
+  { id = "VT-2", expects = "A change-log row missing `revision` (or `index`) still REFUSES the parse — tolerance is not leniency about row shape (`sec-5`).", test_file = "src/design_run/snapshot.rs", keywords = ["a_change_log_row_missing_its_revision_is_still_refused"], waived = false },
+  { id = "VT-3", expects = "The rendered envelope discloses a degraded row WITH its reason, and a wrong reason fails the test — pinned the way leg 3 pins a refusal's reason (`sec-8` leg 4).", test_file = "src/design_run/render/envelope.rs", keywords = ["a_degraded_row_is_disclosed_with_the_reason_it_was_unreadable", "Unreadable"], waived = false },
+  { id = "VA-1", expects = "Behaviour preservation: `ChangeEvent`'s existing suites are green UNCHANGED — `git diff` shows no edit to them. That is the evidence `DEC-251` sited the opacity correctly and the gate `AGENTS.md` requires when shared machinery moves." },
+  { id = "VA-2", expects = "`doctrine design show 244` reads. It fails today; that failure is `ISS-315`." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Refusal driven by the contract"
+objective = """
+Leg 3, key axis (`DEC-244`): unknown keys at EVERY nesting level are refused by \
+walking the submitted JSON against `payload_contract`'s pinned key inventory \
+before deserialisation — reaching the three places `deny_unknown_fields` \
+structurally cannot. Closes `ISS-333` and `ISS-328`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete." },
+  { id = "EN-2", text = "Re-verified: the contract table carries EIGHT `UnknownKeys::SilentlyDropped` rows, not the nine the design states — `AcceptanceDeclaration`, `StageDeclaration`, `DischargeDeclaration`, `AdoptAuthored`, `TraversalDeclaration`, `CreateRecord`, `ReviewPolicyDeclaration`, `ApplyRequest` (`payload_contract.rs:1082`, `:1102`, `:1126`, `:1156`, `:1180`, `:1218`, `:1268`, `:1453`). `sec-9` `R0` predicted exactly this class of error." },
+  { id = "EN-3", text = "Re-verified: `payload_contract.rs:3710`'s existing test asserts a rendered header CONTAINS the `silently-dropped` token. It is a pin on the defect and must invert with the rule." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A walk over the submitted JSON against `payload_contract`'s key inventory refuses any key the inventory does not hold, at every nesting level." },
+  { id = "EX-2", text = "The walk reaches all three places the serde attribute cannot: `ApplyRequest`'s `#[serde(flatten)]` envelope, the internally-tagged enums (`Provenance`, `Dispose`, `DelegationAct`), and untagged `WireFacetValue`." },
+  { id = "EX-3", text = "All eight `SilentlyDropped` contract rows become `UnknownKeys::Refused`; the rendering states a rule rather than disclosing a defect, and no row renders the `silently-dropped` token." },
+  { id = "EX-4", text = "The refusal NAMES what was expected — the offending key and where it was admitted. Refusal is a property of the request against schema and subject state, never of whether anything changed (`DEC-245`)." },
+  { id = "EX-5", text = "Layering (`ADR-001`): `payload_contract` stays a leaf and the walk sits at or below the command boundary that parses; no command-tier concern is pulled into the leaf. `design_run` tests do not name `crate::` (`mem.pattern.design-run.leaf-rule-binds-tests`)." },
+  { id = "EX-6", text = "No second schema is introduced. The walk single-sources off the existing inventory, which `sec-8` pin 1 already proves equal to the wire shape against a fully populated value's serde output." },
+]
+verification = [
+  { id = "VT-1", expects = "An unknown TOP-LEVEL key — inside `ApplyRequest`'s flatten envelope, the case `deny_unknown_fields` cannot reach and the one a caller hand-authors — is refused, with the REASON pinned, not merely the exit code (`ISS-333`).", test_file = "src/design_run/payload_contract.rs", keywords = ["an_unknown_top_level_key_inside_the_flatten_envelope_is_refused"], waived = false },
+  { id = "VT-2", expects = "An unknown key NESTED inside `CreateRecord` is refused with its reason (`ISS-328`).", test_file = "src/design_run/payload_contract.rs", keywords = ["an_unknown_key_nested_inside_create_record_is_refused"], waived = false },
+  { id = "VT-3", expects = "An unknown key inside an INTERNALLY-TAGGED enum variant is refused with its reason — the second place the attribute cannot reach.", test_file = "src/design_run/payload_contract.rs", keywords = ["an_unknown_key_inside_an_internally_tagged_variant_is_refused"], waived = false },
+  { id = "VT-4", expects = "Every contract row now declares `UnknownKeys::Refused`; the inverted successor to the `silently-dropped` header pin holds the class rather than the instances.", test_file = "src/design_run/payload_contract.rs", keywords = ["every_payload_contract_row_refuses_unknown_keys", "UnknownKeys::Refused"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "The state axis"
+objective = """
+Leg 3, state axis (`DEC-246`): a key honoured in one subject state and silently \
+dropped in the other is refused. Four cells — `provenance` (honoured on create), \
+`lifecycle` (honoured on update), `concerns` and `blocking` (honoured when a \
+finding is raised). Closes `ISS-327`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete — the key axis refuses first, so the state axis is a second rule on the same admission surface rather than a rule plus an exception." },
+  { id = "EN-2", text = "Re-verified: the four cells are still the four cells, and `Sparse::Omitted` still means persist and is still reachable by not sending the key." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "All four state-inert cells are refused, naming the key and the subject state that makes it inert." },
+  { id = "EX-2", text = "Admission asks whether the subject is already held, reading the next snapshot — the same rule as `SL-249`'s kind-axis table on a second axis, not a special case beside it." },
+  { id = "EX-3", text = "`Declaration::WIRE_KEYS`' kind-axis table gains its state-axis counterpart in `submission.rs` (`sec-7`)." },
+  { id = "EX-4", text = "A PRESENT value is never read as persistence. `Sparse::Omitted` remains the only way to persist; omission behaviour is unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "Each of the four cells — `provenance` on update, `lifecycle` on create, `concerns` and `blocking` when no finding is raised — yields a typed refusal whose REASON is pinned. A refusal that fires for the wrong reason is a test passing for the wrong reason (`sec-8` leg 3).", test_file = "src/design_run/tests.rs", keywords = ["a_key_inert_at_the_subjects_state_is_refused", "PayloadKey"], waived = false },
+  { id = "VT-2", expects = "The control: the same four keys are HONOURED at the state that honours them, so the refusal has not been widened into a ban.", test_file = "src/design_run/tests.rs", keywords = ["the_same_keys_are_honoured_at_the_state_that_honours_them"], waived = false },
+  { id = "VT-3", expects = "`blocking` specifically — the flag the lock gate reads — is refused rather than silently discarded when the subject is not a raised finding. This is the cell that defeated the omission-persist alternative (`sec-3`).", test_file = "src/design_run/tests.rs", keywords = ["correcting_blocking_on_an_unraised_finding_is_refused"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Payload term kinds"
+objective = """
+Leg 3, value axis (`DEC-247`): a `PayloadTerm`'s constructed `ValueKind` is \
+checked against the kind `payload_terms()` declares for its event, and the one \
+live divergence is ruled — `StepDischarged`'s `Outcome` declaration moves from \
+`Token` to `Label`. Closes `ISS-290`. Guard the class, not just the instance.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete." },
+  { id = "EN-2", text = "Re-verified — the divergence is live and is exactly one: `change_log.rs:411` declares `(PayloadKey::Outcome, ValueKind::Token)` while `run.rs:1846` constructs `PayloadTerm::label(PayloadKey::Outcome, …)`." },
+  { id = "EN-3", text = "Re-verified — `PayloadTerm::admit` (`change_log.rs:609`) does NOT have the event in scope; `ChangeEvent::ordered` (`change_log.rs:422`) does, and already walks `payload_terms()`. The check needs a seam that sees both." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A term whose constructed `ValueKind` differs from its event's declared kind is refused at construction, at a seam that has both the event and the term in scope." },
+  { id = "EX-2", text = "`StepDischarged`'s `Outcome` is declared `ValueKind::Label` — `Outcome` is a closed two-member vocabulary, so `Label` is the precise kind and the DECLARATION was the error, matching `CheckpointDisposed`'s `Disposition`." },
+  { id = "EX-3", text = "The admission bounds follow the corrected kind: `Label` bounds at `DESIGN_STAGE_LABEL_BYTES` (16), not `DESIGN_ID_BYTES` (32)." },
+  { id = "EX-4", text = "The class is guarded, not the instance: any future declaration/construction divergence is refused without a new case. Fixing the instance without guarding the class is how this survived `SL-233` `PHASE-08`." },
+]
+verification = [
+  { id = "VT-1", expects = "A term constructed at a kind its event's `payload_terms()` declaration does not name is refused, with the reason pinned.", test_file = "src/design_run/tests.rs", keywords = ["a_term_constructed_at_an_undeclared_kind_is_refused", "ValueKind"], waived = false },
+  { id = "VT-2", expects = "`StepDischarged` declares its `Outcome` term as `ValueKind::Label`, and the construction at `run.rs` agrees with the declaration.", test_file = "src/design_run/change_log.rs", keywords = ["(PayloadKey::Outcome, ValueKind::Label)"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Hoist the refusable ahead of the mints"
+objective = """
+Leg 1 (`DEC-250`): hoist every check that CAN be hoisted ahead of the mint loop, \
+so the two-pass doc's claim — pass 1 refuses while the authored tier is \
+untouched — is true BY CONSTRUCTION rather than by the accident that today's \
+predicates do not discriminate between a provisional id and a claimed one. \
+Hoisting on principle, with no witness behind it; last, so it covers the checks \
+PHASE-03..05 added.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03, PHASE-04 and PHASE-05 complete — the hoist must cover the checks they add, which is why leg 1 lands last despite being leg 1." },
+  { id = "EN-2", text = "Re-verified against the tree — `apply`'s order is `serde_json::from_str` (`design.rs:1624`), `plan_checkpoints` (`:1691`), pass 1 against provisional ids (`:1702`), `execute_mint` (`:1719`), pass 2 (`:1728`), `write_journal` (`:1740`), `recheck_watermark_before_write` (`:1748`), `write_snapshot` (`:1751`). This is `RV-365` `F-2`'s corrected order, not the earlier draft's." },
+  { id = "EN-3", text = "`SPEC-029` owns the reserve-then-journal protocol. No failure path deletes authored knowledge to repair a runtime error, and unwinding materialisation on refusal is prohibited by name — the hoist moves CHECKS earlier, it never adds a second writer of the authored tier." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Every check that can run ahead of `execute_mint` does. Pass 2 carries no refusal predicate that pass 1 does not also evaluate." },
+  { id = "EX-2", text = "The two-pass doc comment states what the code now guarantees structurally, and no longer rests on the coincidence that no pass-2 predicate is value-dependent." },
+  { id = "EX-3", text = "On a refused or failed submission: the revision, the receipt and the change log are unmoved, and the submission_id is not consumed." },
+  { id = "EX-4", text = "The late watermark window is the SOLE named carve-out, documented as such: `recheck_watermark_before_write` reads concurrently-mutable state, runs after `execute_mint` has materialised records, and no hoisting reaches it (`SPEC-029`, `DEC-100` as precedent)." },
+  { id = "EX-5", text = "NOT done, deliberately: no test manufactures a submission that clears pass 1 and fails pass 2. `sec-6` records that no such instance is reachable, so a pin over a manufactured predicate proves only that the manufacture worked (`RV-365` `F-2`). `ISS-361` stays open against the residual window and is NOT closed on a plausible story." },
+]
+verification = [
+  { id = "VT-1", expects = "A refused submission leaves the snapshot bytes, the revision and the receipts unchanged — the whole of leg 1's promise outside the named window.", test_file = "src/commands/design.rs", keywords = ["a_refused_submission_leaves_the_snapshot_bytes_unchanged"], waived = false },
+  { id = "VT-2", expects = "The late-check window is exercised for RECOVERABILITY THROUGH THE JOURNAL — a watermark divergence abandons the write without advancing the run while journalled effects remain recoverable. Not for non-occurrence: a test asserting the window cannot happen would assert something `SPEC-029` does not promise (`sec-8` leg 1).", test_file = "src/commands/design.rs", keywords = ["a_late_watermark_divergence_abandons_the_write_and_stays_recoverable"], waived = false },
+  { id = "VA-1", expects = "Structural check of the hoist, which is the claim `DEC-250` actually makes: read `apply` from `:1624` to `write_snapshot` and confirm no refusal predicate remains between `execute_mint` and pass 2's completion that could have been evaluated before `execute_mint`. Record the enumeration, not a verdict." },
+]
+specs        = []
+requirements = []
