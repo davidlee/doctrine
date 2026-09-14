@@ -105,20 +105,25 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-02 complete." },
   { id = "EN-2", text = "Re-verified: the contract table carries EIGHT `UnknownKeys::SilentlyDropped` rows, not the nine the design states — `AcceptanceDeclaration`, `StageDeclaration`, `DischargeDeclaration`, `AdoptAuthored`, `TraversalDeclaration`, `CreateRecord`, `ReviewPolicyDeclaration`, `ApplyRequest` (`payload_contract.rs:1082`, `:1102`, `:1126`, `:1156`, `:1180`, `:1218`, `:1268`, `:1453`). `sec-9` `R0` predicted exactly this class of error." },
   { id = "EN-3", text = "Re-verified: `payload_contract.rs:3710`'s existing test asserts a rendered header CONTAINS the `silently-dropped` token. It is a pin on the defect and must invert with the rule." },
+  { id = "EN-4", text = "Re-verified: `WireFacetValue` is `List(Vec<String>) | Text(String)` (`submission.rs:254-257`) — untagged with NO object variant, so it carries no keys and the walk has nothing to check inside it. The design names it as a place `deny_unknown_fields` cannot be APPLIED, which is true and is a different fact from a nesting level the walk must reach." },
+  { id = "EN-5", text = "Re-verified: `payload_contract` declares map keys in two forms (`MapKey`, `:397-416`). `Of(ty)` keys are values of a wire type; `Extern { region, selector }` keys come from a vocabulary this leaf has crate out-degree zero to — `CreateRecord.facet`'s legal keys are chosen by the VALUE of its sibling `kind` field. A walk that treats every map key as a closed inventory refuses every facet name." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "A walk over the submitted JSON against `payload_contract`'s key inventory refuses any key the inventory does not hold, at every nesting level." },
-  { id = "EX-2", text = "The walk reaches all three places the serde attribute cannot: `ApplyRequest`'s `#[serde(flatten)]` envelope, the internally-tagged enums (`Provenance`, `Dispose`, `DelegationAct`), and untagged `WireFacetValue`." },
+  { id = "EX-2", text = "The walk reaches the object nesting levels the serde attribute cannot: `ApplyRequest`'s `#[serde(flatten)]` envelope and the internally-tagged enums (`Provenance`, `Dispose`, `DelegationAct`). `WireFacetValue` needs no reach — it has no object variant (EN-4), and saying otherwise sends an implementer hunting for work that does not exist." },
   { id = "EX-3", text = "All eight `SilentlyDropped` contract rows become `UnknownKeys::Refused`; the rendering states a rule rather than disclosing a defect, and no row renders the `silently-dropped` token." },
   { id = "EX-4", text = "The refusal NAMES what was expected — the offending key and where it was admitted. Refusal is a property of the request against schema and subject state, never of whether anything changed (`DEC-245`)." },
   { id = "EX-5", text = "Layering (`ADR-001`): `payload_contract` stays a leaf and the walk sits at or below the command boundary that parses; no command-tier concern is pulled into the leaf. `design_run` tests do not name `crate::` (`mem.pattern.design-run.leaf-rule-binds-tests`)." },
   { id = "EX-6", text = "No second schema is introduced. The walk single-sources off the existing inventory, which `sec-8` pin 1 already proves equal to the wire shape against a fully populated value's serde output." },
+  { id = "EX-7", text = "A map key is judged by the form its contract declares, never as a struct key. `MapKey::Of(ty)` validates the key's SHAPE against `ty`; `MapKey::Extern` keys are not adjudicated from inside the leaf — the walk leaves them to the seam that can resolve the region, and `CreateRecord.facet` keeps accepting the facet names its `kind` names. Refusing them would be the defect this phase exists to remove, inverted." },
+  { id = "EX-8", text = "The extern case decides where the walk sits. `ADR-001` bars the leaf from importing `crate::knowledge`, so either the walk runs at the command boundary that can supply the resolved key set, or it is a leaf function taking that set as an injected input. Whichever is chosen is stated at the seam, not left to the reader." },
 ]
 verification = [
   { id = "VT-1", expects = "An unknown TOP-LEVEL key — inside `ApplyRequest`'s flatten envelope, the case `deny_unknown_fields` cannot reach and the one a caller hand-authors — is refused, with the REASON pinned, not merely the exit code (`ISS-333`).", test_file = "src/design_run/payload_contract.rs", keywords = ["an_unknown_top_level_key_inside_the_flatten_envelope_is_refused"], waived = false },
   { id = "VT-2", expects = "An unknown key NESTED inside `CreateRecord` is refused with its reason (`ISS-328`).", test_file = "src/design_run/payload_contract.rs", keywords = ["an_unknown_key_nested_inside_create_record_is_refused"], waived = false },
   { id = "VT-3", expects = "An unknown key inside an INTERNALLY-TAGGED enum variant is refused with its reason — the second place the attribute cannot reach.", test_file = "src/design_run/payload_contract.rs", keywords = ["an_unknown_key_inside_an_internally_tagged_variant_is_refused"], waived = false },
   { id = "VT-4", expects = "Every contract row now declares `UnknownKeys::Refused`; the inverted successor to the `silently-dropped` header pin holds the class rather than the instances.", test_file = "src/design_run/payload_contract.rs", keywords = ["every_payload_contract_row_refuses_unknown_keys", "UnknownKeys::Refused"], waived = false },
+  { id = "VT-5", expects = "A `CreateRecord.facet` map carrying legitimate facet names is ACCEPTED — the negative control on EX-7, and the one that catches a walk which closed a map it should have left open.", test_file = "src/design_run/payload_contract.rs", keywords = ["facet_map_keys_are_not_judged_as_struct_keys"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -134,7 +139,7 @@ finding is raised). Closes `ISS-327`.
 """
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-03 complete — the key axis refuses first, so the state axis is a second rule on the same admission surface rather than a rule plus an exception." },
-  { id = "EN-2", text = "Re-verified: the four cells are still the four cells, and `Sparse::Omitted` still means persist and is still reachable by not sending the key." },
+  { id = "EN-2", text = "Re-verified: the four cells are still the four cells — `provenance` (`submission.rs:138`), `lifecycle` (`:143`), `concerns` (`:164`), `blocking` (`:171`), named as constants at `:570-577` — and `:644-647` already inspects `provenance.is_some()` / `lifecycle.is_some()` on the kind axis, which is the surface the state axis extends. `Sparse::Omitted` still means persist and is still reachable by not sending the key." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "All four state-inert cells are refused, naming the key and the subject state that makes it inert." },
@@ -163,6 +168,7 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-04 complete." },
   { id = "EN-2", text = "Re-verified — the divergence is live and is exactly one: `change_log.rs:411` declares `(PayloadKey::Outcome, ValueKind::Token)` while `run.rs:1846` constructs `PayloadTerm::label(PayloadKey::Outcome, …)`." },
   { id = "EN-3", text = "Re-verified — `PayloadTerm::admit` (`change_log.rs:609`) does NOT have the event in scope; `ChangeEvent::ordered` (`change_log.rs:422`) does, and already walks `payload_terms()`. The check needs a seam that sees both." },
+  { id = "EN-4", text = "Re-verified, and it closes a cross-phase risk rather than raising one: narrowing `Outcome` from `Token` (32 bytes) to `Label` (16) cannot newly degrade a stored row, because `outcome_label` (`run.rs:1852-1857`) returns only `attested` and `skipped` — 8 and 7 bytes. No `PHASE-02` `Unreadable::TermTooLong` fallout." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "A term whose constructed `ValueKind` differs from its event's declared kind is refused at construction, at a seam that has both the event and the term in scope." },
@@ -192,6 +198,7 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-03, PHASE-04 and PHASE-05 complete — the hoist must cover the checks they add, which is why leg 1 lands last despite being leg 1." },
   { id = "EN-2", text = "Re-verified against the tree — `apply`'s order is `serde_json::from_str` (`design.rs:1624`), `plan_checkpoints` (`:1691`), pass 1 against provisional ids (`:1702`), `execute_mint` (`:1719`), pass 2 (`:1728`), `write_journal` (`:1740`), `recheck_watermark_before_write` (`:1748`), `write_snapshot` (`:1751`). This is `RV-365` `F-2`'s corrected order, not the earlier draft's." },
   { id = "EN-3", text = "`SPEC-029` owns the reserve-then-journal protocol. No failure path deletes authored knowledge to repair a runtime error, and unwinding materialisation on refusal is prohibited by name — the hoist moves CHECKS earlier, it never adds a second writer of the authored tier." },
+  { id = "EN-4", text = "Re-verified — the late-check window is ALREADY PINNED, twice: `edit_in_prewrite_window_abandons_the_write` (`design.rs:2838`) asserts the snapshot file is byte-identical and the run advanced no stage, and `checkpoint_effects_survive_an_abandoned_write_without_duplicate` (`:2887`) asserts journalled effects remain, are recoverable through the submission-keyed journal, and produce no duplicate on retry. That is `sec-8` leg 1's recoverability requirement, discharged. This phase EXTENDS those pins; it does not write parallel ones." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "Every check that can run ahead of `execute_mint` does. Pass 2 carries no refusal predicate that pass 1 does not also evaluate." },
@@ -201,8 +208,8 @@ exit_criteria = [
   { id = "EX-5", text = "NOT done, deliberately: no test manufactures a submission that clears pass 1 and fails pass 2. `sec-6` records that no such instance is reachable, so a pin over a manufactured predicate proves only that the manufacture worked (`RV-365` `F-2`). `ISS-361` stays open against the residual window and is NOT closed on a plausible story." },
 ]
 verification = [
-  { id = "VT-1", expects = "A refused submission leaves the snapshot bytes, the revision and the receipts unchanged — the whole of leg 1's promise outside the named window.", test_file = "src/commands/design.rs", keywords = ["a_refused_submission_leaves_the_snapshot_bytes_unchanged"], waived = false },
-  { id = "VT-2", expects = "The late-check window is exercised for RECOVERABILITY THROUGH THE JOURNAL — a watermark divergence abandons the write without advancing the run while journalled effects remain recoverable. Not for non-occurrence: a test asserting the window cannot happen would assert something `SPEC-029` does not promise (`sec-8` leg 1).", test_file = "src/commands/design.rs", keywords = ["a_late_watermark_divergence_abandons_the_write_and_stays_recoverable"], waived = false },
+  { id = "VT-1", expects = "A refused submission leaves the snapshot bytes, the revision and the receipts unchanged, and does not consume its `submission_id` — the whole of leg 1's promise outside the named window. Copy the both-halves shape of `edit_in_prewrite_window_abandons_the_write`: asserting the error alone does not prove the write was abandoned.", test_file = "src/commands/design.rs", keywords = ["a_refused_submission_leaves_the_snapshot_bytes_unchanged"], waived = false },
+  { id = "VT-2", expects = "The late-check window stays pinned for RECOVERABILITY THROUGH THE JOURNAL across the hoist — the two existing pins (EN-4) still hold, extended if the hoist moves what runs inside the window. Not for non-occurrence: a test asserting the window cannot happen would assert something `SPEC-029` does not promise (`sec-8` leg 1). Do not author a third test beside these two.", test_file = "src/commands/design.rs", keywords = ["edit_in_prewrite_window_abandons_the_write", "checkpoint_effects_survive_an_abandoned_write_without_duplicate"], waived = false },
   { id = "VA-1", expects = "Structural check of the hoist, which is the claim `DEC-250` actually makes: read `apply` from `:1624` to `write_snapshot` and confirm no refusal predicate remains between `execute_mint` and pass 2's completion that could have been evaluated before `execute_mint`. Record the enumeration, not a verdict." },
 ]
 specs        = []

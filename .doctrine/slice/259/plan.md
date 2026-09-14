@@ -52,6 +52,50 @@ scripts remain broken, so no refresh round was run. The slice's seven
 `design-target` selectors were checked against the tree and every one still
 names a live path.
 
+## What the critical pass changed
+
+The plan was written, then read back against the tree a second time. Four of its
+assumptions were checked; all four were wrong or incomplete, and two materially
+so. They are recorded here because the corrections are more useful than the
+first draft was.
+
+**`WireFacetValue` needs no reach.** The design lists it beside the flatten
+envelope and the internally-tagged enums as somewhere `deny_unknown_fields`
+cannot go. True — but it is `List(Vec<String>) | Text(String)`, with no object
+variant, so it holds no keys for a key walk to check. The first draft copied the
+design's list into an exit criterion and would have sent an implementer looking
+for work that does not exist.
+
+**A map key is not a struct key, and one map's keys live outside the leaf.**
+`payload_contract` declares map keys in two forms. `MapKey::Of(ty)` keys are
+values of a wire type. `MapKey::Extern { region, selector }` keys come from a
+vocabulary the leaf has crate out-degree zero to — `CreateRecord.facet`'s legal
+keys are chosen by the *value* of its sibling `kind` field. A walk that treats
+every map key as a closed inventory refuses every facet name, which is this
+slice's own defect inverted: refusing input the engine would have acted on.
+`PHASE-03` gains `EX-7` and `EX-8` for it, and a `VT-5` negative control.
+
+This is also the one place the plan makes a judgement the design did not spell
+out. `sec-3` states the rule — `payload_contract` is a leaf, the walk sits *at or
+below the command boundary that parses* — but does not enumerate the extern case.
+`EX-8` requires the implementer to state which seam they chose rather than
+discover the constraint mid-phase. It is a mechanism choice inside a rule the
+design already fixed, not a reopened decision.
+
+**The late-check window is already pinned, twice.** `PHASE-06`'s first draft
+commissioned a new test for journal recoverability.
+`edit_in_prewrite_window_abandons_the_write` and
+`checkpoint_effects_survive_an_abandoned_write_without_duplicate` already assert
+exactly `sec-8` leg 1's requirement — snapshot byte-identical, run unadvanced,
+journalled effects recoverable, no duplicate on retry. `PHASE-06` now extends
+them and is explicitly forbidden from authoring a third beside them.
+
+**One cross-phase risk was raised and then closed.** Narrowing `Outcome` from
+`Token` (32 bytes) to `Label` (16) in `PHASE-05` could in principle make an
+already-stored row fail its admission bound and degrade under `PHASE-02`'s
+`Unreadable::TermTooLong`. It cannot: `outcome_label` returns only `attested`
+and `skipped`. Recorded as `PHASE-05` `EN-4` so it is not re-raised at audit.
+
 ## Sequencing & Rationale
 
 The legs are *not* planned in their numbered order, and the reason is a
@@ -84,6 +128,13 @@ before `PHASE-03`..`PHASE-05` would hoist a check set those phases then extend,
 and the exit criterion would be satisfied at the moment it was written and false
 by the end of the slice. Leg 1 is the last phase because it is a statement about
 all the others.
+
+**All six phases are serial.** They are not dispatch-parallelisable: the file
+sets overlap at `snapshot.rs` (`PHASE-01`, `PHASE-02`), at `change_log.rs`
+(`PHASE-02`, `PHASE-05`) and at `commands/design.rs` (`PHASE-03`, `PHASE-06`),
+and three of the orderings above are true dependencies rather than preferences.
+An orchestrator looking for file-disjoint phases to run in parallel will not
+find any here.
 
 ## What this plan deliberately does not do
 
