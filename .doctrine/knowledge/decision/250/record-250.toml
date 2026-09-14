@@ -29,5 +29,17 @@ supersedes    = []   # record ids this one replaces (set by doctrine supersede)
 superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
 
 [[relation]]
+label = "references"
+role = "concerns"
+descriptor = "SPEC-029's reserve-then-journal and watermark responsibilities govern this ruling"
+target = "SPEC-029"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "DEC-100 records the analogous consciously-tolerated late-write window"
+target = "DEC-100"
+
+[[relation]]
 label = "shapes"
 target = "SL-259"
