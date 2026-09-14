@@ -358,10 +358,22 @@ impl CheckpointActGroup {
     /// Kind-ordered on the way in, so an unrelated re-record cannot churn the
     /// snapshot's bytes — the serialisation rule [`SectionGroup::upsert`]
     /// already follows for ids.
-    pub(crate) fn record(&mut self, act: CheckpointAct) {
-        self.acts.retain(|held| held.act != act.act);
+    ///
+    /// **Returns the act it displaced**, because this is the only code that
+    /// knows one died: the replacement takes the same id the kind gives it, so
+    /// no later before/after difference over the recorded set can see it
+    /// (`ISS-367`, `DEC-248`). The caller turns that into its change row — the
+    /// group is storage, and giving it the log's vocabulary for one row's sake
+    /// would couple the two.
+    pub(crate) fn record(&mut self, act: CheckpointAct) -> Option<CheckpointAct> {
+        let displaced = self
+            .acts
+            .iter()
+            .position(|held| held.act == act.act)
+            .map(|at| self.acts.remove(at));
         self.acts.push(act);
         self.acts.sort_by_key(|held| held.act);
+        displaced
     }
 }
 
@@ -384,11 +396,21 @@ impl AgentDeclarationGroup {
     /// displaces the first however its blocking set differs. Two live ones would
     /// make *which did the user confirm* ambiguous, and removing that ambiguity
     /// is what the confirmation link exists for.
-    pub(crate) fn record(&mut self, declaration: AgentDeclaration) {
-        self.declarations
-            .retain(|held| held.act.kind() != declaration.act.kind());
+    ///
+    /// **Returns the declaration it displaced**, on
+    /// [`CheckpointActGroup::record`]'s grounds and for the same row. Both
+    /// stores are repaired or neither is: an earlier draft repaired one and left
+    /// the other, which is the instance-by-instance fix `DEC-248` exists to
+    /// replace (`RV-365` `F-1`).
+    pub(crate) fn record(&mut self, declaration: AgentDeclaration) -> Option<AgentDeclaration> {
+        let displaced = self
+            .declarations
+            .iter()
+            .position(|held| held.act.kind() == declaration.act.kind())
+            .map(|at| self.declarations.remove(at));
         self.declarations.push(declaration);
         self.declarations.sort_by_key(|held| held.act.kind());
+        displaced
     }
 }
 

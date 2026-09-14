@@ -379,7 +379,7 @@ pub(crate) fn apply(
     // the fingerprint of the record the engine has just written, so both arrive in
     // one submission with no caller-computed digest (design `sec-4`).
     if let Some(declared) = request.agent_declaration.as_ref() {
-        pending.push(record_declaration(&mut next, declared, derived)?);
+        pending.extend(record_declaration(&mut next, declared, derived)?);
     }
     if let Some(declared) = request.checkpoint_act.as_ref() {
         pending.extend(record_act(&mut next, declared, derived, payload_digest)?);
@@ -529,13 +529,14 @@ pub(crate) fn apply(
 }
 
 /// Construct the agent declaration this batch carries and put it through the
-/// record seam, returning the row that says so (design `sec-4`, build order
+/// record seam, returning the rows that say so (design `sec-4`, build order
 /// step 4).
 ///
 /// The caller hoists the `Option`: *nothing was supplied* is its question, not
 /// this function's. Conflating it with *something happened* under one `Ok(())`
 /// was `ISS-355` in miniature, and separating them is what makes the mandatory
-/// row expressible in the return type.
+/// row expressible in the return type — which stays mandatory through
+/// [`admit_and_record`], whose every arm returns the `ActRecorded` row.
 ///
 /// **Runs before [`record_act`]**, so an act confirming this declaration can be
 /// given the fingerprint of the record written here rather than one its caller
@@ -545,7 +546,7 @@ fn record_declaration(
     next: &mut DesignSnapshot,
     declared: &AgentActDeclaration,
     derived: &DerivedInput,
-) -> Result<Pending, Refusal> {
+) -> Result<Vec<Pending>, Refusal> {
     if declared.basis.trim().is_empty() {
         return Err(Refusal::AcceptanceBasisMissing);
     }
@@ -570,16 +571,19 @@ fn record_declaration(
 /// Construct the checkpoint act this batch carries, admit it, and record it
 /// (design `sec-4`, build order step 4).
 ///
-/// Returns one row on every path, and two on the arm that carries a review
-/// disposition: `ActRecorded` **first**, then `ReviewDisposed` (`DEC-241`,
-/// `DEC-238`) — the recording is what makes the disposition addressable.
+/// Returns the `ActRecorded` row on every path, in an order that is contractual
+/// rather than incidental: an `ActInvalidated` row **before** it when this
+/// recording displaced a live act of the same kind, and a `ReviewDisposed` row
+/// **after** it on the arm that carries a disposition (`DEC-241`, `DEC-238`).
+/// The order is the sentence — the prior act died, this act was recorded, and
+/// the recording is what makes the disposition addressable.
 ///
 /// **Construction order runs opposite to vector order, deliberately.** The
 /// optional disposition row is built *before* [`admit_and_record`] is called, so
-/// a row-construction failure precedes mutation — while the mandatory
-/// `ActRecorded` row does not exist until the seam returns, and has to be placed
-/// first. `apply` assigns `ChangeRow.index` from the vector's own order, so this
-/// ordering is the stored one and is contractual, not incidental.
+/// a row-construction failure precedes mutation — while the rows the seam owns
+/// do not exist until it returns, and have to be placed ahead of it. `apply`
+/// assigns `ChangeRow.index` from the vector's own order, so this ordering is
+/// the stored one.
 ///
 /// The disposition row is derived from the constructed **record** rather than
 /// from the declaration, so a disposition that never became an act cannot leave
@@ -647,11 +651,9 @@ fn record_act(
             ))
         }
     };
-    let recorded = admit_and_record(next, ActRecord::Checkpoint(record), rule, derived)?;
-    Ok([Some(recorded), disposed_row]
-        .into_iter()
-        .flatten()
-        .collect())
+    let mut rows = admit_and_record(next, ActRecord::Checkpoint(record), rule, derived)?;
+    rows.extend(disposed_row);
+    Ok(rows)
 }
 
 /// One act record that can be stored and named in a change row.
@@ -700,23 +702,34 @@ impl ActRecord {
         }
     }
 
-    /// Into whichever group holds this shape.
-    fn insert(self, next: &mut DesignSnapshot) {
+    /// Into whichever group holds this shape, reporting whether it displaced a
+    /// record of the same kind.
+    ///
+    /// Both arms answer it, from stores that key on different vocabularies but
+    /// retain-then-push identically. The displaced record itself is not carried
+    /// up: replacement is by kind, so its act is [`ActRecord::kind`] and its id
+    /// is what [`act_id`] gives that kind — the caller already holds both.
+    fn insert(self, next: &mut DesignSnapshot) -> bool {
         match self {
-            ActRecord::Checkpoint(record) => next.acts.record(record),
-            ActRecord::Agent(record) => next.declarations.record(record),
+            ActRecord::Checkpoint(record) => next.acts.record(record).is_some(),
+            ActRecord::Agent(record) => next.declarations.record(record).is_some(),
         }
     }
 }
 
 /// Admit one constructed record against the rule it is written against, store
-/// it, and return the row saying so.
+/// it, and return the rows saying so.
 ///
 /// The one production route by which an act reaches the snapshot (`DEC-238`).
 /// Storing an act and reporting it are one operation here, so the asymmetry
 /// `SL-256` exists to delete cannot re-form by a caller choosing differently:
-/// the return type is [`Pending`], not `Option<Pending>`, so there is no arm in
-/// which emission is optional.
+/// **every arm returns the [`ChangeEvent::ActRecorded`] row**, so emission is
+/// not optional — the `Vec` widens what may be said, never whether anything is.
+/// A recording that displaced a live act of the same kind says one thing more,
+/// and says it first: the act died, then the act that replaced it was recorded.
+/// No later difference over the recorded set can report that death, because the
+/// replacement takes the same id the kind gives it (`ISS-367`) — which is why
+/// the row is owed here and not by [`invalidation_rows`].
 ///
 /// What this does **not** buy is unbypassability. `CheckpointActGroup::record`
 /// and `AgentDeclarationGroup::record` are `pub(crate)`, so the storage sinks
@@ -741,7 +754,7 @@ fn admit_and_record(
     record: ActRecord,
     rule: Option<ActRule>,
     derived: &DerivedInput,
-) -> Result<Pending, Refusal> {
+) -> Result<Vec<Pending>, Refusal> {
     if let Some(rule) = rule {
         admit_act(
             record.admission_view(),
@@ -749,13 +762,16 @@ fn admit_and_record(
             derived.observed_review.as_ref(),
         )?;
     }
-    let row = Pending::about(
-        ChangeEvent::ActRecorded,
-        record.id(),
-        vec![PayloadTerm::token(PayloadKey::Act, record.kind().as_str())?],
-    );
-    record.insert(next);
-    Ok(row)
+    let id = record.id().clone();
+    let act = PayloadTerm::token(PayloadKey::Act, record.kind().as_str())?;
+    let recorded = Pending::about(ChangeEvent::ActRecorded, &id, vec![act.clone()]);
+    let displaced = record.insert(next);
+    let mut rows = Vec::new();
+    if displaced {
+        rows.push(Pending::about(ChangeEvent::ActInvalidated, &id, vec![act]));
+    }
+    rows.push(recorded);
+    Ok(rows)
 }
 
 /// The id a recorded act is written under.
@@ -1882,11 +1898,15 @@ const fn outcome_label(claim: DischargeClaim) -> &'static str {
 /// and only the framing differs.
 ///
 /// An act carrying no covered map is `Coverage::Artefact`-bound: its own recorded
-/// content cannot move, so it is inert here and never dies of coverage. It still
-/// leaves the set by being *replaced*, which is a death worth a row —
-/// [`CheckpointActGroup::record`] retains-then-pushes by kind.
-///
-/// [`CheckpointActGroup::record`]: super::snapshot::CheckpointActGroup::record
+/// content cannot move, so it is inert here and never dies of coverage — and
+/// coverage is the only death this set can report. **Replacement is invisible to
+/// it, by construction:** [`act_id`] makes the id a pure function of the act
+/// kind, and both stores key replacement on that same kind, so a displaced act
+/// and the act displacing it occupy the identical `(ActKind, DesignId)` slot.
+/// The difference is empty however many times the slot is rewritten. The claim
+/// that an act "leaves the set by being replaced" stood here until `ISS-367`
+/// showed it never had; [`admit_and_record`] owns that row now, at the store
+/// that knows a replacement happened.
 pub(super) fn live_acts(snapshot: &DesignSnapshot) -> BTreeSet<(ActKind, DesignId)> {
     let sections = snapshot.sections.fingerprints();
     let nodes = snapshot.map.inquiry.materials();
@@ -1952,6 +1972,12 @@ pub(super) fn live_reviews(
 /// apply — derived from the before/after difference rather than recorded by
 /// whoever changed the content, so a new way of moving a fingerprint cannot
 /// forget to report what it killed.
+///
+/// **Death by coverage only.** The other way a recorded act dies — being
+/// displaced by a same-kind recording — cannot reach a set difference at all
+/// ([`live_acts`]), and is emitted at the seam that performs it instead. The two
+/// cases are disjoint, so neither row can double the other and no dedup is owed:
+/// an act present on both sides is exactly the case this derivation is blind to.
 fn invalidation_rows(
     acts_before: &BTreeSet<(ActKind, DesignId)>,
     acts_after: &BTreeSet<(ActKind, DesignId)>,
@@ -2616,6 +2642,141 @@ mod tests {
             !rows_of(&created.snapshot, ChangeEvent::NodeLifecycle).is_empty(),
             "and it is a material change, so it owes a row: {:?}",
             created.snapshot.change_log.rows
+        );
+    }
+
+    /// Every row this revision produced, in log order.
+    fn rows_at(snapshot: &DesignSnapshot, revision: u64) -> Vec<&ChangeRow> {
+        snapshot
+            .change_log
+            .rows
+            .iter()
+            .filter(|row| row.revision == revision)
+            .collect()
+    }
+
+    /// A same-kind CHECKPOINT act replacement reports the act it displaced.
+    ///
+    /// The derivation cannot see this and never could: `act_id` makes the id a
+    /// pure function of the kind, so the replacement occupies the identical
+    /// `(ActKind, DesignId)` slot and the before/after difference is empty
+    /// (`ISS-367`). The row is owed by the site that retains-then-pushes, which
+    /// is the only code that knows a replacement happened.
+    #[test]
+    fn a_same_kind_checkpoint_act_replacement_emits_its_invalidation() {
+        let prior = run_with_a_map();
+        let request = ApplyRequest {
+            checkpoint_act: Some(checkpoint(
+                ActKind::DraftingReady,
+                "the sections are seeded",
+            )),
+            ..payload(&prior)
+        };
+        let once = apply(
+            &prior,
+            &request,
+            &DerivedInput::default(),
+            "sha256:pay",
+            &Resolution::default(),
+        )
+        .expect("the act records");
+        assert!(
+            rows_of(&once.snapshot, ChangeEvent::ActInvalidated).is_empty(),
+            "the first writing displaced nothing: {:?}",
+            once.snapshot.change_log.rows
+        );
+
+        let mut again = request;
+        again.envelope.known_revision = once.snapshot.run.revision;
+        again.envelope.submission_id = "s2".to_owned();
+        let twice = apply(
+            &once.snapshot,
+            &again,
+            &DerivedInput::default(),
+            "sha256:pay2",
+            &Resolution::default(),
+        )
+        .expect("a second act of the same kind displaces the first");
+
+        let replacement = rows_at(&twice.snapshot, twice.snapshot.run.revision);
+        let died = replacement
+            .iter()
+            .position(|row| row.event == ChangeEvent::ActInvalidated)
+            .expect("the displaced act is reported dead");
+        let recorded = replacement
+            .iter()
+            .position(|row| row.event == ChangeEvent::ActRecorded)
+            .expect("and the act that displaced it is reported recorded");
+        assert!(died < recorded, "died, then recorded: {replacement:?}");
+        assert!(
+            replacement[died]
+                .terms
+                .iter()
+                .any(|term| term.value() == ActKind::DraftingReady.as_str()),
+            "the row names the act that died: {:?}",
+            replacement[died]
+        );
+    }
+
+    /// The identical retain-by-kind on the OTHER act store owes the identical
+    /// row, pinned separately.
+    ///
+    /// Not a parameterised case over the two stores: an undifferentiated single
+    /// case is what let one of them go unrepaired while the other was fixed
+    /// (`RV-365` `F-1`), and a test that cannot fail for one store alone cannot
+    /// report that.
+    #[test]
+    fn a_same_kind_agent_declaration_replacement_emits_its_invalidation() {
+        let prior = run_with_a_map();
+        let request = ApplyRequest {
+            agent_declaration: Some(declaring(
+                AgentAct::BlockingSetDeclared {
+                    blocking: [id("inq-1")].into(),
+                },
+                "these block drafting",
+            )),
+            ..payload(&prior)
+        };
+        let once = apply(
+            &prior,
+            &request,
+            &derived_claiming("sha256:claim"),
+            "sha256:pay",
+            &Resolution::default(),
+        )
+        .expect("the declaration records");
+        assert!(
+            rows_of(&once.snapshot, ChangeEvent::ActInvalidated).is_empty(),
+            "the first writing displaced nothing: {:?}",
+            once.snapshot.change_log.rows
+        );
+
+        let mut again = request;
+        again.envelope.known_revision = once.snapshot.run.revision;
+        again.envelope.submission_id = "s2".to_owned();
+        let twice = apply(
+            &once.snapshot,
+            &again,
+            &derived_claiming("sha256:claim2"),
+            "sha256:pay2",
+            &Resolution::default(),
+        )
+        .expect("a second declaration of the same kind displaces the first");
+
+        let replacement = rows_at(&twice.snapshot, twice.snapshot.run.revision);
+        let died = replacement
+            .iter()
+            .position(|row| row.event == ChangeEvent::ActInvalidated)
+            .expect("the displaced declaration is reported dead");
+        let recorded = replacement
+            .iter()
+            .position(|row| row.event == ChangeEvent::ActRecorded)
+            .expect("and the declaration that displaced it is reported recorded");
+        assert!(died < recorded, "died, then recorded: {replacement:?}");
+        assert_eq!(
+            twice.snapshot.declarations.declarations.len(),
+            1,
+            "replacement is by kind, so the run still holds one"
         );
     }
 }
