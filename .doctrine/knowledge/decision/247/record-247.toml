@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 247
+slug = "a-payload-terms-valuekind-is-checked-at-construction-outcomes-declaration-is-the-error"
+title = "A payload term's ValueKind is checked at construction; Outcome's declaration is the error"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-14"
+updated = "2026-09-14"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "ISS-290: PayloadTerm's declared ValueKind is never compared with the kind actually constructed. The kinds carry different admission bounds (Token 32 bytes, Label 16, Digest and Prose unbounded), so drift silently changes what is admissible. One live instance survives: StepDischarged declares Outcome as Token while run.rs builds a Label. The issue explicitly left the ruling open because it is ambiguous which side is wrong."
+choice = "Two parts. The class: a term's constructed kind is checked against payload_terms()' declaration at construction. The instance: Outcome is a closed two-member vocabulary (attested / skipped), so Label is the precise kind and the DECLARATION is the error — it moves to Label, matching CheckpointDisposed, which already declares its Disposition as Label."
+alternatives = ["Move the call site to Token instead. Rejected — it would widen Outcome's admission bound from 16 to 32 bytes for a vocabulary with two members, entrenching the looser reading of a value that is not an id.", "Fix the instance without guarding the class, as SL-233 PHASE-08 did for the step id. Rejected: that is how this instance survived."]
+rationale = "Label is what the payload key vocabulary already uses for closed non-id vocabularies, so the ruling follows precedent in the type rather than inventing one. Checking at construction is where the information is: payload_terms() is already the single source for key ORDER, so making it the source for kind too adds no second declaration to keep in sync (STD-001)."
+consequences = ["The containment proof then proves a budget for the shape actually built, rather than for a declared shape nothing holds it to.", "A new term whose constructed kind disagrees with its declaration fails at the call site rather than latently."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-259"

@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 248
+slug = "material-changes-are-emitted-at-the-seam-that-performs-them-never-derived-from-a-set-difference"
+title = "Material changes are emitted at the seam that performs them, never derived from a set difference"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-14"
+updated = "2026-09-14"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Two of leg 2's items are the same shape. ISS-367: live_acts keys on (ActKind, DesignId) where act_id is prefix + kind, so the tuple is the kind twice; invalidation_rows differences that set, and a same-kind replacement yields an identical tuple on both sides and no ActInvalidated row. ISS-450: a needs edge declared at node creation emits no needs_added row, because run.rs:1294 returns a lone NodeCreated before the diff at run.rs:1330 that only the update path reaches."
+choice = "Neither is repaired by widening the derivation. A material change is emitted by the code that performs it, at the unified admit-store-emit seam DEC-238 already established — so the ActInvalidated row is emitted where CheckpointActGroup::record retains-then-pushes, and node creation reaches the same needs diff the update path runs by diffing against an empty prior rather than returning early."
+alternatives = ["Add a discriminator to live_acts' tuple — an ordinal, or the acceptance digest — so the set difference can see a replacement. Rejected: it repairs one derivation and leaves the class, and it contradicts DEC-238, which is the accepted ruling that a recording is an occurrence and is emitted rather than inferred.", "Hunt the remaining missed emission sites individually. Rejected as the primary move — ISS-450 was found by dogfooding this very run, which is evidence the hunt does not terminate."]
+rationale = "A derived difference reports a change only when the derivation happens to be injective over what changed, which is a property nobody states and no test guards — both items are that property quietly failing. Emission at the seam makes the row a consequence of the write rather than of a later comparison, and gives the coverage check something enumerable. Diffing creation against an empty prior additionally removes the create/update branch split that produced ISS-450 and ISS-327 alike."
+consequences = ["live_acts' doc claim that an artefact-bound act 'leaves the set by being replaced' stops being load-bearing; the row no longer comes from the set at all.", "The create branch stops being a separate emission path, which is the structural half of ISS-450's fix.", "Leg 2's verification is that each seam emits, not that a derivation is wide enough."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-259"

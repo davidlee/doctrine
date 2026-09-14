@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 245
+slug = "leg-3-refuses-input-the-engine-will-not-act-on-not-input-that-changed-nothing"
+title = "Leg 3 refuses input the engine will not act on, not input that changed nothing"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-14"
+updated = "2026-09-14"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Leg 3 was scoped as 'unknown or inert input yields a typed refusal', which invited a general invariant: an admitted submission that changes nothing is refused. inq-11 asked whether that invariant survives its counterexamples. It does not — an idempotent re-declare, a traversal-only submission, and an adopt_authored that re-baselines to the same fingerprint all legitimately change nothing, and ISS-362 being struck removed the item that motivated the wider reading."
+choice = "Refusal is predicated on the payload against the schema and the subject's state — a key the engine will not act on — never on whether anything changed. The test is decidable before execution and needs no diff."
+alternatives = ["A general no-change invariant: refuse any admitted submission that produces no change row. Rejected — it converts three legitimate no-ops into errors, and it can only be evaluated after doing the work, which is the wrong side of the refusal boundary."]
+rationale = "Keeps refusal a property of the request rather than of the outcome, so it composes with DEC-244's contract-driven walk: both ask 'will this key be acted on', one against the schema and one against the subject's state. It also keeps the refusal reason nameable — the engine can say which key and why — where a no-change invariant could only say that nothing happened."
+consequences = ["Leg 3 is two axes of one rule (key inert at kind; key inert at state), not a change-detection invariant.", "A no-op submission still consumes a revision. That is accepted: the revision is the caller's compare-and-swap, not a claim that something changed."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-259"

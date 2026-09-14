@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 246
+slug = "all-four-of-iss-327s-state-inert-declaration-keys-refuse-rather-than-silently-persist"
+title = "All four of ISS-327's state-inert declaration keys refuse rather than silently persist"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-14"
+updated = "2026-09-14"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "ISS-327 names four cells where a declaration key is honoured in one subject state and dropped in the other: provenance (honoured on create, dropped on update), lifecycle (honoured on update, dropped on create), and concerns and blocking (honoured when a finding is raised, dropped when it already exists). DEC-183 recorded that the judgement was deferred, not made. The issue itself observes the drop could instead be defined as omission-persist."
+choice = "All four refuse, naming the key and the state it is inert in. The drop is not redefined as persist."
+alternatives = ["Define the drop as omission-persist and document it. Rejected: Sparse::Omitted already means persist, and it is reachable by simply not sending the key — so a PRESENT value that is ignored has no honest reading as 'persist', it is a caller asserting something the engine discards."]
+rationale = "blocking is the case that settles it: it is the flag the lock gate reads, so a caller correcting a finding's blocking flag is today told it succeeded and changes nothing. Persist semantics would make that silence correct by definition. Refusing is also uniform with SL-249's key-home table, which already refuses a key inert at its subject's KIND — this is the same rule on the state axis, and two axes of one rule is cheaper to hold than one rule and one exception."
+consequences = ["Admission must know whether the subject is already held. It runs against the next snapshot, so this is available, but it is a different check shape from the kind-axis table.", "Creating a node with lifecycle set is refused: a node is born open, and resolution routes through a disposition.", "A caller re-declaring a node must omit provenance rather than resend it."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-259"

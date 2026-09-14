@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 249
+slug = "degrade-what-is-history-refuse-what-is-state"
+title = "Degrade what is history; refuse what is state"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-14"
+updated = "2026-09-14"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Leg 4 requires that an unrecognised historical row degrade visibly rather than fail the file (STD-003), while change_log.rs argues the opposite on the record: ChangeEvent deserialises strictly because 'a change log that quietly accepted an event it could not name would be a change log that lies'. inq-14 asked how far tolerance should reach — only the ChangeEvent token, or every closed vocabulary a snapshot stores (PayloadKey, Stage, ActKind, DispositionForm, IdKind)."
+choice = "The line is what the token is FOR, not which type it is. A token that records something that happened — a change-log row and its terms — degrades visibly under DEC-243's floor: the row is retained with its raw token and disclosed as unreadable. A token that constitutes current state — the run's Stage, an id kind, an act kind held live — still refuses, because a snapshot whose stage cannot be read is not a degraded row, it is an unusable run."
+alternatives = ["Tolerate only the ChangeEvent token. Rejected: that is the treadmill, and it is exactly what produced ISS-315 three times.", "Tolerate every closed vocabulary uniformly. Rejected: it would let a run resume at a stage the binary cannot name, which converts a loud failure into a silent wrong-state one — the defect class this slice exists to remove."]
+rationale = "It reconciles the two positions rather than overruling either. change_log.rs' argument is about a log that lies — a retained, disclosed, unreadable row does not lie, it says precisely what it knows and what it does not, which is what STD-003 asks for. And the distinction is decidable from the type's role, so it does not need re-litigating per token."
+consequences = ["The retired-member roster of DEC-243 remains the intended path for a known retirement; the floor is the backstop for an unknown one.", "Whether a degraded row survives a rewrite is a separate open question (inq-15) — the change log is append-only history and every apply rewrites the file, so drop means lose on next write.", "Stage, IdKind and ActKind keep strict parse, and a retirement in those vocabularies must go through the roster."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-259"
