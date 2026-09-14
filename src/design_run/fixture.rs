@@ -20,10 +20,20 @@ use super::ids::{DesignId, Fingerprint};
 use super::inquiry::{Disposition, InquiryNode, Provenance};
 use super::run::DerivedInput;
 use super::snapshot::{DesignSnapshot, Section};
+use super::submission::Declaration;
 
 /// A well-formed run-local id, or a failure naming the bad literal.
 pub(super) fn id(raw: &str) -> DesignId {
     DesignId::parse(raw).expect("test fixture id must be well-formed")
+}
+
+/// One declaration, as a caller actually sends it.
+///
+/// Built through serde rather than through builders: the keys under test are the
+/// *wire's*, and half of them have no Rust builder because nothing in the tree
+/// constructs a declaration that way.
+pub(super) fn declared(json: &str) -> Declaration {
+    serde_json::from_str(json).expect("the fixture is a well-formed declaration")
 }
 
 /// A section at a stated fingerprint.

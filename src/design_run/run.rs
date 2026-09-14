@@ -1253,48 +1253,63 @@ pub(super) fn declare(
     }
 }
 
+/// The prior a NEW node is diffed against: the node its `NodeCreated` row
+/// describes — opened at the declared question and provenance, under the
+/// declared parent — paired with that row.
+///
+/// Seeding the parent rather than leaving it empty is what keeps the shared diff
+/// from emitting a `NodeReparented` row for a node that was never parented
+/// elsewhere. The creation row already states the parent; a node that has just
+/// come into being has not been *re*-parented, and a row saying so would be one
+/// of the untrue rows this seam exists to stop writing.
+fn created_prior(
+    next: &mut DesignSnapshot,
+    declaration: &Declaration,
+) -> Result<(InquiryNode, Pending), Refusal> {
+    let id = declaration.subject();
+    let question = match declaration.question_declaration() {
+        Sparse::Value(question) => question.clone(),
+        Sparse::Omitted | Sparse::Null => String::new(),
+    };
+    let provenance = declaration
+        .provenance()
+        .cloned()
+        .unwrap_or(Provenance::AgentProposed);
+    let mut node =
+        InquiryNode::open(id.clone(), question, provenance.clone()).sequenced(next.map.claim_seq());
+    let mut terms = Vec::new();
+    if let Sparse::Value(parent) = declaration.parent_declaration() {
+        node = node.with_parent(parent.clone());
+        terms.push(PayloadTerm::token(PayloadKey::Parent, parent.as_str())?);
+    }
+    terms.push(PayloadTerm::label(
+        PayloadKey::Provenance,
+        provenance.label(),
+    )?);
+    Ok((node, Pending::about(ChangeEvent::NodeCreated, id, terms)))
+}
+
 /// Create a node, or move an existing one.
+///
+/// **One row-producing path over two priors** (`DEC-248`). For a node the map
+/// already holds, the prior is what it holds; for a new one it is
+/// [`created_prior`]. Everything the declaration asks for beyond that prior is a
+/// change against it and reaches the same diff — which is why a `needs` edge
+/// landed by the declaration that creates the node emits its `needs_added` row
+/// (`ISS-450`), exactly as the same edge on an existing node always did. The
+/// create/update split on the diff is the shape that let that edge land
+/// silently, so there is no second diff site to keep in step.
 fn declare_node(
     next: &mut DesignSnapshot,
     declaration: &Declaration,
 ) -> Result<Vec<Pending>, Refusal> {
     let id = declaration.subject();
-    let Some(existing) = next.map.inquiry.get(id).cloned() else {
-        let question = match declaration.question_declaration() {
-            Sparse::Value(question) => question.clone(),
-            Sparse::Omitted | Sparse::Null => String::new(),
-        };
-        let provenance = declaration
-            .provenance()
-            .cloned()
-            .unwrap_or(Provenance::AgentProposed);
-        let mut node = InquiryNode::open(id.clone(), question, provenance.clone())
-            .sequenced(next.map.claim_seq());
-        let parent = match declaration.parent_declaration() {
-            Sparse::Value(parent) => Some(parent.clone()),
-            Sparse::Omitted | Sparse::Null => None,
-        };
-        if let Some(parent) = parent.clone() {
-            node = node.with_parent(parent);
-        }
-        if let Sparse::Value(needs) = declaration.needs_declaration() {
-            for need in needs {
-                node = node.needing(need.clone());
-            }
-        }
-        next.map.inquiry.insert(node)?;
-        let mut terms = Vec::new();
-        if let Some(parent) = parent {
-            terms.push(PayloadTerm::token(PayloadKey::Parent, parent.as_str())?);
-        }
-        terms.push(PayloadTerm::label(
-            PayloadKey::Provenance,
-            provenance.label(),
-        )?);
-        return Ok(vec![Pending::about(ChangeEvent::NodeCreated, id, terms)]);
+    let (existing, mut rows) = if let Some(existing) = next.map.inquiry.get(id).cloned() {
+        (existing, Vec::new())
+    } else {
+        let (seeded, created) = created_prior(next, declaration)?;
+        (seeded, vec![created])
     };
-
-    let mut rows = Vec::new();
     let mut parent = existing.parent().cloned();
     let mut needs: BTreeSet<DesignId> = existing.needs().clone();
     let mut lifecycle = existing.lifecycle();
@@ -1967,6 +1982,7 @@ fn invalidation_rows(
 #[cfg(test)]
 mod tests {
     use super::super::attestation::{AgentAct, ReviewDisposition};
+    use super::super::fixture::declared;
     use super::super::refusal::ActFault;
     use super::super::submission::{
         AcceptanceDeclaration, AgentActDeclaration, CheckpointActDeclaration,
@@ -2059,6 +2075,16 @@ mod tests {
             checkpoint_act: None,
             agent_declaration: None,
         }
+    }
+
+    /// Every row `snapshot`'s log holds for `event`, in log order.
+    fn rows_of(snapshot: &DesignSnapshot, event: ChangeEvent) -> Vec<&ChangeRow> {
+        snapshot
+            .change_log
+            .rows
+            .iter()
+            .filter(|row| row.event == event)
+            .collect()
     }
 
     /// A run holding one section and one inquiry node.
@@ -2426,6 +2452,170 @@ mod tests {
         assert_eq!(
             first.id, second.id,
             "the id is the act's, not the writing's"
+        );
+    }
+
+    /// Every `needs` edge a declaration lands emits its row — including the ones
+    /// landed by the declaration that *creates* the node (`ISS-450`).
+    ///
+    /// The control is the same edge declared against an EXISTING node, which
+    /// emitted its row even while creation did not. That contrast is what
+    /// distinguished the defect from a dropped key, so it is pinned here rather
+    /// than recounted in a commit message.
+    #[test]
+    fn a_needs_edge_declared_at_node_creation_emits_its_row() {
+        let prior = run_with_a_map();
+        let created = apply(
+            &prior,
+            &ApplyRequest {
+                declare: vec![
+                    declared(
+                        r#"{"subject": "inq-2", "question": "and this?", "needs": ["inq-1"]}"#,
+                    ),
+                    declared(r#"{"subject": "inq-3", "question": "the control?"}"#),
+                ],
+                ..payload(&prior)
+            },
+            &DerivedInput::default(),
+            "sha256:pay",
+            &Resolution::default(),
+        )
+        .expect("the new node seats");
+
+        assert!(
+            created
+                .snapshot
+                .map
+                .inquiry
+                .get(&id("inq-2"))
+                .expect("the node is in the graph")
+                .needs()
+                .contains(&id("inq-1")),
+            "the declared edge lands in the graph"
+        );
+        assert!(
+            rows_of(&created.snapshot, ChangeEvent::NeedsAdded)
+                .iter()
+                .any(|row| row.subject.as_ref() == Some(&id("inq-2"))),
+            "the edge landed at creation, so it owes a row: {:?}",
+            created.snapshot.change_log.rows
+        );
+
+        let mut control = ApplyRequest {
+            declare: vec![declared(r#"{"subject": "inq-3", "needs": ["inq-1"]}"#)],
+            ..payload(&created.snapshot)
+        };
+        control.envelope.submission_id = "s2".to_owned();
+        let updated = apply(
+            &created.snapshot,
+            &control,
+            &DerivedInput::default(),
+            "sha256:pay2",
+            &Resolution::default(),
+        )
+        .expect("the existing node takes the edge");
+
+        assert!(
+            rows_of(&updated.snapshot, ChangeEvent::NeedsAdded)
+                .iter()
+                .any(|row| row.subject.as_ref() == Some(&id("inq-3"))
+                    && row.revision == updated.snapshot.run.revision),
+            "the control: the same edge on an EXISTING node emits its row"
+        );
+    }
+
+    /// Creation states its parent once, in the row that says the node was
+    /// created — a node that has just come into being has not been *re*-parented.
+    ///
+    /// The guard on [`created_prior`]'s seeded parent: a wholly empty prior would
+    /// reach the same shared diff and emit a `node_reparented` row alongside the
+    /// `node_created` one that already names the parent, which is the kind of
+    /// untrue row the seam exists to stop writing.
+    #[test]
+    fn a_node_created_under_a_parent_is_not_also_reported_reparented() {
+        let prior = run_with_a_map();
+        let created = apply(
+            &prior,
+            &ApplyRequest {
+                declare: vec![declared(
+                    r#"{"subject": "inq-2", "question": "under what?", "parent": "inq-1"}"#,
+                )],
+                ..payload(&prior)
+            },
+            &DerivedInput::default(),
+            "sha256:pay",
+            &Resolution::default(),
+        )
+        .expect("the child seats");
+
+        assert_eq!(
+            created
+                .snapshot
+                .map
+                .inquiry
+                .get(&id("inq-2"))
+                .expect("the node is in the graph")
+                .parent(),
+            Some(&id("inq-1")),
+            "the declared parent lands"
+        );
+        assert!(
+            rows_of(&created.snapshot, ChangeEvent::NodeReparented).is_empty(),
+            "creation names the parent in its own row: {:?}",
+            created.snapshot.change_log.rows
+        );
+        let creations = rows_of(&created.snapshot, ChangeEvent::NodeCreated);
+        let [row] = creations.as_slice() else {
+            panic!("one creation row");
+        };
+        assert!(
+            row.terms
+                .iter()
+                .any(|term| term.key() == PayloadKey::Parent && term.value() == "inq-1"),
+            "and that row is where the parent is stated: {:?}",
+            row.terms
+        );
+    }
+
+    /// A `lifecycle` declared at creation lands and emits its row.
+    ///
+    /// The other key the create branch dropped on the floor: before the diff was
+    /// collapsed onto one path it was read only on the update side, so a node
+    /// declared `deferred` was seated `open` with nothing said. It is the same
+    /// defect as `ISS-450` wearing a different key, which is why the repair is
+    /// the shared path rather than a second read of the key.
+    #[test]
+    fn a_lifecycle_declared_at_node_creation_lands_and_emits_its_row() {
+        let prior = run_with_a_map();
+        let created = apply(
+            &prior,
+            &ApplyRequest {
+                declare: vec![declared(
+                    r#"{"subject": "inq-2", "question": "later?", "lifecycle": "deferred"}"#,
+                )],
+                ..payload(&prior)
+            },
+            &DerivedInput::default(),
+            "sha256:pay",
+            &Resolution::default(),
+        )
+        .expect("the node seats");
+
+        assert_eq!(
+            created
+                .snapshot
+                .map
+                .inquiry
+                .get(&id("inq-2"))
+                .expect("the node is in the graph")
+                .lifecycle(),
+            InquiryLifecycle::Deferred,
+            "the declared lifecycle is honoured, not dropped"
+        );
+        assert!(
+            !rows_of(&created.snapshot, ChangeEvent::NodeLifecycle).is_empty(),
+            "and it is a material change, so it owes a row: {:?}",
+            created.snapshot.change_log.rows
         );
     }
 }

@@ -26,7 +26,7 @@ use super::attestation::{
 };
 use super::fixture::{
     BLOCKING_NODE, OPEN_NODE, PASS, SECTION_A, SECTION_B, attest, blocking_set_declared,
-    checkpoint_act, cleared, drafting_ready, id, pass_over, run_holding, section,
+    checkpoint_act, cleared, declared, drafting_ready, id, pass_over, run_holding, section,
 };
 use super::gate::{
     ActRequirement, ActRule, Advance, AttestationRule, Binding, CONTRACTS, Cause, Condition,
@@ -2959,15 +2959,6 @@ fn every_rows_predicate_agrees_with_its_keys_presence_on_the_wire() {
              the addressing key"
         );
     }
-}
-
-/// One declaration, as a caller actually sends it.
-///
-/// Built through serde rather than through builders: the keys under test are the
-/// *wire's*, and half of them have no Rust builder because nothing in the tree
-/// constructs a declaration that way.
-fn declared(json: &str) -> Declaration {
-    serde_json::from_str(json).expect("the fixture is a well-formed declaration")
 }
 
 /// The `SL-248` loss, at the unit that refuses it (`EX-1`, `EX-2`, `EX-5`).
