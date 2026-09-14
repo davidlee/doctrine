@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 250
+slug = "leg-1-hoists-every-hoistable-check-ahead-of-the-mints-and-states-the-residual-it-cannot-hoist"
+title = "Leg 1 hoists every hoistable check ahead of the mints and states the residual it cannot hoist"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-14"
+updated = "2026-09-14"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "EVD-029: commands/design.rs::apply materialises knowledge records in the mint loop, then runs write_journal, recheck_watermark_before_write and a second run::apply, any of which can still refuse — so an authored record can outlive a revision that never landed. The two-pass structure is the intended guard and its doc already claims pass 1 refuses 'while the authored tier is still untouched'; that holds only where both passes refuse identically, and the watermark recheck is not in pass 1 at all."
+choice = "Make pass 1 total for every check that CAN be hoisted, so the guarantee the code already claims becomes true, and state the residual explicitly in the invariant where a check cannot be hoisted — the watermark recheck reads state that may change concurrently, so it is inherently a late check. Leg 1's promise is then stated precisely: on a refused or failed submission the revision, the receipt and the change log are unmoved, and the authored tier is unmoved except across the named late-check window, whose recovery is the journal."
+alternatives = ["Unwind record materialisation on refusal. Rejected: a compensating transaction is a SECOND writer of the authored tier, and this codebase has deliberately kept that single — it is where the next generation of this defect would live.", "Keep the ordering and disclose it only. Rejected as the whole answer: leg 1 is the slice's headline invariant, and an invariant with an undocumented exception is precisely what ISS-361 was reported against. Disclosure is the residual, not the fix."]
+rationale = "Hoisting closes the part that is a genuine defect — a check that could have run before the write and did not — without inventing rollback. Naming the residual converts the remaining window from an unstated exception into a stated one, which is what STD-003's disclosure principle asks of a degraded guarantee, and it keeps the invariant something a retry can actually be written against."
+consequences = ["The doc claim on apply's two-pass structure stops being aspirational and becomes testable.", "A refusal predicated on a RESOLVED id — the one class that passes pass 1 and fails pass 2 — must be identified and either hoisted or named in the residual.", "Leg 1's verification tests the hoisted checks leave the authored tier untouched, and separately that the late-check window is recoverable through the journal rather than that it cannot occur."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-259"

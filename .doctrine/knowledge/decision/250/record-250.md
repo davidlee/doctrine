@@ -1,0 +1,1 @@
+Settles inq-18. ISS-361 stays open against the residual window rather than being closed by this slice: EVD-028 ruled out its reported mechanism, EVD-029 names the surviving suspect, and neither establishes that the single witness saw this window.
