@@ -1,0 +1,50 @@
+memory_uid = "mem_01a0a23ddce871a197fab3050149a1c8"
+memory_key = "mem.pattern.change-log.derived-difference-cannot-see-replacement"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A set difference is blind to replacement when the key derives from the record"
+summary = "If a derived before/after set keys on something the replacing record reproduces, replacement is invisible to it — emit at the write seam instead of widening the derivation."
+created = "2026-09-14"
+updated = "2026-09-14"
+
+[scope]
+paths = ["src/design_run/run.rs", "src/design_run/snapshot.rs"]
+globs = []
+commands = []
+tags = ["design-run", "change-log", "derivation"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "73494fc2a01f5803efb7a0787d5b75a0291c2acb"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0686002a83f8373061382212a42dd415b677aa6d4b937d6ccc0fc46334b7ed8b"
+base_commit = "a4d10d2163d25a938bae574890b1955a3a521297"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-259"
+
+[[source]]
+kind = "issue"
+ref = "ISS-367"
+
