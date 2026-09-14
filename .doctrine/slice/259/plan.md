@@ -182,6 +182,17 @@ redundant and are not — `is_subset(&EMITTABLE, &READABLE)` is the only reader 
 `cargo test --bin doctrine`. A per-compilation-unit trap with no attribute that
 substitutes.
 
+A VT mandate names the file its keywords must land in, so the file is chosen by
+where the behaviour is *observable*, not by where a suite happens to be
+tidiest. `PHASE-01`'s three mandates were retargeted from
+`src/design_run/tests.rs` to `src/design_run/run.rs` at phase-planning time for
+that reason: `Pending`'s fields are private to `run.rs`, so no test outside it
+can read the event a `declare` call emitted — rows become observable only as
+`change_log.rows` after `apply`, and the apply harness plus the exact
+replacement precedent already live in `run.rs`'s own `mod tests`. Homing them
+elsewhere would have meant a second copy of that harness. The criterion ids and
+their keywords are unchanged.
+
 ## Notes
 
 `ChangeEvent::ordered` sorts an undeclared payload key to `usize::MAX` rather

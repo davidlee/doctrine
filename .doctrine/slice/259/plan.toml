@@ -50,9 +50,9 @@ exit_criteria = [
   { id = "EX-5", text = "No row is emitted twice: the seam is the sole emitter, and any derived row that duplicated it is removed rather than left alongside." },
 ]
 verification = [
-  { id = "VT-1", expects = "A `needs` edge declared at node CREATION emits `needs_added`, with the control being the same edge declared on an existing node — the distinction that separated `ISS-450` from a dropped key.", test_file = "src/design_run/tests.rs", keywords = ["a_needs_edge_declared_at_node_creation_emits_its_row", "ChangeEvent::NeedsAdded"], waived = false },
-  { id = "VT-2", expects = "A same-kind CHECKPOINT act replacement emits `ActInvalidated`.", test_file = "src/design_run/tests.rs", keywords = ["a_same_kind_checkpoint_act_replacement_emits_its_invalidation", "ChangeEvent::ActInvalidated"], waived = false },
-  { id = "VT-3", expects = "A same-kind AGENT DECLARATION replacement emits `ActInvalidated` — pinned separately per act store, because a single undifferentiated case is what let one store go unrepaired (`sec-8` leg 2).", test_file = "src/design_run/tests.rs", keywords = ["a_same_kind_agent_declaration_replacement_emits_its_invalidation"], waived = false },
+  { id = "VT-1", expects = "A `needs` edge declared at node CREATION emits `needs_added`, with the control being the same edge declared on an existing node — the distinction that separated `ISS-450` from a dropped key.", test_file = "src/design_run/run.rs", keywords = ["a_needs_edge_declared_at_node_creation_emits_its_row", "ChangeEvent::NeedsAdded"], waived = false },
+  { id = "VT-2", expects = "A same-kind CHECKPOINT act replacement emits `ActInvalidated`.", test_file = "src/design_run/run.rs", keywords = ["a_same_kind_checkpoint_act_replacement_emits_its_invalidation", "ChangeEvent::ActInvalidated"], waived = false },
+  { id = "VT-3", expects = "A same-kind AGENT DECLARATION replacement emits `ActInvalidated` — pinned separately per act store, because a single undifferentiated case is what let one store go unrepaired (`sec-8` leg 2).", test_file = "src/design_run/run.rs", keywords = ["a_same_kind_agent_declaration_replacement_emits_its_invalidation"], waived = false },
   { id = "VA-1", expects = "Grep confirms no remaining retain-by-kind act store emits no row: every `retain(|held| held.act.kind() != …)` site in `snapshot.rs` is covered by EX-2 or EX-3." },
 ]
 specs        = []
