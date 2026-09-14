@@ -77,12 +77,66 @@ Splitting `Declaration` into separate wire and stored types: deferred debt under
 `DEC-243`. Whether stage should gate acts it does not gate today: the residual
 of the struck `ISS-362`.
 
+## Review passes
+
+*Written after RV-365 concluded, at design run revision 53.*
+
+`RV-365` was the design pass: an external adversarial reviewer (codex-cli,
+`gpt-5.6-sol`) against revision 40. Six findings, three of them blockers, all
+verified against the tree before disposition, all terminal. Sections 2, 4, 5, 6,
+7 and 9 were amended and the design rematerialised at revision 50; a seventh
+defect introduced *by* those amendments was caught on the verification pass and
+corrected at revision 49.
+
+**No further design pass is needed before planning**, and the reason is specific
+rather than a shrug: the pass that just ran was hostile, evidence-led and
+adversarially verified against the source, and the three findings it did not
+raise are the ones a second pass would go looking for. `sec-1` and `sec-3` were
+probed and came back sound — the `payload_contract` single-source claim in
+particular was checked against its pins, including the flatten envelope and the
+internally-tagged enums, with an effective positive control.
+
+**What a further pass should probe, if one is ever run:**
+
+1. **The amended text itself.** Sections 2, 4, 5, 6, 7 and 9 are newer than the
+   review that shaped them. One defect already entered that way (`sec-5`'s
+   "whole surface", corrected at revision 49) and it was found only because the
+   raiser was asked to re-read changed text. Changed text is where defects
+   enter.
+2. **Every file:line and count in the design** — `sec-9` `R0`. Three of this
+   design's factual claims failed external checking and none was caught by the
+   author. This is a re-verification task at implementation, not a review task.
+3. **`DEC-250`'s hoist, once its implementation exists.** The ruling is now
+   hoisting-on-principle with no witness behind it. The right moment to test
+   whether the hoist is sufficient is against real hoisted code, not against
+   prose.
+4. **`IMP-446`'s trigger**, if delegation gains live traffic before this slice
+   lands — that is the one deferral whose justification can expire underneath
+   the slice.
+
+A *code* review pass at implementation is a separate question and is expected;
+this statement covers the design axis only.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-14 · design stage (locked) · 68bdc5958
 
 ### Produced
 
+`RV-365` (design review, concluded — 6 findings, 3 blockers, all terminal).
+`IMP-446` (deferred `Declaration` wire/stored split, trigger-bound).
+Design amendments across revisions 41-50; `DEC-243` and `DEC-250` amended.
+
 ### Learned
 
+A design defended by its own author fails factual checking in ways the author
+does not catch: three of six findings were plain misstatements of the tree
+(arithmetic, a citation, a call order). Recorded as `sec-9` `R0`.
+`DEC-249`'s history/state line is load-bearing in a second place nobody had
+noticed — it is what forbids widening the `DEC-251` floor to cover stored
+declarations (`RV-365` `F-3`).
+
 ### Open
+
+`ISS-361` stays open against `DEC-250`'s residual late-check window.
+`IMP-446` open, trigger-bound on first live non-empty `delegation`.

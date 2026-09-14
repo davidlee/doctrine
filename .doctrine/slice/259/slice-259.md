@@ -34,7 +34,10 @@ One invariant, four legs:
    failed submission: no revision, no receipt, no change row. The **authored**
    tier is unmoved too, except across one named late-check window that
    `SPEC-029` specifies and whose recovery is the journal — every check that
-   *can* be hoisted ahead of the mints is. `ISS-361`'s reported mechanism is
+   *can* be hoisted ahead of the mints is, **on principle rather than against a
+   witness**: `RV-365` `F-2` found no reachable refusal that clears pass 1 and
+   fails pass 2, so the hoist buys construction-truth for a claim the code
+   already makes, and the carve-out rests on the late watermark check alone. `ISS-361`'s reported mechanism is
    ruled out by repro (`EVD-028`); the item stays open against that residual.
 2. **Success ⇒ rows that tell the truth.** Every material change emits its row;
    `ISS-367`'s same-kind replacement emits `ActInvalidated`, and `ISS-450`'s
@@ -61,8 +64,12 @@ is no type seam to split on. The ruling instead moves the axis: **strictness
 refuses what was never known; a retired-member roster carries what was known and
 then retired**, generalising `SL-256`'s `READABLE`/`EMITTABLE` split from
 change-event tokens to wire keys, with an `STD-003` disclosed-degradation floor
-beneath it so a forgotten roster entry costs one row's legibility rather than the
-file. `DEC-244` settles the mechanism: write-path strictness is driven off
+beneath it **for change-log rows only**, so a forgotten roster entry there costs
+one row's legibility rather than the file. `RV-365` `F-3` established the limit:
+the floor cannot reach a stored `Declaration` inside `Proposal`, and `DEC-249`
+forbids widening it there (degrade history, refuse state). On that one path the
+roster is the sole guard — stated in the design's `sec-2`, repair tracked as
+`IMP-446`. `DEC-244` settles the mechanism: write-path strictness is driven off
 `payload_contract`'s pinned key inventory rather than off `deny_unknown_fields`,
 which structurally cannot reach the flatten envelope, the internally-tagged enums,
 or untagged `WireFacetValue`. Together they unblock `ISS-333`, `ISS-328`,
@@ -77,7 +84,8 @@ or untagged `WireFacetValue`. Together they unblock `ISS-333`, `ISS-328`,
 - Migrating stored snapshots in place — tolerance is on the reader.
 - Splitting `Declaration` into separate wire and stored types (`DEC-243`'s first
   rejected alternative) — the clean layering repair, deferred as known debt
-  because `EVD-027` shows no live snapshot exercises the overlap.
+  because `EVD-027` shows no live snapshot exercises the overlap. Tracked as
+  `IMP-446`, triggered on the first live non-empty `delegation`.
 - Whether stage should gate acts it does not gate today — the residual of the
   struck `ISS-362`.
 
@@ -88,13 +96,16 @@ or untagged `WireFacetValue`. Together they unblock `ISS-333`, `ISS-328`,
   statements rather than disclosures of a defect
 - `src/design_run/submission.rs` — wire structs, `ApplyRequest`'s flatten envelope
 - `src/design_run/change_log.rs` — `ChangeEvent`'s rosters and const proofs
-  (untouched by `DEC-251`, deliberately), `ChangeLog`'s four-method surface,
-  `PayloadTerm::admit` for `DEC-247`
-- `src/design_run/snapshot.rs` — snapshot parse; the legacy-fragment compat pins
+  (untouched by `DEC-251`, deliberately), `ChangeLog`'s four-method surface plus
+  its externally-read `floor` field, `RawRow`'s classified reason (`RV-365`
+  `F-4`), `PayloadTerm::admit` for `DEC-247`
+- `src/design_run/snapshot.rs` — snapshot parse; the legacy-fragment compat
+  pins; **both** retain-by-kind act stores, `CheckpointActGroup::record` and
+  `AgentDeclarationGroup::record` (`RV-365` `F-1`)
 - `src/design_run/run.rs` — `declare_node`'s create/update split, `live_acts` /
   `invalidation_rows`, the `StepDischarged` term construction
-- `src/design_run/render/envelope.rs` — the one production reader of the log's
-  rows; gains the degraded-row disclosure
+- `src/design_run/render/envelope.rs` — the one production consumer of the log,
+  via `since()`; gains the degraded-row disclosure
 - `src/commands/design.rs` — `apply`'s parse → admit → mint → persist ordering
 - design-run e2e suites
 
@@ -118,10 +129,12 @@ or untagged `WireFacetValue`. Together they unblock `ISS-333`, `ISS-328`,
   left is narrower than the report. `ISS-361` stays open against it.
 - **OQ — closed** as `DEC-251`: preserve, at the row. Two facts closed it. The
   change log is a bounded **32-revision window** (`CHANGE_LOG_REVISIONS`), not
-  permanent history, so an opaque row's cost is bounded and `ISS-315`
-  self-heals on an active run. And `ChangeLog` is tightly encapsulated —
-  `record` / `retain_window` / `covers` / `since`, one production reader of
-  `.rows` — so a row-level fallback leaves every `ChangeEvent` pin standing,
+  permanent history, so an opaque row's cost is bounded — though not short: the
+  floor advances as `current - 32 + 1`, so `SL-244`'s revision-88 row survives to
+  119 (`RV-365` `F-5`). And `ChangeLog` is encapsulated where it counts —
+  `record` / `retain_window` / `covers` / `since`, and **no production read of
+  `.rows` outside the type at all** (`RV-365` `F-6`) — so a row-level fallback
+  leaves every `ChangeEvent` pin standing,
   where an `Opaque(String)` variant would break `Copy`, `const fn as_str`, and
   both compile-time proofs.
 - **R3 — new.** Do not "clean up" `change_log.rs`'s two `const _: ()` proofs.
