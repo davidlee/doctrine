@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a09e65-e94f-7c00-a00a-f7c68397708a"
+recorded_at = "2026-09-14T05:31:14.127829569Z"
+kind = "friction"
+summary = "doctrine link: legal label+role set is only discoverable by failing (/design, RV-365 disposition)"
+detail = "Minting IMP-446 and relating it to SL-259 took three attempts. 'doctrine link IMP-446 originates_from SL-259' failed — 'IMP may not author originates_from' — with a legal-label list that printed 'references' twice and named no roles. 'doctrine link IMP-446 references SL-259' then failed with 'references requires a role — author it with --role <originates_from|concerns>'. So originates_from is both an illegal label AND a legal role for a different label, and nothing surfaces the label-role pairing up front. 'link --help' does not enumerate per-source-kind legality. Cost: two wasted round trips per relation authored. A single error naming the legal (label, role) pairs for the source kind would dissolve it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
