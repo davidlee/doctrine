@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 251
+slug = "an-unreadable-change-row-is-preserved-opaquely-at-the-row-not-by-an-opaque-changeevent-variant"
+title = "An unreadable change row is preserved opaquely at the row, not by an opaque ChangeEvent variant"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-14"
+updated = "2026-09-14"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-249 rules that a change-log row degrades visibly rather than failing the file. inq-15 asked whether a tolerant reader PRESERVES the unrecognised row across a rewrite or drops it with a disclosure, and by what storage shape. Two facts decided it. First, the change log is a bounded window, not permanent history: CHANGE_LOG_REVISIONS is 32 and retain_window evicts below an explicitly recorded floor — SL-244 sits at revision 92 with floor 61 and its one offending row is at revision 88, four revisions from ageing out on its own. So ISS-315 is self-healing on an active run and bites a dormant one. Second, ChangeLog is tightly encapsulated: its whole surface is record, retain_window, covers and since, and the only production reader of .rows outside the type is render/envelope.rs:1071."
+choice = "Preserve, and site the opacity at the ROW: ChangeLog holds StoredRow = Read(ChangeRow) | Unreadable(RawRow), where RawRow keeps revision, index and the raw table. ChangeEvent is not touched — it stays closed, Copy and const-provable."
+alternatives = ["Drop the unrecognised row with a disclosure. Rejected: every apply rewrites the whole file, so drop means the row is gone on the next write and the disclosure appears exactly once — it loses immediately what the 32-revision window would otherwise have kept.", "Add an Opaque(String) variant to ChangeEvent. Rejected on blast radius: it breaks Copy, breaks `const fn as_str(self) -> &'static str`, and therefore breaks both compile-time proofs — the DESIGN_EVENT_NAME_BYTES bound and the EMITTABLE-subset assert, the latter being (per its own comment) the only reader of EMITTABLE in src/, so removing it passes cargo check and fails cargo test --bin doctrine. It also moves the name bound from compile time to runtime, and still covers only the event token."]
+rationale = "Siting the fallback at the row satisfies the behaviour-preservation gate by construction rather than by re-proving: every existing pin on ChangeEvent holds unchanged. It also covers strictly more than the token — an unknown PayloadKey, an unknown ValueKind, or an over-bound term value all land in the same arm — which is DEC-249's rule without the per-vocabulary treadmill inq-14 objected to. And it answers change_log.rs' standing objection honestly: a retained row naming its revision, its index and its unreadable token is not a log that lies, it is a log stating exactly what it knows and what it does not."
+consequences = ["revision and index stay REQUIRED on RawRow, so a structurally broken row still refuses — tolerance is for vocabulary we do not recognise, not for rows we cannot place.", "since() returns two arms, so the turn projection must render a disclosure line for an unreadable row.", "Deserialisation becomes an ordered try, ChangeRow then RawRow, which must not mask a genuinely malformed row.", "An opaque row is bounded in lifetime: it evicts itself once it falls below the retention floor."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-259"
