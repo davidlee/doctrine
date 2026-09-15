@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0a3b5-5a9a-7320-9a43-dd83a94c1458"
+recorded_at = "2026-09-15T06:16:06.554054055Z"
+kind = "friction"
+summary = "/code-review: a finding-born backlog item cannot link to the RV that raised it"
+detail = """Raised six findings on RV-367, minted ISS-454 and IMP-450 from two of them, then tried the obvious edge: `doctrine link ISS-454 references RV-367 --role originates_from`. Refused — "`references` target must be one of [ISS, IMP, CHR, RSK, IDE, SL], got a RV". So an item whose whole provenance is a review finding can only point at the review's *subject* (SL-259), losing which ledger and which finding; the citation survives in prose only. Two failed calls plus the re-read of `link --help` to find there was no legal role. Also incidental: `backlog paths ISS-454` shows `backlog-454.md`, not `issue-454.md` — I guessed the kind-named form first and ate a failed `cat`."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

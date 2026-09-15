@@ -1,0 +1,58 @@
+memory_uid = "mem_01a0a3b7175073038fa672d90b326a21"
+memory_key = "mem.pattern.review.cited-guard-must-assert-the-claim"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Read a new doc comment against the artefact it cites, not against its own prose"
+summary = "A comment that cites a pin/test/proof as the guarantee is a claim about that artefact — verify the artefact asserts it; two consecutive SL-259 reviews found this class and nothing else."
+created = "2026-09-15"
+updated = "2026-09-15"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["review", "testing", "pins", "doc-drift"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d67e37203d3da43a86cf468ef5c5d30e5437d5a2"
+ref_name = "refs/heads/edge"
+checkout_state_id = "94a7fb5e3f8d9fffa679850314222ccdd6bb1a9ec500af93b7f4fa209abf31b3"
+base_commit = "fd0e10ecd73a82a9ecf40d47641028bca8db8cfa"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-367"
+
+[[source]]
+kind = "slice"
+ref = "SL-259"
+
+[[relation]]
+label = "related"
+target = "mem_019ebee3c67875f1b4aad250501d09a4"
+
+[[relation]]
+label = "related"
+target = "mem_019fe22b652973239aa273bef6ace8ca"
+

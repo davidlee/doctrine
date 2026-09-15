@@ -1,0 +1,142 @@
+id    = 367
+slug  = "sl-259-implementation-code-review-the-truthful-apply-surface-against-its-own-standard"
+title = "SL-259 implementation code review — the truthful-apply surface against its own standard"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-259"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Expected: an act dies once and is reported once. Observed: an act already reported dead by coverage earns a SECOND ActInvalidated row when a same-kind recording displaces it."
+detail = """
+`admit_and_record` (`src/design_run/run.rs:768-785`) emits `ActInvalidated` whenever `record.insert(next)` reports a displacement. `CheckpointActGroup::record` / `AgentDeclarationGroup::record` (`src/design_run/snapshot.rs:361-370`, `:404-413`) report displacement from the STORE, which retains acts that `live_acts` has already dropped for coverage (`run.rs:1962-1982` filters, it does not prune). So a coverage death and a later displacement of the same corpse both emit.
+
+The doc on `invalidation_rows` (`run.rs:2027-2032`) argues no dedup is owed because "the two cases are disjoint". That is true WITHIN one revision — an act absent from both sides of the difference produces no derived row. It is not true across revisions, which is where the doubling lives.
+
+VERIFIED BY EXECUTION (scratch probe in `run.rs`'s suite, reverted):
+  rev 2: declare inq-9  -> ActInvalidated  (3, 1, cpa-sufficiency-accepted)   [coverage]
+         live_acts = {} , stored acts = 1  -- the corpse is retained
+  rev 3: record SufficiencyAccepted again -> ActInvalidated (4, 0, cpa-sufficiency-accepted)  [displacement]
+A delta reader sees the same (ActKind, DesignId) slot die twice with no intervening `ActRecorded`. The second row names an act that was already dead and already reported dead.
+
+This is leg 2's mirror: `ISS-367` was the under-report, this is the over-report, and the slice's framing is "rows that tell the truth", not "rows that are never missing".
+
+Cheapest honest remedies, in order: (a) suppress the displacement row when the displaced slot was not in `live_acts_before` — `apply` holds that set already and would have to thread it into `admit_and_record`; or (b) if the doubling is accepted, say so at `invalidation_rows` and `admit_and_record` instead of claiming disjointness, since the current prose asserts the stronger property."""
+disposition = "follow-up"
+response = """Accepted as observed, and the fix is owned future work rather than a reconcile-time edit — not because it is large. Two defensible readings, and they have different remedies: leg 2 as `design.md` states it ("every material change emits its row") is NOT violated — the second row is spurious, not missing — so either the code is wrong (suppress the displacement row when the displaced slot was not in `live_acts_before`) or the prose is wrong (state the limit at `invalidation_rows` and `admit_and_record` instead of claiming disjointness). Deciding that is a design question with a behavioural change and a test behind it, and SL-259's six phases are complete; there is no phase for it to live in. Minted ISS-454 (`area:correctness`, `cluster:design-run`, originates_from SL-259) carrying the mechanism, the reproduction trace, and both candidate remedies with the reviewer's recommendation of the first. User's call, taken 2026-09-15."""
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "minor"
+title = "Expected: the two-step parse keeps serde's own words for a shape fault. Observed: it keeps the words and silently drops the line and column, on every malformed apply payload."
+detail = """
+`commands::design::apply` (`src/commands/design.rs:1766-1785`) now parses twice: `serde_json::from_str::<Value>` for the contract walk, then `serde_json::from_value::<ApplyRequest>(document)`. Before SL-259 it was one `from_str::<ApplyRequest>`.
+
+`serde_json`'s `Error` Display prints position ONLY when `line != 0` (`serde_json-1.0.150/src/error.rs:406-416`), and `from_value` constructs its errors without one. So the position is gone.
+
+VERIFIED LIVE against this repo's own run:
+  $ cat /tmp/p1.json   # known_revision: "not-a-number", on line 3
+  $ doctrine design apply 259 --input /tmp/p1.json
+  Error: parse the apply payload as JSON: invalid type: string "not-a-number", expected u64
+    doctrine design contract --format prompt
+No " at line 3 column N". Under `from_str` serde appends it.
+
+Why it matters here rather than generally: `contract_check` deliberately declines shape faults — `walk_type`'s `None => Ok(())` arm (`contract_check.rs:66-72`) says "a struct target that is not an object is a shape fault, and serde reports it a moment later in its own words". The walk hands the whole class back to serde, and the same slice made serde's answer less locatable. An apply payload is hand-authored and can run to hundreds of lines; a type error with no path and no position is a materially worse diagnostic than the one this slice replaced. The module doc directly above (`design.rs:1760-1765`) still argues for keeping serde's text out of `.context()` "which is what a caller actually reads" — the argument survives, the property it protects did not.
+
+Remedy is one line: keep the `Value` for the walk, then deserialise the typed request from the ORIGINAL string — `let request: ApplyRequest = serde_json::from_str(payload).map_err(...)`. Cost is one extra parse of a bounded payload."""
+disposition = "fix-now"
+response = "Accepted. A one-line repair with no design question in it: keep the `serde_json::Value` for the contract walk, then deserialise the typed request from the ORIGINAL string (`serde_json::from_str(payload)`) rather than from the parsed value, restoring serde's line and column. Cost is one extra parse of a bounded payload. Reconciled inside SL-259 before close; execution batched to the next session on context budget, so this finding stays answered until the edit lands and the raiser verifies it."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "minor"
+title = "Expected: ISS-451 is out of scope, so its mechanism survives. Observed: PHASE-05 closed it, its own test says so, the sort fallback it named is now unreachable — and the item is still open."
+detail = """
+`ISS-451` (*Undeclared payload key sorts to the end instead of refusing*) is filed against `ChangeEvent::ordered`'s `unwrap_or(usize::MAX)`, and says the key axis "was not in that slice's originating set and was left out deliberately rather than widening the phase". It is not in SL-259's `originates_from`.
+
+But `shaped` (`src/design_run/change_log.rs:455-470`) refuses on `!shape.contains(&(term.key(), term.kind()))` — the PAIR, so a key the event does not declare at all is refused exactly as a wrong kind is. `Refusal::UndeclaredTerm`'s Display carries a dedicated arm for it (`refusal.rs:968-981`: "`{event}` declares no `{key}` term; it declares: …"). And the suite pins it by name: `a_term_carrying_a_key_its_event_does_not_declare_is_refused` (`tests.rs:4440-4468`), whose own doc says "Before this, such a term was silently sorted to the end of the row by `ordered`'s `unwrap_or(usize::MAX)`". That is ISS-451's mechanism, cited by name, as closed.
+
+Two consequences, both real:
+1. `ISS-451` is open against a defect that no longer exists, at a function (`ordered`) that no longer exists. Neither `notes.md`, `RV-366` nor the reconciliation brief disposes it. The next reader either re-fixes it or spends the cost of discovering it is done.
+2. The `unwrap_or(usize::MAX)` fallback is still in `shaped`'s `sort_by_key` and is now UNREACHABLE: the `contains` guard above it proves an entry with that key exists, so `position` always finds one. It reads as if an undeclared key is handled by sorting — which is precisely the wrong mental model, and precisely the one ISS-451 was filed about.
+
+Remedy: close `ISS-451` against this slice, and replace the dead fallback with something that states the invariant (or drop it, since the guard makes it dead)."""
+disposition = "fix-now"
+response = "Accepted, and it splits. First half done now: ISS-451 transitioned `resolved · fixed` — `shaped`'s `(key, kind)` pair check closes its mechanism, `Refusal::UndeclaredTerm` carries a dedicated arm for it, and `a_term_carrying_a_key_its_event_does_not_declare_is_refused` pins it by name while citing `ordered`'s `unwrap_or(usize::MAX)` as the thing it replaced. Second half owed: that fallback is still in `shaped`'s `sort_by_key` and is unreachable (the `contains` guard proves `position` finds an entry), so it reads as if an undeclared key is handled by sorting — the exact wrong model. Removal batched with F-2/F-4/F-5; finding stays answered until it lands."
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "minor"
+title = "Expected: the untagged arm's soundness claim is pinned, so a future untagged variant with a key surface fails the build. Observed: the pin checks a weaker property, and the failure mode it names is the wrong one."
+detail = """
+`walk_enum`'s `Tagging::Untagged` arm (`src/design_run/contract_check.rs:135-144`) walks the value against EVERY untagged variant's payload. Its comment states the premise and cites its guard:
+
+  "every untagged variant in the closure is a `Shape` carrying no keys (`EN-4`;
+   pinned by `every_untagged_variant_is_a_shape` below, so a future untagged
+   variant with a key surface fails here rather than slipping past unwalked)"
+
+The pin (`contract_check.rs:405-429`) asserts only `matches!(variant.payload, VariantPayload::Shape(_))`. `VariantPayload::Shape` holds a `&'static WireType` (`payload_contract.rs:443`), and `WireType::Named(&TypeContract)` is a legal inhabitant (`payload_contract.rs:367`). So `Shape(Named(SomeStruct))` — a shape that DOES carry a key surface — passes the pin unchanged.
+
+The claim "carrying no keys" is therefore unpinned, and the arm is unsound without it. Two untagged variants `Shape(Named(A))` and `Shape(Named(B))`: a value of shape B is walked against A's key row set by `walk_wire` -> `walk_type` -> `walk_keys`, and every B key earns `UnknownPayloadKey`. That is a FALSE REFUSAL of legitimate input — the direction this module's own `walk_map` comment calls "the expensive direction" (`contract_check.rs:207-210`), and the inverse of the defect the slice exists to fix. The comment predicts the opposite failure ("slipping past unwalked"), so a future author reading it is misdirected as well as unguarded.
+
+Latent today — `WIRE_FACET_VALUE` is the only untagged inhabitant (`payload_contract.rs:1074`) and its variants are scalar/seq shapes — which is exactly why the pin exists. It just does not pin what it is cited for.
+
+Remedy: strengthen the assertion to reject a `Shape` whose `WireType` can reach a key surface (`Named`, or a `Seq`/`Map` over one), and correct the comment to name false refusal as the failure mode."""
+disposition = "fix-now"
+response = "Accepted on both halves. The pin is weaker than the claim it is cited for — `matches!(variant.payload, VariantPayload::Shape(_))` admits `Shape(WireType::Named(..))`, which is a shape that DOES carry a key surface — and the comment names the wrong failure mode: the consequence is a false refusal of a sibling variant's legitimate value, not an unwalked pass-through. Latent today (`WIRE_FACET_VALUE` is the only untagged inhabitant and its variants are scalar/seq shapes), which is precisely why the pin exists and precisely why it must hold. Repair: strengthen the assertion to reject a `Shape` whose `WireType` can reach a key surface (`Named`, or a `Seq`/`Map` over one), and correct the comment. Batched to the next session; finding stays answered until it lands."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "nit"
+title = "Expected: gate::join is widened to refusal.rs so there is one spelling of a comma-separated list. Observed: the same slice adds a second spelling three lines from a use of join."
+detail = '''
+`gate::join` was promoted from private to `pub(super)` in this slice, and the doc added with the promotion states the reason (`src/design_run/gate.rs:1282-1287`): "Visible to the leaf rather than to this file because `super::refusal` renders lists too and a second spelling of 'comma-separated' is the duplication this exists to prevent."
+
+Of the two `Refusal` variants SL-259 added, one honours that and one does not:
+- `UndeclaredTerm`'s Display uses `join(...)` (`refusal.rs:977`).
+- `UnknownPayloadKey`'s Display, added in the same phase, hand-rolls it: `.map(|admitted| format!("\`{admitted}\`")).collect::<Vec<_>>().join(", ")` (`refusal.rs:666-679`).
+
+So the promotion's stated rationale is not delivered by the commit that made it. The five incumbent `", "` joins in `refusal.rs` (lines 96, 147, 607, 618) were also left, which is defensible as out of scope — the new one is not, since it was written after the helper was made reachable.
+
+`STD-001` (single-source named constants, *required*): the ", " separator is now spelt seven ways in one file, one of them beside a helper that exists to stop exactly that. One-line fix at `refusal.rs:672-678`; converting the incumbents is optional and can ride a chore.'''
+disposition = "fix-now"
+response = "Accepted, and it is the cheapest of the set. `gate::join` was widened to `pub(super)` in this slice with a doc stating the reason, and `UnknownPayloadKey`'s Display — written after the widening — hand-rolls the separator anyway while its sibling `UndeclaredTerm` uses the helper. STD-001 is required, and the defect is a commit contradicting its own stated rationale. Fix is the new site only (`refusal.rs:672-678`); the five incumbent spellings are pre-existing and out of this slice's scope — if they are worth converting they are worth a chore, not a silent widening here. Batched to the next session; finding stays answered until it lands."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "nit"
+title = "Expected: the published payload contract describes what the wire enforces. Observed: PHASE-04 added a hard refusal on three keys that the contract still renders as plain 'optional'."
+detail = '''
+`install/design-payload-contract.md` is generated from `payload_contract` and pinned to it by test, and opens by promising "Every key a design-run submission may carry, what may be sent under it, whether it may be omitted and what omission means, and what happens to a key this contract does not list."
+
+PHASE-04 added the state axis (`KeyWhen`, `submission.rs:598-611`): `provenance`, `concerns` and `blocking` are `KeyWhen::Only(SubjectState::Absent)` and are now REFUSED — not dropped — when the run already holds the subject (`Declaration::inert_at_state`, `submission.rs:794-805`; `Refusal::InertAtState`).
+
+The rendered contract says (`install/design-payload-contract.md:53,58,60`):
+  provenance  Provenance  optional
+  concerns    id(sec-)    optional
+  blocking    boolean     optional
+
+So a payload that fully satisfies the published contract is hard-refused, for a rule the contract does not state. The cause is that the state axis lives in `submission::Declaration::WIRE_KEYS` while the rendering reads `payload_contract::DECLARATION` — two tables about the same keys, each pinned to serde's key set but not to each other, and only one of them published.
+
+Mitigations, and they are real: the refusal itself is legible ("\`blocking\` is inert at fnd-1: the run already holds it, and \`blocking\` is honoured only where the run does not yet hold it. Omit the key to leave the held value as it is"), and no shipped skill or template hands an agent a payload carrying these keys (checked across `.agents/skills/` and `install/`). Contract legibility is also an explicit Non-Goal of this slice (`IMP-390`, `ISS-298`, `ISS-360`).
+
+Raised anyway because the gap is NEW — the non-goal was written about pre-existing legibility debt, and this slice widened the delta between what the contract says and what the wire does. Follow-up, not fix-now.'''
+disposition = "follow-up"
+response = "Accepted as a real and NEW gap — the slice widened the delta between what the published contract says and what the wire does — and routed to the family that owns it. Minted IMP-450 (`area:design-run`, `area:legibility`, originates_from SL-259) recording the two-table cause: the state axis lives in `submission::Declaration::WIRE_KEYS`, the rendering reads `payload_contract::DECLARATION`, each is pinned to serde's key set and neither to the other. Follow-up rather than fix-now because contract legibility is an explicit Non-Goal of SL-259 (`IMP-390`, `ISS-298`, `ISS-360`) and closing it here would mean choosing how two key tables reconcile — a design move, not a repair. Mitigations recorded on the item: the refusal itself names the rule and its remedy, and no shipped skill or template emits a payload carrying these keys."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

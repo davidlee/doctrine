@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 451
-slug = "undeclared-payload-key-sorts-to-the-end-instead-of-refusing"
-title = "Undeclared payload key sorts to the end instead of refusing"
-kind = "issue"
-status = "resolved"
-resolution = "fixed"
-created = "2026-09-14"
+id = 450
+slug = "published-payload-contract-omits-the-state-axis"
+title = "Published payload contract omits the state axis"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-09-15"
 updated = "2026-09-15"
-tags = ["area:correctness", "area:design-run", "cluster:design-run"]
+tags = ["area:design-run", "area:legibility", "cluster:design-run"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -22,5 +22,6 @@ after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
-label = "related"
-target = "ISS-290"
+label = "references"
+role = "originates_from"
+target = "SL-259"

@@ -389,3 +389,54 @@ nothing landed" promises; it is `DEC-245` working, not drift.
 
 `ISS-361`, `IMP-446`, `IMP-447`, `IMP-448` remain open with stated reasons and,
 where applicable, triggers. No governance/spec `REV` is owed by this slice.
+
+---
+
+## Code review — RV-367 (2026-09-15)
+
+`RV-366`'s synthesis flagged that the slice had had no implementation-facet
+adversarial pass and left it as the User's call. The User called it. `RV-367`
+(facet `code-review`, target `SL-259`) ran the full delta
+`f02d6d7a5..89c483080`. **Six findings, none blocking**, `just gate` exits 0.
+
+### The shape of the set
+
+Four of six are the same defect `RV-366` found nine times, one layer down: a
+sentence written in this slice makes a claim the code beside it does not
+support. `F-1` (`invalidation_rows`' disjointness argument — true per revision,
+false across them), `F-4` (a pin cited for a claim it does not assert), `F-5`
+(`gate::join` widened with a rationale the same phase violates), `F-3`
+(`ISS-451`'s premise, already invalidated by `shaped`). Harvested as
+`mem.pattern.review.cited-guard-must-assert-the-claim` — in a codebase that
+argues for itself in prose this densely, the prose is where the defects are, and
+the citation names the artefact so the check is one jump.
+
+Two findings were established by execution, not by reading: `F-1` by a scratch
+probe in `run.rs`'s own suite (reverted), `F-2` live against this repo's run.
+
+### Disposition
+
+| finding | severity | disposition | state |
+|---|---|---|---|
+| `F-1` double `ActInvalidated` on displacing a coverage-dead act | minor | follow-up → **`ISS-454`** | verified |
+| `F-2` `from_value` drops serde's line/column on every shape fault | minor | fix-now | **owed** |
+| `F-3` `ISS-451` closed-but-open; dead `unwrap_or(usize::MAX)` in `shaped` | minor | fix-now | **owed** (`ISS-451` → `resolved · fixed` done) |
+| `F-4` untagged-arm pin weaker than the claim citing it | minor | fix-now | **owed** |
+| `F-5` second spelling of the comma-join beside the helper widened to stop it | nit | fix-now | **owed** |
+| `F-6` published contract omits the state axis | nit | follow-up → **`IMP-450`** | verified |
+
+`RV-367` stands `active · await=raiser` with four `fix-now` findings answered
+and unverified — deliberately. The edits are batched to a fresh session on
+context budget; the ledger says what is owed until they land and are verified.
+None gates close (`blocker` alone does), but closing `SL-259` over an unfinished
+`RV-367` would be closing over known, accepted work.
+
+### New items
+
+- `ISS-454` — displacing a coverage-dead act reports it invalidated twice
+  (`area:correctness`, `cluster:design-run`). Carries both candidate remedies;
+  which side is wrong — the row or the comment — is the open question.
+- `IMP-450` — published payload contract omits the state axis. Joins the
+  `IMP-390` / `ISS-298` / `ISS-360` legibility family.
+- `ISS-451` resolved `fixed` — `PHASE-05` closed it incidentally and its own
+  test cites `ordered`'s `unwrap_or(usize::MAX)` as what it replaced.

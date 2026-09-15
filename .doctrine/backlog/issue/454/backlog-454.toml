@@ -1,13 +1,13 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 451
-slug = "undeclared-payload-key-sorts-to-the-end-instead-of-refusing"
-title = "Undeclared payload key sorts to the end instead of refusing"
+id = 454
+slug = "displacing-a-coverage-dead-act-reports-it-invalidated-twice"
+title = "Displacing a coverage-dead act reports it invalidated twice"
 kind = "issue"
-status = "resolved"
-resolution = "fixed"
-created = "2026-09-14"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-09-15"
 updated = "2026-09-15"
 tags = ["area:correctness", "area:design-run", "cluster:design-run"]
 
@@ -22,5 +22,6 @@ after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
-label = "related"
-target = "ISS-290"
+label = "references"
+role = "originates_from"
+target = "SL-259"
