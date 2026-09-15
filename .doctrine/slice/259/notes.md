@@ -248,7 +248,60 @@ third `Pending` constructor from reaching the log through the sorter alone. Thre
 instances of this declaration/construction class now exist across `SL-233`,
 `SL-249` and this slice — `mem.pattern.design-run.guard-declaration-construction-at-the-seam`.
 
+PHASE-06 `F-1` — leg 1's hoist had a witness after all, on an axis the design
+review did not examine. `RV-365` `F-2` cleared the pass-1/pass-2 differential and
+`sec-6` generalised that into "*hoisting on principle, with no witness behind
+it*". But `execute_mint` runs **once per plan to completion** and its step 1
+carried a refusal (SL-249 `D8`'s retry guard), so a two-checkpoint payload whose
+second plan trips the guard materialises the **first** plan's record and then
+refuses. Reproduced before it was claimed. Not a `SPEC-029` breach — the spec
+says in terms that the guarantee is *the run does not advance*, not that nothing
+was written — so `DEC-250` is the only thing it repairs. Now
+`refuse_unresumable_mints`, over the whole batch, ahead of the loop. Recorded as
+`mem.pattern.atomicity.hoist-a-loops-refusal-out-of-the-loop`.
+
+PHASE-06 `F-2` — a multi-checkpoint payload was an unknown, not a given. No
+fixture in the tree declared two `cp-` subjects in one `declare` array; the
+phase-plan carried it as `A1` with a STOP condition. It is admissible and both
+plans mint in declare order, which is what makes `F-1` reachable rather than
+theoretical. Single-item fixtures are how a per-item guard hides a cross-item
+hole.
+
+PHASE-06 `F-3` — pass 2's resolution-dependence was exactly two things, and both
+were true by observation rather than by construction. The key set
+`CheckpointRecordUnresolved` fires on was built by two separate walks that merely
+agreed (now one expression, `resolution_of`). The `DESIGN_ID_BYTES` bound on a
+resolved record was argued away in `sec-6` by counting bytes in prose (now
+`widest_canonical_id`, a const proof over the whole `KINDS` table, in
+`gate.rs`'s `widest_condition` idiom). Probe `P6` — tighten the bound to 14 —
+fails the build, so the proof is live and the widest mintable id is exactly 15 B
+against 32.
+
+PHASE-06 `F-5` — the sheet's own risk `R2` was refuted by its probe. It assumed
+`sec-9` `R3`'s `EMITTABLE` fragility generalised to any const proof whose helper
+has no other reader. It does not: `design_run/mod.rs:68-74` carries a module-wide
+`cfg_attr(not(test), expect(dead_code))` and `commands/` does not, so deleting
+the new proof fails `cargo check` outright. The claim "nothing will catch this"
+is about the module's lint posture, never about const proofs. Corrected in the
+code's own comment and recorded as
+`mem.fact.lint.dead-code-exemption-decides-whether-a-const-proof-defends-itself`.
+
+
 ### Open
+`IMP-448` open — `entity.rs:557` re-spells `kinds::canonical_id`'s
+`{prefix}-{id:03}` by hand, and that hand-built string, not the documented format
+authority, is what every minted id actually is (`on_reserved` has one call site).
+`STD-001`, pre-existing, found by PHASE-06's const proof — which can therefore
+prove the *form* but not that there is one formatter. The limit is stated in the
+proof's doc comment and should be deleted with `IMP-448`.
+`design.md` `sec-6` states the hoist has no witness (PHASE-06 `F-1`). True of the
+pass-1/pass-2 axis it was written about, false of the mint loop. Needs qualifying
+by axis at reconcile, not striking.
+`src/commands/design.rs` gains `refuse_unresumable_mints`, `resolution_of`,
+`widest_canonical_id` and a rewritten module doc — `sec-7`'s code-impact row for
+this file says only "`apply`'s check ordering", which understates it. Same class
+as the `ids.rs` and `gate.rs` deltas above.
+
 
 `ISS-361` stays open against `DEC-250`'s residual late-check window.
 `IMP-446` open, trigger-bound on first live non-empty `delegation`.

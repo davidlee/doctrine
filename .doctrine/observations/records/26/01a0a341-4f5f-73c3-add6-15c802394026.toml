@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0a341-4f5f-73c3-add6-15c802394026"
+recorded_at = "2026-09-15T04:09:21.503126762Z"
+kind = "friction"
+summary = "phase-plan: `slice notes <ID>` refuses instead of showing"
+detail = "Invoked `doctrine slice notes SL-259` expecting to READ the slice's notes.md (the boot digest lists `notes` under the slice spine beside `design`/`plan`/`phases`). It is a create-only verb and answered 'Error: Refusing to overwrite existing .doctrine/slice/259/notes.md'. The refusal is correct for a creator but reads as a failure to a reader, and costs a round trip plus a fallback to cat. A no-op-with-path or a --show would make the read intent free."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

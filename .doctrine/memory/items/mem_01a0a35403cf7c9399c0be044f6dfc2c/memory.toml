@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0a35403cf7c9399c0be044f6dfc2c"
+memory_key = "mem.pattern.atomicity.hoist-a-loops-refusal-out-of-the-loop"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Hoist a loop's refusal out of the loop"
+summary = "A loop that both performs an effect and carries a refusal lets an earlier item's effect land on a batch that was always going to refuse"
+created = "2026-09-15"
+updated = "2026-09-15"
+
+[scope]
+paths = ["src/commands/design.rs"]
+globs = []
+commands = []
+tags = ["atomicity", "design-run", "refusal", "batch"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "deafa830ce2a31fd05e57a06ac38fe6d99e92a7f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "5980024e79b2fc08a54bf6794baf5b2f1a731d0306a2968751b1afde5ad2453b"
+base_commit = "165f4665ee1e593a05aad4fa80cfbb3e3b51051b"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
