@@ -453,25 +453,31 @@ impl ChangeEvent {
     /// through [`PayloadTerm::admit`] carrying its own kind, and re-deriving that
     /// kind from today's declaration would fail every row written under an older
     /// one — refusing history, which `DEC-249` forbids.
-    pub(crate) fn shaped(self, mut terms: Vec<PayloadTerm>) -> Result<Vec<PayloadTerm>, Refusal> {
+    pub(crate) fn shaped(self, terms: Vec<PayloadTerm>) -> Result<Vec<PayloadTerm>, Refusal> {
         let shape = self.payload_terms();
-        if let Some(term) = terms
-            .iter()
-            .find(|term| !shape.contains(&(term.key(), term.kind())))
-        {
-            return Err(Refusal::UndeclaredTerm {
-                event: self,
-                key: term.key(),
-                kind: term.kind(),
-            });
-        }
-        terms.sort_by_key(|term| {
-            shape
+        // The declaration's index IS the membership proof, so there is no
+        // no-such-key case left for the sort to invent an answer for. It used to
+        // be checked with `contains` and then looked up again with a
+        // `position(..).unwrap_or(usize::MAX)` fallback the guard had already
+        // made unreachable — which read as if an undeclared key were handled by
+        // sorting it last, the exact model this refusal exists to retire
+        // (RV-367 `F-3`, `ISS-451`).
+        let mut ordered = Vec::with_capacity(terms.len());
+        for term in terms {
+            let Some(at) = shape
                 .iter()
-                .position(|(key, _)| *key == term.key())
-                .unwrap_or(usize::MAX)
-        });
-        Ok(terms)
+                .position(|declared| *declared == (term.key(), term.kind()))
+            else {
+                return Err(Refusal::UndeclaredTerm {
+                    event: self,
+                    key: term.key(),
+                    kind: term.kind(),
+                });
+            };
+            ordered.push((at, term));
+        }
+        ordered.sort_by_key(|(at, _)| *at);
+        Ok(ordered.into_iter().map(|(_, term)| term).collect())
     }
 }
 
