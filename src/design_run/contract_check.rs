@@ -132,12 +132,18 @@ fn walk_enum(
             };
             walk_payload(&placement, variant.payload, contract.name, at)
         }
-        // Untagged: the variant is a shape rather than a token, and every
-        // untagged variant in the closure is a `Shape` carrying no keys
-        // (`EN-4`; pinned by `every_untagged_variant_is_a_shape` below, so a
-        // future untagged variant with a key surface fails here rather than
-        // slipping past unwalked). Walking each arm is sound precisely because
-        // a shape a value does not have reads as nothing to descend.
+        // Untagged: the variant is a shape rather than a token, and no untagged
+        // variant in the closure reaches a key surface (`EN-4`; pinned by
+        // `no_untagged_variant_reaches_a_key_surface` below, so a future
+        // untagged variant that does fails there rather than here). Walking each
+        // arm is sound precisely because a shape a value does not have reads as
+        // nothing to descend.
+        //
+        // The failure mode if that stops holding is a FALSE REFUSAL, not an
+        // unwalked pass-through: with two untagged variants over key surfaces,
+        // a value of one is walked against the other's key rows and every key it
+        // does not share earns `UnknownPayloadKey` — `walk_map`'s "expensive
+        // direction", and the inverse of the defect this walk exists to fix.
         Tagging::Untagged => variants.iter().try_for_each(|variant| {
             walk_payload(&Placement::Shape(value), variant.payload, contract.name, at)
         }),
@@ -397,12 +403,66 @@ mod tests {
         );
     }
 
-    /// The claim [`walk_enum`]'s `Untagged` arm rests on: every untagged variant
-    /// in the closure is a [`VariantPayload::Shape`], so there is no key surface
-    /// the shape-blind arm can walk past. `WireFacetValue` is the only inhabitant
-    /// today (`EN-4`), and the point of the pin is the day it is not.
+    /// Whether a wire type can reach a **key surface** — a described type's key
+    /// rows — directly or through what [`walk_wire`] descends into.
+    ///
+    /// No wildcard, exactly as in `walk_wire`: a new [`WireType`] arm is a
+    /// compile error here and has to say which side of this it falls on. Map
+    /// keys recurse because `walk_map` routes them through `walk_wire` too,
+    /// rather than giving a map key a bespoke check.
+    fn reaches_a_key_surface(ty: WireType) -> bool {
+        match ty {
+            WireType::Text
+            | WireType::Integer
+            | WireType::Boolean
+            | WireType::Id(_)
+            | WireType::Token(_) => false,
+            WireType::Named(_) => true,
+            WireType::Seq(inner) => reaches_a_key_surface(*inner),
+            WireType::Map { key, value } => {
+                let keyed = match key {
+                    MapKey::Of(key_ty) => reaches_a_key_surface(*key_ty),
+                    // The extern region's keys are skipped by name in
+                    // `walk_map`, so they reach nothing from here.
+                    MapKey::Extern { .. } => false,
+                };
+                keyed || reaches_a_key_surface(*value)
+            }
+        }
+    }
+
+    /// [`reaches_a_key_surface`] answers for the shapes the pin below rejects —
+    /// including the one the weaker `matches!(.., Shape(_))` form admitted
+    /// (`RV-367` `F-4`): `Shape(Named(..))` is a legal inhabitant and it carries
+    /// a full key surface.
     #[test]
-    fn every_untagged_variant_is_a_shape() {
+    fn a_key_surface_is_reached_through_a_seq_or_a_map() {
+        const NAMED: WireType = WireType::Named(&PAYLOAD);
+        assert!(reaches_a_key_surface(NAMED));
+        assert!(reaches_a_key_surface(WireType::Seq(&NAMED)));
+        assert!(reaches_a_key_surface(WireType::Map {
+            key: MapKey::Of(&WireType::Text),
+            value: &NAMED,
+        }));
+        assert!(!reaches_a_key_surface(WireType::Text));
+        assert!(!reaches_a_key_surface(WireType::Seq(&WireType::Text)));
+        assert!(!reaches_a_key_surface(WireType::Map {
+            key: MapKey::Of(&WireType::Text),
+            value: &WireType::Boolean,
+        }));
+    }
+
+    /// The claim [`walk_enum`]'s `Untagged` arm rests on: no untagged variant in
+    /// the closure reaches a key surface, so walking a value against every arm
+    /// cannot refuse a key a sibling arm does not admit. `WireFacetValue` is the
+    /// only inhabitant today (`EN-4`), and the point of the pin is the day it is
+    /// not.
+    ///
+    /// Asserting [`VariantPayload::Shape`] alone would be weaker than the claim
+    /// it is cited for (`RV-367` `F-4`): a `Shape` holds a [`WireType`], and
+    /// `WireType::Named` — a described type, keys and all — is one.
+    #[test]
+    fn no_untagged_variant_reaches_a_key_surface() {
         let mut untagged = 0;
         for contract in closure_types(&PAYLOAD) {
             let TypeForm::Enum {
@@ -414,10 +474,18 @@ mod tests {
             };
             untagged += 1;
             for variant in variants {
+                let VariantPayload::Shape(shape) = variant.payload else {
+                    panic!(
+                        "{}'s untagged variant carries keys rather than a shape, \
+                         so `walk_enum` would refuse a sibling variant's value",
+                        contract.name
+                    );
+                };
                 assert!(
-                    matches!(variant.payload, VariantPayload::Shape(_)),
-                    "{} carries an untagged variant with a key surface, which \
-                     `walk_enum` would walk past unchecked",
+                    !reaches_a_key_surface(*shape),
+                    "{} carries an untagged variant whose shape reaches a key \
+                     surface, so `walk_enum` would refuse a sibling variant's \
+                     value for keys this one does not admit",
                     contract.name
                 );
             }
