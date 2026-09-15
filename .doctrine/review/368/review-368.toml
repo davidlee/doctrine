@@ -128,7 +128,7 @@ response = "Verified: the table let a DA1-then-graphics buffer classify as Suppo
 
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "The new /dev/tty poll seam cannot work on supported macOS"
 detail = """

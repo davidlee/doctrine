@@ -184,7 +184,7 @@ fn bracket<S, R>(
 after 100 ms. `body` writes the request, then reads in a loop, appending, until
 `complete` holds or the deadline has passed, so the deadline is honoured to
 within one 100 ms read. `exit` does `tcsetattr` with the saved settings. The
-tty is opened blocking, because a non-blocking fd ignores `VTIME`.
+tty is opened blocking, because POSIX lets `O_NONBLOCK` override `VTIME`.
 
 Restoration is explicit and its error is checked on every return path. The
 guarantee does not rest on a destructor, because a destructor cannot report a
