@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0a42c-978e-7db1-a559-ef9cdc4adaf0"
+recorded_at = "2026-09-15T08:26:20.942647573Z"
+kind = "friction"
+summary = "design: resolving an inquiry takes three attempts"
+detail = "/design on SL-245. The contract lists 'resolution' and 'dispose' as Declaration keys with no hint of which subject kind honours them. Resolving an inq- node needs a cp- subject with 'disposes'; inq- subject refuses both ('inert at inq-2'). Found by trial and error."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

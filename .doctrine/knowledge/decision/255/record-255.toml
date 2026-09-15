@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 255
+slug = "render-capability-a-terminal-descriptor-probed-up-front-dot-probed-by-its-own-spawn"
+title = "Render capability: a terminal descriptor probed up front, dot probed by its own spawn"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-15"
+updated = "2026-09-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "The `--render` path needs terminal and graphviz capability handed to a pure core. `tty::stdout_terminal_width()` returns `None` for both not-a-terminal and unreadable-size, which `--render` must tell apart (DEC-254 refuses the first; the second still renders). `mem.pattern.design.capability-as-data-seam` forbids collapsing such states into bool/Option."
+choice = "Two probes, each typed. (1) Terminal, probed before any work, in `src/tty.rs` beside `terminal_width`: `RenderTarget::{NotTerminal, Terminal { columns: Option<u16>, pixel_width: Option<u16> }}`, from the same isatty + window-size ioctl the module already reads, via a pure both-injected decision fn. (2) Graphviz, probed by the render spawn itself — no `dot -V` pre-flight — returning `Png(bytes) | ToolUnavailable | CommandFailed { status, stderr } | TimedOut`, the DEC-143 taxonomy. The pure encoder takes PNG bytes plus the terminal descriptor and returns escape bytes."
+alternatives = ["Pre-probe everything into one struct, spawning `dot -V` before work — one guard site, but an extra process, a time-of-check/time-of-use window, and a duplicate of map_server's `dot_version`", "Reuse `stdout_terminal_width()` unchanged — conflates the two states DEC-254 must separate"]
+rationale = "Follows the tty.rs shape (thin impure `stdout_*` wrapper, pure injected decision) and the capability-as-data-seam pattern. The spawn is the only truthful answer to whether dot works; a pre-flight answers an earlier question."
+consequences = ["DEC-254's guards run on `RenderTarget` and format before any spawn", "Descriptive absence messages map one-to-one from the spawn outcome arms", "The pure encoder is testable with a stub PNG and synthetic descriptors"]
+decided_by = "user"
+decided_on = "2026-09-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-245"

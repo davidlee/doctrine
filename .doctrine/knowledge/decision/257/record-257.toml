@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 257
+slug = "render-verification-vh-is-the-acceptance-test-vt-scaffolds-arrival-and-guards-regression"
+title = "Render verification: VH is the acceptance test; VT scaffolds arrival and guards regression"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-15"
+updated = "2026-09-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "No agent can see the image and no jail has a raster viewer. Real `dot -Tpng` bytes are not byte-stable across graphviz versions, so they cannot enter a golden."
+choice = "VH is the real test: the user runs `doctrine graph <id> -X` in ghostty on a small and a large graph and judges the image and DEC-256's sizing. VT scaffolds arrival and prevents silent regression, never touching real graphviz: (1) encoder framing and 4096-byte chunking goldens over a tiny committed PNG fixture; (2) DEC-256's sizing rule as a table, plus the PNG IHDR width parse; (3) the `RenderTarget` pure decision fn with probes injected; (4) the DEC-254 guards end to end — under `cargo test` stdout is not a terminal, so `-X` must exit non-zero with the message and empty stdout, and `--format json -X` likewise; (5) the DEC-255 spawn outcomes with the program name and timeout injected — a missing binary → ToolUnavailable, `false` → CommandFailed, `sleep` under a short timeout → TimedOut."
+alternatives = ["Add a VT against real graphviz checking the PNG signature — ties the suite to an installed `dot`, and STD-003 forbids a silent skip when it is absent; the VH run covers the same ground", "A pty-driven end-to-end test — heavy machinery re-proving bytes the encoder goldens already pin"]
+rationale = "Whether the picture is right is a human judgement; the automated tests exist to make arrival incremental and to stop the non-visual layers regressing silently."
+consequences = ["The suite needs no graphviz and no terminal", "The spawn takes its program name and timeout as inputs, with `dot` and the default timeout as single-sourced constants (STD-001)", "DEC-256's sizing rule is expected to be tuned after the VH run"]
+decided_by = "user"
+decided_on = "2026-09-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-245"

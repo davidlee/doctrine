@@ -84,51 +84,34 @@ Carried into the run's inquiry, not resolved here. The live forks:
   hand the pure core a *multi-valued descriptor*; never collapse absent /
   unsupported / degraded into a bare `Option` or `bool`.
 
-## Inquiry state — parked 2026-08-05
+## Inquiry state — 2026-09-15
 
-Design run `dr-019fd12e-03c3-7c92-9b87-bb48b4845e13`, revision 9, stage
-`exploring`. Re-enter with `doctrine design resume SL-245` — the run carries the
-map, the blocking set, the discharged runbook and the change log. This section
-carries only what the run does not.
+Design run `dr-019fd12e-03c3-7c92-9b87-bb48b4845e13`, revision 22, stage
+`inquiring`, runbook cleared. Re-enter with `doctrine design resume SL-245`. This
+section carries only what the run does not.
 
-**Resolved.** `inq-1` → **DEC-143**: two `dot` spawns held knowingly. Pure
-protocol encoder in leaf; a small sync spawn beside it; `map_server`'s async
-`DotRenderer` untouched. The `dot` program name and the tool-unavailable /
-command-failed taxonomy are single-sourced under STD-001; each spawn site
-carries a comment naming the other, so the duplication is discoverable from
-either end (the user's addition).
+**All seven inquiries dispositioned, each as an accepted DEC:** inq-1 → DEC-143
+(two `dot` spawns held knowingly), inq-2 → DEC-253 (`--render` / `-X` per verb),
+inq-3 → DEC-254 (non-terminal or non-DOT format → one descriptive error class),
+inq-4 → DEC-255 (`RenderTarget` descriptor; spawn is its own probe), inq-7 →
+DEC-256 (pixel-width sizing, provisional), inq-5 → DEC-257 (VH acceptance, VT
+scaffold), inq-6 → DEC-258 (graph then concept-map; `-X` implies dot; SPEC-027
+resp. 5 note + ISS-242 annotation at reconcile).
 
-**Open at the cursor — `inq-2`, the CLI shape.** Three shapes were put to the
-user, who parked before answering:
+**inq-2 reversal, recorded.** The 2026-08-05 recommendation of a pipe verb rested
+on (b) importing the renderer into SPEC-027's territory. That was overstated:
+resp. 4's no-external-renderer clause binds `catalog::dot::render`, not the verb
+shell (resp. 5). The user chose (b) on UX grounds; the boundary holds either way.
 
-- **(a) A pipe-consuming verb** — `doctrine graph SL-245 | doctrine render`.
-- **(b) A `--render` flag on each emitting verb** — `doctrine graph SL-245 --render`.
-- **(c) A `--format kitty` variant** — reuses the existing flag.
+**User acts recorded:** `governance-confirmed`; `graph-reviewed` (re-performed
+after inq-7 invalidated it — blocking set now inq-1..inq-5 + inq-7).
 
-The agent recommended **(a)**, reversing the user's earlier lean toward a flag,
-on a boundary argument: under (b) `src/commands/graph.rs` imports the renderer,
-so the `graph` verb acquires the external-renderer dependency SPEC-027 resp. 4
-forbids its component — siting the renderer outside SPEC-027 buys nothing if the
-verb inside it reaches out and calls it. (a) additionally serves every future DOT
-producer with no per-verb wiring (IMP-385's anchor report included), is opt-in by
-construction so POL-002 facet (3) needs no defaulted-off flag, and answers
-`inq-6` with *no SPEC-027 change needed*. Its cost is that it is a pipe, against
-IDE-046's "one command, picture appears" — the rebuttal being that the card's
-complaint was a three-stage pipe through two external tools. (c) is weakest: it
-conflates representation with delivery, needs two separate additions because the
-verbs' format enums differ in kind (`FromStr` vs `ValueEnum`), and creates
-`--format mermaid --render` as a nonsense combination to guard.
+**Outstanding before drafting:** the user's `sufficiency-accepted`.
 
-**Outstanding user acts**, both gating advance to drafting and neither
-performable by the agent: `governance-confirmed` (the user confirms the
-governing-context claim) and `graph-reviewed` (the user reviews the six-node map
-and its declared blocking set `inq-1..inq-5`). The user was asked and parked
-without answering; do not infer either from engagement.
-
-**Still blocked or unopened:** `inq-3` (not-a-terminal fork, child of `inq-2`),
-`inq-4` (capability descriptor, now unblocked by DEC-143), `inq-5` (VT/VH split,
-now unblocked), `inq-6` (first consumer + SPEC-027 note, non-blocking, needs
-`inq-2`).
+**Friction:** the apply payload contract does not say which subject kind honours
+`dispose` / `resolution` (resolving an `inq-` takes a `cp-` subject with
+`disposes`); a new node cannot be declared and disposed in one submission.
+Observation recorded.
 
 **Note on `research/`** — `.gitignore:49` excludes `.doctrine/slice/*/research/`,
 so `research.md` and its `raw/` threads live on disk in this worktree only. They

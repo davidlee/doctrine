@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 256
+slug = "render-at-native-size-when-it-fits-the-terminals-pixel-width-else-scale-to-columns"
+title = "Render at native size when it fits the terminal's pixel width, else scale to columns"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-15"
+updated = "2026-09-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "The kitty protocol sizes in cells (`c=`/`r=`), auto-scaling the unset axis. `c=<columns>` unconditionally stretches small graphs to full width. The window-size ioctl also reports pixel width (0 where the terminal does not fill it); a PNG's pixel width sits at a fixed offset in its IHDR header."
+choice = "Compare pixel widths. PNG width ≤ terminal pixel width: omit `c=`, draw at native size. Wider: `c=<columns>`, terminal scales down preserving aspect. Terminal pixel width unknown: fall back to `c=<columns>` — bounded, never overflows. Provisional pending first use (VH)."
+alternatives = ["Always `c=<columns>` — simplest, but stretches small graphs", "Always native — small graphs look right, large ones overflow and clip"]
+rationale = "User judgement ahead of experiencing it: fit-to-width only when needed. The fallback prefers a stretched image to a clipped one."
+consequences = ["`RenderTarget::Terminal` carries `pixel_width` (DEC for inq-4)", "The pure encoder reads PNG width from the IHDR header — a small, testable parse", "The rule is the first candidate for revision after a VH look"]
+decided_by = "user"
+decided_on = "2026-09-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-245"

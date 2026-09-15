@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 258
+slug = "wire-render-into-graph-first-then-concept-map-export-x-implies-dot-there"
+title = "Wire --render into graph first, then concept-map export; -X implies dot there"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-15"
+updated = "2026-09-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-253 puts `--render` on both DOT-emitting Rust verbs; the scope requires at least one. `concept-map export` requires `--format` (a ValueEnum: dot, mermaid, json), so `export X -X` would fail on a missing format. SPEC-027 resp. 5 describes `doctrine graph` as a thin shell writing to stdout. The concept-map kind has no governing spec (ISS-242)."
+choice = "(1) Wire `doctrine graph` first, proving the seam end to end, then `concept-map export` in this slice. (2) On `concept-map export`, `--format` is required unless `-X` is present; `-X` implies `dot`, and an explicit non-DOT format with `-X` takes DEC-254's error. `graph` already defaults to `dot`. (3) SPEC-027 resp. 5 gains a sentence on the render output mode through a Revision at /reconcile (ADR-013); ISS-242 is annotated that the render flag joins the ungoverned concept-map surface."
+alternatives = ["Wire `graph` only and defer concept-map — less work now, but splits a feature the flag exists to unify", "Keep `--format` required on concept-map export — forces `--format dot -X`, redundant typing against the UX-first stance of DEC-253"]
+rationale = "Once the leaf module exists the second verb is a few lines; one slice delivers the feature whole. `-X` implying `dot` follows DEC-253's UX-first choice."
+consequences = ["Plan has a phase boundary between the leaf + graph wiring and the concept-map wiring", "The SPEC-027 change is reconcile-time, not design-time", "ISS-242 carries the note so a future concept-map spec picks the flag up"]
+decided_by = "user"
+decided_on = "2026-09-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-245"

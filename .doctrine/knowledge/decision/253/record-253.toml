@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 253
+slug = "rendering-is-a-render-x-flag-on-each-dot-emitting-verb"
+title = "Rendering is a --render / -X flag on each DOT-emitting verb"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-15"
+updated = "2026-09-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-245 needs a CLI shape for opting into inline terminal rendering. Options: (a) a pipe-consuming `doctrine render` verb, (b) a `--render` flag on each emitting verb, (c) a `--format kitty` variant."
+choice = "(b) — `--render`, short `-X`, on `doctrine graph` and `concept-map export`, default off. The renderer stays a leaf module outside SPEC-027; the verb's thin command shell calls it after `catalog::dot::render` has produced DOT."
+alternatives = ["(a) pipe verb `doctrine graph X | doctrine render` — cleanest boundary, serves every future DOT producer unwired, but keeps a pipe in the one-glance UX IDE-046 wants to remove", "(c) `--format kitty` — conflates representation with delivery, needs two additions across the verbs' differing format enums (FromStr vs ValueEnum), and admits nonsense combinations"]
+rationale = "UX trumps: one command, picture appears. The boundary objection raised against (b) was overstated — SPEC-027 resp. 4's no-external-renderer clause binds the pure emitter `catalog::dot::render` (FR-004), not the verb's command shell (resp. 5), so the emitter stays dependency-free. Opt-in by explicit flag satisfies POL-002 facet (3)."
+consequences = ["Each consuming verb wires the flag itself; IMP-385's anchor report will need its own wiring", "`--render` must be rejected or ignored descriptively alongside non-DOT formats (e.g. `graph --format json -X`) — design must fix which", "SPEC-027 resp. 5 (graph as thin shell writing to stdout) likely wants a sentence noting the render output mode — inq-6", "inq-3 (not-a-terminal behaviour) now applies to the flag"]
+decided_by = "user"
+decided_on = "2026-09-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-245"

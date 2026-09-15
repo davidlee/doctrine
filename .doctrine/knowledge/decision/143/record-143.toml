@@ -5,9 +5,9 @@ id = 143
 slug = "two-dot-spawns-held-knowingly-cross-referenced-with-the-shared-taxonomy-single-sourced"
 title = "Two dot spawns held knowingly, cross-referenced, with the shared taxonomy single-sourced"
 record_kind = "decision"
-status = "proposed"
+status = "accepted"
 created = "2026-08-05"
-updated = "2026-08-05"
+updated = "2026-09-15"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)

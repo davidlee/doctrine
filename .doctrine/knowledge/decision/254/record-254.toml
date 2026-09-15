@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 254
+slug = "render-refuses-a-non-terminal-stdout-or-a-non-dot-format-with-a-descriptive-error"
+title = "--render refuses a non-terminal stdout or a non-DOT format with a descriptive error"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-15"
+updated = "2026-09-15"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-253 puts `--render` / `-X` on the DOT-emitting verbs. Writing kitty escape bytes to a pipe or file corrupts the output; combining `-X` with a non-DOT format (`graph --format json`, `concept-map export --format mermaid|json`) has no meaning."
+choice = "Both cases are one error class: exit non-zero, write nothing to stdout, and name the cause and the fix on stderr — e.g. `--render` needs stdout to be a terminal (drop `-X` to emit DOT); `--render` needs `--format dot`."
+alternatives = ["Fall back to DOT with a stderr warning — friendlier in pipelines, but `-X > out` silently yields DOT the user did not ask for", "Emit escape bytes regardless, like `--color always` — defeats the guard; a force mode, if ever wanted, is a separate opt-in", "Silently ignore `-X` under a non-DOT format — the same silent substitution"]
+rationale = "A user who asked for a picture and got something else has been surprised; the scope requires both guards to fail descriptively and never corrupt redirected output. A non-zero exit makes scripts notice. One class keeps the error surface small."
+consequences = ["The not-a-terminal probe rides `src/tty.rs`'s existing isatty seam", "The guards run before `dot` is spawned, so no rasteriser work is wasted on a refused invocation", "Invocations without `-X` are unchanged"]
+decided_by = "user"
+decided_on = "2026-09-15"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-245"
