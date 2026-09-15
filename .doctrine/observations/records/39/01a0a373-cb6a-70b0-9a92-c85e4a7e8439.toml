@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0a373-cb6a-70b0-9a92-c85e4a7e8439"
+recorded_at = "2026-09-15T05:04:30.059008374Z"
+kind = "friction"
+summary = "/audit: reading a knowledge record's body has no `show` verb, so the read-via-show guardrail cannot be honoured"
+detail = "The boot guardrail says read entities via `doctrine <kind> show <ID>`, never raw files, because show synthesizes the TOML and MD tiers. `doctrine knowledge` has no `show` — it has `inspect`, which prints only the header (title, slug, kind, status, dates) and rejects --format full. To read DEC-252's body (the only in-band record of a superseded VT in another slice) I had to `cat .doctrine/knowledge/decision/252/record-252.md` and then `cat` the sister toml separately to see status and relations — precisely the two-tier split the guardrail exists to prevent judging an entity from. Three commands and a guardrail violation to read one record."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

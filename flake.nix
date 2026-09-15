@@ -60,6 +60,7 @@
           just
           rust-bin.beta.latest.default
           rust-analyzer
+          helix
           cargo-edit # `cargo set-version` for the release recipe
           # tokei
 

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0a373-cb64-7212-95fb-9d57364a7272"
+recorded_at = "2026-09-15T05:04:30.052376232Z"
+kind = "friction"
+summary = "/audit: a backlog item raised by a review cannot record that provenance as an edge"
+detail = "doctrine link IMP-449 references --role originates_from RV-366 is refused: '`references` target must be one of [ISS, IMP, CHR, RSK, IDE, SL], got a RV'. A review IS the thing that originated the item, and the ledger is the durable record of why it exists. The fallback is a prose line in the item body plus an edge to the slice instead, which loses the machine-readable link in exactly the direction an auditor traverses (given RV-366 F-5, what was captured?). Cost two round trips and left the provenance unqueryable. Hit twice in one audit (IMP-449, ISS-452)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
