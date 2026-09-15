@@ -1778,8 +1778,14 @@ fn apply(
         serde_json::from_str(payload).map_err(|error| parse_error(&error))?;
     design_run::contract_check::refuse_unknown_keys(&document)
         .map_err(|refused| anyhow::anyhow!("{refused}\n  {PAYLOAD_CONTRACT_POINTER}"))?;
+    // Deserialised from the ORIGINAL string rather than from `document`: serde
+    // carries line and column only when it parses from text, so `from_value`
+    // would keep serde's words and silently drop its position (RV-367 `F-2`) —
+    // on a hand-authored payload that can run to hundreds of lines, and for the
+    // whole class of shape faults this walk deliberately hands back to it. The
+    // cost is one extra parse of a bounded payload.
     let request: ApplyRequest =
-        serde_json::from_value(document).map_err(|error| parse_error(&error))?;
+        serde_json::from_str(payload).map_err(|error| parse_error(&error))?;
     let digest = crate::git::sha256(payload.as_bytes());
 
     match design_run::run::admit(&prior, &request.envelope, &digest)

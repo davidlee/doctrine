@@ -1824,6 +1824,54 @@ fn over_bound_payload_terms_are_refused_at_construction_and_on_the_wire() {
     );
 }
 
+// ── RV-367 `F-2`: a shape fault keeps serde's position ────────────────────
+
+/// The **line and column** of a type error in a hand-authored payload.
+///
+/// `apply` parses twice — a `Value` the contract walk reads, then the typed
+/// request — and the walk hands every *shape* fault back to serde by name
+/// (`walk_type`'s struct arm: "serde reports it a moment later in its own
+/// words"). Serde carries a position only when it parses from **text**, so the
+/// typed parse re-reads the original string; deserialising it from the
+/// already-parsed `Value` keeps serde's words and silently drops the position,
+/// on a payload that can run to hundreds of lines.
+///
+/// The fault is nested on purpose. `ApplyRequest` flattens its envelope, and
+/// `#[serde(flatten)]` buffers the map it rides — so a fault in an envelope key
+/// resolves to the end of the enclosing object rather than to the key. Below
+/// the flattened surface the position is exact, which is where a long payload's
+/// faults actually live.
+#[test]
+fn a_shape_fault_keeps_its_line_and_column() {
+    // The line and column asserted below are read off this literal: the fault is
+    // the `17` ending at column 19 of line 7.
+    const PAYLOAD: &str = r###"{
+  "run_uid": "RUN_UID",
+  "known_revision": REVISION,
+  "submission_id": "nested-shape-fault",
+  "declare": [
+    {
+      "subject": 17,
+      "body": "## A section\n\nprose\n"
+    }
+  ]
+}
+"###;
+    let fixture = Fixture::start();
+    let before = fixture.bytes();
+
+    let error = fixture.refuse(
+        &PAYLOAD
+            .replace("RUN_UID", &fixture.uid)
+            .replace("REVISION", &fixture.revision().to_string()),
+    );
+    assert!(
+        error.contains("at line 7 column 19"),
+        "the fault is located, not merely described: {error}"
+    );
+    assert_eq!(fixture.bytes(), before, "and the run did not advance");
+}
+
 // ── PHASE-06: one wire, one route (EX-12, EX-13(b), EX-14) ────────────────
 //
 // Three defects that let the snapshot and the wire disagree in silence: a
