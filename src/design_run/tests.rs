@@ -4394,6 +4394,16 @@ fn a_term_constructed_at_an_undeclared_kind_is_refused() {
     let mut admitted = 0_usize;
     let mut refused = 0_usize;
     for event in ChangeEvent::EMITTABLE {
+        // Per event, not once over the sweep: a total is blind to one event
+        // dropping out of it, which is how a cell "fails by skipping" rather
+        // than by failing (`mem_019fe0c6db677dd1aa6a8ef8e91f3828`, point 2). An
+        // emitted row with no terms carries nothing its event does not already
+        // say, so an empty shape here is a defect and not a case.
+        assert!(
+            !event.payload_terms().is_empty(),
+            "{} declares at least one term, so it contributes cells below",
+            event.as_str()
+        );
         for (key, declared) in event.payload_terms() {
             assert!(
                 event.shaped(vec![term_at(*key, *declared)]).is_ok(),
