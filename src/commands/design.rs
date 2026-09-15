@@ -1621,9 +1621,23 @@ fn apply(
     // ADDRESS on an indented continuation, matching `Refusal::GateNotCleared`'s
     // form. `.context()` would hide serde's text in the error's source rather
     // than its `Display`, which is what a caller actually reads.
-    let request: ApplyRequest = serde_json::from_str(payload).map_err(|error| {
+    // Parsed to a `Value` first so the contract can be read against it BEFORE
+    // deserialisation (SL-259 DEC-244). Serde cannot do this itself at the two
+    // levels that matter — `ApplyRequest` carries `#[serde(flatten)]`, which
+    // forbids `deny_unknown_fields`, and the internally tagged enums buffer
+    // their content — so a misspelt key used to be absorbed in silence
+    // (ISS-333, ISS-328). The remedy rides both complaints identically: serde's
+    // own words or the contract's, then the contract's ADDRESS on an indented
+    // continuation.
+    let parse_error = |error: &dyn std::fmt::Display| {
         anyhow::anyhow!("parse the apply payload as JSON: {error}\n  {PAYLOAD_CONTRACT_POINTER}")
-    })?;
+    };
+    let document: serde_json::Value =
+        serde_json::from_str(payload).map_err(|error| parse_error(&error))?;
+    design_run::contract_check::refuse_unknown_keys(&document)
+        .map_err(|refused| anyhow::anyhow!("{refused}\n  {PAYLOAD_CONTRACT_POINTER}"))?;
+    let request: ApplyRequest =
+        serde_json::from_value(document).map_err(|error| parse_error(&error))?;
     let digest = crate::git::sha256(payload.as_bytes());
 
     match design_run::run::admit(&prior, &request.envelope, &digest)
@@ -2797,35 +2811,86 @@ mod tests {
     /// `SL-251 PHASE-07 VT-3` / `sec-8` pin 7's refusal bullet — the
     /// point-of-failure remedy `DEC-225` argues the slice on. A manual read
     /// (`VA-1`) leaves an audit nothing to re-derive, so this is a test as well.
+    /// The successor to `SL-251`'s `VT-3`, which pinned that a misspelt key on
+    /// `Declaration` came back in **serde's own words** (`DEC-225`'s
+    /// point-of-failure remedy, and true when three of twelve wire types carried
+    /// `deny_unknown_fields` and the rest silently dropped).
+    ///
+    /// `SL-259`'s walk runs before deserialisation, so it now answers this case
+    /// too and a caller no longer sees serde's text for it. That is a
+    /// supersession rather than a regression, and the assertions below are why:
+    /// the walk names the key, the type, the path and **every** admitted key,
+    /// where serde named the key and its expectations alone — and it does so
+    /// identically for a type that carries the attribute and one that cannot.
+    /// `sec-8` pin 1 is what makes the two safely interchangeable: the contract's
+    /// key set is held equal to serde's against a fully populated value.
+    ///
+    /// `DEC-225` is intact. It argues against *paraphrasing* a serde error into
+    /// a classifier that loses detail; this is not a wrapper over serde's error
+    /// but an earlier check carrying strictly more.
     #[test]
-    fn a_refused_payload_names_the_contract_and_keeps_serdes_own_words() {
+    fn one_unknown_key_refusal_shape_covers_every_wire_type() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         let slice = fixture(root);
-        // `Declaration` carries `deny_unknown_fields`, so a misspelt key THERE is
-        // refused — unlike nine of the twelve wire structs, which drop it silently.
-        let payload = format!(
+        // `Declaration` DOES carry `deny_unknown_fields` — serde would have
+        // caught this one unaided.
+        let attributed = format!(
             "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"cursror\":\"inq-1\"}}]}}",
+            envelope(root, slice, 1, "sub-1")
+        );
+        let error = apply(root, slice, &attributed, &|| {}, &no_fault)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("cursror") && error.contains("Declaration"),
+            "the refusal names the key and the type that admitted it: {error}"
+        );
+        assert!(
+            error.contains("declare[0].cursror"),
+            "and locates it, which serde's own message could not: {error}"
+        );
+        assert!(
+            error.contains("`subject`") && error.contains("`dispose`"),
+            "and names what the type DOES admit, first row to last — the half a \
+             caller acts on: {error}"
+        );
+        assert!(
+            error.contains(&format!("\n  {PAYLOAD_CONTRACT_POINTER}")),
+            "carrying the remedy on an indented continuation, matching \
+             Refusal::GateNotCleared's form: {error}"
+        );
+    }
+
+    /// The walk's half of the same promise (`SL-259` `PHASE-03`, `EX-1`/`EX-4`):
+    /// a key serde structurally cannot see is refused at the CLI, not just in
+    /// the leaf's own suite. `stage` is a top-level key inside `ApplyRequest`'s
+    /// flatten envelope — the one case a caller hand-authors from scratch, and
+    /// the one `deny_unknown_fields` can never be applied to (`ISS-333`).
+    #[test]
+    fn an_unknown_key_serde_cannot_see_is_refused_at_the_cli() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let slice = fixture(root);
+        let payload = format!(
+            "{{{},\"stagge\":{{\"to\":\"shaping\"}}}}",
             envelope(root, slice, 1, "sub-1")
         );
         let error = apply(root, slice, &payload, &|| {}, &no_fault)
             .unwrap_err()
             .to_string();
         assert!(
-            error.contains("unknown field"),
-            "serde's own text survives verbatim: {error}"
+            error.contains("stagge") && error.contains("ApplyRequest"),
+            "the refusal names the key and the type that admitted it: {error}"
         );
         assert!(
-            error.contains("cursror"),
-            "including the key it names: {error}"
-        );
-        assert!(
-            error.contains(PAYLOAD_CONTRACT_POINTER),
-            "and the refusal carries the remedy: {error}"
+            error.contains("`stage`"),
+            "and what was expected instead: {error}"
         );
         assert!(
             error.contains(&format!("\n  {PAYLOAD_CONTRACT_POINTER}")),
-            "on an indented continuation, matching Refusal::GateNotCleared's form: {error}"
+            "carrying the remedy on an indented continuation, like every other \
+             wire-level complaint: {error}"
         );
     }
 
