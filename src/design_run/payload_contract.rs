@@ -3858,9 +3858,9 @@ mod tests {
              got {disclosures:?}"
         );
         assert!(
-            disclosures
+            disclosures.iter().all(|gloss| rendered
                 .iter()
-                .all(|gloss| rendered.iter().any(|variant| gloss == unknown_keys_note(*variant))),
+                .any(|variant| gloss == unknown_keys_note(*variant))),
             "and each is the variant's own fixed string: {disclosures:?}"
         );
     }

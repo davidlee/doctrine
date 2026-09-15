@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0a2b1-dbda-78e1-922a-45bc18802003"
+recorded_at = "2026-09-15T01:32:40.28255273Z"
+kind = "friction"
+summary = "/phase-plan: a plan-time VT test_file mandate silently constrained module layout, and deferring to it was the wrong default"
+detail = "SL-259 PHASE-03. Four of five VT criteria named test_file = src/design_run/payload_contract.rs. vtgate greps the named file literally, so tests homed elsewhere Fail. At phase-planning I treated that as binding and sited a new value-judging walk inside a 4015-line describing module — the mandate choosing the layout. The user caught it ('tail wagging the dog'). The right move was amending test_file (ids/keywords unchanged, which is not a renumber), and plan.md already recorded PHASE-01 doing exactly that retarget at its own phase-planning time — precedent I had read and did not apply. Cost: one wrong decision authored into the sheet plus a correction round. The skill does not say that a VT mandate is amendable at phase-plan time; the only signal was buried in a prior phase's narrative."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

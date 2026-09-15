@@ -61,6 +61,26 @@ selector = "src/design_run/render/envelope.rs"
 intent = "design-target"
 note = "SL-259 sec-7 code impact: the seven design targets the four legs commit to"
 
+[[selector]]
+selector = "src/design_run/contract_check.rs"
+intent = "design-target"
+note = "SL-259 PHASE-03: leg 3's key axis landed as a leaf sibling (contract_check) rather than inside payload_contract as sec-7 assumed, with Refusal::UnknownPayloadKey and the module declaration alongside"
+
+[[selector]]
+selector = "src/design_run/refusal.rs"
+intent = "design-target"
+note = "SL-259 PHASE-03: leg 3's key axis landed as a leaf sibling (contract_check) rather than inside payload_contract as sec-7 assumed, with Refusal::UnknownPayloadKey and the module declaration alongside"
+
+[[selector]]
+selector = "src/design_run/mod.rs"
+intent = "design-target"
+note = "SL-259 PHASE-03: leg 3's key axis landed as a leaf sibling (contract_check) rather than inside payload_contract as sec-7 assumed, with Refusal::UnknownPayloadKey and the module declaration alongside"
+
+[[selector]]
+selector = "install/design-payload-contract.md"
+intent = "design-target"
+note = "SL-259 PHASE-03 EX-3: the published contract is a deliverable of the flip — it is what tells every installed client whether a misspelt key is refused"
+
 [[relation]]
 label = "governed_by"
 target = "STD-003"
