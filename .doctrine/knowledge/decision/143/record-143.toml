@@ -3,7 +3,7 @@ version = 1
 
 id = 143
 slug = "two-dot-spawns-held-knowingly-cross-referenced-with-the-shared-taxonomy-single-sourced"
-title = "Two dot spawns held knowingly, cross-referenced, with the shared taxonomy single-sourced"
+title = "Two dot render spawns held knowingly, cross-referenced, program name single-sourced"
 record_kind = "decision"
 status = "accepted"
 created = "2026-08-05"
@@ -11,13 +11,13 @@ updated = "2026-09-15"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-context      = ""
-choice       = ""
-alternatives = []
-rationale    = ""
-consequences = []
-decided_by   = ""
-decided_on   = ""
+context = "map_server already runs dot twice: an async dot -Tsvg render in map_server/shell.rs and an async dot -V health probe in map_server/routes.rs. SL-245 needs a sync dot -Tpng render for the CLI. ADR-001 forbids a leaf reaching up into map_server."
+choice = "Hold two render spawns knowingly: map_server's async render stays as is and a sync render lives in the graphviz leaf. The dot program name is single-sourced as graphviz::DOT_PROGRAM at all three invocation sites and in tests. Each timeout stays with its owner under its own name because they differ in meaning: map_server's per-stage render budget, the health probe's short budget, and graphviz's whole-operation render deadline. Each render site carries a comment naming the other. Clarified 2026-09-15 after RV-368 F-3: an earlier reading counted two invocations and a shared timeout."
+alternatives = ["Extract one spawn used by both which is blocked by the tokio versus sync execution split", "Share one timeout constant whose meaning would differ per call site"]
+rationale = "The execution models genuinely differ; what is truly shared is the program name. Naming each budget where it is enforced satisfies STD-001 without pretending the budgets are one."
+consequences = ["map_server imports DOT_PROGRAM only", "routes.rs names its 2s probe budget", "graphviz owns RENDER_TIMEOUT"]
+decided_by = "user"
+decided_on = "2026-08-05"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []

@@ -36,10 +36,11 @@ those verbs opt into, not a copy per verb**.
 - **POL-002 facet (3)** (added by REV-047 during preflight): a feature-scoped
   host tool such as `dot` must be opt-in, and its absence must fail naming what
   was missing and what would satisfy it.
-- **Capability detection is not needed.** Opt-in is the capability assertion.
-  Env-sniffing would in fact be wrong: inside the jail `TERM=xterm-256color`
-  with no `KITTY_WINDOW_ID`, so inference would report "no kitty" against a
-  terminal that speaks it.
+- **Env-sniffing would be wrong.** Inside the jail `TERM=xterm-256color` with
+  no `KITTY_WINDOW_ID`, so inference would report "no kitty" against a
+  terminal that speaks it. Preflight concluded no detection was needed; design
+  review (RV-368 F-1) reversed that under POL-002 facet (3), and support is now
+  asked of the terminal directly (DEC-259).
 
 ### The constraint that shapes this slice
 
@@ -61,33 +62,35 @@ free — every emitting surface already produces DOT strings.
 2. **Opt-in activation via `--render` / `-X`** on each DOT-emitting verb
    (DEC-253), default off. Every verb's behaviour is unchanged without it. On
    `concept-map export`, `-X` implies `--format dot` (DEC-258).
-3. **Descriptive guards, one error class** (DEC-254): stdout is not a
-   terminal, or `-X` is combined with a non-DOT format — exit non-zero, nothing
-   on stdout, cause and fix on stderr. A failed `dot` spawn is reported by its
-   typed outcome — unavailable, failed with graphviz's stderr, or timed out
-   (DEC-255). Nothing fails silently or corrupts redirected output.
-4. **Typed capability seams** (DEC-255): a `RenderTarget` terminal descriptor
-   (`NotTerminal` | `Terminal { columns, pixel_width }`) probed in `src/tty.rs`,
-   and a sync `dot -Tpng` spawn that is its own availability probe. A pure
-   encoder turns PNG bytes plus the descriptor into kitty escape bytes. The
-   spawn is a second, knowingly-held `dot` spawn beside `map_server`'s, each
-   naming the other, program name and timeout single-sourced (DEC-143). The
-   spawn rides a bounded sync-subprocess helper extracted from
-   `coverage_verify` rather than copying it; that suite is the
-   behaviour-preservation proof.
-5. **Sizing by pixel width** (DEC-256, provisional): native size when the PNG
-   fits the terminal's pixel width, else scale to columns; unknown pixel width
-   scales to columns.
+3. **Descriptive refusals, one error class** (DEC-254, DEC-259, DEC-256): the
+   format is not DOT, stdout is not a terminal, the terminal does not report
+   its pixel size, or the terminal does not answer the kitty support query
+   (tmux included). Exit non-zero with cause and fix on stderr. A failed `dot`
+   spawn is reported by its typed outcome: unavailable, failed with graphviz's
+   stderr, timed out, or other I/O (DEC-255). Every failure before the image is
+   written leaves stdout empty; nothing fails silently.
+4. **Typed capability seams** (DEC-255, DEC-259): a `RenderTarget` window
+   descriptor and a raw-mode query/reply exchange in `src/tty.rs`; the kitty
+   support query plus DA1, classified purely; and a sync `dot -Tpng` spawn
+   that is its own availability probe. The spawn is a second, knowingly-held
+   `dot` render spawn beside `map_server`'s, each naming the other. The
+   program name is single-sourced across all three `dot` invocations, and
+   each timeout is named where it is enforced (DEC-143). The spawn rides a
+   bounded sync-subprocess helper extracted from `coverage_verify` rather than
+   copying it; that suite is the behaviour-preservation proof.
+5. **Explicit placement** (DEC-256, provisional): always send columns and rows
+   with `C=1` and write the rows as newlines. Native size when it fits in
+   columns minus one, else scale to columns minus one.
 6. **Both Rust verbs wired** (DEC-258): `doctrine graph` first, proving the
    seam end to end, then `concept-map export`.
-7. **Verification** (DEC-257): VH — the user views small and large graphs in
-   ghostty — is the acceptance test. VT scaffolds arrival and guards against
-   silent regression without graphviz or a terminal: encoder framing goldens
-   over a committed PNG fixture, sizing table, descriptor decision, end-to-end
-   guard errors, and spawn outcomes with program and timeout injected.
-8. **Reconcile-time governance** (DEC-258): a Revision adds a sentence to
-   SPEC-027 resp. 5 on the render output mode; ISS-242 is annotated that the
-   flag joins the ungoverned concept-map surface.
+7. **Verification** (DEC-257): VH (the user in ghostty, small and large graphs,
+   a pipe, tmux) is the acceptance test. VT scaffolds arrival and guards
+   against silent regression without graphviz or a terminal: pure tests over
+   synthetic inputs, two real spawns, and three CLI wiring tests.
+8. **Reconcile-time governance** (DEC-258): a Revision amends SPEC-027 resp. 5
+   and REQ-396's `run_graph` acceptance criterion to describe the render
+   branch. ISS-242 is annotated that the flag joins the ungoverned concept-map
+   surface.
 
 ## Non-Goals
 
@@ -96,12 +99,9 @@ free — every emitting surface already produces DOT strings.
   clause on `catalog::dot::render`, that is a signal the siting is wrong. (The
   resp. 5 note on the verb shell's output mode is descriptive, not a
   relaxation.)
-- **Unifying the two `dot` spawns** — held knowingly per DEC-143.
-- **Capability handshake.** No kitty query-response round-trip — it is an
-  interactive exchange that can hang on terminals that never answer, and opt-in
-  makes it unnecessary.
-- **Multiplexer passthrough.** Under tmux the escape sequence needs wrapping or
-  is swallowed. Out of scope, named rather than omitted.
+- **Unifying the two `dot` render spawns** — held knowingly per DEC-143.
+- **Multiplexer passthrough.** Under tmux the escape sequence needs wrapping.
+  Out of scope; the support probe refuses there rather than drawing nothing.
 - **Sixel or other protocols**, and any bundled raster viewer.
 - **The POL-002 amendment** — travelled separately and landed as REV-047;
   this slice consumes facet (3), it does not author it.

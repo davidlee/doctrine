@@ -15,7 +15,7 @@ context = "DEC-253 puts `--render` on both DOT-emitting Rust verbs; the scope re
 choice = "(1) Wire `doctrine graph` first, proving the seam end to end, then `concept-map export` in this slice. (2) On `concept-map export`, `--format` is required unless `-X` is present; `-X` implies `dot`, and an explicit non-DOT format with `-X` takes DEC-254's error. `graph` already defaults to `dot`. (3) SPEC-027 resp. 5 gains a sentence on the render output mode through a Revision at /reconcile (ADR-013); ISS-242 is annotated that the render flag joins the ungoverned concept-map surface."
 alternatives = ["Wire `graph` only and defer concept-map — less work now, but splits a feature the flag exists to unify", "Keep `--format` required on concept-map export — forces `--format dot -X`, redundant typing against the UX-first stance of DEC-253"]
 rationale = "Once the leaf module exists the second verb is a few lines; one slice delivers the feature whole. `-X` implying `dot` follows DEC-253's UX-first choice."
-consequences = ["Plan has a phase boundary between the leaf + graph wiring and the concept-map wiring", "The SPEC-027 change is reconcile-time, not design-time", "ISS-242 carries the note so a future concept-map spec picks the flag up"]
+consequences = ["Plan has a phase boundary between the leaf modules plus graph wiring and the concept-map wiring", "The reconcile-time Revision amends SPEC-027 responsibility 5 and REQ-396's run_graph acceptance criterion (RV-368 F-2)", "ISS-242 carries the note so a future concept-map spec picks the flag up"]
 decided_by = "user"
 decided_on = "2026-09-15"
 

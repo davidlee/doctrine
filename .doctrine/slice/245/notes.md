@@ -86,8 +86,7 @@ Carried into the run's inquiry, not resolved here. The live forks:
 
 ## Inquiry state — 2026-09-15
 
-Design run `dr-019fd12e-03c3-7c92-9b87-bb48b4845e13`, revision 22, stage
-`inquiring`, runbook cleared. Re-enter with `doctrine design resume SL-245`. This
+Design run `dr-019fd12e-03c3-7c92-9b87-bb48b4845e13`, stage `reviewing`. Re-enter with `doctrine design resume SL-245`. This
 section carries only what the run does not.
 
 **All seven inquiries dispositioned, each as an accepted DEC:** inq-1 → DEC-143
@@ -106,7 +105,12 @@ shell (resp. 5). The user chose (b) on UX grounds; the boundary holds either way
 **User acts recorded:** `governance-confirmed`; `graph-reviewed` (re-performed
 after inq-7 invalidated it — blocking set now inq-1..inq-5 + inq-7).
 
-**Outstanding before drafting:** the user's `sufficiency-accepted`.
+**Design review — RV-368 (codex gpt-5.6-sol, 2026-09-15).** 8 findings, all
+disposed; see the ledger for chronology. Two reopened settled positions with the
+user's agreement: a kitty support probe (DEC-259, reverses the scope's "no
+capability handshake" non-goal under POL-002 facet 3) and explicit placement
+geometry (DEC-256 amended). DEC-143, DEC-257 and DEC-258 amended to match.
+ISS-455 captures the incumbent descendant-pipe hang in the bounded spawn.
 
 **Friction:** the apply payload contract does not say which subject kind honours
 `dispose` / `resolution` (resolving an `inq-` takes a `cp-` subject with

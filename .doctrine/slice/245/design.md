@@ -20,11 +20,15 @@ write the image inline using the kitty graphics protocol (an escape-sequence
 image format that kitty and ghostty both implement). Without the flag, both
 verbs behave exactly as they do today (`DEC-253`).
 
-The flag is an explicit request, so it is also the capability assertion: there
-is no terminal sniffing and no query-response handshake. When the request
-cannot be honoured — stdout is not a terminal, the format is not DOT, `dot` is
-missing or fails — the verb writes nothing to stdout, exits non-zero, and says
-on stderr what went wrong and how to fix it (`DEC-254`).
+The flag opts in; it does not assert the terminal can draw. Before any work,
+the verb asks the terminal directly, using the kitty protocol's own support
+query (`DEC-259`), because a terminal protocol is a host capability that
+POL-002 facet (3) requires to fail descriptively when absent. When the request
+cannot be honoured, the verb exits non-zero and says on stderr what was missing
+and how to fix it (`DEC-254`). The cases are: the format is not DOT, stdout is
+not a terminal, the terminal does not speak the protocol (tmux included), the
+terminal does not report its pixel size, or `dot` is missing or fails. Every
+failure before the image is written leaves stdout empty.
 
 ### The boundary
 
@@ -51,11 +55,11 @@ flowchart TB
     dot["catalog::dot::render<br/>SPEC-027 emitter (unchanged)"]
   end
   subgraph leaf["leaf tier"]
-    ti["terminal_image<br/>guard + compose (new)"]
+    ti["terminal_image<br/>checks + compose (new)"]
     gv["graphviz<br/>sync dot -Tpng spawn (new)"]
     sp["subprocess<br/>bounded sync spawn (new, extracted)"]
     kitty["kitty<br/>pure encoder + sizing (new)"]
-    tty["tty<br/>+ RenderTarget (extended)"]
+    tty["tty<br/>+ RenderTarget, raw query (extended)"]
   end
   graph --> dot
   graph -- "-X" --> ti
@@ -65,17 +69,17 @@ flowchart TB
   ti --> kitty
   gv --> sp
   cv --> sp
-  ms -. "DOT_PROGRAM, DOT_TIMEOUT" .-> gv
+  ms -. "DOT_PROGRAM" .-> gv
 ```
 
 The non-obvious edges:
 
 - `catalog::dot::render` has no edge to anything new. The SPEC-027 clause stays
   literally true.
-- `map_server` takes only the program name and timeout constants from
-  `graphviz`. Its async spawn is not rewritten: there are knowingly two `dot`
-  spawns, one async for the HTTP server and one sync for the CLI, each naming
-  the other in a comment (`DEC-143`).
+- `map_server` takes only the program name from `graphviz`. Its async render
+  spawn and its `dot -V` health probe are not rewritten. There are knowingly
+  two render spawns, one async for the HTTP server and one sync for the CLI,
+  each naming the other in a comment (`DEC-143`).
 - `subprocess` is the bounded synchronous spawn that `coverage_verify` already
   had, moved down a tier so `graphviz` reuses it instead of copying it.
 - `terminal_image` is the only module the verbs import. The encoder and the
@@ -83,27 +87,28 @@ The non-obvious edges:
 
 ### Out of reach
 
-The web explorer's TypeScript DOT emitters, tmux passthrough, sixel or any
-other image protocol, and a force mode that writes escape bytes to a
-non-terminal.
+The web explorer's TypeScript DOT emitters, sixel or any other image protocol,
+and a force mode that writes escape bytes to a non-terminal. Multiplexer
+passthrough is out of reach too, but no longer silent: the support probe
+refuses under tmux.
 
 <!-- doctrine:section sec-2 -->
 ## Modules, responsibilities and types
 
-Five leaf units, each with one job. Four are new, one is extended. Every
-impurity (the tty probe, the process spawn, the stdout write) sits in a named
-thin function; everything that decides or encodes is pure and takes those
-results as plain values (`DEC-255`).
+There are five leaf units, each with one job: four new and one extended. Every
+impurity sits in a named thin function: the tty probes, the process spawn and
+the stdout write. Everything that decides, parses or encodes is pure and takes
+the probes' results as plain values (`DEC-255`).
 
 | unit | tier | pure? | responsibility |
 |---|---|---|---|
-| `tty` (extended) | leaf | seam | probe stdout into a `RenderTarget` |
-| `subprocess` (new) | leaf | seam | run a child synchronously under a timeout (see *The graphviz spawn*) |
-| `graphviz` (new) | leaf | seam | run `dot -Tpng` synchronously; classify the outcome |
-| `kitty` (new) | leaf | pure | PNG width, display sizing, escape-sequence encoding |
-| `terminal_image` (new) | leaf | pure core + thin shell | guard a render request; compose spawn → size → encode |
+| `tty` (extended) | leaf | seam | probe stdout into a `RenderTarget`; run a raw-mode query/reply exchange on the controlling tty |
+| `subprocess` (new) | leaf | seam | run a child synchronously, bounded for the direct child (see *The graphviz spawn*) |
+| `graphviz` (new) | leaf | seam + pure classifier | run `dot -Tpng`; classify the outcome |
+| `kitty` (new) | leaf | pure | protocol bytes: support query and reply classifier, PNG size, placement, encoding |
+| `terminal_image` (new) | leaf | pure checks + thin shell | sequence the checks; compose spawn → place → encode |
 
-### `tty` — the terminal descriptor
+### `tty` — what the terminal is
 
 `stdout_terminal_width()` returns `None` both for a pipe and for a terminal
 whose size could not be read. `-X` must tell those apart, so it gets its own
@@ -112,33 +117,51 @@ descriptor rather than reusing that `Option`.
 ```rust
 pub(crate) enum RenderTarget {
   NotTerminal,
-  Terminal(TerminalGeometry),
+  Terminal(WindowGeometry),
 }
 
-pub(crate) struct TerminalGeometry {
-  /// Width in cells; `None` when the ioctl fails or reports 0.
-  pub(crate) columns: Option<u16>,
-  /// Width in pixels; `None` when the terminal does not fill it (reports 0).
-  pub(crate) pixel_width: Option<u16>,
+/// The window-size ioctl as reported. 0 means the terminal did not report the
+/// field; an ioctl failure on a tty is all zeros, with the same remedy.
+pub(crate) struct WindowGeometry {
+  pub(crate) columns: u16,
+  pub(crate) rows: u16,
+  pub(crate) pixel_width: u16,
+  pub(crate) pixel_height: u16,
 }
 
 /// Thin shell: isatty + `crossterm::terminal::window_size()`.
 pub(crate) fn stdout_render_target() -> RenderTarget;
 
-/// Pure decision, both impurities injected. `window` is `(columns, pixel_width)`.
-fn render_target(is_tty: bool, window: Option<(u16, u16)>) -> RenderTarget;
+/// Pure decision, both impurities injected.
+fn render_target(is_tty: bool, window: Option<WindowGeometry>) -> RenderTarget;
+
+/// Thin shell: put the controlling tty in raw mode, write `request`, and read
+/// until `complete(&bytes_so_far)` or `timeout`. Raw mode is restored on every
+/// path by a drop guard. `Ok(None)` means the deadline passed first.
+pub(crate) fn query_terminal(
+  request: &[u8],
+  complete: impl Fn(&[u8]) -> bool,
+  timeout: Duration,
+) -> std::io::Result<Option<Vec<u8>>>;
 ```
 
-`window_size()` is the same ioctl `size()` already performs, so the probe adds
-no system call. The existing width and colour functions are untouched.
+`window_size()` is the ioctl `size()` already performs. Raw mode comes from
+`crossterm::terminal::{enable_raw_mode, disable_raw_mode}`, available under the
+current `default-features = false` build. The query reads and writes
+`/dev/tty`. Because there is no portable read timeout on a tty, the reads
+happen on a thread feeding a channel, and the caller waits with
+`recv_timeout`. If the deadline passes, that thread stays blocked on the tty
+until the process exits, which follows immediately with the refusal. `tty`
+knows nothing about kitty: the request bytes and the completion predicate
+come from the caller.
 
 ### `graphviz` — the spawn
 
 ```rust
-/// The graphviz layout program. Single source for both `dot` spawns (DEC-143).
+/// The graphviz layout program. Single source for all three `dot` invocations (DEC-143).
 pub(crate) const DOT_PROGRAM: &str = "dot";
-/// Wall-clock bound on one `dot` run. Also adopted by `map_server::shell`.
-pub(crate) const DOT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Whole-operation deadline for one CLI render: spawn, feed, wait.
+pub(crate) const RENDER_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(crate) enum RasterOutcome {
   Png(Vec<u8>),
@@ -146,9 +169,9 @@ pub(crate) enum RasterOutcome {
   ToolUnavailable,
   /// The program ran and exited non-zero; `stderr` is graphviz's own.
   CommandFailed { status: Option<i32>, stderr: String },
-  /// The run exceeded the timeout and was killed.
+  /// The run exceeded the deadline and was killed.
   TimedOut,
-  /// Any other I/O failure spawning or talking to the process.
+  /// Any other I/O failure spawning or waiting on the process.
   Io(std::io::Error),
 }
 
@@ -163,60 +186,79 @@ fn classify(run: std::io::Result<subprocess::Bounded>) -> RasterOutcome;
 catch-all (`MapServerError::Other`). Folding it into `ToolUnavailable` would
 misreport a permission error as a missing tool, which STD-003 forbids.
 
-### `kitty` — the pure encoder
+### `kitty` — the protocol, pure
 
 ```rust
-/// Width from the PNG IHDR chunk; `None` if the bytes are not a PNG.
-pub(crate) fn png_pixel_width(png: &[u8]) -> Option<u32>;
+/// The documented support query (a=q, id 31, a 1×1 RGB payload) followed by DA1.
+pub(crate) const SUPPORT_QUERY: &[u8];
 
-/// DEC-256: `None` = draw at native size; `Some(c)` = scale to `c` columns.
-/// Takes a known width: output that is not a PNG is refused before sizing.
-pub(crate) fn display_columns(png_width: u32, geometry: &TerminalGeometry) -> Option<u16>;
+pub(crate) enum SupportReply { Incomplete, Supported, Unsupported }
 
-/// Transmit-and-display escape sequence(s) for one PNG.
-pub(crate) fn encode_png(png: &[u8], columns: Option<u16>) -> Vec<u8>;
+/// A graphics reply for id 31 before the DA1 reply → Supported; DA1 alone →
+/// Unsupported; neither yet → Incomplete.
+pub(crate) fn classify_support_reply(bytes: &[u8]) -> SupportReply;
+
+pub(crate) struct PngSize { pub(crate) width: u32, pub(crate) height: u32 }
+
+/// From the PNG IHDR chunk; `None` if the bytes are not a PNG.
+pub(crate) fn png_size(png: &[u8]) -> Option<PngSize>;
+
+/// Cell size in pixels; `None` if any window field is 0 (DEC-256 refuses).
+pub(crate) struct CellGeometry { pub(crate) columns: u16, pub(crate) cell_width: u16, pub(crate) cell_height: u16 }
+pub(crate) fn cell_geometry(window: &WindowGeometry) -> Option<CellGeometry>;
+
+/// DEC-256: the cell rectangle the image occupies.
+pub(crate) struct Placement { pub(crate) columns: u16, pub(crate) rows: u16 }
+pub(crate) fn place(png: PngSize, cell: &CellGeometry) -> Placement;
+
+/// The escape sequence(s) for one PNG at `placement`, followed by
+/// `placement.rows` newlines so the cursor lands on the line below the image.
+pub(crate) fn encode_png(png: &[u8], placement: Placement) -> Vec<u8>;
 ```
 
-`kitty` imports `tty::TerminalGeometry` (a leaf-to-leaf edge) and nothing else
-in the crate. The protocol literals are named constants (STD-001).
+`kitty` imports `tty::WindowGeometry`, a leaf-to-leaf edge, and nothing else in
+the crate. Every protocol literal is a named constant (STD-001).
 
 ### `terminal_image` — the only surface the verbs see
 
 ```rust
-/// Why a render request is refused before any work is done (DEC-254).
+/// Why a render request is refused before anything is written (DEC-254, DEC-259, DEC-256).
 pub(crate) enum RenderRefusal {
-  NotTerminal,
   FormatNotDot { format: String },
+  NotTerminal,
+  Unsupported,
+  Unconfirmed,
+  NoPixelSize,
 }
 
-/// Pure. Format first, then terminal: a wrong format is wrong on any stdout.
-pub(crate) fn guard(format: &str, is_dot: bool, target: RenderTarget)
-  -> Result<TerminalGeometry, RenderRefusal>;
+/// Thin shell. Runs the checks cheapest-first and stops at the first refusal:
+/// format → terminal → pixel size → support probe. Returns the cell geometry.
+pub(crate) fn prepare(format: &str, is_dot: bool) -> anyhow::Result<CellGeometry>;
 
-/// Thin shell: rasterise via `graphviz`, size and encode via `kitty`.
-/// A failed raster becomes a descriptive error naming `dot` and the fix.
-pub(crate) fn render_dot(dot: &str, geometry: &TerminalGeometry) -> anyhow::Result<Vec<u8>>;
+/// Thin shell: rasterise via `graphviz`, then place and encode via `kitty`.
+pub(crate) fn render_dot(dot: &str, cell: &CellGeometry) -> anyhow::Result<Vec<u8>>;
 ```
 
-`RenderRefusal` implements `Display` with the user-facing messages, so each
-verb shell propagates it with `?` and the existing error path supplies the
-non-zero exit.
+The checks inside `prepare` are small pure functions over the probe results,
+tested without a terminal. `RenderRefusal` implements `Display` with the
+user-facing messages, and each verb shell propagates it with `?`.
 
 ### Why separate units, not one
 
-The encoder is the part with goldens; the spawn is the part with a process; the
-guard is the part with policy. A single module would mix a pure,
-fixture-tested encoder with a thread-and-timeout spawn, and `map_server` would
-have to import the whole renderer to reach one constant. The split costs small
-files. It keeps `graphviz` reusable by any future caller that needs a `dot`
-spawn without a terminal, and `subprocess` reusable by any bounded spawn.
+The encoder is the part with byte-exact tests; the spawn is the part with a
+process; the tty query is the part with raw mode; the guard is the part with
+policy. One module would mix all four, and `map_server` would import the whole
+renderer to reach one constant. Splitting keeps each concern alone in a small
+file. `graphviz` stays reusable by any caller that needs `dot` without a
+terminal, and `subprocess` by any bounded spawn.
 
 <!-- doctrine:section sec-3 -->
 ## Request flow and refusal paths
 
-A render request is checked before any work, then run as one straight pipeline.
-Every failure leaves stdout empty and exits non-zero through the verb's
-ordinary `anyhow` error path (`DEC-254`).
+A render request passes four checks before any work, cheapest first, then runs
+as one pipeline. Every refusal and every rasterise or encode failure happens
+before the first byte reaches stdout, so all of them leave stdout empty and exit
+non-zero through the verb's ordinary `anyhow` error path (`DEC-254`).
 
 ```mermaid
 flowchart TD
@@ -224,17 +266,22 @@ flowchart TD
   fmt -- no --> r1["refuse: FormatNotDot"]
   fmt -- yes --> tty{"stdout is a terminal?"}
   tty -- no --> r2["refuse: NotTerminal"]
-  tty -- yes --> build["build DOT<br/>(scan corpus, project, emit — unchanged)"]
+  tty -- yes --> px{"window reports columns, rows,<br/>pixel width and height?"}
+  px -- no --> r3["refuse: NoPixelSize"]
+  px -- yes --> probe["kitty support query + DA1<br/>(raw tty, 2s deadline)"]
+  probe -- "DA1 only" --> r4["refuse: Unsupported"]
+  probe -- "no reply" --> r5["refuse: Unconfirmed"]
+  probe -- "graphics reply first" --> build["build DOT<br/>(scan corpus, project, emit: unchanged)"]
   build --> spawn["graphviz::rasterise_png"]
-  spawn -- ToolUnavailable / CommandFailed / TimedOut / Io --> r3["error naming dot and the fix"]
+  spawn -- "ToolUnavailable / CommandFailed / TimedOut / Io" --> r6["error naming dot and the fix"]
   spawn -- Png --> png{"PNG header readable?"}
-  png -- no --> r4["error: dot output is not a PNG"]
-  png -- yes --> size["kitty::display_columns"] --> enc["kitty::encode_png"] --> out(["write bytes + newline to stdout"])
+  png -- no --> r7["error: dot output is not a PNG"]
+  png -- yes --> place["kitty::place"] --> enc["kitty::encode_png<br/>(escapes + rows newlines)"] --> out(["one write_all to stdout"])
 ```
 
-The guards come first so that a refused request costs no corpus scan. Format
-is checked before the terminal because `--format json -X` is wrong wherever
-stdout points.
+The checks come before the corpus scan, so a refused request costs nothing.
+Format comes first because `--format json -X` is wrong wherever stdout points.
+The probe comes last because it is the only check that talks to the terminal.
 
 ### The verb shell
 
@@ -242,28 +289,27 @@ Both shells follow the same shape. `run_graph`, abbreviated:
 
 ```rust
 pub(crate) fn run_graph(/* existing args */, format: GraphFormat, render: bool) -> anyhow::Result<()> {
-  let geometry = render
-    .then(|| terminal_image::guard(&format.to_string(), format == GraphFormat::Dot,
-                                   tty::stdout_render_target()))
+  let cell = render
+    .then(|| terminal_image::prepare(&format.to_string(), format == GraphFormat::Dot))
     .transpose()?;
   let root = crate::root::find(path, &crate::root::default_markers())?;
   let output = build_graph_output(/* unchanged */)?;
   let mut stdout = std::io::stdout().lock();
-  match geometry {
+  match cell {
     None => writeln!(stdout, "{output}")?,
-    Some(geometry) => {
-      stdout.write_all(&terminal_image::render_dot(&output, &geometry)?)?;
-      writeln!(stdout)?;
-    }
+    Some(cell) => stdout.write_all(&terminal_image::render_dot(&output, &cell)?)?,
   }
   Ok(())
 }
 ```
 
 `build_graph_output` is untouched, so every existing graph test keeps asserting
-on the same string. The rendered bytes are assembled in full before the first
-byte is written, so a late failure cannot leave half an escape sequence on the
-terminal.
+on the same string. The image, its escapes and its trailing newlines are
+assembled into one buffer and written with a single `write_all`. That prevents
+a *doctrine* failure from leaving half an escape on the terminal. It cannot
+make the terminal write itself atomic: if stdout fails mid-write, part of the
+transmission may already be on screen, and the write error is reported as
+usual.
 
 ### Messages
 
@@ -274,77 +320,128 @@ Each message names what was missing and what would satisfy it (POL-002 facet
 |---|---|
 | format not DOT | `--render needs --format dot, got 'json'; drop -X or the --format` |
 | not a terminal | `--render needs stdout to be a terminal; drop -X to emit DOT` |
+| no pixel size | `--render needs the terminal to report its size in pixels, and it did not; drop -X to emit DOT` |
+| unsupported | `--render needs a terminal that supports the kitty graphics protocol (kitty, ghostty); this one does not, and under tmux or screen it never will; drop -X to emit DOT` |
+| unconfirmed | `--render could not confirm kitty graphics support: the terminal did not answer within 2s; drop -X to emit DOT` |
+| tty query I/O | `--render could not query the terminal: <io error>` |
 | `dot` not found | `--render needs graphviz: 'dot' was not found on PATH; install graphviz or drop -X` |
 | `dot` exited non-zero | `'dot' failed (exit 1): <graphviz stderr, trimmed>` |
 | `dot` timed out | `'dot' did not finish within 10s; drop -X and render the DOT yourself` |
-| other I/O | `could not run 'dot': <io error>` |
+| other spawn I/O | `could not run 'dot': <io error>` |
 | not a PNG | `'dot -Tpng' produced output that is not a PNG` |
 
 A non-PNG payload is refused rather than forwarded because the terminal would
-reject it silently. That silent failure is exactly the case the guard exists to
-surface.
+drop it silently, which is the exact failure the checks exist to surface.
 
 <!-- doctrine:section sec-4 -->
-## Encoding and sizing
+## The protocol: support query, placement, encoding
 
-### The escape sequence
+### Support query
 
-One PNG is sent as a *transmit-and-display* command: base64 payload, split into
-chunks, each wrapped in an APC escape (`ESC _ G … ESC \`). The first chunk
-carries the full control data; continuation chunks carry only the
-more-follows flag.
+`DEC-259` uses the probe the kitty protocol documents
+(<https://sw.kovidgoyal.net/kitty/graphics-protocol/>, *Querying support*): a
+graphics query, immediately followed by a request for the primary device
+attributes (DA1).
 
 ```text
-ESC_G a=T,f=100,t=d,q=2,c=80,m=1 ; <4096 base64 bytes> ESC\
-ESC_G m=1,q=2                    ; <4096 base64 bytes> ESC\
-ESC_G m=0,q=2                    ; <final ≤4096 bytes>  ESC\
+ESC_G i=31,s=1,v=1,a=q,t=d,f=24 ; AAAA ESC\      graphics query: 1×1 RGB, never displayed
+ESC[c                                            DA1 request
+```
+
+Every VT-compatible terminal answers DA1 (`ESC[?…c`). A terminal that speaks
+the graphics protocol also answers the query (`ESC_G i=31;… ESC\`), and does so
+before DA1 because the requests are answered in order. `classify_support_reply`
+scans the accumulated bytes:
+
+| bytes seen so far | result |
+|---|---|
+| a graphics reply carrying `i=31` | `Supported`, whatever its status text: any reply proves the protocol is spoken |
+| a complete DA1 reply and no graphics reply | `Unsupported` |
+| neither complete | `Incomplete`; keep reading |
+
+`query_terminal` is called with `complete = |b| classify_support_reply(b) != Incomplete`
+and a 2 s deadline. tmux answers DA1 itself and does not pass the query
+through, so under tmux the probe returns `Unsupported`.
+
+### Placement
+
+`DEC-256`. The kitty docs say that after a placement the cursor moves right by
+the placement's columns and down by its rows. If that leaves the screen, the
+cursor position is undefined. Doctrine therefore fixes the rectangle itself,
+tells the terminal not to move the cursor (`C=1`), and moves it with newlines.
+
+Inputs: the PNG's `width × height` from its header, and the cell size
+`cell_width = pixel_width / columns`, `cell_height = pixel_height / rows` from
+the window geometry (integer division; `cell_geometry` returns `None` if any
+field or quotient is 0).
+
+```text
+max_columns    = columns - 1                          never reach the right edge
+native_columns = ceil(width / cell_width)
+if native_columns <= max_columns:
+  placement = (native_columns, ceil(height / cell_height))
+else:
+  scaled_height = height * (max_columns * cell_width) / width
+  placement     = (max_columns, ceil(scaled_height / cell_height))
+rows = max(rows, 1)                                   saturating at u16::MAX
+```
+
+All arithmetic is `u64` and the division rounds up. Rounding to whole cells
+distorts the aspect ratio by less than one cell on each axis. A tall image is
+not bounded vertically: the newlines scroll the screen like any other output,
+and the image scrolls with it.
+
+| case | window (cols × rows, px) | PNG | placement |
+|---|---|---|---|
+| small graph | 200 × 50, 2000 × 1000 (cell 10×20) | 300 × 200 | 30 × 10 (native) |
+| exactly fits | 200 × 50, 2000 × 1000 | 1990 × 400 | 199 × 20 (native) |
+| wide graph | 200 × 50, 2000 × 1000 | 4000 × 1000 | 199 × 25 (scaled) |
+| tall graph | 80 × 24, 800 × 480 (cell 10×20) | 400 × 3000 | 40 × 150 (native, scrolls) |
+| one-column terminal | 1 × 24, 10 × 480 | 100 × 100 | 1 × 1 (clamped) |
+
+For `columns == 1`, `max_columns` is floored at 1.
+
+### Encoding
+
+One PNG is sent as a transmit-and-display command: base64 payload, split into
+chunks, each wrapped in an APC escape (`ESC _ G … ESC \`). The first chunk
+carries the full control data; continuation chunks carry only `m` and `q`.
+
+```text
+ESC_G a=T,f=100,t=d,q=2,C=1,c=199,r=25,m=1 ; <4096 base64 bytes> ESC\
+ESC_G m=1,q=2                              ; <4096 base64 bytes> ESC\
+ESC_G m=0,q=2                              ; <final ≤4096 bytes>  ESC\
+\n × 25
 ```
 
 | key | value | why |
 |---|---|---|
 | `a=T` | transmit and display | one command, no separate placement |
-| `f=100` | PNG | graphviz emits PNG; no pixel decoding in doctrine |
-| `t=d` | direct (in-band) | no temp files; written explicitly because the protocol docs imply but do not state it is the default |
-| `q=2` | suppress all responses | the terminal would otherwise type its acknowledgement into the user's shell input |
-| `c=N` | display columns | present only when sizing says scale; absent means native size |
+| `f=100` | PNG | graphviz emits PNG; doctrine decodes no pixels |
+| `t=d` | direct (in-band) | the documented default, written out for clarity |
+| `q=2` | quiet | no image id is sent, so no reply is expected; `q=2` also suppresses failure replies that would otherwise be typed into the shell's input |
+| `C=1` | do not move the cursor | doctrine moves it with `r` newlines |
+| `c`, `r` | placement columns, rows | always both, from `place` |
 | `m=1` / `m=0` | more follows / last | chunking |
 
-Base64 uses the standard alphabet with padding (`base64` 0.22, already a leaf-legal
-dependency). The chunk bound is 4096 bytes and every non-final chunk must be a
-multiple of 4; 4096 is, so fixed-size slicing of the encoded string satisfies
-both. A payload that fits one chunk is sent as a single escape with `m=0`.
+Base64 uses the standard alphabet with padding (`base64` 0.22, already a
+leaf-legal dependency). The chunk bound is 4096 bytes, and every non-final
+chunk must be a multiple of 4. 4096 is a multiple of 4, so fixed-size slicing
+of the encoded string satisfies both rules. A payload that fits one chunk is
+sent as a single escape with `m=0`. `encode_png` allocates its output once,
+sized from the encoded length plus the newlines.
 
-The literals — `ESC_G`, `ESC\`, the keys, the chunk size — are named constants
-(STD-001). `encode_png` allocates the output once, sized from the encoded
-length.
-
-### Sizing
-
-`DEC-256` in one table. `png_width` comes from the PNG header; the other two
-columns come from `TerminalGeometry`.
-
-| terminal pixel width | terminal columns | PNG fits in pixel width? | `display_columns` | result |
-|---|---|---|---|---|
-| known | any | yes | `None` | native size |
-| known | known | no | `Some(columns)` | scaled down to fit |
-| known | unknown | no | `None` | native, terminal truncates |
-| unknown | known | — | `Some(columns)` | scaled to width |
-| unknown | unknown | — | `None` | native size |
-
-The rule prefers a scaled image to a clipped one wherever it has the numbers to
-scale. It is marked provisional: the first VH run is expected to tune it.
-
-`png_pixel_width` reads the fixed layout every PNG starts with:
+`png_size` reads the fixed layout every PNG starts with, and returns `None`
+unless the signature and the `IHDR` tag match and at least 24 bytes are
+present:
 
 ```text
 offset  0..8    89 50 4E 47 0D 0A 1A 0A   signature
 offset  8..12   chunk length
 offset 12..16   "IHDR"
 offset 16..20   width, big-endian u32
+offset 20..24   height, big-endian u32
 ```
-
-It returns `None` unless the signature and the `IHDR` tag both match and at
-least 20 bytes are present.
 
 <!-- doctrine:section sec-5 -->
 ## The graphviz spawn
@@ -368,22 +465,37 @@ pub(crate) enum Bounded {
   TimedOut,
 }
 
-/// Spawn `command` with piped stdio, feed `stdin` (if any) on its own thread,
-/// drain stdout and stderr on their own threads, and poll for exit until
-/// `timeout`. On expiry: kill, wait, join, return `TimedOut`.
+/// Spawn `command` with piped stdio, feed `stdin` (if any) on a detached
+/// thread, drain stdout and stderr on their own threads, and poll for exit
+/// until `timeout`. On expiry: kill, wait, join the drains, return `TimedOut`.
 /// `Err` is a spawn or wait failure; the caller classifies it (e.g. `NotFound`).
+///
+/// The bound covers the direct child. A descendant that inherits and holds the
+/// output pipes keeps the drain joins open past the deadline (ISS-455).
 pub(crate) fn run_bounded(command: Command, stdin: Option<Vec<u8>>, timeout: Duration)
   -> std::io::Result<Bounded>;
 ```
 
-Stdin is fed on a thread, not the calling thread. A child that never reads its
-input would otherwise block the write forever, and the deadline would never be
-checked. A `BrokenPipe` on that write is ignored: a child that exits early, as
-`dot` does on a syntax error, reports through its exit status and stderr.
+The stdin writer runs on its own thread for two reasons:
+
+- A child that never reads its input would otherwise block the write forever,
+  and the deadline would never be checked.
+- It is not joined. When the child exits or is killed, the pipe's read end
+  closes, the write fails with `BrokenPipe`, and the thread ends by itself.
+  Nothing waits on it.
+
+A child that exits early, as `dot` does on a syntax error, reports through its
+exit status and stderr; the `BrokenPipe` is not an error.
+
+The descendant limitation is incumbent. `coverage_verify` has it today, and
+this extraction preserves rather than introduces it. `dot` does not fork, so
+the render path is not exposed. ISS-455 tracks process-group ownership for the
+general case.
 
 `coverage_verify` keeps its 50 ms poll interval, which becomes the helper's
-constant, and its mapping stays as it is: `Err` or `TimedOut` becomes
-`Unobtainable`, and `Completed` becomes `Ran`. Its existing suite is the
+named constant. Its mapping is unchanged: `Err` or `TimedOut` becomes
+`Unobtainable`, and `Completed` becomes `Ran`. It keeps setting `current_dir`
+on the `Command` before handing it over. Its existing suite is the
 behaviour-preservation proof and must pass unchanged.
 
 ### `rasterise_png`
@@ -413,20 +525,32 @@ fn classify(run: std::io::Result<Bounded>) -> RasterOutcome {
 }
 ```
 
-The production caller passes `DOT_PROGRAM` and `DOT_TIMEOUT`. Tests substitute
-a nonexistent program to prove the real `NotFound` mapping.
+The production caller passes `DOT_PROGRAM` and `RENDER_TIMEOUT`. Tests
+substitute a nonexistent program to prove the real `NotFound` mapping.
 
-### The other `dot` spawn
+### Every `dot` invocation
 
-`map_server::shell::RealDotRenderer` stays async on tokio. It is an HTTP
-handler and must not block a runtime thread on a sync poll loop (`DEC-143`).
-It changes in three ways only: its `"dot"` literals become
-`graphviz::DOT_PROGRAM`, both in `shell.rs` and in the `dot -V` health probe in
-`routes.rs`; its local `DOT_TIMEOUT` is deleted in favour of
-`graphviz::DOT_TIMEOUT`; and it gains a comment pointing at
-`graphviz::rasterise_png` as the sync counterpart. `rasterise_png` carries the
-reverse pointer. Test assertions on the literal `"dot"` stay as they are, since
-they pin observable output.
+There are three invocations. They share the program name and nothing else
+(`DEC-143`).
+
+| site | invocation | execution | timeout, owned where it is enforced |
+|---|---|---|---|
+| `graphviz::rasterise_png` (new) | `dot -Tpng` | sync, `subprocess` | `graphviz::RENDER_TIMEOUT`: one deadline for the whole operation |
+| `map_server::shell::RealDotRenderer` | `dot -Tsvg` | async, tokio | its existing `DOT_TIMEOUT`: applied separately to the stdin write and to the wait |
+| `map_server::routes::dot_version` | `dot -V` | async, tokio | the hard-coded 2 s becomes a named `DOT_VERSION_TIMEOUT` in `routes.rs` |
+
+`map_server` changes in these ways only:
+
+- Every `"dot"` program and tool literal becomes `graphviz::DOT_PROGRAM`: the
+  two `Command::new` calls, the `ToolUnavailable`, `CommandFailed` and
+  `Timeout` fields, and the test assertions in `error.rs` on those fields.
+- The 2 s probe budget gets a name.
+- A comment on `RealDotRenderer` points at `graphviz::rasterise_png` as its
+  sync counterpart; `rasterise_png` carries the reverse pointer.
+
+The async renderer stays async: it runs in an HTTP handler and must not block a
+runtime thread on a sync poll loop. The `"dot"` key in the `/health` JSON body
+is a field name in the wire format, not the program name, so it stays a literal.
 
 <!-- doctrine:section sec-6 -->
 ## CLI surface
@@ -466,9 +590,9 @@ Export {
 
 The dispatch arm resolves the format: `format.unwrap_or(ExportFormat::Dot)`.
 Clap's required-unless rule guarantees `format` is present whenever `render` is
-false. `run_export` gains the same guard-then-write shape as `run_graph`, with
+false. `run_export` gains the same prepare-then-write shape as `run_graph`, with
 `ExportFormat` gaining a `Display` impl for the refusal message. An explicit
-`--format mermaid -X` reaches `guard` and is refused as `FormatNotDot`.
+`--format mermaid -X` reaches `terminal_image::prepare` and is refused as `FormatNotDot`.
 
 ### Unchanged
 
@@ -487,43 +611,58 @@ currently covers either verb's options.
 
 | path | change |
 |---|---|
-| `src/subprocess.rs` | **new** leaf: `Bounded`, `run_bounded` — the bounded sync spawn extracted from `coverage_verify` |
-| `src/graphviz.rs` | **new** leaf: `DOT_PROGRAM`, `DOT_TIMEOUT`, `RasterOutcome`, `rasterise_png`, pure `classify` |
-| `src/kitty.rs` | **new** leaf: protocol constants, `png_pixel_width`, `display_columns`, `encode_png` |
-| `src/terminal_image.rs` | **new** leaf: `RenderRefusal`, `guard`, `render_dot`, message constants |
-| `src/tty.rs` | add `RenderTarget`, `TerminalGeometry`, `stdout_render_target`, pure `render_target` |
+| `src/subprocess.rs` | **new** leaf: `Bounded`, `run_bounded`, the poll-interval constant — the bounded sync spawn extracted from `coverage_verify` |
+| `src/graphviz.rs` | **new** leaf: `DOT_PROGRAM`, `RENDER_TIMEOUT`, `RasterOutcome`, `rasterise_png`, pure `classify` |
+| `src/kitty.rs` | **new** leaf: protocol constants, `SUPPORT_QUERY`, `classify_support_reply`, `png_size`, `cell_geometry`, `place`, `encode_png` |
+| `src/terminal_image.rs` | **new** leaf: `RenderRefusal` and its messages, pure checks, `prepare`, `render_dot` |
+| `src/tty.rs` | add `RenderTarget`, `WindowGeometry`, `stdout_render_target`, pure `render_target`, `query_terminal` (raw-mode drop guard, reader thread) |
 | `src/main.rs` | declare the four new modules |
 | `src/coverage_verify.rs` | `run_argv` delegates to `subprocess::run_bounded`; `drain` and `reap` move out; `RunResult` mapping unchanged |
 | `src/commands/cli.rs` | `Graph` gains `render`; the dispatch arm passes it |
-| `src/commands/graph.rs` | `run_graph` takes `render`; guard-then-write shell |
+| `src/commands/graph.rs` | `run_graph` takes `render`; prepare-then-write shell |
 | `src/concept_map.rs` | `Export`: `format` becomes `Option`, required unless `render`; `ExportFormat: Display`; `run_export` takes `render` |
-| `src/map_server/shell.rs` | `"dot"` → `graphviz::DOT_PROGRAM`; local `DOT_TIMEOUT` removed; cross-reference comment |
-| `src/map_server/routes.rs` | `dot -V` probe: `"dot"` → `graphviz::DOT_PROGRAM` |
+| `src/map_server/shell.rs` | `"dot"` literals → `graphviz::DOT_PROGRAM`; cross-reference comment; `DOT_TIMEOUT` stays local |
+| `src/map_server/routes.rs` | `dot -V` probe: `"dot"` → `graphviz::DOT_PROGRAM`; 2 s → named `DOT_VERSION_TIMEOUT` |
+| `src/map_server/error.rs` | test assertions on the tool/command field use `graphviz::DOT_PROGRAM` |
 | `.doctrine/adr/001/layering.toml` | register `subprocess`, `graphviz`, `kitty`, `terminal_image` as `leaf` |
-| `tests/e2e_render_guard.rs` | **new** end-to-end guard wiring tests, one per verb (see Verification) |
+| `tests/e2e_render_guard.rs` | **new** CLI wiring tests (see Verification) |
 
 No new crate dependency: `base64` 0.22 and `crossterm` 0.29 are already direct
-dependencies, and `window_size` is available under the current feature set.
+dependencies. `window_size` and raw mode are both available under the current
+feature set.
 
 ### Dependency edges added
 
-All point downward or sideways within the leaf tier, so the ADR-001 layering
+All point downward, or sideways within the leaf tier, so the ADR-001 layering
 gate (`tests/architecture_layering.rs`) needs only the four table entries.
 
 - `terminal_image` → `tty`, `graphviz`, `kitty`
 - `graphviz` → `subprocess`
-- `kitty` → `tty` (for `TerminalGeometry`)
+- `kitty` → `tty` (for `WindowGeometry`)
 - `coverage_verify` (engine) → `subprocess`
-- `commands::graph`, `concept_map` (command) → `terminal_image`, `tty`
+- `commands::graph`, `concept_map` (command) → `terminal_image`
 - `map_server` (command) → `graphviz`
 
 ### Governance at reconcile
 
-- A Revision adds one sentence to SPEC-027's fifth responsibility: under
-  `--render` the `graph` shell writes a terminal image in place of the DOT
-  text. The fourth responsibility is untouched.
-- ISS-242 is annotated that `concept-map export --render` joins the concept-map
-  surface that still has no governing spec.
+A Revision amends SPEC-027 in two places, both describing the new composition,
+not relaxing the emitter boundary:
+
+- **Responsibility 5**: under `--render`, the `graph` shell hands the DOT to
+  the terminal-image renderer and writes its image in place of the DOT text.
+- **REQ-396**, third acceptance criterion ("`run_graph` resolves the project
+  root, delegates to `build_graph_output`, and writes the result to stdout —
+  nothing else"). It gains the render branch: without `--render`, unchanged;
+  with it, `run_graph` also prepares the render request before delegating, and
+  writes `terminal_image::render_dot`'s bytes instead. REQ-396's second
+  criterion ("the command module neither builds nor post-processes DOT")
+  stays true: the shell passes the DOT string through unread.
+
+Responsibility 4 and `catalog::dot::render` are untouched.
+
+ISS-242 is annotated that `concept-map export --render` joins the concept-map
+surface that still has no governing spec. ISS-455 carries the pre-existing
+descendant-pipe limitation of the bounded spawn.
 
 <!-- doctrine:section sec-8 -->
 ## Verification
@@ -538,45 +677,54 @@ them needs graphviz or a terminal (`DEC-257`).
 In ghostty, on the landed binary:
 
 1. `doctrine graph <small focus> --depth 1 -X` — a few nodes. The image appears
-   below the prompt at native size and is legible, and the prompt returns on
-   the line after it.
-2. `doctrine graph` with no focus, `-X` — the whole corpus, wider than the
-   window. The image is scaled to the window width, not clipped.
-3. `doctrine concept-map export <id> -X` — renders with no `--format`.
-4. `doctrine graph <focus> -X | cat` — refused with the not-a-terminal message,
-   and no escape bytes appear.
+   at native size and is legible. The prompt returns on the line directly
+   below it: no overlap, no blank gap. No stray reply text appears in the
+   shell input.
+2. `doctrine graph -X`, no focus: the whole corpus, wider than the window. The
+   image is scaled to one column short of the window width and is not clipped.
+   If it is taller than the window, it scrolls cleanly.
+3. `doctrine concept-map export <id> -X` renders with no `--format`.
+4. `doctrine graph <focus> -X | cat` is refused with the not-a-terminal
+   message, and no escape bytes appear.
+5. Inside tmux, `doctrine graph <focus> -X` is refused with the unsupported
+   message.
 
-The outcome of steps 1 and 2 decides whether `DEC-256`'s sizing rule stands.
+Steps 1 and 2 decide whether `DEC-256`'s placement rule stands, including on a
+HiDPI display.
 
 ### VT — scaffold and regression guard
 
-The tests are chosen for confidence per cost. Logic is tested pure, with
+The tests are chosen for confidence per cost. Logic is tested pure, over
 synthetic inputs. Only two tests spawn a real child process, and each covers
 something no pure test can. There is no binary fixture and no tight timing
 assertion.
 
 | area | test | asserts |
 |---|---|---|
-| `kitty` | single-chunk payload encodes to one escape | exact bytes over a few synthetic bytes: `a=T,f=100,t=d,q=2,m=0`, the base64, the terminator |
-| `kitty` | multi-chunk payload splits at 4096 | over `vec![0; 5000]`: non-final chunks exactly 4096 bytes with `m=1`; continuations carry only `m`/`q`; the last has `m=0`; concatenated payloads decode to the input |
-| `kitty` | `c=` present only when sizing says so | `Some(80)` emits `c=80`; `None` emits no `c` key |
-| `kitty` | PNG width is read from IHDR | a hand-built 24-byte header yields its width; `None` for short input, bad signature, non-IHDR first chunk |
-| `kitty` | sizing table | one case per row of the table in *Encoding and sizing* |
-| `tty` | render target decision | not a tty → `NotTerminal`; tty with `(0, 0)` → both fields `None`; `(120, 0)` → columns only; `(120, 1920)` → both |
-| `terminal_image` | guard order and arms | non-DOT on a non-terminal → `FormatNotDot`; DOT on a non-terminal → `NotTerminal`; DOT on a terminal → the geometry |
+| `kitty` | single-chunk payload encodes to one escape | exact bytes over a few synthetic bytes at a fixed placement: `a=T,f=100,t=d,q=2,C=1,c=…,r=…,m=0`, the base64, the terminator, then `r` newlines |
+| `kitty` | multi-chunk payload splits at 4096 | over `vec![0; 5000]`: non-final chunks exactly 4096 bytes with `m=1`; continuations carry only `m` and `q`; the last has `m=0`; concatenated payloads decode to the input |
+| `kitty` | PNG size is read from IHDR | a hand-built 24-byte header yields its width and height; `None` for short input, bad signature, non-IHDR first chunk |
+| `kitty` | cell geometry | any zero field or zero quotient → `None`; otherwise the integer cell size |
+| `kitty` | placement table | one case per row of the table in *The protocol*, including the clamped one-column case |
+| `kitty` | support reply classifier | graphics reply then DA1 → `Supported`; graphics reply with an error status → `Supported`; DA1 alone → `Unsupported`; partial DA1 or empty → `Incomplete`; a DA1 reply split across two reads classifies once complete |
+| `tty` | render target decision | not a tty → `NotTerminal`; a tty passes its window geometry through unchanged; a tty whose ioctl failed → all-zero geometry |
+| `terminal_image` | check order and arms | pure checks over synthetic probe results: non-DOT beats everything; not-a-terminal beats pixel size; zero pixel size → `NoPixelSize`; each support result maps to its refusal or to the geometry |
 | `terminal_image` | refusal messages name the fix | each message contains the flag and its remedy (substring, not exact text) |
-| `graphviz` | outcome classification | pure `classify` over synthetic results: `NotFound` → `ToolUnavailable`; other `io::Error` → `Io`; `TimedOut` → `TimedOut`; exit 0 → `Png` with stdout; exit 1 → `CommandFailed` with status and stderr (`ExitStatus` built via `ExitStatusExt::from_raw`) |
+| `graphviz` | outcome classification | pure `classify` over synthetic results: `NotFound` → `ToolUnavailable`; other `io::Error` → `Io`; `TimedOut` → `TimedOut`; success → `Png` with stdout; failure → `CommandFailed` with `status == Some(1)` and stderr. Statuses are built under `#[cfg(unix)]` with `ExitStatusExt::from_raw`, which takes a raw wait status: `0` for success, `1 << 8` for exit code 1. |
 | `graphviz` | real missing program | `rasterise_png` with a nonexistent path → `ToolUnavailable` (real spawn, deterministic) |
-| `subprocess` | a child that ignores its stdin still times out | a 1 MiB stdin to `sleep 30` under a 200 ms timeout → `TimedOut`, returning in under 5 s (real spawn; the only test of the stdin-thread design) |
-| e2e | `graph <id> -X` off a terminal | exit non-zero, stdout empty, stderr has the not-a-terminal message |
-| e2e | `concept-map export <id> -X` off a terminal, no `--format` | the not-a-terminal message, not clap's missing-argument error — proves both the relaxed `--format` rule and the shell wiring |
+| `subprocess` | a child that ignores its stdin still times out | a 1 MiB stdin to `sleep 30` under a 200 ms timeout → `TimedOut`, returning in under 5 s (real spawn; the only test of the detached stdin writer) |
+| e2e | `graph --format json -X` | exit non-zero, stdout empty, stderr has the format message |
+| e2e | `concept-map export <id> --format mermaid -X` | exit non-zero, stdout empty, stderr has the format message |
+| e2e | `concept-map export <id> -X`, no `--format`, off a terminal | the not-a-terminal message, not clap's missing-argument error: proves the relaxed `--format` rule and the live `stdout_render_target` probe |
 
-Under `cargo test` stdout is a pipe, so both e2e rows exercise the real
-`stdout_render_target` probe. They never reach the spawn. The guard runs before
-the corpus is read, so neither needs a seeded fixture.
+The three e2e tests run with a working directory outside any doctrine project.
+Reaching the render refusal instead of a project-root error proves `prepare`
+runs before the root lookup. Under `cargo test` stdout is a pipe, so none of
+them reaches the terminal probe or the spawn.
 
-Deliberately not tested automatically: stdin delivery to a real child and the
-image itself (both proven at VH step 1), and clap's own required-unless rule.
+Deliberately not tested automatically, because VH steps 1, 2 and 5 cover them:
+the raw-mode tty exchange, stdin delivery to a real `dot`, and the image
+itself. Clap's own required-unless rule is not re-tested.
 
 ### Behaviour preservation
 
@@ -584,7 +732,8 @@ image itself (both proven at VH step 1), and clap's own required-unless rule.
   extraction.
 - The existing `graph` and `concept-map export` tests pass unchanged: every
   path without `-X` is byte-identical.
-- The `map_server` route and error tests pass unchanged.
+- The `map_server` route and error tests pass, with only the literal-to-constant
+  substitution in their assertions.
 - The ADR-001 layering gate passes with the four new leaf entries.
 
 <!-- doctrine:section sec-9 -->
@@ -592,35 +741,47 @@ image itself (both proven at VH step 1), and clap's own required-unless rule.
 
 ### Assumptions carried
 
-- **Ghostty implements transmit-and-display for PNG.** Not probed; opt-in makes
-  it the caller's assertion. The first VH step verifies it.
-- **`t=d` is accepted when stated explicitly.** It is the implied default; the
-  design sends it rather than relying on the omission.
-- **`q=2` suppresses every response.** If a terminal replies anyway, the reply
-  lands in the shell's input line. VH step 1 would show it.
-- **`dot -Tpng` output is not byte-stable across graphviz versions.** It is the
-  reason no golden contains real rasteriser output. Cheap to check if a golden is
-  ever proposed.
+- **Ghostty answers the kitty support query and implements transmit-and-display
+  for PNG with `C=1`, `c` and `r`.** The probe verifies the first half at run
+  time; VH step 1 verifies the rest.
+- **`q=2` with no image id produces no reply text.** If a terminal replies
+  anyway, the reply lands in the shell's input line, and VH step 1 would show
+  it.
+- **`dot -Tpng` output is not byte-stable across graphviz versions.** That is
+  the reason no test contains real rasteriser output. Cheap to check if a golden
+  is ever proposed.
 
 ### Risks
 
-- **The sizing rule is untested in a real terminal** (`DEC-256`, provisional).
-  One concrete way it could be wrong: on a HiDPI display the terminal reports
-  device pixels while graphviz renders at 96 dpi, so a "native size" image
-  could look half-size. The fix would be a dpi argument to `dot` or a scale
-  factor in `display_columns`, both local to `graphviz` and `kitty`.
-- **The `subprocess` extraction touches `coverage_verify`.** Mitigated by moving
-  the mechanism rather than rewriting it, and by the unchanged coverage suite.
-- **Very large graphs.** The whole-corpus PNG may be several megabytes, sent
-  in-band as base64. It is bounded by `DOT_TIMEOUT` on the graphviz side, but not
-  on the terminal side. Acceptable for an explicit opt-in; observed at VH step 2.
+- **The placement rule is untested in a real terminal** (`DEC-256`,
+  provisional). One concrete way it could be wrong: on a HiDPI display the
+  window ioctl may report device pixels while graphviz renders at 96 dpi, so a
+  "native size" image could look half-size. The fix would be a dpi argument to
+  `dot` or a scale factor in `place`, both local to `graphviz` and `kitty`.
+- **Raw mode must always be restored.** A panic or early return while the tty
+  is raw would leave the user's shell unusable. The drop guard covers every
+  path out of `query_terminal`, including unwinding.
+- **An unanswered probe leaves a reader thread on the tty.** For the moment
+  between the refusal and process exit, that thread can swallow keystrokes the
+  user types ahead. The window is milliseconds and the refusal path is rare.
+- **The `subprocess` extraction touches `coverage_verify`.** This is mitigated
+  by moving the mechanism rather than rewriting it, and by the unchanged
+  coverage suite.
+- **Very large graphs.** A whole-corpus PNG may be several megabytes, sent
+  in-band as base64. The graphviz side is bounded by `RENDER_TIMEOUT`; the
+  terminal side is not. Acceptable for an explicit opt-in, and observed at VH
+  step 2.
 
 ### Residuals, named rather than omitted
 
-- **Two `dot` spawns** — async in `map_server`, sync in `graphviz` — sharing
-  only constants, each naming the other (`DEC-143`).
-- **tmux and other multiplexers** swallow or need wrapping for the escape
-  sequence. Under tmux, `-X` succeeds and nothing appears.
+- **Two render spawns** of `dot` — async in `map_server`, sync in `graphviz` —
+  plus `map_server`'s version probe. All three share only the program name
+  (`DEC-143`).
+- **Descendant-held pipes** can hold `subprocess::run_bounded` past its
+  deadline. This is incumbent from `coverage_verify`, not reachable from `dot`,
+  and tracked by ISS-455.
+- **Multiplexers** are refused, not supported. Passthrough wrapping for tmux is
+  out of scope.
 - **The TypeScript DOT emitters** in `web/map/src/dot.ts` do not use this seam.
 - **IMP-385's anchor report** will wire `-X` itself when it lands. The flag
   lives on each verb, not in a shared parser.

@@ -3,7 +3,7 @@ version = 1
 
 id = 256
 slug = "render-at-native-size-when-it-fits-the-terminals-pixel-width-else-scale-to-columns"
-title = "Render at native size when it fits the terminal's pixel width, else scale to columns"
+title = "Place the image on an explicit cell rectangle: native if it fits, else scale to columns minus one"
 record_kind = "decision"
 status = "accepted"
 created = "2026-09-15"
@@ -11,11 +11,11 @@ updated = "2026-09-15"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-context = "The kitty protocol sizes in cells (`c=`/`r=`), auto-scaling the unset axis. `c=<columns>` unconditionally stretches small graphs to full width. The window-size ioctl also reports pixel width (0 where the terminal does not fill it); a PNG's pixel width sits at a fixed offset in its IHDR header."
-choice = "Compare pixel widths. PNG width ≤ terminal pixel width: omit `c=`, draw at native size. Wider: `c=<columns>`, terminal scales down preserving aspect. Terminal pixel width unknown: fall back to `c=<columns>` — bounded, never overflows. Provisional pending first use (VH)."
-alternatives = ["Always `c=<columns>` — simplest, but stretches small graphs", "Always native — small graphs look right, large ones overflow and clip"]
-rationale = "User judgement ahead of experiencing it: fit-to-width only when needed. The fallback prefers a stretched image to a clipped one."
-consequences = ["`RenderTarget::Terminal` carries `pixel_width` (DEC for inq-4)", "The pure encoder reads PNG width from the IHDR header — a small, testable parse", "The rule is the first candidate for revision after a VH look"]
+context = "The kitty protocol sizes in cells (c columns, r rows). After placement the cursor moves right by c and down by r, and if that leaves the screen or scroll area the cursor position is undefined (RV-368 F-4). c equal to the full terminal width from column 0 crosses the right edge; a height left to the terminal leaves the row count unknown to doctrine. A terminal that passes the DEC-259 probe reports columns, rows and pixel width and height through the window-size ioctl; a PNG carries its pixel width and height in the IHDR header."
+choice = "Always send both c and r, and C=1 so the terminal does not move the cursor; doctrine then writes exactly r newlines, making scrolling deterministic. Cell size is pixel width over columns and pixel height over rows. If the PNG's native width in whole cells fits within columns minus one, use native size rounded up to whole cells; otherwise c is columns minus one and r follows the aspect ratio, rounded up. A terminal that does not report its pixel size is refused descriptively. Provisional pending the first VH run. Amended 2026-09-15 after RV-368 F-4; supersedes the earlier c-only rule and its unknown-pixel-width fallback."
+alternatives = ["c only with default cursor movement which is undefined at the right edge", "Always native which clips wide graphs", "Fall back to c=columns when pixel size is unknown which reintroduces an unknown row count"]
+rationale = "User judgement: fit to width only when needed. An explicit rectangle plus doctrine-written newlines removes every protocol-undefined cursor path; distortion is under one cell on each axis."
+consequences = ["TerminalGeometry carries columns and rows and pixel width and height", "kitty reads PNG width and height from IHDR", "A tall image scrolls rather than being bounded vertically", "The rule is the first candidate for revision after a VH look"]
 decided_by = "user"
 decided_on = "2026-09-15"
 

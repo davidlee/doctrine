@@ -80,6 +80,11 @@ selector = "tests/e2e_render_guard.rs"
 intent = "design-target"
 note = "design § Code impact"
 
+[[selector]]
+selector = "src/map_server/error.rs"
+intent = "design-target"
+note = "design § Code impact"
+
 [[relation]]
 label = "fulfils"
 target = "IDE-046"
