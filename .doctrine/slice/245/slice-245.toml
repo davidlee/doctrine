@@ -1,9 +1,9 @@
 id = 245
 slug = "inline-terminal-diagram-rendering"
 title = "Inline terminal diagram rendering"
-status = "proposed"
+status = "plan"
 created = "2026-08-05"
-updated = "2026-08-05"
+updated = "2026-09-15"
 tags = ["area:cli", "area:graph", "area:render"]
 
 [relationships]
