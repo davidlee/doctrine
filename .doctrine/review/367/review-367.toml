@@ -8,6 +8,7 @@ title = "SL-259 implementation code review — the truthful-apply surface agains
 facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+concluded = true
 
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-259"
@@ -36,7 +37,7 @@ response = """Accepted as observed, and the fix is owned future work rather than
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected: the two-step parse keeps serde's own words for a shape fault. Observed: it keeps the words and silently drops the line and column, on every malformed apply payload."
 detail = """
@@ -59,7 +60,7 @@ response = "Accepted. A one-line repair with no design question in it: keep the 
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected: ISS-451 is out of scope, so its mechanism survives. Observed: PHASE-05 closed it, its own test says so, the sort fallback it named is now unreachable — and the item is still open."
 detail = """
@@ -77,7 +78,7 @@ response = "Accepted, and it splits. First half done now: ISS-451 transitioned `
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected: the untagged arm's soundness claim is pinned, so a future untagged variant with a key surface fails the build. Observed: the pin checks a weaker property, and the failure mode it names is the wrong one."
 detail = """
@@ -99,7 +100,7 @@ response = "Accepted on both halves. The pin is weaker than the claim it is cite
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Expected: gate::join is widened to refusal.rs so there is one spelling of a comma-separated list. Observed: the same slice adds a second spelling three lines from a use of join."
 detail = '''

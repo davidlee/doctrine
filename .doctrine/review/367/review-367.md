@@ -52,6 +52,13 @@ disposed `fix-now` and their edits are batched to a fresh session on context
 budget, so they stand `answered` until the repairs land and the raiser verifies
 them. `F-1` and `F-6` are terminal.*
 
+*Closed 2026-09-15. All four repairs landed and were verified as raiser — the
+typed parse re-reads the original string (`3444c59cd`), `shaped` fuses its guard
+with its ordering (`a93bb8243`), the untagged pin asserts what it is cited for
+and is renamed to say so (`2ba9d8bf1`), and `UnknownPayloadKey` renders through
+`gate::join` (`06e23cc94`). `just gate` exits 0 at each. Six findings terminal,
+pass concluded.*
+
 **Overall: solid.**
 
 ### Synopsis
