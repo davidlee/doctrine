@@ -152,8 +152,11 @@ pub(crate) enum RasterOutcome {
   Io(std::io::Error),
 }
 
-/// Program and timeout are parameters so tests can substitute them.
+/// Thin shell: spawn `program -Tpng` under `timeout`, then `classify`.
 pub(crate) fn rasterise_png(dot: &[u8], program: &OsStr, timeout: Duration) -> RasterOutcome;
+
+/// Pure: map a bounded run's result onto the outcome taxonomy.
+fn classify(run: std::io::Result<subprocess::Bounded>) -> RasterOutcome;
 ```
 
 `Io` is a fifth arm that `DEC-255` does not name. `map_server` has the same
@@ -385,11 +388,19 @@ behaviour-preservation proof and must pass unchanged.
 
 ### `rasterise_png`
 
+The spawn and the classification are separate functions, so the outcome
+mapping is tested with synthetic results rather than with real misbehaving
+programs.
+
 ```rust
 pub(crate) fn rasterise_png(dot: &[u8], program: &OsStr, timeout: Duration) -> RasterOutcome {
   let mut command = Command::new(program);
   command.arg("-Tpng");
-  match subprocess::run_bounded(command, Some(dot.to_vec()), timeout) {
+  classify(subprocess::run_bounded(command, Some(dot.to_vec()), timeout))
+}
+
+fn classify(run: std::io::Result<Bounded>) -> RasterOutcome {
+  match run {
     Err(e) if e.kind() == ErrorKind::NotFound => RasterOutcome::ToolUnavailable,
     Err(e) => RasterOutcome::Io(e),
     Ok(Bounded::TimedOut) => RasterOutcome::TimedOut,
@@ -402,8 +413,8 @@ pub(crate) fn rasterise_png(dot: &[u8], program: &OsStr, timeout: Duration) -> R
 }
 ```
 
-The production caller passes `DOT_PROGRAM` and `DOT_TIMEOUT`; tests substitute
-both.
+The production caller passes `DOT_PROGRAM` and `DOT_TIMEOUT`. Tests substitute
+a nonexistent program to prove the real `NotFound` mapping.
 
 ### The other `dot` spawn
 
@@ -477,7 +488,7 @@ currently covers either verb's options.
 | path | change |
 |---|---|
 | `src/subprocess.rs` | **new** leaf: `Bounded`, `run_bounded` — the bounded sync spawn extracted from `coverage_verify` |
-| `src/graphviz.rs` | **new** leaf: `DOT_PROGRAM`, `DOT_TIMEOUT`, `RasterOutcome`, `rasterise_png` |
+| `src/graphviz.rs` | **new** leaf: `DOT_PROGRAM`, `DOT_TIMEOUT`, `RasterOutcome`, `rasterise_png`, pure `classify` |
 | `src/kitty.rs` | **new** leaf: protocol constants, `png_pixel_width`, `display_columns`, `encode_png` |
 | `src/terminal_image.rs` | **new** leaf: `RenderRefusal`, `guard`, `render_dot`, message constants |
 | `src/tty.rs` | add `RenderTarget`, `TerminalGeometry`, `stdout_render_target`, pure `render_target` |
@@ -489,8 +500,7 @@ currently covers either verb's options.
 | `src/map_server/shell.rs` | `"dot"` → `graphviz::DOT_PROGRAM`; local `DOT_TIMEOUT` removed; cross-reference comment |
 | `src/map_server/routes.rs` | `dot -V` probe: `"dot"` → `graphviz::DOT_PROGRAM` |
 | `.doctrine/adr/001/layering.toml` | register `subprocess`, `graphviz`, `kitty`, `terminal_image` as `leaf` |
-| `tests/fixtures/render/tiny.png` | **new** committed PNG fixture for the `kitty` encoder goldens (`include_bytes!`) |
-| `tests/e2e_render_guard.rs` | **new** end-to-end guard tests (see Verification) |
+| `tests/e2e_render_guard.rs` | **new** end-to-end guard wiring tests, one per verb (see Verification) |
 
 No new crate dependency: `base64` 0.22 and `crossterm` 0.29 are already direct
 dependencies, and `window_size` is available under the current feature set.
@@ -540,28 +550,33 @@ The outcome of steps 1 and 2 decides whether `DEC-256`'s sizing rule stands.
 
 ### VT — scaffold and regression guard
 
+The tests are chosen for confidence per cost. Logic is tested pure, with
+synthetic inputs. Only two tests spawn a real child process, and each covers
+something no pure test can. There is no binary fixture and no tight timing
+assertion.
+
 | area | test | asserts |
 |---|---|---|
-| `kitty` | single-chunk PNG encodes to one escape | exact bytes over a tiny fixture: `a=T,f=100,t=d,q=2,m=0`, the payload, the terminator |
-| `kitty` | multi-chunk payload splits at 4096 | non-final chunks are exactly 4096 bytes with `m=1`; continuations carry only `m`/`q`; the last has `m=0`; concatenated payloads decode to the input |
+| `kitty` | single-chunk payload encodes to one escape | exact bytes over a few synthetic bytes: `a=T,f=100,t=d,q=2,m=0`, the base64, the terminator |
+| `kitty` | multi-chunk payload splits at 4096 | over `vec![0; 5000]`: non-final chunks exactly 4096 bytes with `m=1`; continuations carry only `m`/`q`; the last has `m=0`; concatenated payloads decode to the input |
 | `kitty` | `c=` present only when sizing says so | `Some(80)` emits `c=80`; `None` emits no `c` key |
-| `kitty` | PNG width is read from IHDR | fixture width; `None` for short input, bad signature, non-IHDR first chunk |
+| `kitty` | PNG width is read from IHDR | a hand-built 24-byte header yields its width; `None` for short input, bad signature, non-IHDR first chunk |
 | `kitty` | sizing table | one case per row of the table in *Encoding and sizing* |
-| `tty` | render target decision | not a tty → `NotTerminal`; tty with `(0, 0)` → both fields `None`; tty with `(120, 0)` → columns only; tty with `(120, 1920)` → both |
+| `tty` | render target decision | not a tty → `NotTerminal`; tty with `(0, 0)` → both fields `None`; `(120, 0)` → columns only; `(120, 1920)` → both |
 | `terminal_image` | guard order and arms | non-DOT on a non-terminal → `FormatNotDot`; DOT on a non-terminal → `NotTerminal`; DOT on a terminal → the geometry |
-| `terminal_image` | refusal messages name the fix | each `Display` names the flag and the remedy |
-| `graphviz` | missing program | a nonexistent program path → `ToolUnavailable` |
-| `graphviz` | non-zero exit carries stderr | a program that writes stderr and exits 1 → `CommandFailed` with that stderr |
-| `graphviz` | timeout kills the child | `sleep` under a 100 ms timeout → `TimedOut`, returning well before the sleep would end |
-| `subprocess` | stdin is delivered | `cat` round-trips the fed bytes to stdout |
-| `subprocess` | a child that ignores stdin still times out | a large stdin to `sleep` under a short timeout → `TimedOut`, not a hang |
-| e2e | `graph -X` off a terminal | exit non-zero, stdout empty, stderr has the not-a-terminal message |
-| e2e | `graph --format json -X` | exit non-zero, stdout empty, stderr has the format message |
-| e2e | `concept-map export --format mermaid -X` | same, via the concept-map shell |
-| e2e | `concept-map export` with neither flag | clap missing-argument error, unchanged |
+| `terminal_image` | refusal messages name the fix | each message contains the flag and its remedy (substring, not exact text) |
+| `graphviz` | outcome classification | pure `classify` over synthetic results: `NotFound` → `ToolUnavailable`; other `io::Error` → `Io`; `TimedOut` → `TimedOut`; exit 0 → `Png` with stdout; exit 1 → `CommandFailed` with status and stderr (`ExitStatus` built via `ExitStatusExt::from_raw`) |
+| `graphviz` | real missing program | `rasterise_png` with a nonexistent path → `ToolUnavailable` (real spawn, deterministic) |
+| `subprocess` | a child that ignores its stdin still times out | a 1 MiB stdin to `sleep 30` under a 200 ms timeout → `TimedOut`, returning in under 5 s (real spawn; the only test of the stdin-thread design) |
+| e2e | `graph <id> -X` off a terminal | exit non-zero, stdout empty, stderr has the not-a-terminal message |
+| e2e | `concept-map export <id> -X` off a terminal, no `--format` | the not-a-terminal message, not clap's missing-argument error — proves both the relaxed `--format` rule and the shell wiring |
 
-Under `cargo test` stdout is a pipe, so the e2e rows exercise the real
-`stdout_render_target` probe. They never reach the spawn.
+Under `cargo test` stdout is a pipe, so both e2e rows exercise the real
+`stdout_render_target` probe. They never reach the spawn. The guard runs before
+the corpus is read, so neither needs a seeded fixture.
+
+Deliberately not tested automatically: stdin delivery to a real child and the
+image itself (both proven at VH step 1), and clap's own required-unless rule.
 
 ### Behaviour preservation
 

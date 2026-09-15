@@ -76,11 +76,6 @@ intent = "design-target"
 note = "design § Code impact"
 
 [[selector]]
-selector = "tests/fixtures/render/tiny.png"
-intent = "design-target"
-note = "design § Code impact"
-
-[[selector]]
 selector = "tests/e2e_render_guard.rs"
 intent = "design-target"
 note = "design § Code impact"
