@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0a409-720c-76a2-879d-379e4018cc57"
+recorded_at = "2026-09-15T07:47:57.580991825Z"
+kind = "friction"
+summary = "review show prints the prose companion but no finding bodies — reading RV findings needs a --json dump and a script"
+detail = "Applying RV-367's four fix-now findings. `doctrine review show RV-367` renders the brief and synthesis but not the findings' title/detail/response, and there is no --findings flag or per-finding verb. `review status` gives one derived line. To read the four remedies (each carrying file:line and the fix) I had to pipe --json through a python one-liner to iterate review.finding[]. A responder or a returning raiser reads finding bodies far more often than the brief, and pays a JSON dump plus a hand-rolled formatter each time."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
