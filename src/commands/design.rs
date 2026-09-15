@@ -42,6 +42,33 @@
 //! `with_turn`'s stronger, and for `with_turn` entirely true, no-write claim:
 //! effects ordered before the snapshot under DEC-083/DEC-086 remain, and remain
 //! recoverable through the submission-keyed journal without duplication.
+//!
+//! # Where a submission can still be refused (DEC-250)
+//!
+//! [`apply`] refuses everything it can before [`execute_mint`] runs, and that is
+//! now a property of the ordering rather than of which predicates happen to
+//! exist. Parse, the contract walk, admission, the entry watermark check,
+//! `plan_checkpoints` (SL-249 D5), pass 1 over the whole pure core, and
+//! [`refuse_unresumable_mints`] over the whole mint batch (SL-259 PHASE-06) all
+//! run first.
+//!
+//! Pass 2 re-runs the same `run::apply` over claimed ids instead of provisional
+//! ones, so it can only refuse where pass 1 did not through a predicate that
+//! reads a resolution value. There are exactly two, both structural rather than
+//! observed: the resolution's key set is built by one expression for both passes
+//! ([`resolution_of`]), and the only value-dependent predicate — the
+//! `DESIGN_ID_BYTES` bound on a resolved record — cannot discriminate, because
+//! every id a mint can claim provably fits it (see [`widest_canonical_id`]).
+//!
+//! **The one carve-out, and it is the whole of it.**
+//! [`recheck_watermark_before_write`] reads state another process may change, and
+//! runs after `execute_mint` has materialised records. No reordering reaches it;
+//! `SPEC-029` prescribes it, and `DEC-100` is the precedent for stating such a
+//! window rather than designing it away. Inside it the guarantee is `SPEC-029`'s
+//! own and not the stronger one: **the run does not advance** — not that nothing
+//! was written. Journalled effects deliberately remain and stay recoverable,
+//! because the formulation promising nothing was written invites a cleanup path
+//! that deletes authored knowledge, which the creation protocol forbids.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -819,6 +846,60 @@ enum MintKind {
     Review(crate::review::NewArgs),
 }
 
+/// How many decimal digits `value` renders as — counted rather than spelt, so
+/// the bound below cannot drift from the id type it is about (`STD-001`).
+const fn decimal_digits(mut value: u32) -> usize {
+    let mut digits = 1;
+    while value >= 10 {
+        value /= 10;
+        digits += 1;
+    }
+    digits
+}
+
+/// The widest canonical id any kind can claim, at compile time.
+const fn widest_canonical_id(kinds: &[crate::kinds::KindRef]) -> usize {
+    match kinds {
+        [] => 0,
+        [head, tail @ ..] => {
+            // `kinds::canonical_id` is `{prefix}-{id:03}` — a prefix, one hyphen,
+            // and a `u32` that `{:03}` pads but never truncates.
+            let head = head.kind.prefix.len() + 1 + decimal_digits(u32::MAX);
+            let tail = widest_canonical_id(tail);
+            if head > tail { head } else { tail }
+        }
+    }
+}
+
+/// Every id a mint can claim fits the bound pass 2 checks it against — **proved
+/// rather than asserted** (`DEC-250`, SL-259 PHASE-06; the form is borrowed from
+/// `design_run::gate`'s `widest_condition` proof).
+///
+/// `run::declare_checkpoint` bounds a checkpoint's resolved record at
+/// [`design_run::bounds::DESIGN_ID_BYTES`], and that is the **only** predicate in
+/// `run::apply` whose verdict can differ between the provisional value pass 1
+/// validates ([`MintPlan::provisional_record`]) and the claimed id pass 2
+/// carries. `design.md` `sec-6` argued it away by inspection — *every pass-2
+/// value is a canonical ref of at most nine bytes against a limit of 32* — which
+/// is true today, and is exactly the coincidence this phase exists to replace.
+/// A guarantee that survives only while nobody widens a kind prefix is not a
+/// guarantee.
+///
+/// Proved over ALL of `KINDS` rather than over the two kinds a mint reaches, so
+/// a newly mintable kind needs no edit here.
+///
+/// **A build-stopper, not a test.** Nothing else reads [`widest_canonical_id`]:
+/// deleting this line passes `cargo check` *and* `cargo test`. Same shape as
+/// `change_log`'s `EMITTABLE` proof (`sec-9` `R3`) — do not "clean it up".
+///
+/// One honest limit: `entity.rs`'s reservation midpoint re-spells the canonical
+/// form as `format!("{prefix}-{name}")` rather than calling
+/// `kinds::canonical_id`, so this proves the *form*, single-sourced from the
+/// prefix table, and not that there is only one formatter. That duplication is
+/// pre-existing and tracked separately.
+const _: () =
+    assert!(widest_canonical_id(crate::kinds::KINDS) <= design_run::bounds::DESIGN_ID_BYTES);
+
 impl MintKind {
     /// The canonical prefix a provisional id of this kind carries.
     fn prefix(&self) -> &'static str {
@@ -1181,6 +1262,33 @@ fn plan_checkpoints(
 /// The six steps are the mint's, not the checkpoint's: a review pass runs the
 /// same protocol against `review`'s semantics, which is the whole of D4's
 /// widening (`CheckpointStep`'s tokens are unchanged — they name the steps).
+/// Fold each mint's `(plan, record)` pair into the [`Resolution`] a validation
+/// pass is run against.
+///
+/// The ONE expression both passes are built through (`DEC-250`, SL-259
+/// PHASE-06). Pass 2 can refuse where pass 1 did not only through a predicate
+/// that reads a resolution value, and `Refusal::CheckpointRecordUnresolved` is
+/// one: it fires on a checkpoint the map does not hold. Two separate walks that
+/// merely *agreed* left that identity one edit away from breaking, silently.
+/// One walk makes the key set the same key set by construction.
+///
+/// The values still differ by pass — provisional stand-ins before the mints,
+/// claimed ids after — which is what `D2` intends and what the bound at
+/// `run.rs`'s `declare_checkpoint` reads — bounded by construction, see
+/// [`widest_canonical_id`].
+fn resolution_of<'a>(minted: impl IntoIterator<Item = (&'a MintPlan, String)>) -> Resolution {
+    let mut resolution = Resolution::default();
+    for (plan, record) in minted {
+        match plan.checkpoint() {
+            Some(checkpoint) => {
+                resolution.checkpoints.insert(checkpoint.clone(), record);
+            }
+            None => resolution.review_pass = Some(ReviewRef::new(record)),
+        }
+    }
+    resolution
+}
+
 /// `DEC-250` — the SL-249 `D8` retry guard, hoisted out of [`execute_mint`]'s
 /// step 1 and asked of the WHOLE batch before any mint executes.
 ///
@@ -1730,20 +1838,26 @@ fn apply(
         }),
     };
 
-    // Everything refusable, refused while the authored tier is untouched. Pass 1
+    // Everything refusable, refused while the authored tier is untouched — see
+    // the module doc's ordering section for why that is now structural. Pass 1
     // stands in a provisional value for every id the mints will claim, so the
-    // candidate validates against values of the real shape (D2).
+    // candidate validates against values of the real shape (D2), and the two
+    // things that could make a provisional value validate where a claimed one
+    // would not are closed rather than observed: `resolution_of` builds both
+    // passes' key sets, and `widest_canonical_id` proves the claimed id fits the
+    // one bound that reads it.
     let plans = plan_checkpoints(root, &prior, &request)?;
-    let provisional = Resolution {
-        checkpoints: plans
+    // Built unconditionally, because whether a pass is OWED is pass 1's own
+    // output and cannot be read before it runs. Pass 1 therefore validates
+    // against an `RV` stand-in either way, and the plan is discarded below if the
+    // run turns out not to be opening one.
+    let review_plan = review_pass_plan(slice);
+    let provisional = resolution_of(
+        plans
             .iter()
-            .filter_map(|plan| Some((plan.checkpoint()?.clone(), plan.provisional_record())))
-            .collect(),
-        review_pass: Some(ReviewRef::new(crate::listing::canonical_id(
-            crate::kinds::REVIEW_KIND.prefix,
-            PROVISIONAL_RECORD_ID,
-        ))),
-    };
+            .chain(std::iter::once(&review_plan))
+            .map(|plan| (plan, plan.provisional_record())),
+    );
     let candidate = design_run::run::apply(&prior, &request, &derived, &digest, &provisional)
         .map_err(|refused| refusal(&refused))?;
 
@@ -1757,24 +1871,22 @@ fn apply(
 
     // The batch the mints will walk, named once so the guard below and the loop
     // cannot disagree about what it contains.
-    let review_plan = opening_review.then(|| review_pass_plan(slice));
-    let minting: Vec<&MintPlan> = plans.iter().chain(review_plan.iter()).collect();
+    let minting: Vec<&MintPlan> = plans
+        .iter()
+        .chain(opening_review.then_some(&review_plan))
+        .collect();
 
     // DEC-250 — everything refusable, refused ahead of the mints. This is the
     // last check that can be, and hoisting it is the whole of SL-259 PHASE-06.
     refuse_unresumable_mints(root, slice, &request.envelope.submission_id, &minting)?;
 
     // DEC-086 steps 1–5, per mint, resuming the first incomplete effect.
-    let mut resolved = Resolution::default();
+    let mut minted: Vec<(&MintPlan, String)> = Vec::with_capacity(minting.len());
     for plan in minting.iter().copied() {
         let record = execute_mint(root, slice, &request.envelope.submission_id, plan, fault)?;
-        match plan.checkpoint() {
-            Some(checkpoint) => {
-                resolved.checkpoints.insert(checkpoint.clone(), record);
-            }
-            None => resolved.review_pass = Some(ReviewRef::new(record)),
-        }
+        minted.push((plan, record));
     }
+    let resolved = resolution_of(minted);
 
     let mut applied = design_run::run::apply(&prior, &request, &derived, &digest, &resolved)
         .map_err(|refused| refusal(&refused))?;
@@ -3763,6 +3875,129 @@ mod tests {
             read_snapshot(root, slice).unwrap().run.revision,
             2,
             "and the run did not advance"
+        );
+    }
+
+    /// SL-259 PHASE-06 `VT-1` / `EX-3` — leg 1's promise, outside the named
+    /// late-check window: a refused submission leaves the snapshot bytes, the
+    /// revision and the receipts unchanged, journals no mint intent, and does
+    /// **not** consume its `submission_id`.
+    ///
+    /// Quantified over a case table rather than pinned on one instance, and the
+    /// table is drawn from the refusals this slice's own earlier phases added —
+    /// so the hoist is shown to cover the checks PHASE-03 and PHASE-04 put in
+    /// front of it, which is why leg 1 lands last despite being leg 1. Case `d`
+    /// is the pre-existing class and the one that matters most: it refuses
+    /// inside pass 1's `run::apply`, downstream of `plan_checkpoints`, where the
+    /// walk and the wire types are already behind us.
+    ///
+    /// The snapshot file carries the revision, the receipts and the change log,
+    /// so byte-identity covers three of the four claims at once. The fourth —
+    /// non-consumption — no byte comparison can see, and asserting it by replay
+    /// would be vacuous behind the journalled intent state
+    /// (`mem.pattern.testing.replay-cannot-prove-idempotence-behind-a-state-guard`).
+    /// It is asserted instead by sending a VALID payload under a refused
+    /// submission's own id and watching the run advance: a consumed id would
+    /// have come back `Admission::Resumed` with the run standing still.
+    #[test]
+    fn a_refused_submission_leaves_the_snapshot_bytes_unchanged() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let slice = fixture_with_node(root);
+        let snapshot_path = crate::state::design_snapshot_path(root, slice);
+        let before = std::fs::read(&snapshot_path).unwrap();
+
+        let create = |extra: &str| {
+            format!(
+                "\"declare\":[{{\"subject\":\"cp-1\",\"disposes\":\"inq-1\",\
+                 \"dispose\":{{\"form\":\"create\",\"kind\":\"decision\",\
+                 \"title\":\"Checkpointed decision\"{extra}}}}}]"
+            )
+        };
+        // (label, body, a fragment of the reason — so a case that refuses for
+        // the WRONG reason fails rather than passing on the exit code alone.)
+        let cases: [(&str, String, &str); 4] = [
+            // a — PHASE-03 / ISS-333: a top-level key inside `ApplyRequest`'s
+            // `#[serde(flatten)]` envelope, which `deny_unknown_fields` cannot
+            // reach and a caller hand-authors.
+            (
+                "unknown top-level key",
+                "\"stagge\":{\"to\":\"shaping\"}".to_owned(),
+                "stagge",
+            ),
+            // b — PHASE-03 / ISS-328: a key nested inside `CreateRecord`.
+            (
+                "unknown nested key",
+                create(",\"boddy\":\"prose\""),
+                "boddy",
+            ),
+            // c — PHASE-04 / ISS-327: a key honoured only where the subject is
+            // absent, sent against a node the run already holds.
+            (
+                "key inert at the subject's state",
+                "\"declare\":[{\"subject\":\"inq-1\",\
+                 \"provenance\":{\"provenance\":\"user-directed\"}}]"
+                    .to_owned(),
+                "provenance",
+            ),
+            // d — the pre-existing class, refused by pass 1 itself rather than
+            // by the walk or by serde.
+            (
+                "unknown node",
+                "\"declare\":[{\"subject\":\"cp-1\",\"disposes\":\"inq-9\",\
+                 \"dispose\":{\"form\":\"create\",\"kind\":\"decision\",\
+                 \"title\":\"T\"}}]"
+                    .to_owned(),
+                "inq-9",
+            ),
+        ];
+
+        for (index, (label, body, reason)) in cases.iter().enumerate() {
+            let error = apply(
+                root,
+                slice,
+                &format!(
+                    "{{{},{body}}}",
+                    envelope(root, slice, 2, &format!("sub-{index}"))
+                ),
+                &|| {},
+                &no_fault,
+            )
+            .unwrap_err();
+            let error = format!("{error:#}");
+            assert!(
+                error.contains(reason),
+                "`{label}` refuses for its own reason (`{reason}`): {error}"
+            );
+            assert_eq!(
+                std::fs::read(&snapshot_path).unwrap(),
+                before,
+                "`{label}` left the snapshot byte-identical — revision, receipts \
+                 and change log alike"
+            );
+            assert!(
+                read_journal(root, slice).unwrap().intents.is_empty(),
+                "`{label}` journalled no mint intent"
+            );
+        }
+
+        // The half byte-identity cannot see. `sub-0` was refused above; it is
+        // still spendable, so the refusal consumed nothing.
+        apply(
+            root,
+            slice,
+            &format!(
+                "{{{},\"declare\":[{{\"subject\":\"inq-2\",\"question\":\"q\"}}]}}",
+                envelope(root, slice, 2, "sub-0")
+            ),
+            &|| {},
+            &no_fault,
+        )
+        .unwrap();
+        assert_eq!(
+            read_snapshot(root, slice).unwrap().run.revision,
+            3,
+            "a refused submission_id is not consumed: the same id spends fresh"
         );
     }
 
