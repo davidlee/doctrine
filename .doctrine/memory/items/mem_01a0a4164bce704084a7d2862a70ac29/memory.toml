@@ -1,0 +1,50 @@
+memory_uid = "mem_01a0a4164bce704084a7d2862a70ac29"
+memory_key = "mem.pattern.serde.position-survives-from-str-not-from-value"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "serde_json keeps line and column only when it parses from text"
+summary = "from_value errors carry no position; and under #[serde(flatten)] a top-level key's fault resolves to the end of the enclosing object"
+created = "2026-09-15"
+updated = "2026-09-15"
+
+[scope]
+paths = ["src/commands/design.rs", "src/design_run/contract_check.rs"]
+globs = []
+commands = []
+tags = ["serde", "diagnostics", "json", "design-run"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e654920ecd8b6787b406fae5a99b68f5a6aeeeb3"
+ref_name = "refs/heads/edge"
+checkout_state_id = "236a6e95f79b70ec96ed0870cf57d13853272ec3835e3b6991e6dcfe25244128"
+base_commit = "0fa42294dfa2393de0d60d20f0d3b38f4dd1ce93"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-367"
+
+[[source]]
+kind = "slice"
+ref = "SL-259"
+
