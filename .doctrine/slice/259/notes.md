@@ -119,31 +119,36 @@ this statement covers the design axis only.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-15 · PHASE-01 completed · 3a9b5a95e
+fresh-as-of: 2026-09-15 · PHASE-02 completed · 419493b60
 
 ### Produced
 
 `RV-365` (design review, concluded — 6 findings, 3 blockers, all terminal).
 `IMP-446` (deferred `Declaration` wire/stored split, trigger-bound).
 Design amendments across revisions 41-50; `DEC-243` and `DEC-250` amended.
-PHASE-01 (leg 2): `95ca9676c` closes `ISS-450`, `a4d10d216` closes `ISS-367` —
-dispose both at slice close.
+PHASE-01 (leg 2): `95ca9676c` closes `ISS-450`, `a4d10d216` closes `ISS-367`.
+PHASE-02 (leg 4): `419493b60` closes `ISS-315` — `StoredRow` / `RawRow` /
+`Unreadable` and the disclosure at `render/change_row.rs`.
+Dispose `ISS-450`, `ISS-367`, `ISS-315` together at slice close.
 `mem.pattern.change-log.derived-difference-cannot-see-replacement`.
+`mem.fact.design-run.change-log-degrades-state-refuses`,
+`mem.pattern.testing.readable-arm-accessor-narrows-every-sweep`.
 
 ### Learned
 
 A design defended by its own author fails factual checking in ways the author
 does not catch: three of six findings were plain misstatements of the tree
-(arithmetic, a citation, a call order). Recorded as `sec-9` `R0`.
+(arithmetic, a citation, a call order). Recorded as `sec-9` `R0`. PHASE-02
+found the same class again in its own plan — `EN-3`'s reader inventory was both
+stale in line numbers and short by a whole file (PHASE-02 `F1`).
 `DEC-249`'s history/state line is load-bearing in a second place nobody had
 noticed — it is what forbids widening the `DEC-251` floor to cover stored
 declarations (`RV-365` `F-3`).
-`DEC-248`'s *empty prior* under-determines the parent: a literally empty one
-emits `node_reparented` for a node that never had another parent. The create
-prior is the node its `NodeCreated` row describes (PHASE-01 `D4`).
-The create/update split hid a second silent drop of the same shape — a
-`lifecycle` declared at creation was never read (PHASE-01 `D5`), which is the
-`ISS-327` class arriving through leg 2 rather than leg 3.
+`DEC-248`'s *empty prior* under-determines the parent (PHASE-01 `D4`).
+The create/update split hid a second silent drop of the same shape (PHASE-01 `D5`).
+A tolerance decision inverts the pins written before it: `DEC-249` turns
+`SL-233` `EX-11(a)`'s wire half from *refuse the file* into *retain the row*,
+with the guarded finding still closed (PHASE-02 `F5`).
 
 ### Open
 
@@ -152,3 +157,10 @@ The create/update split hid a second silent drop of the same shape — a
 PHASE-01 `D5` changes a refusal surface: a node declared `resolved` with no
 disposition now refuses where it used to be seated `open` silently. Worth a
 line at audit against leg 1's *error ⇒ nothing landed*.
+PHASE-02 `F5` changes a second refusal surface, in the other direction — an
+over-bound stored term degrades where it used to fail the file. `SL-233`'s
+criterion needs reconciling, not just this slice's.
+PHASE-02 `VA-1` held in intent but not in its literal wording (accessor-only
+edits to two `ChangeEvent` roster tests were unavoidable); adjudicate at audit.
+Research baseline for `SL-259` reports drift against its own downstream
+artefacts only; judged not to invalidate a thread, not restamped (PHASE-02 `A5`).

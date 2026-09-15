@@ -1,0 +1,51 @@
+memory_uid = "mem_01a0a2a4fe427292b4925816f53b419e"
+memory_key = "mem.fact.design-run.change-log-degrades-state-refuses"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Change-log rows degrade, live state refuses"
+summary = "A design-run change-log row with unreadable vocabulary is retained opaquely and disclosed; every other snapshot vocabulary still refuses the file"
+created = "2026-09-15"
+updated = "2026-09-15"
+
+[scope]
+paths = ["src/design_run/change_log.rs", "src/design_run/snapshot.rs", "src/design_run/render/change_row.rs"]
+globs = []
+commands = []
+tags = ["design-run", "serde", "storage-tiers", "tolerance"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e5c27b7cd2f04ed5c6cf4b703595605dc9e750e3"
+ref_name = "refs/heads/edge"
+checkout_state_id = "9d85d5d0117fc5ec73dc7fa46d4d1a6b3d3ecd5304c7ec086e4265f06df4f452"
+base_commit = "419493b60a5bef5cfb8372fe93504822a6ab4f24"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-259"
+
+[[source]]
+kind = "commit"
+ref = "419493b60"
+
