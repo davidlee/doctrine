@@ -1597,6 +1597,18 @@ mod tests {
             .replace("<uid>", "dr-000001")
             .replace("<n>", "0")
             .replace("<unique>", "sub-0001");
+        // Against the contract as well as against serde (`SL-259` `PHASE-03`):
+        // the example is what an agent copies, and since the walk refuses an
+        // unknown key rather than dropping it, an example that drifts from the
+        // contract it teaches now hands every reader a payload the CLI rejects.
+        // Serde alone would not catch that — `ApplyRequest` carries
+        // `#[serde(flatten)]`, so a stale key here parsed clean for four slices.
+        crate::design_run::contract_check::refuse_unknown_keys(
+            &serde_json::from_str(&json).expect("the substituted example is JSON"),
+        )
+        .unwrap_or_else(|refused| {
+            panic!("the worked example satisfies the contract it teaches: {refused}\n{json}")
+        });
         let request: ApplyRequest = serde_json::from_str(&json).unwrap_or_else(|e| {
             panic!("the worked example's JSON arm parses after substitution: {e}\n{json}")
         });
