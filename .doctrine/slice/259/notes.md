@@ -119,7 +119,7 @@ this statement covers the design axis only.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-15 · PHASE-03 completed · 7ca1c082f
+fresh-as-of: 2026-09-15 · PHASE-03 completed · d97bf389f
 
 ### Produced
 
@@ -133,7 +133,10 @@ PHASE-03 (leg 3, key axis): `a05ff23f1`..`7ca1c082f` close `ISS-333` and
 `ISS-328` — `design_run::contract_check`, a leaf walk of the payload against
 `payload_contract`'s inventory before deserialisation, plus
 `Refusal::UnknownPayloadKey` and all eight contract rows flipped to `Refused`.
+`IMP-447` (collapse `UnknownKeys` if its arm stays uninhabited).
 Dispose `ISS-450`, `ISS-367`, `ISS-315`, `ISS-333`, `ISS-328` at slice close.
+Gate green at `d97bf389f`: `doctrine check gate` exit 0, `verify-vt` PHASE-01..03
+all PASS. `.doctrine` changes committed with their code.
 `mem.pattern.change-log.derived-difference-cannot-see-replacement`.
 `mem.fact.design-run.change-log-degrades-state-refuses`,
 `mem.pattern.testing.readable-arm-accessor-narrows-every-sweep`.
@@ -157,14 +160,14 @@ with the guarded finding still closed (PHASE-02 `F5`).
 The payload contract's own published document changes what it tells every
 installed client: `unknown-keys: refused` where it said `silently-dropped`.
 
-PHASE-03 `D1` — the phase's `VT` mandates were **retargeted at phase-planning
-time**, the second time this slice has done it (`PHASE-01` was the first).
-Four named `payload_contract.rs`, which would have sited a value-judging walk
-in the largest production module in `design_run` and the one whose doc calls
-it a *describing* module. `VT-4` stayed, because it asserts a claim about the
-table's own self-description. A `VT`'s `test_file` is a plan-time guess at
-where behaviour will be observable; treating it as binding lets a grep choose
-the architecture.
+`mem.pattern.doctrine.vt-test-file-is-a-guess-retarget-it` (PHASE-03 `D1`) —
+the second `VT` retarget in this slice; `PHASE-01` was the first.
+`mem_019f89125fb275a2895bf58b5e29ed95` refined — `record-delta`, not the
+`completed` flip, is what clears `UNATTRIBUTABLE`; conformance is the half that
+does need the flip.
+`mem_019fd03e13397240b4eb05af218f5cf5` updated — the flatten-drop defect is
+closed, and on this surface a green suite is now positive evidence (PHASE-03
+`F3`).
 
 PHASE-03 `D2` — **no unification of the two contract descents** (`T9`, bar
 stated in the sheet: unify only if the unified form is no more complex than
@@ -178,17 +181,15 @@ mattered — `sec-2`'s tagging × payload table — was already single-sourced a
 is now shared rather than copied: `place` / `Placement` / `Fields` left
 `cfg(test)` for their first shipping consumer.
 
-PHASE-03 `F3` — the walk is its own sweep. A stale wire key used to be dropped
-in silence; it is now a refusal, so a green suite after this phase is positive
-evidence that no exercised payload carries one — stronger than the grep
-`T8` planned, and it needs no positive control. The gap it leaves is payloads
-no test exercises, which is why the turn's rendered worked example is now
-walked against the contract it teaches.
-
 ### Open
 
 `ISS-361` stays open against `DEC-250`'s residual late-check window.
 `IMP-446` open, trigger-bound on first live non-empty `delegation`.
+`IMP-447` open — `UnknownKeys::SilentlyDropped` left with no production
+inhabitant by `EX-3`, retained deliberately (PHASE-03 sheet `D5`).
+`DEC-252` — the walk supersedes serde's message for the three attributed types,
+so `SL-251`'s `VT-3` reads red if re-run. Whether that wants a `REV` against
+`SL-251` or a line in this slice's reconciliation is audit's call.
 PHASE-01 `D5` changes a refusal surface: a node declared `resolved` with no
 disposition now refuses where it used to be seated `open` silently. Worth a
 line at audit against leg 1's *error ⇒ nothing landed*.
@@ -197,28 +198,6 @@ over-bound stored term degrades where it used to fail the file. `SL-233`'s
 criterion needs reconciling, not just this slice's.
 PHASE-02 `VA-1` held in intent but not in its literal wording (accessor-only
 edits to two `ChangeEvent` roster tests were unavoidable); adjudicate at audit.
+`submission.rs` reads `undelivered` in conformance, correctly: PHASE-04's target.
 Research baseline for `SL-259` reports drift against its own downstream
 artefacts only; judged not to invalidate a thread, not restamped (PHASE-02 `A5`).
-
-PHASE-03 `F1` — **`SL-251`'s `VT-3` is superseded, and a closed slice's
-evidence now reads red if re-run.** It pinned that a misspelt key on
-`Declaration` came back in *serde's own words* (`DEC-225`'s point-of-failure
-remedy). The walk runs before deserialisation, so it answers that case too.
-Nothing is lost — the walk names the key, the type, the dotted path and every
-admitted key, where serde named the key and its expectations alone, and
-`sec-8` pin 1 holds the two key sets equal — and the shape is now uniform
-across all twelve wire types instead of two shapes depending on which type
-happened to carry an attribute. `DEC-225` is intact in substance: it argues
-against *paraphrasing* a serde error into a lossy classifier, and this is an
-earlier check carrying more. The incumbent test was rewritten to pin the
-successor invariant rather than kept alive around its `unknown field` literal.
-**Adjudicate at audit**: whether the supersession wants a `REV` against
-`SL-251`, or a line in this slice's reconciliation is enough.
-
-PHASE-03 `F2` — `UnknownKeys::SilentlyDropped` has **no production
-inhabitant** after `EX-3`, and `TypeForm`'s own doc argues that a field
-meaningless on half its inhabitants is a slot for a wrong answer. Retained
-deliberately (sheet `D5`): a model that cannot express the defect cannot
-describe a type that reacquires it, and `ISS-333` was live for four slices.
-Raise an `IMP` at close if it is still uninhabited when the contract model is
-next revisited.

@@ -126,3 +126,28 @@ will list selectors *other* phases delivered, which is not a violation.
 including `.doctrine/` artefacts a code-selector fence does not govern — a
 coverage cell, an observation record, a backlog item. Expect the nonzero and read
 the cell, rather than treating the exit code as the verdict.
+
+**Refinement, SL-259 PHASE-03 (2026-09-15) — the completed flip is not what
+clears `UNATTRIBUTABLE`; the registry ROW is, and you can write it yourself.**
+
+Measured directly. PHASE-03 ran `verify-vt` mid-phase with the phase
+`in_progress` and read `UNATTRIBUTABLE` on all five criteria — *keyword present
+but `<file>` not modified by this slice*. Then, still `in_progress`:
+
+```
+doctrine slice record-delta <id> PHASE-NN --start <code_start_oid> --end HEAD
+```
+
+and the same five read `PASS`. No status change in between. So the operative
+cause is an absent boundary row, not an in-flight status, and `record-delta` is
+the direct fix rather than a workaround — use the raw `--start/--end` mode for a
+multi-commit phase, which is the normal shape when a phase commits as it goes.
+
+The conformance half above is unchanged and really does need the flip:
+`slice conformance <id>` refused with *recorded row for PHASE-NN, which is not a
+completed phase* until the status moved. Two different gates with two different
+preconditions, which is why one rule for both misleads.
+
+Worth knowing at phase-plan time: a phase whose `EX` asks for green `verify-vt`
+can get it before the flip; one that asks for a clean conformance read cannot,
+and needs the `--against <code_start_oid>..HEAD` form above.

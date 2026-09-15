@@ -1,0 +1,62 @@
+# DEC-252: The contract walk supersedes serde's message for the three attributed types
+
+<!-- Knowledge record body — context, detail, links. The structured, queried
+     fields live in the sister `record-NNN.toml`; this prose is free-form and is
+     never structurally parsed (the storage rule). -->
+
+## The decision
+
+`SL-259` `PHASE-03`'s unknown-key walk runs **before** deserialisation, so it
+answers the unknown-key case for *every* wire type — including
+`Declaration`, `CheckpointActDeclaration` and `AgentActDeclaration`, the three
+that carry `#[serde(deny_unknown_fields)]` and used to answer for themselves.
+A caller no longer sees serde's text for that case.
+
+This was not sought. It is what running the check earlier necessarily does, and
+the alternative — exempting the three attributed types so serde still speaks —
+was rejected: it would preserve two message shapes for one fault, chosen by
+whether a type happens to carry an attribute, which is not a distinction a
+caller can see or act on.
+
+## What it supersedes
+
+`SL-251` (`done`) `PHASE-07` `VT-3`, which pinned that an unknown key on
+`Declaration` comes back carrying **serde's own text**, and its `VA-1`
+companion. That slice's test was rewritten in place to pin the successor
+invariant. **If `SL-251`'s `VT-3` is re-run it will read red**, deliberately —
+the behaviour it verified has been replaced, and holding its `unknown field`
+literal alive to keep a closed slice's grep green would have been false
+evidence.
+
+## Why `DEC-225` is intact
+
+`DEC-225` (`SL-251` `sec-6`) is the *remedy rides the point of failure* rule:
+serde's own message verbatim, **no paraphrase, no classifier**, then the
+contract's address on an indented continuation. Its target is a wrapper that
+catches a serde error and re-words it, losing detail.
+
+This is not that. Nothing wraps or re-words a serde error; an earlier check
+refuses first, and it carries strictly more than serde did:
+
+| | serde's `deny_unknown_fields` | the walk |
+|---|---|---|
+| the offending key | ✓ | ✓ |
+| what was expected | ✓ | ✓ (the type's full admitted list) |
+| **where in the payload** | ✗ | ✓ (dotted path, e.g. `declare[0].cursror`) |
+| **which type admitted it** | implicit | ✓ named |
+| **coverage** | 3 of 12 wire types | every type in the closure |
+| the contract's address | ✓ | ✓ (same indented continuation) |
+
+`sec-8` pin 1 is what makes the substitution safe rather than plausible: it
+holds each struct contract's key set equal to a fully populated value's serde
+output, so *the expectations the walk prints are the ones serde would have
+printed*.
+
+## Carried forward
+
+Whether this wants a `REV` against `SL-251` or a line in `SL-259`'s
+reconciliation is **open, and belongs to `SL-259`'s audit**. The argument for
+the lighter treatment: no governance artefact changes, one closed slice's test
+was edited in place, and the reasoning is recorded here. The argument for a
+`REV`: `SL-251`'s verification record now describes behaviour the tree does not
+have, and an auditor re-running its gate has no in-band way to learn why.

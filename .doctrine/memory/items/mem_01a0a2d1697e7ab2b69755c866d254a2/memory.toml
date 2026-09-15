@@ -1,0 +1,47 @@
+memory_uid = "mem_01a0a2d1697e7ab2b69755c866d254a2"
+memory_key = "mem.pattern.doctrine.vt-test-file-is-a-guess-retarget-it"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "A VT's test_file is a plan-time guess; retarget it at phase-plan rather than let it choose the architecture"
+summary = "A VT mandate names where behaviour was expected to be observable, authored before the code exists. At phase-plan time it is amendable — ids and keywords unchanged — and deferring to it lets a grep decide module layout."
+created = "2026-09-15"
+updated = "2026-09-15"
+
+[scope]
+paths = []
+globs = [".doctrine/slice/*/plan.toml"]
+commands = []
+tags = ["doctrine", "phase-plan", "verification", "architecture"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c860159a8f7e854ce711810700fd639767fd2e24"
+ref_name = "refs/heads/edge"
+checkout_state_id = "f0fd783ba278dac0c4ea2aa5ced85e3b120eee9632901fe34deeda86d8ec0745"
+base_commit = "d97bf389fa521b1ac7cb7536c338c37807e12f1b"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-259"
+

@@ -39,3 +39,30 @@ an unknown key inside a `form = "create"` disposition is dropped by the same
 mechanism, with none of the structural excuse: nothing prevents the attribute
 there. The rest of this memory stands — `flatten` really does forbid the
 attribute on the outermost type, and the retirement discipline is unchanged.
+
+**Closed, SL-259 PHASE-03 (2026-09-15) — and the corollary inverts for this
+surface.** `design_run::contract_check` now walks the submitted JSON against
+`payload_contract`'s key inventory *before* deserialisation, so an unknown key
+at any nesting level is a typed refusal (`Refusal::UnknownPayloadKey`) rather
+than a silent drop. That reaches both places the attribute cannot: the flatten
+envelope on `ApplyRequest`, and the internally tagged enums — `CreateRecord`
+among them, which is the 2026-08-08 correction above. All eight contract rows
+read `UnknownKeys::Refused`, and the published contract says so to every client.
+
+**What this changes about the retirement discipline.** The grep for stale
+fixture claims is no longer the detector; the *suite* is. A retired key that
+fixtures keep sending used to keep every test green, which is why the discipline
+above exists. It now fails them loudly. So on this surface a green suite IS
+positive evidence that no exercised payload carries a stale key — the one place
+the general caution *"a green suite is not evidence that a fixture exercises the
+mechanism"* is discharged rather than merely unverified.
+
+Two caveats keep the discipline alive. Payloads **no test exercises** are still
+dark: the fix for the worst case is to walk the shipped worked example against
+the contract it teaches (done at `render/envelope.rs`'s example pin), since that
+is what agents copy. And this holds for the *design-run apply payload* only —
+any other wire surface still needs the grep and its positive control.
+
+Flipping the strictness is also how you find the stale claims for free: land the
+refusal, run everything, and read the failures. SL-259 found exactly four, all
+in `e2e_design_state.rs`, all phrasing rather than substance.
