@@ -1839,6 +1839,16 @@ const HEADING_MISSING: &str = "ATX heading";
 /// [`Refusal::SectionTitleEmpty`]'s rendering.
 const TITLE_EMPTY: &str = "heading has no text";
 
+/// How a key the wire does not hold is refused, whichever layer answers first.
+///
+/// It used to be serde's `unknown field`, from `deny_unknown_fields` on the
+/// three wire types that carry it. `SL-259` reads the payload contract against
+/// the JSON *before* deserialisation, so the walk now answers for every type —
+/// including the nine serde could not see — and it is its wording a caller
+/// reads. The retirement pins below are about the key being off the wire, not
+/// about which layer says so, so the phrasing is spelled once (STD-001).
+const UNKNOWN_KEY: &str = "unknown key";
+
 /// EX-13(b) — a section's title is DERIVED from its own body, so `title` is no
 /// longer a wire field. A payload that still declares one is refused as an
 /// unknown key rather than accepted beside a `body` it may contradict.
@@ -1856,7 +1866,7 @@ fn declare_refuses_removed_title_wire_field() {
         }] }),
     ));
     assert!(
-        error.contains("unknown field") && error.contains("title"),
+        error.contains(UNKNOWN_KEY) && error.contains("title"),
         "the removed `title` key is refused by name: {error}"
     );
     assert_eq!(fixture.bytes(), before, "and the run did not advance");
@@ -1888,7 +1898,7 @@ fn declare_refuses_removed_annotation_wire_fields() {
         }] }),
     ));
     assert!(
-        error.contains("unknown field") && error.contains("adopt_record"),
+        error.contains(UNKNOWN_KEY) && error.contains("adopt_record"),
         "`adopt_record` is refused by name: {error}"
     );
 
@@ -1903,7 +1913,7 @@ fn declare_refuses_removed_annotation_wire_fields() {
         }] }),
     ));
     assert!(
-        error.contains("unknown field") && error.contains("record"),
+        error.contains(UNKNOWN_KEY) && error.contains("record"),
         "`record` is refused by name: {error}"
     );
 
@@ -1919,7 +1929,7 @@ fn declare_refuses_removed_annotation_wire_fields() {
         }] }),
     ));
     assert!(
-        error.contains("unknown field") && error.contains("record"),
+        error.contains(UNKNOWN_KEY) && error.contains("record"),
         "and it is refused as an unknown key, not as an ambiguity: {error}"
     );
 
