@@ -1181,22 +1181,36 @@ fn plan_checkpoints(
 /// The six steps are the mint's, not the checkpoint's: a review pass runs the
 /// same protocol against `review`'s semantics, which is the whole of D4's
 /// widening (`CheckpointStep`'s tokens are unchanged — they name the steps).
-fn execute_mint(
+/// `DEC-250` — the SL-249 `D8` retry guard, hoisted out of [`execute_mint`]'s
+/// step 1 and asked of the WHOLE batch before any mint executes.
+///
+/// A held intent journalled a payload; this retry rebuilt one. If they disagree,
+/// the acceptance journalled with the intent is bound to content this submission
+/// is no longer writing, and resuming would apply it to different content. Refuse
+/// — rather than repair anything afterwards (DEC-083).
+///
+/// **Why it is here and not at step 1.** Both of its inputs — the journal and the
+/// plan's payload digest — exist before the loop, so nothing about the question
+/// needs a mint to have happened. Asked per plan inside the loop, it refused a
+/// batch's SECOND plan only after the FIRST plan's record had been materialised:
+/// an authored write on a submission that was always going to be refused.
+/// `SPEC-029` tolerates that — its guarantee is that *the run does not advance*,
+/// not that nothing was written — but `DEC-250` declines to spend it when the
+/// check is free to hoist.
+///
+/// This is the sole expression of "may this retry resume". [`execute_mint`] still
+/// reads the intent, because it needs the state to route steps 2–5; it does not
+/// re-ask this question.
+fn refuse_unresumable_mints(
     root: &Path,
     slice: u32,
     submission: &str,
-    plan: &MintPlan,
-    fault: FaultHook<'_>,
-) -> Result<String> {
-    // Step 1 — the intent, before anything else exists.
-    let held = journalled_intent(root, slice, submission, &plan.subject)?;
-    let mut intent = if let Some(held) = held {
-        // The retry guard (SL-249 D8). A held intent journalled a payload; this
-        // retry rebuilt one. If they disagree, the acceptance journalled with the
-        // intent is bound to content this submission is no longer writing, and
-        // resuming would apply it to different content. Refuse here — before any
-        // resumed effect, and before the run advances — rather than repair
-        // anything afterwards (DEC-083).
+    plans: &[&MintPlan],
+) -> Result<()> {
+    for plan in plans {
+        let Some(held) = journalled_intent(root, slice, submission, &plan.subject)? else {
+            continue;
+        };
         if !held.resumable_under(plan.payload_digest.as_ref()) {
             anyhow::bail!(
                 "submission `{submission}` is mid-mint at `{}` and its payload has \
@@ -1205,6 +1219,23 @@ fn execute_mint(
                 held.reserved_record().unwrap_or(&plan.provisional_record())
             );
         }
+    }
+    Ok(())
+}
+
+fn execute_mint(
+    root: &Path,
+    slice: u32,
+    submission: &str,
+    plan: &MintPlan,
+    fault: FaultHook<'_>,
+) -> Result<String> {
+    // Step 1 — the intent, before anything else exists. This read asks only what
+    // STATE the intent is in, so steps 2–5 resume at the right one; whether the
+    // retry may resume AT ALL was settled for the whole batch by
+    // [`refuse_unresumable_mints`] before any mint ran (DEC-250).
+    let held = journalled_intent(root, slice, submission, &plan.subject)?;
+    let mut intent = if let Some(held) = held {
         held
     } else {
         fault(CheckpointStep::IntentJournal);
@@ -1724,12 +1755,18 @@ fn apply(
         && prior.run.stage != design_run::Stage::Reviewing;
     drop(candidate);
 
+    // The batch the mints will walk, named once so the guard below and the loop
+    // cannot disagree about what it contains.
+    let review_plan = opening_review.then(|| review_pass_plan(slice));
+    let minting: Vec<&MintPlan> = plans.iter().chain(review_plan.iter()).collect();
+
+    // DEC-250 — everything refusable, refused ahead of the mints. This is the
+    // last check that can be, and hoisting it is the whole of SL-259 PHASE-06.
+    refuse_unresumable_mints(root, slice, &request.envelope.submission_id, &minting)?;
+
     // DEC-086 steps 1–5, per mint, resuming the first incomplete effect.
     let mut resolved = Resolution::default();
-    for plan in plans
-        .iter()
-        .chain(opening_review.then(|| review_pass_plan(slice)).iter())
-    {
+    for plan in minting.iter().copied() {
         let record = execute_mint(root, slice, &request.envelope.submission_id, plan, fault)?;
         match plan.checkpoint() {
             Some(checkpoint) => {
@@ -3613,6 +3650,120 @@ mod tests {
         // resumes and completes (VT-3, arm one, end to end).
         apply(root, slice, &first, &|| {}, &no_fault).unwrap();
         assert_eq!(read_snapshot(root, slice).unwrap().run.revision, 3);
+    }
+
+    /// SL-259 PHASE-06 `EX-1` — the mint loop's own refusal, hoisted ahead of the
+    /// mints.
+    ///
+    /// [`execute_mint`] runs once per plan **to completion**, and its step 1
+    /// carries the SL-249 `D8` retry guard. So a batch whose SECOND plan fails
+    /// that guard materialises the FIRST plan's record before it refuses — an
+    /// authored write on a submission that was always going to be refused, from a
+    /// predicate whose every input (the journal, the plan's payload digest)
+    /// exists before the loop runs.
+    ///
+    /// `RV-365` `F-2` examined the pass-1/pass-2 axis and found no reachable
+    /// differential refusal; it did not examine the loop. `design.md` `sec-6`'s
+    /// "hoisting on principle, with no witness behind it" is true of that axis
+    /// and not of this one.
+    ///
+    /// This is not a `SPEC-029` violation — the spec says in terms that the
+    /// guarantee is *the run does not advance*, not that nothing was written. It
+    /// is `DEC-250`'s hoist, and the only thing that makes it one: the check
+    /// *can* run ahead of the mints, so it does.
+    #[test]
+    fn a_refused_mint_leaves_no_earlier_mints_record() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let slice = fixture(root);
+        let doc = design_doc_path(root, slice);
+
+        apply(
+            root,
+            slice,
+            &format!(
+                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q1\"}},\
+                 {{\"subject\":\"inq-2\",\"question\":\"q2\"}}]}}",
+                envelope(root, slice, 1, "sub-seed")
+            ),
+            &|| {},
+            &no_fault,
+        )
+        .unwrap();
+
+        let checkpoint = |subject: &str, node: &str, body: &str| {
+            format!(
+                "{{\"subject\":\"{subject}\",\"disposes\":\"{node}\",\
+                 \"dispose\":{{\"form\":\"create\",\"kind\":\"decision\",\
+                 \"title\":\"Checkpointed decision\",\"body\":{}}}}}",
+                serde_json::to_string(body).unwrap()
+            )
+        };
+        let batch = |declarations: &str| {
+            format!(
+                "{{{},\"declare\":[{declarations}]}}",
+                envelope(root, slice, 2, "sub-batch")
+            )
+        };
+
+        // `cp-2` mints in full under `sub-batch`; the write is then abandoned in
+        // the pre-write window, so its intent and its record survive and the run
+        // does not advance — which is what lets the retry below be admitted.
+        let hook = || std::fs::write(&doc, b"mid-invocation hand edit\n").unwrap();
+        apply(
+            root,
+            slice,
+            &batch(&checkpoint(
+                "cp-2",
+                "inq-2",
+                "The prose the acceptance was bound to.\n",
+            )),
+            &hook,
+            &no_fault,
+        )
+        .unwrap_err();
+        std::fs::remove_file(&doc).unwrap();
+
+        let records = root.join(crate::kinds::DECISION_KIND.dir);
+        let minted = || std::fs::read_dir(&records).map_or(0, Iterator::count);
+        let before = minted();
+
+        // The same submission, now carrying a FRESH `cp-1` AHEAD of a `cp-2`
+        // whose body has changed. `cp-1` has no journalled intent, so the loop
+        // would mint it; `cp-2`'s guard is what refuses.
+        let error = apply(
+            root,
+            slice,
+            &batch(&format!(
+                "{},{}",
+                checkpoint(
+                    "cp-1",
+                    "inq-1",
+                    "A record this submission was never going to keep.\n"
+                ),
+                checkpoint("cp-2", "inq-2", "Different prose entirely.\n")
+            )),
+            &|| {},
+            &no_fault,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(
+            error.contains("sub-batch"),
+            "the refusal is the retry guard's, naming the submission: {error}"
+        );
+        assert_eq!(
+            minted(),
+            before,
+            "the refused submission materialised no record for the plan ORDERED \
+             AHEAD of the one that refused"
+        );
+        assert_eq!(
+            read_snapshot(root, slice).unwrap().run.revision,
+            2,
+            "and the run did not advance"
+        );
     }
 
     /// VT-3 (SL-249), arm two, end to end — a retry that rebuilt the same
