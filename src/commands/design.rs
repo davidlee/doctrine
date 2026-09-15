@@ -888,9 +888,12 @@ const fn widest_canonical_id(kinds: &[crate::kinds::KindRef]) -> usize {
 /// Proved over ALL of `KINDS` rather than over the two kinds a mint reaches, so
 /// a newly mintable kind needs no edit here.
 ///
-/// **A build-stopper, not a test.** Nothing else reads [`widest_canonical_id`]:
-/// deleting this line passes `cargo check` *and* `cargo test`. Same shape as
-/// `change_log`'s `EMITTABLE` proof (`sec-9` `R3`) — do not "clean it up".
+/// **A build-stopper, not a test**, and it defends itself. Nothing else reads
+/// [`widest_canonical_id`], which the `sec-9` `R3` reading would make this as
+/// fragile as `change_log`'s `EMITTABLE` proof — delete the assert, keep a green
+/// build. It is not: both helpers are private `fn`s, so the repo's denied
+/// `dead_code` fails `cargo check` on the orphans the moment this line goes
+/// (probed, SL-259 PHASE-06 `P5`). Still: do not "clean it up".
 ///
 /// One honest limit: `entity.rs`'s reservation midpoint re-spells the canonical
 /// form as `format!("{prefix}-{name}")` rather than calling
