@@ -135,7 +135,7 @@ are runtime tier by design; if a fresh clone needs them, re-run the round.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-15 · plan authored · design locked
+fresh-as-of: 2026-09-15 · ready (plan approved) · 2d180bf2d
 
 ### Produced
 
