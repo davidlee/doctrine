@@ -1,9 +1,9 @@
 id = 259
 slug = "truthful-apply"
 title = "Truthful apply"
-status = "started"
+status = "audit"
 created = "2026-09-11"
-updated = "2026-09-14"
+updated = "2026-09-15"
 tags = ["area:correctness", "area:design-run", "cluster:design-run", "footgun"]
 
 [relationships]
