@@ -119,7 +119,7 @@ this statement covers the design axis only.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-15 · PHASE-03 completed · d97bf389f
+fresh-as-of: 2026-09-15 · PHASE-04 completed · f0873ee1c
 
 ### Produced
 
@@ -134,12 +134,19 @@ PHASE-03 (leg 3, key axis): `a05ff23f1`..`7ca1c082f` close `ISS-333` and
 `payload_contract`'s inventory before deserialisation, plus
 `Refusal::UnknownPayloadKey` and all eight contract rows flipped to `Refused`.
 `IMP-447` (collapse `UnknownKeys` if its arm stays uninhabited).
-Dispose `ISS-450`, `ISS-367`, `ISS-315`, `ISS-333`, `ISS-328` at slice close.
+PHASE-04 (leg 3, state axis): `6b7bc165f` closes `ISS-327` — `KeyWhen` column on
+`Declaration::WIRE_KEYS`, `Declaration::inert_at_state`, `Refusal::InertAtState`,
+`run::subject_state`, and `Batch::validate` taking the state as an injected
+`state_of`. Plan amended at `f3558f3dd` (four cells → three).
+Dispose `ISS-450`, `ISS-367`, `ISS-315`, `ISS-333`, `ISS-328`, `ISS-327` at slice
+close.
 Gate green at `d97bf389f`: `doctrine check gate` exit 0, `verify-vt` PHASE-01..03
 all PASS. `.doctrine` changes committed with their code.
 `mem.pattern.change-log.derived-difference-cannot-see-replacement`.
 `mem.fact.design-run.change-log-degrades-state-refuses`,
 `mem.pattern.testing.readable-arm-accessor-narrows-every-sweep`.
+`mem.pattern.doctrine.earlier-phase-may-close-a-later-phases-cell` (new,
+`f0873ee1c`); `mem_019fd0ceae9d7913840328c2ded75ee7` gained a third instance.
 
 ### Learned
 
@@ -181,6 +188,28 @@ mattered — `sec-2`'s tagging × payload table — was already single-sourced a
 is now shared rather than copied: `place` / `Placement` / `Fields` left
 `cfg(test)` for their first shipping consumer.
 
+PHASE-04 `F-1` — `PHASE-01` closed one of `DEC-246`'s four state-inert cells
+three phases early: collapsing `declare_node` onto one row-producing path made
+`lifecycle` honoured at creation, which was the whole of that cell. Leg 2
+repaired a leg 3 defect. `EN-2`'s named anchors were all live; the **count** was
+the only false claim, and it was the one thing the criterion did not say to
+check. Amended, not restored — re-refusing `lifecycle` would regress `PHASE-01`.
+
+PHASE-04 `D-6` — the state column joined `WIRE_KEYS` rather than sitting in a
+separate three-row table. The separate table is closer to `EX-3`'s wording and
+far more compact; it was rejected because a wire key added without a state answer
+would silently default to state-insensitive, which is this slice's own defect.
+
+PHASE-04 — the kind-axis matrix (`I10`) and the state-axis matrix guard each
+other, which is `EX-2`'s claim showing up as a property: widening the refusal
+into a ban fails the state control **and** `I10`, because a key both refused and
+effectful is `I10`'s own documented hazard.
+
+PHASE-04 `F-4` — a probe harness reverting with `git checkout -- <path>` took a
+phase's uncommitted work on the invocation whose grep matched nothing. The
+corpus already held the rule (`mem_019fd0ceae…`); retrieval had been scoped to
+the subject matter, not to the technique.
+
 ### Open
 
 `ISS-361` stays open against `DEC-250`'s residual late-check window.
@@ -198,6 +227,12 @@ over-bound stored term degrades where it used to fail the file. `SL-233`'s
 criterion needs reconciling, not just this slice's.
 PHASE-02 `VA-1` held in intent but not in its literal wording (accessor-only
 edits to two `ChangeEvent` roster tests were unavoidable); adjudicate at audit.
-`submission.rs` reads `undelivered` in conformance, correctly: PHASE-04's target.
+`submission.rs` conformant as of `6b7bc165f` — supersedes the `undelivered`
+line carried here through PHASE-03.
+`src/design_run/ids.rs` reads `undeclared` in conformance: `sec-7`'s code-impact
+table did not anticipate `SubjectState` landing beside `IdKind`. Authored-truth
+delta for reconcile, same class as the next line.
+`design.md` `sec-3` still states `DEC-246`'s four cells where three exist
+(PHASE-04 `F-1`). Reconcile against the locked design; not editable mid-phase.
 Research baseline for `SL-259` reports drift against its own downstream
 artefacts only; judged not to invalidate a thread, not restamped (PHASE-02 `A5`).
