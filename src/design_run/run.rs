@@ -255,21 +255,30 @@ pub(super) struct Pending {
 
 impl Pending {
     /// A row about one run-local subject.
-    fn about(event: ChangeEvent, subject: &DesignId, terms: Vec<PayloadTerm>) -> Self {
-        Pending {
+    ///
+    /// Fallible because [`ChangeEvent::shaped`] is: the terms are conformed to
+    /// the event's declared shape here, which is the earliest point both are in
+    /// scope (`DEC-247`). Every row in the log is built through this or
+    /// [`Pending::run_wide`], so the check cannot be routed around.
+    fn about(
+        event: ChangeEvent,
+        subject: &DesignId,
+        terms: Vec<PayloadTerm>,
+    ) -> Result<Self, Refusal> {
+        Ok(Pending {
             event,
             subject: Some(subject.clone()),
-            terms: event.ordered(terms),
-        }
+            terms: event.shaped(terms)?,
+        })
     }
 
     /// A row about the run itself.
-    fn run_wide(event: ChangeEvent, terms: Vec<PayloadTerm>) -> Self {
-        Pending {
+    fn run_wide(event: ChangeEvent, terms: Vec<PayloadTerm>) -> Result<Self, Refusal> {
+        Ok(Pending {
             event,
             subject: None,
-            terms: event.ordered(terms),
-        }
+            terms: event.shaped(terms)?,
+        })
     }
 }
 
@@ -439,7 +448,7 @@ pub(crate) fn apply(
                     PayloadTerm::label(PayloadKey::Old, previous.as_str())?,
                     PayloadTerm::label(PayloadKey::New, declared.policy.as_str())?,
                 ],
-            ));
+            )?);
         }
     }
 
@@ -650,7 +659,7 @@ fn record_act(
                 ChangeEvent::ReviewDisposed,
                 &record.id,
                 terms,
-            ))
+            )?)
         }
     };
     let mut rows = admit_and_record(next, ActRecord::Checkpoint(record), rule, derived)?;
@@ -766,11 +775,11 @@ fn admit_and_record(
     }
     let id = record.id().clone();
     let act = PayloadTerm::token(PayloadKey::Act, record.kind().as_str())?;
-    let recorded = Pending::about(ChangeEvent::ActRecorded, &id, vec![act.clone()]);
+    let recorded = Pending::about(ChangeEvent::ActRecorded, &id, vec![act.clone()])?;
     let displaced = record.insert(next);
     let mut rows = Vec::new();
     if displaced {
-        rows.push(Pending::about(ChangeEvent::ActInvalidated, &id, vec![act]));
+        rows.push(Pending::about(ChangeEvent::ActInvalidated, &id, vec![act])?);
     }
     rows.push(recorded);
     Ok(rows)
@@ -922,7 +931,7 @@ fn adopt_authored(
                 PayloadTerm::digest(PayloadKey::Old, section.fingerprint.as_str()),
                 PayloadTerm::digest(PayloadKey::New, authored.fingerprint.as_str()),
             ],
-        ));
+        )?);
     }
     Ok(rows)
 }
@@ -1233,7 +1242,7 @@ fn delegation_row(
 ) -> Result<Pending, Refusal> {
     let mut terms = vec![PayloadTerm::token(PayloadKey::Node, obligation.as_str())?];
     terms.extend(prose);
-    Ok(Pending::about(event, id, terms))
+    Pending::about(event, id, terms)
 }
 
 /// Whether the run already holds `subject` — the state axis's one fact
@@ -1345,7 +1354,7 @@ fn created_prior(
         PayloadKey::Provenance,
         provenance.label(),
     )?);
-    Ok((node, Pending::about(ChangeEvent::NodeCreated, id, terms)))
+    Ok((node, Pending::about(ChangeEvent::NodeCreated, id, terms)?))
 }
 
 /// Create a node, or move an existing one.
@@ -1389,7 +1398,7 @@ fn declare_node(
                 terms.push(PayloadTerm::token(PayloadKey::Old, old.as_str())?);
             }
             terms.push(PayloadTerm::token(PayloadKey::New, declared.as_str())?);
-            rows.push(Pending::about(ChangeEvent::NodeReparented, id, terms));
+            rows.push(Pending::about(ChangeEvent::NodeReparented, id, terms)?);
             parent = Some(declared.clone());
         }
         Sparse::Null if parent.is_some() => {
@@ -1397,7 +1406,7 @@ fn declare_node(
             if let Some(old) = parent.as_ref() {
                 terms.push(PayloadTerm::token(PayloadKey::Old, old.as_str())?);
             }
-            rows.push(Pending::about(ChangeEvent::NodeReparented, id, terms));
+            rows.push(Pending::about(ChangeEvent::NodeReparented, id, terms)?);
             parent = None;
         }
         _ => {}
@@ -1413,7 +1422,7 @@ fn declare_node(
                     PayloadTerm::token(PayloadKey::From, id.as_str())?,
                     PayloadTerm::token(PayloadKey::To, added.as_str())?,
                 ],
-            ));
+            )?);
         }
         for removed in needs.difference(&declared) {
             rows.push(Pending::about(
@@ -1423,7 +1432,7 @@ fn declare_node(
                     PayloadTerm::token(PayloadKey::From, id.as_str())?,
                     PayloadTerm::token(PayloadKey::To, removed.as_str())?,
                 ],
-            ));
+            )?);
         }
         needs = declared;
     }
@@ -1438,7 +1447,7 @@ fn declare_node(
                 PayloadTerm::label(PayloadKey::From, lifecycle.as_str())?,
                 PayloadTerm::label(PayloadKey::To, declared.as_str())?,
             ],
-        ));
+        )?);
         lifecycle = declared;
     }
 
@@ -1522,7 +1531,7 @@ fn declare_section(
                 PayloadKey::Fingerprint,
                 fingerprint.as_str(),
             )],
-        )],
+        )?],
         Some(prior) if &prior.fingerprint != fingerprint => vec![Pending::about(
             ChangeEvent::SectionFingerprintChanged,
             id,
@@ -1530,7 +1539,7 @@ fn declare_section(
                 PayloadTerm::digest(PayloadKey::Old, prior.fingerprint.as_str()),
                 PayloadTerm::digest(PayloadKey::New, fingerprint.as_str()),
             ],
-        )],
+        )?],
         Some(_) => Vec::new(),
     })
 }
@@ -1561,7 +1570,7 @@ fn declare_attestation(
             PayloadTerm::token(PayloadKey::Section, subject.as_str())?,
             PayloadTerm::token(PayloadKey::Attestation, id.as_str())?,
         ],
-    )])
+    )?])
 }
 
 /// Raise a finding, or dispose one already raised.
@@ -1592,7 +1601,7 @@ fn declare_finding(
             event,
             id,
             vec![PayloadTerm::token(PayloadKey::Section, section.as_str())?],
-        )]);
+        )?]);
     }
 
     let Some(summary) = declaration.summary().filter(|text| !text.trim().is_empty()) else {
@@ -1615,7 +1624,7 @@ fn declare_finding(
         ChangeEvent::FindingRaised,
         id,
         vec![PayloadTerm::token(PayloadKey::Section, section.as_str())?],
-    )])
+    )?])
 }
 
 /// Which of the four DEC-062 dispositions a checkpoint declaration names.
@@ -1710,7 +1719,7 @@ fn declare_checkpoint(
         ChangeEvent::CheckpointDisposed,
         id,
         terms,
-    )])
+    )?])
 }
 
 /// Apply a declared change of traversal direction (EX-8).
@@ -1806,7 +1815,7 @@ fn stage_move(
             terms.push(PayloadTerm::prose(PayloadKey::Reason, reason));
         }
     }
-    Ok(Pending::run_wide(ChangeEvent::StageMoved, terms))
+    Pending::run_wide(ChangeEvent::StageMoved, terms)
 }
 
 /// Admit one runbook discharge (SL-233 PHASE-16).
@@ -1913,13 +1922,13 @@ fn discharge_step(
         ),
     };
     next.runbook.upsert(recorded);
-    Ok(Pending::run_wide(
+    Pending::run_wide(
         ChangeEvent::StepDischarged,
         vec![
             PayloadTerm::token(PayloadKey::Step, &declared.step)?,
             PayloadTerm::label(PayloadKey::Outcome, outcome_label(declared.outcome))?,
         ],
-    ))
+    )
 }
 
 /// The wire label a discharge outcome is recorded under in the change log.
@@ -2033,7 +2042,7 @@ fn invalidation_rows(
             ChangeEvent::ActInvalidated,
             id,
             vec![PayloadTerm::token(PayloadKey::Act, act.as_str())?],
-        ));
+        )?);
     }
     for (attestation, subject, _fingerprint) in reviews_before.difference(reviews_after) {
         rows.push(Pending::about(
@@ -2043,7 +2052,7 @@ fn invalidation_rows(
                 PayloadTerm::token(PayloadKey::Section, subject.as_str())?,
                 PayloadTerm::token(PayloadKey::Attestation, attestation.as_str())?,
             ],
-        ));
+        )?);
     }
     Ok(rows)
 }

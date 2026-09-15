@@ -24,6 +24,7 @@ use super::attestation::{
     IntentSubject, RecordedAct, RecoveryIntent, ReviewDisposition, ReviewPolicy, ReviewRef,
     Reviewer,
 };
+use super::change_log::{ChangeEvent, PayloadKey, PayloadTerm, ValueKind};
 use super::fixture::{
     BLOCKING_NODE, OPEN_NODE, PASS, SECTION_A, SECTION_B, attest, blocking_set_declared,
     checkpoint_act, cleared, declared, drafting_ready, id, pass_over, run_holding, section,
@@ -4341,4 +4342,158 @@ fn the_removal_probe_refuses_exactly_the_required_rows() {
         &AgentActDeclaration::fully_populated(),
         &AGENT_ACT_DECLARATION,
     );
+}
+
+// ── leg 3, the value axis (DEC-247, ISS-290) ──────────────────────────────
+
+/// A term at `kind`, whatever kind that is — the one place this suite names all
+/// four constructors, so the matrices below can quantify over the vocabulary
+/// instead of over the three cases someone remembered.
+///
+/// The value is one byte, which is inside every admission bound, so a cell that
+/// refuses refuses for the reason under test rather than for length.
+fn term_at(key: PayloadKey, kind: ValueKind) -> PayloadTerm {
+    match kind {
+        ValueKind::Token => PayloadTerm::token(key, "x").expect("one byte is inside the id bound"),
+        ValueKind::Label => {
+            PayloadTerm::label(key, "x").expect("one byte is inside the label bound")
+        }
+        ValueKind::Digest => PayloadTerm::digest(key, "x"),
+        ValueKind::Prose => PayloadTerm::prose(key, "x"),
+    }
+}
+
+/// Every `(key, kind)` pair any event declares — the payload key vocabulary as
+/// the declaration itself spells it.
+///
+/// Read from `payload_terms()` rather than from a written-out list so a key
+/// added to an event joins these matrices without anyone remembering to add it
+/// (`mem_019fe0c6db677dd1aa6a8ef8e91f3828`, point 1).
+fn declared_keys() -> BTreeSet<PayloadKey> {
+    ChangeEvent::EMITTABLE
+        .iter()
+        .flat_map(|event| event.payload_terms().iter().map(|(key, _)| *key))
+        .collect()
+}
+
+/// `VT-1` / `EX-1` / `EX-4` (`DEC-247`, `ISS-290`) — a term whose `ValueKind`
+/// is not the one its event declares for that key is refused, at the seam that
+/// has both the event and the term in scope.
+///
+/// A matrix, not the one live instance: `ISS-290` survived `SL-233` `PHASE-08`
+/// because its sibling key was repaired at the instance. Both vocabularies are
+/// read from their own source — `ChangeEvent::EMITTABLE` and `ValueKind::ALL` —
+/// so a new event, a new key or a fourth value kind joins the sweep unasked.
+///
+/// **Two-sided, on `I10`'s reasoning**: each declared pair is asserted
+/// *admitted* as well as each undeclared one refused. Without the control a
+/// seam that refused everything would read green, which is a ban rather than a
+/// rule.
+#[test]
+fn a_term_constructed_at_an_undeclared_kind_is_refused() {
+    let mut admitted = 0_usize;
+    let mut refused = 0_usize;
+    for event in ChangeEvent::EMITTABLE {
+        for (key, declared) in event.payload_terms() {
+            assert!(
+                event.shaped(vec![term_at(*key, *declared)]).is_ok(),
+                "{} declares {} as {declared:?}, so a term at that kind is admitted",
+                event.as_str(),
+                key.as_str()
+            );
+            admitted += 1;
+            for kind in ValueKind::ALL.iter().filter(|kind| *kind != declared) {
+                let outcome = event.shaped(vec![term_at(*key, *kind)]);
+                assert!(
+                    matches!(
+                        outcome,
+                        Err(Refusal::UndeclaredTerm {
+                            event: refused_event,
+                            key: refused_key,
+                            kind: refused_kind,
+                        }) if refused_event == event && refused_key == *key && refused_kind == *kind
+                    ),
+                    "{} declares {} as {declared:?}, so a term at {kind:?} is refused naming it: {outcome:?}",
+                    event.as_str(),
+                    key.as_str()
+                );
+                refused += 1;
+            }
+        }
+    }
+    assert!(
+        admitted > 0 && refused > 0,
+        "the sweep read its vocabularies: {admitted} declared pairs, {refused} divergent cells"
+    );
+}
+
+/// `EX-4`'s other half — a term carrying a key its event does not declare **at
+/// all** is refused, at every kind.
+///
+/// The same predicate as the kind cells above rather than a second rule: a term
+/// is admitted when the declaration names its `(key, kind)` pair, and there are
+/// two ways to miss. Before this, such a term was silently sorted to the end of
+/// the row by `ordered`'s `unwrap_or(usize::MAX)`.
+#[test]
+fn a_term_carrying_a_key_its_event_does_not_declare_is_refused() {
+    let vocabulary = declared_keys();
+    let mut cells = 0_usize;
+    for event in ChangeEvent::EMITTABLE {
+        let own: BTreeSet<PayloadKey> = event.payload_terms().iter().map(|(key, _)| *key).collect();
+        for key in vocabulary.difference(&own) {
+            for kind in ValueKind::ALL {
+                let outcome = event.shaped(vec![term_at(*key, kind)]);
+                assert!(
+                    matches!(
+                        outcome,
+                        Err(Refusal::UndeclaredTerm { key: refused_key, .. })
+                            if refused_key == *key
+                    ),
+                    "{} declares no {} term, so one at {kind:?} is refused naming it: {outcome:?}",
+                    event.as_str(),
+                    key.as_str()
+                );
+                cells += 1;
+            }
+        }
+    }
+    assert!(cells > 0, "the sweep found keys to withhold from an event");
+}
+
+/// A subset of the declared shape is legitimate and live — `ReviewDisposed`
+/// declares a reason its dispositions do not always carry — so the check asks
+/// whether every term is declared, never whether every declaration is termed.
+#[test]
+fn a_row_carrying_fewer_terms_than_its_event_declares_is_admitted() {
+    for event in ChangeEvent::EMITTABLE {
+        let shape = event.payload_terms();
+        let Some((key, kind)) = shape.first() else {
+            continue;
+        };
+        assert!(
+            event.shaped(vec![term_at(*key, *kind)]).is_ok(),
+            "{} admits a row carrying only its first declared term",
+            event.as_str()
+        );
+    }
+}
+
+/// `ValueKind` now spells its vocabulary twice — once for serde, once for the
+/// refusals that name it — so the two are held together here rather than left
+/// to stay aligned by attention.
+///
+/// This is the drift `ChangeEvent`'s hand-written `Serialize`/`Deserialize`
+/// impls were written to end: a variant renamed moves serde's token while
+/// `as_str`'s stays, and both halves still compile. `ValueKind` rides
+/// `rename_all` like the rest of the leaf's closed vocabularies, so it gets the
+/// guard instead of the impls.
+#[test]
+fn value_kind_tokens_match_their_serde_spelling() {
+    for kind in ValueKind::ALL {
+        assert_eq!(
+            serde_json::to_string(&kind).expect("a fieldless enum serialises"),
+            format!("\"{}\"", kind.as_str()),
+            "{kind:?} spells itself the same way twice"
+        );
+    }
 }

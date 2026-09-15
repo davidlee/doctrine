@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use super::Stage;
 use super::attestation::{ActKind, AgentActKind, ReviewRef};
-use super::gate::{Coverage, ObservedFact, Unmet};
+use super::change_log::{ChangeEvent, PayloadKey, ValueKind};
+use super::gate::{Coverage, ObservedFact, Unmet, join};
 use super::ids::{DesignId, IdKind, SubjectState};
 
 /// One way a recorded act fails to correspond to the rule it is written against
@@ -504,6 +505,31 @@ pub(crate) enum Refusal {
         /// be a second discriminator free to disagree with the first.
         honoured_when: SubjectState,
     },
+    /// A change-row term whose `(key, kind)` pair its event does not declare
+    /// (`DEC-247`, `ISS-290`) — the **value**-axis sibling of
+    /// [`Refusal::InertKey`] and [`Refusal::InertAtState`], raised from
+    /// [`super::change_log::ChangeEvent::shaped`].
+    ///
+    /// One variant for both ways a term can fall outside the declared shape —
+    /// a declared key carried at the wrong kind, and a key the event does not
+    /// declare at all. They are one predicate, *this pair is not in the shape*;
+    /// splitting them would make the caller's remedy the discriminator rather
+    /// than the fact. Which one it is, `Display` reads back off
+    /// [`super::change_log::ChangeEvent::payload_terms`] — recomputed from the
+    /// declaration rather than carried as a second field free to disagree with
+    /// it, on [`Refusal::InertAtState`]'s own reasoning.
+    ///
+    /// Unlike its two siblings this is never provoked by a caller's payload: the
+    /// event, the key and the kind are all fixed by the engine's own code, so
+    /// reaching it means the declaration and the construction have drifted
+    /// apart. It is a refusal rather than an assertion because the alternative
+    /// is what `ISS-290` was — the drift admitted a term against a bound its
+    /// event did not claim for it, silently.
+    UndeclaredTerm {
+        event: ChangeEvent,
+        key: PayloadKey,
+        kind: ValueKind,
+    },
 }
 
 impl fmt::Display for Refusal {
@@ -924,6 +950,37 @@ impl fmt::Display for Refusal {
                 },
                 honoured_when.as_str()
             ),
+            // The declared shape is named, not just the offending term: a
+            // refusal saying only "not declared" leaves the reader to go find
+            // the declaration, and this refusal's reader is whoever just moved
+            // it. Which of the two misses it was is read back off
+            // `payload_terms` rather than carried, so the message cannot
+            // disagree with the table it is about.
+            Refusal::UndeclaredTerm { event, key, kind } => match event
+                .payload_terms()
+                .iter()
+                .find(|(declared, _)| declared == key)
+            {
+                Some((_, expected)) => write!(
+                    f,
+                    "`{}` declares `{}` as {}, not {}",
+                    event.as_str(),
+                    key.as_str(),
+                    expected.as_str(),
+                    kind.as_str()
+                ),
+                None => write!(
+                    f,
+                    "`{}` declares no `{}` term; it declares: {}",
+                    event.as_str(),
+                    key.as_str(),
+                    join(event.payload_terms().iter().map(|(named, at)| format!(
+                        "{}={}",
+                        named.as_str(),
+                        at.as_str()
+                    )))
+                ),
+            },
         }
     }
 }

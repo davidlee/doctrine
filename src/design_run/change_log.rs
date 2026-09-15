@@ -403,31 +403,75 @@ impl ChangeEvent {
                 (PayloadKey::Node, ValueKind::Token),
                 (PayloadKey::Reason, ValueKind::Prose),
             ],
-            // The step id and the outcome are both closed tokens; the skip
-            // reason is deliberately NOT a term. It is stored whole on the
-            // discharge record, and the change log is a bounded rendering.
+            // The step id is identity, bounded by the id slot it rides
+            // (`runbook::RUNBOOK_STEP_ID_BYTES` derives from the same constant).
+            // The outcome is a closed TWO-member vocabulary — `attested` or
+            // `skipped` — so it is a label, exactly as `CheckpointDisposed`
+            // declares its disposition. This arm read `Token` for both until
+            // `DEC-247`: the construction has always built a label, and nothing
+            // compared the two, so the declaration claimed an admission bound
+            // (32 B) the term was never admitted against (16 B). The DECLARATION
+            // was the error, not the construction (`ISS-290`).
+            //
+            // The skip reason is deliberately NOT a term. It is stored whole on
+            // the discharge record, and the change log is a bounded rendering.
             ChangeEvent::StepDischarged => &[
                 (PayloadKey::Step, ValueKind::Token),
-                (PayloadKey::Outcome, ValueKind::Token),
+                (PayloadKey::Outcome, ValueKind::Label),
             ],
         }
     }
 
-    /// Put `terms` into this event's declared order.
+    /// Put `terms` into this event's declared shape — its canonical order, and
+    /// only terms the declaration names — or refuse.
     ///
-    /// A row's terms are built by whichever branch noticed the change, so
-    /// without this the rendered order would follow construction rather than the
-    /// documented shape — and a reader comparing two rows of the same kind would
-    /// have to allow for both.
-    pub(crate) fn ordered(self, mut terms: Vec<PayloadTerm>) -> Vec<PayloadTerm> {
+    /// **Order.** A row's terms are built by whichever branch noticed the
+    /// change, so without this the rendered order would follow construction
+    /// rather than the documented shape — and a reader comparing two rows of the
+    /// same kind would have to allow for both.
+    ///
+    /// **Kind** (`DEC-247`, `ISS-290`). Nothing used to compare the kind a term
+    /// was *constructed* at with the kind its event *declares*, and the two carry
+    /// different admission bounds — so a term could be admitted against a bound
+    /// its own event does not claim for it. `StepDischarged` had drifted exactly
+    /// that way. The check is here because this is the earliest moment both are
+    /// in scope: a [`PayloadTerm`] has no event until a row pairs them, and
+    /// [`PayloadTerm::admit`] therefore cannot see one.
+    ///
+    /// **Why fused with the ordering rather than sitting beside it.** The
+    /// declaration governs both, and one method means a row cannot be built
+    /// through the sorter alone. Fixing `StepDischarged` without closing the
+    /// class is how `SL-233` `PHASE-08` left this behind after repairing the
+    /// sibling key (`runbook::RUNBOOK_STEP_ID_BYTES`).
+    ///
+    /// A **subset** of the declared shape is legitimate — a disposition without
+    /// a reason emits one of `ReviewDisposed`'s two terms — so the question is
+    /// whether every term is declared, never whether every declaration is
+    /// termed.
+    ///
+    /// The **stored** side is deliberately untouched: a persisted term re-enters
+    /// through [`PayloadTerm::admit`] carrying its own kind, and re-deriving that
+    /// kind from today's declaration would fail every row written under an older
+    /// one — refusing history, which `DEC-249` forbids.
+    pub(crate) fn shaped(self, mut terms: Vec<PayloadTerm>) -> Result<Vec<PayloadTerm>, Refusal> {
         let shape = self.payload_terms();
+        if let Some(term) = terms
+            .iter()
+            .find(|term| !shape.contains(&(term.key(), term.kind())))
+        {
+            return Err(Refusal::UndeclaredTerm {
+                event: self,
+                key: term.key(),
+                kind: term.kind(),
+            });
+        }
         terms.sort_by_key(|term| {
             shape
                 .iter()
                 .position(|(key, _)| *key == term.key())
                 .unwrap_or(usize::MAX)
         });
-        terms
+        Ok(terms)
     }
 }
 
@@ -547,6 +591,33 @@ pub(crate) enum ValueKind {
 }
 
 impl ValueKind {
+    /// The token this kind renders as in a refusal.
+    ///
+    /// Hand-written beside `#[serde(rename_all)]`, as [`super::attestation::ActKind`]
+    /// and the rest of this leaf's closed vocabularies are: `clippy::use_debug`
+    /// is denied, so a diagnostic naming a kind needs one, and
+    /// `value_kind_tokens_match_their_serde_spelling` holds the two spellings
+    /// together rather than trusting them to stay aligned — the drift
+    /// [`ChangeEvent`]'s own serde impls were written to end.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            ValueKind::Token => "token",
+            ValueKind::Label => "label",
+            ValueKind::Digest => "digest",
+            ValueKind::Prose => "prose",
+        }
+    }
+
+    /// The closed kind vocabulary, so a sweep over value kinds reads its
+    /// members from the enum rather than from whichever three a test author
+    /// remembered.
+    pub(crate) const ALL: [ValueKind; 4] = [
+        ValueKind::Token,
+        ValueKind::Label,
+        ValueKind::Digest,
+        ValueKind::Prose,
+    ];
+
     /// What a value of this kind is *admitted* against, and the noun a refusal
     /// names it by. `None` for the two kinds no admission bound can be derived
     /// for: a digest is abbreviated at emission and stored whole, and a stored

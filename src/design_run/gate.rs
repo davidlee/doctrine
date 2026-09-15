@@ -1280,7 +1280,11 @@ impl fmt::Display for Cause {
 }
 
 /// One comma-separated list, so eleven causes do not spell it eleven ways.
-fn join(terms: impl Iterator<Item = impl fmt::Display>) -> String {
+///
+/// Visible to the leaf rather than to this file because [`super::refusal`]
+/// renders lists too and a second spelling of "comma-separated" is the
+/// duplication this exists to prevent.
+pub(super) fn join(terms: impl Iterator<Item = impl fmt::Display>) -> String {
     terms
         .map(|term| term.to_string())
         .collect::<Vec<_>>()
