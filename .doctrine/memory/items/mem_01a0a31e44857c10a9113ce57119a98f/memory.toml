@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0a31e44857c10a9113ce57119a98f"
+memory_key = "mem.pattern.design-run.guard-declaration-construction-at-the-seam"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Guard a declaration/construction pair at the seam that sees both"
+summary = "A table declaring a shape and the sites constructing it will drift; refuse the disagreement where both are in scope, quantified over the vocabulary"
+created = "2026-09-15"
+updated = "2026-09-15"
+
+[scope]
+paths = ["src/design_run/change_log.rs", "src/design_run/run.rs"]
+globs = ["src/design_run/**"]
+commands = []
+tags = ["design-run", "invariants", "defect-class"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8dbccd2984c566cfde10297cbfbfcb9d6e78d773"
+ref_name = "refs/heads/edge"
+checkout_state_id = "dc1b9fba0b5517e0bea3552d993d812c809ae5d44b14b2e2b8299bc24a021ca1"
+base_commit = "e4a3e9b1db67d716e21a15f3a19d1ef4e26ddb9f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-259"
+

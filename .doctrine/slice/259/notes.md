@@ -119,7 +119,7 @@ this statement covers the design axis only.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-15 · PHASE-04 completed · f0873ee1c
+fresh-as-of: 2026-09-15 · PHASE-05 completed · e4a3e9b1d
 
 ### Produced
 
@@ -138,15 +138,24 @@ PHASE-04 (leg 3, state axis): `6b7bc165f` closes `ISS-327` — `KeyWhen` column 
 `Declaration::WIRE_KEYS`, `Declaration::inert_at_state`, `Refusal::InertAtState`,
 `run::subject_state`, and `Batch::validate` taking the state as an injected
 `state_of`. Plan amended at `f3558f3dd` (four cells → three).
-Dispose `ISS-450`, `ISS-367`, `ISS-315`, `ISS-333`, `ISS-328`, `ISS-327` at slice
-close.
-Gate green at `d97bf389f`: `doctrine check gate` exit 0, `verify-vt` PHASE-01..03
-all PASS. `.doctrine` changes committed with their code.
+PHASE-05 (leg 3, value axis): `0a793ee63`..`e4a3e9b1d` close `ISS-290` —
+`ChangeEvent::ordered` absorbed into `ChangeEvent::shaped` (the declaration
+governs a row's term order AND kinds, through one call), `Refusal::UndeclaredTerm`,
+fallible `Pending::{about,run_wide}`, and `StepDischarged`'s `Outcome` declared
+`Label`. `ValueKind` gained `as_str` + `ALL`; `gate::join` widened to `pub(super)`
+rather than respelt.
+Dispose `ISS-450`, `ISS-367`, `ISS-315`, `ISS-333`, `ISS-328`, `ISS-327`, `ISS-290`
+at slice close.
+Gate green at `e4a3e9b1d`: `doctrine check gate` exit 0, `verify-vt` PHASE-01..05
+all PASS (PHASE-06's `VT-1` is the only FAIL, and is unwritten). `.doctrine`
+changes committed with their code.
 `mem.pattern.change-log.derived-difference-cannot-see-replacement`.
 `mem.fact.design-run.change-log-degrades-state-refuses`,
 `mem.pattern.testing.readable-arm-accessor-narrows-every-sweep`.
 `mem.pattern.doctrine.earlier-phase-may-close-a-later-phases-cell` (new,
 `f0873ee1c`); `mem_019fd0ceae9d7913840328c2ded75ee7` gained a third instance.
+`mem.pattern.design-run.guard-declaration-construction-at-the-seam` and
+`mem.pattern.lint.closed-vocabulary-tokens-in-diagnostics` (both new, PHASE-05).
 
 ### Learned
 
@@ -210,6 +219,35 @@ phase's uncommitted work on the invocation whose grep matched nothing. The
 corpus already held the rule (`mem_019fd0ceae…`); retrieval had been scoped to
 the subject matter, not to the technique.
 
+PHASE-05 `F-2` — `EN-4` asked whether narrowing `Outcome` could degrade a stored
+row and answered from the value lengths. The real answer is structural: a stored
+term re-enters through `PayloadTermWire` carrying its **own** kind, so a
+declaration change cannot reach history at all — and the corpus had already
+settled it, **65 of 65** live stored `outcome` terms reading `kind = "label"`.
+The declaration moved onto what the disk said. `mem_019fcd1727fa7061b771179b113f5726`
+(a `DesignSnapshot`-reachable wire form outlives its binary) is discharged by the
+census, not argued past.
+
+PHASE-05 `F-4` — the probe that mattered was the one that found a hole in the
+**test**, not in the code. Emptying one event's declared shape left the `VT-1`
+matrix green: a sweep-wide `cells > 0` total cannot see one input dropping out of
+the sweep. That is `mem_019fe0c6db677dd1aa6a8ef8e91f3828`'s point 2 landing on the
+matrix that cited it, and the reason every `VT` is probed rather than read.
+
+PHASE-05 `F-3` — `clippy::use_debug` is denied repo-wide, which overturned a
+phase-plan decision written to avoid a second spelling of a serde token. The
+house rule (`gate.rs:1214`) is the opposite: every closed vocabulary carries
+`as_str` beside `rename_all`, and the two spellings get a round-trip pin rather
+than hand-written serde impls. `ChangeEvent` is the exception, not the pattern.
+Recorded as `mem.pattern.lint.closed-vocabulary-tokens-in-diagnostics`.
+
+PHASE-05 `D-1` — the seam is `shaped` (absorbing `ordered`), not the drain at
+`run.rs:495` and not `PayloadTerm::admit`. Fusing the kind check into the
+ordering call, rather than adding an `admits()` beside it, is what stops a future
+third `Pending` constructor from reaching the log through the sorter alone. Three
+instances of this declaration/construction class now exist across `SL-233`,
+`SL-249` and this slice — `mem.pattern.design-run.guard-declaration-construction-at-the-seam`.
+
 ### Open
 
 `ISS-361` stays open against `DEC-250`'s residual late-check window.
@@ -231,7 +269,11 @@ edits to two `ChangeEvent` roster tests were unavoidable); adjudicate at audit.
 line carried here through PHASE-03.
 `src/design_run/ids.rs` reads `undeclared` in conformance: `sec-7`'s code-impact
 table did not anticipate `SubjectState` landing beside `IdKind`. Authored-truth
-delta for reconcile, same class as the next line.
+delta for reconcile.
+`src/design_run/gate.rs` joins it (PHASE-05): `join` was widened to `pub(super)`
+so the new refusal renders its list through the one comma-separated join rather
+than a twelfth spelling. Same class — a one-line change to a file `sec-7` does
+not list.
 `design.md` `sec-3` still states `DEC-246`'s four cells where three exist
 (PHASE-04 `F-1`). Reconcile against the locked design; not editable mid-phase.
 Research baseline for `SL-259` reports drift against its own downstream
