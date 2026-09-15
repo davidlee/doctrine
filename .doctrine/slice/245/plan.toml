@@ -42,9 +42,9 @@ entrance_criteria = [
   { id = "EN-2", text = "`doctrine check gate` green on the starting tree" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "src/subprocess.rs exists as a leaf with `Bounded { Completed { status, stdout, stderr }, TimedOut }`, `run_bounded(command, stdin, timeout) -> io::Result<Bounded>`, and named constants for the 50 ms poll interval and the 1 s reap grace (STD-001)" },
+  { id = "EX-1", text = "src/subprocess.rs exists as a leaf with `Bounded { Completed { status, stdout, stderr }, TimedOut }`, `run_bounded(command, stdin, timeout) -> io::Result<Bounded>`, and named constants for the 50 ms poll interval and the 1 s reap grace (STD-001). stdout and stderr are always piped; stdin is piped only when `stdin` is Some — with None the Command's own stdin setting stands, so coverage_verify keeps inheriting stdin as it does today" },
   { id = "EX-2", text = "coverage_verify::run_argv delegates to subprocess::run_bounded; its local drain/reap mechanism is gone (no parallel implementation); Err/TimedOut → Unobtainable and Completed → Ran, exactly as before" },
-  { id = "EX-3", text = "The timeout path never calls a blocking wait: on expiry it kills, polls try_wait for at most REAP_GRACE, and returns TimedOut whether or not the child was reaped" },
+  { id = "EX-3", text = "The timeout path never calls a blocking wait: on expiry it kills, polls try_wait for at most REAP_GRACE, and returns TimedOut whether or not the child was reaped. A try_wait failure likewise kills and bounded-reaps before returning Err" },
   { id = "EX-4", text = "The stdin writer thread is not joined; a BrokenPipe from a child that exits early is not surfaced as an error" },
   { id = "EX-5", text = "`subprocess = \"leaf\"` registered in .doctrine/adr/001/layering.toml; the ADR-001 layering gate passes" },
   { id = "EX-6", text = "`doctrine check gate` green (fmt, clippy zero warnings, tests)" },
@@ -219,13 +219,14 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "`concept-map export <id> -X` works with no --format; `--format mermaid -X` is refused as FormatNotDot; without -X, export is byte-identical and a missing --format still fails at clap" },
+  { id = "EX-4", text = "The three existing run_export unit tests change only by the added `false` render argument; their assertions are untouched" },
   { id = "EX-2", text = "ExportFormat implements Display; run_export calls prepare before the root lookup" },
   { id = "EX-3", text = "`doctrine check gate` green" },
 ]
 verification = [
   { id = "VT-1", expects = "e2e: `concept-map export <id> --format mermaid -X` exits non-zero, stdout empty, stderr has the format message", test_file = "tests/e2e_render_guard.rs", keywords = ["concept-map", "export", "mermaid"], waived = false },
   { id = "VT-2", expects = "e2e: `concept-map export <id> -X`, no --format, off a terminal → the not-a-terminal message, not clap's missing-argument error (proves the relaxed rule and the live stdout check)", test_file = "tests/e2e_render_guard.rs", keywords = ["concept-map", "export", "terminal"], waived = false },
-  { id = "VT-3", expects = "existing concept_map export tests pass unchanged", test_file = "src/concept_map.rs", keywords = ["required_unless_present = \"render\"", "Display for ExportFormat"], waived = false },
+  { id = "VT-3", expects = "existing concept_map export tests pass, changed only by the added render argument", test_file = "src/concept_map.rs", keywords = ["required_unless_present = \"render\"", "Display for ExportFormat"], waived = false },
   { id = "VH-1", expects = "ghostty: `doctrine concept-map export <id> -X` renders with no --format (design sec-8 VH step 3)" },
   { id = "VH-2", expects = "optional, when a macOS host is available: PHASE-05 VH-1 again in kitty or ghostty on macOS — the image appears, confirming timed reads on macOS /dev/tty (VH step 6; waive with reason if no host)" },
 ]

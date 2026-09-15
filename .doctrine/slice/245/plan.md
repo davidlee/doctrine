@@ -62,6 +62,11 @@ optional macOS check of the timed-read probe.
   built binary.
 - **macOS:** VH-2 on PHASE-06 is optional and may be waived with a reason when
   no macOS host is available; the sec-9 assumption then stands unverified.
+- **`run_bounded` stdin, made precise** (design sec-5 says "piped stdio, feed
+  `stdin` (if any)"): stdin is piped only when bytes are supplied. The incumbent
+  `run_argv` inherits stdin, and piping it unconditionally would change what a
+  verification check sees — contrary to the move-not-rewrite premise. Recorded
+  in PHASE-01/EX-1; no design change.
 - **Reconcile-time governance** (design sec-7) is not a phase: the SPEC-027
   resp. 5 and REQ-396 Revision and the ISS-242 annotation happen at
   `/reconcile`.
