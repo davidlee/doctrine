@@ -1592,7 +1592,7 @@ const TYPE_LEAD: &str = "type";
 /// The `BTreeSet` of names is what makes this a graph walk: a type met a second
 /// time contributes its name to an edge and nothing else. It is also why a cycle
 /// could not hang the walk, though the closure has none (`sec-3`).
-fn closure_types(root: &'static TypeContract) -> Vec<&'static TypeContract> {
+pub(super) fn closure_types(root: &'static TypeContract) -> Vec<&'static TypeContract> {
     let mut seen = BTreeSet::new();
     let mut order = Vec::new();
     visit_type(root, &mut seen, &mut order);
@@ -2346,8 +2346,14 @@ pub(crate) fn render_document(extern_contracts: &ExternContracts) -> String {
 // The test-time seam (sec-8 pins 2, 3 and 4)
 // ---------------------------------------------------------------------------
 //
-// Everything from here to `mod tests` is `#[cfg(test)]` and ships in nothing.
-// It sits at **module level** rather than inside `mod tests` because the §9.1
+// Four items below are production — [`Placement`], [`Fields`], their two
+// readers, and [`place`] — because `SL-259` `PHASE-03` gave the tagging × payload
+// table a fourth consumer that ships: [`super::contract_check`]. Everything else
+// from here to `mod tests` is `#[cfg(test)]` and ships in nothing, and note what
+// that costs the promoted four: under `cfg(test)` the crate's blanket
+// `expect(dead_code)` is off, so the pressure described below no longer reaches
+// them. Their production consumer has to be real.
+// This region sits at **module level** rather than inside `mod tests` because the §9.1
 // suite ([`super::tests`]) is where pin 2's recursive descent and its coverage
 // equality live, and a sibling module cannot see a private `mod tests`. Pin 4's
 // per-variant samples are the only inputs that reach most `VariantContract`
@@ -2361,10 +2367,10 @@ pub(crate) fn render_document(extern_contracts: &ExternContracts) -> String {
 /// Where one enum variant's token and its keys sit on the wire — `sec-2`'s
 /// tagging × payload table, resolved against a value.
 ///
-/// The table has **one** implementation ([`place`]) and three consumers: pin 4's
-/// [`serde_token`], pin 2's variant selection, and pin 3's variant removal
-/// probe. None of the three restates it (`PHASE-03/EX-2`, `EX-6`).
-#[cfg(test)]
+/// The table has **one** implementation ([`place`]) and four consumers: pin 4's
+/// [`serde_token`], pin 2's variant selection, pin 3's variant removal probe,
+/// and — the one that ships — [`super::contract_check`]'s unknown-key walk.
+/// None of the four restates it (`SL-251` `PHASE-03/EX-2`, `EX-6`).
 #[derive(Debug)]
 pub(super) enum Placement<'a> {
     /// [`Tagging::External`] + [`VariantPayload::Absent`] — the JSON string is
@@ -2398,13 +2404,11 @@ pub(super) enum Placement<'a> {
 ///
 /// One reading for all three is what lets pin 2's key-set equality and pin 3's
 /// removal probe be written once each rather than once per tagging.
-#[cfg(test)]
 pub(super) struct Fields<'a> {
     object: Option<&'a Map<String, Value>>,
     tag: Option<&'a str>,
 }
 
-#[cfg(test)]
 impl<'a> Fields<'a> {
     /// A plain object with no tag in it — a struct target's own keys.
     pub(super) const fn plain(object: &'a Map<String, Value>) -> Fields<'a> {
@@ -2435,7 +2439,6 @@ impl<'a> Fields<'a> {
     }
 }
 
-#[cfg(test)]
 impl<'a> Placement<'a> {
     /// The token serde wrote, or `None` where the placement carries none.
     pub(super) fn token(&self) -> Option<&'a str> {
@@ -2466,7 +2469,13 @@ impl<'a> Placement<'a> {
             Placement::Shape(_) => None,
         }
     }
+}
 
+/// Pin 3's alone, and so still `#[cfg(test)]`: promoting it with the two readers
+/// above would ship a method nothing in production calls, which the blanket
+/// `expect(dead_code)` would hide rather than report.
+#[cfg(test)]
+impl<'a> Placement<'a> {
     /// The whole value again with one payload key removed, rewrapped exactly
     /// where it came from — pin 3's variant removal probe rebuilds its subject
     /// through this rather than restating where the keys sat.
@@ -2500,7 +2509,6 @@ impl<'a> Placement<'a> {
 /// extraction table: `Internal(tag)` × any, `Untagged` × any) and not a
 /// wildcard over the model — pin 2's own matches, which are what `EX-1` binds,
 /// name every arm.
-#[cfg(test)]
 pub(super) fn place<'a>(
     type_name: &str,
     tagging: Tagging,

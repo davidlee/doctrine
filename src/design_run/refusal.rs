@@ -180,6 +180,28 @@ pub(crate) enum Refusal {
     /// snapshot, which is why a retired spelling is carried rather than dropped
     /// (`ISS-315`).
     UnknownChangeEvent { raw: String },
+    /// A submitted payload carries a key the contract does not hold, at some
+    /// nesting level (`SL-259` `DEC-244`, `ISS-333`/`ISS-328`).
+    ///
+    /// Raised by [`super::contract_check`] before deserialisation, because serde
+    /// cannot: `ApplyRequest` carries `#[serde(flatten)]`, which forbids
+    /// `deny_unknown_fields`, and three more wire types are internally tagged.
+    ///
+    /// A property of the **request against the schema**, never of whether
+    /// anything changed (`DEC-245`). It carries what was expected as well as
+    /// what arrived: a refusal that names only the offence leaves the caller
+    /// guessing at the spelling.
+    UnknownPayloadKey {
+        /// Where in the payload, as a dotted path from the root.
+        at: String,
+        /// The Rust type whose contract was being read there — the name a
+        /// caller can look up (`payload_contract`'s `TypeContract::name`).
+        type_name: String,
+        /// The key that is not in the contract.
+        key: String,
+        /// Every key that type does admit, in contract order.
+        admitted: Vec<String>,
+    },
     /// A run-local id exceeds its admission bound. A refusal, never a trim: a
     /// truncated identity is a *wrong* identity rather than a shorter one.
     IdTooLong { raw: String, limit: usize },
@@ -594,6 +616,20 @@ impl fmt::Display for Refusal {
             Refusal::UnknownChangeEvent { raw } => {
                 write!(f, "unknown change event: `{raw}`")
             }
+            Refusal::UnknownPayloadKey {
+                at,
+                type_name,
+                key,
+                admitted,
+            } => write!(
+                f,
+                "unknown key `{key}` at `{at}`: {type_name} admits {}",
+                admitted
+                    .iter()
+                    .map(|admitted| format!("`{admitted}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
             Refusal::IdTooLong { raw, limit } => write!(
                 f,
                 "run-local id is {} bytes, over the {limit}-byte admission bound: `{raw}` \
