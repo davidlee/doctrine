@@ -123,10 +123,21 @@ are runtime tier by design; if a fresh clone needs them, re-run the round.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-15 · design reviewing · 04f89b35f
 
 ### Produced
 
+- design.md sec-1..sec-9 (run dr-019fd12e…, reviewing)
+- DEC-253, DEC-254, DEC-255, DEC-256, DEC-257, DEC-258, DEC-259 (accepted); DEC-143 accepted + clarified
+- RV-368 (design review, codex gpt-5.6-sol): F-1..F-11 verified
+- ISS-455 (bounded-spawn descendant-pipe hang, incumbent in coverage_verify)
+
 ### Learned
 
+- mem.fact.rustix.poll-dev-tty-macos
+- Friction observation: design apply subject-kind vocabulary (observation f0/01a0a42c)
+
 ### Open
+
+- RV-368 F-12 (blocker): poll on /dev/tty fails on macOS → select
+- Human section review (9 sections) + design lock → /plan

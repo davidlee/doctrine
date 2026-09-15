@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0a51700677b81a6f7a491d73956ad"
+memory_key = "mem.fact.rustix.poll-dev-tty-macos"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "rustix poll does not work on /dev/tty on macOS — use select"
+summary = "Waiting for terminal replies on /dev/tty: rustix::event::poll fails on macOS (and on /dev/null); rustix::event::select works there. macOS is a supported doctrine platform."
+created = "2026-09-15"
+updated = "2026-09-15"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["rust", "terminal", "portability"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c7abc64ea20ab60f76664a84f7e7385dfe317257"
+ref_name = "refs/heads/edge"
+checkout_state_id = "02ca36c4ca3a17a33237114bb0655f1f663bc188f8bb48a6218a3e132eed8229"
+base_commit = "04f89b35fdcdd80e8be9c8715ad7e3ae7fc15628"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-368"
+

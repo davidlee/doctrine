@@ -50,7 +50,7 @@ response = "Verified against the kitty docs: cursor position is undefined when p
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "run_bounded can hang after its deadline"
 detail = "Expected: `subprocess::run_bounded` returns after its wall-clock timeout, and the new stdin-thread design is specifically meant to prevent a non-reading child from defeating the deadline (`.doctrine/slice/245/design.md:364-382`). Observed: the extraction preserves the incumbent blocking joins after the direct child reports completion (`src/coverage_verify.rs:439-449`) and after kill/wait (`src/coverage_verify.rs:469-478`), then adds another joined writer thread. A child can fork a descendant that inherits stdin/stdout/stderr and exit immediately; `try_wait` then reports the direct parent complete before the deadline, but the drain/writer threads remain blocked on pipe ends held by the descendant, so joining them can wait arbitrarily long. A shell-level reproduction of the output half is `TIMEFORMAT='%R'; time sh -c 'sleep 30 & exit 0' | cat`: the parent exits, yet the pipe remains open for 30 seconds. Ignoring a failed `kill` and then calling blocking `wait` is a second route past the bound. The proposed 1 MiB-to-direct-`sleep` test (`.doctrine/slice/245/design.md:570`) proves only that killing one well-behaved direct child closes its pipes; it cannot expose descendant inheritance. Penance: specify process-tree ownership and bounded cleanup (Unix process group plus the corresponding portable strategy, or another design that can cancel/close every I/O worker without an unbounded join), propagate cleanup failures coherently, and add a helper subprocess that forks a descendant holding all three pipe ends. The helper must prove an elapsed-time bound on both parent-completed and timeout paths."
@@ -86,7 +86,7 @@ response = "Verified. Invariant narrowed to failures before the first write (sec
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The probe can interrogate a different terminal from stdout"
 detail = """
@@ -100,7 +100,7 @@ response = "Verified against crossterm 0.29: window_size prefers /dev/tty, enabl
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "A Drop guard cannot guarantee raw-mode restoration"
 detail = """
@@ -114,7 +114,7 @@ response = "Verified: disable_raw_mode (and tcsetattr) is fallible and a destruc
 
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The support classifier drops the required reply ordering"
 detail = """
@@ -125,6 +125,18 @@ Observed: the immediately following classifier table reduces this to “any grap
 Penance: parse complete frames in encounter order, terminate Unsupported when DA1 is reached before the matching graphics reply, and add reversed-order, partial-frame, unrelated-id, and surrounding-noise cases to the pure classifier table."""
 disposition = "fixed"
 response = "Verified: the table let a DA1-then-graphics buffer classify as Supported. classify_support_reply now walks complete frames in arrival order and the first frame of interest decides: graphics reply for id 31 first means Supported, DA1 first means Unsupported even if a graphics reply follows; other-id graphics replies and noise are skipped (sec-4). VT cases added: DA1-then-graphics, other-id-then-DA1, surrounding noise, and a frame split at every byte boundary (sec-8)."
+
+[[finding]]
+id = "F-12"
+status = "open"
+severity = "blocker"
+title = "The new /dev/tty poll seam cannot work on supported macOS"
+detail = """
+Expected: the new single-endpoint query must work on every shipped platform, including Doctrine's documented macOS binaries. The same `/dev/tty` fd may be used for geometry, termios and query I/O, but its readiness primitive must support that endpoint.
+
+Observed: the latest F-9 repair specifies `rustix::event::poll` on the opened `/dev/tty` fd (`.doctrine/slice/245/design.md:153-195`) and deliberately leaves all real poll coverage to VH (`.doctrine/slice/245/design.md:791-795`). rustix 1.1.4 expressly documents that `poll` does not work on fds for `/dev/tty` on macOS and directs callers to `select` instead (`/home/david/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/src/event/poll.rs:12-15`). Doctrine officially ships macOS arm64 and x86_64 binaries (`README.md:45-58`). Thus the newly selected query mechanism makes `-X` fail or time out on a supported platform even when the terminal supports Kitty graphics; the Linux/ghostty VH does not expose it.
+
+Penance: define a readiness seam that uses a working backend on every supported platform (for example rustix `select` on macOS and `poll` elsewhere, or `select` uniformly), preserve the one-fd invariant, and add platform-appropriate evidence for the real `/dev/tty` readiness path."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
