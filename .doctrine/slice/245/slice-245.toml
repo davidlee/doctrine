@@ -85,6 +85,11 @@ selector = "src/map_server/error.rs"
 intent = "design-target"
 note = "design § Code impact"
 
+[[selector]]
+selector = "Cargo.toml"
+intent = "design-target"
+note = "design § Code impact"
+
 [[relation]]
 label = "fulfils"
 target = "IDE-046"

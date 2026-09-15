@@ -111,6 +111,18 @@ user's agreement: a kitty support probe (DEC-259, reverses the scope's "no
 capability handshake" non-goal under POL-002 facet 3) and explicit placement
 geometry (DEC-256 amended). DEC-143, DEC-257 and DEC-258 amended to match.
 ISS-455 captures the incumbent descendant-pipe hang in the bounded spawn.
+Later passes raised F-9..F-12, all verified; F-12 moved the tty wait from `poll`
+to termios timed reads (DEC-259 amended).
+
+**Further review passes — none planned (2026-09-15, after F-12 verified).** The
+RV-368 passes converged: each found fewer, narrower defects, the last a single
+platform fact in the tty seam. What remains is empirical, not analytic, and a
+desk review cannot settle it: timed reads on macOS `/dev/tty` (sec-9 assumption,
+VH step 6), the placement rule on HiDPI (DEC-256 provisional, VH steps 1-2), and
+whether ghostty emits reply text for `q=2`. One thing a further pass could still
+probe on paper: keystrokes typed during the up-to-2 s probe are read in raw mode
+and discarded as noise by the classifier. That is a small, unnamed residual;
+raise it at section review of sec-2/sec-9 if it matters.
 
 **Friction:** the apply payload contract does not say which subject kind honours
 `dispose` / `resolution` (resolving an `inq-` takes a `cp-` subject with
@@ -123,13 +135,13 @@ are runtime tier by design; if a fresh clone needs them, re-run the round.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-15 · design reviewing · 04f89b35f
+fresh-as-of: 2026-09-15 · design reviewing · 7069a8b75
 
 ### Produced
 
 - design.md sec-1..sec-9 (run dr-019fd12e…, reviewing)
 - DEC-253, DEC-254, DEC-255, DEC-256, DEC-257, DEC-258, DEC-259 (accepted); DEC-143 accepted + clarified
-- RV-368 (design review, codex gpt-5.6-sol): F-1..F-11 verified; F-12 disposed fixed (termios timed reads), awaiting verify
+- RV-368 (design review, codex gpt-5.6-sol): F-1..F-11 verified; F-12 verified (termios timed reads)
 - ISS-455 (bounded-spawn descendant-pipe hang, incumbent in coverage_verify)
 
 ### Learned
@@ -139,5 +151,4 @@ fresh-as-of: 2026-09-15 · design reviewing · 04f89b35f
 
 ### Open
 
-- RV-368 F-12: codex verify
 - Human section review (9 sections) + design lock → /plan
