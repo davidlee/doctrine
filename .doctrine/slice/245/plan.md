@@ -8,65 +8,55 @@ authored in the TOML. Use this for the plan's rationale and sequencing.
 
 ## Overview
 
-Six phases build the render path bottom-up, one leaf unit at a time, so each
-phase lands green with its own tests before anything depends on it. The two
-verbs are wired last, `doctrine graph` before `concept-map export` (DEC-258).
+Three phases: two independent leaf tracks, then the join that wires
+`doctrine graph -X`.
 
 ```mermaid
 flowchart LR
-  P1["PHASE-01<br/>subprocess<br/>(extract from coverage_verify)"] --> P2["PHASE-02<br/>graphviz<br/>+ map_server DOT_PROGRAM"]
-  P3["PHASE-03<br/>tty endpoint<br/>+ raw-mode query"] --> P4["PHASE-04<br/>kitty<br/>(pure protocol)"]
-  P2 --> P5["PHASE-05<br/>terminal_image<br/>+ graph -X · VH"]
-  P4 --> P5
-  P5 --> P6["PHASE-06<br/>concept-map export -X · VH"]
+  P2["PHASE-02<br/>graphviz spawn<br/>+ map_server DOT_PROGRAM"] --> P5["PHASE-05<br/>terminal_image<br/>+ graph -X · VH"]
+  P3["PHASE-03<br/>tty endpoint + raw-mode query<br/>+ kitty protocol"] --> P5
 ```
+
+Phase ids are non-contiguous by design: the first plan had six phases, and the
+scope cut of 2026-09-15 (see `slice-245.md` § Scope cut) removed PHASE-01
+(`subprocess` extraction → IMP-452), PHASE-04 (folded into PHASE-03) and
+PHASE-06 (`concept-map export -X` → IMP-451). Ids are never reused.
 
 ## Sequencing & Rationale
 
-**PHASE-01 first, alone.** It is the only phase that changes existing
-behaviour-bearing code (`coverage_verify`). Landing the extraction by itself
-means its proof is simply "the incumbent suites pass unchanged", with no new
-feature code in the same diff to blur that reading. It also adds the bounded
-reap and the stdin writer, which nothing exercises yet except its own
-`sleep 30` test.
+**PHASE-02 and PHASE-03 are independent** and may run in parallel. PHASE-02 is
+small: a plain std spawn with a stdin writer thread and the `map_server`
+single-sourcing of the program name (DEC-143). PHASE-03 holds the riskiest code
+in the slice — raw mode with a checked restore — alongside the pure, byte-exact
+kitty encoder that consumes its `WindowGeometry`. They share one phase because
+together they are the terminal side of the seam and neither is useful alone.
 
-**PHASE-02 depends on PHASE-01** (`rasterise_png` rides `run_bounded`) and
-carries the `map_server` literal sweep, because `DOT_PROGRAM` is born in
-`graphviz` and the three `dot` invocations should be single-sourced in the same
-commit that creates the constant (DEC-143).
+**PHASE-05 joins them** into `terminal_image` and wires `graph -X` end to end,
+then the user judges the picture in ghostty. DEC-256's placement rule is
+provisional; a HiDPI miss would be fixed inside `kitty` or `graphviz`.
 
-**PHASE-03 and PHASE-04 are the terminal track, independent of 01–02.** `tty`
-comes before `kitty` only because `kitty::cell_geometry` takes
-`tty::WindowGeometry`. PHASE-03 is the riskiest code in the slice (raw mode,
-checked restore); keeping it separate from the byte-exact encoder keeps each
-review focused. The two tracks may run in parallel.
+## Where the plan departs from the locked design
 
-**PHASE-05 joins both tracks** into `terminal_image` and wires `graph -X`
-end to end. It carries the first human acceptance deliberately: DEC-256's
-placement rule is provisional, and the one realistic way it is wrong (HiDPI
-pixel reporting) would be fixed inside `kitty` or `graphviz`. Judging it before
-the second verb is wired keeps any correction to one verb's worth of rework.
+The design was left as locked and is marked up at `/reconcile`. Until then,
+where they disagree, `slice-245.md` and this plan govern:
 
-**PHASE-06** is the small `concept-map export` wiring — relaxing `--format`
-under `-X` — plus its e2e tests and the remaining VH steps, including the
-optional macOS check of the timed-read probe.
+- **No `subprocess` module, no CLI render deadline.** `rasterise_png` takes no
+  timeout and `RasterOutcome` has no `TimedOut` arm; `coverage_verify` is not
+  touched (design sec-5, sec-7 → IMP-452).
+- **`graph` only.** Design sec-6's `concept-map export` changes, its e2e rows
+  and VH step 3 are deferred (IMP-451).
+- **No macOS VH** (design sec-8 step 6 → CHR-072).
+- **One added e2e row** (PHASE-05/VT-4): with the concept-map test gone, `graph
+  -X` off a terminal now carries the proof that the live stdout check fires.
 
 ## Notes
 
 - **Gate per phase:** `doctrine check gate`. Each new leaf registers its
-  `layering.toml` row in the phase that creates it, so the ADR-001 layering
-  gate is green at every phase boundary rather than only at the end.
+  `layering.toml` row in the phase that creates it.
 - **What the automated tests cannot see** (design sec-8): the real termios
-  calls, stdin delivery to a real `dot`, and the picture. Those are the VH rows
-  on PHASE-05 and PHASE-06; they need the user at a ghostty terminal on the
-  built binary.
-- **macOS:** VH-2 on PHASE-06 is optional and may be waived with a reason when
-  no macOS host is available; the sec-9 assumption then stands unverified.
-- **`run_bounded` stdin, made precise** (design sec-5 says "piped stdio, feed
-  `stdin` (if any)"): stdin is piped only when bytes are supplied. The incumbent
-  `run_argv` inherits stdin, and piping it unconditionally would change what a
-  verification check sees — contrary to the move-not-rewrite premise. Recorded
-  in PHASE-01/EX-1; no design change.
-- **Reconcile-time governance** (design sec-7) is not a phase: the SPEC-027
-  resp. 5 and REQ-396 Revision and the ISS-242 annotation happen at
-  `/reconcile`.
+  calls, stdin delivery to a real `dot`, and the picture — the VH rows on
+  PHASE-05, run by the user at a ghostty terminal on the built binary.
+- **Reconcile-time governance** (design sec-7): the SPEC-027 resp. 5 and REQ-396
+  Revision; the design markup for the scope cut; DEC-255 (no timed-out outcome)
+  and DEC-143 (no CLI timeout) amendments. ISS-242's concept-map annotation
+  moves to IMP-451.

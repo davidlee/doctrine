@@ -6,8 +6,8 @@
 
 ## Problem
 
-`coverage_verify::run_argv` (and `subprocess::run_bounded`, which SL-245
-extracts from it) bounds only the **direct** child. After `try_wait` reports the
+`coverage_verify::run_argv` (and the `subprocess::run_bounded` extraction
+proposed in IMP-452) bounds only the **direct** child. After `try_wait` reports the
 child finished, or after kill-and-wait on timeout, it joins the stdout/stderr
 drain threads. A child that forks a descendant inheriting those pipes and then
 exits leaves the drains blocked until the descendant closes them, so the call can
@@ -20,7 +20,8 @@ parent exits at once, the pipe stays open for 30 s.
 
 - `coverage_verify` runs arbitrary configured verification commands (e.g. test
   runners that spawn helpers), so it is exposed today.
-- SL-245's `graphviz` render path is not: `dot` does not fork.
+- SL-245's `graphviz` render path is not: it has no deadline (IMP-452), and
+  `dot` does not fork.
 
 ## Direction (not decided)
 

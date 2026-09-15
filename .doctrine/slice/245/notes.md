@@ -140,7 +140,8 @@ fresh-as-of: 2026-09-15 · plan authored · design locked
 ### Produced
 
 - design.md sec-1..sec-9 (run dr-019fd12e…, locked 2026-09-15)
-- plan.toml / plan.md: PHASE-01..PHASE-06 (phase sheets materialised)
+- plan.toml / plan.md: PHASE-02, PHASE-03, PHASE-05 after scope cut (PHASE-01/04/06 removed, never reused)
+- IMP-451 (concept-map export -X), IMP-452 (bounded subprocess + render timeout), CHR-072 (macOS probe check) — deferred by scope cut
 - DEC-253, DEC-254, DEC-255, DEC-256, DEC-257, DEC-258, DEC-259 (accepted); DEC-143 accepted + clarified
 - RV-368 (design review, codex gpt-5.6-sol): F-1..F-11 verified; F-12 verified (termios timed reads)
 - ISS-455 (bounded-spawn descendant-pipe hang, incumbent in coverage_verify)
@@ -152,5 +153,6 @@ fresh-as-of: 2026-09-15 · plan authored · design locked
 
 ### Open
 
-- Plan approval → PHASE-01 (/phase-plan, then /execute or /dispatch)
+- Plan approval → PHASE-02 / PHASE-03 (/phase-plan, then /execute or /dispatch)
+- Reconcile: mark design up for the scope cut (slice-245.md § Scope cut); amend DEC-255, DEC-143
 - Keystrokes typed during the ≤2 s support probe are consumed (unnamed residual; see Inquiry state)

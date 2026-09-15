@@ -59,15 +59,16 @@ free — every emitting surface already produces DOT strings.
 1. **A renderer component sited outside SPEC-027** — DOT text in, terminal
    graphics bytes out. Owned by doctrine, consumed by the emitting verbs rather
    than owned by any one of them.
-2. **Opt-in activation via `--render` / `-X`** on each DOT-emitting verb
-   (DEC-253), default off. Every verb's behaviour is unchanged without it. On
-   `concept-map export`, `-X` implies `--format dot` (DEC-258).
+2. **Opt-in activation via `--render` / `-X`** on `doctrine graph` (DEC-253),
+   default off. Its behaviour is unchanged without it. The flag lives on the
+   verb, so later DOT emitters opt in the same way (`concept-map export`:
+   IMP-451).
 3. **Descriptive refusals, one error class** (DEC-254, DEC-259, DEC-256): the
    format is not DOT, stdout is not a terminal, the terminal does not report
    its pixel size, or the terminal does not answer the kitty support query
    (tmux included). Exit non-zero with cause and fix on stderr. A failed `dot`
    spawn is reported by its typed outcome: unavailable, failed with graphviz's
-   stderr, timed out, or other I/O (DEC-255). Every failure before the image is
+   stderr, or other I/O (DEC-255). Every failure before the image is
    written leaves stdout empty; nothing fails silently.
 4. **Typed capability seams** (DEC-255, DEC-259): in `src/tty.rs`, one
    verified terminal endpoint (the controlling tty, refused unless it is
@@ -77,22 +78,39 @@ free — every emitting surface already produces DOT strings.
    that is its own availability probe. The spawn is a second, knowingly-held
    `dot` render spawn beside `map_server`'s, each naming the other. The
    program name is single-sourced across all three `dot` invocations, and
-   each timeout is named where it is enforced (DEC-143). The spawn rides a
-   bounded sync-subprocess helper extracted from `coverage_verify` rather than
-   copying it; that suite is the behaviour-preservation proof.
+   `map_server`'s timeouts are named where they are enforced (DEC-143). The CLI
+   spawn has no deadline: `-X` is interactive, so Ctrl-C is the timeout
+   (IMP-452).
 5. **Explicit placement** (DEC-256, provisional): always send columns and rows
    with `C=1` and write the rows as newlines. Native size when it fits in
    columns minus one, else scale to columns minus one.
-6. **Both Rust verbs wired** (DEC-258): `doctrine graph` first, proving the
-   seam end to end, then `concept-map export`.
+6. **`doctrine graph` wired** end to end through the seam.
 7. **Verification** (DEC-257): VH (the user in ghostty, small and large graphs,
    a pipe, tmux) is the acceptance test. VT scaffolds arrival and guards
    against silent regression without graphviz or a terminal: pure tests over
-   synthetic inputs, two real spawns, and three CLI wiring tests.
+   synthetic inputs, one real spawn, and two CLI wiring tests.
 8. **Reconcile-time governance** (DEC-258): a Revision amends SPEC-027 resp. 5
    and REQ-396's `run_graph` acceptance criterion to describe the render
-   branch. ISS-242 is annotated that the flag joins the ungoverned concept-map
-   surface.
+   branch. The design is marked up to match the scope cut below.
+
+### Scope cut after design lock (user, 2026-09-15)
+
+The locked design (`design.md`) covers more than this slice now delivers. The
+cut was made in scope and plan, not in the design; reconcile marks the design
+up. Each deferred part keeps its design text as the reference for its backlog
+item:
+
+| deferred | design reference | backlog |
+|---|---|---|
+| `concept-map export -X` | sec-6, sec-8 e2e rows, VH step 3, DEC-258 | IMP-451 |
+| `subprocess` extraction, bounded reap, CLI `RENDER_TIMEOUT` / `TimedOut` | sec-5, sec-7 rows, sec-8 `subprocess` row | IMP-452 |
+| macOS check of the timed-read probe | sec-8 VH step 6, sec-9 assumption | CHR-072 |
+
+What this slice builds in their place: `graphviz::rasterise_png(dot, program)`
+spawns `dot -Tpng` with piped stdio, writes the DOT on a writer thread, and
+collects output with `wait_with_output`; `RasterOutcome` has no `TimedOut` arm.
+`coverage_verify` is untouched. DEC-255's outcome list and DEC-143's CLI-timeout
+clause are amended at reconcile.
 
 ## Non-Goals
 
@@ -110,6 +128,9 @@ free — every emitting surface already produces DOT strings.
 - **A force mode** that emits escape bytes to a non-terminal — a separate
   opt-in if ever wanted (DEC-254).
 - **The web explorer's TypeScript DOT emitters.**
+- **`concept-map export -X`** (IMP-451), **a CLI render deadline and the
+  bounded-subprocess extraction** (IMP-452), and **macOS verification**
+  (CHR-072) — deferred by the scope cut above.
 - **IMP-385** — the anchor report's DOT rendering is a downstream consumer that
   inherits this seam, not part of it.
 
