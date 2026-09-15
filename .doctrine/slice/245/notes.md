@@ -129,7 +129,7 @@ fresh-as-of: 2026-09-15 · design reviewing · 04f89b35f
 
 - design.md sec-1..sec-9 (run dr-019fd12e…, reviewing)
 - DEC-253, DEC-254, DEC-255, DEC-256, DEC-257, DEC-258, DEC-259 (accepted); DEC-143 accepted + clarified
-- RV-368 (design review, codex gpt-5.6-sol): F-1..F-11 verified
+- RV-368 (design review, codex gpt-5.6-sol): F-1..F-11 verified; F-12 disposed fixed (termios timed reads), awaiting verify
 - ISS-455 (bounded-spawn descendant-pipe hang, incumbent in coverage_verify)
 
 ### Learned
@@ -139,5 +139,5 @@ fresh-as-of: 2026-09-15 · design reviewing · 04f89b35f
 
 ### Open
 
-- RV-368 F-12 (blocker): poll on /dev/tty fails on macOS → select
+- RV-368 F-12: codex verify
 - Human section review (9 sections) + design lock → /plan

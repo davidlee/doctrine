@@ -128,7 +128,7 @@ response = "Verified: the table let a DA1-then-graphics buffer classify as Suppo
 
 [[finding]]
 id = "F-12"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "The new /dev/tty poll seam cannot work on supported macOS"
 detail = """
@@ -137,6 +137,8 @@ Expected: the new single-endpoint query must work on every shipped platform, inc
 Observed: the latest F-9 repair specifies `rustix::event::poll` on the opened `/dev/tty` fd (`.doctrine/slice/245/design.md:153-195`) and deliberately leaves all real poll coverage to VH (`.doctrine/slice/245/design.md:791-795`). rustix 1.1.4 expressly documents that `poll` does not work on fds for `/dev/tty` on macOS and directs callers to `select` instead (`/home/david/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/src/event/poll.rs:12-15`). Doctrine officially ships macOS arm64 and x86_64 binaries (`README.md:45-58`). Thus the newly selected query mechanism makes `-X` fail or time out on a supported platform even when the terminal supports Kitty graphics; the Linux/ghostty VH does not expose it.
 
 Penance: define a readiness seam that uses a working backend on every supported platform (for example rustix `select` on macOS and `poll` elsewhere, or `select` uniformly), preserve the one-fd invariant, and add platform-appropriate evidence for the real `/dev/tty` readiness path."""
+disposition = "fixed"
+response = "Verified: rustix 1.1.4 src/event/poll.rs:12 says poll does not work on /dev/tty fds on macOS, and doctrine ships macOS binaries. The suggested select was not taken: rustix::event::select is an unsafe fn, and the workspace denies unsafe_code with exactly two excepted sites (Cargo.toml:207-215; the_unsafe_budget_is_exactly_two_sites). The wait is now a termios setting rather than a readiness call: enter sets raw mode with VMIN=0, VTIME=1 on the same verified /dev/tty fd (opened blocking), and body reads in a loop, appending, until complete or the 2s deadline; each read returns on the first byte or after 100 ms. This is POSIX non-canonical input behaviour, the same on Linux and macOS, so there is no per-platform backend and no unsafe code. The one-fd rule and bracket's restore are unchanged. The rustix event feature is dropped; only termios is added (sec-2, sec-3 flowchart, sec-7). Platform evidence: VH step 6 (optional, when a macOS host is available) reruns step 1 on macOS, and sec-9 carries the macOS behaviour as an explicit assumption until then (sec-8, sec-9). DEC-259 choice, alternatives and consequences amended."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

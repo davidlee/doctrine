@@ -151,7 +151,7 @@ fn endpoint(stdout_is_tty: bool, stdout_device: u64, tty_device: Option<u64>) ->
 enum Endpoint { NotTerminal, NotControlling, Same }
 
 impl RenderTerminal {
-  /// Raw mode on this fd, write `request`, `poll` and read until
+  /// Raw mode with timed reads on this fd, write `request`, read until
   /// `complete(&bytes_so_far)` or `timeout`, then restore. `Ok(None)` = deadline.
   pub(crate) fn query(
     &self,
@@ -178,22 +178,29 @@ fn bracket<S, R>(
 ) -> Result<R, QueryError>;
 ```
 
-`query` is `bracket` with real closures. `enter` does `tcgetattr` and
-`tcsetattr` with the settings made raw. `body` writes the request and reads
-with `poll` against the deadline. `exit` does `tcsetattr` with the saved
-settings.
+`query` is `bracket` with real closures. `enter` does `tcgetattr`, then
+`tcsetattr` with the settings made raw and set for timed reads: `VMIN=0`,
+`VTIME=1`. A `read` then returns as soon as a byte arrives, or with zero bytes
+after 100 ms. `body` writes the request, then reads in a loop, appending, until
+`complete` holds or the deadline has passed, so the deadline is honoured to
+within one 100 ms read. `exit` does `tcsetattr` with the saved settings. The
+tty is opened blocking, because a non-blocking fd ignores `VTIME`.
 
 Restoration is explicit and its error is checked on every return path. The
 guarantee does not rest on a destructor, because a destructor cannot report a
 failed restore. A drop guard remains as a best-effort fallback while unwinding
 from a panic, and is disarmed once the explicit restore has run.
 
-`poll` on the tty fd bounds each read, so no thread is needed, nothing outlives
-the query, and nothing can swallow keystrokes afterwards.
+The timed read bounds each wait, so no thread is needed, nothing outlives the
+query, and nothing can swallow keystrokes afterwards. The wait is a termios
+setting rather than a readiness call. `poll` does not work on `/dev/tty` on
+macOS, one of doctrine's shipped platforms. `select` does work there, but it is
+`unsafe` in rustix, and the workspace denies `unsafe` outside two named sites.
+Timed reads are POSIX terminal behaviour, the same on Linux and macOS.
 
 All of this uses `rustix`, already a direct dependency (`fs`), with its
-`termios` and `event` features added. crossterm already compiles rustix with
-`termios`, so this adds no crate. `tty` knows nothing about kitty: the request
+`termios` feature added. crossterm already compiles rustix with `termios`, so
+this adds no crate. `tty` knows nothing about kitty: the request
 bytes and the completion predicate come from the caller.
 
 ### `graphviz` — the spawn
@@ -314,7 +321,7 @@ flowchart TD
   ctl -- no --> r2b["refuse: NotControllingTerminal"]
   ctl -- yes --> px{"window reports columns, rows,<br/>pixel width and height?"}
   px -- no --> r3["refuse: NoPixelSize"]
-  px -- yes --> probe["kitty support query + DA1<br/>(raw mode on that fd, poll, 2s deadline)"]
+  px -- yes --> probe["kitty support query + DA1<br/>(raw mode on that fd, timed reads, 2s deadline)"]
   probe -- "DA1 first" --> r4["refuse: Unsupported"]
   probe -- "no reply" --> r5["refuse: Unconfirmed"]
   probe -- "graphics reply first" --> build["build DOT<br/>(scan corpus, project, emit: unchanged)"]
@@ -682,7 +689,7 @@ currently covers either verb's options.
 | `src/tty.rs` | add `RenderTarget`, `RenderTerminal`, `WindowGeometry`, `open_render_terminal`, pure `endpoint`, `RenderTerminal::query`, `QueryError`, `bracket` (explicit restore + unwind-only drop guard) |
 | `src/main.rs` | declare the four new modules |
 | `src/coverage_verify.rs` | `run_argv` delegates to `subprocess::run_bounded`; `drain` and `reap` move out (reap becomes bounded); `RunResult` mapping unchanged |
-| `Cargo.toml` | `rustix` features gain `termios` and `event` (no new crate) |
+| `Cargo.toml` | `rustix` features gain `termios` (no new crate) |
 | `src/commands/cli.rs` | `Graph` gains `render`; the dispatch arm passes it |
 | `src/commands/graph.rs` | `run_graph` takes `render`; prepare-then-write shell |
 | `src/concept_map.rs` | `Export`: `format` becomes `Option`, required unless `render`; `ExportFormat: Display`; `run_export` takes `render` |
@@ -693,7 +700,7 @@ currently covers either verb's options.
 | `tests/e2e_render_guard.rs` | **new** CLI wiring tests (see Verification) |
 
 No new crate. `base64` 0.22 is already a direct dependency. `rustix` 1.x is a
-direct dependency too, and gains two features of its own. crossterm already
+direct dependency too, and gains one feature of its own. crossterm already
 builds rustix with `termios`.
 
 ### Dependency edges added
@@ -753,6 +760,9 @@ In ghostty, on the landed binary:
    message, and no escape bytes appear.
 5. Inside tmux, `doctrine graph <focus> -X` is refused with the unsupported
    message.
+6. Optional, when a macOS host is available: step 1 again in kitty or ghostty
+   on macOS. The image appears, which shows the timed-read probe works on
+   macOS `/dev/tty`.
 
 Steps 1 and 2 decide whether `DEC-256`'s placement rule stands, including on a
 HiDPI display.
@@ -789,7 +799,7 @@ runs before the root lookup. Under `cargo test` stdout is a pipe, so none of
 them reaches the terminal probe or the spawn.
 
 Deliberately not tested automatically, because VH steps 1, 2 and 5 cover them:
-the real termios and `poll` calls inside `RenderTerminal::query`, stdin
+the real termios calls and timed reads inside `RenderTerminal::query`, stdin
 delivery to a real `dot`, and the image itself. The restore logic around those
 calls is covered through `bracket`. A pty harness is deliberately not built:
 the decisions it would exercise are pure and already tested. Clap's own
@@ -813,6 +823,10 @@ required-unless rule is not re-tested.
 - **Ghostty answers the kitty support query and implements transmit-and-display
   for PNG with `C=1`, `c` and `r`.** The probe verifies the first half at run
   time; VH step 1 verifies the rest.
+- **Timed reads on `/dev/tty` behave the same on macOS as on Linux.**
+  `VMIN=0` with `VTIME>0` is POSIX non-canonical input behaviour, not a
+  per-platform readiness call. VH step 6 verifies it when a macOS host is
+  available; until then it is unverified on macOS.
 - **`q=2` with no image id produces no reply text.** If a terminal replies
   anyway, the reply lands in the shell's input line, and VH step 1 would show
   it.
