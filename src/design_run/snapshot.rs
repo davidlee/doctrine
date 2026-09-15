@@ -452,7 +452,13 @@ pub(crate) struct AuthoredGroup {
 
 /// The canonical snapshot. Serialises 1:1 to
 /// `design.toml` under the slice's runtime state tree.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `PartialEq` but **not `Eq`**: the change log may hold a row this binary could
+/// not read, retained as the raw `toml::Value` the writer stored (`DEC-249`),
+/// and a TOML value is not `Eq` because it may be a float. Nothing needs the
+/// marker — comparison here is `assert_eq!`, never a hash or a map key — so the
+/// honest bound is the one the data supports.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct DesignSnapshot {
     /// [`DESIGN_SNAPSHOT_SCHEMA`], checked on parse.
     pub(crate) schema: String,
@@ -637,7 +643,8 @@ pub(crate) fn to_toml(snapshot: &DesignSnapshot) -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::super::attestation::{ReviewPolicy, Reviewer};
-    use super::super::change_log::ChangeEvent;
+    use super::super::bounds::DESIGN_ID_BYTES;
+    use super::super::change_log::{ChangeEvent, StoredRow, Unreadable};
     use super::super::fixture::{attest, id, pass_over, run_holding, section};
     use super::*;
 
@@ -786,8 +793,8 @@ mod tests {
         );
 
         let parsed = parse(&pre_rename).expect("a pre-rename snapshot still parses");
-        let [row] = parsed.change_log.rows.as_slice() else {
-            panic!("one row: {:?}", parsed.change_log.rows);
+        let [StoredRow::Read(row)] = parsed.change_log.rows.as_slice() else {
+            panic!("one row, and it READS: {:?}", parsed.change_log.rows);
         };
         assert_eq!(
             row.event,
@@ -835,8 +842,8 @@ mod tests {
         );
 
         let parsed = parse(&pre_retirement).expect("a pre-retirement snapshot still parses");
-        let [row] = parsed.change_log.rows.as_slice() else {
-            panic!("one row: {:?}", parsed.change_log.rows);
+        let [StoredRow::Read(row)] = parsed.change_log.rows.as_slice() else {
+            panic!("one row, and it READS: {:?}", parsed.change_log.rows);
         };
         assert_eq!(
             row.event,
@@ -849,6 +856,190 @@ mod tests {
             "run-wide as stored: the reader must not manufacture a subject"
         );
         assert!(row.terms.is_empty(), "term-free as stored: {:?}", row.terms);
+    }
+
+    /// `SL-259` `VT-1` — `ISS-315`. The two tests above are the cases a *live*
+    /// vocabulary member covers: a rename keeps an alias, a retirement keeps its
+    /// own member. Neither is available to a token the vocabulary no longer
+    /// spells at all, and `SL-244` `PHASE-04` retired `IntegratedReviewRecorded`
+    /// exactly that way — which is why `design show 244` fails on this repo's own
+    /// state tree today.
+    ///
+    /// `DEC-249` degrades the row rather than the file: the row is retained with
+    /// its raw table and disclosed as unreadable, carrying the cause classified
+    /// where it was known (`DEC-251`, `STD-003`).
+    ///
+    /// The token is the **live** one, not an invented stand-in: the fixture's
+    /// bytes come from a real run, which is what keeps this test standing in for
+    /// a `VA-` whose own subject is gitignored runtime state
+    /// (`mem.pattern.plan.verification-subject-must-outlive-the-phase`).
+    ///
+    /// The round trip is the second half and not gold-plating. A retained row
+    /// that does not survive the next snapshot write destroys, on that write, the
+    /// history retaining it was for — and `DEC-239` refused whole-row
+    /// normalisation precisely to stop the reader manufacturing what the writer
+    /// never stored.
+    #[test]
+    fn a_snapshot_carrying_a_retired_change_event_token_retains_the_row() {
+        let retired = format!(
+            "schema = \"{DESIGN_SNAPSHOT_SCHEMA}\"\n\
+             version = {DESIGN_SNAPSHOT_VERSION}\n\
+             \n\
+             [run]\n\
+             uid = \"dr-test\"\n\
+             slice = 244\n\
+             revision = 92\n\
+             stage = \"drafting\"\n\
+             \n\
+             [change_log]\n\
+             floor = 61\n\
+             \n\
+             [[change_log.row]]\n\
+             revision = 88\n\
+             index = 3\n\
+             event = \"integrated_review_recorded\"\n\
+             subject = \"sec-1\"\n"
+        );
+
+        let parsed = parse(&retired).expect("a snapshot carrying a retired token still parses");
+        let [StoredRow::Unreadable(raw)] = parsed.change_log.rows.as_slice() else {
+            panic!(
+                "one row, retained opaquely rather than read: {:?}",
+                parsed.change_log.rows
+            );
+        };
+        assert_eq!(
+            raw.why,
+            Unreadable::Event,
+            "the cause is classified where it was known, not left for the renderer"
+        );
+        assert_eq!(
+            (raw.revision, raw.index),
+            (88, 3),
+            "an opaque row is still placed: retention and ordering read it"
+        );
+
+        let rewritten = to_toml(&parsed).expect("the snapshot serialises");
+        let reparsed = parse(&rewritten).expect("and parses back");
+        assert_eq!(
+            reparsed.change_log.rows, parsed.change_log.rows,
+            "the row survives the write that would otherwise evict it by rewriting it"
+        );
+    }
+
+    /// `SL-259` `EX-3` — the ordered try classifies all FOUR causes, and the
+    /// order is the contract.
+    ///
+    /// `VT-1` pins the one cause a live defect exists for. The other three ship
+    /// on the same code path and would otherwise ship unexercised, which is how a
+    /// mis-ordered classifier reaches a user: every arm produces a retained row,
+    /// so getting the cause wrong is invisible except in what is disclosed. The
+    /// last row is the order pin — a term that is *both* unknown-keyed and
+    /// over-bound reads as the first thing that could not be read, not the last
+    /// thing checked.
+    #[test]
+    fn each_unreadable_cause_is_classified_where_it_is_known() {
+        let with_term = |event: &str, key: &str, kind: &str, value: &str| {
+            format!(
+                "schema = \"{DESIGN_SNAPSHOT_SCHEMA}\"\n\
+                 version = {DESIGN_SNAPSHOT_VERSION}\n\
+                 \n\
+                 [run]\n\
+                 uid = \"dr-test\"\n\
+                 slice = 259\n\
+                 revision = 5\n\
+                 stage = \"drafting\"\n\
+                 \n\
+                 [change_log]\n\
+                 floor = 0\n\
+                 \n\
+                 [[change_log.row]]\n\
+                 revision = 4\n\
+                 index = 0\n\
+                 event = \"{event}\"\n\
+                 \n\
+                 [[change_log.row.term]]\n\
+                 key = \"{key}\"\n\
+                 kind = \"{kind}\"\n\
+                 value = \"{value}\"\n"
+            )
+        };
+        let over_bound = "x".repeat(DESIGN_ID_BYTES + 1);
+
+        for (case, fragment, expected) in [
+            (
+                "an event token no member spells",
+                with_term("integrated_review_recorded", "node", "token", "inq-1"),
+                Unreadable::Event,
+            ),
+            (
+                "a payload key no member spells",
+                with_term("stage_moved", "not_a_key", "token", "inq-1"),
+                Unreadable::PayloadKey,
+            ),
+            (
+                "a value kind no member spells",
+                with_term("stage_moved", "node", "not_a_kind", "inq-1"),
+                Unreadable::ValueKind,
+            ),
+            (
+                "a value over the bound its kind carries",
+                with_term("stage_moved", "node", "token", &over_bound),
+                Unreadable::TermTooLong,
+            ),
+            (
+                "both at once — the FIRST unreadable vocabulary wins",
+                with_term("stage_moved", "not_a_key", "token", &over_bound),
+                Unreadable::PayloadKey,
+            ),
+        ] {
+            let parsed = parse(&fragment).unwrap_or_else(|error| panic!("{case} retains: {error}"));
+            let [StoredRow::Unreadable(raw)] = parsed.change_log.rows.as_slice() else {
+                panic!("{case}: one row, retained: {:?}", parsed.change_log.rows);
+            };
+            assert_eq!(raw.why, expected, "{case}");
+        }
+    }
+
+    /// `SL-259` `VT-2` — the other half of `DEC-251`: the tolerance is for
+    /// vocabulary we do not recognise, never for a row we cannot place. A row
+    /// missing `revision` has no position in the retention window or the delta
+    /// order, so it refuses the parse as it always did.
+    ///
+    /// Two fragments, because only the second could regress. The first is the
+    /// behaviour before this slice; the second is a row that is *both* unplaceable
+    /// and carries the retired token, which is where a fallback that classified
+    /// eagerly would quietly admit it.
+    #[test]
+    fn a_change_log_row_missing_its_revision_is_still_refused() {
+        let missing_revision = |event: &str| {
+            format!(
+                "schema = \"{DESIGN_SNAPSHOT_SCHEMA}\"\n\
+                 version = {DESIGN_SNAPSHOT_VERSION}\n\
+                 \n\
+                 [run]\n\
+                 uid = \"dr-test\"\n\
+                 slice = 244\n\
+                 revision = 12\n\
+                 stage = \"drafting\"\n\
+                 \n\
+                 [change_log]\n\
+                 floor = 0\n\
+                 \n\
+                 [[change_log.row]]\n\
+                 index = 0\n\
+                 event = \"{event}\"\n"
+            )
+        };
+
+        assert!(
+            parse(&missing_revision("stage_moved")).is_err(),
+            "a structurally broken row refuses, as it always did"
+        );
+        assert!(
+            parse(&missing_revision("integrated_review_recorded")).is_err(),
+            "and an unreadable token does not rescue a row that cannot be placed"
+        );
     }
 
     /// `T11` retired this test's acceptance half with [`LockAcceptance`]

@@ -191,7 +191,7 @@ pub(crate) struct RunbookFacts {
 }
 
 /// A validated candidate: the next snapshot, and the rows it produced.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Applied {
     pub(crate) snapshot: DesignSnapshot,
     pub(crate) rows: Vec<ChangeRow>,
@@ -2107,8 +2107,7 @@ mod tests {
     fn rows_of(snapshot: &DesignSnapshot, event: ChangeEvent) -> Vec<&ChangeRow> {
         snapshot
             .change_log
-            .rows
-            .iter()
+            .read_rows()
             .filter(|row| row.event == event)
             .collect()
     }
@@ -2649,8 +2648,7 @@ mod tests {
     fn rows_at(snapshot: &DesignSnapshot, revision: u64) -> Vec<&ChangeRow> {
         snapshot
             .change_log
-            .rows
-            .iter()
+            .read_rows()
             .filter(|row| row.revision == revision)
             .collect()
     }

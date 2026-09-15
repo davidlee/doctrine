@@ -47,7 +47,9 @@ mod design_run;
 
 use design_run::attestation::{ActKind, AgentAct, ReviewDisposition};
 use design_run::bounds::{DESIGN_ID_BYTES, DESIGN_STAGE_LABEL_BYTES};
-use design_run::change_log::{ChangeEvent, ChangeRow, PayloadTerm, ValueKind};
+use design_run::change_log::{
+    ChangeEvent, ChangeRow, PayloadTerm, StoredRow, Unreadable, ValueKind,
+};
 use design_run::ids::{DesignId, IdKind};
 use design_run::refusal::Refusal;
 use design_run::render::{ELISION_MARKER_UNDER_TEST, ENVELOPE_PAYLOAD_BYTES_UNDER_TEST};
@@ -710,7 +712,7 @@ fn change_log_floor_is_recorded_not_inferred() {
     let oldest_row = log
         .rows
         .iter()
-        .map(|row| row.revision)
+        .map(StoredRow::revision)
         .min()
         .expect("the late revision's rows survive");
     assert!(
@@ -788,8 +790,7 @@ fn within_revision_index_is_candidate_order_not_submission_order() {
         fixture
             .read()
             .change_log
-            .rows
-            .iter()
+            .read_rows()
             .map(|row| {
                 (
                     row.index,
@@ -1092,8 +1093,7 @@ fn every_material_event_kind_persists_a_change_row() {
     let seen: BTreeSet<ChangeEvent> = fixture
         .read()
         .change_log
-        .rows
-        .iter()
+        .read_rows()
         .map(|row| row.event)
         .collect();
     let missing: Vec<&str> = ChangeEvent::EMITTABLE
@@ -1141,8 +1141,7 @@ fn the_retired_event_is_readable_but_not_emittable() {
 fn no_row_the_ladder_produces_carries_a_non_emittable_event() {
     let log = every_event_fixture().read().change_log;
     let strays: Vec<&str> = log
-        .rows
-        .iter()
+        .read_rows()
         .map(|row| row.event)
         .filter(|event| !ChangeEvent::EMITTABLE.contains(event))
         .map(ChangeEvent::as_str)
@@ -1150,6 +1149,17 @@ fn no_row_the_ladder_produces_carries_a_non_emittable_event() {
     assert!(
         strays.is_empty(),
         "the writer emitted events no roster admits: {strays:?}"
+    );
+    // `read_rows` skips rows this binary could not read (`SL-259` `DEC-249`), so
+    // the sweep above is only exhaustive while nothing degraded. On this path it
+    // cannot: every row came from this binary's own writer, and a writer that
+    // produced a row its own reader refuses would make the assertion above
+    // silently vacuous rather than red.
+    assert_eq!(
+        log.read_rows().count(),
+        log.rows.len(),
+        "every row the ladder wrote reads back: {:?}",
+        log.rows
     );
 }
 
@@ -1215,8 +1225,7 @@ fn act_subject(prefix: IdKind, act: ActKind) -> String {
 /// vector's own order read back off the snapshot.
 fn rows_about<'a>(log: &'a design_run::change_log::ChangeLog, subject: &str) -> Vec<&'a ChangeRow> {
     let mut rows: Vec<&ChangeRow> = log
-        .rows
-        .iter()
+        .read_rows()
         .filter(|row| row.subject.as_ref().map(DesignId::to_string).as_deref() == Some(subject))
         .collect();
     rows.sort_by_key(|row| (row.revision, row.index));
@@ -1341,8 +1350,7 @@ fn an_acceptance_reports_through_the_shared_act_row() {
         "one term: which act the run now holds"
     );
     assert!(
-        !log.rows
-            .iter()
+        !log.read_rows()
             .any(|row| row.event == ChangeEvent::LegacyAcceptanceAttested),
         "the retired member is readable history, never newly written"
     );
@@ -1360,8 +1368,7 @@ fn an_acceptance_reports_through_the_shared_act_row() {
 fn a_waived_disposition_row_names_its_arm_and_carries_its_reason() {
     let log = every_event_fixture().read().change_log;
     let row = log
-        .rows
-        .iter()
+        .read_rows()
         .find(|row| row.event == ChangeEvent::ReviewDisposed)
         .expect("waiving the pass persists a disposition row");
 
@@ -1398,7 +1405,7 @@ fn retention_evicts_oldest_revisions_and_advances_the_floor() {
         ));
     }
     let log = fixture.read().change_log;
-    let oldest = log.rows.iter().map(|row| row.revision).min().unwrap();
+    let oldest = log.rows.iter().map(StoredRow::revision).min().unwrap();
     assert!(
         log.floor > 1 && oldest >= log.floor,
         "floor {} advanced and no row survives below it (oldest {oldest})",
@@ -1407,7 +1414,7 @@ fn retention_evicts_oldest_revisions_and_advances_the_floor() {
     let span = log
         .rows
         .iter()
-        .map(|row| row.revision)
+        .map(StoredRow::revision)
         .collect::<BTreeSet<_>>();
     assert!(
         u64::try_from(span.len()).unwrap() <= design_run::bounds::CHANGE_LOG_REVISIONS,
@@ -1431,8 +1438,7 @@ fn stored_change_row_keeps_full_reason_and_fingerprint() {
 
     let log = fixture.read().change_log;
     let stored_reason = log
-        .rows
-        .iter()
+        .read_rows()
         .filter(|row| row.event == ChangeEvent::StageMoved)
         .flat_map(|row| row.terms.iter())
         .find(|term| term.kind() == ValueKind::Prose)
@@ -1444,8 +1450,7 @@ fn stored_change_row_keeps_full_reason_and_fingerprint() {
     );
 
     let stored_digest = log
-        .rows
-        .iter()
+        .read_rows()
         .filter(|row| row.event == ChangeEvent::SectionFingerprintChanged)
         .flat_map(|row| row.terms.iter())
         .find(|term| term.key() == design_run::change_log::PayloadKey::New)
@@ -1585,8 +1590,7 @@ fn stored_reason_is_byte_identical_at_any_length() {
 
     let log = fixture.read().change_log;
     let stored = log
-        .rows
-        .iter()
+        .read_rows()
         // Scoped to the stage move, and it has to be: PHASE-10's delegation rows
         // carry prose of their own (attribution, a refusal reason), so "the first
         // prose term in the log" stopped being a synonym for "the regression
@@ -1604,8 +1608,7 @@ fn stored_reason_is_byte_identical_at_any_length() {
     );
 
     let row = log
-        .rows
-        .iter()
+        .read_rows()
         .find(|row| {
             row.event == ChangeEvent::StageMoved
                 && row.terms.iter().any(|term| term.kind() == ValueKind::Prose)
@@ -1782,8 +1785,15 @@ fn over_bound_payload_terms_are_refused_at_construction_and_on_the_wire() {
         "exactly at the bound is admitted — this is a bound, not an off-by-one"
     );
 
-    // (b) the wire. A hand-edited snapshot claiming an over-bound value is a
-    // token is refused at parse, before any rendering can emit it.
+    // (b) the wire. `SL-259` `DEC-249` INVERTED the outcome here and left the
+    // finding closed. An over-bound term value is one of the four causes a
+    // change-log row now degrades on, so a hand-edited snapshot no longer fails
+    // the whole file — it retains that row opaquely and the run stays readable
+    // (`ISS-315`). What `RV-321` `F-1` actually protects is untouched and is what
+    // this half asserts: the over-bound value never reaches a rendering, because
+    // the term is still refused at `admit` and so the row never becomes a
+    // `ChangeRow` at all. The budgeted-projection premise is kept by the value
+    // being unreachable, not by the file being unreadable.
     let fixture = every_event_fixture();
     let stored = std::fs::read_to_string(&fixture.snapshot).unwrap();
     let doctored = stored.replace(
@@ -1796,14 +1806,21 @@ fn over_bound_payload_terms_are_refused_at_construction_and_on_the_wire() {
     );
     std::fs::write(&fixture.snapshot, &doctored).unwrap();
 
-    let error = fail(&fixture.root, &["design", "show", SLICE, "-p", "."]);
+    let shown = run(&fixture.root, &["design", "show", SLICE, "-p", "."]);
     assert!(
-        error.contains("admission bound"),
-        "the deserialization path re-validates rather than re-entering: {error}"
+        !shown.contains(&over_id),
+        "the over-bound value reaches no rendering, whole or trimmed: {shown}"
     );
+
+    let held = snapshot::parse(&std::fs::read_to_string(&fixture.snapshot).unwrap())
+        .expect("and the snapshot the run reads still parses");
     assert!(
-        !error.contains(ELISION_MARKER_UNDER_TEST),
-        "and it REFUSES rather than trimming the value to fit"
+        held.change_log.rows.iter().any(|row| matches!(
+            row,
+            StoredRow::Unreadable(raw) if raw.why == Unreadable::TermTooLong
+        )),
+        "the doctored row is RETAINED, classified by the bound it broke: {:?}",
+        held.change_log.rows
     );
 }
 

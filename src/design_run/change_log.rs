@@ -687,9 +687,200 @@ pub(crate) struct ChangeRow {
     pub(crate) terms: Vec<PayloadTerm>,
 }
 
+/// The wire keys the tolerant reader names a **second** time.
+///
+/// The derives above already spell them once; [`classify`] and [`place`] read a
+/// failed row's fields back off its raw table, and a spelling that drifted from
+/// the derive would silently stop classifying rather than fail (STD-001). Note
+/// `terms` is [`ChangeRow`]'s Rust name and `row.term` its wire name — the
+/// rename is the reason this group is worth naming at all.
+const ROW_REVISION: &str = "revision";
+const ROW_INDEX: &str = "index";
+const ROW_EVENT: &str = "event";
+const ROW_TERMS: &str = "term";
+const TERM_KEY: &str = "key";
+const TERM_KIND: &str = "kind";
+const TERM_VALUE: &str = "value";
+
+/// Why a stored row could not be read — a vocabulary this binary does not
+/// recognise, classified at the point of failure.
+///
+/// Closed, and deliberately **not** a member of [`ChangeEvent`] (`DEC-251`):
+/// widening the event vocabulary to carry an unreadable token would cost `Copy`,
+/// `const fn as_str`, and through them both compile-time proofs above — and
+/// would still cover only one of these four causes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Unreadable {
+    /// The `event` token names no member of [`ChangeEvent`].
+    Event,
+    /// A term's `key` names no member of [`PayloadKey`].
+    PayloadKey,
+    /// A term's `kind` names no member of [`ValueKind`].
+    ValueKind,
+    /// A term's value is longer than its [`ValueKind`] admits.
+    TermTooLong,
+}
+
+impl Unreadable {
+    /// The disclosed token. Single-sourced here, read by the renderer (STD-001).
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Unreadable::Event => "event",
+            Unreadable::PayloadKey => "payload_key",
+            Unreadable::ValueKind => "value_kind",
+            Unreadable::TermTooLong => "term_too_long",
+        }
+    }
+}
+
+/// A row retained at full fidelity because this binary cannot read its
+/// vocabulary (`DEC-249`).
+///
+/// `revision` and `index` are **required**, not tolerated: they are what places
+/// the row in the retention window and the delta order, so a row without them is
+/// not a degraded read but an unplaceable one, and still refuses the parse. The
+/// tolerance is for vocabulary, never for shape.
+///
+/// `why` is carried, not re-derived. `STD-003` asks a degraded read to disclose
+/// *what* was skipped **and why**, and the ordered try that produced this row is
+/// the one place the cause is known (`RV-365` `F-4`).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct RawRow {
+    pub(crate) revision: u64,
+    pub(crate) index: u32,
+    /// The row exactly as stored, so re-serialising it returns the bytes the
+    /// writer wrote rather than this reader's idea of them (`DEC-239`).
+    pub(crate) raw: toml::Value,
+    pub(crate) why: Unreadable,
+}
+
+/// One row as **stored**: read, or retained opaquely.
+///
+/// The asymmetry is deliberate and states something true. Only deserialisation
+/// can produce [`StoredRow::Unreadable`] — a row this binary has just built is
+/// readable by construction — which is why [`ChangeLog::record`] still takes
+/// `ChangeRow` and wraps here.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum StoredRow {
+    Read(ChangeRow),
+    Unreadable(RawRow),
+}
+
+impl StoredRow {
+    /// The revision that produced the row, off either arm — what retention reads.
+    pub(crate) const fn revision(&self) -> u64 {
+        match self {
+            StoredRow::Read(row) => row.revision,
+            StoredRow::Unreadable(row) => row.revision,
+        }
+    }
+
+    /// Position within that revision, off either arm — what ordering reads.
+    pub(crate) const fn index(&self) -> u32 {
+        match self {
+            StoredRow::Read(row) => row.index,
+            StoredRow::Unreadable(row) => row.index,
+        }
+    }
+
+    /// The row's read form, if it has one.
+    pub(crate) const fn read(&self) -> Option<&ChangeRow> {
+        match self {
+            StoredRow::Read(row) => Some(row),
+            StoredRow::Unreadable(_) => None,
+        }
+    }
+}
+
+impl Serialize for StoredRow {
+    /// An opaque row serialises as the table it was read from, byte-for-byte in
+    /// content: the writer's row, not the reader's reconstruction of it.
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            StoredRow::Read(row) => row.serialize(serializer),
+            StoredRow::Unreadable(row) => row.raw.serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for StoredRow {
+    /// The **ordered try** (`DEC-251`).
+    ///
+    /// The whole row first, so the happy path pays for nothing. On failure the
+    /// cause is classified where it is known and the row is placed; a row that
+    /// cannot be *both* classified and placed refuses with the error it actually
+    /// failed on, which is how "tolerance is for vocabulary, never for shape"
+    /// stays a property of the structure rather than a second guard.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<StoredRow, D::Error> {
+        let raw = toml::Value::deserialize(deserializer)?;
+        match ChangeRow::deserialize(raw.clone()) {
+            Ok(row) => Ok(StoredRow::Read(row)),
+            Err(refused) => match (classify(&raw), place(&raw)) {
+                (Some(why), Some((revision, index))) => Ok(StoredRow::Unreadable(RawRow {
+                    revision,
+                    index,
+                    raw,
+                    why,
+                })),
+                _ => Err(serde::de::Error::custom(refused)),
+            },
+        }
+    }
+}
+
+/// Where a row sits, if it says. `None` is a row that cannot be placed.
+fn place(raw: &toml::Value) -> Option<(u64, u32)> {
+    let revision = u64::try_from(raw.get(ROW_REVISION)?.as_integer()?).ok()?;
+    let index = u32::try_from(raw.get(ROW_INDEX)?.as_integer()?).ok()?;
+    Some((revision, index))
+}
+
+/// Which unrecognised vocabulary a row failed on, in the order the row is read.
+///
+/// `None` means no vocabulary explains the failure — the row is broken in some
+/// other way, and the caller refuses it rather than retaining it under a guessed
+/// cause.
+fn classify(raw: &toml::Value) -> Option<Unreadable> {
+    if let Some(event) = raw.get(ROW_EVENT)
+        && ChangeEvent::deserialize(event.clone()).is_err()
+    {
+        return Some(Unreadable::Event);
+    }
+    raw.get(ROW_TERMS)
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|term| PayloadTerm::deserialize((*term).clone()).is_err())
+        .and_then(term_cause)
+}
+
+/// Which vocabulary the first unreadable term failed on.
+///
+/// Ordered as the term is read — key, then kind, then the bound its kind carries
+/// — so the cause is the first thing that could not be read, not the last thing
+/// checked. A term missing any of the three is shape, not vocabulary.
+fn term_cause(term: &toml::Value) -> Option<Unreadable> {
+    let (Some(key), Some(kind), Some(value)) = (
+        term.get(TERM_KEY),
+        term.get(TERM_KIND),
+        term.get(TERM_VALUE),
+    ) else {
+        return None;
+    };
+    if PayloadKey::deserialize(key.clone()).is_err() {
+        return Some(Unreadable::PayloadKey);
+    }
+    if ValueKind::deserialize(kind.clone()).is_err() {
+        return Some(Unreadable::ValueKind);
+    }
+    // Key and kind both read and the value is a string, so the only admission
+    // this term can have failed is the bound [`ValueKind`] carries.
+    value.is_str().then_some(Unreadable::TermTooLong)
+}
+
 /// The change-log snapshot group: an explicitly recorded floor plus the retained
 /// rows.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ChangeLog {
     /// The oldest revision the log still covers, recorded **explicitly** and
     /// never inferred from the oldest surviving row: inference breaks when
@@ -697,14 +888,18 @@ pub(crate) struct ChangeLog {
     /// complete delta as unavailable.
     pub(crate) floor: u64,
     #[serde(default, rename = "row")]
-    pub(crate) rows: Vec<ChangeRow>,
+    pub(crate) rows: Vec<StoredRow>,
 }
 
 impl ChangeLog {
     /// Append `rows` produced by `revision`, then evict past the retention
     /// window and advance the floor.
+    ///
+    /// Takes [`ChangeRow`], not [`StoredRow`]: a row this binary has just built
+    /// is readable by construction, so the wrap belongs here rather than at every
+    /// caller, and the opaque arm stays reachable only from deserialisation.
     pub(crate) fn record(&mut self, revision: u64, rows: Vec<ChangeRow>) {
-        self.rows.extend(rows);
+        self.rows.extend(rows.into_iter().map(StoredRow::Read));
         self.retain_window(revision);
     }
 
@@ -718,7 +913,7 @@ impl ChangeLog {
             self.floor = floor;
         }
         let keep = self.floor;
-        self.rows.retain(|row| row.revision >= keep);
+        self.rows.retain(|row| row.revision() >= keep);
     }
 
     /// Whether a delta from `known_revision` can be answered completely.
@@ -730,14 +925,27 @@ impl ChangeLog {
         known_revision >= self.floor
     }
 
+    /// Every row this binary can read, in stored order.
+    ///
+    /// Test-facing on purpose. Production has exactly one consumer of the log's
+    /// contents ([`super::render::envelope`]) and it must see **both** arms — a
+    /// production reader that skipped the opaque ones would be the silent skip
+    /// `STD-003` forbids. A test asserting about a row it wrote is in the
+    /// opposite position: it knows the row is readable, and saying so once here
+    /// beats unwrapping the arm at every assertion.
+    #[cfg(test)]
+    pub(crate) fn read_rows(&self) -> impl Iterator<Item = &ChangeRow> {
+        self.rows.iter().filter_map(StoredRow::read)
+    }
+
     /// The rows in the half-open range `(known_revision, current]`, newest last.
-    pub(crate) fn since(&self, known_revision: u64) -> Vec<&ChangeRow> {
-        let mut rows: Vec<&ChangeRow> = self
+    pub(crate) fn since(&self, known_revision: u64) -> Vec<&StoredRow> {
+        let mut rows: Vec<&StoredRow> = self
             .rows
             .iter()
-            .filter(|row| row.revision > known_revision)
+            .filter(|row| row.revision() > known_revision)
             .collect();
-        rows.sort_by_key(|row| (row.revision, row.index));
+        rows.sort_by_key(|row| (row.revision(), row.index()));
         rows
     }
 }

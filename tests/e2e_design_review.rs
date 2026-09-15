@@ -54,7 +54,7 @@ use design_run::attestation::{
     AcceptanceAuthority, ActKind, AgentAct, AgentActKind, CoveredSet, IntentState, IntentSubject,
     RecoveryIntent, ReviewDisposition, ReviewPolicy, ReviewRef,
 };
-use design_run::change_log::ChangeEvent;
+use design_run::change_log::{ChangeEvent, StoredRow};
 use design_run::gate::Condition;
 use design_run::snapshot::{self, CheckpointGroup, DesignSnapshot};
 
@@ -509,6 +509,7 @@ impl Fixture {
             .change_log
             .since(0)
             .into_iter()
+            .filter_map(StoredRow::read)
             .filter(|row| row.event == ChangeEvent::ReviewInvalidated)
             .filter_map(|row| row.subject.as_ref().map(|id| id.as_str().to_owned()))
             .collect()
@@ -1238,6 +1239,7 @@ fn loosening_the_policy_clears_the_gate() {
         .change_log
         .since(0)
         .into_iter()
+        .filter_map(StoredRow::read)
         .filter(|row| row.event == ChangeEvent::ReviewPolicyChanged)
         .flat_map(|row| row.terms.iter().map(|term| term.value().to_owned()))
         .collect();
@@ -1264,6 +1266,7 @@ fn loosening_the_policy_clears_the_gate() {
         .change_log
         .since(0)
         .into_iter()
+        .filter_map(StoredRow::read)
         .filter(|row| row.event == ChangeEvent::ReviewPolicyChanged)
         .count();
     assert_eq!(rows, 1, "a no-op re-declaration emits no row");
@@ -1412,6 +1415,7 @@ fn an_accepted_disposition_is_the_users_and_leaves_a_row() {
         held.change_log
             .since(0)
             .into_iter()
+            .filter_map(StoredRow::read)
             .find(|row| row.event == ChangeEvent::ReviewDisposed)
             .and_then(|row| row.subject.as_ref().map(|id| id.as_str().to_owned())),
         Some(recorded.id.as_str().to_owned()),
@@ -1426,6 +1430,7 @@ fn disposition_rows(held: &DesignSnapshot) -> Vec<Vec<String>> {
     held.change_log
         .since(0)
         .into_iter()
+        .filter_map(StoredRow::read)
         .filter(|row| row.event == ChangeEvent::ReviewDisposed)
         .map(|row| {
             row.terms

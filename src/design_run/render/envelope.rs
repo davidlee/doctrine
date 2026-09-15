@@ -41,6 +41,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::Serialize;
 
 use super::super::attestation::ActKind;
+use super::super::change_log::StoredRow;
 use super::super::ids::DesignId;
 use super::super::inquiry::{Disposition, InquiryLifecycle, InquiryNode};
 use super::super::payload_contract::PAYLOAD_CONTRACT_POINTER;
@@ -1077,9 +1078,14 @@ fn changes(
     let rows = all
         .into_iter()
         .skip(omitted)
-        .map(|row| match detail {
-            Detail::Normal => change_row::render(row),
-            Detail::Full => change_row::render_full(row),
+        .map(|row| match row {
+            StoredRow::Read(row) => match detail {
+                Detail::Normal => change_row::render(row),
+                Detail::Full => change_row::render_full(row),
+            },
+            // A degraded read is disclosed, never dropped and never silently
+            // rendered as though it had been understood (`STD-003`).
+            StoredRow::Unreadable(row) => change_row::render_unreadable(row),
         })
         .collect();
     (
@@ -1459,8 +1465,8 @@ fn more(omitted: usize) -> String {
 )]
 mod tests {
     use super::{
-        Detail, ENVELOPE_NORMAL_BUDGET_BYTES, OutstandingBySeverity, project, project_within,
-        prompt, rendered_bytes, resume, status,
+        ChangeDelta, Detail, ENVELOPE_NORMAL_BUDGET_BYTES, OutstandingBySeverity, project,
+        project_within, prompt, rendered_bytes, resume, status,
     };
 
     /// The projection argument for a run whose ledger holds nothing — the honest
@@ -1474,6 +1480,7 @@ mod tests {
     };
     use crate::design_run::Stage;
     use crate::design_run::attestation::{ReviewPolicy, Reviewer};
+    use crate::design_run::change_log::{RawRow, StoredRow, Unreadable};
     use crate::design_run::fixture::{
         PASS, SECTION_A, SECTION_B, attest, cleared, pass_over, run_holding,
     };
@@ -1484,6 +1491,58 @@ mod tests {
     use crate::design_run::refusal::Refusal;
     use crate::design_run::runbook::RunbookStanding;
     use crate::design_run::snapshot::DesignSnapshot;
+
+    /// `SL-259` `VT-3` — `STD-003`, `EX-5`. A row this binary could not read is
+    /// disclosed in the delta **and names the cause**.
+    ///
+    /// Naming it is the half a bare marker would lose, and `sec-5`'s own argument
+    /// is what makes the loss material: the fallback covers four distinct
+    /// failures, so an undifferentiated "unreadable" tells a reader that
+    /// something is wrong and nothing about what. The control is a second row
+    /// differing ONLY in `why` — without it this passes against a renderer that
+    /// hardcodes any one reason.
+    #[test]
+    fn a_degraded_row_is_disclosed_with_the_reason_it_was_unreadable() {
+        let disclosed = |why: Unreadable| {
+            let mut run = DesignSnapshot::new("dr-test", 259, None);
+            run.run.revision = 1;
+            run.change_log.floor = 0;
+            run.change_log.rows.push(StoredRow::Unreadable(RawRow {
+                revision: 1,
+                index: 0,
+                raw: toml::Value::Table(toml::map::Map::new()),
+                why,
+            }));
+            let envelope = project(&run, 0, Detail::Normal, NOTHING_OUTSTANDING)
+                .expect("a run holding an unreadable row still projects");
+            let ChangeDelta::Since { rows, .. } = envelope.changes else {
+                panic!("the delta is available: {:?}", envelope.changes);
+            };
+            let [row] = rows.as_slice() else {
+                panic!("one rendered row: {rows:?}");
+            };
+            row.clone()
+        };
+
+        let line = disclosed(Unreadable::Event);
+        assert!(
+            line.contains("unreadable"),
+            "the row is disclosed rather than dropped: {line}"
+        );
+        assert!(
+            line.contains(Unreadable::Event.as_str()),
+            "and it names why it could not be read: {line}"
+        );
+        assert_ne!(
+            line,
+            disclosed(Unreadable::TermTooLong),
+            "a different cause reads differently — the reason is carried, not decorative"
+        );
+        assert!(
+            line.starts_with("1 0 "),
+            "and the row keeps its place, which is what retention and ordering read: {line}"
+        );
+    }
 
     /// A run with `count` open nodes hanging off one root.
     fn wide_run(count: u32) -> DesignSnapshot {
