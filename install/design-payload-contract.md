@@ -12,7 +12,7 @@ enum's tagging and that variant's payload together, so the rendering states it
 per variant rather than per type.
 
 ```text
-payload ApplyRequest  unknown-keys: silently-dropped   (a misspelt key is discarded, exit 0)
+payload ApplyRequest  unknown-keys: refused   (a misspelt key is refused)
   run_uid            text                      required
   known_revision     integer                   required
   submission_id      text                      required
@@ -27,21 +27,21 @@ payload ApplyRequest  unknown-keys: silently-dropped   (a misspelt key is discar
   checkpoint_act     CheckpointActDeclaration  optional
   agent_declaration  AgentActDeclaration       optional
 
-type AdoptAuthored  unknown-keys: silently-dropped   (a misspelt key is discarded, exit 0)
+type AdoptAuthored  unknown-keys: refused   (a misspelt key is refused)
   fingerprint  text              required
   sections     {id(sec-): text}  optional
 
-type TraversalDeclaration  unknown-keys: silently-dropped   (a misspelt key is discarded, exit 0)
+type TraversalDeclaration  unknown-keys: refused   (a misspelt key is refused)
   pin        id(inq-)   sparse   (omit persists · null clears)
   cursor     id(inq-)   sparse   (omit persists · null clears)
   posture    Posture    optional
   authority  Authority  optional
 
-type StageDeclaration  unknown-keys: silently-dropped   (a misspelt key is discarded, exit 0)
+type StageDeclaration  unknown-keys: refused   (a misspelt key is refused)
   to      Stage  required
   reason  text   optional
 
-type AcceptanceDeclaration  unknown-keys: silently-dropped   (a misspelt key is discarded, exit 0)
+type AcceptanceDeclaration  unknown-keys: refused   (a misspelt key is refused)
   basis  text  required
   turn   text  optional
 
@@ -62,7 +62,7 @@ type Declaration  unknown-keys: refused   (a misspelt key is refused)
   disposes    id(inq-)                     optional
   dispose     Dispose                      optional
 
-type CreateRecord  unknown-keys: silently-dropped   (a misspelt key is discarded, exit 0)
+type CreateRecord  unknown-keys: refused   (a misspelt key is refused)
   kind        knowledge::RecordKind                     required
   title       text                                      required
   slug        text                                      optional
@@ -70,12 +70,12 @@ type CreateRecord  unknown-keys: silently-dropped   (a misspelt key is discarded
   facet       {knowledge::RecordKind chosen by kind: WireFacetValue}  optional
   acceptance  AcceptanceDeclaration                     optional
 
-type DischargeDeclaration  unknown-keys: silently-dropped   (a misspelt key is discarded, exit 0)
+type DischargeDeclaration  unknown-keys: refused   (a misspelt key is refused)
   step     text            required
   outcome  DischargeClaim  required
   reason   text            optional
 
-type ReviewPolicyDeclaration  unknown-keys: silently-dropped   (a misspelt key is discarded, exit 0)
+type ReviewPolicyDeclaration  unknown-keys: refused   (a misspelt key is refused)
   policy      ReviewPolicy           required
   acceptance  AcceptanceDeclaration  required
 

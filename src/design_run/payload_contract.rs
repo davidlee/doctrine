@@ -494,12 +494,22 @@ pub(crate) enum Presence {
 /// stored* or *accepted and thrown away*, and only one of them is true.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum UnknownKeys {
-    /// `deny_unknown_fields` — a misspelt key is a refusal.
+    /// A misspelt key is a refusal — from `deny_unknown_fields` where a type
+    /// carries it, and from [`super::contract_check`]'s pre-deserialisation walk
+    /// for the nine that structurally cannot (`SL-259` `DEC-244`). Every row in
+    /// this contract says this, and `every_payload_contract_row_refuses_unknown_keys`
+    /// is what keeps it true of a row added later.
     Refused,
-    /// `serde(flatten)` forbids `deny_unknown_fields`, and eight more wire
-    /// structs simply carry no attribute — the key is accepted and discarded in
-    /// silence, and a *correct* submission prints no change row either, so the
-    /// caller has no observable that separates *landed* from *discarded*.
+    /// The key is accepted and discarded in silence, and a *correct* submission
+    /// prints no change row either, so the caller has no observable that
+    /// separates *landed* from *discarded*.
+    ///
+    /// **No production inhabitant since `SL-259`** — it survives as a statement
+    /// the model must be able to make, exercised by the exemplar contract in
+    /// this module's `sec-2` suite. Retained rather than collapsed because a
+    /// model that cannot express the defect cannot describe a type that
+    /// reacquires it (`ISS-333` was live for four slices); `IMP` if it is still
+    /// uninhabited when the model is next revisited.
     SilentlyDropped,
 }
 
@@ -611,12 +621,14 @@ impl ExternContracts {
 // surface of its own to describe. Its pin is the disjoint union in the §9.1
 // suite rather than a contract here.
 //
-// That split is also why the `unknown_keys` census reads 3 + 8 below while
-// `sec-2` reads 3 + 9: three closure structs carry `deny_unknown_fields`
-// (`Declaration`, `CheckpointActDeclaration`, `AgentActDeclaration`) and the
-// other **nine** do not, but the ninth of those nine is `SubmissionEnvelope`,
-// which has no contract to state it on. Eight contracts say `SilentlyDropped`;
-// the envelope's keys inherit the root's, which is the same answer.
+// Every contract below now says `Refused`, and the serde attribute is no longer
+// what the row is reporting. Three closure structs carry `deny_unknown_fields`
+// (`Declaration`, `CheckpointActDeclaration`, `AgentActDeclaration`); the other
+// nine cannot or do not, and `SubmissionEnvelope` — the ninth — has no contract
+// to state it on and inherits the root's. What made the rows agree is
+// [`super::contract_check`], which reads THIS table against the payload before
+// deserialisation, so the disclosure the eight used to carry became a rule
+// (`SL-259` `PHASE-03`, `EX-3`).
 //
 // **Every row below is a claim about the wire, and the claims are pinned rather
 // than trusted.** `sec-8` pin 1 holds each struct contract's key set against a
@@ -1079,7 +1091,7 @@ pub(crate) static WIRE_FACET_VALUE: TypeContract = TypeContract {
 pub(crate) static ACCEPTANCE_DECLARATION: TypeContract = TypeContract {
     name: "AcceptanceDeclaration",
     form: TypeForm::Struct {
-        unknown_keys: UnknownKeys::SilentlyDropped,
+        unknown_keys: UnknownKeys::Refused,
         keys: &[
             KeyContract {
                 key: "basis",
@@ -1099,7 +1111,7 @@ pub(crate) static ACCEPTANCE_DECLARATION: TypeContract = TypeContract {
 pub(crate) static STAGE_DECLARATION: TypeContract = TypeContract {
     name: "StageDeclaration",
     form: TypeForm::Struct {
-        unknown_keys: UnknownKeys::SilentlyDropped,
+        unknown_keys: UnknownKeys::Refused,
         keys: &[
             KeyContract {
                 key: "to",
@@ -1123,7 +1135,7 @@ pub(crate) static STAGE_DECLARATION: TypeContract = TypeContract {
 pub(crate) static DISCHARGE_DECLARATION: TypeContract = TypeContract {
     name: "DischargeDeclaration",
     form: TypeForm::Struct {
-        unknown_keys: UnknownKeys::SilentlyDropped,
+        unknown_keys: UnknownKeys::Refused,
         keys: &[
             KeyContract {
                 key: "step",
@@ -1153,7 +1165,7 @@ pub(crate) static DISCHARGE_DECLARATION: TypeContract = TypeContract {
 pub(crate) static ADOPT_AUTHORED: TypeContract = TypeContract {
     name: "AdoptAuthored",
     form: TypeForm::Struct {
-        unknown_keys: UnknownKeys::SilentlyDropped,
+        unknown_keys: UnknownKeys::Refused,
         keys: &[
             KeyContract {
                 key: "fingerprint",
@@ -1177,7 +1189,7 @@ pub(crate) static ADOPT_AUTHORED: TypeContract = TypeContract {
 pub(crate) static TRAVERSAL_DECLARATION: TypeContract = TypeContract {
     name: "TraversalDeclaration",
     form: TypeForm::Struct {
-        unknown_keys: UnknownKeys::SilentlyDropped,
+        unknown_keys: UnknownKeys::Refused,
         keys: &[
             KeyContract {
                 key: "pin",
@@ -1215,7 +1227,7 @@ pub(crate) static TRAVERSAL_DECLARATION: TypeContract = TypeContract {
 pub(crate) static CREATE_RECORD: TypeContract = TypeContract {
     name: "CreateRecord",
     form: TypeForm::Struct {
-        unknown_keys: UnknownKeys::SilentlyDropped,
+        unknown_keys: UnknownKeys::Refused,
         keys: &[
             KeyContract {
                 key: "kind",
@@ -1265,7 +1277,7 @@ pub(crate) static CREATE_RECORD: TypeContract = TypeContract {
 pub(crate) static REVIEW_POLICY_DECLARATION: TypeContract = TypeContract {
     name: "ReviewPolicyDeclaration",
     form: TypeForm::Struct {
-        unknown_keys: UnknownKeys::SilentlyDropped,
+        unknown_keys: UnknownKeys::Refused,
         keys: &[
             KeyContract {
                 key: "policy",
@@ -1444,13 +1456,16 @@ pub(crate) static DECLARATION: TypeContract = TypeContract {
 /// `delegation`, whose acts are not all writes, and reading the payload's key
 /// count off it would reproduce the omission this contract exists to close.
 ///
-/// `unknown_keys` is `SilentlyDropped` and cannot be anything else:
-/// `#[serde(flatten)]` and `deny_unknown_fields` are mutually exclusive, so a
-/// misspelt top-level key is discarded in silence (`ISS-333`).
+/// `unknown_keys` is `Refused`, and *serde* is not what refuses it:
+/// `#[serde(flatten)]` and `deny_unknown_fields` are mutually exclusive, so no
+/// attribute can reach this type's keys. [`super::contract_check`] reads this
+/// contract against the payload before deserialisation instead, which is how the
+/// outermost type — the only one a caller hand-authors from scratch — stopped
+/// discarding misspellings in silence (`ISS-333`, `SL-259` `DEC-244`).
 pub(crate) const PAYLOAD: TypeContract = TypeContract {
     name: "ApplyRequest",
     form: TypeForm::Struct {
-        unknown_keys: UnknownKeys::SilentlyDropped,
+        unknown_keys: UnknownKeys::Refused,
         keys: &[
             KeyContract {
                 key: "run_uid",
@@ -3615,14 +3630,16 @@ mod tests {
         );
 
         // 6. `EX-3`'s three expressibility claims, each read out of the output:
-        //    a silently-dropped disclosure, a sparse presence, and tagging
-        //    carried *as* tagging rather than encoded structurally.
+        //    an unknown-keys disclosure, a sparse presence, and tagging carried
+        //    *as* tagging rather than encoded structurally. The disclosure reads
+        //    `refused` since `SL-259` flipped every row; what is pinned is that
+        //    the column is carried and populated, not which way it reads.
         assert_eq!(
             types
                 .get("ApplyRequest")
                 .and_then(|entry| entry.get("unknown-keys"))
                 .and_then(Value::as_str),
-            Some("silently-dropped")
+            Some("refused")
         );
         assert!(
             rendered.contains("\"presence\": \"sparse\""),
@@ -3715,14 +3732,74 @@ mod tests {
             "the root block comes first, got {header:?}"
         );
         assert!(
-            header.contains(unknown_keys_token(UnknownKeys::SilentlyDropped)),
-            "the root still discloses that a misspelt key is dropped: {header:?}"
+            header.contains(unknown_keys_token(UnknownKeys::Refused)),
+            "the root states the rule a caller is held to: {header:?}"
         );
         assert!(
             header.chars().count() <= 100,
             "the root header runs to {} columns: {header:?}",
             header.chars().count()
         );
+    }
+
+    /// `VT-4` (`SL-259` `PHASE-03`, `EX-3`) — the successor to the eight
+    /// `silently-dropped` rows, holding the **class** rather than the instances.
+    ///
+    /// Stated over the closure rather than over a list of eight type names, for
+    /// the reason `sec-9` `R0` gives: the design said nine and the tree held
+    /// eight, and an enumeration authored by hand is exactly what got that
+    /// wrong. A contract row added later is covered by this without being added
+    /// to it.
+    ///
+    /// The rendering half matters as much as the table half. `payload_contract`
+    /// used to *disclose a defect* in its own published output — the token a
+    /// client agent read told it a misspelling would be swallowed. After
+    /// `SL-259` there is no such row to render, and no token to print.
+    #[test]
+    fn every_payload_contract_row_refuses_unknown_keys() {
+        let silent: Vec<&str> = closure_types(&PAYLOAD)
+            .into_iter()
+            .filter(|contract| {
+                matches!(
+                    contract.form,
+                    TypeForm::Struct {
+                        unknown_keys: UnknownKeys::SilentlyDropped,
+                        ..
+                    }
+                )
+            })
+            .map(|contract| contract.name)
+            .collect();
+        assert!(
+            silent.is_empty(),
+            "every struct in the closure refuses an unknown key; these do not: {silent:?}"
+        );
+
+        // The positive control: the filter above finds a silently-dropped row
+        // when one exists, so `is_empty` is a measurement rather than a
+        // vacuous pass over a predicate that never matches.
+        assert!(
+            matches!(
+                EXEMPLAR_CREATE_RECORD.form,
+                TypeForm::Struct {
+                    unknown_keys: UnknownKeys::SilentlyDropped,
+                    ..
+                }
+            ),
+            "the exemplar still inhabits the arm this test looks for"
+        );
+
+        let token = unknown_keys_token(UnknownKeys::SilentlyDropped);
+        for rendering in [
+            render_prompt(&extern_fixture()).join("\n"),
+            render_json(&extern_fixture()),
+            render_document(&extern_fixture()),
+        ] {
+            assert!(
+                !rendering.contains(token),
+                "no rendered row discloses `{token}` any more"
+            );
+        }
     }
 
     /// `EX-9` — a parenthetical is one fixed string per [`Presence`] /
@@ -3755,6 +3832,20 @@ mod tests {
             "every sparse row carries the same parenthetical, got {sparse:?}"
         );
 
+        // Counted against the variants actually RENDERED, not against the
+        // enum's cardinality: every contract row says `Refused` since `SL-259`,
+        // so pinning `2` here would pin the defect's survival rather than the
+        // rule. What the claim has always been is *one fixed string per
+        // variant, never per key* — which is a mapping, and is what this now
+        // asserts directly.
+        let mut rendered: Vec<UnknownKeys> = Vec::new();
+        for contract in closure_types(&PAYLOAD) {
+            if let TypeForm::Struct { unknown_keys, .. } = contract.form
+                && !rendered.contains(&unknown_keys)
+            {
+                rendered.push(unknown_keys);
+            }
+        }
         let disclosures: BTreeSet<String> = lines
             .iter()
             .filter(|line| line.contains("unknown-keys:"))
@@ -3762,8 +3853,15 @@ mod tests {
             .collect();
         assert_eq!(
             disclosures.len(),
-            2,
-            "one fixed string per UnknownKeys variant, got {disclosures:?}"
+            rendered.len(),
+            "one fixed string per rendered UnknownKeys variant ({rendered:?}), \
+             got {disclosures:?}"
+        );
+        assert!(
+            disclosures
+                .iter()
+                .all(|gloss| rendered.iter().any(|variant| gloss == unknown_keys_note(*variant))),
+            "and each is the variant's own fixed string: {disclosures:?}"
         );
     }
 
