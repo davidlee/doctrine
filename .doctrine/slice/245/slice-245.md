@@ -71,7 +71,10 @@ free — every emitting surface already produces DOT strings.
    and a sync `dot -Tpng` spawn that is its own availability probe. A pure
    encoder turns PNG bytes plus the descriptor into kitty escape bytes. The
    spawn is a second, knowingly-held `dot` spawn beside `map_server`'s, each
-   naming the other, taxonomy single-sourced (DEC-143).
+   naming the other, program name and timeout single-sourced (DEC-143). The
+   spawn rides a bounded sync-subprocess helper extracted from
+   `coverage_verify` rather than copying it; that suite is the
+   behaviour-preservation proof.
 5. **Sizing by pixel width** (DEC-256, provisional): native size when the PNG
    fits the terminal's pixel width, else scale to columns; unknown pixel width
    scales to columns.

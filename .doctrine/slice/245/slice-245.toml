@@ -10,6 +10,81 @@ tags = ["area:cli", "area:graph", "area:render"]
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
+[[selector]]
+selector = "src/subprocess.rs"
+intent = "design-target"
+note = "design § Code impact"
+
+[[selector]]
+selector = "src/graphviz.rs"
+intent = "design-target"
+note = "design § Code impact"
+
+[[selector]]
+selector = "src/kitty.rs"
+intent = "design-target"
+note = "design § Code impact"
+
+[[selector]]
+selector = "src/terminal_image.rs"
+intent = "design-target"
+note = "design § Code impact"
+
+[[selector]]
+selector = "src/tty.rs"
+intent = "design-target"
+note = "design § Code impact"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+note = "design § Code impact"
+
+[[selector]]
+selector = "src/coverage_verify.rs"
+intent = "design-target"
+note = "design § Code impact"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "design § Code impact"
+
+[[selector]]
+selector = "src/commands/graph.rs"
+intent = "design-target"
+note = "design § Code impact"
+
+[[selector]]
+selector = "src/concept_map.rs"
+intent = "design-target"
+note = "design § Code impact"
+
+[[selector]]
+selector = "src/map_server/shell.rs"
+intent = "design-target"
+note = "design § Code impact"
+
+[[selector]]
+selector = "src/map_server/routes.rs"
+intent = "design-target"
+note = "design § Code impact"
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
+note = "design § Code impact"
+
+[[selector]]
+selector = "tests/fixtures/render/tiny.png"
+intent = "design-target"
+note = "design § Code impact"
+
+[[selector]]
+selector = "tests/e2e_render_guard.rs"
+intent = "design-target"
+note = "design § Code impact"
+
 [[relation]]
 label = "fulfils"
 target = "IDE-046"
