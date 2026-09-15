@@ -5,10 +5,10 @@ id = 328
 slug = "an-unknown-key-nested-inside-createrecord-is-dropped-not-refused"
 title = "An unknown key nested inside CreateRecord is dropped, not refused"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-08-08"
-updated = "2026-08-15"
+updated = "2026-09-15"
 tags = ["area:cli", "area:design-run", "cluster:design-run", "footgun"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

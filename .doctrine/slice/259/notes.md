@@ -119,7 +119,7 @@ this statement covers the design axis only.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-15 · audit (RV-366) resolved · 503c5a2a3
+fresh-as-of: 2026-09-15 · code review (RV-367) concluded · 0fa42294d
 
 ### Produced
 
@@ -162,6 +162,13 @@ terminal; synthesis + reconciliation brief in `review-366.md`).
 `IMP-449` (slice conformance reports a slice's own lifecycle artefacts as
 undeclared — systemic, cross-checked on `SL-256`) and `ISS-452` (opening a review
 pass emits no change row), both from `RV-366` and linked `originates_from SL-259`.
+
+`RV-367` (implementation code review, concluded — 6 findings, 0 blockers, all
+verified terminal). `ISS-454` and `IMP-450` from its two follow-ups; `ISS-451`
+resolved `fixed` against `PHASE-05`. Its four `fix-now` repairs landed at
+`3444c59cd`, `a93bb8243`, `2ba9d8bf1`, `06e23cc94`, gate exit 0 at each.
+`mem.pattern.review.cited-guard-must-assert-the-claim` and
+`mem.pattern.serde.position-survives-from-str-not-from-value` (new).
 Audit evidence: `doctrine check gate` exit 0 at `503c5a2a3`; `slice verify-vt 259`
 PASS on all 18 `VT`s across six phases; `PHASE-01` `VA-1`, `PHASE-02` `VA-1`/`VA-2`
 and `PHASE-06` `VA-1` all discharged in `RV-366`'s synthesis.
@@ -419,17 +426,27 @@ probe in `run.rs`'s own suite (reverted), `F-2` live against this repo's run.
 | finding | severity | disposition | state |
 |---|---|---|---|
 | `F-1` double `ActInvalidated` on displacing a coverage-dead act | minor | follow-up → **`ISS-454`** | verified |
-| `F-2` `from_value` drops serde's line/column on every shape fault | minor | fix-now | **owed** |
-| `F-3` `ISS-451` closed-but-open; dead `unwrap_or(usize::MAX)` in `shaped` | minor | fix-now | **owed** (`ISS-451` → `resolved · fixed` done) |
-| `F-4` untagged-arm pin weaker than the claim citing it | minor | fix-now | **owed** |
-| `F-5` second spelling of the comma-join beside the helper widened to stop it | nit | fix-now | **owed** |
+| `F-2` `from_value` drops serde's line/column on every shape fault | minor | fix-now | verified (`3444c59cd`) |
+| `F-3` `ISS-451` closed-but-open; dead `unwrap_or(usize::MAX)` in `shaped` | minor | fix-now | verified (`a93bb8243`; `ISS-451` → `resolved · fixed`) |
+| `F-4` untagged-arm pin weaker than the claim citing it | minor | fix-now | verified (`2ba9d8bf1`) |
+| `F-5` second spelling of the comma-join beside the helper widened to stop it | nit | fix-now | verified (`06e23cc94`) |
 | `F-6` published contract omits the state axis | nit | follow-up → **`IMP-450`** | verified |
 
-`RV-367` stands `active · await=raiser` with four `fix-now` findings answered
-and unverified — deliberately. The edits are batched to a fresh session on
-context budget; the ledger says what is owed until they land and are verified.
-None gates close (`blocker` alone does), but closing `SL-259` over an unfinished
-`RV-367` would be closing over known, accepted work.
+The four `fix-now` edits were batched to a fresh session on context budget and
+landed there (2026-09-15), each gated and verified as raiser; `RV-367` is now
+`done · concluded`, six findings terminal. None of them gated close — `blocker`
+alone does — but closing `SL-259` over known, accepted, cheap work is how the
+ledger stops meaning anything, so the slice waited for them.
+
+Two repairs turned up more than the finding predicted. `F-2`: `ApplyRequest`'s
+`#[serde(flatten)]` buffers the envelope's map, so a fault in an envelope key
+still resolves to the **end of the enclosing object** — the position is exact
+only below the flattened surface, which is where a long payload's faults live,
+and is what the pin uses. `F-4`: strengthening the assertion needed a real
+predicate rather than a wider `matches!` — `reaches_a_key_surface` mirrors
+`walk_wire`'s descent with no wildcard arm, and its own pin doubles as the
+control, since `Named ⇒ true` is exactly the inhabitant the old `Shape(_)` form
+admitted.
 
 ### New items
 

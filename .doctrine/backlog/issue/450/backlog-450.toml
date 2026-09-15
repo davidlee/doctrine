@@ -5,10 +5,10 @@ id = 450
 slug = "needs-edge-at-node-creation-emits-no-change-row"
 title = "needs edge at node creation emits no change row"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-09-11"
-updated = "2026-09-11"
+updated = "2026-09-15"
 tags = ["area:correctness", "area:design-run", "cluster:design-run", "footgun"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
