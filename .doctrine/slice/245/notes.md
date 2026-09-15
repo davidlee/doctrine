@@ -135,11 +135,12 @@ are runtime tier by design; if a fresh clone needs them, re-run the round.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-15 · design reviewing · 7069a8b75
+fresh-as-of: 2026-09-15 · plan authored · design locked
 
 ### Produced
 
-- design.md sec-1..sec-9 (run dr-019fd12e…, reviewing)
+- design.md sec-1..sec-9 (run dr-019fd12e…, locked 2026-09-15)
+- plan.toml / plan.md: PHASE-01..PHASE-06 (phase sheets materialised)
 - DEC-253, DEC-254, DEC-255, DEC-256, DEC-257, DEC-258, DEC-259 (accepted); DEC-143 accepted + clarified
 - RV-368 (design review, codex gpt-5.6-sol): F-1..F-11 verified; F-12 verified (termios timed reads)
 - ISS-455 (bounded-spawn descendant-pipe hang, incumbent in coverage_verify)
@@ -151,4 +152,5 @@ fresh-as-of: 2026-09-15 · design reviewing · 7069a8b75
 
 ### Open
 
-- Human section review (9 sections) + design lock → /plan
+- Plan approval → PHASE-01 (/phase-plan, then /execute or /dispatch)
+- Keystrokes typed during the ≤2 s support probe are consumed (unnamed residual; see Inquiry state)
