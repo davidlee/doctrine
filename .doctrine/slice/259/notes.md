@@ -119,7 +119,7 @@ this statement covers the design axis only.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-15 · PHASE-05 completed · e4a3e9b1d
+fresh-as-of: 2026-09-15 · audit (RV-366) resolved · 503c5a2a3
 
 ### Produced
 
@@ -156,6 +156,15 @@ changes committed with their code.
 `f0873ee1c`); `mem_019fd0ceae9d7913840328c2ded75ee7` gained a third instance.
 `mem.pattern.design-run.guard-declaration-construction-at-the-seam` and
 `mem.pattern.lint.closed-vocabulary-tokens-in-diagnostics` (both new, PHASE-05).
+
+`RV-366` (implementation audit, resolved — 9 findings, 0 blockers, all verified
+terminal; synthesis + reconciliation brief in `review-366.md`).
+`IMP-449` (slice conformance reports a slice's own lifecycle artefacts as
+undeclared — systemic, cross-checked on `SL-256`) and `ISS-452` (opening a review
+pass emits no change row), both from `RV-366` and linked `originates_from SL-259`.
+Audit evidence: `doctrine check gate` exit 0 at `503c5a2a3`; `slice verify-vt 259`
+PASS on all 18 `VT`s across six phases; `PHASE-01` `VA-1`, `PHASE-02` `VA-1`/`VA-2`
+and `PHASE-06` `VA-1` all discharged in `RV-366`'s synthesis.
 
 ### Learned
 
@@ -287,6 +296,26 @@ code's own comment and recorded as
 `mem.fact.lint.dead-code-exemption-decides-whether-a-const-proof-defends-itself`.
 
 
+Harvested from the phase sheets at audit — durable, and not previously lifted:
+
+- **A duplicated guard is invisible to the suite by construction** (`PHASE-06`
+  probe `P2`). Hoisting `refuse_unresumable_mints` out of `execute_mint` step 1
+  was pinned by probe `P1` (removing the hoisted guard reds both `T3` and
+  `SL-249`'s own retry test, so no second copy was left behind), but the inverse
+   — *restoring* the bail inside the loop as well — breaks nothing and no test
+  can see it. Recorded as a standing blind spot: a silent parallel implementation
+  is caught by review or not at all.
+- **`review_pass_plan` can never trip the retry guard** (`PHASE-06` `P3`). It
+  carries `payload_digest: None` (`design.rs:924-942`) and `resumable_under` is
+  `is_none_or`. Including it in the hoisted pre-pass is consistency, not
+  coverage — worth knowing before someone "simplifies" it out.
+- **`read_rows()` is `#[cfg(test)]` on purpose** (`PHASE-02` `F7`). The
+  readable-arm accessor drops opaque rows by construction, which would make a
+  sweep silently vacuous rather than red; closed in place with
+  `assert_eq!(log.read_rows().count(), log.rows.len())`. Production deliberately
+  has no such accessor — `envelope.rs` must see both arms, and does. Verified at
+  audit: both callers are in test modules.
+
 ### Open
 `IMP-448` open — `entity.rs:557` re-spells `kinds::canonical_id`'s
 `{prefix}-{id:03}` by hand, and that hand-built string, not the documented format
@@ -331,3 +360,32 @@ not list.
 (PHASE-04 `F-1`). Reconcile against the locked design; not editable mid-phase.
 Research baseline for `SL-259` reports drift against its own downstream
 artefacts only; judged not to invalidate a thread, not restamped (PHASE-02 `A5`).
+
+
+*Audit (`RV-366`) — what it added to this list, and what it closed.*
+
+`RV-366` `F-1`/`F-2`/`F-3`/`F-8` carry the four `design.md` divergences already
+listed above (`sec-3`'s cell count, `sec-6`'s "no witness", `sec-7`'s code-impact
+table, and — newly found at audit — `sec-5`'s "`ChangeEvent` is not touched") into
+the reconciliation brief as per-slice direct edits. `F-4` names the load-bearing
+repair for the `ids.rs` / `gate.rs` conformance rows and five more the notes had
+not caught: the **selector registry**, not `sec-7`'s prose.
+
+**`DEC-252` is ruled** (`F-6`): a line in this slice's reconciliation, **not** a
+`REV` against `SL-251`. `PHASE-NN`/`VT-n` ids are immutable-append, so a `REV`
+would resolve to no legal write; no governance artefact changed; the real gap is
+discoverability, closed by settling `DEC-252` and relating it to both slices.
+The same reasoning disposes `SL-233` `EX-11(a)` (`PHASE-02` `F5`): a closed
+slice's plan criterion is off-surface for `/reconcile`, and the inversion is
+already recorded here and in `mem.fact.design-run.change-log-degrades-state-refuses`.
+
+**`PHASE-02` `VA-1` is adjudicated: held.** The two forced `snapshot.rs` pin
+edits (`[row]` → `[StoredRow::Read(row)]`) *tighten* — they now additionally
+assert the row reads — and both `const _: ()` proofs are intact.
+
+**`PHASE-01` `D5` needs no line against leg 1.** A node declared `resolved` with
+no disposition now refuses *before* anything lands, which is what "error ⇒
+nothing landed" promises; it is `DEC-245` working, not drift.
+
+`ISS-361`, `IMP-446`, `IMP-447`, `IMP-448` remain open with stated reasons and,
+where applicable, triggers. No governance/spec `REV` is owed by this slice.
