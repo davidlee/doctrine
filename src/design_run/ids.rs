@@ -109,6 +109,33 @@ impl IdKind {
     }
 }
 
+/// Whether the run already holds the subject a declaration addresses.
+///
+/// The **state axis** (`DEC-246`, `ISS-327`), and it is homed beside [`IdKind`]
+/// because that is the **kind axis** — the two closed vocabularies a declaration's
+/// subject is classified on, and the two columns of one table
+/// ([`super::submission::Declaration::WIRE_KEYS`]). Unlike a kind, a state is not
+/// derivable from the id: it is a fact about the snapshot, produced by
+/// [`super::run::subject_state`] and passed in, never read from here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum SubjectState {
+    /// The run does not hold the subject: the engine takes its create path.
+    Absent,
+    /// The run already holds the subject: the engine takes its update path.
+    Held,
+}
+
+impl SubjectState {
+    /// How a refusal names the state — the phrase a caller reads, not a token.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            SubjectState::Absent => "the run does not yet hold it",
+            SubjectState::Held => "the run already holds it",
+        }
+    }
+}
+
 /// May `byte` appear in an id's body?
 ///
 /// `[A-Za-z0-9_-]` is a **choice**, not a derivation, and is recorded as one:

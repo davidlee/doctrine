@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use super::Stage;
 use super::attestation::{ActKind, AgentActKind, ReviewRef};
 use super::gate::{Coverage, ObservedFact, Unmet};
-use super::ids::{DesignId, IdKind};
+use super::ids::{DesignId, IdKind, SubjectState};
 
 /// One way a recorded act fails to correspond to the rule it is written against
 /// (design `sec-4`).
@@ -483,6 +483,27 @@ pub(crate) enum Refusal {
         /// one would send them somewhere worse than the honouring kind.
         remedy: Option<&'static str>,
     },
+    /// A wire key honoured at this subject's **kind** but inert in its current
+    /// **state** (`DEC-246`, `ISS-327`) — the state-axis sibling of
+    /// [`Refusal::InertKey`], raised from the same seam over the same table.
+    ///
+    /// Three cells, one polarity: `provenance`, `concerns` and `blocking` are
+    /// each read only where the engine creates the subject, and each is
+    /// discarded where it updates one. A caller correcting a finding's
+    /// `blocking` is otherwise told it succeeded and changes nothing — and
+    /// `blocking` is the flag the lock gate reads.
+    ///
+    /// No `remedy`, unlike its sibling. An inert *kind* has a plausible key the
+    /// caller meant instead; an inert *state* does not — there is nothing to
+    /// spell differently, only a different moment to have said it.
+    InertAtState {
+        subject: DesignId,
+        key: &'static str,
+        /// The state at which the key IS honoured. There are two states, so
+        /// naming one names both — carrying the offending state as well would
+        /// be a second discriminator free to disagree with the first.
+        honoured_when: SubjectState,
+    },
 }
 
 impl fmt::Display for Refusal {
@@ -884,6 +905,25 @@ impl fmt::Display for Refusal {
                     None => Ok(()),
                 }
             }
+            // The state the subject is IN is rendered from the honouring state's
+            // complement rather than carried, on the variant's own reasoning: two
+            // states, so one field says both. Omission is named as the route,
+            // because it is the only honest one — `Sparse::Omitted` persists, and
+            // a present value that is discarded has no reading as persistence.
+            Refusal::InertAtState {
+                subject,
+                key,
+                honoured_when,
+            } => write!(
+                f,
+                "`{key}` is inert at {subject}: {}, and `{key}` is honoured only where {}. \
+                 Omit the key to leave the held value as it is",
+                match honoured_when {
+                    SubjectState::Absent => SubjectState::Held.as_str(),
+                    SubjectState::Held => SubjectState::Absent.as_str(),
+                },
+                honoured_when.as_str()
+            ),
         }
     }
 }

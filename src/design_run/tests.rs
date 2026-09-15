@@ -34,7 +34,7 @@ use super::gate::{
     RequiredActor, Unmet, advance, boundary_conditions, boundary_runbook, cumulative_conditions,
     regress, requirement_for, satisfied,
 };
-use super::ids::{DesignId, Fingerprint, IdKind};
+use super::ids::{DesignId, Fingerprint, IdKind, SubjectState};
 use super::inquiry::{
     Disposition, InquiryLifecycle, InquiryMap, InquiryNode, NodeMaterial, Provenance,
 };
@@ -47,12 +47,12 @@ use super::payload_contract::{
 };
 use super::prompt::contract_block;
 use super::refusal::{ActFault, Refusal};
-use super::run::{DerivedInput, ObservedReview, declare, live_reviews};
+use super::run::{DerivedInput, ObservedReview, declare, live_reviews, subject_state};
 use super::runbook::{RunbookKey, RunbookStanding};
-use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup, DesignSnapshot};
+use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup, DesignSnapshot, Finding};
 use super::submission::{
     AcceptanceDeclaration, AdoptAuthored, AgentActDeclaration, ApplyRequest, Batch,
-    CheckpointActDeclaration, CreateRecord, Declaration, DischargeDeclaration,
+    CheckpointActDeclaration, CreateRecord, Declaration, DischargeDeclaration, KeyHome, KeyWhen,
     ReviewPolicyDeclaration, Sparse, StageDeclaration, SubmissionEnvelope, TraversalDeclaration,
 };
 
@@ -497,8 +497,10 @@ fn unordered_batch_refuses_duplicate_subjects() {
         Declaration::about(subject.clone()).question(Sparse::Value("first".to_owned())),
         Declaration::about(subject.clone()).question(Sparse::Value("second".to_owned())),
     ]);
+    // Neither declaration carries a state-axis key, so the state cannot decide
+    // this refusal; `Absent` is the empty run these bare subjects imply.
     assert_eq!(
-        duplicated.validate(),
+        duplicated.validate(|_| SubjectState::Absent),
         Err(Refusal::DuplicateSubject { id: subject })
     );
 
@@ -514,10 +516,10 @@ fn unordered_batch_refuses_duplicate_subjects() {
         )
     };
     let forward = declarations([&one, &two, &three])
-        .validate()
+        .validate(|_| SubjectState::Absent)
         .expect("valid");
     let reversed = declarations([&three, &two, &one])
-        .validate()
+        .validate(|_| SubjectState::Absent)
         .expect("valid");
     assert_eq!(forward, reversed);
     assert_eq!(
@@ -2947,7 +2949,7 @@ fn the_wire_key_table_holds_exactly_a_populated_declarations_serde_keys() {
 /// along.
 #[test]
 fn every_rows_predicate_agrees_with_its_keys_presence_on_the_wire() {
-    for (key, _, carried) in &Declaration::WIRE_KEYS {
+    for (key, _, _, carried) in &Declaration::WIRE_KEYS {
         assert!(
             carried(&Declaration::fully_populated(id("inq-1"))),
             "`{key}`'s predicate must see it on a fully populated declaration"
@@ -2967,7 +2969,10 @@ fn a_checkpoint_subject_carrying_section_prose_is_refused_naming_the_key_it_want
     let refused = Batch::of(vec![declared(
         r###"{"subject": "cp-4", "body": "## The two candidate sites\n"}"###,
     )])
-    .validate()
+    // A `cp-` subject has no held state at all (`subject_state`), so the state
+    // axis cannot fire here whatever this answers — the refusal under test is
+    // the kind axis's, and it runs first regardless.
+    .validate(|_| SubjectState::Absent)
     .expect_err("`body` is section prose and means nothing on a checkpoint");
 
     assert_eq!(
@@ -3002,22 +3007,16 @@ fn a_non_declarable_subject_is_refused_as_such_rather_than_key_by_key() {
 const COMPANION_NODE: &str = "inq-2";
 const COMPANION_SECTION: &str = "sec-2";
 
-/// What state the subject must be in for a key to be observable at its
-/// honouring kind — the `EN-2` discharge, per `DEC-183`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SubjectState {
-    /// The run does not hold the subject yet: the engine takes its create path.
-    Absent,
-    /// The run already holds the subject: the engine takes its update path.
-    Held,
-}
-
 /// The run every cell is measured against, and the shell-derived facts it needs.
 ///
-/// Holds the two companions and, under [`SubjectState::Held`], the `inq-`
-/// subject itself. `section_digests` carries the `sec-` subject because a
+/// Holds the two companions and, under [`SubjectState::Held`], the subject of
+/// the kind under test. `section_digests` carries the `sec-` subject because a
 /// section body is digested by the shell and the pure layer never hashes.
-fn universe(state: SubjectState) -> (DesignSnapshot, DerivedInput) {
+///
+/// `SubjectState` is the production enum (`ids.rs`), not a test-local copy: it is
+/// the same vocabulary the wire-key table's state column is written in, and two
+/// spellings of one concept is how a fixture drifts from the rule it measures.
+fn universe(state: SubjectState, kind: IdKind) -> (DesignSnapshot, DerivedInput) {
     let mut snapshot = run_holding(&[(COMPANION_SECTION, "digest-companion")]);
     snapshot
         .map
@@ -3029,21 +3028,46 @@ fn universe(state: SubjectState) -> (DesignSnapshot, DerivedInput) {
         ))
         .expect("the companion node seats");
     if state == SubjectState::Held {
-        snapshot
-            .map
-            .inquiry
-            .insert(InquiryNode::open(
-                id("inq-1"),
-                "the subject",
-                Provenance::AgentProposed,
-            ))
-            .expect("the held subject seats");
+        seat_subject(&mut snapshot, kind);
     }
     let derived = DerivedInput {
         section_digests: BTreeMap::from([(id("sec-1"), Fingerprint::new("digest-subject"))]),
         ..DerivedInput::default()
     };
     (snapshot, derived)
+}
+
+/// Seat the subject `kind` addresses, for a [`SubjectState::Held`] universe.
+///
+/// Covers the two kinds that carry a state-axis row and **panics** for the rest,
+/// on [`wire_value`]'s reasoning: a row added at a kind with no held fixture must
+/// fail the matrix rather than quietly narrow it. `subject_state` reports the
+/// other kinds `Absent` unconditionally, so a cell there would assert nothing.
+fn seat_subject(snapshot: &mut DesignSnapshot, kind: IdKind) {
+    match kind {
+        IdKind::Inquiry => {
+            snapshot
+                .map
+                .inquiry
+                .insert(InquiryNode::open(
+                    id("inq-1"),
+                    "the subject",
+                    Provenance::AgentProposed,
+                ))
+                .expect("the held subject seats");
+        }
+        IdKind::Finding => snapshot.review.findings.push(Finding {
+            id: id("fnd-1"),
+            subject: id(COMPANION_SECTION),
+            summary: "the held finding".to_owned(),
+            blocking: false,
+            resolution: None,
+        }),
+        other => panic!(
+            "no held fixture for a `{}` subject — a state-axis row at that kind needs one",
+            other.prefix()
+        ),
+    }
 }
 
 /// A JSON value for `key`, chosen to differ from whatever the engine defaults to
@@ -3113,7 +3137,7 @@ fn engine_outcome(
     kind: IdKind,
     keys: &[&str],
 ) -> (DesignSnapshot, Option<Refusal>) {
-    let (mut next, derived) = universe(state);
+    let (mut next, derived) = universe(state, kind);
     let refused = declare(&mut next, &declaration_at(kind, keys), &derived, "sub-1").err();
     (next, refused)
 }
@@ -3121,9 +3145,11 @@ fn engine_outcome(
 /// Whether the whole admission path refuses this declaration — the wire-key
 /// check first, then the engine's own arms.
 fn admission_refuses(state: SubjectState, kind: IdKind, keys: &[&str]) -> bool {
-    let (mut next, derived) = universe(state);
+    let (mut next, derived) = universe(state, kind);
     let declaration = declaration_at(kind, keys);
-    match Batch::of(vec![declaration]).validate() {
+    // The PRODUCTION resolver, never a `|_| Absent` stand-in: a constant here
+    // would make every state-axis cell vacuous while leaving the matrix green.
+    match Batch::of(vec![declaration]).validate(|subject| subject_state(&next, subject)) {
         Err(_) => true,
         Ok(candidate) => candidate
             .values()
@@ -3162,19 +3188,23 @@ fn admission_refuses(state: SubjectState, kind: IdKind, keys: &[&str]) -> bool {
 /// than deleting rows nobody misses (`R10`). A key added without a
 /// [`wire_value`] fixture fails; it does not quietly skip.
 ///
-/// # The subject state, and what `DEC-183` scopes out
+/// # The subject state this is quantified at
 ///
-/// Four keys are read on only *one* of their honouring kind's two paths, so the
-/// base's subject state decides whether the differential can see them:
-/// `provenance` is read only where a node is created, `lifecycle` only where one
-/// is updated, and `concerns` / `blocking` only where a finding is raised. The
-/// state is therefore stated per key ([`subject_state`]) rather than defaulted.
+/// [`SubjectState::Absent`], for every key. `I10` is the **kind**-axis matrix,
+/// and the create path is where every key is observable at its honouring kind —
+/// so one state suffices and the cell stays a question about the kind.
 ///
-/// The other state of each of those four is where the key is **silently
-/// ignored** — accepted, no effect, no refusal. `DEC-183` rules that outside this
-/// matrix: `I10` is quantified over the subject-**kind** axis, so a cell asks
-/// whether *some* submission at that kind makes the key effectful. The state
-/// axis is `ISS-327`, and the nested-`CreateRecord` sibling is `ISS-328`.
+/// It did not always. A per-key `subject_state` fixture held `lifecycle` at
+/// [`SubjectState::Held`], because the create branch dropped it on the floor and
+/// an absent subject would have shown it inert. `PHASE-01` collapsed
+/// `declare_node` onto one row-producing path over two priors, so `lifecycle` is
+/// now honoured at both states and the fixture had nothing left to do.
+///
+/// The keys that ARE read on only one path — `provenance`, `concerns`,
+/// `blocking` — are the state axis (`DEC-246`, `ISS-327`), and their other state
+/// is pinned by `a_key_inert_at_the_subjects_state_is_refused` below rather than
+/// here. `DEC-183` drew that line and it still holds: a cell here asks whether
+/// *some* submission at this kind makes the key effectful.
 ///
 /// # The addressing key
 ///
@@ -3187,12 +3217,12 @@ fn admission_refuses(state: SubjectState, kind: IdKind, keys: &[&str]) -> bool {
 #[test]
 fn no_wire_key_is_accepted_and_ignored_at_any_subject_kind() {
     let bare = Declaration::about(id("inq-1"));
-    for (key, _, carried) in &Declaration::WIRE_KEYS {
+    for (key, _, _, carried) in &Declaration::WIRE_KEYS {
         if carried(&bare) {
             continue;
         }
         for kind in IdKind::ALL {
-            let state = subject_state(key);
+            let state = SubjectState::Absent;
             let base: Vec<&str> = companions(kind)
                 .iter()
                 .copied()
@@ -3220,17 +3250,208 @@ fn no_wire_key_is_accepted_and_ignored_at_any_subject_kind() {
     }
 }
 
-/// The subject state a key's honouring cell must be measured in (`DEC-183`).
+// ── the state-axis refusal (SL-259 PHASE-04, ISS-327) ──────────────────────
+
+/// Every state-axis row, as `(key, home kind, the state that honours it)`.
 ///
-/// [`SubjectState::Absent`] unless the key is read only on an update path. Two
-/// entries are load-bearing and both are `ISS-327`: `lifecycle` is read only
-/// where `declare_node` updates, so an absent subject would show it inert; and
-/// its mirror, `provenance`, is read only where `declare_node` creates, which is
-/// why the default is `Absent` rather than `Held`.
-fn subject_state(key: &str) -> SubjectState {
-    match key {
-        "lifecycle" => SubjectState::Held,
-        _ => SubjectState::Absent,
+/// Read off [`Declaration::WIRE_KEYS`] rather than listed here, on `I9`'s
+/// reasoning: a hand-written list is a third spelling, free to agree with
+/// neither the table nor the engine. Empty would silently pass every test
+/// below, so the callers assert the count.
+fn state_axis_rows() -> Vec<(&'static str, IdKind, SubjectState)> {
+    Declaration::WIRE_KEYS
+        .iter()
+        .filter_map(|&(key, home, when, _)| match (home, when) {
+            (KeyHome::At(kind), KeyWhen::Only(honoured_when)) => Some((key, kind, honoured_when)),
+            (KeyHome::Universal | KeyHome::At(_), KeyWhen::EitherState | KeyWhen::Only(_)) => None,
+        })
+        .collect()
+}
+
+/// The keys a cell carries beneath the one under test.
+///
+/// [`companions`] are what the CREATE path requires, so at a state where some of
+/// them are themselves inert they must be dropped — otherwise the first refusal
+/// names a companion and the cell under test is never reached. Filtering by the
+/// state rather than by a hardcoded list keeps this correct in both directions,
+/// including for a future row honoured only where the subject is held.
+fn base_at(kind: IdKind, state: SubjectState, under_test: &str) -> Vec<&'static str> {
+    let inert: Vec<&str> = state_axis_rows()
+        .into_iter()
+        .filter(|&(_, _, honoured_when)| honoured_when != state)
+        .map(|(key, ..)| key)
+        .collect();
+    companions(kind)
+        .iter()
+        .copied()
+        .filter(|companion| *companion != under_test && !inert.contains(companion))
+        .collect()
+}
+
+/// The state a key is NOT honoured in. Two states, so one names the other.
+const fn other_than(state: SubjectState) -> SubjectState {
+    match state {
+        SubjectState::Absent => SubjectState::Held,
+        SubjectState::Held => SubjectState::Absent,
+    }
+}
+
+/// `VT-1` — a key inert at its subject's STATE is refused, naming the key
+/// (`EX-1`, `DEC-246`, `ISS-327`).
+///
+/// # The two halves, and why neither alone would do
+///
+/// Each cell asserts both:
+///
+/// - the key is **not effectful** at this state, measured on [`declare`], which
+///   never reads the wire-key table — that is the defect `ISS-327` reported, and
+///   measuring it a layer below the table is what stops this test being the
+///   table's own oracle (`I10`'s rule, one axis along);
+/// - admission **refuses** it, with the REASON pinned as
+///   [`Refusal::InertAtState`] naming that key. A refusal that fires for the
+///   wrong reason is a test passing for the wrong reason (`sec-8` leg 3).
+///
+/// Dropping the first half would leave a test that passes over a key the engine
+/// honours — a refusal widened into a ban, which is what
+/// `the_same_keys_are_honoured_at_the_state_that_honours_them` guards from the
+/// other side.
+#[test]
+fn a_key_inert_at_the_subjects_state_is_refused() {
+    let rows = state_axis_rows();
+    assert_eq!(
+        rows.len(),
+        3,
+        "three cells survive `DEC-246`'s four — `PHASE-01` made `lifecycle` \
+         honoured at creation too; a change in this count is a change in the rule"
+    );
+
+    for (key, kind, honoured_when) in rows {
+        let inert_state = other_than(honoured_when);
+        let base = base_at(kind, inert_state, key);
+        let mut carrying = base.clone();
+        carrying.push(key);
+
+        assert_eq!(
+            engine_outcome(inert_state, kind, &base),
+            engine_outcome(inert_state, kind, &carrying),
+            "`{key}` at a `{}` subject the run holds must be inert — if the engine \
+             now honours it, the row is stale, not the refusal",
+            kind.prefix()
+        );
+
+        let (mut next, derived) = universe(inert_state, kind);
+        let refused = Batch::of(vec![declaration_at(kind, &carrying)])
+            .validate(|subject| subject_state(&next, subject))
+            .expect_err("a key inert at the subject's state is refused");
+        assert_eq!(
+            refused,
+            Refusal::InertAtState {
+                subject: id(&format!("{}1", kind.prefix())),
+                key,
+                honoured_when,
+            }
+        );
+        // The refusal is the whole outcome: nothing reached the engine.
+        assert!(
+            declare(&mut next, &declaration_at(kind, &base), &derived, "sub-1").is_ok(),
+            "and the base without it still applies, so the key is what was refused"
+        );
+    }
+}
+
+/// `VT-2` — the control: the same keys are HONOURED at the state that honours
+/// them, so the refusal has not been widened into a ban (`EX-4`).
+///
+/// The mirror of the test above, cell for cell. Without it, refusing all three
+/// keys unconditionally would pass every other assertion in this file.
+#[test]
+fn the_same_keys_are_honoured_at_the_state_that_honours_them() {
+    let rows = state_axis_rows();
+    assert_eq!(rows.len(), 3, "the same three cells, at their other state");
+
+    for (key, kind, honoured_when) in rows {
+        let base = base_at(kind, honoured_when, key);
+        let mut carrying = base.clone();
+        carrying.push(key);
+
+        assert_ne!(
+            engine_outcome(honoured_when, kind, &base),
+            engine_outcome(honoured_when, kind, &carrying),
+            "`{key}` must still change what the engine does at the state that \
+             honours it"
+        );
+        assert!(
+            !admission_refuses(honoured_when, kind, &carrying),
+            "`{key}` is honoured here, so admission must not refuse it"
+        );
+    }
+}
+
+/// `VT-3` — `blocking` on a finding the run ALREADY HOLDS is refused, not
+/// discarded.
+///
+/// Named on its own rather than left to the matrix because it is the cell that
+/// decided the design (`sec-3`). The alternative to refusing was to read the
+/// dropped key as omission-persist, and `blocking` is what defeats it: it is the
+/// flag the lock gate reads, so a caller *correcting* a finding's `blocking` is
+/// told they succeeded and changes nothing — and persist semantics would make
+/// that silence correct by definition. `Sparse::Omitted` already means persist
+/// and is reachable by not sending the key, so a PRESENT value that is discarded
+/// has no honest reading as persistence (`EX-4`).
+///
+/// Written as literal JSON against a hand-built run, not through the matrix
+/// fixtures: this cell's value is that it reads as the caller's own mistake.
+#[test]
+fn correcting_blocking_on_an_already_raised_finding_is_refused() {
+    let (next, _) = universe(SubjectState::Held, IdKind::Finding);
+    assert!(
+        next.review.findings.iter().any(|held| !held.blocking),
+        "the run holds the finding, and holds it non-blocking"
+    );
+
+    let refused = Batch::of(vec![declared(r#"{"subject": "fnd-1", "blocking": true}"#)])
+        .validate(|subject| subject_state(&next, subject))
+        .expect_err("`blocking` is read only where the finding is raised");
+
+    assert_eq!(
+        refused,
+        Refusal::InertAtState {
+            subject: id("fnd-1"),
+            key: "blocking",
+            honoured_when: SubjectState::Absent,
+        }
+    );
+}
+
+/// Every state-axis row names a kind whose state `subject_state` can observe.
+///
+/// `subject_state` answers [`SubjectState::Absent`] unconditionally for the three
+/// kinds with no held state — a `cp-` subject is not a record the run holds, and
+/// the other two are not declaration subjects at all. That is the honest answer,
+/// and it would also silently disarm a state-axis row added at one of those
+/// kinds: the row would never fire, and no test above would notice.
+///
+/// So the two axes are pinned against each other here. [`seat_subject`] is the
+/// other half — it panics for a kind it cannot seat, which catches the same
+/// mistake from the fixture side.
+#[test]
+fn every_state_axis_row_names_a_kind_whose_state_this_function_observes() {
+    for (key, kind, _) in state_axis_rows() {
+        let (next, _) = universe(SubjectState::Held, kind);
+        assert_eq!(
+            subject_state(&next, &id(&format!("{}1", kind.prefix()))),
+            SubjectState::Held,
+            "`{key}`'s row is at a `{}` subject, whose held state `subject_state` \
+             must be able to see",
+            kind.prefix()
+        );
+        // And the same id reads `Absent` in the universe that does not seat it,
+        // so the answer is a reading of the snapshot rather than a constant.
+        let (unseated, _) = universe(SubjectState::Absent, kind);
+        assert_eq!(
+            subject_state(&unseated, &id(&format!("{}1", kind.prefix()))),
+            SubjectState::Absent,
+        );
     }
 }
 

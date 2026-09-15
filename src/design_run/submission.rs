@@ -18,7 +18,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::Stage;
 use super::attestation::{ActKind, AgentAct, ReviewDisposition, ReviewPolicy, Reviewer};
-use super::ids::{DesignId, IdKind};
+use super::ids::{DesignId, IdKind, SubjectState};
 use super::inquiry::{DispositionForm, InquiryLifecycle, Provenance};
 use super::refusal::Refusal;
 use super::traversal::{Authority, Posture};
@@ -592,9 +592,29 @@ pub(crate) enum KeyHome {
     At(IdKind),
 }
 
-/// One row of the correspondence: the key, where it is honoured, and the test
-/// for whether a declaration carries it.
-type WireKey = (&'static str, KeyHome, fn(&Declaration) -> bool);
+/// When a key is honoured at its home kind — the **state axis** (`DEC-246`).
+///
+/// Mirrors [`KeyHome`], which is the kind axis. One row, two columns, one rule
+/// read twice: a key means nothing at the wrong kind, and a key means nothing at
+/// the wrong state of the right kind. A key with no state sensitivity declares
+/// that explicitly rather than by omission, so a wire key cannot be added
+/// without answering both questions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KeyWhen {
+    /// Honoured whichever state the subject is in.
+    EitherState,
+    /// Honoured at exactly one subject state, and inert at the other.
+    Only(SubjectState),
+}
+
+/// One row of the correspondence: the key, the two axes it is honoured on, and
+/// the test for whether a declaration carries it.
+///
+/// Still a tuple with four elements rather than a named struct, and deliberately:
+/// every element names its own type at the call site — a `KEY_*` constant, a
+/// `KeyHome::`, a `KeyWhen::`, a closure — so position is not carrying the
+/// meaning here the way it would in a tuple of four strings.
+type WireKey = (&'static str, KeyHome, KeyWhen, fn(&Declaration) -> bool);
 
 /// The key the caller wanted, where their intent is unambiguous (SL-249 `EX-2`).
 ///
@@ -630,49 +650,96 @@ impl Declaration {
     /// therefore not a wire key — excluded by construction rather than by an
     /// exception list (`EX-3`).
     pub(crate) const WIRE_KEYS: [WireKey; 15] = [
-        (KEY_SUBJECT, KeyHome::Universal, |_| true),
-        (KEY_QUESTION, KeyHome::At(IdKind::Inquiry), |declared| {
-            !declared.question.is_omitted()
-        }),
-        (KEY_NEEDS, KeyHome::At(IdKind::Inquiry), |declared| {
-            !declared.needs.is_omitted()
-        }),
-        (KEY_PARENT, KeyHome::At(IdKind::Inquiry), |declared| {
-            !declared.parent.is_omitted()
-        }),
-        (KEY_PROVENANCE, KeyHome::At(IdKind::Inquiry), |declared| {
-            declared.provenance.is_some()
-        }),
-        (KEY_LIFECYCLE, KeyHome::At(IdKind::Inquiry), |declared| {
-            declared.lifecycle.is_some()
-        }),
-        (KEY_BODY, KeyHome::At(IdKind::Section), |declared| {
-            declared.body.is_some()
-        }),
-        (KEY_ATTESTS, KeyHome::At(IdKind::Attestation), |declared| {
-            declared.attests.is_some()
-        }),
-        (KEY_REVIEWER, KeyHome::At(IdKind::Attestation), |declared| {
-            declared.reviewer.is_some()
-        }),
-        (KEY_CONCERNS, KeyHome::At(IdKind::Finding), |declared| {
-            declared.concerns.is_some()
-        }),
-        (KEY_SUMMARY, KeyHome::At(IdKind::Finding), |declared| {
-            declared.summary.is_some()
-        }),
-        (KEY_BLOCKING, KeyHome::At(IdKind::Finding), |declared| {
-            declared.blocking.is_some()
-        }),
-        (KEY_RESOLUTION, KeyHome::At(IdKind::Finding), |declared| {
-            declared.resolution.is_some()
-        }),
-        (KEY_DISPOSES, KeyHome::At(IdKind::Checkpoint), |declared| {
-            declared.disposes.is_some()
-        }),
-        (KEY_DISPOSE, KeyHome::At(IdKind::Checkpoint), |declared| {
-            declared.dispose.is_some()
-        }),
+        (
+            KEY_SUBJECT,
+            KeyHome::Universal,
+            KeyWhen::EitherState,
+            |_| true,
+        ),
+        (
+            KEY_QUESTION,
+            KeyHome::At(IdKind::Inquiry),
+            KeyWhen::EitherState,
+            |declared| !declared.question.is_omitted(),
+        ),
+        (
+            KEY_NEEDS,
+            KeyHome::At(IdKind::Inquiry),
+            KeyWhen::EitherState,
+            |declared| !declared.needs.is_omitted(),
+        ),
+        (
+            KEY_PARENT,
+            KeyHome::At(IdKind::Inquiry),
+            KeyWhen::EitherState,
+            |declared| !declared.parent.is_omitted(),
+        ),
+        (
+            KEY_PROVENANCE,
+            KeyHome::At(IdKind::Inquiry),
+            KeyWhen::Only(SubjectState::Absent),
+            |declared| declared.provenance.is_some(),
+        ),
+        (
+            KEY_LIFECYCLE,
+            KeyHome::At(IdKind::Inquiry),
+            KeyWhen::EitherState,
+            |declared| declared.lifecycle.is_some(),
+        ),
+        (
+            KEY_BODY,
+            KeyHome::At(IdKind::Section),
+            KeyWhen::EitherState,
+            |declared| declared.body.is_some(),
+        ),
+        (
+            KEY_ATTESTS,
+            KeyHome::At(IdKind::Attestation),
+            KeyWhen::EitherState,
+            |declared| declared.attests.is_some(),
+        ),
+        (
+            KEY_REVIEWER,
+            KeyHome::At(IdKind::Attestation),
+            KeyWhen::EitherState,
+            |declared| declared.reviewer.is_some(),
+        ),
+        (
+            KEY_CONCERNS,
+            KeyHome::At(IdKind::Finding),
+            KeyWhen::Only(SubjectState::Absent),
+            |declared| declared.concerns.is_some(),
+        ),
+        (
+            KEY_SUMMARY,
+            KeyHome::At(IdKind::Finding),
+            KeyWhen::EitherState,
+            |declared| declared.summary.is_some(),
+        ),
+        (
+            KEY_BLOCKING,
+            KeyHome::At(IdKind::Finding),
+            KeyWhen::Only(SubjectState::Absent),
+            |declared| declared.blocking.is_some(),
+        ),
+        (
+            KEY_RESOLUTION,
+            KeyHome::At(IdKind::Finding),
+            KeyWhen::EitherState,
+            |declared| declared.resolution.is_some(),
+        ),
+        (
+            KEY_DISPOSES,
+            KeyHome::At(IdKind::Checkpoint),
+            KeyWhen::EitherState,
+            |declared| declared.disposes.is_some(),
+        ),
+        (
+            KEY_DISPOSE,
+            KeyHome::At(IdKind::Checkpoint),
+            KeyWhen::EitherState,
+            |declared| declared.dispose.is_some(),
+        ),
     ];
 
     /// The first key this declaration carries that is inert at its subject's
@@ -698,7 +765,7 @@ impl Declaration {
         }
         Declaration::WIRE_KEYS
             .iter()
-            .find_map(|&(key, home, carried)| match home {
+            .find_map(|&(key, home, _, carried)| match home {
                 KeyHome::At(honoured_by) if honoured_by != kind && carried(self) => {
                     Some(Refusal::InertKey {
                         subject: self.subject.clone(),
@@ -708,6 +775,44 @@ impl Declaration {
                     })
                 }
                 KeyHome::Universal | KeyHome::At(_) => None,
+            })
+    }
+
+    /// The first key this declaration carries that is inert in its subject's
+    /// **state**, as the refusal a caller should see (`DEC-246`, `ISS-327`).
+    ///
+    /// The state-axis sibling of [`Declaration::inert_key`] — the same table,
+    /// the same first-not-every rule, the same seam. Only the column differs.
+    ///
+    /// **Scoped to the key's home kind.** A key at the wrong kind is refused by
+    /// the kind axis, which runs first: a caller who spelled `blocking` on a
+    /// checkpoint has not made a state mistake, and answering them with one
+    /// would name the consequence instead of the cause.
+    ///
+    /// The state is an **input**, not a read. This module describes the wire;
+    /// whether the run holds a subject is a fact about the snapshot, which
+    /// [`super::run::subject_state`] owns and [`Batch::validate`] passes in. That
+    /// is what keeps the table pure data and the wire types ignorant of state.
+    pub(crate) fn inert_at_state(&self, state: SubjectState) -> Option<Refusal> {
+        let kind = self.subject.kind();
+        if !kind.declarable() {
+            return None;
+        }
+        Declaration::WIRE_KEYS
+            .iter()
+            .find_map(|&(key, home, when, carried)| match (home, when) {
+                (KeyHome::At(honoured_by), KeyWhen::Only(honoured_when))
+                    if honoured_by == kind && honoured_when != state && carried(self) =>
+                {
+                    Some(Refusal::InertAtState {
+                        subject: self.subject.clone(),
+                        key,
+                        honoured_when,
+                    })
+                }
+                (KeyHome::Universal | KeyHome::At(_), KeyWhen::EitherState | KeyWhen::Only(_)) => {
+                    None
+                }
             })
     }
 
@@ -1344,20 +1449,41 @@ impl Batch {
     /// - A **repeated subject**: two declarations about one subject in a batch
     ///   with no order is genuinely ambiguous, and picking last-wins would be
     ///   inventing an order the contract says does not exist.
-    /// - An **inert key** ([`Declaration::inert_key`], `ISS-318`): a key that
-    ///   means nothing at its subject's kind, which serde admits because
-    ///   `Declaration` is one flat struct and which nothing else would catch.
+    /// - An **inert key**, on either axis: one that means nothing at its
+    ///   subject's kind ([`Declaration::inert_key`], `ISS-318`), or one that
+    ///   means nothing in its subject's state
+    ///   ([`Declaration::inert_at_state`], `ISS-327`). Serde admits both,
+    ///   because `Declaration` is one flat struct and serde cannot see the
+    ///   snapshot at all.
     ///
-    /// The inert-key check runs first. A declaration repeated at the wrong
-    /// subject kind is two mistakes with one cause, and the key-level refusal
-    /// names the cause.
+    /// The inert checks run first, kind before state, and both before the
+    /// duplicate check. Each is the cause of the one after it: a declaration
+    /// repeated at the wrong subject kind is two mistakes with one cause, and a
+    /// key at the wrong state of the wrong kind is a state complaint about a
+    /// kind mistake.
+    ///
+    /// # Where the state fact comes from
+    ///
+    /// `state_of` is **injected, not read** (`EX-2`). Whether the run already
+    /// holds a subject is a property of the next snapshot, which this module has
+    /// no business knowing — it describes the wire. [`super::run`] owns the
+    /// snapshot, already calls this seam with it in scope, and supplies
+    /// [`super::run::subject_state`]. The alternative — this module importing
+    /// `DesignSnapshot` to answer its own question — would buy nothing and cost
+    /// the wire types their independence from run state.
     ///
     /// Returns the declarations keyed by subject, so iteration order is
     /// determined by the subjects present and not by how they were submitted.
-    pub(crate) fn validate(self) -> Result<BTreeMap<DesignId, Declaration>, Refusal> {
+    pub(crate) fn validate(
+        self,
+        state_of: impl Fn(&DesignId) -> SubjectState,
+    ) -> Result<BTreeMap<DesignId, Declaration>, Refusal> {
         let mut candidate = BTreeMap::new();
         for declaration in self.declarations {
             if let Some(inert) = declaration.inert_key() {
+                return Err(inert);
+            }
+            if let Some(inert) = declaration.inert_at_state(state_of(declaration.subject())) {
                 return Err(inert);
             }
             let subject = declaration.subject().clone();

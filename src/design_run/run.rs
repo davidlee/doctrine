@@ -39,7 +39,7 @@ use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm};
 use super::delegation::{Delegation, DelegationState, Proposal};
 use super::gate;
 use super::gate::{ActRule, Coverage, ObservedFact, ObservedFacts};
-use super::ids::{DesignId, Fingerprint, IdKind};
+use super::ids::{DesignId, Fingerprint, IdKind, SubjectState};
 use super::inquiry::{Disposition, InquiryLifecycle, InquiryNode, Provenance};
 use super::refusal::Refusal;
 use super::runbook::{Discharge, Runbook, RunbookKey, StepVerification};
@@ -365,7 +365,9 @@ pub(crate) fn apply(
             *declaration = declaration.clone().resolving(record);
         }
     }
-    for (_, declaration) in Batch::of(declarations).validate()? {
+    for (_, declaration) in
+        Batch::of(declarations).validate(|subject| subject_state(&next, subject))?
+    {
         pending.extend(declare(
             &mut next,
             &declaration,
@@ -1232,6 +1234,47 @@ fn delegation_row(
     let mut terms = vec![PayloadTerm::token(PayloadKey::Node, obligation.as_str())?];
     terms.extend(prose);
     Ok(Pending::about(event, id, terms))
+}
+
+/// Whether the run already holds `subject` — the state axis's one fact
+/// (`DEC-246`, `ISS-327`), read off the snapshot the batch is about to be
+/// applied to.
+///
+/// Homed here rather than in [`super::submission`] because this is where the
+/// knowledge is: each arm names the same collection [`declare`]'s corresponding
+/// arm searches to decide whether it takes its create path or its update path,
+/// and the state axis exists precisely to refuse a key the update path drops.
+/// A second reader of that correspondence, in a module that does not hold the
+/// snapshot, could only drift from it.
+///
+/// **Three kinds have no held state, and answer `Absent` rather than pretend.**
+/// A `cp-` subject is not a record the run holds — [`declare_checkpoint`] has no
+/// update branch, it resolves the node it disposes — and the other two are not
+/// declaration subjects at all ([`IdKind::declarable`]). `Absent` is the honest
+/// answer for a subject that cannot be held, but it would also silently disarm a
+/// state-axis row added at one of those kinds, so the table is pinned to the
+/// kinds this function can actually observe by
+/// `every_state_axis_row_names_a_kind_whose_state_this_function_observes`.
+pub(super) fn subject_state(next: &DesignSnapshot, subject: &DesignId) -> SubjectState {
+    let held = match subject.kind() {
+        IdKind::Inquiry => next.map.inquiry.get(subject).is_some(),
+        IdKind::Section => next.sections.find(subject).is_some(),
+        IdKind::Attestation => next
+            .review
+            .attestations
+            .iter()
+            .any(|held| held.id() == subject),
+        IdKind::Finding => next.review.findings.iter().any(|held| &held.id == subject),
+        IdKind::Checkpoint
+        | IdKind::Delegation
+        | IdKind::CheckpointAct
+        | IdKind::AgentDeclaration => false,
+    };
+    if held {
+        SubjectState::Held
+    } else {
+        SubjectState::Absent
+    }
 }
 
 /// Apply one subject-addressed declaration. What it means is derived from the
