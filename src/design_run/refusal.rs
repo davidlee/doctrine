@@ -671,11 +671,7 @@ impl fmt::Display for Refusal {
             } => write!(
                 f,
                 "unknown key `{key}` at `{at}`: {type_name} admits {}",
-                admitted
-                    .iter()
-                    .map(|admitted| format!("`{admitted}`"))
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                join(admitted.iter().map(|admitted| format!("`{admitted}`")))
             ),
             Refusal::IdTooLong { raw, limit } => write!(
                 f,
