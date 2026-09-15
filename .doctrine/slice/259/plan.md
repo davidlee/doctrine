@@ -207,6 +207,38 @@ itself — it asserts every contract row declares `UnknownKeys::Refused`, which 
 a claim about the table's own self-description, not about any payload. Criterion
 ids, `expects` prose and keywords are unchanged.
 
+`PHASE-04`'s mandates were **checked and kept**, which is the same discipline
+reaching the opposite answer. All three name `src/design_run/tests.rs`, and that
+is where the behaviour is observable: the kind-axis refusal's own suite lives
+there, and so does `I10`
+(`no_wire_key_is_accepted_and_ignored_at_any_subject_kind`), whose doc scopes the
+state axis out by name and hands it to `ISS-327`. The state axis is `I10`'s other
+cell, so it is pinned beside `I10` and reuses its fixtures rather than building a
+second universe. Two field edits were needed inside those mandates. `VT-1`'s
+keyword `PayloadKey` matched **nothing** — zero occurrences in the mandated file,
+and it names `change_log`'s enum rather than anything a state-axis test spells;
+since `verify-vt` is a raw-byte substring check, the mandate could only have
+passed by hardcoding an irrelevant string. It now names `Refusal::InertAtState`,
+the variant the refusal actually is. And `VT-3`'s mandated test name said
+`…_on_an_unraised_finding_…`, which reads as the subject the run does not hold —
+the state where `blocking` *is* honoured. It is now
+`correcting_blocking_on_an_already_raised_finding_is_refused`.
+
+`PHASE-04` also lost a cell at phase-planning time, and the cause is worth
+recording because it is a cross-leg interaction this plan's phase ordering
+created. `DEC-246` names four state-inert cells; `PHASE-01` closed one of them.
+Collapsing `declare_node` onto a single row-producing path over two priors — leg
+2's repair, aimed at `ISS-450`'s dropped `needs` edge — also made a `lifecycle`
+declared at node creation land and emit its row, which is the whole of the
+`lifecycle` cell. So leg 2 repaired a leg 3 defect as a side effect, and
+`PHASE-04`'s `EN-2`, `EX-1`, `VT-1` and `VT-2` were amended from four cells to
+three. The three survivors — `provenance`, `concerns`, `blocking` — share one
+polarity: each is honoured only where the run does not yet hold the subject. Re-
+refusing `lifecycle` to preserve the count would regress `PHASE-01` and turn a
+finding's direction into a defect facing the other way. `design.md` `sec-3`
+still states the four; reconciling the locked design against what the code now
+does is `/audit`'s, not this plan's.
+
 ## Notes
 
 `ChangeEvent::ordered` sorts an undeclared payload key to `usize::MAX` rather

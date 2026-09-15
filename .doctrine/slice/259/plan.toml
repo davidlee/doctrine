@@ -133,24 +133,25 @@ id        = "PHASE-04"
 name      = "The state axis"
 objective = """
 Leg 3, state axis (`DEC-246`): a key honoured in one subject state and silently \
-dropped in the other is refused. Four cells — `provenance` (honoured on create), \
-`lifecycle` (honoured on update), `concerns` and `blocking` (honoured when a \
-finding is raised). Closes `ISS-327`.
+dropped in the other is refused. THREE cells, not the four authored here — `provenance` \
+(honoured on create), `concerns` and `blocking` (honoured when a finding is \
+raised), each inert once the run holds the subject. `lifecycle` was the fourth \
+until `PHASE-01` made it honoured at creation too; see `EN-2`. Closes `ISS-327`.
 """
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-03 complete — the key axis refuses first, so the state axis is a second rule on the same admission surface rather than a rule plus an exception." },
-  { id = "EN-2", text = "Re-verified: the four cells are still the four cells — `provenance` (`submission.rs:138`), `lifecycle` (`:143`), `concerns` (`:164`), `blocking` (`:171`), named as constants at `:570-577` — and `:644-647` already inspects `provenance.is_some()` / `lifecycle.is_some()` on the kind axis, which is the surface the state axis extends. `Sparse::Omitted` still means persist and is still reachable by not sending the key." },
+  { id = "EN-2", text = "Re-verified: the four cells are still the four cells — `provenance` (`submission.rs:138`), `lifecycle` (`:143`), `concerns` (`:164`), `blocking` (`:171`), named as constants at `:570-577` — and `:644-647` already inspects `provenance.is_some()` / `lifecycle.is_some()` on the kind axis, which is the surface the state axis extends. `Sparse::Omitted` still means persist and is still reachable by not sending the key. **Amended at phase-plan, 2026-09-15: the four cells are THREE.** The constants run `:570-581` and the kind-axis closures `:644-650` (line numbers drifted, anchors live). But `PHASE-01` collapsed `declare_node` onto one row-producing path over two priors (`run.rs:1307-1400`), so a `lifecycle` declared at CREATION now lands and emits its row — pinned green at `run.rs:2613`, whose own doc calls it \"the other key the create branch dropped on the floor\". Leg 2 closed a leg 3 cell. Re-refusing it would regress `PHASE-01`. The surviving cells are `provenance`, `concerns` and `blocking`, all honoured only where the subject is ABSENT; enumerated against all fifteen wire keys per `sec-9` `R0`." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "All four state-inert cells are refused, naming the key and the subject state that makes it inert." },
+  { id = "EX-1", text = "All three state-inert cells are refused, naming the key and the subject state that makes it inert. THREE, not the four `DEC-246` names: `PHASE-01` closed the `lifecycle` cell (see `EN-2`), and a fourth refusal cannot be added without regressing it." },
   { id = "EX-2", text = "Admission asks whether the subject is already held, reading the next snapshot — the same rule as `SL-249`'s kind-axis table on a second axis, not a special case beside it." },
   { id = "EX-3", text = "`Declaration::WIRE_KEYS`' kind-axis table gains its state-axis counterpart in `submission.rs` (`sec-7`)." },
   { id = "EX-4", text = "A PRESENT value is never read as persistence. `Sparse::Omitted` remains the only way to persist; omission behaviour is unchanged." },
 ]
 verification = [
-  { id = "VT-1", expects = "Each of the four cells — `provenance` on update, `lifecycle` on create, `concerns` and `blocking` when no finding is raised — yields a typed refusal whose REASON is pinned. A refusal that fires for the wrong reason is a test passing for the wrong reason (`sec-8` leg 3).", test_file = "src/design_run/tests.rs", keywords = ["a_key_inert_at_the_subjects_state_is_refused", "PayloadKey"], waived = false },
-  { id = "VT-2", expects = "The control: the same four keys are HONOURED at the state that honours them, so the refusal has not been widened into a ban.", test_file = "src/design_run/tests.rs", keywords = ["the_same_keys_are_honoured_at_the_state_that_honours_them"], waived = false },
-  { id = "VT-3", expects = "`blocking` specifically — the flag the lock gate reads — is refused rather than silently discarded when the subject is not a raised finding. This is the cell that defeated the omission-persist alternative (`sec-3`).", test_file = "src/design_run/tests.rs", keywords = ["correcting_blocking_on_an_unraised_finding_is_refused"], waived = false },
+  { id = "VT-1", expects = "Each of the three surviving cells — `provenance` against a node the run already holds, `concerns` and `blocking` against a finding it already holds — yields a typed refusal whose REASON is pinned. The `lifecycle` cell is struck: `PHASE-01` made it honoured at creation (`EN-2`). A refusal that fires for the wrong reason is a test passing for the wrong reason (`sec-8` leg 3).", test_file = "src/design_run/tests.rs", keywords = ["a_key_inert_at_the_subjects_state_is_refused", "Refusal::InertAtState"], waived = false },
+  { id = "VT-2", expects = "The control: the same three keys are HONOURED at the state that honours them, so the refusal has not been widened into a ban. Three, per `EX-1` — `lifecycle` is now honoured at BOTH states and so is no longer a cell of this axis at all.", test_file = "src/design_run/tests.rs", keywords = ["the_same_keys_are_honoured_at_the_state_that_honours_them"], waived = false },
+  { id = "VT-3", expects = "`blocking` specifically — the flag the lock gate reads — is refused rather than silently discarded when the run ALREADY HOLDS the finding, which is the state `declare_finding`'s update branch drops it in. (Authored as \"when the subject is not a raised finding\"; corrected at phase-plan because that phrase reads as the not-yet-existing subject, which is the state where `blocking` IS honoured.) This is the cell that defeated the omission-persist alternative (`sec-3`).", test_file = "src/design_run/tests.rs", keywords = ["correcting_blocking_on_an_already_raised_finding_is_refused"], waived = false },
 ]
 specs        = []
 requirements = []

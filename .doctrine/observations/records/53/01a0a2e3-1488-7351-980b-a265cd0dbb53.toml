@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0a2e3-1488-7351-980b-a265cd0dbb53"
+recorded_at = "2026-09-15T02:26:26.056485959Z"
+kind = "friction"
+summary = "phase-plan: an earlier phase silently dissolved a later phase's exit criterion"
+detail = "SL-259 PHASE-04's EN-2/EX-1/VT-1 assert four state-inert cells (DEC-246). PHASE-01 (DEC-248, leg 2) collapsed declare_node onto one row-producing path, which made 'lifecycle at creation' honoured — closing one of the four. Nothing surfaced the cross-leg interaction: PHASE-01's plan entry never mentions leg 3, PHASE-04's EN-2 re-probe instruction names only the constants and the kind-axis table (both still live), and the cell count is only falsifiable by re-enumerating all fifteen wire keys against held/absent by hand. Cost: ~15 tool calls of code reading at phase-plan time to find it, and it would have been found as a red test mid-execution otherwise. A plan whose phases repair overlapping defects has no place to record 'PHASE-01 may close PHASE-04's cell 2'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
