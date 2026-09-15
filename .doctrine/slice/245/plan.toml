@@ -1,0 +1,233 @@
+# Implementation plan for SL-245 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-245"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "Bounded subprocess extraction"
+objective = """
+Move coverage_verify's bounded synchronous spawn down into a new leaf,
+src/subprocess.rs (design sec-5), and make coverage_verify::run_argv delegate to
+it. The helper gains what the render spawn needs: optional stdin fed on a
+detached, unjoined writer thread, and a bounded reap (kill, then try_wait for
+REAP_GRACE, never a blocking wait). coverage_verify's RunResult mapping and
+current_dir handling are unchanged; its suite is the behaviour-preservation proof.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-245 design locked (run dr-019fd12e…); plan approved" },
+  { id = "EN-2", text = "`doctrine check gate` green on the starting tree" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/subprocess.rs exists as a leaf with `Bounded { Completed { status, stdout, stderr }, TimedOut }`, `run_bounded(command, stdin, timeout) -> io::Result<Bounded>`, and named constants for the 50 ms poll interval and the 1 s reap grace (STD-001)" },
+  { id = "EX-2", text = "coverage_verify::run_argv delegates to subprocess::run_bounded; its local drain/reap mechanism is gone (no parallel implementation); Err/TimedOut → Unobtainable and Completed → Ran, exactly as before" },
+  { id = "EX-3", text = "The timeout path never calls a blocking wait: on expiry it kills, polls try_wait for at most REAP_GRACE, and returns TimedOut whether or not the child was reaped" },
+  { id = "EX-4", text = "The stdin writer thread is not joined; a BrokenPipe from a child that exits early is not surfaced as an error" },
+  { id = "EX-5", text = "`subprocess = \"leaf\"` registered in .doctrine/adr/001/layering.toml; the ADR-001 layering gate passes" },
+  { id = "EX-6", text = "`doctrine check gate` green (fmt, clippy zero warnings, tests)" },
+]
+verification = [
+  { id = "VT-1", expects = "a 1 MiB stdin to `sleep 30` under a 200 ms timeout returns TimedOut in under 5 s — the only test of the detached writer and the bounded reap (real spawn)", test_file = "src/subprocess.rs", keywords = ["fn run_bounded", "REAP_GRACE", "Bounded::TimedOut", "\"sleep\""], waived = false },
+  { id = "VT-2", expects = "the existing coverage_verify unit suite passes unchanged across the extraction", test_file = "src/coverage_verify.rs", keywords = ["subprocess::run_bounded", "RunResult::Unobtainable"], waived = false },
+  { id = "VT-3", expects = "the existing coverage verify e2e goldens pass unchanged", test_file = "tests/e2e_coverage_record_golden.rs", keywords = ["coverage_verify_prints_transition_and_audit_lines"], waived = false },
+  { id = "VA-1", expects = "diff review: coverage_verify.rs test module is byte-unchanged, and no drain/reap/try_wait loop remains outside subprocess.rs" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "graphviz leaf and dot single-sourcing"
+objective = """
+Add src/graphviz.rs (design sec-2, sec-5): DOT_PROGRAM, RENDER_TIMEOUT,
+RasterOutcome, the thin rasterise_png shell over subprocess::run_bounded, and the
+pure classify. Replace every `"dot"` program/tool literal in map_server (shell.rs,
+routes.rs, and the error.rs test assertions) with graphviz::DOT_PROGRAM, name
+routes.rs's 2 s probe budget DOT_VERSION_TIMEOUT, and add the reciprocal
+cross-reference comments between RealDotRenderer and rasterise_png (DEC-143).
+The `/health` JSON key "dot" stays a literal.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: subprocess::run_bounded available" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/graphviz.rs exists as a leaf with DOT_PROGRAM, RENDER_TIMEOUT (10 s), RasterOutcome { Png, ToolUnavailable, CommandFailed { status, stderr }, TimedOut, Io }, rasterise_png(dot, program, timeout) and a private pure classify" },
+  { id = "EX-2", text = "No `\"dot\"` program or tool literal remains in src/map_server/{shell,routes,error}.rs other than the /health wire key; DOT_TIMEOUT stays local to shell.rs" },
+  { id = "EX-3", text = "routes.rs's dot -V budget is a named DOT_VERSION_TIMEOUT" },
+  { id = "EX-4", text = "RealDotRenderer and rasterise_png each carry a comment naming the other as its async/sync counterpart" },
+  { id = "EX-5", text = "`graphviz = \"leaf\"` registered in layering.toml; map_server → graphviz is a downward edge; layering gate passes" },
+  { id = "EX-6", text = "`doctrine check gate` green" },
+]
+verification = [
+  { id = "VT-1", expects = "pure classify over synthetic results: NotFound → ToolUnavailable; other io::Error → Io; TimedOut → TimedOut; success → Png(stdout); exit 1 → CommandFailed { status: Some(1), stderr } — statuses via cfg(unix) ExitStatusExt::from_raw (0, 1 << 8)", test_file = "src/graphviz.rs", keywords = ["fn classify", "ExitStatusExt::from_raw", "RasterOutcome::ToolUnavailable", "RasterOutcome::CommandFailed", "RasterOutcome::Io"], waived = false },
+  { id = "VT-2", expects = "rasterise_png with a nonexistent program path → ToolUnavailable (real spawn, deterministic)", test_file = "src/graphviz.rs", keywords = ["fn rasterise_png", "RENDER_TIMEOUT"], waived = false },
+  { id = "VT-3", expects = "map_server error and shell tests pass with only the literal-to-constant substitution", test_file = "src/map_server/error.rs", keywords = ["graphviz::DOT_PROGRAM"], waived = false },
+  { id = "VT-4", expects = "routes.rs uses the named probe budget and the shared program name", test_file = "src/map_server/routes.rs", keywords = ["DOT_VERSION_TIMEOUT", "graphviz::DOT_PROGRAM"], waived = false },
+  { id = "VA-1", expects = "grep sweep: `\"dot\"` in src/map_server appears only as the /health JSON key" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "tty render endpoint and raw-mode query"
+objective = """
+Extend src/tty.rs with the single verified terminal endpoint (design sec-2,
+DEC-259): RenderTarget, RenderTerminal, WindowGeometry, the thin
+open_render_terminal shell (isatty stdout; open /dev/tty read-write and blocking;
+fstat both; tcgetwinsize on the tty), the pure endpoint decision, and
+RenderTerminal::query built on a pure, closure-injected bracket. query enters raw
+mode with termios timed reads (VMIN=0, VTIME=1), writes the request, reads in a
+loop until complete or the deadline, and restores explicitly with a checked
+error that beats the body's result; an unwind-only drop guard is disarmed after
+the explicit restore. rustix gains the `termios` feature only; no unsafe, no
+thread, no readiness syscall.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked; no code dependency on PHASE-01 or PHASE-02, so it may run in parallel with them" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "tty.rs exposes RenderTarget { NotTerminal, NotControllingTerminal, Terminal(RenderTerminal) }, RenderTerminal { tty, window }, WindowGeometry { columns, rows, pixel_width, pixel_height }, open_render_terminal, RenderTerminal::query, QueryError { Io, Restore }" },
+  { id = "EX-2", text = "Pure `endpoint(stdout_is_tty, stdout_device, tty_device) -> Endpoint { NotTerminal, NotControlling, Same }` decides topology over st_rdev values; a failed /dev/tty open maps to NotControlling" },
+  { id = "EX-3", text = "Pure `bracket(enter, body, exit)`: exit runs whenever enter succeeded; an exit error beats the body result (QueryError::Restore); a body error is QueryError::Io; an enter error runs neither body nor exit" },
+  { id = "EX-4", text = "query sets VMIN=0 and VTIME=1 (named constants), opens the tty without O_NONBLOCK, and returns Ok(None) at the deadline; all termios, winsize and I/O go through the one tty fd" },
+  { id = "EX-5", text = "Cargo.toml rustix features are exactly [\"fs\", \"termios\"]; no `event` feature; the workspace unsafe budget is unchanged" },
+  { id = "EX-6", text = "stdout_terminal_width and the existing color helpers are unchanged; tty stays out=0 to the crate in layering.toml" },
+  { id = "EX-7", text = "`doctrine check gate` green" },
+]
+verification = [
+  { id = "VT-1", expects = "endpoint decision: stdout not a tty → NotTerminal; no controlling terminal → NotControlling; different device ids → NotControlling; equal ids → Same", test_file = "src/tty.rs", keywords = ["fn endpoint", "Endpoint::NotControlling", "Endpoint::Same"], waived = false },
+  { id = "VT-2", expects = "bracket restores on every path: body ok → exit runs, result returned; body error → exit runs, Io; exit error after body ok or body error → Restore wins; enter error → neither body nor exit runs", test_file = "src/tty.rs", keywords = ["fn bracket", "QueryError::Restore", "QueryError::Io"], waived = false },
+  { id = "VT-3", expects = "timed-read constants and termios wiring are present in the query path", test_file = "src/tty.rs", keywords = ["SpecialCodeIndex::VMIN", "SpecialCodeIndex::VTIME", "fn open_render_terminal"], waived = false },
+  { id = "VA-1", expects = "code review of RenderTerminal::query: every return path reaches the checked restore; the drop guard is disarmed after it; no O_NONBLOCK; no poll/select; no unsafe" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-04"
+name      = "kitty protocol leaf"
+objective = """
+Add src/kitty.rs, a pure leaf (design sec-2, sec-4): the SUPPORT_QUERY bytes
+(a=q id 31 1×1 RGB query, then DA1), the order-aware classify_support_reply,
+png_size from IHDR, cell_geometry from tty::WindowGeometry, the DEC-256 place
+rule (u64 arithmetic, rounding up, columns−1 bound floored at 1, rows ≥ 1,
+saturating), and encode_png (a=T,f=100,t=d,q=2,C=1,c,r; standard padded base64
+chunked at 4096; continuations carry only m and q; rows newlines appended; one
+allocation). Every protocol literal is a named constant (STD-001).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: tty::WindowGeometry exists" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "kitty.rs exposes SUPPORT_QUERY, SupportReply { Incomplete, Supported, Unsupported }, classify_support_reply, PngSize, png_size, CellGeometry, cell_geometry, Placement, place, encode_png" },
+  { id = "EX-2", text = "classify_support_reply walks complete frames in arrival order; the first graphics reply for i=31 or DA1 reply decides; other-id graphics replies and noise are skipped" },
+  { id = "EX-3", text = "place reproduces every row of design sec-4's placement table" },
+  { id = "EX-4", text = "kitty imports only tty::WindowGeometry from the crate; `kitty = \"leaf\"` registered in layering.toml; layering gate passes" },
+  { id = "EX-5", text = "`doctrine check gate` green" },
+]
+verification = [
+  { id = "VT-1", expects = "single-chunk payload encodes to one escape: exact bytes `a=T,f=100,t=d,q=2,C=1,c=…,r=…,m=0`, base64, terminator, then r newlines", test_file = "src/kitty.rs", keywords = ["fn encode_png", "a=T,f=100,t=d,q=2,C=1"], waived = false },
+  { id = "VT-2", expects = "multi-chunk payload over vec![0; 5000]: non-final chunks exactly 4096 bytes with m=1; continuations carry only m and q; last has m=0; concatenated payloads decode to the input", test_file = "src/kitty.rs", keywords = ["vec![0; 5000]", "4096", "m=1,q=2"], waived = false },
+  { id = "VT-3", expects = "png_size reads width and height from a hand-built 24-byte IHDR header; None for short input, bad signature, non-IHDR first chunk", test_file = "src/kitty.rs", keywords = ["fn png_size", "IHDR"], waived = false },
+  { id = "VT-4", expects = "cell_geometry: any zero field or zero quotient → None; otherwise integer cell size", test_file = "src/kitty.rs", keywords = ["fn cell_geometry"], waived = false },
+  { id = "VT-5", expects = "placement table: one case per design sec-4 row — small (30×10), exactly fits (199×20), wide (199×25), tall (40×150), one-column clamp (1×1)", test_file = "src/kitty.rs", keywords = ["fn place", "199", "150"], waived = false },
+  { id = "VT-6", expects = "support reply classifier: graphics then DA1 → Supported; graphics with error status → Supported; DA1 then graphics → Unsupported; DA1 alone → Unsupported; other-id graphics then DA1 → Unsupported; noise skipped; empty, partial, and a frame split at every byte boundary → Incomplete until complete", test_file = "src/kitty.rs", keywords = ["fn classify_support_reply", "SupportReply::Incomplete", "SupportReply::Unsupported", "SupportReply::Supported"], waived = false },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-05"
+name      = "terminal_image and doctrine graph -X"
+objective = """
+Add src/terminal_image.rs (design sec-2, sec-3): RenderRefusal with Display
+messages as named constants, the pure check functions over probe results,
+prepare (format → controlling terminal → pixel size → support probe, cheapest
+first, returning CellGeometry) and render_dot (rasterise → png_size → place →
+encode into one buffer). Wire `doctrine graph`: `render: bool` with
+`#[arg(short = 'X', long)]` on the Graph variant, passed through dispatch, and
+run_graph's prepare-before-root-lookup, single write_all shell (DEC-253,
+DEC-254). build_graph_output is untouched. This phase proves the seam end to end
+and carries the first human acceptance so DEC-256's provisional placement is
+judged before the second verb is wired.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02, PHASE-03 and PHASE-04 complete" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "terminal_image.rs exposes RenderRefusal { FormatNotDot, NotTerminal, NotControllingTerminal, Unsupported, Unconfirmed, NoPixelSize }, prepare(format, is_dot) -> anyhow::Result<CellGeometry>, render_dot(dot, cell) -> anyhow::Result<Vec<u8>>; every message in design sec-3's table is a named constant naming the flag and its fix" },
+  { id = "EX-2", text = "prepare runs the checks in design order and stops at the first refusal; QueryError::Io and ::Restore map to their own messages; the probe uses a 2 s named deadline" },
+  { id = "EX-3", text = "render_dot maps each RasterOutcome to its sec-3 message and refuses a non-PNG payload; the image bytes and trailing newlines are one buffer" },
+  { id = "EX-4", text = "`doctrine graph … -X` exists; without -X every graph path is byte-identical (existing graph tests unchanged); run_graph calls prepare before crate::root::find" },
+  { id = "EX-5", text = "`terminal_image = \"leaf\"` registered in layering.toml; graph → terminal_image is downward; layering gate passes" },
+  { id = "EX-6", text = "`doctrine check gate` green" },
+]
+verification = [
+  { id = "VT-1", expects = "check order and arms over synthetic probe results: non-DOT beats everything; not-a-terminal and not-controlling beat pixel size; zero pixel size → NoPixelSize; each SupportReply and each QueryError maps to its refusal or to the geometry", test_file = "src/terminal_image.rs", keywords = ["RenderRefusal::FormatNotDot", "RenderRefusal::NoPixelSize", "RenderRefusal::Unconfirmed", "fn prepare"], waived = false },
+  { id = "VT-2", expects = "each refusal message contains the flag and its remedy (substring, not exact text)", test_file = "src/terminal_image.rs", keywords = ["Display for RenderRefusal", "drop -X"], waived = false },
+  { id = "VT-3", expects = "e2e: `graph --format json -X` from a working directory outside any doctrine project exits non-zero, stdout empty, stderr carries the format message (proves prepare runs before the root lookup)", test_file = "tests/e2e_render_guard.rs", keywords = ["doctrine_bin", "--format", "json", "-X"], waived = false },
+  { id = "VA-1", expects = "diff review: build_graph_output unchanged; no escape byte can reach stdout on any refusal path; one write_all" },
+  { id = "VH-1", expects = "ghostty, landed binary: `doctrine graph <small focus> --depth 1 -X` — image at native size, legible; prompt returns directly below; no stray reply text in the shell input (design sec-8 VH step 1)" },
+  { id = "VH-2", expects = "ghostty: `doctrine graph -X`, whole corpus — scaled to one column short of the window, not clipped; tall output scrolls cleanly; judged on HiDPI too (VH step 2; decides DEC-256)" },
+  { id = "VH-3", expects = "`doctrine graph <focus> -X | cat` refused with the not-a-terminal message; no escape bytes (VH step 4)" },
+  { id = "VH-4", expects = "inside tmux, `doctrine graph <focus> -X` refused with the unsupported message (VH step 5)" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-06"
+name      = "concept-map export -X"
+objective = """
+Wire `doctrine concept-map export` (design sec-6, DEC-258): `format` becomes
+Option<ExportFormat> with required_unless_present = "render"; add the -X flag;
+the dispatch arm resolves format.unwrap_or(ExportFormat::Dot); ExportFormat gains
+Display; run_export takes `render` and follows run_graph's prepare-then-write
+shape. Complete the e2e wiring tests and the remaining human acceptance.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 complete, including its VH acceptance (DEC-256 placement confirmed or amended)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`concept-map export <id> -X` works with no --format; `--format mermaid -X` is refused as FormatNotDot; without -X, export is byte-identical and a missing --format still fails at clap" },
+  { id = "EX-2", text = "ExportFormat implements Display; run_export calls prepare before the root lookup" },
+  { id = "EX-3", text = "`doctrine check gate` green" },
+]
+verification = [
+  { id = "VT-1", expects = "e2e: `concept-map export <id> --format mermaid -X` exits non-zero, stdout empty, stderr has the format message", test_file = "tests/e2e_render_guard.rs", keywords = ["concept-map", "export", "mermaid"], waived = false },
+  { id = "VT-2", expects = "e2e: `concept-map export <id> -X`, no --format, off a terminal → the not-a-terminal message, not clap's missing-argument error (proves the relaxed rule and the live stdout check)", test_file = "tests/e2e_render_guard.rs", keywords = ["concept-map", "export", "terminal"], waived = false },
+  { id = "VT-3", expects = "existing concept_map export tests pass unchanged", test_file = "src/concept_map.rs", keywords = ["required_unless_present = \"render\"", "Display for ExportFormat"], waived = false },
+  { id = "VH-1", expects = "ghostty: `doctrine concept-map export <id> -X` renders with no --format (design sec-8 VH step 3)" },
+  { id = "VH-2", expects = "optional, when a macOS host is available: PHASE-05 VH-1 again in kitty or ghostty on macOS — the image appears, confirming timed reads on macOS /dev/tty (VH step 6; waive with reason if no host)" },
+]
+specs        = []
+requirements = []
