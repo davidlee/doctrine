@@ -1,0 +1,47 @@
+memory_uid = "mem_01a0a2f731d17fe1bac1cabdee6f7a67"
+memory_key = "mem.pattern.doctrine.earlier-phase-may-close-a-later-phases-cell"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "An earlier phase can close a later phase's criterion"
+summary = "A plan's phases can repair overlapping defects; re-enumerate a later phase's cell count at phase-plan rather than trusting its authored EN."
+created = "2026-09-15"
+updated = "2026-09-15"
+
+[scope]
+paths = []
+globs = [".doctrine/slice/*/plan.toml"]
+commands = []
+tags = ["phase-plan", "plan", "criteria", "doctrine"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "0af4e048c400a7bf2bb3e2545625910d4e473e41"
+ref_name = "refs/heads/edge"
+checkout_state_id = "691f97636470ececb296bb8b692c4118773f719eca86fe49c776a1e132e02686"
+base_commit = "6b7bc165f0a7edb25eada5350c1d6eee4b998abd"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-259"
+
