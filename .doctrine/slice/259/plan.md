@@ -193,6 +193,20 @@ replacement precedent already live in `run.rs`'s own `mod tests`. Homing them
 elsewhere would have meant a second copy of that harness. The criterion ids and
 their keywords are unchanged.
 
+`PHASE-03`'s mandates were retargeted at phase-planning time on the same rule,
+running the other way. Four of the five named
+`src/design_run/payload_contract.rs`, which would have sited a value-judging
+walk inside the largest production module in `design_run` (4015 lines) and the
+one whose own doc calls it a **describing** module that does nothing to a run —
+letting a test mandate choose the module layout. `VT-1`, `VT-2`, `VT-3` and
+`VT-5` now name `src/design_run/contract_check.rs`: the contract *applied* to a
+value, a leaf sibling that reads `payload_contract`'s `pub(super)` placement
+table rather than restating it, exactly as `src/design_run/tests.rs` already
+does. `VT-4` stays on `payload_contract.rs` and the split is the argument for
+itself — it asserts every contract row declares `UnknownKeys::Refused`, which is
+a claim about the table's own self-description, not about any payload. Criterion
+ids, `expects` prose and keywords are unchanged.
+
 ## Notes
 
 `ChangeEvent::ordered` sorts an undeclared payload key to `usize::MAX` rather
