@@ -81,6 +81,41 @@ selector = "install/design-payload-contract.md"
 intent = "design-target"
 note = "SL-259 PHASE-03 EX-3: the published contract is a deliverable of the flip — it is what tells every installed client whether a misspelt key is refused"
 
+[[selector]]
+selector = "src/design_run/fixture.rs"
+intent = "design-target"
+note = "SL-259 RV-366 F-4: deliberate change that sec-7 as locked did not name; declared at reconcile so conformance reads the work rather than drift"
+
+[[selector]]
+selector = "src/design_run/gate.rs"
+intent = "design-target"
+note = "SL-259 RV-366 F-4: deliberate change that sec-7 as locked did not name; declared at reconcile so conformance reads the work rather than drift"
+
+[[selector]]
+selector = "src/design_run/ids.rs"
+intent = "design-target"
+note = "SL-259 RV-366 F-4: deliberate change that sec-7 as locked did not name; declared at reconcile so conformance reads the work rather than drift"
+
+[[selector]]
+selector = "src/design_run/render/change_row.rs"
+intent = "design-target"
+note = "SL-259 RV-366 F-4: deliberate change that sec-7 as locked did not name; declared at reconcile so conformance reads the work rather than drift"
+
+[[selector]]
+selector = "src/design_run/tests.rs"
+intent = "design-target"
+note = "SL-259 RV-366 F-4: deliberate change that sec-7 as locked did not name; declared at reconcile so conformance reads the work rather than drift"
+
+[[selector]]
+selector = "tests/e2e_design_review.rs"
+intent = "design-target"
+note = "SL-259 RV-366 F-4: deliberate change that sec-7 as locked did not name; declared at reconcile so conformance reads the work rather than drift"
+
+[[selector]]
+selector = "tests/e2e_design_state.rs"
+intent = "design-target"
+note = "SL-259 RV-366 F-4: deliberate change that sec-7 as locked did not name; declared at reconcile so conformance reads the work rather than drift"
+
 [[relation]]
 label = "governed_by"
 target = "STD-003"

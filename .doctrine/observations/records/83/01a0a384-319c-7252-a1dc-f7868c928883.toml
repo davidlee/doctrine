@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0a384-319c-7252-a1dc-f7868c928883"
+recorded_at = "2026-09-15T05:22:24.796126371Z"
+kind = "friction"
+summary = "/reconcile: the audit brief named a verb whose enum does not admit the state it asked for"
+detail = "RV-366's reconciliation brief instructed 'doctrine knowledge settle DEC-252 — proposed to accepted'. knowledge settle's <STATE> enum is answered|validated|invalidated|waived (resolving states); a decision's proposed->accepted is knowledge status, and the facet fields need knowledge edit decision. Cost: three --help round-trips at reconcile to discover the brief's named verb was wrong. The brief's other named verb (slice selector add) was correct and the skill told me to confirm its flags, which I did; the knowledge verb carried no such hedge. Generalises: an audit writing a brief names verbs from recall, and /reconcile is where that recall is spent."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -147,9 +147,17 @@ not name `crate::` (`mem.pattern.design-run.leaf-rule-binds-tests`).
 ### The state axis
 
 `ISS-327` is the same defect rotated: a key honoured in one subject *state* and
-dropped in the other. Four cells — `provenance` (honoured on create), `lifecycle`
-(honoured on update), `concerns` and `blocking` (honoured when a finding is
-raised). `DEC-246` refuses all four.
+dropped in the other. Four cells were named — `provenance` (honoured on create),
+`lifecycle` (honoured on update), `concerns` and `blocking` (honoured when a
+finding is raised) — and `DEC-246`'s ruling covers the class they belong to.
+
+**Three landed.** `PHASE-01` closed the `lifecycle` cell three phases early, and
+from the other direction: collapsing `declare_node` onto one row-producing path
+over two priors made a `lifecycle` declared at *creation* land and emit its row,
+so there is nothing inert left there to refuse. Leg 2 reached the cell before
+leg 3 did, and re-refusing it to match a four-cell count would regress
+`PHASE-01`. `plan.toml` carries the correction (`PHASE-04` `EN-2`/`EX-1`). The
+ruling is unchanged; only its cell count moved.
 
 The alternative was to define the drop as omission-persist. It does not survive
 `blocking`: that is the flag the lock gate reads, so a caller correcting a
@@ -299,9 +307,21 @@ disclose an undifferentiated "unreadable", and this section's own argument —
 that the fallback covers four distinct failures — is what makes an
 undifferentiated disclosure insufficient. Classify at the point of failure.
 
-`ChangeEvent` is not touched. It stays closed, `Copy`, and const-provable, and
-every existing pin holds unchanged — the behaviour-preservation gate satisfied
-by construction rather than by re-proving.
+**The `ChangeEvent` *type* is not touched**, which is what siting the opacity at
+the row depends on: its variant set stays closed, it stays `Copy`, `const fn
+as_str(self) -> &'static str` survives, both `const _: ()` proofs stay intact
+(`widest(&READABLE) <= DESIGN_EVENT_NAME_BYTES` and `is_subset(&EMITTABLE,
+&READABLE)`), and no `Opaque` variant is added.
+
+Two things around it did move, and the claim is qualified by axis rather than
+struck. Its **impl** gained a fallible `shaped()` at `PHASE-05` — `ordered`
+renamed and returning `Result<Vec<PayloadTerm>, Refusal>`, absorbing the
+declared-kind check into the ordering call. And `PHASE-02`'s change to `rows`'
+element type forced **two** pre-existing `snapshot.rs` pins to re-pattern from
+`[row]` to `[StoredRow::Read(row)]` — accessor-only edits that *tighten* the
+pins, since they now additionally assert the row reads. So the
+behaviour-preservation gate (`PHASE-02` `VA-1`) is **held** in substance; it is
+not satisfied by the stronger literal claim this paragraph used to make.
 
 ### Why not an `Opaque(String)` variant
 
@@ -375,13 +395,28 @@ where both passes refuse identically.
 
 An earlier draft asserted they do not: that since the passes differ in the
 `Resolution` handed in, a refusal predicated on a resolved id clears pass 1 and
-fails pass 2, orphaning the record. **That assertion has no witness, and the
-code is built to deny it.** Pass 1 stands in a provisional value *of the real
-shape* for every id the mints will claim, and says so — `design.rs:1688-1701`,
-D2 — precisely so the candidate validates against realistic values. The only
-value-dependent predicate on a resolved record is the `DESIGN_ID_BYTES` bound at
-`run.rs:1589-1596`, and every pass-2 value is a canonical ref of at most nine
-bytes against a limit of 32. No reachable instance was found (`RV-365` `F-2`).
+fails pass 2, orphaning the record. **On that axis — pass 1 against pass 2 —
+the assertion has no witness, and the code is built to deny it.** Pass 1 stands
+in a provisional value *of the real shape* for every id the mints will claim,
+and says so — `design.rs:1688-1701`, D2 — precisely so the candidate validates
+against realistic values. The only value-dependent predicate on a resolved
+record is the `DESIGN_ID_BYTES` bound at `run.rs:1589-1596`, and every pass-2
+value is a canonical ref of at most nine bytes against a limit of 32. No
+reachable instance was found (`RV-365` `F-2`).
+
+**A second axis had one, and this design never examined it.** The paragraph
+above is about the pass-1/pass-2 differential; the *mint loop* is a separate
+place the same promise can break, and `PHASE-06` `F-1` reproduced a witness
+there. `execute_mint` runs once per plan to completion, and its step 1 carried
+`SL-249` `D8`'s retry guard — so a two-checkpoint payload whose **second** plan
+trips that guard materialises the **first** plan's record and then refuses. Not
+a `SPEC-029` breach (the spec promises the run does not advance, not that
+nothing was written), but exactly what `DEC-250` exists to prevent, and real
+rather than principled. The repair is `refuse_unresumable_mints`, which asks
+the guard of the whole batch ahead of the loop, leaving `execute_mint`'s step 1
+to read the intent only to route steps 2-5. No fixture in the tree declared two
+`cp-` subjects in one `declare` array, which is why the design could not see it
+(`PHASE-06` `F-2`).
 
 This design will not close that gap with a plausible story, for the same reason
 it refuses to close `ISS-361` with one. So `DEC-250` is restated at the altitude
@@ -395,6 +430,14 @@ one. A guarantee that survives only while nobody adds a value-dependent check to
 pass 2 is not a guarantee; it is a coincidence with good manners. The hoist is
 cheap, it is defensible as hygiene alone, and it removes the need for anyone to
 re-derive this argument the next time a predicate is added.
+
+`PHASE-06` `F-3` went one step further than the hoist and closed the
+pass-1/pass-2 axis **structurally**, so it no longer rests on the observation
+this section made: `resolution_of` is now the single expression both passes'
+key sets are built through, and `widest_canonical_id` is a `const` proof over
+the whole `KINDS` table — `gate.rs`'s `widest_condition` idiom — in place of
+the byte-counting-in-prose above. The differential is closed by construction
+rather than by the accident the argument had to lean on.
 
 What the hoist does **not** do is make leg 1 absolute, and this is where the
 carve-out earns its place honestly. `recheck_watermark_before_write` reads state
@@ -437,11 +480,28 @@ The design targets, by the change each carries.
 | `src/design_run/snapshot.rs` | The ordered-try deserialisation for `StoredRow`, and the legacy-fragment compat pins. |
 | `src/design_run/run.rs` | `declare_node`'s create branch diffs against an empty prior instead of returning early; `live_acts` / `invalidation_rows` stop carrying the claim they cannot keep (`DEC-248`). |
 | `src/design_run/snapshot.rs` (acts) | **Both** retain-by-kind sites emit their replacement row — `CheckpointActGroup::record` and `AgentDeclarationGroup::record` (`:387-390`). One store repaired and the other left is the instance-by-instance fix this design rejects (`RV-365` `F-1`). |
-| `src/design_run/render/envelope.rs` | The one production consumer of the log, via `since()` at `:1071` — no production code outside `ChangeLog` touches `.rows` (`RV-365` `F-6`). Gains the degraded-row disclosure, carrying `RawRow.why` (`STD-003`). |
-| `src/commands/design.rs` | `apply`'s check ordering — hoisting what can be hoisted ahead of the mint loop (`DEC-250`), as hygiene that makes the two-pass doc's claim true by construction. No reachable differential refusal is being repaired; see `sec-6`. |
+| `src/design_run/render/envelope.rs` | The one production consumer of the log, via `since()` at `:1071` — no production code outside `ChangeLog` touches `.rows` (`RV-365` `F-6`). Matches on `StoredRow`'s two arms and routes the unreadable one to the disclosure. |
+| `src/design_run/render/change_row.rs` | **Where the `STD-003` disclosure actually sits** — `render_unreadable` keeps the five-column shape and carries `RawRow.why` rather than re-deriving it, under its own `const _: ()` width proof for the `unreadable` marker. (`sec-5` and an earlier draft of this table attributed it to `envelope.rs`.) |
+| `src/design_run/contract_check.rs` | **New.** Leg 3's key walk, which runs ahead of deserialisation over the whole payload closure. It landed as a **leaf sibling** rather than inside `payload_contract` as this table first assumed: `ADR-001`'s layering is what put it here (`PHASE-03` `EX-7`/`EX-8`). |
+| `src/design_run/refusal.rs` | `Refusal::UnknownPayloadKey`, `InertAtState` and `UndeclaredTerm` — the typed refusals legs 3's three axes render through. |
+| `src/design_run/mod.rs` | The `contract_check` module declaration. |
+| `src/design_run/ids.rs` | `SubjectState` (`Absent` / `Held`) homed beside `IdKind`, because they are the two closed vocabularies a declaration's subject is classified on and the two columns of one table (`DEC-246`). |
+| `src/design_run/gate.rs` | `join` widened to `pub(super)` so the new refusals render their lists through the one comma-separated spelling rather than a twelfth (`STD-001`). |
+| `src/design_run/fixture.rs` | `declared()` — a declaration built through serde rather than through builders, because the keys under test are the *wire's* and half have no Rust constructor. |
+| `install/design-payload-contract.md` | The **published** contract, a deliverable of `PHASE-03` `EX-3`: `unknown-keys` flips from silently-dropped to refused for every installed client. Pinned to the render by a golden test so it cannot drift from the code that enforces it. |
+| `src/commands/design.rs` | `apply`'s check ordering — hoisting what can be hoisted ahead of the mint loop (`DEC-250`), as hygiene that makes the two-pass doc's claim true by construction. Concretely: `refuse_unresumable_mints` asking `SL-249` `D8`'s retry guard of the whole batch, `resolution_of` as the one expression both passes' key sets are built through, `widest_canonical_id` as a `const` proof over `KINDS`, and a rewritten module doc. No differential refusal between the passes is being repaired; the mint-loop witness is (see `sec-6`). |
 
 Three of these are the same class of change reaching three files, which is the
 point: the sections above are organised by class because the fixes are.
+
+Eight rows here — `change_row.rs` through `design-payload-contract.md` — were
+added at reconcile, and the `commands/design.rs` row widened (`RV-366` `F-3`).
+The table as locked named seven paths; thirteen changed. None of the additions
+is scope creep — each is where a leg's stated commitment actually landed — but a
+design's own statement of what it touches is not allowed to under-describe the
+slice by eight rows, and `sec-9` `R0` predicted exactly this class. The selector registry,
+which `doctrine slice conformance` reads, is the load-bearing half of the same
+repair (`RV-366` `F-4`); this table is its human mirror.
 
 
 <!-- doctrine:section sec-8 -->
@@ -457,11 +517,17 @@ non-occurrence. A test asserting the window cannot happen would be asserting
 something `SPEC-029` does not promise.
 
 What is **not** pinned here, deliberately: a submission that clears pass 1 and
-fails pass 2. `sec-6` records that no such instance is reachable, so a test
-would have to manufacture one, and a pin over a manufactured predicate proves
-only that the manufacture worked. The hoist is verified structurally instead —
-every check that can run ahead of the mint loop does — which is the claim
-`DEC-250` actually makes (`RV-365` `F-2`).
+fails pass 2. `sec-6` records that no such instance is reachable **on that
+axis**, so a test would have to manufacture one, and a pin over a manufactured
+predicate proves only that the manufacture worked. The hoist is verified
+structurally instead — every check that can run ahead of the mint loop does —
+which is the claim `DEC-250` actually makes (`RV-365` `F-2`), and `PHASE-06`
+`F-3` closed the axis by construction rather than by observation.
+
+The **mint-loop** axis is a different matter and is pinned, because it had a
+witness: a multi-plan payload whose second plan trips `SL-249` `D8`'s retry
+guard is refused by `refuse_unresumable_mints` ahead of the loop, with nothing
+materialised (`sec-6`).
 
 **Leg 2.** A same-kind act replacement emits `ActInvalidated` — pinned **once
 per act store**, checkpoint and agent declaration, because a single

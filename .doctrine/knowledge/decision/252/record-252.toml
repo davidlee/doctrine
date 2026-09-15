@@ -5,19 +5,26 @@ id = 252
 slug = "the-contract-walk-supersedes-serdes-message-for-the-three-attributed-types"
 title = "The contract walk supersedes serde's message for the three attributed types"
 record_kind = "decision"
-status = "proposed"
+status = "accepted"
 created = "2026-09-15"
 updated = "2026-09-15"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-context      = ""
-choice       = ""
-alternatives = []
-rationale    = ""
-consequences = []
-decided_by   = ""
-decided_on   = ""
+context = "SL-259 PHASE-03's unknown-key walk runs BEFORE deserialisation, so it answers the unknown-key case for every wire type — including Declaration, CheckpointActDeclaration and AgentActDeclaration, the three that carry #[serde(deny_unknown_fields)] and used to answer for themselves. A caller no longer sees serde's text for that case. SL-251 (done) PHASE-07 VT-3 pinned that an unknown key on Declaration comes back carrying serde's own text, and its VA-1 companion did the same; that slice's test was rewritten in place to pin the successor invariant."
+choice = "Let the walk supersede serde's message for the three attributed types, and let SL-251's VT-3 read red deliberately if re-run — rather than holding serde's 'unknown field' literal alive to keep a closed slice's grep green."
+alternatives = [
+  "Exempt the three attributed types so serde still speaks for them. Rejected: it preserves two message shapes for one fault, chosen by whether a type happens to carry an attribute — not a distinction a caller can see or act on.",
+  "Keep serde's `unknown field` literal alive alongside the walk's message so SL-251's VT-3 stays green. Rejected as false evidence: the behaviour that criterion verified has been replaced, and a grep kept green over a dead invariant is exactly the untruth SL-259 exists to close.",
+]
+rationale = "DEC-225's remedy-rides-the-point-of-failure rule is intact: nothing wraps or re-words a serde error, an earlier check simply refuses first, and it carries strictly more than serde did — the dotted path into the payload, the admitting type named, and every type in the closure rather than 3 of 12. sec-8 pin 1 is what makes the substitution safe rather than plausible: it holds each struct contract's key set equal to a fully populated value's serde output, so the expectations the walk prints are the ones serde would have printed."
+consequences = [
+  "SL-251 PHASE-07 VT-3 and its VA-1 companion read RED by design if re-run — the behaviour they verified has been replaced, not regressed.",
+  "The unknown-key message shape is uniform across all twelve wire types rather than varying by whether a type happens to carry #[serde(deny_unknown_fields)].",
+  "The supersession is carried by a line in SL-259's reconciliation plus concerns edges to both slices, NOT by a REV (RV-366 F-6): PHASE-NN / VT-n ids are immutable-append, so a REV would resolve to no legal write.",
+]
+decided_by = "SL-259 design run dr-01a08e32; the REV-vs-reconciliation-line question ruled by SL-259's audit, RV-366 F-6"
+decided_on = "2026-09-15"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
@@ -27,3 +34,15 @@ notes       = []
 [relationships]                 # verb-written edges (set by doctrine supersede)
 supersedes    = []   # record ids this one replaces (set by doctrine supersede)
 superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "supersedes SL-251 PHASE-07 VT-3 and its VA-1 companion: an unknown key on Declaration no longer returns serde's own text, so that criterion reads red by design"
+target = "SL-251"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "SL-259 PHASE-03's pre-deserialisation contract walk is what supersedes serde's message; ruled a reconciliation line rather than a REV at RV-366 F-6"
+target = "SL-259"

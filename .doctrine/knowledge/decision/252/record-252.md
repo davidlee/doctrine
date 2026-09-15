@@ -52,11 +52,26 @@ holds each struct contract's key set equal to a fully populated value's serde
 output, so *the expectations the walk prints are the ones serde would have
 printed*.
 
-## Carried forward
+## The ruling: a reconciliation line, not a `REV`
 
-Whether this wants a `REV` against `SL-251` or a line in `SL-259`'s
-reconciliation is **open, and belongs to `SL-259`'s audit**. The argument for
-the lighter treatment: no governance artefact changes, one closed slice's test
-was edited in place, and the reasoning is recorded here. The argument for a
-`REV`: `SL-251`'s verification record now describes behaviour the tree does not
-have, and an auditor re-running its gate has no in-band way to learn why.
+Settled by `SL-259`'s audit (`RV-366` `F-6`), which this record's predecessor
+paragraph handed the question to. Three reasons, in order of force.
+
+1. **A `REV` would resolve to no legal write.** The revision kind is the
+   governance-dependency vehicle (`ADR-013`) and routes changes to governance
+   and spec entities. `SL-251`'s `PHASE-07` `VT-3` is a *plan criterion*, and
+   `PHASE-NN` / `EN-` / `EX-` / `VT-` ids are immutable-append — there is
+   nothing a `REV` could lawfully rewrite.
+2. **No governance artefact changed.** `DEC-225` is intact (see above), and the
+   table above shows the walk carries strictly more than serde did, with
+   `sec-8` pin 1 holding the printed expectations equal to serde's.
+3. **The defect the `REV` argument pointed at is a *linking* failure, not a
+   revision failure.** "An auditor re-running `SL-251`'s gate has no in-band way
+   to learn why" was true, and it was caused by this record being `proposed`,
+   facet-empty and unrelated to anything — not by the absence of a revision. It
+   is fixed at a hundredth of the cost.
+
+So, at `SL-259`'s reconcile: this record moved to `accepted`, its facet was
+populated from the prose above, and it now carries `references --role concerns`
+edges to **both** `SL-251` and `SL-259`. An auditor re-running `SL-251`'s gate
+reaches the supersession in one hop.

@@ -292,3 +292,100 @@ bending the layering. `DEC-225` survives `DEC-252` intact.
   is precisely what "error ⇒ nothing landed" promises.
 - **`ISS-361`**, **`IMP-446`**, **`IMP-447`**, **`IMP-448`** — all open with
   stated reasons and, where applicable, triggers. No reconciliation owed.
+
+## Reconciliation Outcome
+
+Every brief item written. **No `REV` authored** — the brief's governance/spec
+section is explicitly *None*, and reconcile confirmed rather than re-derived
+that: no ADR, policy, standard or spec became untrue.
+
+`SL-259`'s design run (`dr-01a08e32`) is `locked` and `materialised`, so these
+edits land out of band and the run's section fingerprints now diverge from
+`design.md`. That is the surface working as designed at this stage
+(`mem.pattern.reconcile.edit-design-out-of-band`): the regress →
+`adopt_authored` → re-lock loop is for a run still governing execution, and
+would spend two user acts and a fresh adversarial attestation on a slice about
+to go `done`.
+
+### Direct edits applied
+
+- **`design.md` `sec-3` §*The state axis*** (`F-1`): four cells *named*, **three
+  landed**. States that `PHASE-01` closed the `lifecycle` cell from the other
+  direction — one row-producing path over two priors makes a `lifecycle`
+  declared at creation land and emit, so nothing inert remains to refuse — that
+  re-refusing it would regress `PHASE-01`, and that `plan.toml` already carries
+  the correction (`PHASE-04` `EN-2`/`EX-1`). `DEC-246`'s ruling untouched.
+- **`design.md` `sec-6` §*What is actually defective*** (`F-2`): the "no
+  witness" assertion qualified to the **pass-1/pass-2 axis**, plus a new
+  paragraph naming the **mint-loop** axis where `PHASE-06` `F-1` reproduced one
+  (`execute_mint` step 1 carrying `SL-249` `D8`'s retry guard; a two-checkpoint
+  payload materialises the first plan's record, then refuses), the repair
+  (`refuse_unresumable_mints` over the whole batch), and why no fixture could
+  see it (`PHASE-06` `F-2`). A further paragraph records that `PHASE-06` `F-3`
+  closed the pass axis **structurally** — `resolution_of` as the one expression
+  both key sets are built through, `widest_canonical_id` as a `const` proof over
+  `KINDS` — rather than by the observation the section rested on. `DEC-250`'s
+  ruling and `EX-5` untouched.
+- **`design.md` `sec-8` leg 1** (`F-2`): same axis-naming on "no such instance
+  is reachable", plus a line pinning the mint-loop axis, which did have one.
+- **`design.md` `sec-5` §*Preserve, and where the opacity lives*** (`F-8`): the
+  claim split three ways — the **type** untouched (variant set closed, `Copy`,
+  `const fn as_str`, both `const _: ()` proofs intact, no `Opaque`), its
+  **impl** gained a fallible `shaped()` at `PHASE-05`, and **two** `snapshot.rs`
+  pins re-patterned to `[StoredRow::Read(row)]`, which tighten them.
+  `PHASE-02` `VA-1` recorded as **held** in substance.
+- **`design.md` `sec-7` §*Code impact*** (`F-3`): eight rows added
+  (`render/change_row.rs`, `contract_check.rs`, `refusal.rs`, `mod.rs`,
+  `ids.rs`, `gate.rs`, `fixture.rs`, `install/design-payload-contract.md`), the
+  `commands/design.rs` row widened to name `refuse_unresumable_mints`,
+  `resolution_of`, `widest_canonical_id` and the rewritten module doc, and the
+  **`STD-003` attribution corrected** from `render/envelope.rs` to
+  `render/change_row.rs` (verified at the source: `render_unreadable`,
+  `UNREADABLE_REASON_KEY`, and its own `const _: ()` width proof). A closing
+  note records the correction and points at the selector registry as the
+  load-bearing half.
+- **Selector registry** (`F-4`): `doctrine slice selector add 259 --intent
+  design-target` over the seven paths. `doctrine slice conformance 259` now
+  reads **18 conformant, 0 undelivered**, and the residual 18 undeclared are
+  exactly the `.doctrine/` lifecycle-artefact class `F-5` measured — as the
+  brief predicted. The nine redundant `selector doctor` rows stay, per `F-4`'s
+  stated tradeoff.
+- **`DEC-252`** (`F-6`): `proposed` → `accepted`; `[facet]` populated from the
+  prose it already carried; `references --role concerns` edges to **both**
+  `SL-251` and `SL-259`, so an auditor re-running `SL-251`'s gate reaches the
+  supersession in one hop. The *Carried forward* paragraph is replaced by the
+  ruling itself — a reconciliation line, not a `REV`, on `F-6`'s three reasons.
+  **One correction to the brief:** it named `doctrine knowledge settle`, whose
+  `<STATE>` enum is `answered | validated | invalidated | waived`; a decision's
+  `proposed → accepted` is `doctrine knowledge status`, with `knowledge edit
+  decision` for the facet.
+- **`DEC-250`** (`F-9`): `consequences[2]` and `[3]` rejoined into one sentence.
+
+### Escalated
+
+- **`ISS-453`** — `F-9`'s escalation trigger fired. `DEC-243` carries **four**
+  fragments of the same shape, and both records were mangled by the same commit
+  (`a3b565571`, the CLI amendment against `RV-365`; neither carried the shape at
+  `a3b565571^`). The mechanism is now established rather than suspected:
+  `src/knowledge.rs:2952`/`:2958` declare `--alternatives` and `--consequences`
+  with `#[arg(value_delimiter = ',')]`, so any prose element with an internal
+  comma is split at every comma and reported as success. Records written through
+  the design run's JSON payload are unaffected (`DEC-251`'s comma-rich
+  `alternatives` are intact) — it is CLI-path-only. `DEC-243` was repaired
+  alongside `DEC-250`, by hand: the CLI cannot repair either, since re-sending
+  the joined sentence re-splits it. The fix itself is out of `SL-259`'s scope
+  and needs a design call (repeatable flag vs. typed refusal), so it is filed,
+  not taken.
+
+### Withdrawn / tolerated / follow-up
+
+- `RV-366` `F-5` — follow-up, captured as **`IMP-449`** (conformance's undeclared
+  cell is majority lifecycle noise; platform-level, reproduced on `SL-256`).
+- `RV-366` `F-7` — follow-up, captured as **`ISS-452`** (opening a review pass
+  writes no row; site outside all four legs, `SL-259` did not touch it).
+
+Nothing else from the brief remains. Two surfaces the brief explicitly named as
+**off-surface** were not written and are not owed: `SL-233` `EX-11(a)` and
+`SL-251` `PHASE-07` `VT-3`, both closed slices' plan criteria, immutable-append.
+
+Reconcile pass complete — handoff to `/close`.
