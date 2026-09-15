@@ -102,26 +102,39 @@ the probes' results as plain values (`DEC-255`).
 
 | unit | tier | pure? | responsibility |
 |---|---|---|---|
-| `tty` (extended) | leaf | seam | probe stdout into a `RenderTarget`; run a raw-mode query/reply exchange on the controlling tty |
+| `tty` (extended) | leaf | seam + pure decisions | verify stdout is the controlling terminal; read its geometry; run a raw-mode query/reply exchange on it |
 | `subprocess` (new) | leaf | seam | run a child synchronously, bounded for the direct child (see *The graphviz spawn*) |
 | `graphviz` (new) | leaf | seam + pure classifier | run `dot -Tpng`; classify the outcome |
 | `kitty` (new) | leaf | pure | protocol bytes: support query and reply classifier, PNG size, placement, encoding |
 | `terminal_image` (new) | leaf | pure checks + thin shell | sequence the checks; compose spawn → place → encode |
 
-### `tty` — what the terminal is
+### `tty` — one terminal endpoint
 
-`stdout_terminal_width()` returns `None` both for a pipe and for a terminal
-whose size could not be read. `-X` must tell those apart, so it gets its own
-descriptor rather than reusing that `Option`.
+The terminal that doctrine sizes, puts in raw mode, queries, and writes to must
+be one device. Otherwise a positive probe of one terminal could authorise output
+to another. `tty` therefore opens the controlling terminal (`/dev/tty`) once,
+checks that it is the same device stdout writes to, and does everything else on
+that one file descriptor.
+
+`stdout_terminal_width()` cannot serve here: it returns `None` both for a pipe
+and for an unreadable size, and it probes through crossterm, which picks its own
+descriptor.
 
 ```rust
 pub(crate) enum RenderTarget {
   NotTerminal,
-  Terminal(WindowGeometry),
+  /// stdout is a terminal, but not the controlling one, or there is none.
+  NotControllingTerminal,
+  Terminal(RenderTerminal),
 }
 
-/// The window-size ioctl as reported. 0 means the terminal did not report the
-/// field; an ioctl failure on a tty is all zeros, with the same remedy.
+/// The controlling terminal, verified to be stdout's device.
+pub(crate) struct RenderTerminal {
+  tty: std::fs::File,
+  pub(crate) window: WindowGeometry,
+}
+
+/// `tcgetwinsize` as reported; 0 means the terminal did not report the field.
 pub(crate) struct WindowGeometry {
   pub(crate) columns: u16,
   pub(crate) rows: u16,
@@ -129,31 +142,59 @@ pub(crate) struct WindowGeometry {
   pub(crate) pixel_height: u16,
 }
 
-/// Thin shell: isatty + `crossterm::terminal::window_size()`.
-pub(crate) fn stdout_render_target() -> RenderTarget;
+/// Thin shell: isatty(stdout); open `/dev/tty` read-write; `fstat` both;
+/// `tcgetwinsize` on the tty. Failure to open `/dev/tty` means no controlling terminal.
+pub(crate) fn open_render_terminal() -> std::io::Result<RenderTarget>;
 
-/// Pure decision, both impurities injected.
-fn render_target(is_tty: bool, window: Option<WindowGeometry>) -> RenderTarget;
+/// Pure decision over the injected probe results (device ids are `st_rdev`).
+fn endpoint(stdout_is_tty: bool, stdout_device: u64, tty_device: Option<u64>) -> Endpoint;
+enum Endpoint { NotTerminal, NotControlling, Same }
 
-/// Thin shell: put the controlling tty in raw mode, write `request`, and read
-/// until `complete(&bytes_so_far)` or `timeout`. Raw mode is restored on every
-/// path by a drop guard. `Ok(None)` means the deadline passed first.
-pub(crate) fn query_terminal(
-  request: &[u8],
-  complete: impl Fn(&[u8]) -> bool,
-  timeout: Duration,
-) -> std::io::Result<Option<Vec<u8>>>;
+impl RenderTerminal {
+  /// Raw mode on this fd, write `request`, `poll` and read until
+  /// `complete(&bytes_so_far)` or `timeout`, then restore. `Ok(None)` = deadline.
+  pub(crate) fn query(
+    &self,
+    request: &[u8],
+    complete: impl Fn(&[u8]) -> bool,
+    timeout: Duration,
+  ) -> Result<Option<Vec<u8>>, QueryError>;
+}
+
+pub(crate) enum QueryError {
+  /// Entering raw mode, writing, or reading failed; the terminal was restored.
+  Io(std::io::Error),
+  /// Restoring the saved terminal settings failed. Takes precedence over
+  /// whatever the exchange produced, because the user's shell is affected.
+  Restore(std::io::Error),
+}
+
+/// Enter, run, always exit. An exit failure beats the body's result; an enter
+/// failure skips both. The closures are injected so every path is unit-tested.
+fn bracket<S, R>(
+  enter: impl FnOnce() -> std::io::Result<S>,
+  body: impl FnOnce(&S) -> std::io::Result<R>,
+  exit: impl FnOnce(S) -> std::io::Result<()>,
+) -> Result<R, QueryError>;
 ```
 
-`window_size()` is the ioctl `size()` already performs. Raw mode comes from
-`crossterm::terminal::{enable_raw_mode, disable_raw_mode}`, available under the
-current `default-features = false` build. The query reads and writes
-`/dev/tty`. Because there is no portable read timeout on a tty, the reads
-happen on a thread feeding a channel, and the caller waits with
-`recv_timeout`. If the deadline passes, that thread stays blocked on the tty
-until the process exits, which follows immediately with the refusal. `tty`
-knows nothing about kitty: the request bytes and the completion predicate
-come from the caller.
+`query` is `bracket` with real closures. `enter` does `tcgetattr` and
+`tcsetattr` with the settings made raw. `body` writes the request and reads
+with `poll` against the deadline. `exit` does `tcsetattr` with the saved
+settings.
+
+Restoration is explicit and its error is checked on every return path. The
+guarantee does not rest on a destructor, because a destructor cannot report a
+failed restore. A drop guard remains as a best-effort fallback while unwinding
+from a panic, and is disarmed once the explicit restore has run.
+
+`poll` on the tty fd bounds each read, so no thread is needed, nothing outlives
+the query, and nothing can swallow keystrokes afterwards.
+
+All of this uses `rustix`, already a direct dependency (`fs`), with its
+`termios` and `event` features added. crossterm already compiles rustix with
+`termios`, so this adds no crate. `tty` knows nothing about kitty: the request
+bytes and the completion predicate come from the caller.
 
 ### `graphviz` — the spawn
 
@@ -194,8 +235,9 @@ pub(crate) const SUPPORT_QUERY: &[u8];
 
 pub(crate) enum SupportReply { Incomplete, Supported, Unsupported }
 
-/// A graphics reply for id 31 before the DA1 reply → Supported; DA1 alone →
-/// Unsupported; neither yet → Incomplete.
+/// Complete frames in arrival order: the first of {graphics reply for id 31,
+/// DA1 reply} decides. Graphics first → Supported; DA1 first → Unsupported;
+/// neither complete yet → Incomplete.
 pub(crate) fn classify_support_reply(bytes: &[u8]) -> SupportReply;
 
 pub(crate) struct PngSize { pub(crate) width: u32, pub(crate) height: u32 }
@@ -226,13 +268,15 @@ the crate. Every protocol literal is a named constant (STD-001).
 pub(crate) enum RenderRefusal {
   FormatNotDot { format: String },
   NotTerminal,
+  NotControllingTerminal,
   Unsupported,
   Unconfirmed,
   NoPixelSize,
 }
 
 /// Thin shell. Runs the checks cheapest-first and stops at the first refusal:
-/// format → terminal → pixel size → support probe. Returns the cell geometry.
+/// format → stdout is the controlling terminal → pixel size → support probe.
+/// Returns the cell geometry.
 pub(crate) fn prepare(format: &str, is_dot: bool) -> anyhow::Result<CellGeometry>;
 
 /// Thin shell: rasterise via `graphviz`, then place and encode via `kitty`.
@@ -255,7 +299,7 @@ terminal, and `subprocess` by any bounded spawn.
 <!-- doctrine:section sec-3 -->
 ## Request flow and refusal paths
 
-A render request passes four checks before any work, cheapest first, then runs
+A render request passes five checks before any work, cheapest first, then runs
 as one pipeline. Every refusal and every rasterise or encode failure happens
 before the first byte reaches stdout, so all of them leave stdout empty and exit
 non-zero through the verb's ordinary `anyhow` error path (`DEC-254`).
@@ -266,10 +310,12 @@ flowchart TD
   fmt -- no --> r1["refuse: FormatNotDot"]
   fmt -- yes --> tty{"stdout is a terminal?"}
   tty -- no --> r2["refuse: NotTerminal"]
-  tty -- yes --> px{"window reports columns, rows,<br/>pixel width and height?"}
+  tty -- yes --> ctl{"/dev/tty is the same<br/>device as stdout?"}
+  ctl -- no --> r2b["refuse: NotControllingTerminal"]
+  ctl -- yes --> px{"window reports columns, rows,<br/>pixel width and height?"}
   px -- no --> r3["refuse: NoPixelSize"]
-  px -- yes --> probe["kitty support query + DA1<br/>(raw tty, 2s deadline)"]
-  probe -- "DA1 only" --> r4["refuse: Unsupported"]
+  px -- yes --> probe["kitty support query + DA1<br/>(raw mode on that fd, poll, 2s deadline)"]
+  probe -- "DA1 first" --> r4["refuse: Unsupported"]
   probe -- "no reply" --> r5["refuse: Unconfirmed"]
   probe -- "graphics reply first" --> build["build DOT<br/>(scan corpus, project, emit: unchanged)"]
   build --> spawn["graphviz::rasterise_png"]
@@ -320,10 +366,12 @@ Each message names what was missing and what would satisfy it (POL-002 facet
 |---|---|
 | format not DOT | `--render needs --format dot, got 'json'; drop -X or the --format` |
 | not a terminal | `--render needs stdout to be a terminal; drop -X to emit DOT` |
+| not the controlling terminal | `--render needs stdout to be the terminal you are running in; it is another terminal, or there is none; drop -X to emit DOT` |
 | no pixel size | `--render needs the terminal to report its size in pixels, and it did not; drop -X to emit DOT` |
 | unsupported | `--render needs a terminal that supports the kitty graphics protocol (kitty, ghostty); this one does not, and under tmux or screen it never will; drop -X to emit DOT` |
 | unconfirmed | `--render could not confirm kitty graphics support: the terminal did not answer within 2s; drop -X to emit DOT` |
 | tty query I/O | `--render could not query the terminal: <io error>` |
+| terminal restore failed | `--render could not restore the terminal's settings: <io error>; run 'reset'` |
 | `dot` not found | `--render needs graphviz: 'dot' was not found on PATH; install graphviz or drop -X` |
 | `dot` exited non-zero | `'dot' failed (exit 1): <graphviz stderr, trimmed>` |
 | `dot` timed out | `'dot' did not finish within 10s; drop -X and render the DOT yourself` |
@@ -351,15 +399,18 @@ ESC[c                                            DA1 request
 Every VT-compatible terminal answers DA1 (`ESC[?…c`). A terminal that speaks
 the graphics protocol also answers the query (`ESC_G i=31;… ESC\`), and does so
 before DA1 because the requests are answered in order. `classify_support_reply`
-scans the accumulated bytes:
+walks the accumulated bytes frame by frame, in arrival order, and the first
+complete frame of interest decides:
 
-| bytes seen so far | result |
+| first complete frame of interest | result |
 |---|---|
-| a graphics reply carrying `i=31` | `Supported`, whatever its status text: any reply proves the protocol is spoken |
-| a complete DA1 reply and no graphics reply | `Unsupported` |
-| neither complete | `Incomplete`; keep reading |
+| a graphics reply carrying `i=31`, whatever its status text | `Supported`: any reply proves the protocol is spoken |
+| a DA1 reply | `Unsupported`, even if a graphics reply follows it |
+| none yet (empty, partial frame, or only unrelated bytes) | `Incomplete`; keep reading |
 
-`query_terminal` is called with `complete = |b| classify_support_reply(b) != Incomplete`
+Graphics replies for other ids and any other bytes are skipped.
+
+`RenderTerminal::query` is called with `complete = |b| classify_support_reply(b) != Incomplete`
 and a 2 s deadline. tmux answers DA1 itself and does not pass the query
 through, so under tmux the probe returns `Unsupported`.
 
@@ -467,7 +518,9 @@ pub(crate) enum Bounded {
 
 /// Spawn `command` with piped stdio, feed `stdin` (if any) on a detached
 /// thread, drain stdout and stderr on their own threads, and poll for exit
-/// until `timeout`. On expiry: kill, wait, join the drains, return `TimedOut`.
+/// until `timeout`. On expiry: kill, then poll `try_wait` for up to
+/// `REAP_GRACE`. If the child is reaped, join the drains; if not, leave it
+/// and its drain threads behind. Either way, return `TimedOut`.
 /// `Err` is a spawn or wait failure; the caller classifies it (e.g. `NotFound`).
 ///
 /// The bound covers the direct child. A descendant that inherits and holds the
@@ -487,13 +540,24 @@ The stdin writer runs on its own thread for two reasons:
 A child that exits early, as `dot` does on a syntax error, reports through its
 exit status and stderr; the `BrokenPipe` is not an error.
 
+Cleanup after a timeout is bounded too. The incumbent code ignores a failed
+`kill` and then calls a blocking `wait`. A child that survives `SIGKILL`, for
+example one stuck in uninterruptible I/O, would hold that `wait` indefinitely.
+`run_bounded` instead polls `try_wait` for a short named grace period (1 s).
+If the child still has not exited, it returns `TimedOut` without reaping it or
+joining its drains. The unreaped child is collected when the process exits.
+The whole call is therefore bounded by `timeout + REAP_GRACE` for the direct
+child on every path.
+
 The descendant limitation is incumbent. `coverage_verify` has it today, and
 this extraction preserves rather than introduces it. `dot` does not fork, so
 the render path is not exposed. ISS-455 tracks process-group ownership for the
 general case.
 
 `coverage_verify` keeps its 50 ms poll interval, which becomes the helper's
-named constant. Its mapping is unchanged: `Err` or `TimedOut` becomes
+named constant. Its timeout path gains the bounded reap; in the ordinary case,
+where the killed child exits at once, the result is identical. Its mapping is
+unchanged: `Err` or `TimedOut` becomes
 `Unobtainable`, and `Completed` becomes `Ran`. It keeps setting `current_dir`
 on the `Command` before handing it over. Its existing suite is the
 behaviour-preservation proof and must pass unchanged.
@@ -611,13 +675,14 @@ currently covers either verb's options.
 
 | path | change |
 |---|---|
-| `src/subprocess.rs` | **new** leaf: `Bounded`, `run_bounded`, the poll-interval constant — the bounded sync spawn extracted from `coverage_verify` |
+| `src/subprocess.rs` | **new** leaf: `Bounded`, `run_bounded`, the poll-interval and reap-grace constants — the bounded sync spawn extracted from `coverage_verify` |
 | `src/graphviz.rs` | **new** leaf: `DOT_PROGRAM`, `RENDER_TIMEOUT`, `RasterOutcome`, `rasterise_png`, pure `classify` |
 | `src/kitty.rs` | **new** leaf: protocol constants, `SUPPORT_QUERY`, `classify_support_reply`, `png_size`, `cell_geometry`, `place`, `encode_png` |
 | `src/terminal_image.rs` | **new** leaf: `RenderRefusal` and its messages, pure checks, `prepare`, `render_dot` |
-| `src/tty.rs` | add `RenderTarget`, `WindowGeometry`, `stdout_render_target`, pure `render_target`, `query_terminal` (raw-mode drop guard, reader thread) |
+| `src/tty.rs` | add `RenderTarget`, `RenderTerminal`, `WindowGeometry`, `open_render_terminal`, pure `endpoint`, `RenderTerminal::query`, `QueryError`, `bracket` (explicit restore + unwind-only drop guard) |
 | `src/main.rs` | declare the four new modules |
-| `src/coverage_verify.rs` | `run_argv` delegates to `subprocess::run_bounded`; `drain` and `reap` move out; `RunResult` mapping unchanged |
+| `src/coverage_verify.rs` | `run_argv` delegates to `subprocess::run_bounded`; `drain` and `reap` move out (reap becomes bounded); `RunResult` mapping unchanged |
+| `Cargo.toml` | `rustix` features gain `termios` and `event` (no new crate) |
 | `src/commands/cli.rs` | `Graph` gains `render`; the dispatch arm passes it |
 | `src/commands/graph.rs` | `run_graph` takes `render`; prepare-then-write shell |
 | `src/concept_map.rs` | `Export`: `format` becomes `Option`, required unless `render`; `ExportFormat: Display`; `run_export` takes `render` |
@@ -627,9 +692,9 @@ currently covers either verb's options.
 | `.doctrine/adr/001/layering.toml` | register `subprocess`, `graphviz`, `kitty`, `terminal_image` as `leaf` |
 | `tests/e2e_render_guard.rs` | **new** CLI wiring tests (see Verification) |
 
-No new crate dependency: `base64` 0.22 and `crossterm` 0.29 are already direct
-dependencies. `window_size` and raw mode are both available under the current
-feature set.
+No new crate. `base64` 0.22 is already a direct dependency. `rustix` 1.x is a
+direct dependency too, and gains two features of its own. crossterm already
+builds rustix with `termios`.
 
 ### Dependency edges added
 
@@ -706,16 +771,17 @@ assertion.
 | `kitty` | PNG size is read from IHDR | a hand-built 24-byte header yields its width and height; `None` for short input, bad signature, non-IHDR first chunk |
 | `kitty` | cell geometry | any zero field or zero quotient → `None`; otherwise the integer cell size |
 | `kitty` | placement table | one case per row of the table in *The protocol*, including the clamped one-column case |
-| `kitty` | support reply classifier | graphics reply then DA1 → `Supported`; graphics reply with an error status → `Supported`; DA1 alone → `Unsupported`; partial DA1 or empty → `Incomplete`; a DA1 reply split across two reads classifies once complete |
-| `tty` | render target decision | not a tty → `NotTerminal`; a tty passes its window geometry through unchanged; a tty whose ioctl failed → all-zero geometry |
-| `terminal_image` | check order and arms | pure checks over synthetic probe results: non-DOT beats everything; not-a-terminal beats pixel size; zero pixel size → `NoPixelSize`; each support result maps to its refusal or to the geometry |
+| `kitty` | support reply classifier | graphics then DA1 → `Supported`; graphics with an error status → `Supported`; DA1 then graphics → `Unsupported`; DA1 alone → `Unsupported`; graphics for another id then DA1 → `Unsupported`; noise around frames is skipped; empty, partial frame, or a frame split at every byte boundary → `Incomplete` until complete |
+| `tty` | endpoint decision | stdout not a tty → `NotTerminal`; no controlling terminal → `NotControlling`; different device ids → `NotControlling`; equal ids → `Same` |
+| `tty` | `bracket` restores on every path | body ok → exit runs, result returned; body error → exit runs, `Io`; exit error after body ok or body error → `Restore` wins; enter error → neither body nor exit runs |
+| `terminal_image` | check order and arms | pure checks over synthetic probe results: non-DOT beats everything; not-a-terminal and not-controlling beat pixel size; zero pixel size → `NoPixelSize`; each support result and each `QueryError` maps to its refusal or to the geometry |
 | `terminal_image` | refusal messages name the fix | each message contains the flag and its remedy (substring, not exact text) |
 | `graphviz` | outcome classification | pure `classify` over synthetic results: `NotFound` → `ToolUnavailable`; other `io::Error` → `Io`; `TimedOut` → `TimedOut`; success → `Png` with stdout; failure → `CommandFailed` with `status == Some(1)` and stderr. Statuses are built under `#[cfg(unix)]` with `ExitStatusExt::from_raw`, which takes a raw wait status: `0` for success, `1 << 8` for exit code 1. |
 | `graphviz` | real missing program | `rasterise_png` with a nonexistent path → `ToolUnavailable` (real spawn, deterministic) |
-| `subprocess` | a child that ignores its stdin still times out | a 1 MiB stdin to `sleep 30` under a 200 ms timeout → `TimedOut`, returning in under 5 s (real spawn; the only test of the detached stdin writer) |
+| `subprocess` | a child that ignores its stdin still times out | a 1 MiB stdin to `sleep 30` under a 200 ms timeout → `TimedOut`, returning in under 5 s (real spawn; the only test of the detached stdin writer and the bounded reap) |
 | e2e | `graph --format json -X` | exit non-zero, stdout empty, stderr has the format message |
 | e2e | `concept-map export <id> --format mermaid -X` | exit non-zero, stdout empty, stderr has the format message |
-| e2e | `concept-map export <id> -X`, no `--format`, off a terminal | the not-a-terminal message, not clap's missing-argument error: proves the relaxed `--format` rule and the live `stdout_render_target` probe |
+| e2e | `concept-map export <id> -X`, no `--format`, off a terminal | the not-a-terminal message, not clap's missing-argument error: proves the relaxed `--format` rule and the live `open_render_terminal` stdout check |
 
 The three e2e tests run with a working directory outside any doctrine project.
 Reaching the render refusal instead of a project-root error proves `prepare`
@@ -723,8 +789,11 @@ runs before the root lookup. Under `cargo test` stdout is a pipe, so none of
 them reaches the terminal probe or the spawn.
 
 Deliberately not tested automatically, because VH steps 1, 2 and 5 cover them:
-the raw-mode tty exchange, stdin delivery to a real `dot`, and the image
-itself. Clap's own required-unless rule is not re-tested.
+the real termios and `poll` calls inside `RenderTerminal::query`, stdin
+delivery to a real `dot`, and the image itself. The restore logic around those
+calls is covered through `bracket`. A pty harness is deliberately not built:
+the decisions it would exercise are pure and already tested. Clap's own
+required-unless rule is not re-tested.
 
 ### Behaviour preservation
 
@@ -758,12 +827,14 @@ itself. Clap's own required-unless rule is not re-tested.
   window ioctl may report device pixels while graphviz renders at 96 dpi, so a
   "native size" image could look half-size. The fix would be a dpi argument to
   `dot` or a scale factor in `place`, both local to `graphviz` and `kitty`.
-- **Raw mode must always be restored.** A panic or early return while the tty
-  is raw would leave the user's shell unusable. The drop guard covers every
-  path out of `query_terminal`, including unwinding.
-- **An unanswered probe leaves a reader thread on the tty.** For the moment
-  between the refusal and process exit, that thread can swallow keystrokes the
-  user types ahead. The window is milliseconds and the refusal path is rare.
+- **Raw mode must be restored.** Every return path restores explicitly and
+  reports a failed restore as its own error, telling the user to run `reset`.
+  During a panic, restoration is best-effort through a drop guard. The crate
+  denies `panic!` and friends, so that path should be unreachable in practice.
+- **Topology refusals.** A stdout redirected to a different terminal, or a
+  session with no controlling terminal, is refused rather than guessed at.
+  That is correct, but it could surprise someone who knowingly renders to
+  another pty.
 - **The `subprocess` extraction touches `coverage_verify`.** This is mitigated
   by moving the mechanism rather than rewriting it, and by the unchanged
   coverage suite.
@@ -777,9 +848,10 @@ itself. Clap's own required-unless rule is not re-tested.
 - **Two render spawns** of `dot` — async in `map_server`, sync in `graphviz` —
   plus `map_server`'s version probe. All three share only the program name
   (`DEC-143`).
-- **Descendant-held pipes** can hold `subprocess::run_bounded` past its
-  deadline. This is incumbent from `coverage_verify`, not reachable from `dot`,
-  and tracked by ISS-455.
+- **Descendant-held pipes** can hold `subprocess::run_bounded`'s drain joins
+  past its deadline when the direct child completed on time. This is incumbent
+  from `coverage_verify`, not reachable from `dot`, and tracked by ISS-455.
+  The direct child alone is bounded on every path.
 - **Multiplexers** are refused, not supported. Passthrough wrapping for tmux is
   out of scope.
 - **The TypeScript DOT emitters** in `web/map/src/dot.ts` do not use this seam.

@@ -69,8 +69,10 @@ free — every emitting surface already produces DOT strings.
    spawn is reported by its typed outcome: unavailable, failed with graphviz's
    stderr, timed out, or other I/O (DEC-255). Every failure before the image is
    written leaves stdout empty; nothing fails silently.
-4. **Typed capability seams** (DEC-255, DEC-259): a `RenderTarget` window
-   descriptor and a raw-mode query/reply exchange in `src/tty.rs`; the kitty
+4. **Typed capability seams** (DEC-255, DEC-259): in `src/tty.rs`, one
+   verified terminal endpoint (the controlling tty, refused unless it is
+   stdout's device) carrying its window geometry and a raw-mode query/reply
+   exchange with explicitly checked restoration; the kitty
    support query plus DA1, classified purely; and a sync `dot -Tpng` spawn
    that is its own availability probe. The spawn is a second, knowingly-held
    `dot` render spawn beside `map_server`'s, each naming the other. The

@@ -14,7 +14,7 @@ ref   = "SL-245"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Unsupported terminals succeed silently despite POL-002"
 detail = "Expected: POL-002 facet 3 expressly treats a terminal protocol as a host capability and requires a feature-scoped capability to be both opt-in and, when absent, to fail with a message naming what is missing and what would satisfy it. Observed: the design declares the `-X` request itself to be the capability assertion and performs only an isatty probe (`.doctrine/slice/245/design.md:23-27`); it explicitly accepts that under tmux `-X` exits successfully while nothing appears (`.doctrine/slice/245/design.md:620-623`). The Kitty reference provides an actual support-query mechanism (`a=q`, followed by primary device attributes): https://sw.kovidgoyal.net/kitty/graphics-protocol/#querying-support-and-available-transmission-mediums. `q=2` suppresses responses; it does not prove protocol support. Thus a real TTY that lacks Kitty graphics (including the design's named tmux case) consumes all work and reports success with no image—the exact silent host-capability dependency POL-002 forbids, and a direct contradiction of the slice's “nothing fails silently” objective. Penance: either design a bounded, non-hanging capability probe and a descriptive unsupported-terminal refusal, or obtain an explicit governance/decision change that sanctions `-X` as a force-without-detection mode. Merely documenting tmux as a residual does not satisfy required policy."
@@ -23,7 +23,7 @@ response = 'Verified: POL-002 facet (3) names a terminal protocol as a host capa
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Graph rendering leaves REQ-396 contradicted"
 detail = "Expected: active SPEC-027 requirement REQ-396 fixes the shell contract: `run_graph` resolves the root, delegates to `build_graph_output`, writes the result to stdout, “and nothing else” (`.doctrine/requirement/396/requirement-396.toml:15`). Observed: the proposed `run_graph` additionally probes the TTY, applies feature-policy guards, launches Graphviz, encodes Kitty bytes, and chooses a different output path (`.doctrine/slice/245/design.md:241-260`). The design's reconcile action amends only SPEC-027 responsibility 5 (`.doctrine/slice/245/design.md:520-524`) and never amends REQ-396, even though the graph command shell remains part of SPEC-027 regardless of which module owns the renderer. This leaves the landed design and its governing acceptance criterion mutually contradictory. The accused cannot escape the spec boundary by moving the called code into a leaf. Penance: make the planned Revision update the structured responsibility and REQ-396's shell acceptance criteria (and any coverage bound to them), or preserve `run_graph` exactly by introducing a separately governed command/output seam. The governance change must describe the new external-rendering composition, not merely add prose to one responsibility."
@@ -32,7 +32,7 @@ response = "Verified: REQ-396 AC3 says run_graph writes the result to stdout and
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "DEC-143 ignores a third dot spawn and split timeouts"
 detail = """Expected: accepted DEC-143 says the two Graphviz spawns are knowingly held, cross-referenced, with program name and timeout single-sourced; STD-001 requires meaningful recurring literals to use the named constant everywhere. Observed: current code already has two distinct spawn sites before the proposed sync renderer: `dot -Tsvg` in `src/map_server/shell.rs:33-58` and `dot -V` in `src/map_server/routes.rs:154-169`; `graphviz::rasterise_png` would be a third. The design nevertheless repeatedly calls the result “two `dot` spawns” (`.doctrine/slice/245/design.md:75-78`, `:620-621`). Worse, it says the health probe changes only its program literal (`.doctrine/slice/245/design.md:423-427`), leaving the probe's hard-coded 2-second timeout at `src/map_server/routes.rs:166`, while the render path uses 10 seconds twice—once for stdin and again for wait (`src/map_server/shell.rs:49-58`)—so importing a 10-second constant does not impose the proposed single 10-second wall-clock bound. The design even preserves raw `"dot"` assertions (`.doctrine/slice/245/design.md:428-429`) despite STD-001 applying to tests. Penance: inventory and name all three process invocations; decide whether health and rendering intentionally have distinct named timeouts; define whether the render timeout is one whole-operation deadline or two stage budgets; use `DOT_PROGRAM` at every semantic program/error/test site; and revise DEC-143 if its “two”/single-timeout premise is no longer true. Until then the accepted decision cannot be implemented as written—let this magic-string hydra be broken on the wheel."""
@@ -41,7 +41,7 @@ response = 'Verified all three invocations (shell.rs dot -Tsvg with per-stage 10
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Placement geometry makes fit and cursor position undefined"
 detail = "Expected: VH requires a wide graph to fit the window and the prompt to return on the line after the image (`.doctrine/slice/245/design.md:538-549`). Observed: the encoder sets `c=<terminal columns>` with no `r` and relies on the default cursor policy, then the shell appends one newline (`.doctrine/slice/245/design.md:252-257`, `:297-315`, `:326-335`). The Kitty protocol says a placement moves the cursor right by its column count and down by its row count, and if either movement leaves the screen or scroll area the resulting cursor position is implementation-defined: https://sw.kovidgoyal.net/kitty/graphics-protocol/#controlling-displayed-image-layout. A placement starting at the first column with `c` equal to the full terminal width necessarily crosses the right edge; a tall aspect ratio can also cross the bottom because the design carries no rows/pixel-height and imposes no vertical bound. The following newline cannot repair an already undefined cursor position. The same geometry table silently chooses native clipping when pixel width is known, the image is wider, but columns are unavailable (`.doctrine/slice/245/design.md:326-332`), contrary to DEC-256's “else scale to columns” outcome. Penance: define full placement geometry, including PNG height and terminal rows/pixel height; choose and encode an explicit cursor policy (`C=1` plus deterministic cursor advancement, or another protocol-safe placement rule); bound both axes; and make insufficient geometry an explicit outcome rather than silent clipping. Add tall/full-width cases and cursor bytes to VT, not only a visual hope at VH."
@@ -54,12 +54,12 @@ status = "answered"
 severity = "major"
 title = "run_bounded can hang after its deadline"
 detail = "Expected: `subprocess::run_bounded` returns after its wall-clock timeout, and the new stdin-thread design is specifically meant to prevent a non-reading child from defeating the deadline (`.doctrine/slice/245/design.md:364-382`). Observed: the extraction preserves the incumbent blocking joins after the direct child reports completion (`src/coverage_verify.rs:439-449`) and after kill/wait (`src/coverage_verify.rs:469-478`), then adds another joined writer thread. A child can fork a descendant that inherits stdin/stdout/stderr and exit immediately; `try_wait` then reports the direct parent complete before the deadline, but the drain/writer threads remain blocked on pipe ends held by the descendant, so joining them can wait arbitrarily long. A shell-level reproduction of the output half is `TIMEFORMAT='%R'; time sh -c 'sleep 30 & exit 0' | cat`: the parent exits, yet the pipe remains open for 30 seconds. Ignoring a failed `kill` and then calling blocking `wait` is a second route past the bound. The proposed 1 MiB-to-direct-`sleep` test (`.doctrine/slice/245/design.md:570`) proves only that killing one well-behaved direct child closes its pipes; it cannot expose descendant inheritance. Penance: specify process-tree ownership and bounded cleanup (Unix process group plus the corresponding portable strategy, or another design that can cancel/close every I/O worker without an unbounded join), propagate cleanup failures coherently, and add a helper subprocess that forks a descendant holding all three pipe ends. The helper must prove an elapsed-time bound on both parent-completed and timeout paths."
-disposition = "narrowed-and-deferred"
-response = "Observation verified, prescription narrowed. The descendant-held-pipe hang is incumbent in coverage_verify::run_argv and preserved (not introduced) by the extraction; dot does not fork, so the render path is not exposed. Process-group ownership is machinery this slice's evidence does not justify. Repair here: run_bounded's contract is stated as bounded for the direct child with the descendant limitation disclosed (sec-5, sec-9 residuals), and the stdin writer thread is detached (never joined) so it cannot extend the bound. The general fix is captured as ISS-455 with the reproduction and a test-helper direction."
+disposition = "fixed-and-deferred"
+response = "Contest accepted. The narrowed contract claimed a bound for the direct child, but the timeout path still ignored a failed kill and then called a blocking wait; a child surviving SIGKILL (e.g. uninterruptible I/O) would hold it indefinitely. run_bounded now polls try_wait for a named REAP_GRACE (1s) after kill; if the child has not exited it returns TimedOut without reaping it or joining its drains. The direct child is bounded by timeout + REAP_GRACE on every path (design sec-5; sec-9 residual reworded). The completed-parent/descendant-held-pipe case remains deferred to ISS-455, which the raiser accepted as reasonable."
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The VT matrix does not implement DEC-257"
 detail = "Expected: accepted DEC-257 explicitly requires end-to-end coverage that `--format json -X` fails with the format message and empty stdout, plus encoder framing goldens over a committed PNG fixture. Observed: the VT table tests format ordering only through the pure `terminal_image::guard` (`.doctrine/slice/245/design.md:566`) and its only two CLI tests exercise the not-a-terminal path (`.doctrine/slice/245/design.md:571-576`). That does not prove either shell maps its distinct format enum correctly, that `FormatNotDot` wins before the live TTY/root/corpus probes, or that `concept-map export --format mermaid -X` reaches the guard. The encoder rows use “a few synthetic bytes” and `vec![0; 5000]` (`.doctrine/slice/245/design.md:558-564`), not the accepted committed PNG fixture. A swapped boolean or misplaced guard would therefore ship green while violating DEC-254. Penance: add CLI-level cases for `graph --format json -X` and `concept-map export --format mermaid|json -X`, asserting non-zero, exact error class, empty stdout, and no corpus dependency; use the committed PNG fixture promised by DEC-257 for at least the framing golden (synthetic data may remain for boundary chunking)."
@@ -68,7 +68,7 @@ response = "Partly accepted. DEC-257 was stale, not the design: after it was rec
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "ExitStatus from_raw does not mean exit code"
 detail = "Expected: the pure classifier test constructs a synthetic process that exited with code 1 and asserts `CommandFailed { status: Some(1), ... }` (`.doctrine/slice/245/design.md:568`). Observed: the design merely says to build it with `ExitStatusExt::from_raw`, whose contract is platform-specific. On Unix `from_raw` consumes the raw `wait` status, not an exit code (Rust API: https://doc.rust-lang.org/std/os/unix/process/trait.ExitStatusExt.html#tymethod.from_raw); raw `1` represents signal 1 and yields `status.code() == None`, while exit code 1 is encoded as raw `1 << 8`. The Windows extension has different semantics, and an unconditional `std::os::unix` import will not compile there. Penance: specify cfg-specific test helpers with the correct raw representation (Unix 256, Windows 1), or obtain statuses by running tiny deterministic child programs while keeping classification assertions separate. Pin both success and failure-code behavior so the test cannot accidentally prove the signal arm."
@@ -77,12 +77,54 @@ response = "Verified. The classify test builds statuses under cfg(unix) with Exi
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The empty-stdout-on-every-failure guarantee is impossible"
 detail = "Expected: the design repeatedly guarantees that every render failure leaves stdout empty (`.doctrine/slice/245/design.md:23-27`, `:217-219`) and argues that full preassembly prevents a half escape (`.doctrine/slice/245/design.md:263-266`). Observed: preassembly only makes failures before output safe. `Write::write_all` may successfully write a prefix and then return an error; the separate `writeln!` can fail after the complete image has already been emitted (`.doctrine/slice/245/design.md:251-257`). No userspace write larger than the platform's atomic-write limit can guarantee rollback on a terminal I/O failure. Penance: narrow the invariant to guard/rasterise/encode failures before the first write, append the trailing newline to the already assembled byte buffer and make one best-effort `write_all`, and explicitly document that terminal write failure may leave a partial transmission. If stronger behavior is desired, introduce an injectable writer test seam, but do not promise impossible atomic stdout."
 disposition = "fixed"
 response = "Verified. Invariant narrowed to failures before the first write (sec-1, sec-3, scope objective 3). kitty::encode_png now appends the trailing newlines into the assembled buffer and the shell does a single write_all; sec-3 states plainly that a terminal write failure may leave a partial transmission and is reported as an ordinary write error."
+
+[[finding]]
+id = "F-9"
+status = "answered"
+severity = "major"
+title = "The probe can interrogate a different terminal from stdout"
+detail = """
+Expected: the terminal that passes the stdout TTY gate, supplies pixel geometry, is placed in raw mode for the query, answers the support query, and ultimately receives the image must be one coherent endpoint. Otherwise a positive probe does not establish support for the actual render target.
+
+Observed: the design checks stdout with `IsTerminal` but then obtains geometry through crossterm and explicitly performs query I/O on `/dev/tty` (`.doctrine/slice/245/design.md:117-145`, `:148-156`, `:258-275`, `:339-364`). Crossterm 0.29's Unix `window_size()` prefers `/dev/tty` and only falls back to stdout (`/home/david/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crossterm-0.29.0/src/terminal/sys/unix.rs:61-95`), while `enable_raw_mode()` uses `tty_fd()`, which selects stdin whenever stdin is a TTY and `/dev/tty` otherwise (`.../terminal/sys/file_descriptor.rs:123-153`; `.../terminal/sys/unix.rs:108-139`). These descriptors can differ in valid redirection/topology cases. With stdout attached to terminal A and the controlling tty at B, doctrine probes and sizes B but emits to A; a Kitty B can therefore authorize an unsupported A, recreating silent success. With stdin attached to a different TTY, raw mode can be applied to stdin while the `/dev/tty` reader remains cooked and times out despite receiving a reply.
+
+Penance: define and own one terminal endpoint for support I/O and geometry, prove it is the same device as stdout before emitting, and apply raw mode to that exact endpoint rather than crossterm's independently selected `tty_fd`. Refuse incoherent terminal topology descriptively. Add PTY coverage for redirected stdin and for stdout/control-terminal mismatch."""
+disposition = "fixed"
+response = "Verified against crossterm 0.29: window_size prefers /dev/tty, enable_raw_mode uses stdin when it is a tty, and the design read /dev/tty; these can be different devices. Repair: tty::open_render_terminal opens /dev/tty once and refuses unless its st_rdev equals stdout's (new NotControllingTerminal refusal, message in sec-3); geometry (tcgetwinsize), raw mode (tcgetattr/tcsetattr) and the query (write + poll + read) all run on that one fd via rustix termios/event features, no longer via crossterm's independently selected descriptors. Stdin is never touched. The pure endpoint decision is unit-tested with injected device ids. PTY coverage is contested as cost without matching confidence: the decisions a pty harness would exercise are pure and tested; the real termios/poll calls are covered at VH. DEC-259 amended."
+
+[[finding]]
+id = "F-10"
+status = "answered"
+severity = "major"
+title = "A Drop guard cannot guarantee raw-mode restoration"
+detail = """
+Expected: entering raw mode must not leave the user's terminal altered; the design promises restoration on every return path and during unwinding (`.doctrine/slice/245/design.md:138-145`, `:761-763`).
+
+Observed: the entire guarantee is assigned to a Drop guard, but crossterm's `disable_raw_mode()` is fallible. It calls `tty_fd()` and `set_terminal_attr(...)?`, and deliberately retains the saved mode when restoration fails (`/home/david/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crossterm-0.29.0/src/terminal/sys/unix.rs:142-168`). A destructor cannot propagate that error on an ordinary return or during unwinding, so “restored on every path” is not established and a failed restore can strand the shell in raw mode. The verification plan explicitly leaves the raw-tty exchange to the happy-path VH checks (`.doctrine/slice/245/design.md:725-727`) and provides no injected seam or PTY case for early errors, timeout, unwinding, or restoration failure.
+
+Penance: make restoration explicit and checked on normal paths, retain Drop only as a best-effort unwind fallback, define error precedence when both the query and restoration fail, and narrow the guarantee to what can actually be promised. Add a testable raw-mode backend or PTY tests covering each early return and timeout; exercise unwinding if that guarantee remains normative."""
+disposition = "fixed"
+response = "Verified: disable_raw_mode (and tcsetattr) is fallible and a destructor cannot report failure. Repair: restoration is explicit and checked on every return path via a closure-injected bracket(enter, body, exit); an exit (restore) failure takes precedence over the body's result and surfaces as QueryError::Restore with a message telling the user to run reset; an enter failure skips body and exit. The drop guard is retained only as a best-effort unwind fallback and is disarmed after the explicit restore; the guarantee is narrowed accordingly (sec-2, sec-9). bracket's paths are unit-tested with injected closures (sec-8). DEC-259 amended."
+
+[[finding]]
+id = "F-11"
+status = "answered"
+severity = "minor"
+title = "The support classifier drops the required reply ordering"
+detail = """
+Expected: a Kitty graphics response proves support only when it is received before the following DA1 response. The protocol's prescribed discriminator is query, then DA1: a graphics reply before DA1 means supported; DA1 without the query reply means unsupported (https://sw.kovidgoyal.net/kitty/graphics-protocol/#querying-support-and-available-transmission-mediums). The design states that ordering rule at `.doctrine/slice/245/design.md:351-353`.
+
+Observed: the immediately following classifier table reduces this to “any graphics-protocol reply carrying i=31 -> Supported” (`.doctrine/slice/245/design.md:355-364`) and the VT row tests graphics-then-DA1 and DA1-alone, but not DA1-then-graphics (`.doctrine/slice/245/design.md:707-710`). A buffer containing DA1 followed by a late or stale graphics reply with the fixed id 31 is therefore allowed to classify as Supported even though DA1 already established that this query was unanswered.
+
+Penance: parse complete frames in encounter order, terminate Unsupported when DA1 is reached before the matching graphics reply, and add reversed-order, partial-frame, unrelated-id, and surrounding-noise cases to the pure classifier table."""
+disposition = "fixed"
+response = "Verified: the table let a DA1-then-graphics buffer classify as Supported. classify_support_reply now walks complete frames in arrival order and the first frame of interest decides: graphics reply for id 31 first means Supported, DA1 first means Unsupported even if a graphics reply follows; other-id graphics replies and noise are skipped (sec-4). VT cases added: DA1-then-graphics, other-id-then-DA1, surrounding noise, and a frame split at every byte boundary (sec-8)."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
