@@ -257,6 +257,24 @@ reinstall:
   doctrine install -y
   npx skills add . --agent universal -y
 
+## OUBLIETTE
+##
+# Round-trip a slice through a capsule. Both halves travel — the authored one on
+# the code ref, the gitignored one (phase sheets, handover, research) on the
+# state ref. scripts/oubliette.sh carries the why.
+
+# push a slice into a capsule: `just send 245 c [ref]`
+send slice slot ref="":
+  @scripts/oubliette.sh send {{slice}} {{slot}} {{ref}}
+
+# bring it home into its own branch + worktree: `just back 245 c`
+back slice slot:
+  @scripts/oubliette.sh back {{slice}} {{slot}}
+
+# what the fleet is holding
+capsules:
+  @capsule all status
+
 ## GIT
 ##
 
