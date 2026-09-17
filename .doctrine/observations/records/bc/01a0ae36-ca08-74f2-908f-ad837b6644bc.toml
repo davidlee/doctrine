@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ae36-ca08-74f2-908f-ad837b6644bc"
+recorded_at = "2026-09-17T07:13:41.384324361Z"
+kind = "friction"
+summary = "reconcile: capsule phase state is runtime-tier, so it never came back with the imported diff"
+detail = "SL-245 was implemented by an oubliette capsule on a linked worktree (.worktrees/SL-245-c11). The orchestrator imports the working-tree DIFF, but .doctrine/state/ is gitignored runtime tier, so the phase sheets' status flips and every worker note stayed in the fork. In the coord tree the phase sheets were still the 1.2-1.4 KB 'planned' scaffolds while the fork carried 26-51 KB completed sheets, and 'doctrine slice status SL-245' reported 'phases: 0/3' after a fully audited slice with RV-369 done. Reconcile had to notice and hand-copy them before /close could read a true rollup. Cost: a lifecycle read that says 0/3 is indistinguishable from an unstarted slice, and nothing in the capsule hand-back flags the gap. Related to, but distinct from, the RV-369 synthesis point that verify-vt reports VT and is silent about VH."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
