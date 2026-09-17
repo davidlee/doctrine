@@ -23,31 +23,29 @@ const ARG_FORMAT_PNG: &str = "-Tpng";
 /// Graph-level resolution override, `-Gdpi=<n>`.
 const ARG_DPI_PREFIX: &str = "-Gdpi=";
 
-/// Graph-level drawing size, `-Gsize=<w>,<h>!` — inches, not pixels.
+/// Graph-level drawing size, `-Gsize=<w>,<h>` — inches, not pixels. A plain
+/// `size` is a MAXIMUM only: a drawing larger than the box is scaled down to
+/// it, a smaller one is left alone. Apparent size is set by the dpi the
+/// caller asks for (ISS-459), not by stretching the drawing to the window —
+/// the trailing `!` that did that blew a one-node graph up to fill the
+/// terminal.
 const ARG_SIZE_PREFIX: &str = "-Gsize=";
-
-/// Trailing `!` on `-Gsize`: the box is a MINIMUM as well as a maximum, so a
-/// drawing smaller than the box is scaled UP to meet it. Plain `size` only
-/// ever scales down, which is what left small graphs rendering native (SL-245
-/// human acceptance).
-const ARG_SIZE_FILL: &str = "!";
 
 /// Decimal places on the inch conversion — enough that a box stated in whole
 /// pixels round-trips at any plausible dpi.
 const SIZE_PRECISION: usize = 4;
 
-/// Raster resolution, in dots per inch.
-///
-/// This is only the UNIT the fit box is expressed in — [`FitBox`] decides how
-/// big the drawing actually comes out, so this is not a knob for apparent
-/// size. It wants to be high enough that the box divides into a sensible
-/// number of inches and the glyph rasterisation is crisp, and no higher:
-/// pixels past the terminal's own resolution are decoded, counted against its
-/// image quota, and thrown away.
-const RASTER_DPI: u32 = 384;
+/// Floor on a caller-supplied dpi, so a terminal reporting an implausibly
+/// small cell cannot ask for an unreadable raster.
+const MIN_RASTER_DPI: u32 = 48;
 
-/// The pixel box a drawing is scaled to fill — the terminal's usable width,
-/// and whatever height the caller's image budget leaves for it.
+/// The scaling brief for one raster: the pixel box the drawing must fit
+/// INSIDE — the terminal's usable width, and whatever height the caller's
+/// image budget leaves — and the resolution its text is drawn at.
+///
+/// The two are independent. `dpi` sets apparent size (how big the text comes
+/// out); the box only ever shrinks a drawing that would overflow it. A small
+/// graph therefore stays small instead of being stretched to the window.
 ///
 /// Pixels rather than inches because the caller reasons in cells and window
 /// geometry; converting to graphviz's units is this leaf's business.
@@ -55,6 +53,10 @@ const RASTER_DPI: u32 = 384;
 pub(crate) struct FitBox {
     pub(crate) width_px: u32,
     pub(crate) height_px: u32,
+    /// Raster resolution in dots per inch, which is what decides apparent
+    /// size. The caller picks it from the terminal's cell geometry so graph
+    /// text lands at about the size of terminal text.
+    pub(crate) dpi: u32,
 }
 
 /// Outcome of a `dot -Tpng` raster spawn.
@@ -100,7 +102,7 @@ pub(crate) fn rasterise_png(dot: &[u8], program: &OsStr, fit: FitBox) -> RasterO
 /// child that `wait_with_output` is already waiting on.
 fn run(dot: &[u8], program: &OsStr, fit: FitBox) -> std::io::Result<Output> {
     let mut child = Command::new(program)
-        .args(raster_args(RASTER_DPI, fit))
+        .args(raster_args(fit))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -126,15 +128,16 @@ fn run(dot: &[u8], program: &OsStr, fit: FitBox) -> std::io::Result<Output> {
     child.wait_with_output()
 }
 
-/// The arguments `dot` is spawned with: PNG out, at an explicit resolution,
-/// scaled to fill `fit`.
-fn raster_args(dpi: u32, fit: FitBox) -> [String; 3] {
-    let inches = |px: u32| f64::from(px) / f64::from(dpi.max(1));
+/// The arguments `dot` is spawned with: PNG out, at `fit`'s resolution,
+/// bounded by `fit`'s box.
+fn raster_args(fit: FitBox) -> [String; 3] {
+    let dpi = fit.dpi.max(MIN_RASTER_DPI);
+    let inches = |px: u32| f64::from(px) / f64::from(dpi);
     [
         ARG_FORMAT_PNG.to_owned(),
         format!("{ARG_DPI_PREFIX}{dpi}"),
         format!(
-            "{ARG_SIZE_PREFIX}{:.*},{:.*}{ARG_SIZE_FILL}",
+            "{ARG_SIZE_PREFIX}{:.*},{:.*}",
             SIZE_PRECISION,
             inches(fit.width_px),
             SIZE_PRECISION,
@@ -239,31 +242,38 @@ mod tests {
     /// terminal's pixels, so the conversion is this leaf's job.
     #[test]
     fn raster_args_state_the_fit_box_in_inches_at_the_named_resolution() {
-        let args = raster_args(
-            96,
-            FitBox {
-                width_px: 960,
-                height_px: 480,
-            },
-        );
+        let args = raster_args(FitBox {
+            width_px: 960,
+            height_px: 480,
+            dpi: 96,
+        });
         assert_eq!(args[0], "-Tpng");
         assert_eq!(args[1], "-Gdpi=96");
-        assert_eq!(args[2], "-Gsize=10.0000,5.0000!");
+        assert_eq!(args[2], "-Gsize=10.0000,5.0000");
     }
 
-    /// The trailing `!` is the whole point. Without it `size` only ever scales
-    /// a drawing DOWN, and a graph smaller than the window would keep
-    /// rendering native-and-small — the symptom the fit box exists to fix.
+    /// The box is a MAXIMUM only — no trailing `!`. With it, graphviz stretches
+    /// any smaller drawing up to meet the box, which blew a one-node graph up
+    /// to fill the terminal (ISS-459). Apparent size is `dpi`'s job.
     #[test]
-    fn the_fit_box_is_a_minimum_as_well_as_a_maximum() {
-        let args = raster_args(
-            RASTER_DPI,
-            FitBox {
-                width_px: 100,
-                height_px: 100,
-            },
-        );
-        assert!(args[2].ends_with('!'), "{}", args[2]);
+    fn the_fit_box_never_enlarges_a_drawing() {
+        let args = raster_args(FitBox {
+            width_px: 100,
+            height_px: 100,
+            dpi: 96,
+        });
+        assert!(!args[2].ends_with('!'), "{}", args[2]);
+    }
+
+    /// A dpi below the floor would ask `dot` for an unreadable raster.
+    #[test]
+    fn raster_args_floor_an_implausibly_low_dpi() {
+        let args = raster_args(FitBox {
+            width_px: 960,
+            height_px: 480,
+            dpi: 1,
+        });
+        assert_eq!(args[1], format!("-Gdpi={MIN_RASTER_DPI}"));
     }
 
     #[test]
@@ -274,6 +284,7 @@ mod tests {
             FitBox {
                 width_px: 800,
                 height_px: 600,
+                dpi: 96,
             },
         );
         assert!(matches!(result, RasterOutcome::ToolUnavailable));

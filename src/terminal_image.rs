@@ -366,14 +366,35 @@ fn check_image_size(size: kitty::PngSize) -> Result<(), RenderRefusal> {
     })
 }
 
-/// The box `dot` scales the drawing into: as wide as the placement will ever
-/// be, and as tall as the remaining budget allows.
+/// Points per inch — the fixed conversion in `dpi = pt * 72 / px`.
+const POINTS_PER_INCH: u32 = 72;
+
+/// Graphviz's default node/edge label size, in points. The emitter does not
+/// set `fontsize`, so this is what every label is drawn at.
+const LABEL_POINT_SIZE: u32 = 14;
+
+/// The resolution a graph is drawn at: the one that renders a
+/// [`LABEL_POINT_SIZE`] label about as tall as a terminal row, so graph text
+/// reads at the size of the text around it (ISS-459).
+///
+/// Apparent size is this, and only this. The fit box below never enlarges a
+/// drawing — it only shrinks one that would overflow the window.
+#[expect(
+    clippy::integer_division,
+    reason = "truncation costs at most one dpi, which moves a label by well under a \
+              pixel — the test asserts the label lands within 1px of a row's height"
+)]
+fn raster_dpi(cell: CellGeometry) -> u32 {
+    (POINTS_PER_INCH * u32::from(cell.cell_height)) / LABEL_POINT_SIZE
+}
+
+/// The box `dot` must fit the drawing INSIDE: as wide as the placement will
+/// ever be, and as tall as the remaining budget allows.
 ///
 /// Width is `DEC-256`'s `max_columns` in pixels — the widest rectangle
-/// [`kitty::place`] will ever ask for — so the raster arrives at the size it
-/// will be displayed at. Below that and the terminal upscales a small bitmap;
-/// above it and the surplus pixels are decoded, counted against the terminal's
-/// quota, and thrown away.
+/// [`kitty::place`] will ever ask for — so a raster that binds on this arrives
+/// at the size it will be displayed at, rather than having its surplus pixels
+/// decoded, counted against the terminal's quota, and thrown away.
 ///
 /// Height is whatever [`MAX_IMAGE_PIXELS`] has left once that width is spent,
 /// which makes the box's AREA the budget: any drawing fitted into it is within
@@ -402,6 +423,7 @@ fn fit_box(cell: CellGeometry) -> crate::graphviz::FitBox {
         height_px: u32::try_from(height_px)
             .unwrap_or(MAX_IMAGE_DIMENSION)
             .min(MAX_IMAGE_DIMENSION),
+        dpi: raster_dpi(cell),
     }
 }
 
@@ -797,6 +819,44 @@ mod tests {
     }
 
     // ── The fit box ────────────────────────────────────────────────────────
+
+    /// Apparent size is the dpi's job: a label is drawn at about the height of
+    /// a terminal row, whatever the terminal's cell geometry (ISS-459).
+    #[test]
+    fn raster_dpi_draws_a_label_about_one_row_tall() {
+        for cell_height in [14_u16, 20, 24, 40, 64] {
+            let cell = CellGeometry {
+                columns: 120,
+                cell_width: cell_height / 2,
+                cell_height,
+            };
+            let label_px = (LABEL_POINT_SIZE * raster_dpi(cell)) / POINTS_PER_INCH;
+            let delta = i64::from(label_px).abs_diff(i64::from(cell_height));
+            assert!(
+                delta <= 1,
+                "cell height {cell_height}: label drawn at {label_px}px"
+            );
+        }
+    }
+
+    /// The box bounds a drawing; it does not set its size. Two windows of the
+    /// same cell geometry but different widths draw text identically — only
+    /// the point at which a large graph starts shrinking moves.
+    #[test]
+    fn the_fit_box_width_does_not_change_apparent_size() {
+        let narrow = fit_box(CellGeometry {
+            columns: 40,
+            cell_width: 10,
+            cell_height: 20,
+        });
+        let wide = fit_box(CellGeometry {
+            columns: 400,
+            cell_width: 10,
+            cell_height: 20,
+        });
+        assert_eq!(narrow.dpi, wide.dpi);
+        assert!(wide.width_px > narrow.width_px);
+    }
 
     /// The width `dot` is given is the width `kitty::place` will ask for, so
     /// the raster is neither upscaled by the terminal nor decoded and thrown
