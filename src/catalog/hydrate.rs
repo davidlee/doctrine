@@ -103,6 +103,12 @@ pub(crate) struct CatalogEntity {
     /// Memory type classification for `CatalogKey::Memory` entities;
     /// `None` for numbered entities.
     pub(crate) memory_type: Option<String>,
+    /// Readable memory key (`mem.<type>.<domain>.<subject>`) for
+    /// `CatalogKey::Memory` entities — the citable handle, where the key
+    /// itself is an opaque uid. `None` for numbered entities and for memories
+    /// with no authored key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) memory_key: Option<String>,
     /// NOTE: `[estimate]`/`[value]` facets are no longer carried through the
     /// catalog (deleted at SL-222 PHASE-09). A key-presence tripwire in the
     /// scan layer detects any extant top-level key as unmigrated residue.
@@ -233,6 +239,7 @@ impl Catalog {
                 title: se.title.clone(),
                 status: se.status.clone(),
                 memory_type: None,
+                memory_key: None,
 
                 body: se.body.clone(),
                 source: SourceSpan {
@@ -297,6 +304,7 @@ impl Catalog {
                 title: record.title.clone(),
                 status: Some(record.status.clone()),
                 memory_type: Some(record.memory_type.clone()),
+                memory_key: record.key.clone(),
 
                 body: None,
                 source: SourceSpan {

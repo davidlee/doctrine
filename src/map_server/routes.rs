@@ -1413,6 +1413,7 @@ mod tests {
                 status: Some("active".to_string()),
                 kind_label: "Assumption",
                 memory_type: Some("assumption".to_string()),
+                memory_key: None,
             },
         );
         let priority_graph = crate::priority::graph::build(root_path).expect("priority graph");

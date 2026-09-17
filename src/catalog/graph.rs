@@ -37,6 +37,9 @@ pub(crate) struct CatalogNode {
     pub(crate) kind_label: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) memory_type: Option<String>,
+    /// Readable memory key for memory nodes; `None` for numbered entities.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) memory_key: Option<String>,
 }
 
 impl CatalogGraph {
@@ -53,6 +56,7 @@ impl CatalogGraph {
                     status: entity.status.clone(),
                     kind_label: entity.kind_label,
                     memory_type: entity.memory_type.clone(),
+                    memory_key: entity.memory_key.clone(),
                 },
             );
         }
@@ -625,6 +629,7 @@ mod tests {
                     status: None,
                     kind_label,
                     memory_type: None,
+                    memory_key: None,
                 },
             );
         }
@@ -749,6 +754,7 @@ mod tests {
                     status: None,
                     kind_label,
                     memory_type: None,
+                    memory_key: None,
                 },
             );
         }
@@ -821,6 +827,7 @@ mod tests {
                     status: None,
                     kind_label,
                     memory_type: None,
+                    memory_key: None,
                 },
             );
         }
@@ -923,6 +930,7 @@ mod tests {
                 status: None,
                 kind_label: "SL",
                 memory_type: None,
+                memory_key: None,
             },
         );
         nodes.insert(
@@ -932,6 +940,7 @@ mod tests {
                 status: None,
                 kind_label: "REQ",
                 memory_type: None,
+                memory_key: None,
             },
         );
 
@@ -993,6 +1002,7 @@ mod tests {
                 status: Some("proposed".to_string()),
                 kind_label: "SL",
                 memory_type: None,
+                memory_key: None,
             },
         );
         nodes.insert(
@@ -1002,6 +1012,7 @@ mod tests {
                 status: Some("active".to_string()),
                 kind_label: "REQ",
                 memory_type: None,
+                memory_key: None,
             },
         );
         nodes.insert(
@@ -1011,6 +1022,7 @@ mod tests {
                 status: None,
                 kind_label: "MEM",
                 memory_type: Some("assumption".to_string()),
+                memory_key: None,
             },
         );
 
@@ -1185,6 +1197,7 @@ mod tests {
                 status: Some("proposed".to_string()),
                 kind_label: "SL",
                 memory_type: None,
+                memory_key: None,
             },
         );
         nodes.insert(
@@ -1194,6 +1207,7 @@ mod tests {
                 status: Some("active".to_string()),
                 kind_label: "REQ",
                 memory_type: None,
+                memory_key: None,
             },
         );
 
@@ -1287,6 +1301,7 @@ mod tests {
                 status: Some("proposed".to_string()),
                 kind_label: "SL",
                 memory_type: None,
+                memory_key: None,
             },
         );
         nodes.insert(
@@ -1296,6 +1311,7 @@ mod tests {
                 status: Some("active".to_string()),
                 kind_label: "REQ",
                 memory_type: None,
+                memory_key: None,
             },
         );
 
@@ -1354,6 +1370,7 @@ mod tests {
                 status: Some("proposed".to_string()),
                 kind_label: "SL",
                 memory_type: None,
+                memory_key: None,
             },
         );
         nodes.insert(
@@ -1363,6 +1380,7 @@ mod tests {
                 status: Some("active".to_string()),
                 kind_label: "REQ",
                 memory_type: None,
+                memory_key: None,
             },
         );
         nodes.insert(
@@ -1372,6 +1390,7 @@ mod tests {
                 status: None,
                 kind_label: "MEM",
                 memory_type: Some("assumption".to_string()),
+                memory_key: None,
             },
         );
 
@@ -1463,6 +1482,7 @@ mod tests {
                 status: Some("proposed".to_string()),
                 kind_label: "SL",
                 memory_type: None,
+                memory_key: None,
             },
         );
         nodes.insert(
@@ -1472,6 +1492,7 @@ mod tests {
                 status: Some("active".to_string()),
                 kind_label: "REQ",
                 memory_type: None,
+                memory_key: None,
             },
         );
         // ADR-002 has no edges → isolated
@@ -1482,6 +1503,7 @@ mod tests {
                 status: Some("accepted".to_string()),
                 kind_label: "ADR",
                 memory_type: None,
+                memory_key: None,
             },
         );
 
@@ -1536,6 +1558,7 @@ mod tests {
                 status: Some("proposed".to_string()),
                 kind_label: "SL",
                 memory_type: None,
+                memory_key: None,
             },
         );
         nodes.insert(
@@ -1545,6 +1568,7 @@ mod tests {
                 status: Some("active".to_string()),
                 kind_label: "REQ",
                 memory_type: None,
+                memory_key: None,
             },
         );
 
@@ -1595,6 +1619,7 @@ mod tests {
                 status: Some("proposed".to_string()),
                 kind_label: "SL",
                 memory_type: None,
+                memory_key: None,
             },
         );
         nodes.insert(
@@ -1604,6 +1629,7 @@ mod tests {
                 status: Some("active".to_string()),
                 kind_label: "REQ",
                 memory_type: None,
+                memory_key: None,
             },
         );
 

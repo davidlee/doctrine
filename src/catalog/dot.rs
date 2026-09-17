@@ -29,6 +29,30 @@ pub(crate) fn dot_escape(s: &str) -> String {
     out
 }
 
+/// Escape text for an HTML-like DOT label (`label=<…>`), which is parsed as
+/// XML: only `&`, `<`, and `>` are structural.
+fn html_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+/// Render wrapped text (real newlines) as HTML-like label lines.
+fn html_lines(wrapped: &str) -> String {
+    wrapped
+        .lines()
+        .map(html_escape)
+        .collect::<Vec<_>>()
+        .join("<BR/>")
+}
+
 // ---------------------------------------------------------------------------
 // Style tables (STD-001)
 // ---------------------------------------------------------------------------
@@ -112,6 +136,65 @@ const DEFAULT_EDGE_COLOR: EdgeColor = EdgeColor {
 };
 
 // ---------------------------------------------------------------------------
+// Label wrapping (SPIKE)
+// ---------------------------------------------------------------------------
+
+/// Target line width, in characters, for a wrapped node title.
+const LABEL_WRAP_COLS: usize = 22;
+
+/// Font family for node and edge labels. Monospace keeps `LABEL_WRAP_COLS`
+/// honest — a wrapped line's character count is its real width.
+const LABEL_FONT: &str = "monospace";
+
+/// Greedily pack `chunks` into lines of at most `cols` characters, each line
+/// joined by `glue`, the lines joined by real newlines — `dot_escape` turns
+/// those into the DOT centred-line escape. A chunk wider than `cols` takes a
+/// line of its own rather than being split.
+fn pack_lines<'a>(chunks: impl Iterator<Item = &'a str>, glue: &str, cols: usize) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for chunk in chunks {
+        if current.is_empty() {
+            current.push_str(chunk);
+        } else if current.chars().count() + glue.len() + chunk.chars().count() <= cols {
+            current.push_str(glue);
+            current.push_str(chunk);
+        } else {
+            lines.push(std::mem::take(&mut current));
+            current.push_str(chunk);
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    lines.join("\n")
+}
+
+/// Word-wrap a title: chunks are whitespace-separated words, rejoined with a
+/// space.
+fn wrap_title(text: &str, cols: usize) -> String {
+    pack_lines(text.split_whitespace(), " ", cols)
+}
+
+/// Wrap a memory key (`mem.pattern.dispatch.spawn-backend-…`), which carries no
+/// whitespace to break on: chunks end *after* a `.` or `-`, so a delimiter
+/// stays with the line it terminates and no glue is needed.
+fn wrap_key(key: &str, cols: usize) -> String {
+    let mut chunks: Vec<&str> = Vec::new();
+    let mut start = 0;
+    for (idx, ch) in key.char_indices() {
+        if ch == '.' || ch == '-' {
+            chunks.push(&key[start..=idx]);
+            start = idx + ch.len_utf8();
+        }
+    }
+    if start < key.len() {
+        chunks.push(&key[start..]);
+    }
+    pack_lines(chunks.into_iter(), "", cols)
+}
+
+// ---------------------------------------------------------------------------
 // render()
 // ---------------------------------------------------------------------------
 
@@ -127,6 +210,8 @@ pub(crate) fn render(graph: &CatalogGraph, focus: Option<&NodeKey>) -> String {
         "  bgcolor=\"transparent\";".to_string(),
         "  nodesep=0.45;".to_string(),
         "  ranksep=0.8;".to_string(),
+        format!("  node [fontname=\"{LABEL_FONT}\"];"),
+        format!("  edge [fontname=\"{LABEL_FONT}\"];"),
         String::new(),
     ];
 
@@ -139,10 +224,22 @@ pub(crate) fn render(graph: &CatalogGraph, focus: Option<&NodeKey>) -> String {
         let style = node_style(prefix);
 
         let id = key.canonical();
-        let label = if prefix == "MEM" {
-            node.title.clone()
+        // SPIKE: titles in labels (hardcoded on; no flag yet). Line 1 is the
+        // citable handle — the canonical id, or for a memory its readable key
+        // (the memory's canonical form is an opaque uid). Title wraps beneath.
+        let handle = if prefix == "MEM" {
+            node.memory_key
+                .as_deref()
+                .map(|k| wrap_key(k, LABEL_WRAP_COLS))
         } else {
-            key.canonical()
+            Some(id.clone())
+        };
+        let wrapped_title = html_lines(&wrap_title(&node.title, LABEL_WRAP_COLS));
+        // HTML-like label (`label=<…>`) — the only way to weight part of a
+        // label. `record` shapes carry ports, not formatting.
+        let label = match handle {
+            Some(h) => format!("<B>{}</B><BR/>{wrapped_title}", html_lines(&h)),
+            None => wrapped_title,
         };
 
         let penwidth = if let Some(f) = focus
@@ -163,11 +260,10 @@ pub(crate) fn render(graph: &CatalogGraph, focus: Option<&NodeKey>) -> String {
         let tooltip = build_tooltip(&id, &node.title, node.kind_label, node.status.as_deref());
 
         let escaped_id = dot_escape(&id);
-        let escaped_label = dot_escape(&label);
         let escaped_tooltip = dot_escape(&tooltip);
 
         lines.push(format!(
-            "  \"{escaped_id}\" [label=\"{escaped_label}\", style=\"{style_str}\", fillcolor=\"{fill}\", fontcolor=\"{font}\", shape=\"box\", penwidth={penwidth}, tooltip=\"{escaped_tooltip}\"];",
+            "  \"{escaped_id}\" [label=<{label}>, style=\"{style_str}\", fillcolor=\"{fill}\", fontcolor=\"{font}\", shape=\"box\", penwidth={penwidth}, tooltip=\"{escaped_tooltip}\"];",
             fill = style.fill,
             font = style.font,
         ));
@@ -284,6 +380,19 @@ mod tests {
     use crate::relation::Role;
     use std::collections::BTreeMap;
 
+    /// Wrap a node map in a `CatalogGraph` with no edges and the standard unit
+    /// labels — the shape most label tests need.
+    fn graph_of(nodes: BTreeMap<NodeKey, CatalogNode>) -> CatalogGraph {
+        CatalogGraph {
+            nodes,
+            edges: Vec::new(),
+            units: crate::catalog::hydrate::Units {
+                estimation: "hours".to_string(),
+                value: "points".to_string(),
+            },
+        }
+    }
+
     /// A real node line starts with `  "prefix-nnn"`, does NOT contain `->`, and is not a ghost.
     fn is_real_node_line(line: &str) -> bool {
         let trimmed = line.trim_start();
@@ -327,6 +436,7 @@ mod tests {
                 status: Some("proposed".to_string()),
                 kind_label: "SL",
                 memory_type: None,
+                memory_key: None,
             },
         );
         nodes.insert(
@@ -336,6 +446,7 @@ mod tests {
                 status: Some("accepted".to_string()),
                 kind_label: "ADR",
                 memory_type: None,
+                memory_key: None,
             },
         );
         nodes.insert(
@@ -345,6 +456,7 @@ mod tests {
                 status: None, // no status → tooltip omits trailing segment
                 kind_label: "PRD",
                 memory_type: None,
+                memory_key: None,
             },
         );
         nodes.insert(
@@ -354,6 +466,7 @@ mod tests {
                 status: Some("active".to_string()),
                 kind_label: "REQ",
                 memory_type: None,
+                memory_key: None,
             },
         );
 
@@ -634,6 +747,7 @@ mod tests {
                 status: Some("proposed".to_string()),
                 kind_label: "SL",
                 memory_type: None,
+                memory_key: None,
             },
         );
         nodes.insert(
@@ -643,6 +757,7 @@ mod tests {
                 status: Some("active".to_string()),
                 kind_label: "REQ",
                 memory_type: None,
+                memory_key: None,
             },
         );
 
@@ -715,5 +830,119 @@ mod tests {
         assert!(ghost_a_line.contains("style=\"dashed\""));
         let ghost_b_line = output1.lines().find(|l| l.contains("?:GHOST_B")).unwrap();
         assert!(ghost_b_line.contains("style=\"dashed\""));
+    }
+    // ── labels: handle over wrapped title (IMP-454) ─────────────────────────
+
+    #[test]
+    /// Titles wrap greedily on whitespace, packing each line up to `cols`.
+    fn wrap_title_packs_words_up_to_the_column_budget() {
+        assert_eq!(
+            wrap_title("Render probes kitty graphics support before rendering", 22),
+            "Render probes kitty\ngraphics support\nbefore rendering"
+        );
+    }
+
+    #[test]
+    /// A word wider than the budget takes its own line rather than being split.
+    fn wrap_title_never_splits_a_word() {
+        assert_eq!(
+            wrap_title("a supercalifragilistic b", 8),
+            "a\nsupercalifragilistic\nb"
+        );
+    }
+
+    #[test]
+    /// Memory keys carry no whitespace, so they break after `.`/`-`, with the
+    /// delimiter staying on the line it terminates.
+    fn wrap_key_breaks_after_delimiters() {
+        assert_eq!(
+            wrap_key("mem.pattern.dispatch.spawn-backend-harness", 22),
+            "mem.pattern.dispatch.\nspawn-backend-harness"
+        );
+    }
+
+    #[test]
+    /// HTML-like labels are parsed as XML: `&`, `<`, `>` must be entities.
+    fn html_escape_covers_structural_characters() {
+        assert_eq!(html_escape("a & b <c> d"), "a &amp; b &lt;c&gt; d");
+    }
+
+    #[test]
+    /// A node label is its bolded handle, then its wrapped title, in an
+    /// HTML-like label — the only DOT form that can weight part of a label.
+    fn node_label_bolds_the_handle_above_the_title() {
+        let (graph, focus_key, _) = rich_fixture();
+        let output = render(&graph, Some(&focus_key));
+
+        let sl_line = output
+            .lines()
+            .find(|l| l.trim_start().starts_with("\"SL-001\""))
+            .expect("SL-001 node line");
+        assert!(
+            sl_line.contains("label=<<B>SL-001</B><BR/>Fix the thing>"),
+            "expected bolded handle over title, got: {sl_line}"
+        );
+    }
+
+    #[test]
+    /// A memory node's handle is its readable key — its canonical form is an
+    /// opaque uid — and the key wraps like any other handle.
+    fn memory_node_handle_is_its_readable_key() {
+        use crate::catalog::hydrate::CatalogKey;
+
+        let uid = "mem_019ebeeda9c27f03808fdeeafb0e93cc";
+        let key = CatalogKey::Memory(uid.to_string());
+        let mut nodes = BTreeMap::new();
+        nodes.insert(
+            key,
+            CatalogNode {
+                title: "Spawn backends stay harness-agnostic".to_string(),
+                status: Some("active".to_string()),
+                kind_label: "MEM",
+                memory_type: Some("pattern".to_string()),
+                memory_key: Some("mem.pattern.dispatch.spawn-backend".to_string()),
+            },
+        );
+        let output = render(&graph_of(nodes), None);
+        let line = output
+            .lines()
+            .find(|l| l.contains(uid))
+            .expect("memory node line");
+
+        assert!(
+            line.contains("<B>mem.pattern.dispatch.<BR/>spawn-backend</B>"),
+            "expected wrapped key as a bolded handle, got: {line}"
+        );
+        assert!(
+            !line.contains(&format!("<B>{uid}")),
+            "the opaque uid must not be the handle: {line}"
+        );
+    }
+
+    #[test]
+    /// A memory with no authored key has no citable handle — the label is just
+    /// its wrapped title, unbolded.
+    fn memory_node_without_a_key_falls_back_to_its_title() {
+        use crate::catalog::hydrate::CatalogKey;
+
+        let uid = "mem_019ebeeda9c27f03808fdeeafb0e93cc";
+        let mut nodes = BTreeMap::new();
+        nodes.insert(
+            CatalogKey::Memory(uid.to_string()),
+            CatalogNode {
+                title: "Unkeyed memory".to_string(),
+                status: Some("active".to_string()),
+                kind_label: "MEM",
+                memory_type: Some("fact".to_string()),
+                memory_key: None,
+            },
+        );
+        let line = render(&graph_of(nodes), None)
+            .lines()
+            .find(|l| l.contains(uid))
+            .expect("memory node line")
+            .to_string();
+
+        assert!(line.contains("label=<Unkeyed memory>"), "got: {line}");
     }
 }
