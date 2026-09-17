@@ -41,3 +41,22 @@ one.
 
 SL-245 `DEC-259` (the single verified terminal endpoint). Pick this up in
 SL-245 PHASE-05 if it is cheap there, or standalone.
+
+## Resolution — obsolete (SL-245 reconcile, 2026-09-17)
+
+Dissolved by `RV-369` `F-1`, not fixed. The audit found that the `st_rdev`
+comparison this issue is about is not merely mistyped on macOS — it is
+**unsatisfiable on every platform**. An fd opened from `/dev/tty` `fstat`s as the
+`/dev/tty` devnode itself, `(5,0)`, and never as the pts it redirects to,
+`(136,N)`, so `Endpoint::Same` was unreachable and `-X` refused every terminal on
+earth with a message explaining it was the wrong one.
+
+The fix replaced device ids with POSIX session ids via `tcgetsid`, which is a
+total identity: a controlling terminal belongs to exactly one session and a
+session has at most one controlling terminal. There is no `dev_t` left in the
+path, so there is nothing left to widen and this issue has no subject.
+
+**This is not macOS clearance.** `F-1`'s fix removes the *compile* barrier named
+here; it verifies nothing about `VMIN`/`VTIME` timed reads on macOS `/dev/tty`,
+which is the actual platform question. That remains open as `CHR-072` — do not
+read this closure as covering it.

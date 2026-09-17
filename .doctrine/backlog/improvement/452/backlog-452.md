@@ -33,3 +33,25 @@ helper rather than growing its own timeout.
 
 ISS-455 (descendant-held pipes extend the drain joins) is the other known gap in
 the same mechanism; fix them together if convenient.
+
+## Annotation — the calculus changed (SL-245 reconcile, 2026-09-17)
+
+`RV-369` `F-6`. Deferral item (1), the CLI render deadline, was weighed on the
+assumption that the slow path ends in an **image**: wait 36 s for the whole
+corpus, get your picture, and Ctrl-C is there if you lose patience.
+
+It can now end in a **refusal**. `F-6` added an 8 MiB budget on the rasterised
+PNG (the whole corpus rasterises to 62 MiB, which ghostty silently declines),
+so the most obvious thing a user types — `doctrine graph -X`, no focus — spends
+~36 s in graphviz and then prints a refusal. Waiting that long to be told no is
+worse than waiting that long for a picture, which is the trade this deferral
+actually made.
+
+That does not reverse the deferral, and it is deliberately not a byte-budget
+problem to solve here: a pre-spawn bound on DOT size would refuse in 2 s instead
+of 36, but DOT size is only a proxy and could refuse a graph that renders
+perfectly well — accuracy beat latency (`RV-369` synthesis). Re-read this item's
+priority knowing the outcome can be a refusal, not just a slow success.
+
+Deferral item (2), the bounded-subprocess extraction, is unaffected: its
+`coverage_verify` blocking-`wait` defect stands exactly as described above.

@@ -15,7 +15,7 @@ context = "map_server already runs dot twice: an async dot -Tsvg render in map_s
 choice = "Hold two render spawns knowingly: map_server's async render stays as is and a sync render lives in the graphviz leaf. The dot program name is single-sourced as graphviz::DOT_PROGRAM at all three invocation sites and in tests. Each timeout stays with its owner under its own name because they differ in meaning: map_server's per-stage render budget, the health probe's short budget, and graphviz's whole-operation render deadline. Each render site carries a comment naming the other. Clarified 2026-09-15 after RV-368 F-3: an earlier reading counted two invocations and a shared timeout."
 alternatives = ["Extract one spawn used by both which is blocked by the tokio versus sync execution split", "Share one timeout constant whose meaning would differ per call site"]
 rationale = "The execution models genuinely differ; what is truly shared is the program name. Naming each budget where it is enforced satisfies STD-001 without pretending the budgets are one."
-consequences = ["map_server imports DOT_PROGRAM only", "routes.rs names its 2s probe budget", "graphviz owns RENDER_TIMEOUT"]
+consequences = ["map_server imports DOT_PROGRAM only", " routes.rs names its 2s probe budget", " graphviz owns no render deadline — RENDER_TIMEOUT was cut with the bounded-spawn helper (SL-245 scope cut", " IMP-452) and Ctrl-C is the interactive timeout"]
 decided_by = "user"
 decided_on = "2026-08-05"
 

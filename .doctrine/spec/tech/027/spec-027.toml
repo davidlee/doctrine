@@ -21,7 +21,7 @@ responsibilities = [
   "Fix the projection algebra: the self-consuming, composable filters (`filter_kinds`, `filter_label`, `exclude_memory`, `drop_isolated`) and the undirected breadth-bounded `neighbourhood(focus, depth)` subgraph, including their edge-incidence and boundary-node rules.",
   "Preserve unresolved and unvalidated edge targets in the edge list with no target node, so a dangling reference stays visible to every consuming surface instead of being silently dropped.",
   "Emit the projection as deterministic, byte-stable Graphviz DOT (`catalog::dot::render`) — styled by kind prefix and relation label, focus-highlighted, escaped for DOT string literals — with no filesystem or external-renderer dependency.",
-  "Serve `doctrine graph [FOCUS]` as a thin ADR-001 command shell: validate `--kind` against the kind registry, resolve FOCUS to a `CatalogKey`, apply the projection pipeline in fixed order, and write to stdout.",
+  "Serve `doctrine graph [FOCUS]` as a thin ADR-001 command shell: validate `--kind` against the kind registry, resolve FOCUS to a `CatalogKey`, apply the projection pipeline in fixed order, and write to stdout — or, under `--render`, hand the emitted DOT to the terminal-image renderer and write its image bytes in that text's place.",
   "Guarantee `--format json` emits the same `CatalogGraph` serialisation `/api/graph` serves, so the CLI and the web explorer consume one graph contract rather than two.",
   "Report focus exclusion as a named, self-describing error — focus absent, focus filtered out by `--kind`, or a memory focus without `--include-memory` — rather than emitting a silently empty graph.",
 ]

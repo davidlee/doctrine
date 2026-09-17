@@ -1,6 +1,28 @@
 <!-- doctrine:section sec-1 -->
 ## What changes and where the boundary sits
 
+> **Reconciled 2026-09-17 (SL-245, `RV-369`).** This design was locked before the
+> 2026-09-15 scope cut and implemented after it. Two classes of correction apply,
+> and the second is deliberately *not* marked up in place.
+>
+> **1. Corrected below**, each attributed to the `RV-369` finding that drove it:
+> sec-2 (`endpoint` compares session ids, not `st_rdev` — `F-1`), sec-3 (two
+> missing message rows — `F-3`, `F-6`), sec-4 (the image byte budget and the cost
+> side of `q=2` — `F-6`, `F-7`), sec-5 (`Png` carries `dot`'s notes — `F-8`),
+> sec-8 (the pty-harness rationale, disproven — `F-2`), sec-9 (the very-large-graph
+> risk and the placement rule — `F-6`, `F-7`).
+>
+> **2. Designed here, never built.** The scope cut removed these before
+> implementation. They are left described below as design intent; read them as
+> such, not as shipped behaviour.
+>
+> | described here | what shipped | tracked by |
+> |---|---|---|
+> | `src/subprocess.rs`, `run_bounded`, the `coverage_verify` extraction (sec-5, sec-6, sec-8, sec-9) | not built; `graphviz` spawns `dot` directly and `coverage_verify` is untouched | `IMP-452` |
+> | `graphviz::RENDER_TIMEOUT` and `RasterOutcome::TimedOut` (sec-3, sec-5, sec-8, sec-9) | no deadline at all; `-X` is interactive and Ctrl-C is the user's timeout | `IMP-452` |
+> | `concept-map export --render` (sec-6, sec-8) | not wired; `doctrine graph -X` only | `IMP-451` |
+> | macOS acceptance (sec-8 VH step 6, sec-9) | not run; `VMIN`/`VTIME` on macOS `/dev/tty` remains unverified | `CHR-072` |
+
 **Today** a user who wants to *see* a graph runs a three-stage pipe through two
 external tools:
 
@@ -111,10 +133,24 @@ the probes' results as plain values (`DEC-255`).
 ### `tty` — one terminal endpoint
 
 The terminal that doctrine sizes, puts in raw mode, queries, and writes to must
-be one device. Otherwise a positive probe of one terminal could authorise output
-to another. `tty` therefore opens the controlling terminal (`/dev/tty`) once,
-checks that it is the same device stdout writes to, and does everything else on
-that one file descriptor.
+be one terminal. Otherwise a positive probe of one terminal could authorise
+output to another. `tty` therefore opens the controlling terminal (`/dev/tty`)
+once, checks that it is the same terminal stdout writes to, and does everything
+else on that one file descriptor.
+
+**The identity is the POSIX session id, not the device id** (`RV-369` `F-1`,
+reconciled 2026-09-17). This design originally compared `st_rdev` between the two
+descriptors. That reads as the obvious identity and is not one: `/dev/tty` is a
+devnode in its own right, so a descriptor opened from it `fstat`s as the
+`/dev/tty` devnode — `(5,0)` — and never as the pts it redirects to, which
+carries `(136,N)`. The two values can never be equal, so `Endpoint::Same` was
+unreachable and every terminal on earth was refused as the wrong one. A session
+id *is* an identity, and a total one: a controlling terminal belongs to exactly
+one session and a session has at most one controlling terminal, so two
+descriptors reporting the same session are the same terminal. `tcgetsid` answers
+`ENOTTY` for a descriptor that is no session's controlling terminal, which is an
+answer the decision needs rather than a failure to report (STD-003), and maps to
+`None`.
 
 `stdout_terminal_width()` cannot serve here: it returns `None` both for a pipe
 and for an unreadable size, and it probes through crossterm, which picks its own
@@ -142,12 +178,12 @@ pub(crate) struct WindowGeometry {
   pub(crate) pixel_height: u16,
 }
 
-/// Thin shell: isatty(stdout); open `/dev/tty` read-write; `fstat` both;
+/// Thin shell: isatty(stdout); open `/dev/tty` read-write; `tcgetsid` both;
 /// `tcgetwinsize` on the tty. Failure to open `/dev/tty` means no controlling terminal.
 pub(crate) fn open_render_terminal() -> std::io::Result<RenderTarget>;
 
-/// Pure decision over the injected probe results (device ids are `st_rdev`).
-fn endpoint(stdout_is_tty: bool, stdout_device: u64, tty_device: Option<u64>) -> Endpoint;
+/// Pure decision over the injected probe results (POSIX session ids).
+fn endpoint(stdout_is_tty: bool, stdout_session: Option<i32>, tty_session: Option<i32>) -> Endpoint;
 enum Endpoint { NotTerminal, NotControlling, Same }
 
 impl RenderTerminal {
@@ -374,6 +410,7 @@ Each message names what was missing and what would satisfy it (POL-002 facet
 | format not DOT | `--render needs --format dot, got 'json'; drop -X or the --format` |
 | not a terminal | `--render needs stdout to be a terminal; drop -X to emit DOT` |
 | not the controlling terminal | `--render needs stdout to be the terminal you are running in; it is another terminal, or there is none; drop -X to emit DOT` |
+| the terminal could not be inspected | `--render could not inspect the terminal: <io error>; drop -X to emit DOT` |
 | no pixel size | `--render needs the terminal to report its size in pixels, and it did not; drop -X to emit DOT` |
 | unsupported | `--render needs a terminal that supports the kitty graphics protocol (kitty, ghostty); this one does not, and under tmux or screen it never will; drop -X to emit DOT` |
 | unconfirmed | `--render could not confirm kitty graphics support: the terminal did not answer within 2s; drop -X to emit DOT` |
@@ -384,9 +421,18 @@ Each message names what was missing and what would satisfy it (POL-002 facet
 | `dot` timed out | `'dot' did not finish within 10s; drop -X and render the DOT yourself` |
 | other spawn I/O | `could not run 'dot': <io error>` |
 | not a PNG | `'dot -Tpng' produced output that is not a PNG` |
+| image over the byte budget | `--render needs a smaller graph: 'dot' produced a 62 MiB image and the terminal is sent at most 8 MiB; narrow it with a focus id or --depth, or drop -X to emit DOT` |
 
 A non-PNG payload is refused rather than forwarded because the terminal would
 drop it silently, which is the exact failure the checks exist to surface.
+
+The last two rows arrived during implementation and are recorded here at
+reconcile (`RV-369` `F-3`, `F-6`). *The terminal could not be inspected* is
+deliberately not folded into *tty query I/O*: that row means the terminal was
+opened and the exchange failed, this one means the terminal could not be
+interrogated at all, and POL-002 facet (3) requires the message to name what was
+actually missing. *Image over the byte budget* is the stop `F-6` added; see
+sec-4, *The byte budget*.
 
 <!-- doctrine:section sec-4 -->
 ## The protocol: support query, placement, encoding
@@ -459,6 +505,32 @@ and the image scrolls with it.
 
 For `columns == 1`, `max_columns` is floored at 1.
 
+#### The byte budget
+
+Reconciled 2026-09-17 (`RV-369` `F-6`). **A cell bound is not a resource bound.**
+The rule above bounds columns, deliberately does not bound height, and bounds
+nothing in bytes — and the case that convicted it placed entirely legally. The
+whole corpus rasterises to a 62 MiB PNG which lands in an unremarkable 199 × 237
+cell rectangle; ghostty declines it, and because `q=2` makes that refusal
+unreportable (see *Encoding*) the user is left looking at the 237 newlines the
+encoder appends. An image the terminal would reject therefore has to be refused
+*before* it is sent, as a stop like every other.
+
+`terminal_image` carries that stop: `MAX_IMAGE_BYTES = 8 MiB`, checked on the
+rasterised PNG between the spawn and the encode. The figure is **calibrated to
+this corpus, not derived from any published limit** — measured here, `--depth 1`
+rasterises to 143 KB and draws, `--depth 2` to 559 KB, `--depth 3` to 9.6 MiB
+and 18109 px of illegible scroll, and the whole corpus to 62 MiB and nothing at
+all. 8 MiB sits above every graph worth looking at and below every graph that is
+a smudge at any placement. A miscalibration is recoverable: being refused is
+cheap, and the message names the two flags that narrow the graph.
+
+Scaling instead of refusing was considered and rejected. `dot -Gsize` was
+measured at 834 × 1987 px, 1.8 MiB, and still 25 s: it converts a blank screen
+into an illegible grey one. The bound is on PNG bytes rather than DOT bytes for
+the same reason — a pre-spawn bound would refuse in 2 s instead of 36, but DOT
+size is a proxy that could refuse a graph which renders perfectly well.
+
 ### Encoding
 
 One PNG is sent as a transmit-and-display command: base64 payload, split into
@@ -477,10 +549,19 @@ ESC_G m=0,q=2                              ; <final ≤4096 bytes>  ESC\
 | `a=T` | transmit and display | one command, no separate placement |
 | `f=100` | PNG | graphviz emits PNG; doctrine decodes no pixels |
 | `t=d` | direct (in-band) | the documented default, written out for clarity |
-| `q=2` | quiet | no image id is sent, so no reply is expected; `q=2` also suppresses failure replies that would otherwise be typed into the shell's input |
+| `q=2` | quiet | no image id is sent, so no reply is expected; `q=2` also suppresses failure replies that would otherwise be typed into the shell's input — and, in the same breath, makes a terminal-side rejection undetectable (`RV-369` `F-7`) |
 | `C=1` | do not move the cursor | doctrine moves it with `r` newlines |
 | `c`, `r` | placement columns, rows | always both, from `place` |
 | `m=1` / `m=0` | more follows / last | chunking |
+
+**The `q=2` tradeoff, recorded both ways** (`RV-369` `F-7`, reconciled
+2026-09-17). The benefit is that no reply text lands in the shell's input line.
+The cost is that a terminal which refuses the image — for any reason — refuses
+silently, so by construction a dropped image is indistinguishable from a drawn
+one. The case that actually bit, an over-budget image, is now refused before it
+is sent (*The byte budget*); a rejection for any other reason remains a silent
+no-op, and is carried as a residual in sec-9. Dropping `q=2` would trade that
+exposure for the failure `q=2` exists to prevent, so it stays.
 
 Base64 uses the standard alphabet with padding (`base64` 0.22, already a
 leaf-legal dependency). The chunk bound is 4096 bytes, and every non-final
@@ -587,7 +668,8 @@ fn classify(run: std::io::Result<Bounded>) -> RasterOutcome {
     Err(e) if e.kind() == ErrorKind::NotFound => RasterOutcome::ToolUnavailable,
     Err(e) => RasterOutcome::Io(e),
     Ok(Bounded::TimedOut) => RasterOutcome::TimedOut,
-    Ok(Bounded::Completed { status, stdout, .. }) if status.success() => RasterOutcome::Png(stdout),
+    Ok(Bounded::Completed { status, stdout, stderr }) if status.success() =>
+      RasterOutcome::Png { png: stdout, notes: String::from_utf8_lossy(&stderr).into_owned() },
     Ok(Bounded::Completed { status, stderr, .. }) => RasterOutcome::CommandFailed {
       status: status.code(),
       stderr: String::from_utf8_lossy(&stderr).into_owned(),
@@ -595,6 +677,15 @@ fn classify(run: std::io::Result<Bounded>) -> RasterOutcome {
   }
 }
 ```
+
+**`Png` carries `dot`'s stderr alongside the bytes** (`RV-369` `F-8`, reconciled
+2026-09-17; the variant was originally `Png(Vec<u8>)`). A zero exit does not mean
+an undegraded render: graphviz reports a forced downscale on stderr *while
+succeeding* — `graph is too large for cairo-renderer bitmaps. Scaling by 0.668933
+to fit` — so discarding stderr on the success path hid from the caller that the
+image about to be drawn is not the image that was asked for. STD-003: a degraded
+read is disclosed. The caller warns with graphviz's own text unprefixed, because
+`dot` already names itself in its stderr.
 
 The production caller passes `DOT_PROGRAM` and `RENDER_TIMEOUT`. Tests
 substitute a nonexistent program to prove the real `NotFound` mapping.
@@ -782,7 +873,7 @@ assertion.
 | `kitty` | cell geometry | any zero field or zero quotient → `None`; otherwise the integer cell size |
 | `kitty` | placement table | one case per row of the table in *The protocol*, including the clamped one-column case |
 | `kitty` | support reply classifier | graphics then DA1 → `Supported`; graphics with an error status → `Supported`; DA1 then graphics → `Unsupported`; DA1 alone → `Unsupported`; graphics for another id then DA1 → `Unsupported`; noise around frames is skipped; empty, partial frame, or a frame split at every byte boundary → `Incomplete` until complete |
-| `tty` | endpoint decision | stdout not a tty → `NotTerminal`; no controlling terminal → `NotControlling`; different device ids → `NotControlling`; equal ids → `Same` |
+| `tty` | endpoint decision | stdout not a tty → `NotTerminal`; no controlling terminal → `NotControlling`; different session ids → `NotControlling`; either descriptor naming no session → `NotControlling`; equal sessions → `Same` (`RV-369` `F-1`: originally specified over `st_rdev` values) |
 | `tty` | `bracket` restores on every path | body ok → exit runs, result returned; body error → exit runs, `Io`; exit error after body ok or body error → `Restore` wins; enter error → neither body nor exit runs |
 | `terminal_image` | check order and arms | pure checks over synthetic probe results: non-DOT beats everything; not-a-terminal and not-controlling beat pixel size; zero pixel size → `NoPixelSize`; each support result and each `QueryError` maps to its refusal or to the geometry |
 | `terminal_image` | refusal messages name the fix | each message contains the flag and its remedy (substring, not exact text) |
@@ -792,6 +883,7 @@ assertion.
 | e2e | `graph --format json -X` | exit non-zero, stdout empty, stderr has the format message |
 | e2e | `concept-map export <id> --format mermaid -X` | exit non-zero, stdout empty, stderr has the format message |
 | e2e | `concept-map export <id> -X`, no `--format`, off a terminal | the not-a-terminal message, not clap's missing-argument error: proves the relaxed `--format` rule and the live `open_render_terminal` stdout check |
+| e2e | `-X` on a real controlling terminal, via util-linux `script` | the adapter seam (`RV-369` `F-2`): under a real pty the endpoint check resolves and `-X` reaches the support probe rather than a topology refusal. One spawn, no new dependency, no timing assertion |
 
 The three e2e tests run with a working directory outside any doctrine project.
 Reaching the render refusal instead of a project-root error proves `prepare`
@@ -801,9 +893,27 @@ them reaches the terminal probe or the spawn.
 Deliberately not tested automatically, because VH steps 1, 2 and 5 cover them:
 the real termios calls and timed reads inside `RenderTerminal::query`, stdin
 delivery to a real `dot`, and the image itself. The restore logic around those
-calls is covered through `bracket`. A pty harness is deliberately not built:
-the decisions it would exercise are pure and already tested. Clap's own
-required-unless rule is not re-tested.
+calls is covered through `bracket`. Clap's own required-unless rule is not
+re-tested.
+
+**The adapter needs one real-environment test** (`RV-369` `F-2`, reconciled
+2026-09-17). This section originally justified the shape with *"A pty harness is
+deliberately not built: the decisions it would exercise are pure and already
+tested."* Read after the fact, that sentence is the defect's charter. The
+decisions were pure and tested; what fed them was neither. A pure core plus
+injected inputs leaves exactly one thing uncovered — the **adapter**, the impure
+shell that measures the quantity the pure rule compares — and that is precisely
+where `F-1` shipped. Every pure test injected the two values `endpoint` compares;
+every e2e test ran with stdout on a pipe and stopped at a refusal; so `-X`'s
+success path had never executed anywhere when the slice was handed back as
+complete, with 17/17 green.
+
+The rule the slice learned is not "build pty harnesses". It is that a pure-core
+design must put **one** real-environment test on the seam where the shell's
+measurement meets the pure rule, and that no amount of further pure coverage
+substitutes for it. One `script` spawn was enough. The lesson generalises past
+terminals: the suite verified the rule exhaustively and never once exercised the
+premise.
 
 ### Behaviour preservation
 
@@ -836,11 +946,14 @@ required-unless rule is not re-tested.
 
 ### Risks
 
-- **The placement rule is untested in a real terminal** (`DEC-256`,
-  provisional). One concrete way it could be wrong: on a HiDPI display the
-  window ioctl may report device pixels while graphviz renders at 96 dpi, so a
-  "native size" image could look half-size. The fix would be a dpi argument to
-  `dot` or a scale factor in `place`, both local to `graphviz` and `kitty`.
+- **The placement rule is judged on one machine** (`DEC-256`). Reconciled
+  2026-09-17: VH-1 passed on the fixed binary in ghostty — the focused graph
+  renders at native size, the prompt returns on the line directly below it, and
+  no stray reply text appears. The HiDPI question this risk raised was not
+  separately exercised, so it stands: on a HiDPI display the window ioctl may
+  report device pixels while graphviz renders at 96 dpi, so a "native size"
+  image could look half-size. The fix would be a dpi argument to `dot` or a
+  scale factor in `place`, both local to `graphviz` and `kitty`.
 - **Raw mode must be restored.** Every return path restores explicitly and
   reports a failed restore as its own error, telling the user to run `reset`.
   During a panic, restoration is best-effort through a drop guard. The crate
@@ -852,10 +965,17 @@ required-unless rule is not re-tested.
 - **The `subprocess` extraction touches `coverage_verify`.** This is mitigated
   by moving the mechanism rather than rewriting it, and by the unchanged
   coverage suite.
-- **Very large graphs.** A whole-corpus PNG may be several megabytes, sent
-  in-band as base64. The graphviz side is bounded by `RENDER_TIMEOUT`; the
-  terminal side is not. Acceptable for an explicit opt-in, and observed at VH
-  step 2.
+- **Very large graphs.** Reconciled 2026-09-17 (`RV-369` `F-6`). This risk
+  named `RENDER_TIMEOUT` as what bounded the graphviz side, and the scope cut
+  removed `RENDER_TIMEOUT` with the bounded-spawn helper (`IMP-452`), so that
+  side is unbounded: the whole corpus takes ~36 s before anything happens at
+  all. What mitigates the terminal side is now the byte budget — an 8 MiB stop
+  on the rasterised PNG, refusing with a message that names the two flags which
+  narrow the graph (sec-4, *The byte budget*). VH step 2 observed this risk and
+  **rejected** the "acceptable for an explicit opt-in" reading written here: a
+  62 MiB PNG is not degraded output, it is 237 blank rows. `IMP-452` should be
+  read knowing the slow path can now end in a refusal rather than an image,
+  which is a worse thing to wait 36 s for than the deferral assumed.
 
 ### Residuals, named rather than omitted
 
@@ -866,6 +986,12 @@ required-unless rule is not re-tested.
   past its deadline when the direct child completed on time. This is incumbent
   from `coverage_verify`, not reachable from `dot`, and tracked by ISS-455.
   The direct child alone is bounded on every path.
+- **A terminal-side rejection is silent.** `q=2` suppresses the failure reply,
+  so an image a terminal refuses for any reason is indistinguishable from one it
+  drew (`RV-369` `F-7`, tolerated). The case that bit — an oversized image — is
+  refused before it is sent, but the class stays open. The alternative trades
+  this exposure for the reply text in the shell's input line that `q=2` exists
+  to prevent.
 - **Multiplexers** are refused, not supported. Passthrough wrapping for tmux is
   out of scope.
 - **The TypeScript DOT emitters** in `web/map/src/dot.ts` do not use this seam.

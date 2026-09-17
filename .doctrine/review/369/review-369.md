@@ -272,3 +272,96 @@ so a future reader comparing the two does not stumble.
 **Acceptance is therefore complete.** `DEC-257` nominated `VH-1..VH-4` as the
 acceptance test; all four have now been run by the user against the landed
 behaviour, and the slice is clear to proceed to `/reconcile` on that axis.
+
+## Reconciliation Outcome
+
+Reconciled 2026-09-17. Every brief item resolved; no half-applied REV blocks the
+close gate.
+
+### Direct edits applied — `design.md`
+
+A **scope-cut banner** heads the document (user's ruling: cheap and sufficient,
+rather than marking up sec-5/6/8/9 in place). It separates the two classes a
+reader has to tell apart — what was corrected below and by which finding, and
+what was designed here and never built (`src/subprocess.rs` and `run_bounded`,
+`RENDER_TIMEOUT` and `RasterOutcome::TimedOut`, `concept-map export --render`,
+macOS acceptance), each pointed at `IMP-452` / `IMP-451` / `CHR-072`.
+
+| § | edit | finding |
+|---|---|---|
+| sec-2 | `endpoint` respecified over POSIX session ids (`tcgetsid`), with the reason device ids cannot serve: an fd from `/dev/tty` `fstat`s as the `/dev/tty` devnode `(5,0)`, never the pts `(136,N)`, so the equality is unsatisfiable | `F-1` |
+| sec-3 | two rows added — *the terminal could not be inspected* and *image over the byte budget* — plus why the first is not folded into *tty query I/O* | `F-3`, `F-6` |
+| sec-4 | new *The byte budget* subsection: a cell bound is not a resource bound; `MAX_IMAGE_BYTES = 8 MiB`, stated as calibrated to this corpus and not derived; the rejected `-Gsize` and DOT-size alternatives | `F-6` |
+| sec-4 | `q=2` recorded both ways — the suppressed reply is also a terminal-side rejection made undetectable | `F-7` |
+| sec-5 | `RasterOutcome::Png` carries `dot`'s stderr beside the bytes; STD-003 rationale | `F-8` |
+| sec-8 | the no-pty-harness rationale deleted and replaced by the rule the slice learned — a pure core plus injected inputs leaves the **adapter** uncovered, and that seam takes one real-environment test; the shipped `script` pty row added to the VT table; the endpoint VT row restated over session ids | `F-2`, `F-1` |
+| sec-9 | *Very large graphs* re-stated against the byte budget (its named mitigation `RENDER_TIMEOUT` was cut) and VH-2's rejection of the "acceptable for an explicit opt-in" reading recorded; the placement risk updated to VH-1-passed-but-HiDPI-unexercised; a new residual for the silent terminal-side rejection | `F-6`, `F-7` |
+
+`slice-245.md` § *Scope cut after design lock* needed no change — the declared
+departures all held, as the brief recorded.
+
+### Knowledge records amended
+
+- **`DEC-259`** — the endpoint clause moved from `st_rdev` to `tcgetsid`, with
+  the unsatisfiability argument and the `ENOTTY`-is-an-answer reading (`F-1`).
+- **`DEC-256`** — gains the companion byte budget and the cell-bound-is-not-a-
+  resource-bound statement; no longer provisional for the case VH-1 covers, with
+  HiDPI still named (`F-6`).
+- **`DEC-255`** — scope cut: the `TimedOut` arm was never built; the shipped
+  taxonomy is `Png { png, notes } | ToolUnavailable | CommandFailed | Io`.
+- **`DEC-143`** — scope cut: `graphviz` owns no render deadline; `RENDER_TIMEOUT`
+  went with the bounded-spawn helper.
+
+### Source
+
+- `src/terminal_image.rs` — `MSG_TERMINAL_INSPECT`'s doc comment said "Queued
+  for reconcile as a design-table addition"; it now records that sec-3's table
+  has the row (`F-3`). Comment only.
+
+### REVs completed
+
+- **`REV-056`** (`reconcile-sl-245`) — `done`, approved. Two `modify` rows, both
+  surfaced for manual landing and both landed by hand:
+  - `SPEC-027` responsibility 5 (structured tier and its prose mirror in
+    *The command surface*) gains the render output mode, stated so
+    responsibility 4's "no external-renderer dependency" clause stays literally
+    true — the renderer sits outside the emitter and the shell passes the DOT
+    through unread.
+  - `REQ-396`'s third acceptance criterion gains the `--render` branch,
+    including that the request is prepared *ahead of* the root lookup.
+
+  `spec validate SPEC-027` clean. Rationale and before/after excerpts in
+  `revision-056.md`. Provenance: `DEC-258`, restated by `RV-368` `F-2`, carried
+  unchanged by this audit.
+
+### Backlog
+
+- **`ISS-456`** — `closed` / `obsolete`. `F-1` dissolved it rather than fixing
+  it: there is no `dev_t` left to widen. The resolution note states explicitly
+  that this is **not** macOS clearance — `CHR-072` remains the platform question.
+- **`ISS-457`** (new) — the `spawn_cwd_convention.rs::bin_refs` macro blind spot
+  (`F-5` leg 2): `syn::visit` does not descend into macro token streams, and the
+  anti-vacuity test covers only bare statements. Wants the fix plus the missing
+  row. Linked `references --role originates_from SL-245`.
+- **`IMP-452`** — annotated (`F-6`): the deferred CLI deadline was weighed when
+  the slow path ended in an image; it can now end in a refusal after ~36 s.
+  Recorded as a re-read-the-priority note, not a reversal, and with the reason a
+  pre-spawn DOT-size bound was rejected.
+
+### Withdrawn / tolerated — no writes needed
+
+- `F-4` — dissolved by `F-1`'s fix; discharged above as `ISS-456`'s closure.
+- `F-7` — `tolerated`. Both halves of the `q=2` tradeoff are now written into
+  sec-4 and carried as a sec-9 residual; the class stays open by choice.
+- `F-9` — `aligned`. Conformance's one undeclared cell is the slice's own
+  lifecycle status flip, correctly read as noise.
+
+### Off-surface, not attempted
+
+`PHASE-03` `EX-2` pins `endpoint(…)` "over `st_rdev` values" and is false as
+written after `F-1`. Plan criteria are immutable-append and are not a reconcile
+edit surface, so it stands as a recorded design/plan divergence. The behaviour
+`EX-2` reached for — a failed `/dev/tty` open maps to `NotControlling` — is
+preserved exactly, and the design and `DEC-259` now carry the correct rule.
+
+Reconcile pass complete — handoff to `/close`.

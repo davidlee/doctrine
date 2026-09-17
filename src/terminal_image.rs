@@ -129,14 +129,12 @@ const MSG_UNCONFIRMED: &str = "--render could not confirm kitty graphics support
 
 /// `open_render_terminal` failing outright (`tcgetwinsize`).
 ///
-/// Design sec-3's table has no row for this path, nor for
-/// [`MSG_IMAGE_TOO_LARGE`]; EX-1's "every message in the table is a named
-/// constant" is a floor, not a ceiling, so both are conformant. It deliberately
+/// Design sec-3's table gained a row for this path, and for
+/// [`MSG_IMAGE_TOO_LARGE`], at reconcile (RV-369 F-3, F-6). It deliberately
 /// does NOT reuse [`MSG_TTY_QUERY_IO`]:
 /// that row means "the terminal was opened and the exchange failed", whereas this
 /// one means "the terminal could not be inspected at all", and POL-002 facet (3)
-/// requires the message to name what was actually missing. Queued for reconcile
-/// as a design-table addition.
+/// requires the message to name what was actually missing.
 const MSG_TERMINAL_INSPECT: &str =
     "--render could not inspect the terminal: {error}; drop -X to emit DOT";
 

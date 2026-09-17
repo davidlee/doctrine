@@ -1,12 +1,12 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 456
-slug = "endpoint-st-rdev-typing-is-linux-only"
-title = "endpoint st_rdev typing is Linux-only"
+id = 457
+slug = "spawn-convention-scan-is-blind-inside-macro-invocations"
+title = "Spawn-convention scan is blind inside macro invocations"
 kind = "issue"
-status = "closed"
-resolution = "obsolete"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-09-17"
 updated = "2026-09-17"
 tags = []

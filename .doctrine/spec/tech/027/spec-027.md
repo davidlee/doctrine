@@ -142,6 +142,17 @@ filters do not commute:
    focus neighbourhood or (label-filtered, unfocused) `drop_isolated`.
 6. Emit — DOT via the emitter, or JSON via the projection's own serialisation.
 
+**The render output mode** (`--render`, short `-X`; REV-056, SL-245). The shell
+may write the DOT as an inline image rather than as text: it hands the emitted
+string to the `terminal_image` leaf, which rasterises it through graphviz and
+returns kitty-protocol escape bytes, and writes those in the text's place. The
+emitter is untouched by this — `catalog::dot::render` carries no external-renderer
+dependency and the shell passes its output through unread — so the boundary in
+*The DOT emitter* stands. The request is prepared **before** the project-root
+lookup, so a `-X` that cannot be honoured (wrong format, not a terminal, no
+kitty-graphics support, no graphviz) is refused as such rather than masked by
+"no project root", and every refusal leaves stdout empty.
+
 **One graph contract, two surfaces.** `--format json` serialises the same
 `CatalogGraph` that `/api/graph` serves. The shared shape is the point: an agent
 piping `doctrine graph --format json` and a frontend fetching `/api/graph` parse
