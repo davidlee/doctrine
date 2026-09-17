@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0adfa-658e-7ae0-a2e9-d99b2dd16161"
+recorded_at = "2026-09-17T06:07:43.50294593Z"
+kind = "friction"
+summary = "audit: a fresh linked worktree cannot cargo build — web/map/dist is gitignored and absent"
+detail = "SL-245's capsule worktree .worktrees/SL-245-c11 failed 'cargo build' with: #[derive(RustEmbed)] folder 'web/map/dist/' does not exist, plus two knock-on E0599s on Assets::get. web/map/dist is gitignored (.gitignore:61) and produced by 'just map-build' (needs bun). Any audit/dispatch/capsule worktree therefore cannot build until the dist is copied in from the primary tree (what I did) or rebuilt. Cost: a failed build, a diagnosis detour, and a manual cp before any gate could run. Candidate fixes: have worktree/capsule provisioning copy or symlink web/map/dist, or make the embed root tolerate an absent dist in dev builds."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

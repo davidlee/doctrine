@@ -1,0 +1,50 @@
+memory_uid = "mem_01a0ae1389197d419789afd1effbc501"
+memory_key = "mem.pattern.testing.injected-probes-leave-the-adapter-untested"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Injected probes test the rule and skip the premise — the adapter is the uncovered seam"
+summary = "A pure decision with injected inputs plus e2e tests that only reach refusal paths can leave a feature 100% broken and 100% green; test the one adapter that measures what the pure rule compares"
+created = "2026-09-17"
+updated = "2026-09-17"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["testing", "purity", "coverage"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e1090a3cdb1d6bf23996e8abd5d383ee03bd585e"
+ref_name = "refs/heads/edge"
+checkout_state_id = "2415d55aac2271736e37ce874c6a25c24eee1c08b645a1c39bdea4f99605dfdc"
+base_commit = "6748a6422f8a7fff10c6b964b78e05742df96682"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-369"
+
+[[source]]
+kind = "slice"
+ref = "SL-245"
+

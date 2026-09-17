@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0adfa-55fa-7841-85d6-6fb653ec7a8c"
+recorded_at = "2026-09-17T06:07:39.514774215Z"
+kind = "friction"
+summary = "audit: review new succeeds in a worktree fork but every other review verb refuses it"
+detail = "Running /audit for SL-245 from the linked worktree .worktrees/SL-245-c11 (capsule branch), 'doctrine review new --facet reconciliation --target SL-245' SUCCEEDED and allocated RV-369 into the fork's .doctrine/review/369/. Every subsequent verb then refused: 'review prime RV-369', 'review status RV-369' -> 'review verbs are not supported on a worktree fork (IMP-024)'. 'review show' also works. So the gate is applied to the baton-driving verbs but not to the allocating one, which mints an id and an authored entity in a tree that cannot then drive it. Cost: a wasted id + untracked files to reconcile, and a mid-audit re-plan. Expected: 'review new' refuses in a fork with the same message, before allocating."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

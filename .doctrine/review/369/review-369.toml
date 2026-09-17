@@ -1,0 +1,370 @@
+id    = 369
+slug  = "sl-245-implementation-audit-the-x-render-seam-and-the-defect-every-automated-test-missed"
+title = "SL-245 implementation audit — the -X render seam, and the defect every automated test missed"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-245"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Expected: -X renders on a kitty-protocol terminal. Observed: it refused on every terminal, because the endpoint check compared two st_rdev values that can never be equal"
+detail = """
+VH-1 (the acceptance test) failed on first run:
+
+    $ doctrine graph SL-245 --depth 1 -X
+    Error: --render needs stdout to be the terminal you are running in;
+           it is another terminal, or there is none; drop -X to emit DOT
+
+`tty::open_render_terminal` decided topology by comparing `fstat(stdout).st_rdev`
+with `fstat(open("/dev/tty")).st_rdev`, per design sec-2 and PHASE-03 EX-2.
+
+That comparison can never hold. `/dev/tty` is a character devnode in its own
+right; the kernel redirects operations on the resulting fd to the controlling
+terminal, but the fd's inode stays `/dev/tty`, so `fstat` reports the devnode:
+
+    stdout  isatty=True st_rdev=34829 (136,13)     # /dev/pts/13
+    /dev/tty            st_rdev=1280  (5,0)        # the /dev/tty devnode
+    EQUAL: False
+
+So `endpoint` returned `NotControlling` for every terminal in existence, and
+`-X` was non-functional in its entirety. Reproduced deterministically under a
+real pty (`script -qec '... graph -X' /dev/null`), not only in ghostty.
+
+Why nothing caught it: every `tty::endpoint` unit test INJECTS its two device
+ids, so the pure rule was verified while the shell's feed of it never was; and
+both e2e tests run with stdout on a pipe, exercising refusal paths only. The
+suite covered the decision and skipped the premise. Design sec-8 made this
+explicit and got it exactly backwards — 'A pty harness is deliberately not
+built: the decisions it would exercise are pure and already tested.'
+
+`st_rdev` is not an identity for a controlling terminal. The session id is: a
+controlling terminal belongs to exactly one session, and a session has at most
+one controlling terminal, so two fds reporting the same session ARE the same
+terminal. POSIX `tcgetsid` reads it, and rustix exposes it under the `termios`
+feature SL-245 already enables — no new dependency, no new feature, one fewer
+syscall."""
+disposition = "fix-now"
+response = """
+Confirmed and fixed in this audit. src/tty.rs now decides topology on SESSION ids, not device ids:
+
+  fn endpoint(stdout_is_tty: bool, stdout_session: Option<i32>, tty_session: Option<i32>) -> Endpoint
+
+with both probes from POSIX tcgetsid via rustix::termios (already-enabled feature, no new dependency). A controlling terminal belongs to exactly one session and a session has at most one controlling terminal, so equal session ids prove the same terminal — which st_rdev never could. Two None values are explicitly NOT Same: neither fd named a session, so nothing was identified.
+
+Net: one fewer syscall (the two fstat calls are gone), and the macOS dev_t typing problem disappears with them (see F-4).
+
+Regression cover, at the seam that was uncovered rather than at the one that already had tests: tests/e2e_render_guard.rs::a_real_controlling_terminal_passes_the_endpoint_check runs the binary with stdout on a REAL pty via util-linux `script`, and asserts the endpoint check resolves. Verified RED against the shipped code with the exact shipped message, GREEN after. The pure endpoint test gains the (None, None) and (Some, None) rows and is re-cast in session ids.
+
+VH-1 re-run by the user on the fixed binary: passes."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected: the test suite can convict a broken -X. Observed: design sec-8's no-pty-harness rationale is disproven — the one uncovered seam is exactly where the defect shipped"
+detail = """
+F-1's structural cause, raised separately because it outlives F-1's fix.
+
+design.md sec-8 justifies the test shape: 'A pty harness is deliberately not
+built: the decisions it would exercise are pure and already tested.' The
+reasoning is sound only if the impure shell's FEED of those pure decisions is
+itself trivial. It was not — it was the whole defect.
+
+The resulting coverage shape: 17 VTs, all green, none of which could execute a
+successful `-X`. Pure tests inject probe values; both e2e tests pipe stdout and
+so stop at a refusal. The success path had never run anywhere when the slice was
+handed back as complete.
+
+This is not an argument for a general pty harness. It is an argument for one
+test at the one seam no pure test can reach: is what the shell measures the same
+kind of thing the pure rule compares? `script` (util-linux) allocates a real pty
+in one spawn, with no new dependency and no timing assertion."""
+disposition = "verified"
+response = """
+Confirmed; partly repaired here, and the governing prose goes to reconcile.
+
+Repaired: the missing seam now has exactly one test — tests/e2e_render_guard.rs::a_real_controlling_terminal_passes_the_endpoint_check, which runs the binary against a real pty via util-linux `script` and asserts the endpoint check resolves. One spawn, no new dependency, no timing assertion, and it fails red on the shipped code.
+
+Not repaired here, because it is a design statement rather than a defect: design sec-8's rationale, 'A pty harness is deliberately not built: the decisions it would exercise are pure and already tested', is now known to be false in the one way that mattered. Reconcile, design.md sec-8, direct edit: the claim should be replaced by the rule the slice actually learned — that a pure decision plus an injected feed leaves the FEED untested, and the seam where an impure shell measures the quantity a pure rule compares needs one real-environment test, not a harness.
+
+Worth recording as the generalisable lesson, since it is not specific to terminals: the suite verified the rule and skipped the premise, and no amount of additional pure coverage would have found it."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Expected: terminal_image's refusal messages all trace to design sec-3's table. Observed: MSG_TERMINAL_INSPECT is a thirteenth message with no row"
+detail = """
+`terminal_image::MSG_TERMINAL_INSPECT` ('--render could not inspect the
+terminal: {error}; drop -X to emit DOT') covers `open_render_terminal` failing
+outright — now only `tcgetwinsize`, since the audit's fix removed the two
+`fstat` calls.
+
+design sec-3's message table has twelve rows and no row for it. PHASE-05 EX-1
+says 'every message in design sec-3's table is a named constant', which this
+satisfies (it is a floor, not a ceiling), so this is not a conformance breach.
+
+The code flags it itself: 'Queued for reconcile as a design-table addition.'
+Correctly refused a merge into MSG_TTY_QUERY_IO — 'the terminal could not be
+inspected at all' and 'the exchange failed' name different missing things, and
+POL-002 facet (3) wants the message to name what was actually missing.
+
+The gap is that design sec-3 does not describe the shipped refusal surface.
+Reconcile, design.md sec-3, direct edit."""
+disposition = "verified"
+response = "Confirmed; no code change. MSG_TERMINAL_INSPECT is correct as written and correctly refused a merge into MSG_TTY_QUERY_IO — 'the terminal could not be inspected at all' and 'the exchange failed' name different missing things, which POL-002 facet (3) requires the message to distinguish. The gap is that design sec-3's table does not describe the shipped refusal surface. Reconcile, design.md sec-3, direct edit: add a row for it, and a row for MSG_IMAGE_TOO_LARGE, which F-6's fix adds. Its own doc comment is updated to name both as table additions and to drop the now-stale 'fstat' reference (F-1's fix removed those calls)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Expected: ISS-456's macOS st_rdev typing gap is real work. Observed: the F-1 fix dissolves it — there is no dev_t left to widen"
+detail = """
+ISS-456 (raised by the capsule worker during PHASE-03, originates_from SL-245)
+records that `endpoint`'s `stdout_device: u64` is Linux-only: `Stat::st_rdev` is
+`u64` on Linux and `dev_t` is `i32` on macOS, so the shipped signature would not
+compile there. The issue is honest and its reasoning is right — every in-scope
+workaround it considered was worse than the bug, including the
+`u64::try_from(..).unwrap_or(0)` that would map a negative `dev_t` to 0 and make
+two DISTINCT terminals compare equal.
+
+F-1's fix removes the subject. There is no device id in the decision any more:
+`endpoint` takes `Option<i32>` session ids from `tcgetsid`, and a pid is `i32`
+on every platform rustix supports. No platform-conditional conversion, no
+`dev_t` newtype, no cast.
+
+Worth recording rather than silently closing, because the reasoning generalises:
+the typing problem was a symptom of measuring the wrong quantity, and the fix
+for the wrong quantity dissolved it. ISS-456 to be closed at reconcile, citing
+RV-369 F-1 as what resolved it."""
+disposition = "verified"
+response = "Confirmed; dissolved rather than fixed. F-1's fix removes the subject: there is no device id left in the decision, so there is no dev_t to widen and no platform-conditional conversion to write. endpoint takes Option<i32> session ids from tcgetsid, and a pid is i32 on every platform rustix supports. Verified by grep — st_rdev survives in src/ only inside explanatory comments. Reconcile: close ISS-456, citing RV-369 F-1 as what resolved it. Note this does NOT close CHR-072 (macOS verification of the timed-read probe), which is a separate and still-open question: the fix makes the code compile on macOS, it does not verify that VMIN/VTIME reads behave there."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Expected: the IMP-352 convention (only doctrine_cmd resolves the binary) binds every test file. Observed: e2e_render_guard.rs resolves it directly, and the guard cannot see it"
+detail = """
+`tests/e2e_render_guard.rs` (new in PHASE-05) opens with
+
+    assert!(common::doctrine_bin().is_file(), "...");
+
+`tests/spawn_cwd_convention.rs::every_test_spawns_the_binary_through_the_seam`
+forbids exactly that — it flags any test file whose CODE references
+`doctrine_bin`, keyed on the path resolver because 'a spawn cannot dodge it'.
+The gate is green, so the rule did not fire.
+
+It did not fire because the reference sits inside an `assert!` invocation.
+`bin_refs` walks a `syn` AST and `syn::visit` does not descend into a macro's
+token stream, so any `doctrine_bin` inside `assert!`, `format!`, `dbg!` etc is
+invisible to the scan. The file's own anti-vacuity test
+(`scan_separates_a_spawn_from_a_mention`) tests a bare statement and a bare fn
+wrapper — neither is wrapped in a macro, so the blind spot is untested.
+
+Two separable things, and only the first is SL-245's:
+
+1. SL-245's new test file violates the convention as written. The assertion
+   itself is defensible (it turns a confusing spawn failure into a clear one)
+   but the file DOES spawn through `doctrine_cmd` two lines later, so the
+   resolver call is redundant and should go.
+2. The scan's macro blind spot is incumbent, not introduced here, and its
+   anti-vacuity test does not cover the case. Backlog, not this slice."""
+disposition = "fix-now"
+response = """
+Confirmed; leg 1 fixed, leg 2 split out.
+
+Leg 1 (this slice's): the `assert!(common::doctrine_bin().is_file(), ..)` is removed from tests/e2e_render_guard.rs. It was redundant — the file spawns through common::doctrine_cmd two lines later — and the convention exists because the path resolver is the one thing a spawn cannot dodge, so reaching past it is the violation whether or not a spawn follows. The doc comment now records why the guard did not fire, so the next reader does not re-add it.
+
+Leg 2 (incumbent): the macro blind spot in spawn_cwd_convention.rs::bin_refs. syn::visit does not descend into a macro's token stream, so any doctrine_bin inside assert!/format!/dbg! is invisible to the scan, and the file's own anti-vacuity test covers only a bare statement and a bare fn wrapper. That is a hole in a repo-wide guard, predates SL-245, and wants its own fix plus an anti-vacuity row for the macro case. To be raised as a backlog issue at reconcile — not folded into this slice, whose brief is the -X seam."""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "blocker"
+title = "Expected: VH-2, the whole corpus scaled to fit the window. Observed: 36s of graphviz, a 64MB PNG ghostty silently drops, and 237 rows of blank space"
+detail = """
+VH-2 (user, ghostty, on the fixed binary): 'whole corpus render took a lot of
+time and produced nothing but blank space.' VH-1, VH-3 and VH-4 passed.
+
+Measured on this corpus (`doctrine graph`, no focus):
+
+    DOT emitted                 845 KB  (2.1 s)
+    dot -Tpng                   36.6 s
+    graphviz's own stderr:      'graph is too large for cairo-renderer
+                                 bitmaps. Scaling by 0.668933 to fit'
+    PNG                         13762 x 32767 px, 64.4 MB   (height clamped
+                                 at cairo's 32767 limit)
+    base64 payload              ~86 MB, ~21000 chunked escapes
+    kitty::place                199 columns x 237 rows
+
+So doctrine writes ~86 MB of escape sequences at the terminal, ghostty declines
+an image that size, and `q=2` suppresses the failure reply — leaving exactly the
+237 newlines `encode_png` appends. Blank space is the ONLY possible outcome, and
+it is indistinguishable from success.
+
+This is the slice's own stated objective failing: scope objective 3 ends
+'nothing fails silently', and DEC-254's whole refusal apparatus exists so that a
+`-X` that cannot be honoured says so. Here it cannot be honoured and says
+nothing.
+
+DEC-256 bounds the placement in CELLS (`max_columns = columns - 1`) and bounds
+nothing in pixels or bytes, by design: 'A tall image is NOT bounded vertically.'
+At 199 x 237 cells the rectangle is perfectly reasonable; the 64 MB payload
+underneath it is not. The cell bound is not a resource bound and was mistaken
+for one.
+
+design sec-9 named this risk and mis-scoped its mitigation: 'Very large graphs.
+A whole-corpus PNG may be several megabytes, sent in-band as base64. The
+graphviz side is bounded by RENDER_TIMEOUT; the terminal side is not. Acceptable
+for an explicit opt-in, and observed at VH step 2.' Two things have moved.
+RENDER_TIMEOUT was cut from the slice (IMP-452), so the graphviz side is not
+bounded either; and VH step 2 has now observed it, which is what the risk
+deferred to. The observation says it is not acceptable.
+
+Note what a bound cannot fix: 5900 lines of DOT will not be legible in 199
+columns however it is scaled. Bounding the raster at the window
+(`dot -Gsize=20.7,20.7`) yields 834 x 1987 px / 1.8 MB base64 — 48x smaller and
+drawable — but it is a smudge, and still 25 s, because graphviz's cost here is
+layout, not rasterisation. So the honest outcome for a graph this size is a
+REFUSAL naming what would satisfy it (`<focus>`, `--depth`), which is POL-002
+facet (3)'s shape and the shape every other stop in `prepare` already has.
+
+Choosing the bound and the behaviour at it is a design decision (a DEC-256
+amendment), not an audit repair. Held for the user."""
+disposition = "fix-now"
+response = """
+Confirmed. Fixed as option (a) — refuse above a budget — on the user's call (2026-09-17), with F-8 alongside. Not routed back to /design: the change is one constant, one refusal arm and one pure check, which does not warrant an adversarial round. If it grows past that it becomes a backlog follow-up rather than an audit repair.
+
+terminal_image now carries a fifth stop:
+
+  const MAX_IMAGE_BYTES: usize = 8 * BYTES_PER_MIB;
+  fn check_image_size(bytes: usize) -> Result<(), RenderRefusal>
+  RenderRefusal::ImageTooLarge { bytes }
+
+applied in render_dot between rasterise and png_size, so nothing oversized is ever encoded, let alone sent.
+
+The bound is on BYTES because that is the resource actually spent. Cells were never a resource bound — the corpus placed into a perfectly ordinary 199 x 237 rectangle on top of a 61 MiB PNG, which is exactly why DEC-256 could not catch it.
+
+8 MiB, from the measurements in F-1's evidence and on the constant itself: --depth 1 = 143 KB (VH-1 confirms it draws), --depth 2 = 559 KB, --depth 3 = 9.6 MiB and ~900 rows of illegible scroll, whole corpus = 61 MiB and blank. The limit sits above every graph worth looking at and below every graph that is a smudge at any placement.
+
+The message names the size, the limit, and BOTH ways to narrow the graph — POL-002 facet (3), and it has to be actionable because it is the answer to `doctrine graph -X` with no focus, the most obvious thing to type.
+
+NOT fixed here, deliberately: the 36 s wait before the refusal. Bounding the raster via `dot -Gsize` was measured (834 x 1987 px, 1.8 MiB) and rejected — it still costs 25 s, because graphviz's cost on this graph is LAYOUT not rasterisation, and it converts a blank screen into an illegible grey one. A pre-spawn bound on DOT text would refuse in 2 s but is a proxy that could refuse a renderable graph. The wait is IMP-452's declared deferral (no CLI deadline; Ctrl-C is the timeout) and is left there rather than re-litigated under audit.
+
+DEC-256 amendment and the design sec-9 risk re-assessment go to the reconciliation brief."""
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "Expected: a terminal that rejects the image is distinguishable from one that drew it. Observed: q=2 suppresses the failure reply, so a dropped image is silent by construction"
+detail = """
+design sec-4 chooses `q=2` for a stated reason: 'no image id is sent, so no reply
+is expected; q=2 also suppresses failure replies that would otherwise be typed
+into the shell's input.' That reason is sound — VH-1 confirms no stray text
+reaches the input line.
+
+The unnamed cost is the other half: `q=2` suppresses failure replies FULL STOP,
+so when the terminal does reject a transmission doctrine cannot know. There is
+no arm anywhere in `terminal_image` for 'the terminal refused the image', and
+there cannot be one while the reply is suppressed.
+
+F-6 is what this costs in practice: an 86 MB payload ghostty declines, reported
+as a successful render. But the exposure is wider than F-6's size case —
+any terminal-side rejection (memory pressure, an unsupported PNG colour type, a
+truncated transmission) lands the same way.
+
+Not obviously wrong to keep `q=2`; the alternative reintroduces the shell-input
+pollution it was chosen to prevent, and reading a reply would mean a second
+raw-mode exchange AFTER the image is on screen. Raised so the tradeoff is
+recorded as a conscious one with both halves named, rather than as a
+one-sided benefit. Bears directly on F-6's fix: if doctrine cannot detect a
+rejection, it must PREVENT one, which argues for the refusal-before-send shape
+over a best-effort scale-and-hope."""
+disposition = "tolerated"
+response = """
+Confirmed, and consciously kept. q=2 stays.
+
+The rationale holds on its own terms and VH-1 confirms the benefit is real: no stray reply text reaches the shell's input line. The alternatives are both worse. Dropping to q=1 or q=0 reintroduces exactly the pollution q=2 was chosen to prevent, in the failure case where the user is already confused. Reading the reply properly would mean a second raw-mode exchange AFTER the image has been written, which is a materially riskier shape than the one PHASE-03 built and reviewed — and a terminal that accepted the image answers nothing, so the exchange would have to wait out a deadline on every successful render.
+
+What makes this tolerable rather than a live risk is F-6's fix, which is the reason these two findings are dispositioned together. The exposure was never really 'we cannot read the reply' — it was 'we send things that get rejected and cannot tell'. Refusing before sending removes the case that actually bit. Residual exposure after F-6: a terminal-side rejection for some reason OTHER than size (memory pressure, an unsupported PNG colour type, a truncated transmission) still lands as a silent no-op. Accepted: unobserved, not size-driven, and not worth a second raw-mode exchange on every render to detect.
+
+To be recorded in design sec-4 as a two-sided tradeoff rather than a one-sided benefit, and in sec-9's residuals — the design states the upside of q=2 and not its cost, which is how the blank screen came as a surprise. Reconcile, design.md sec-4 and sec-9, direct edit."""
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "Expected: a degraded render is disclosed (STD-003). Observed: graphviz warned it had downscaled the graph, and classify discards stderr on the success path"
+detail = """
+Rasterising the whole corpus, `dot` wrote to its stderr:
+
+    graph is too large for cairo-renderer bitmaps. Scaling by 0.668933 to fit
+
+`graphviz::classify` keeps stderr only on the failure arm:
+
+    Ok(output) if output.status.success() => RasterOutcome::Png(output.stdout),
+    Ok(output) => RasterOutcome::CommandFailed { status, stderr },
+
+So on every successful render graphviz's stderr is dropped. Here it was telling
+doctrine that the image it is about to send is not the image it asked for — the
+drawing was scaled by 0.67 and the height clamped at cairo's 32767 limit.
+
+STD-003 (no silent skip — a degraded read is disclosed) is squarely on point: a
+downscaled render is a degraded result, and it was discarded rather than
+disclosed. It is also evidence doctrine already HAD, at no cost, that would have
+made F-6 diagnosable instead of mysterious.
+
+Small and local: carry stderr on the `Png` arm too and surface a non-empty one
+on stderr as a note. Independent of how F-6 is settled, and useful either way."""
+disposition = "fix-now"
+response = """
+Confirmed and fixed. RasterOutcome::Png is now a struct variant carrying what dot said while succeeding:
+
+  Png { png: Vec<u8>, notes: String }
+
+classify trims dot's stderr into `notes` on the success arm; render_dot discloses a non-empty one on STDERR before the size check, so a downscale warning reaches the user whether or not the refusal fires. Written through a small `warn` helper shaped like state::warn_capture (the repo idiom — `print_stderr` is denied, `writeln!(std::io::stderr(), ..)` is not), because threading the note back through render_dot's return type into run_graph would widen the signature for nothing. The module's invariant is untouched: it still writes nothing to STDOUT.
+
+On the corpus this surfaces exactly what was being thrown away:
+
+  warning: 'dot' reported: graph is too large for cairo-renderer bitmaps. Scaling by 0.668933 to fit
+
+Evidence doctrine already had, for free, that would have made F-6 diagnosable instead of mysterious.
+
+PHASE-02 EX-1 pins `RasterOutcome { Png, ToolUnavailable, CommandFailed { status, stderr }, Io }` and names no payload for Png, so the struct variant stays conformant. Noted in the brief regardless, since the design's sec-5 prose describes the tuple shape."""
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "nit"
+title = "Expected: conformance's undeclared cell names scope creep. Observed: its one entry is the slice's own lifecycle status flip"
+detail = """
+`doctrine slice conformance 245`: 13 conformant, 0 undelivered, 1 undeclared —
+
+    M .doctrine/slice/245/slice-245.toml
+
+The whole delta is the lifecycle move the execution itself performs:
+
+    -status = "ready"       +status = "started"
+    -updated = "2026-09-15" +updated = "2026-09-17"
+
+Not scope creep, not a missed design-target, and not a selector to add: a slice's
+own metadata is not code the design declares. Raised so the cell is
+dispositioned rather than left as an unexplained red mark for the next reader,
+and so the reading is on the record — the registry is otherwise clean, which is
+what makes the conformance signal usable as evidence here."""
+disposition = "aligned"
+response = "The reading is confirmed and no change is warranted. A slice's own lifecycle metadata is not code its design declares, so no design-target selector should match it and none should be added — adding one would make the registry lie about what the slice builds. The cell is noise inherent to the conformance algebra, not a signal about SL-245. Recorded here so the ledger explains the one red mark rather than leaving it for the next reader to re-derive; the registry is otherwise clean (13 conformant, 0 undelivered), which is what makes conformance usable as evidence in this audit."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

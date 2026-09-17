@@ -1,0 +1,50 @@
+memory_uid = "mem_01a0ae133ba870139e66f345af732da5"
+memory_key = "mem.fact.tty.dev-tty-fstat-is-the-devnode"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "/dev/tty fstat reports the devnode, not the terminal — identify a controlling terminal by session id"
+summary = "st_rdev can never match between stdout and a /dev/tty fd; use POSIX tcgetsid to prove two fds are the same controlling terminal"
+created = "2026-09-17"
+updated = "2026-09-17"
+
+[scope]
+paths = ["src/tty.rs"]
+globs = []
+commands = []
+tags = ["tty", "terminal", "posix", "rustix"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e1090a3cdb1d6bf23996e8abd5d383ee03bd585e"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d972acaef8680f3d46b2067f0f9cf6672c0d9233d5e1f29543f1f7167b6dee08"
+base_commit = "6748a6422f8a7fff10c6b964b78e05742df96682"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-369"
+
+[[source]]
+kind = "slice"
+ref = "SL-245"
+
