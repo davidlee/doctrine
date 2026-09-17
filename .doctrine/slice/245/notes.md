@@ -133,9 +133,40 @@ Observation recorded.
 so `research.md` and its `raw/` threads live on disk in this worktree only. They
 are runtime tier by design; if a fresh clone needs them, re-run the round.
 
+## Audit — 2026-09-17 (RV-369)
+
+Implementation audit after the capsule hand-back. Phases ran in an oubliette
+capsule (ADR-020) on `capsule/SL-245/c11`; `VH-1..VH-4` could not run there and
+were run by the user during the audit. Ledger: **RV-369**, 9 findings, all
+terminal. `doctrine check gate` green.
+
+**Two blockers, both found by VH, neither visible to any automated leg.**
+
+- **F-1.** `tty::endpoint` compared `st_rdev` of stdout with `st_rdev` of a
+  `/dev/tty` fd. Unsatisfiable — an fd opened from `/dev/tty` fstats as the
+  devnode `(5,0)`, never as the pts `(136,N)`. `-X` refused every terminal in
+  existence while 17 VTs passed. Fixed: POSIX `tcgetsid` session ids.
+- **F-6.** The whole corpus produced 237 rows of blank space: a 61 MiB PNG that
+  ghostty silently declines, with `q=2` suppressing the refusal (F-7). `DEC-256`
+  bounds *cells*, which is not a resource bound. Fixed: an 8 MiB image budget
+  refusing before the send.
+
+**The structural lesson (F-2)** is the one worth carrying: pure decisions with
+injected inputs, plus e2e tests that only reach refusal paths, leave the
+*adapter* — the thing that measures what the pure rule compares — entirely
+uncovered. design sec-8 argued a pty harness was unnecessary *because the logic
+was pure and already tested*; that sentence is how this shipped. One `script`
+spawn now covers it.
+
+**Note on the capsule path:** the runtime phase sheets
+(`.doctrine/state/slice/245/phases/phase-0{2,3,5}.md`) came back as empty
+template stubs — the capsule worked in its own tree. There was nothing to
+harvest from them, so this audit's harvest is sourced from the ledger and the
+evidence run rather than from phase notes.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-15 · ready (plan approved) · 2d180bf2d
+fresh-as-of: 2026-09-17 · audited (RV-369 resolved, awaiting /reconcile) · 3a38acc50
 
 ### Produced
 
@@ -145,14 +176,22 @@ fresh-as-of: 2026-09-15 · ready (plan approved) · 2d180bf2d
 - DEC-253, DEC-254, DEC-255, DEC-256, DEC-257, DEC-258, DEC-259 (accepted); DEC-143 accepted + clarified
 - RV-368 (design review, codex gpt-5.6-sol): F-1..F-11 verified; F-12 verified (termios timed reads)
 - ISS-455 (bounded-spawn descendant-pipe hang, incumbent in coverage_verify)
+- Implementation: src/{graphviz,kitty,terminal_image}.rs + src/tty.rs render half; `doctrine graph -X`
+- RV-369 (implementation audit): F-1..F-9, all terminal — 4 fixed under audit, 1 dissolved, 1 tolerated
+- ISS-456 — dissolved by RV-369 F-1; close at reconcile
 
 ### Learned
 
 - mem.fact.rustix.poll-dev-tty-macos
+- mem.fact.tty.dev-tty-fstat-is-the-devnode (RV-369 F-1)
+- mem.pattern.testing.injected-probes-leave-the-adapter-untested (RV-369 F-2)
 - Friction observation: design apply subject-kind vocabulary (observation f0/01a0a42c)
+- Friction observations (audit): `review new` succeeds in a worktree fork while every other review verb refuses it; a fresh linked worktree cannot `cargo build` (gitignored `web/map/dist` absent)
 
 ### Open
 
-- Plan approval → PHASE-02 / PHASE-03 (/phase-plan, then /execute or /dispatch)
-- Reconcile: mark design up for the scope cut (slice-245.md § Scope cut); amend DEC-255, DEC-143
+- `/reconcile` — RV-369's Reconciliation Brief is the input; design markup for the scope cut rides with it
+- New backlog issue owed (RV-369 F-5 leg 2): `spawn_cwd_convention.rs::bin_refs` is blind to `doctrine_bin` inside a macro invocation
+- Annotate IMP-452: the deferred CLI deadline was weighed when the slow path ended in an image; it can now end in a refusal after ~36 s
+- CHR-072 still open — F-1 makes the code compile on macOS, it does not verify timed reads there
 - Keystrokes typed during the ≤2 s support probe are consumed (unnamed residual; see Inquiry state)
