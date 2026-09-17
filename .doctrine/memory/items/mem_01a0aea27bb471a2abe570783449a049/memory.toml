@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0aea27bb471a2abe570783449a049"
+memory_key = "mem.fact.graphviz.size-bang-upscales"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Graphviz -Gsize: plain is a maximum, ! also a minimum"
+summary = "graphviz -Gsize with a trailing ! is a minimum as well as a maximum; apparent size belongs to -Gdpi"
+created = "2026-09-17"
+updated = "2026-09-17"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["graphviz", "rendering"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "fc5715ca560846c3b89053d662aac127a235e360"
+tree = "f4978f581c2999b90b3111e993ef4440a63a78e6"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "fc5715ca560846c3b89053d662aac127a235e360"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "issue"
+ref = "ISS-459"
+
