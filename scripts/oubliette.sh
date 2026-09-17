@@ -44,7 +44,8 @@ usage: oubliette.sh send <slice> <slot> [ref]
        oubliette.sh back <slice> <slot>
 
   <slice>  245 or SL-245        <slot>  a single capsule, a..j
-  [ref]    default: the current branch
+  [ref]    default: the current branch — and it has to be what this
+           checkout is on, because the state half comes from the worktree
 
   send  archives whatever the slot held, then provisions it with the slice's
         code AND its gitignored state half, and prints the agent's first line.
@@ -268,8 +269,28 @@ cmd_send() {
     ref=$(git branch --show-current) || true
     [ -n "$ref" ] || die "detached HEAD — name a ref: oubliette.sh send $N $SLOT <ref>"
   fi
-  git rev-parse --verify --quiet "$ref^{commit}" >/dev/null \
+  local refoid
+  refoid=$(git rev-parse --verify --quiet "$ref^{commit}") \
     || die "no commit at '$ref' in this repo."
+
+  # The two halves of a send disagree about what `$ref` means, and only one of
+  # them is told. The code half takes the ref; `--state-from-host` snapshots
+  # *this worktree*, and `capsule-brief` gates that on the checkout's HEAD
+  # matching the guest's — not on the ref (oubliette host/brief.nix, "this
+  # checkout is at X and <slot> is at Y"). So a ref that is not HEAD is refused
+  # anyway, in step 2 of the provision, once the code has landed: a capsule with
+  # code and no state, which is the half-and-half checkout the dirty-tree
+  # refusal above exists to prevent, one layer over. Refused here instead, where
+  # nothing has been pushed.
+  local head
+  head=$(git rev-parse HEAD)
+  [ "$refoid" = "$head" ] || die \
+    "'$ref' is not what this checkout is on, and the state half cannot follow it." \
+    "ref   $(git rev-parse --short "$refoid")  $ref" \
+    "HEAD  $(git rev-parse --short "$head")  $(git branch --show-current)" \
+    "A state tree is worktree content, so it is the state of one commit; the" \
+    "guest would take the code and then refuse the state." \
+    "git switch to it first, or send with no ref at all."
 
   # Before anything is started, collected or forced: is the machine on the other
   # end built from anything resembling this code?
