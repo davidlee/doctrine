@@ -63,6 +63,7 @@ mod install;
 mod install_config;
 mod integrity;
 mod kinds;
+mod kitty;
 mod knowledge;
 mod lazyspec;
 mod ledger;

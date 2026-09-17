@@ -82,7 +82,7 @@ cordage = { path = "crates/cordage", version = "0.2.0" }
 # (src/worktree/claim_lock.rs, SL-228 PHASE-04). Unifies with the existing transitive
 # v1.1.4 (via crossterm), so `default-features = false` + the single `fs` feature adds
 # ZERO new compiled crates (rustix is already built; `fs` only widens its own surface).
-rustix = { version = "1", default-features = false, features = ["fs"] }
+rustix = { version = "1", default-features = false, features = ["fs", "termios"] }
 walkdir.workspace = true
 webbrowser = "1"
 ignore = "0.4.26"
