@@ -56,7 +56,7 @@ const BYTES_PER_MIB: usize = 1024 * 1024;
 ///
 /// `DEC-256` bounds the placement in CELLS and nothing in bytes, which is not a
 /// resource bound: the whole corpus places into a perfectly reasonable
-/// 199 × 237 rectangle on top of a 64 MiB PNG that ghostty silently declines,
+/// 199 × 237 rectangle on top of a 62 MiB PNG that ghostty silently declines,
 /// leaving the user 237 blank rows (RV-369 F-6). `q=2` means the terminal's
 /// refusal is unreportable (F-7), so an image that would be rejected has to be
 /// refused HERE, before it is sent — the same shape as every other stop in
@@ -64,7 +64,7 @@ const BYTES_PER_MIB: usize = 1024 * 1024;
 ///
 /// Measured on this corpus: a focused graph at `--depth 1` rasterises to 143 KB
 /// and draws; `--depth 2` to 559 KB; `--depth 3` to 9.6 MiB and 18109 px tall,
-/// which is ~900 rows of illegible scroll; the whole corpus to 61 MiB, which
+/// which is ~900 rows of illegible scroll; the whole corpus to 62 MiB, which
 /// draws nothing at all. 8 MiB sits above every graph worth looking at and
 /// below every graph that is a smudge at any placement — and being refused is
 /// cheap, because the message names the two flags that narrow the graph.
@@ -163,7 +163,10 @@ const MSG_IMAGE_TOO_LARGE: &str = "--render needs a smaller graph: 'dot' produce
 /// RV-369 F-8. `dot` exited zero and still had something to say — most usefully
 /// that it downscaled the drawing to fit cairo's bitmap limit, which means the
 /// image about to be sent is not the image that was asked for.
-const MSG_DOT_NOTES: &str = "warning: 'dot' reported: {stderr}";
+/// No tool name of our own: graphviz already prefixes its stderr with `dot: `,
+/// so naming it here produced `'dot' reported: dot: graph is too large …`
+/// (observed at the VH-2 re-run). Let the tool speak for itself.
+const MSG_DOT_NOTES: &str = "warning: {stderr}";
 
 /// `dot` exited on its own, with a code.
 const DOT_STATUS_EXIT: &str = "exit {code}";
@@ -611,7 +614,7 @@ mod tests {
     // ── RV-369 F-6: the image budget ───────────────────────────────────────
 
     /// The bound is on BYTES, and it is inclusive at the limit. The corpus case
-    /// that convicted this (VH-2) was 61 MiB behind a placement of 199 × 237
+    /// that convicted this (VH-2) was 62 MiB behind a placement of 199 × 237
     /// cells — a cell rectangle nothing would object to, which is why the cell
     /// bound could not catch it.
     #[test]
