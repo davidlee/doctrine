@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0ae39afc878028402546eb07955a6"
+memory_key = "mem.fact.design.no-unheaded-preamble"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "A design.md cannot carry text before its first section heading"
+summary = "The design reader refuses any non-blank content before the first heading with UnheadedPreamble; a reconcile banner must sit under a heading, not above sec-1."
+created = "2026-09-17"
+updated = "2026-09-17"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["design", "reconcile", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "fd7669348106165e9119d6dd12776855a049dc78"
+ref_name = "refs/heads/edge"
+checkout_state_id = "9d40dce6cad8de705f41d136d45c9fcb3697bb425e49fc7ea9ad296840dc136d"
+base_commit = "8a2784e5f5202c4f412ab85431916e647b18363a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-245"
+

@@ -166,32 +166,37 @@ evidence run rather than from phase notes.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-17 · audited (RV-369 resolved, awaiting /reconcile) · 3a38acc50
+fresh-as-of: 2026-09-17 · reconciled (RV-369 discharged, REV-056 done) · f591accd5
 
 ### Produced
 
-- design.md sec-1..sec-9 (run dr-019fd12e…, locked 2026-09-15)
+- design.md sec-1..sec-9 (run dr-019fd12e…, locked 2026-09-15; reconciled in place 2026-09-17 — direct edit out of band, per mem.pattern.reconcile.edit-design-out-of-band)
 - plan.toml / plan.md: PHASE-02, PHASE-03, PHASE-05 after scope cut (PHASE-01/04/06 removed, never reused)
-- IMP-451 (concept-map export -X), IMP-452 (bounded subprocess + render timeout), CHR-072 (macOS probe check) — deferred by scope cut
-- DEC-253, DEC-254, DEC-255, DEC-256, DEC-257, DEC-258, DEC-259 (accepted); DEC-143 accepted + clarified
+- IMP-451 (concept-map export -X), IMP-452 (bounded subprocess + render timeout; annotated at reconcile), CHR-072 (macOS probe check) — deferred by scope cut
+- DEC-253, DEC-254, DEC-255, DEC-256, DEC-257, DEC-258, DEC-259 (accepted); DEC-143 accepted + clarified. DEC-256/DEC-259 amended at reconcile (RV-369 F-1, F-6); DEC-255/DEC-143 corrected for the scope cut
 - RV-368 (design review, codex gpt-5.6-sol): F-1..F-11 verified; F-12 verified (termios timed reads)
 - ISS-455 (bounded-spawn descendant-pipe hang, incumbent in coverage_verify)
 - Implementation: src/{graphviz,kitty,terminal_image}.rs + src/tty.rs render half; `doctrine graph -X`
 - RV-369 (implementation audit): F-1..F-9, all terminal — 4 fixed under audit, 1 dissolved, 1 tolerated
-- ISS-456 — dissolved by RV-369 F-1; close at reconcile
+- REV-056 (reconcile-sl-245, done): SPEC-027 resp. 5 + REQ-396 acceptance criterion 3 gain the render output mode — the Revision DEC-258 queued at design time
+- ISS-456 — closed obsolete at reconcile (dissolved by RV-369 F-1; explicitly NOT macOS clearance)
+- ISS-457 — spawn_cwd_convention.rs::bin_refs is blind inside macro invocations (RV-369 F-5 leg 2)
 
 ### Learned
 
 - mem.fact.rustix.poll-dev-tty-macos
 - mem.fact.tty.dev-tty-fstat-is-the-devnode (RV-369 F-1)
 - mem.pattern.testing.injected-probes-leave-the-adapter-untested (RV-369 F-2)
+- mem.fact.capsule.phase-state-does-not-ride-the-imported-diff (reconcile: coord read `phases: 0/3` on a fully audited slice)
+- mem.fact.design.no-unheaded-preamble (reconcile: the scope-cut banner had to move under the sec-1 heading)
 - Friction observation: design apply subject-kind vocabulary (observation f0/01a0a42c)
 - Friction observations (audit): `review new` succeeds in a worktree fork while every other review verb refuses it; a fresh linked worktree cannot `cargo build` (gitignored `web/map/dist` absent)
+- Friction observation (reconcile): capsule phase state is runtime tier and does not ride the imported diff (observation bc/01a0ae36)
 
 ### Open
 
-- `/reconcile` — RV-369's Reconciliation Brief is the input; design markup for the scope cut rides with it
-- New backlog issue owed (RV-369 F-5 leg 2): `spawn_cwd_convention.rs::bin_refs` is blind to `doctrine_bin` inside a macro invocation
-- Annotate IMP-452: the deferred CLI deadline was weighed when the slow path ended in an image; it can now end in a refusal after ~36 s
-- CHR-072 still open — F-1 makes the code compile on macOS, it does not verify timed reads there
+- CHR-072 still open — RV-369 F-1 makes the code compile on macOS, it does not verify VMIN/VTIME timed reads there. Do not read ISS-456's closure as platform clearance
+- PHASE-03 EX-2 pins `endpoint(…)` "over st_rdev values" and is false as written. Plan criteria are immutable-append and are not a reconcile edit surface — recorded as a design/plan divergence, behaviour preserved exactly
+- MAX_IMAGE_BYTES = 8 MiB is calibrated to this corpus, not derived from any published terminal limit
 - Keystrokes typed during the ≤2 s support probe are consumed (unnamed residual; see Inquiry state)
+- q=2 keeps a terminal-side rejection unreportable for any cause other than size (RV-369 F-7, tolerated; sec-9 residual)

@@ -1,0 +1,50 @@
+memory_uid = "mem_01a0ae39aefb7101b82595abf693d859"
+memory_key = "mem.fact.capsule.phase-state-does-not-ride-the-imported-diff"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Capsule phase state stays in the fork — the coord tree reads 0/N"
+summary = "A capsule worker's phase-sheet status flips are runtime tier, so the orchestrator's working-tree diff import leaves the coord tree reading 'phases: 0/N' on a fully implemented slice."
+created = "2026-09-17"
+updated = "2026-09-17"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["capsule", "dispatch", "lifecycle", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "8a2784e5f5202c4f412ab85431916e647b18363a"
+tree = "fd7669348106165e9119d6dd12776855a049dc78"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "8a2784e5f5202c4f412ab85431916e647b18363a"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-245"
+
+[[source]]
+kind = "review"
+ref = "RV-369"
+
