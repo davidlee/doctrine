@@ -19,6 +19,12 @@
       "skillPath": "plugins/doctrine/skills/canon/SKILL.md",
       "computedHash": "337a98e9257c9db187ef945cd9cba35ccbdfcf383323e012c95739dabc7c94d2"
     },
+    "capsule-driver": {
+      "source": "davidlee/doctrine",
+      "sourceType": "github",
+      "skillPath": "plugins/doctrine/skills/capsule-driver/SKILL.md",
+      "computedHash": "832a0be7f2fcb8d4081ab361df32300dc71f08aa490534de64270c5bf9729b81"
+    },
     "close": {
       "source": "davidlee/doctrine",
       "sourceType": "github",
