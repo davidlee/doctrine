@@ -112,7 +112,7 @@ const MIN_WRAP_WIDTH: u16 = 16;
 // could authorise output to another. `stdout_terminal_width` above cannot
 // serve — it returns `None` for both a pipe and an unreadable size, and it
 // probes through crossterm, which picks its own descriptor. So this half opens
-// the controlling terminal once, proves it is stdout's device, and does
+// the controlling terminal once, proves it is stdout's own terminal, and does
 // everything else on that one file descriptor.
 
 /// The controlling terminal's device node — opened read-write and BLOCKING.
@@ -151,7 +151,7 @@ pub(crate) enum RenderTarget {
     Terminal(RenderTerminal),
 }
 
-/// The controlling terminal, verified to be stdout's own device. Every later
+/// The controlling terminal, verified to be stdout's own terminal. Every later
 /// `termios`, winsize and I/O call goes through this one handle.
 pub(crate) struct RenderTerminal {
     tty: std::fs::File,
@@ -188,30 +188,54 @@ enum Endpoint {
     Same,
 }
 
-/// The pure endpoint decision with every probe injected (device ids are
-/// `st_rdev`).
+/// The pure endpoint decision with every probe injected, as SESSION ids.
 ///
-/// `tty_device: None` carries "`/dev/tty` would not open" — EX-2's "a failed
-/// `/dev/tty` open maps to `NotControlling`". Modelling it as an absent device
-/// rather than a propagated error keeps the *decision* here, in the pure
-/// layer, and keeps the shell free of a nested `Result`.
-fn endpoint(stdout_is_tty: bool, stdout_device: u64, tty_device: Option<u64>) -> Endpoint {
+/// **Not device ids.** `st_rdev` reads as the obvious identity and is not one:
+/// an fd opened from `/dev/tty` fstats as the `/dev/tty` devnode itself
+/// (`(5,0)` on Linux), never as the pts it redirects to (`(136,N)`), so the two
+/// `st_rdev` values can never be equal and the check would refuse every
+/// terminal in existence (RV-369 F-1, caught by human acceptance after every
+/// automated test passed).
+///
+/// A session id IS an identity, and a total one: a controlling terminal belongs
+/// to exactly one session and a session has at most one controlling terminal,
+/// so two fds reporting the same session are the same terminal.
+///
+/// `None` carries "not the controlling terminal of any session" — `/dev/tty`
+/// would not open, or `tcgetsid` said `ENOTTY`. Both are EX-2's "maps to
+/// `NotControlling`", and two `None`s are never `Same`: neither fd named a
+/// session, so nothing was identified.
+fn endpoint(
+    stdout_is_tty: bool,
+    stdout_session: Option<i32>,
+    tty_session: Option<i32>,
+) -> Endpoint {
     if !stdout_is_tty {
         return Endpoint::NotTerminal;
     }
-    match tty_device {
-        Some(device) if device == stdout_device => Endpoint::Same,
-        // No controlling terminal, or a different device than stdout's.
+    match (stdout_session, tty_session) {
+        (Some(stdout), Some(tty)) if stdout == tty => Endpoint::Same,
+        // No controlling terminal, or stdout is a different one than ours.
         _ => Endpoint::NotControlling,
     }
 }
 
+/// The session `fd` is the controlling terminal of, or `None` when it is not
+/// one at all (`ENOTTY`, or a plain file). A typed outcome, not a swallowed
+/// error (STD-003): "this fd names no session" is an ANSWER the decision needs,
+/// not a failure of the probe.
+fn controlling_session<Fd: std::os::fd::AsFd>(fd: Fd) -> Option<i32> {
+    rustix::termios::tcgetsid(fd)
+        .ok()
+        .map(|session| session.as_raw_nonzero().get())
+}
+
 /// Thin shell: isatty(stdout); open `/dev/tty` read-write and blocking;
-/// `fstat` both; `tcgetwinsize` on the tty. The decision itself is the pure
+/// `tcgetsid` both; `tcgetwinsize` on the tty. The decision itself is the pure
 /// [`endpoint`], so the interesting part is testable without a terminal.
 pub(crate) fn open_render_terminal() -> std::io::Result<RenderTarget> {
     let stdout_is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
-    let stdout_device = rustix::fs::fstat(std::io::stdout())?.st_rdev;
+    let stdout_session = controlling_session(std::io::stdout());
     // A `/dev/tty` that will not open IS the "no controlling terminal" answer
     // (EX-2) — the error is not propagated, because it is not a failure of
     // this function, it is one of the outcomes it reports.
@@ -222,13 +246,9 @@ pub(crate) fn open_render_terminal() -> std::io::Result<RenderTarget> {
     )
     .ok()
     .map(std::fs::File::from);
-    let tty_device = tty
-        .as_ref()
-        .map(rustix::fs::fstat)
-        .transpose()?
-        .map(|stat| stat.st_rdev);
+    let tty_session = tty.as_ref().and_then(controlling_session);
 
-    match (endpoint(stdout_is_tty, stdout_device, tty_device), tty) {
+    match (endpoint(stdout_is_tty, stdout_session, tty_session), tty) {
         (Endpoint::Same, Some(tty)) => {
             let size = rustix::termios::tcgetwinsize(&tty)?;
             Ok(RenderTarget::Terminal(RenderTerminal {
@@ -484,24 +504,41 @@ mod tests {
         std::io::Error::other("synthetic")
     }
 
-    /// VT-1: the pure endpoint decision over injected probe results (device ids
-    /// are `st_rdev`). A failed `/dev/tty` open reaches here as `None` — the
-    /// shell never propagates that error (EX-2), so "no controlling terminal"
-    /// is a typed outcome rather than a swallowed one (STD-003).
+    /// VT-1: the pure endpoint decision over injected probe results (session
+    /// ids). A failed `/dev/tty` open, and an fd that is no session's
+    /// controlling terminal, both reach here as `None` — the shell never
+    /// propagates either as an error (EX-2), so "no controlling terminal" is a
+    /// typed outcome rather than a swallowed one (STD-003).
+    ///
+    /// These cases pin the RULE, not the wiring: the shipped defect (RV-369
+    /// F-1) was that the shell fed this function two `st_rdev` values that can
+    /// never be equal, which no injected case can see. The pty test in
+    /// `tests/e2e_render_guard.rs` is what covers the feed.
     #[test]
     fn endpoint_decides_from_injected_probe_results() {
-        // stdout is not a terminal at all — device ids are irrelevant.
-        assert_eq!(endpoint(false, 0x8801, Some(0x8801)), Endpoint::NotTerminal);
-        // stdout is a terminal, but `/dev/tty` would not open: no controlling one.
-        assert_eq!(endpoint(true, 0x8801, None), Endpoint::NotControlling);
-        // Both are terminals, but different devices — a probe of one must never
-        // authorise output to the other.
+        const OURS: i32 = 4101;
+        const THEIRS: i32 = 4207;
+
+        // stdout is not a terminal at all — session ids are irrelevant.
         assert_eq!(
-            endpoint(true, 0x8801, Some(0x8802)),
+            endpoint(false, Some(OURS), Some(OURS)),
+            Endpoint::NotTerminal
+        );
+        // stdout is a terminal, but `/dev/tty` would not open: no controlling one.
+        assert_eq!(endpoint(true, Some(OURS), None), Endpoint::NotControlling);
+        // stdout is a terminal that is no session's controlling terminal.
+        assert_eq!(endpoint(true, None, Some(OURS)), Endpoint::NotControlling);
+        // Neither fd named a session: nothing was identified, so nothing matches.
+        // `None == None` must NOT read as `Same`.
+        assert_eq!(endpoint(true, None, None), Endpoint::NotControlling);
+        // Both are controlling terminals, but of different sessions — a probe of
+        // one must never authorise output to the other.
+        assert_eq!(
+            endpoint(true, Some(THEIRS), Some(OURS)),
             Endpoint::NotControlling
         );
         // One verified endpoint.
-        assert_eq!(endpoint(true, 0x8801, Some(0x8801)), Endpoint::Same);
+        assert_eq!(endpoint(true, Some(OURS), Some(OURS)), Endpoint::Same);
     }
 
     /// VT-2: `bracket`'s success path — every stage runs, the body's value is

@@ -10,8 +10,9 @@
 //!   format → controlling terminal → pixel size → kitty support probe. The
 //!   pixel-size stop sits BEFORE the probe deliberately: a terminal that cannot
 //!   report pixels is refused without being talked to.
-//! - [`render_dot`] rasterises and encodes into ONE buffer, so the caller has a
-//!   single `write_all` and no half-written escape can survive a failure.
+//! - [`render_dot`] rasterises, discloses anything `dot` said, refuses an image
+//!   too large to send, and encodes into ONE buffer, so the caller has a single
+//!   `write_all` and no half-written escape can survive a failure.
 //!
 //! **Nothing here writes to stdout.** Every stop is a refusal *value*, returned
 //! to the command shell, which is what makes "no escape byte reaches stdout on a
@@ -47,6 +48,34 @@ fn support_probe_timeout_text() -> String {
     format!("{}s", SUPPORT_PROBE_TIMEOUT.as_secs())
 }
 
+// ── The image budget (RV-369 F-6) ──────────────────────────────────────────
+
+const BYTES_PER_MIB: usize = 1024 * 1024;
+
+/// The largest PNG `-X` will hand the terminal.
+///
+/// `DEC-256` bounds the placement in CELLS and nothing in bytes, which is not a
+/// resource bound: the whole corpus places into a perfectly reasonable
+/// 199 × 237 rectangle on top of a 64 MiB PNG that ghostty silently declines,
+/// leaving the user 237 blank rows (RV-369 F-6). `q=2` means the terminal's
+/// refusal is unreportable (F-7), so an image that would be rejected has to be
+/// refused HERE, before it is sent — the same shape as every other stop in
+/// [`prepare`], and the one POL-002 facet (3) asks for.
+///
+/// Measured on this corpus: a focused graph at `--depth 1` rasterises to 143 KB
+/// and draws; `--depth 2` to 559 KB; `--depth 3` to 9.6 MiB and 18109 px tall,
+/// which is ~900 rows of illegible scroll; the whole corpus to 61 MiB, which
+/// draws nothing at all. 8 MiB sits above every graph worth looking at and
+/// below every graph that is a smudge at any placement — and being refused is
+/// cheap, because the message names the two flags that narrow the graph.
+const MAX_IMAGE_BYTES: usize = 8 * BYTES_PER_MIB;
+
+/// Whole mebibytes, rounded UP — so a refused image never reads as smaller than
+/// the limit it exceeded.
+fn mib(bytes: usize) -> usize {
+    bytes.div_ceil(BYTES_PER_MIB)
+}
+
 // ── Message placeholders ───────────────────────────────────────────────────
 
 /// The requested `--format` value.
@@ -57,6 +86,12 @@ const PLACEHOLDER_ERROR: &str = "{error}";
 
 /// The probe budget, from [`support_probe_timeout_text`].
 const PLACEHOLDER_TIMEOUT: &str = "{timeout}";
+
+/// A size in whole mebibytes, from [`mib`].
+const PLACEHOLDER_MIB: &str = "{mib}";
+
+/// [`MAX_IMAGE_BYTES`] in whole mebibytes.
+const PLACEHOLDER_LIMIT: &str = "{limit}";
 
 /// How `dot` terminated — [`DOT_STATUS_EXIT`] or [`DOT_STATUS_SIGNAL`].
 const PLACEHOLDER_STATUS: &str = "{status}";
@@ -92,11 +127,12 @@ const MSG_UNSUPPORTED: &str = "--render needs a terminal that supports the kitty
 const MSG_UNCONFIRMED: &str = "--render could not confirm kitty graphics support: \
      the terminal did not answer within {timeout}; drop -X to emit DOT";
 
-/// `open_render_terminal` failing outright (`fstat` / `tcgetwinsize`).
+/// `open_render_terminal` failing outright (`tcgetwinsize`).
 ///
-/// Design sec-3's table has no row for this path; this is a THIRTEENTH constant,
-/// which EX-1's "every message in the table is a named constant" permits — it is
-/// a floor, not a ceiling. It deliberately does NOT reuse [`MSG_TTY_QUERY_IO`]:
+/// Design sec-3's table has no row for this path, nor for
+/// [`MSG_IMAGE_TOO_LARGE`]; EX-1's "every message in the table is a named
+/// constant" is a floor, not a ceiling, so both are conformant. It deliberately
+/// does NOT reuse [`MSG_TTY_QUERY_IO`]:
 /// that row means "the terminal was opened and the exchange failed", whereas this
 /// one means "the terminal could not be inspected at all", and POL-002 facet (3)
 /// requires the message to name what was actually missing. Queued for reconcile
@@ -118,6 +154,17 @@ const MSG_DOT_IO: &str = "could not run 'dot': {error}";
 
 const MSG_NOT_A_PNG: &str = "'dot -Tpng' produced output that is not a PNG";
 
+/// RV-369 F-6. Names the size, the limit, and BOTH flags that narrow a graph —
+/// the refusal has to be actionable, because it is the answer to the most
+/// obvious thing a user types (`doctrine graph -X`, no focus).
+const MSG_IMAGE_TOO_LARGE: &str = "--render needs a smaller graph: 'dot' produced a {mib} MiB image and the terminal is \
+     sent at most {limit} MiB; narrow it with a focus id or --depth, or drop -X to emit DOT";
+
+/// RV-369 F-8. `dot` exited zero and still had something to say — most usefully
+/// that it downscaled the drawing to fit cairo's bitmap limit, which means the
+/// image about to be sent is not the image that was asked for.
+const MSG_DOT_NOTES: &str = "warning: 'dot' reported: {stderr}";
+
 /// `dot` exited on its own, with a code.
 const DOT_STATUS_EXIT: &str = "exit {code}";
 
@@ -136,12 +183,20 @@ const DOT_STATUS_SIGNAL: &str = "killed by signal";
 /// unmet precondition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum RenderRefusal {
-    FormatNotDot { format: String },
+    FormatNotDot {
+        format: String,
+    },
     NotTerminal,
     NotControllingTerminal,
     Unsupported,
     Unconfirmed,
     NoPixelSize,
+    /// The rasterised PNG exceeds [`MAX_IMAGE_BYTES`] (RV-369 F-6). A guard stop
+    /// like the others — the user acts on it by narrowing the graph — but the
+    /// only one that cannot be decided until after `dot` has run.
+    ImageTooLarge {
+        bytes: usize,
+    },
 }
 
 impl std::fmt::Display for RenderRefusal {
@@ -157,6 +212,11 @@ impl std::fmt::Display for RenderRefusal {
                 &MSG_UNCONFIRMED.replace(PLACEHOLDER_TIMEOUT, &support_probe_timeout_text()),
             ),
             Self::NoPixelSize => f.write_str(MSG_NO_PIXEL_SIZE),
+            Self::ImageTooLarge { bytes } => f.write_str(
+                &MSG_IMAGE_TOO_LARGE
+                    .replace(PLACEHOLDER_MIB, &mib(*bytes).to_string())
+                    .replace(PLACEHOLDER_LIMIT, &mib(MAX_IMAGE_BYTES).to_string()),
+            ),
         }
     }
 }
@@ -232,6 +292,18 @@ fn check_support(reply: Result<Option<Vec<u8>>, QueryError>) -> anyhow::Result<(
     }
 }
 
+/// Stop 5 — the rasterised image against [`MAX_IMAGE_BYTES`] (RV-369 F-6).
+///
+/// Last of the stops, and the only one that cannot run in [`prepare`]: nothing
+/// knows the size until `dot` has produced it. Pure, so the rule is testable
+/// without spawning graphviz.
+fn check_image_size(bytes: usize) -> Result<(), RenderRefusal> {
+    if bytes <= MAX_IMAGE_BYTES {
+        return Ok(());
+    }
+    Err(RenderRefusal::ImageTooLarge { bytes })
+}
+
 /// The support probe's "stop reading" predicate: anything that is not
 /// [`SupportReply::Incomplete`] is a verdict.
 fn support_reply_complete(bytes: &[u8]) -> bool {
@@ -295,11 +367,30 @@ pub(crate) fn render_dot(dot: &str, cell: &CellGeometry) -> anyhow::Result<Vec<u
                 .replace(PLACEHOLDER_STDERR, stderr.trim())
         )),
         RasterOutcome::Io(error) => Err(anyhow::anyhow!(io_message(MSG_DOT_IO, &error))),
-        RasterOutcome::Png(bytes) => {
-            let size = kitty::png_size(&bytes).ok_or_else(|| anyhow::anyhow!(MSG_NOT_A_PNG))?;
-            Ok(kitty::encode_png(&bytes, kitty::place(size, cell)))
+        RasterOutcome::Png { png, notes } => {
+            // F-8: `dot` succeeded and still had something to say. Disclosed
+            // before the size check, so a downscale warning reaches the user
+            // whether or not the refusal below fires.
+            if !notes.is_empty() {
+                warn(&MSG_DOT_NOTES.replace(PLACEHOLDER_STDERR, &notes));
+            }
+            check_image_size(png.len())?;
+            let size = kitty::png_size(&png).ok_or_else(|| anyhow::anyhow!(MSG_NOT_A_PNG))?;
+            Ok(kitty::encode_png(&png, kitty::place(size, cell)))
         }
     }
+}
+
+/// The one place this module writes anything, and it writes to STDERR.
+///
+/// The module's invariant is that no byte it produces reaches STDOUT on a
+/// refusal path — a diagnostic on stderr does not touch that, and the
+/// alternative (threading a note back through `render_dot`'s return type into
+/// `run_graph`) would buy nothing but a wider signature. Shape follows
+/// `state::warn_capture`; a failed warning is not worth failing a render over.
+fn warn(message: &str) {
+    use std::io::Write as _;
+    let _ignored = writeln!(std::io::stderr(), "{message}");
 }
 
 // ── tests ──────────────────────────────────────────────────────────────────
@@ -506,12 +597,66 @@ mod tests {
             RenderRefusal::Unsupported,
             RenderRefusal::Unconfirmed,
             RenderRefusal::NoPixelSize,
+            RenderRefusal::ImageTooLarge {
+                bytes: MAX_IMAGE_BYTES + 1,
+            },
         ];
         for refusal in &refusals {
             let message = refusal.to_string();
             assert!(message.contains("--render"), "no flag in: {message}");
             assert!(message.contains("drop -X"), "no remedy in: {message}");
         }
+    }
+
+    // ── RV-369 F-6: the image budget ───────────────────────────────────────
+
+    /// The bound is on BYTES, and it is inclusive at the limit. The corpus case
+    /// that convicted this (VH-2) was 61 MiB behind a placement of 199 × 237
+    /// cells — a cell rectangle nothing would object to, which is why the cell
+    /// bound could not catch it.
+    #[test]
+    fn the_image_budget_admits_the_limit_and_refuses_past_it() {
+        assert!(
+            check_image_size(0).is_ok(),
+            "an empty render is not too big"
+        );
+        assert!(
+            check_image_size(MAX_IMAGE_BYTES).is_ok(),
+            "the limit itself is admitted"
+        );
+        assert_eq!(
+            check_image_size(MAX_IMAGE_BYTES + 1),
+            Err(RenderRefusal::ImageTooLarge {
+                bytes: MAX_IMAGE_BYTES + 1
+            })
+        );
+        // The measured whole-corpus case.
+        assert!(check_image_size(64 * BYTES_PER_MIB).is_err());
+        // The measured `--depth 1` case, which VH-1 confirmed draws.
+        assert!(check_image_size(143 * 1024).is_ok());
+    }
+
+    /// The refusal has to be actionable: it is the answer to `doctrine graph -X`
+    /// with no focus, which is the most obvious thing to type.
+    #[test]
+    fn the_size_refusal_names_the_size_the_limit_and_both_ways_to_narrow() {
+        let message = RenderRefusal::ImageTooLarge {
+            bytes: 64 * BYTES_PER_MIB,
+        }
+        .to_string();
+        assert!(message.contains("64 MiB"), "{message}");
+        assert!(message.contains("8 MiB"), "{message}");
+        assert!(message.contains("focus"), "{message}");
+        assert!(message.contains("--depth"), "{message}");
+    }
+
+    /// Rounded UP, so a refused image never reads as smaller than the limit it
+    /// just exceeded — `8 MiB + 1 byte` must not print as `8 MiB`.
+    #[test]
+    fn a_size_just_over_the_limit_does_not_print_as_the_limit() {
+        assert_eq!(mib(MAX_IMAGE_BYTES), 8);
+        assert_eq!(mib(MAX_IMAGE_BYTES + 1), 9);
+        assert_eq!(mib(0), 0);
     }
 
     #[test]

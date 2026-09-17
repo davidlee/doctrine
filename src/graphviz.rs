@@ -20,8 +20,15 @@ pub(crate) const DOT_PROGRAM: &str = "dot";
 /// Outcome of a `dot -Tpng` raster spawn.
 #[derive(Debug)]
 pub(crate) enum RasterOutcome {
-    /// The rendered PNG bytes (`dot`'s stdout on a clean exit).
-    Png(Vec<u8>),
+    /// The rendered PNG bytes (`dot`'s stdout on a clean exit), and whatever
+    /// `dot` said on its stderr while succeeding.
+    ///
+    /// `notes` is carried rather than dropped because a zero exit does not mean
+    /// an undegraded render: graphviz reports a forced downscale this way —
+    /// `graph is too large for cairo-renderer bitmaps. Scaling by 0.668933 to
+    /// fit` — and discarding it hid exactly that from the caller (RV-369 F-8;
+    /// STD-003, a degraded read is disclosed). Usually empty.
+    Png { png: Vec<u8>, notes: String },
     /// `program` was not found (`io::ErrorKind::NotFound`).
     ToolUnavailable,
     /// `dot` exited non-zero; `status` is its exit code (`None` if killed by
@@ -84,7 +91,10 @@ fn classify(run: std::io::Result<Output>) -> RasterOutcome {
     match run {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => RasterOutcome::ToolUnavailable,
         Err(e) => RasterOutcome::Io(e),
-        Ok(output) if output.status.success() => RasterOutcome::Png(output.stdout),
+        Ok(output) if output.status.success() => RasterOutcome::Png {
+            png: output.stdout,
+            notes: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        },
         Ok(output) => RasterOutcome::CommandFailed {
             status: output.status.code(),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -126,7 +136,31 @@ mod tests {
     fn classify_success_is_png_with_stdout() {
         let output = synthetic_output(0, b"\x89PNG", b"");
         match classify(Ok(output)) {
-            RasterOutcome::Png(bytes) => assert_eq!(bytes, b"\x89PNG"),
+            RasterOutcome::Png { png, notes } => {
+                assert_eq!(png, b"\x89PNG");
+                assert!(notes.is_empty(), "a clean render says nothing: {notes:?}");
+            }
+            other => panic!("expected Png, got {other:?}"),
+        }
+    }
+
+    /// RV-369 F-8: a zero exit does not mean an undegraded render. graphviz
+    /// announces a forced downscale on stderr and still succeeds, and the
+    /// caller must be able to see it (STD-003).
+    #[test]
+    #[cfg(unix)]
+    fn classify_success_carries_what_dot_said_while_succeeding() {
+        let warning =
+            b"graph is too large for cairo-renderer bitmaps. Scaling by 0.668933 to fit\n";
+        let output = synthetic_output(0, b"\x89PNG", warning);
+        match classify(Ok(output)) {
+            RasterOutcome::Png { notes, .. } => {
+                assert!(notes.contains("too large"), "{notes}");
+                assert!(
+                    !notes.ends_with('\n'),
+                    "trimmed for a one-line warning: {notes:?}"
+                );
+            }
             other => panic!("expected Png, got {other:?}"),
         }
     }
