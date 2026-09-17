@@ -162,6 +162,13 @@ fn resolve_focus(root: &Path, f: &str) -> anyhow::Result<CatalogKey> {
     clippy::needless_pass_by_value,
     reason = "clap dispatch signature — clap consumes the values"
 )]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "clap dispatch signature — one parameter per Graph variant field (SL-245 \
+              PHASE-05 adds --render, taking it past the default threshold of 7). \
+              Bundling into an args struct would rewrite the very call path EX-4 is a \
+              byte-identical regression bar over, for no benefit this phase can verify"
+)]
 pub(crate) fn run_graph(
     path: Option<PathBuf>,
     focus: Option<String>,
@@ -170,7 +177,14 @@ pub(crate) fn run_graph(
     label: Option<String>,
     include_memory: bool,
     format: GraphFormat,
+    render: bool,
 ) -> anyhow::Result<()> {
+    // BEFORE the root lookup (DEC-253): a `-X` that cannot be honoured must be
+    // refused as such, not masked by "no project root". `prepare` writes
+    // nothing — on every refusal path this returns with stdout untouched.
+    let cell = render
+        .then(|| crate::terminal_image::prepare(&format.to_string(), format == GraphFormat::Dot))
+        .transpose()?;
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let output = build_graph_output(
         &root,
@@ -181,7 +195,14 @@ pub(crate) fn run_graph(
         include_memory,
         &format,
     )?;
-    writeln!(std::io::stdout(), "{output}")?;
+    let mut stdout = std::io::stdout().lock();
+    match cell {
+        // Byte-identical to the pre-`-X` path (EX-4).
+        None => writeln!(stdout, "{output}")?,
+        // One write (DEC-254): `render_dot` returns the escapes AND the cursor
+        // advance as a single buffer, so no partial escape can survive a failure.
+        Some(cell) => stdout.write_all(&crate::terminal_image::render_dot(&output, &cell)?)?,
+    }
     Ok(())
 }
 

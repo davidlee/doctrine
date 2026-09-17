@@ -1,11 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#![allow(
-    dead_code,
-    reason = "SUPPORT_QUERY/classify_support_reply/png_size/cell_geometry/place/\
-              encode_png have no production caller until PHASE-05 (SL-245) wires \
-              terminal_image::prepare and ::render_dot to them; exercised by this \
-              module's own tests until then"
-)]
 //! `kitty` — the graphics protocol, pure (ADR-001, SL-245 PHASE-03, sec-4).
 //!
 //! Bytes in, bytes out: the support query and its reply classifier, the PNG
@@ -44,6 +37,22 @@ const DA1_FINAL: u8 = b'c';
 
 /// The DA1 request: `ESC [ c`. Every VT-compatible terminal answers it, which
 /// is what makes it a usable "the terminal has finished answering" marker.
+///
+/// Not read by production code: [`SUPPORT_QUERY`] is a single byte-string
+/// literal (a `const` cannot be concatenated from slices on stable), so this
+/// names the tail it must end with and is read only by the drift guard in this
+/// module's tests. The suppression is per-symbol and `cfg_attr(not(test), …)`,
+/// because under the test compilation the expectation WOULD be unfulfilled
+/// (`mem.pattern.lint.expect-dead-code-at-item-level`). It surfaced when
+/// SL-245 PHASE-05 removed this module's `#![allow(dead_code)]` blanket, which
+/// had been covering it.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "drift guard for SUPPORT_QUERY's DA1 tail — read by this module's tests only"
+    )
+)]
 const DA1_REQUEST: &[u8] = b"\x1b[c";
 
 /// Separates control keys from each other.

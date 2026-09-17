@@ -107,6 +107,7 @@ mod state;
 mod status;
 mod supersede;
 mod tag;
+mod terminal_image;
 #[cfg(test)]
 mod test_support;
 mod tomlfmt;

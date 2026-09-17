@@ -144,11 +144,6 @@ const TERMIOS_ACTION: rustix::termios::OptionalActions = rustix::termios::Option
 /// What `open_render_terminal` found: either the one verified terminal, or the
 /// named reason there isn't one. Both refusals are typed outcomes, never a
 /// swallowed error (STD-003).
-#[expect(
-    dead_code,
-    reason = "the Terminal payload is not read until PHASE-05 (SL-245) matches on \
-              RenderTarget in terminal_image::prepare"
-)]
 pub(crate) enum RenderTarget {
     NotTerminal,
     /// stdout is a terminal, but not the controlling one — or there is none.
@@ -158,11 +153,6 @@ pub(crate) enum RenderTarget {
 
 /// The controlling terminal, verified to be stdout's own device. Every later
 /// `termios`, winsize and I/O call goes through this one handle.
-#[expect(
-    dead_code,
-    reason = "`window` is not read until PHASE-05 (SL-245) feeds it to \
-              kitty::cell_geometry"
-)]
 pub(crate) struct RenderTerminal {
     tty: std::fs::File,
     pub(crate) window: WindowGeometry,
@@ -182,11 +172,6 @@ pub(crate) struct WindowGeometry {
 /// How a query exchange failed. The two arms are ranked, not merely distinct —
 /// see [`bracket`].
 #[derive(Debug)]
-#[expect(
-    dead_code,
-    reason = "the wrapped io::Errors are not read until PHASE-05 (SL-245) renders \
-              them as a RenderRefusal; the tests match the variants, not the payloads"
-)]
 pub(crate) enum QueryError {
     /// Entering raw mode, writing, or reading failed; the terminal WAS restored.
     Io(std::io::Error),
@@ -224,12 +209,6 @@ fn endpoint(stdout_is_tty: bool, stdout_device: u64, tty_device: Option<u64>) ->
 /// Thin shell: isatty(stdout); open `/dev/tty` read-write and blocking;
 /// `fstat` both; `tcgetwinsize` on the tty. The decision itself is the pure
 /// [`endpoint`], so the interesting part is testable without a terminal.
-#[expect(
-    dead_code,
-    reason = "no production caller until PHASE-05 (SL-245) wires terminal_image::prepare \
-              to open_render_terminal; the pure decisions it roots (endpoint, bracket) \
-              are driven by this module's own tests until then"
-)]
 pub(crate) fn open_render_terminal() -> std::io::Result<RenderTarget> {
     let stdout_is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
     let stdout_device = rustix::fs::fstat(std::io::stdout())?.st_rdev;
@@ -278,11 +257,6 @@ impl RenderTerminal {
     /// VA-1: there is exactly one way out of the exchange — [`bracket`], whose
     /// `exit` closure below is the explicit, CHECKED restore. Nothing here
     /// returns around it.
-    #[expect(
-        dead_code,
-        reason = "no production caller until PHASE-05 (SL-245) wires terminal_image::prepare \
-                  to RenderTerminal::query for the kitty support probe"
-    )]
     pub(crate) fn query(
         &self,
         request: &[u8],

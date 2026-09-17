@@ -1,11 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#![allow(
-    dead_code,
-    reason = "rasterise_png/RasterOutcome/run/classify have no production \
-              caller until doctrine graph -X wires terminal_image::render_dot \
-              to rasterise_png in PHASE-05 (SL-245); exercised by this \
-              module's own tests until then"
-)]
 //! `graphviz` — the `dot -Tpng` render leaf (ADR-001, DEC-143, SL-245 PHASE-02).
 //! One neutral home for the CLI's synchronous raster spawn and the shared
 //! `dot` program name; `map_server` (`shell.rs`, `routes.rs`, `error.rs`)

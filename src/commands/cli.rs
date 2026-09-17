@@ -427,6 +427,11 @@ pub(crate) enum Command {
         #[arg(long, default_value_t = GraphFormat::Dot, value_parser = GraphFormat::from_str)]
         format: super::graph::GraphFormat,
 
+        /// Draw the graph inline in a kitty-protocol terminal (kitty, ghostty) via graphviz.
+        /// Needs `--format dot` (the default), a terminal on stdout, and `dot` on PATH.
+        #[arg(short = 'X', long)]
+        render: bool,
+
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -1689,6 +1694,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             label,
             include_memory,
             format,
+            render,
             path,
         } => crate::commands::graph::run_graph(
             path,
@@ -1698,6 +1704,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             label,
             include_memory,
             format,
+            render,
         ),
         Command::Adr { command } => crate::adr::dispatch(command, color),
         Command::Policy { command } => crate::policy::dispatch(command, color),

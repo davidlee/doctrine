@@ -1,0 +1,586 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//! `terminal_image` — the `--render` (`-X`) guard and the DOT→terminal pipeline
+//! (ADR-001, SL-245 PHASE-05, design sec-3).
+//!
+//! Two shells over three leaves ([`crate::graphviz`], [`crate::kitty`],
+//! [`crate::tty`]), and nothing else:
+//!
+//! - [`prepare`] answers *"may I draw at all, and at what cell size?"* — the
+//!   EX-2 check order, **cheapest first**, stopping at the first refusal:
+//!   format → controlling terminal → pixel size → kitty support probe. The
+//!   pixel-size stop sits BEFORE the probe deliberately: a terminal that cannot
+//!   report pixels is refused without being talked to.
+//! - [`render_dot`] rasterises and encodes into ONE buffer, so the caller has a
+//!   single `write_all` and no half-written escape can survive a failure.
+//!
+//! **Nothing here writes to stdout.** Every stop is a refusal *value*, returned
+//! to the command shell, which is what makes "no escape byte reaches stdout on a
+//! refusal path" a structural property rather than a discipline (VA-1).
+//!
+//! Every user-facing message is a named constant (STD-001) carrying design
+//! sec-3's wording verbatim, with `{…}` placeholders for the interpolations.
+//! They are constants rather than `format!` literals because the same string is
+//! asserted by the tests and read by the user, and a second copy would drift.
+//! No deadline governs the render itself (IMP-452); the only clock here is the
+//! support probe's own budget, [`SUPPORT_PROBE_TIMEOUT`].
+
+use std::ffi::OsStr;
+use std::time::Duration;
+
+use crate::graphviz::RasterOutcome;
+use crate::kitty::{self, CellGeometry, SupportReply};
+use crate::tty::{QueryError, RenderTarget, RenderTerminal, WindowGeometry};
+
+// ── The probe budget ───────────────────────────────────────────────────────
+
+/// How long the kitty support probe waits for an answer before giving up and
+/// refusing as [`RenderRefusal::Unconfirmed`]. This is the PROBE's budget, not
+/// a render deadline — there is no render deadline (IMP-452).
+///
+/// Single-sourced (STD-001): [`MSG_UNCONFIRMED`] names the same duration to the
+/// user, and gets it from here via [`support_probe_timeout_text`] rather than
+/// repeating the number.
+const SUPPORT_PROBE_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// The probe budget as the user reads it, e.g. `2s`.
+fn support_probe_timeout_text() -> String {
+    format!("{}s", SUPPORT_PROBE_TIMEOUT.as_secs())
+}
+
+// ── Message placeholders ───────────────────────────────────────────────────
+
+/// The requested `--format` value.
+const PLACEHOLDER_FORMAT: &str = "{format}";
+
+/// An underlying `io::Error`, rendered with `Display`.
+const PLACEHOLDER_ERROR: &str = "{error}";
+
+/// The probe budget, from [`support_probe_timeout_text`].
+const PLACEHOLDER_TIMEOUT: &str = "{timeout}";
+
+/// How `dot` terminated — [`DOT_STATUS_EXIT`] or [`DOT_STATUS_SIGNAL`].
+const PLACEHOLDER_STATUS: &str = "{status}";
+
+/// `dot`'s own captured stderr, trimmed.
+const PLACEHOLDER_STDERR: &str = "{stderr}";
+
+/// A process exit code.
+const PLACEHOLDER_CODE: &str = "{code}";
+
+/// Fill one of the four messages whose only interpolation is an underlying
+/// `io::Error`. One seam, so a fifth cannot drift into a different rendering.
+fn io_message(template: &str, error: &std::io::Error) -> String {
+    template.replace(PLACEHOLDER_ERROR, &error.to_string())
+}
+
+// ── Messages (design sec-3's table, verbatim) ──────────────────────────────
+
+const MSG_FORMAT_NOT_DOT: &str =
+    "--render needs --format dot, got '{format}'; drop -X or the --format";
+
+const MSG_NOT_TERMINAL: &str = "--render needs stdout to be a terminal; drop -X to emit DOT";
+
+const MSG_NOT_CONTROLLING_TERMINAL: &str = "--render needs stdout to be the terminal you are running in; it is another terminal, \
+     or there is none; drop -X to emit DOT";
+
+const MSG_NO_PIXEL_SIZE: &str = "--render needs the terminal to report its size in pixels, \
+     and it did not; drop -X to emit DOT";
+
+const MSG_UNSUPPORTED: &str = "--render needs a terminal that supports the kitty graphics protocol (kitty, ghostty); \
+     this one does not, and under tmux or screen it never will; drop -X to emit DOT";
+
+const MSG_UNCONFIRMED: &str = "--render could not confirm kitty graphics support: \
+     the terminal did not answer within {timeout}; drop -X to emit DOT";
+
+/// `open_render_terminal` failing outright (`fstat` / `tcgetwinsize`).
+///
+/// Design sec-3's table has no row for this path; this is a THIRTEENTH constant,
+/// which EX-1's "every message in the table is a named constant" permits — it is
+/// a floor, not a ceiling. It deliberately does NOT reuse [`MSG_TTY_QUERY_IO`]:
+/// that row means "the terminal was opened and the exchange failed", whereas this
+/// one means "the terminal could not be inspected at all", and POL-002 facet (3)
+/// requires the message to name what was actually missing. Queued for reconcile
+/// as a design-table addition.
+const MSG_TERMINAL_INSPECT: &str =
+    "--render could not inspect the terminal: {error}; drop -X to emit DOT";
+
+const MSG_TTY_QUERY_IO: &str = "--render could not query the terminal: {error}";
+
+const MSG_TERMINAL_RESTORE: &str =
+    "--render could not restore the terminal's settings: {error}; run 'reset'";
+
+const MSG_DOT_NOT_FOUND: &str =
+    "--render needs graphviz: 'dot' was not found on PATH; install graphviz or drop -X";
+
+const MSG_DOT_FAILED: &str = "'dot' failed ({status}): {stderr}";
+
+const MSG_DOT_IO: &str = "could not run 'dot': {error}";
+
+const MSG_NOT_A_PNG: &str = "'dot -Tpng' produced output that is not a PNG";
+
+/// `dot` exited on its own, with a code.
+const DOT_STATUS_EXIT: &str = "exit {code}";
+
+/// `dot` was killed by a signal, so there is no exit code to report
+/// (`RasterOutcome::CommandFailed { status: None, .. }`). Design sec-3's row is
+/// written for the `Some(code)` case only; this is the other half of it, kept in
+/// the constant rather than spelled inline at the call site.
+const DOT_STATUS_SIGNAL: &str = "killed by signal";
+
+// ── Refusals ───────────────────────────────────────────────────────────────
+
+/// Why `--render` declined to draw. Exactly the six EX-1 arms: each one is a
+/// *guard stop*, a condition the user can act on. Probe and spawn I/O failures
+/// are NOT arms here — they are plain `anyhow` errors built from their own
+/// named constants (D1), because they describe a broken exchange rather than an
+/// unmet precondition.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RenderRefusal {
+    FormatNotDot { format: String },
+    NotTerminal,
+    NotControllingTerminal,
+    Unsupported,
+    Unconfirmed,
+    NoPixelSize,
+}
+
+impl std::fmt::Display for RenderRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::FormatNotDot { format } => {
+                f.write_str(&MSG_FORMAT_NOT_DOT.replace(PLACEHOLDER_FORMAT, format))
+            }
+            Self::NotTerminal => f.write_str(MSG_NOT_TERMINAL),
+            Self::NotControllingTerminal => f.write_str(MSG_NOT_CONTROLLING_TERMINAL),
+            Self::Unsupported => f.write_str(MSG_UNSUPPORTED),
+            Self::Unconfirmed => f.write_str(
+                &MSG_UNCONFIRMED.replace(PLACEHOLDER_TIMEOUT, &support_probe_timeout_text()),
+            ),
+            Self::NoPixelSize => f.write_str(MSG_NO_PIXEL_SIZE),
+        }
+    }
+}
+
+/// So the shells can propagate a refusal with `?` into `anyhow::Result`.
+impl std::error::Error for RenderRefusal {}
+
+// ── The pure checks (EX-2's order, testable without a terminal) ────────────
+
+/// Stop 1 — the requested output format. Cheapest of all: no syscall.
+fn check_format(format: &str, is_dot: bool) -> Result<(), RenderRefusal> {
+    if is_dot {
+        return Ok(());
+    }
+    Err(RenderRefusal::FormatNotDot {
+        format: format.to_owned(),
+    })
+}
+
+/// Stop 3 — the cell size the window implies, or the refusal for a terminal
+/// that did not report usable pixels. `kitty::cell_geometry`'s `None` covers
+/// BOTH a zero reported field and a zero quotient; either way the placement
+/// would be a guess, and `DEC-256` refuses rather than guessing.
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "mirrors kitty::cell_geometry, whose `&WindowGeometry` design sec-2 (SL-245) \
+              pins — this is the thin wrapper that calls it, and diverging here would put \
+              a `&`/value mismatch between two functions that are read as one step. Same \
+              grounds as the two expects on kitty.rs's own signatures; pending human \
+              ratification at audit alongside them"
+)]
+fn check_geometry(window: &WindowGeometry) -> Result<CellGeometry, RenderRefusal> {
+    kitty::cell_geometry(window).ok_or(RenderRefusal::NoPixelSize)
+}
+
+/// Stops 2 and 3 over an injected probe result: which terminal (if any) was
+/// found, and the geometry it reports.
+///
+/// The composition is the point — it is what pins stop 2 AHEAD of stop 3, so a
+/// non-terminal is refused as such and never as [`RenderRefusal::NoPixelSize`]
+/// (VT-1). Pure, so the order is testable with no terminal in sight.
+fn check_terminal(target: &RenderTarget) -> Result<(&RenderTerminal, CellGeometry), RenderRefusal> {
+    match target {
+        RenderTarget::NotTerminal => Err(RenderRefusal::NotTerminal),
+        RenderTarget::NotControllingTerminal => Err(RenderRefusal::NotControllingTerminal),
+        RenderTarget::Terminal(terminal) => {
+            let cell = check_geometry(&terminal.window)?;
+            Ok((terminal, cell))
+        }
+    }
+}
+
+/// Stop 4 — the verdict of the kitty support probe, over the exchange's own
+/// result.
+///
+/// `Ok(None)` is the deadline, NOT an error: the terminal simply did not answer,
+/// which is [`RenderRefusal::Unconfirmed`]. `Incomplete` cannot arrive through
+/// [`prepare`] (its `complete` predicate is exactly "not `Incomplete`"), but the
+/// match stays total and conservative rather than panicking — `clippy::unreachable`
+/// is denied, and an unconfirmed answer is the honest reading of a partial one.
+fn check_support(reply: Result<Option<Vec<u8>>, QueryError>) -> anyhow::Result<()> {
+    match reply {
+        Err(QueryError::Io(error)) => Err(anyhow::anyhow!(io_message(MSG_TTY_QUERY_IO, &error))),
+        Err(QueryError::Restore(error)) => {
+            Err(anyhow::anyhow!(io_message(MSG_TERMINAL_RESTORE, &error)))
+        }
+        Ok(None) => Err(RenderRefusal::Unconfirmed.into()),
+        Ok(Some(bytes)) => match kitty::classify_support_reply(&bytes) {
+            SupportReply::Supported => Ok(()),
+            SupportReply::Unsupported => Err(RenderRefusal::Unsupported.into()),
+            SupportReply::Incomplete => Err(RenderRefusal::Unconfirmed.into()),
+        },
+    }
+}
+
+/// The support probe's "stop reading" predicate: anything that is not
+/// [`SupportReply::Incomplete`] is a verdict.
+fn support_reply_complete(bytes: &[u8]) -> bool {
+    kitty::classify_support_reply(bytes) != SupportReply::Incomplete
+}
+
+// ── prepare — the guard shell (EX-1, EX-2) ─────────────────────────────────
+
+/// May `--render` draw, and at what cell size? The thin impure shell over the
+/// checks above: it supplies the two probe results (`open_render_terminal` and
+/// the support query) and threads them through the pure stops, in EX-2's order,
+/// stopping at the first refusal.
+///
+/// Called BEFORE the project-root lookup in `run_graph`, so a refusal is
+/// attributed to `-X` rather than masked by "no project root" (EX-4, VT-3/VT-4).
+/// Writes nothing, anywhere.
+pub(crate) fn prepare(format: &str, is_dot: bool) -> anyhow::Result<CellGeometry> {
+    check_format(format, is_dot)?;
+    let target = crate::tty::open_render_terminal()
+        .map_err(|error| anyhow::anyhow!(io_message(MSG_TERMINAL_INSPECT, &error)))?;
+    let (terminal, cell) = check_terminal(&target)?;
+    check_support(terminal.query(
+        kitty::SUPPORT_QUERY,
+        support_reply_complete,
+        SUPPORT_PROBE_TIMEOUT,
+    ))?;
+    Ok(cell)
+}
+
+// ── render_dot — the pipeline (EX-3) ───────────────────────────────────────
+
+/// How `dot` terminated, as the message spells it.
+fn dot_status_text(status: Option<i32>) -> String {
+    match status {
+        Some(code) => DOT_STATUS_EXIT.replace(PLACEHOLDER_CODE, &code.to_string()),
+        None => DOT_STATUS_SIGNAL.to_owned(),
+    }
+}
+
+/// DOT source → the exact bytes to write: rasterise, read the PNG's size, fix
+/// the placement, encode.
+///
+/// **One buffer.** `kitty::encode_png` already appends `placement.rows`
+/// newlines, so its return value IS the whole write — the image escapes and the
+/// cursor advance together. Appending newlines again here would double-advance
+/// the cursor on a real terminal. Every failure returns before any byte exists
+/// for the caller to write (EX-3, VA-1).
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "design sec-2 / EX-1 (SL-245) pin this signature as `&kitty::CellGeometry`, \
+              and the value is handed straight to kitty::place, which takes `&CellGeometry` \
+              on the same pinned grounds. Pending human ratification at audit alongside \
+              kitty.rs's two expects"
+)]
+pub(crate) fn render_dot(dot: &str, cell: &CellGeometry) -> anyhow::Result<Vec<u8>> {
+    match crate::graphviz::rasterise_png(dot.as_bytes(), OsStr::new(crate::graphviz::DOT_PROGRAM)) {
+        RasterOutcome::ToolUnavailable => Err(anyhow::anyhow!(MSG_DOT_NOT_FOUND)),
+        RasterOutcome::CommandFailed { status, stderr } => Err(anyhow::anyhow!(
+            MSG_DOT_FAILED
+                .replace(PLACEHOLDER_STATUS, &dot_status_text(status))
+                .replace(PLACEHOLDER_STDERR, stderr.trim())
+        )),
+        RasterOutcome::Io(error) => Err(anyhow::anyhow!(io_message(MSG_DOT_IO, &error))),
+        RasterOutcome::Png(bytes) => {
+            let size = kitty::png_size(&bytes).ok_or_else(|| anyhow::anyhow!(MSG_NOT_A_PNG))?;
+            Ok(kitty::encode_png(&bytes, kitty::place(size, cell)))
+        }
+    }
+}
+
+// ── tests ──────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, clippy::expect_used, reason = "test code")]
+mod tests {
+    use super::*;
+
+    /// A window a terminal that reports pixels would produce: 80×24 cells of
+    /// 10×20 pixels each.
+    fn healthy_window() -> WindowGeometry {
+        WindowGeometry {
+            columns: 80,
+            rows: 24,
+            pixel_width: 800,
+            pixel_height: 480,
+        }
+    }
+
+    // ── VT-1: the check order and the arms ─────────────────────────────────
+
+    /// Stop 1 beats every later stop — and it beats them through the REAL
+    /// `fn prepare`, not only through a pure helper. The test process's stdout
+    /// is a pipe, so a `prepare` that checked the terminal first would answer
+    /// `NotTerminal`; answering `FormatNotDot` is what convicts the order.
+    ///
+    /// Deliberately the ONLY `prepare` call in this module's tests: the dot-format
+    /// path would talk to whatever terminal a `--nocapture` run happens to own.
+    #[test]
+    fn prepare_refuses_a_non_dot_format_before_it_looks_for_a_terminal() {
+        let error = prepare("json", false).unwrap_err();
+        let refusal = error.downcast_ref::<RenderRefusal>().expect("a refusal");
+        assert_eq!(
+            *refusal,
+            RenderRefusal::FormatNotDot {
+                format: "json".to_owned()
+            },
+            "the format stop must precede the terminal probe"
+        );
+    }
+
+    #[test]
+    fn a_dot_format_clears_the_format_stop() {
+        assert_eq!(check_format("dot", true), Ok(()));
+    }
+
+    #[test]
+    fn a_non_dot_format_names_the_format_it_got() {
+        assert_eq!(
+            check_format("json", false),
+            Err(RenderRefusal::FormatNotDot {
+                format: "json".to_owned()
+            })
+        );
+    }
+
+    /// Stop 2 beats stop 3: a missing terminal is refused as a missing terminal,
+    /// never as `RenderRefusal::NoPixelSize`. (The `Terminal` arm cannot be
+    /// synthesised here — `RenderTerminal.tty` is a private `File` — so the
+    /// geometry stop is proved directly, below.)
+    #[test]
+    fn not_a_terminal_is_refused_before_pixel_size() {
+        assert_eq!(
+            check_terminal(&RenderTarget::NotTerminal).err(),
+            Some(RenderRefusal::NotTerminal)
+        );
+    }
+
+    #[test]
+    fn another_terminal_is_refused_before_pixel_size() {
+        assert_eq!(
+            check_terminal(&RenderTarget::NotControllingTerminal).err(),
+            Some(RenderRefusal::NotControllingTerminal)
+        );
+    }
+
+    #[test]
+    fn a_terminal_reporting_no_pixels_is_refused() {
+        let window = WindowGeometry {
+            pixel_width: 0,
+            pixel_height: 0,
+            ..healthy_window()
+        };
+        assert_eq!(
+            check_geometry(&window).err(),
+            Some(RenderRefusal::NoPixelSize)
+        );
+    }
+
+    /// Fewer pixels than cells is a ZERO QUOTIENT, not a zero field — and it is
+    /// refused just the same, because a zero cell size cannot place an image.
+    #[test]
+    fn a_degenerate_cell_size_is_refused_as_no_pixel_size() {
+        let window = WindowGeometry {
+            pixel_width: 40,
+            ..healthy_window()
+        };
+        assert_eq!(
+            check_geometry(&window).err(),
+            Some(RenderRefusal::NoPixelSize)
+        );
+    }
+
+    #[test]
+    fn a_healthy_window_yields_its_cell_geometry() {
+        let cell = check_geometry(&healthy_window()).ok().expect("geometry");
+        assert_eq!(cell.columns, 80);
+        assert_eq!(cell.cell_width, 10);
+        assert_eq!(cell.cell_height, 20);
+    }
+
+    /// A graphics reply carrying the query's own id is the one answer that lets
+    /// the render proceed.
+    #[test]
+    fn a_graphics_reply_confirms_support() {
+        let reply = b"\x1b_Gi=31;OK\x1b\\".to_vec();
+        assert!(check_support(Ok(Some(reply))).is_ok());
+    }
+
+    #[test]
+    fn a_da1_reply_first_refuses_as_unsupported() {
+        let reply = b"\x1b[?62;c".to_vec();
+        let error = check_support(Ok(Some(reply))).unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<RenderRefusal>(),
+            Some(&RenderRefusal::Unsupported)
+        );
+    }
+
+    /// The deadline is `Ok(None)` — a non-answer, not a failure.
+    #[test]
+    fn a_silent_terminal_is_unconfirmed_not_an_error() {
+        let error = check_support(Ok(None)).unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<RenderRefusal>(),
+            Some(&RenderRefusal::Unconfirmed)
+        );
+    }
+
+    /// Defensive: `prepare`'s `complete` predicate precludes a partial reply, so
+    /// this arm exists to keep the match total. It reads as unconfirmed.
+    #[test]
+    fn a_partial_reply_is_unconfirmed() {
+        let error = check_support(Ok(Some(b"\x1b_Gi=31".to_vec()))).unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<RenderRefusal>(),
+            Some(&RenderRefusal::Unconfirmed)
+        );
+    }
+
+    /// `QueryError`'s two arms are ranked, not interchangeable — a failed
+    /// restore says the user's shell is left wrong and tells them how to fix it.
+    #[test]
+    fn a_failed_exchange_reports_the_query_io_message() {
+        let error =
+            check_support(Err(QueryError::Io(std::io::Error::other("no read")))).unwrap_err();
+        assert!(
+            error.downcast_ref::<RenderRefusal>().is_none(),
+            "a broken exchange is not one of the six guard stops"
+        );
+        let message = error.to_string();
+        assert!(
+            message.contains("could not query the terminal"),
+            "{message}"
+        );
+        assert!(message.contains("no read"), "{message}");
+    }
+
+    #[test]
+    fn a_failed_restore_outranks_and_tells_the_user_to_reset() {
+        let error = check_support(Err(QueryError::Restore(std::io::Error::other("stuck"))))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("could not restore the terminal's settings"),
+            "{error}"
+        );
+        assert!(error.contains("stuck"), "{error}");
+        assert!(error.contains("run 'reset'"), "{error}");
+    }
+
+    /// The support predicate is what makes `Incomplete` unreachable in `prepare`.
+    #[test]
+    fn the_probe_keeps_reading_until_a_verdict_arrives() {
+        assert!(!support_reply_complete(b"\x1b_Gi=31"));
+        assert!(support_reply_complete(b"\x1b_Gi=31;OK\x1b\\"));
+        assert!(support_reply_complete(b"\x1b[?62;c"));
+    }
+
+    // ── VT-2: every message names the flag and its remedy ──────────────────
+
+    /// Substring, not exact text: the wording is design sec-3's to revise, but
+    /// a message that does not say `--render` and does not say what to do
+    /// instead is a bug whatever the wording.
+    #[test]
+    fn every_refusal_names_the_flag_and_a_remedy() {
+        let refusals = [
+            RenderRefusal::FormatNotDot {
+                format: "json".to_owned(),
+            },
+            RenderRefusal::NotTerminal,
+            RenderRefusal::NotControllingTerminal,
+            RenderRefusal::Unsupported,
+            RenderRefusal::Unconfirmed,
+            RenderRefusal::NoPixelSize,
+        ];
+        for refusal in &refusals {
+            let message = refusal.to_string();
+            assert!(message.contains("--render"), "no flag in: {message}");
+            assert!(message.contains("drop -X"), "no remedy in: {message}");
+        }
+    }
+
+    #[test]
+    fn the_format_refusal_quotes_the_format_that_was_asked_for() {
+        let message = RenderRefusal::FormatNotDot {
+            format: "json".to_owned(),
+        }
+        .to_string();
+        assert!(message.contains("'json'"), "{message}");
+        assert!(message.contains("--format dot"), "{message}");
+    }
+
+    /// No placeholder may survive into a rendered message — an unfilled `{…}`
+    /// is the failure mode this constant-plus-placeholder scheme can have.
+    #[test]
+    fn no_rendered_message_leaks_a_placeholder() {
+        let messages = [
+            RenderRefusal::FormatNotDot {
+                format: "json".to_owned(),
+            }
+            .to_string(),
+            RenderRefusal::Unconfirmed.to_string(),
+            MSG_TTY_QUERY_IO.replace(PLACEHOLDER_ERROR, "boom"),
+            MSG_TERMINAL_RESTORE.replace(PLACEHOLDER_ERROR, "boom"),
+            MSG_TERMINAL_INSPECT.replace(PLACEHOLDER_ERROR, "boom"),
+            MSG_DOT_IO.replace(PLACEHOLDER_ERROR, "boom"),
+            MSG_DOT_FAILED
+                .replace(PLACEHOLDER_STATUS, &dot_status_text(Some(1)))
+                .replace(PLACEHOLDER_STDERR, "syntax error"),
+            MSG_DOT_NOT_FOUND.to_owned(),
+            MSG_NOT_A_PNG.to_owned(),
+        ];
+        for message in &messages {
+            assert!(!message.contains('{'), "unfilled placeholder in: {message}");
+        }
+    }
+
+    /// The probe budget is named ONCE: the message reads it from the constant,
+    /// so the two cannot drift.
+    #[test]
+    fn the_unconfirmed_message_quotes_the_probe_budget() {
+        let message = RenderRefusal::Unconfirmed.to_string();
+        assert!(
+            message.contains(&support_probe_timeout_text()),
+            "{message} does not quote {SUPPORT_PROBE_TIMEOUT:?}"
+        );
+    }
+
+    /// Both halves of the `dot` failure row: an exit code, and the signal case
+    /// design sec-3 does not spell.
+    #[test]
+    fn a_dot_failure_reports_either_an_exit_code_or_a_signal() {
+        assert_eq!(dot_status_text(Some(1)), "exit 1");
+        assert_eq!(dot_status_text(None), "killed by signal");
+        let killed = MSG_DOT_FAILED
+            .replace(PLACEHOLDER_STATUS, &dot_status_text(None))
+            .replace(PLACEHOLDER_STDERR, "");
+        assert!(
+            killed.contains("'dot' failed (killed by signal)"),
+            "{killed}"
+        );
+    }
+
+    /// `render_dot`'s non-PNG stop, and the `-X`-less remedy on the missing-tool
+    /// stop, are the two messages the pipeline owns.
+    #[test]
+    fn the_pipeline_messages_name_their_cause() {
+        assert!(MSG_NOT_A_PNG.contains("not a PNG"));
+        assert!(MSG_DOT_NOT_FOUND.contains("graphviz"));
+        assert!(MSG_DOT_NOT_FOUND.contains("drop -X"));
+    }
+}
