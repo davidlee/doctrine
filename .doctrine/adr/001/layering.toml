@@ -16,7 +16,7 @@
 [tiers]
 # tier = "leaf" | "engine" | "command"
 
-# ── leaf (43) ────────────────────────────────────────────────────────────
+# ── leaf (44) ────────────────────────────────────────────────────────────
 # Import only std + other leaves. Pure utilities, impure seams, no domain knowledge.
 asset_source = "leaf"       # out=0: neutral embedded-asset byte-read seam — owns install/ embed (SL-223 PHASE-01, D3/REQ-376)
 boundary = "leaf"           # out=0: recorded source-delta row type — pure serde (SL-147 PHASE-02)
@@ -39,6 +39,7 @@ fsutil = "leaf"             # out=0: filesystem utility — impure seam, no doma
 funnel_machine = "leaf"     # out=0: dispatch funnel transition machine — pure, std only (SL-228 PHASE-03, design §2/D7)
 git = "leaf"                # out=0: git ops — impure seam, no domain
 globmatch = "leaf"          # → glob (external): shared glob_matches matcher (SL-147 PHASE-03)
+graphviz = "leaf"       # out=0: dot -Tpng render spawn + outcome classifier (SL-245 PHASE-02, DEC-143)
 finding = "leaf"            # out=0: unified doctor Finding type — pure (SL-168 PHASE-01, ADR-001 D2)
 hymns = "leaf"              # out=0: SL-186 pure prompt-cascade resolver engine — pure (no domain deps)
 interpretation = "leaf"     # out=0: [interpretation] policy — strict typed projection, canonical hash, restriction algebra; pure, exported to doctrine-control (SL-248 PHASE-02)

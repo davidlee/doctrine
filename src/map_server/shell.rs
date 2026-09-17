@@ -15,6 +15,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
 
+use crate::graphviz;
 use crate::map_server::error::MapServerError;
 use crate::map_server::state::DotRenderer;
 
@@ -24,6 +25,11 @@ pub(crate) const DOT_BODY_LIMIT: usize = 1_048_576;
 /// Timeout for the `dot` process (stdin write + wait).
 const DOT_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// The async counterpart of [`graphviz::rasterise_png`] — this renderer serves
+/// map-server's own `dot -Tsvg` request lifecycle, on its own timeout
+/// (DEC-143); the two spawns are held knowingly separate (ADR-001 forbids a
+/// leaf reaching up into `map_server` to unify them), sharing only the
+/// program name via [`graphviz::DOT_PROGRAM`].
 #[async_trait]
 impl DotRenderer for crate::map_server::state::RealDotRenderer {
     #[expect(
@@ -31,7 +37,7 @@ impl DotRenderer for crate::map_server::state::RealDotRenderer {
         reason = "stdin configured as Stdio::piped() so take() always returns Some"
     )]
     async fn render_svg(&self, dot: &[u8]) -> Result<Vec<u8>, MapServerError> {
-        let mut child = tokio::process::Command::new("dot")
+        let mut child = tokio::process::Command::new(graphviz::DOT_PROGRAM)
             .arg("-Tsvg")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -39,7 +45,9 @@ impl DotRenderer for crate::map_server::state::RealDotRenderer {
             .kill_on_drop(true)
             .spawn()
             .map_err(|e| match e.kind() {
-                std::io::ErrorKind::NotFound => MapServerError::ToolUnavailable { tool: "dot" },
+                std::io::ErrorKind::NotFound => MapServerError::ToolUnavailable {
+                    tool: graphviz::DOT_PROGRAM,
+                },
                 _ => MapServerError::Other(e.into()),
             })?;
 
@@ -48,19 +56,23 @@ impl DotRenderer for crate::map_server::state::RealDotRenderer {
         let dot_owned = dot.to_vec();
         tokio::time::timeout(DOT_TIMEOUT, stdin.write_all(&dot_owned))
             .await
-            .map_err(|_elapsed| MapServerError::Timeout { command: "dot" })?
+            .map_err(|_elapsed| MapServerError::Timeout {
+                command: graphviz::DOT_PROGRAM,
+            })?
             .map_err(|e| MapServerError::Other(e.into()))?;
         drop(stdin);
 
         // Wait for child to finish with timeout.
         let output = tokio::time::timeout(DOT_TIMEOUT, child.wait_with_output())
             .await
-            .map_err(|_elapsed| MapServerError::Timeout { command: "dot" })?
+            .map_err(|_elapsed| MapServerError::Timeout {
+                command: graphviz::DOT_PROGRAM,
+            })?
             .map_err(|e| MapServerError::Other(e.into()))?;
 
         if !output.status.success() {
             return Err(MapServerError::CommandFailed {
-                command: "dot",
+                command: graphviz::DOT_PROGRAM,
                 status: output.status.code(),
                 stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
             });
@@ -94,13 +106,17 @@ impl DotRenderer for FakeDotRenderer {
     async fn render_svg(&self, _dot: &[u8]) -> Result<Vec<u8>, MapServerError> {
         match &self.mode {
             FakeDotMode::Success(svg) => Ok(svg.clone()),
-            FakeDotMode::ToolUnavailable => Err(MapServerError::ToolUnavailable { tool: "dot" }),
+            FakeDotMode::ToolUnavailable => Err(MapServerError::ToolUnavailable {
+                tool: graphviz::DOT_PROGRAM,
+            }),
             FakeDotMode::CommandFailed { stderr } => Err(MapServerError::CommandFailed {
-                command: "dot",
+                command: graphviz::DOT_PROGRAM,
                 status: Some(1),
                 stderr: stderr.clone(),
             }),
-            FakeDotMode::Timeout => Err(MapServerError::Timeout { command: "dot" }),
+            FakeDotMode::Timeout => Err(MapServerError::Timeout {
+                command: graphviz::DOT_PROGRAM,
+            }),
         }
     }
 }
@@ -128,7 +144,7 @@ mod tests {
             .await
             .unwrap_err();
         match err {
-            MapServerError::ToolUnavailable { tool } => assert_eq!(tool, "dot"),
+            MapServerError::ToolUnavailable { tool } => assert_eq!(tool, graphviz::DOT_PROGRAM),
             other => panic!("expected ToolUnavailable, got {other:?}"),
         }
     }
@@ -147,7 +163,7 @@ mod tests {
                 status,
                 stderr,
             } => {
-                assert_eq!(command, "dot");
+                assert_eq!(command, graphviz::DOT_PROGRAM);
                 assert_eq!(status, Some(1));
                 assert_eq!(stderr, "syntax error");
             }
@@ -165,7 +181,7 @@ mod tests {
             .await
             .unwrap_err();
         match err {
-            MapServerError::Timeout { command } => assert_eq!(command, "dot"),
+            MapServerError::Timeout { command } => assert_eq!(command, graphviz::DOT_PROGRAM),
             other => panic!("expected Timeout, got {other:?}"),
         }
     }
@@ -174,7 +190,7 @@ mod tests {
 
     #[tokio::test]
     async fn real_dot_valid_input_returns_svg() {
-        if which::which("dot").is_err() {
+        if which::which(graphviz::DOT_PROGRAM).is_err() {
             return; // skip
         }
         let renderer = crate::map_server::state::RealDotRenderer;
@@ -185,7 +201,7 @@ mod tests {
 
     #[tokio::test]
     async fn real_dot_garbage_input_returns_command_failed() {
-        if which::which("dot").is_err() {
+        if which::which(graphviz::DOT_PROGRAM).is_err() {
             return; // skip
         }
         let renderer = crate::map_server::state::RealDotRenderer;

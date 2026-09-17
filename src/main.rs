@@ -56,6 +56,7 @@ mod funnel_machine;
 pub mod git;
 mod globmatch;
 mod governance;
+mod graphviz;
 mod hymns;
 mod input;
 mod install;

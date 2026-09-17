@@ -5,6 +5,7 @@
 //! No duplicated graph policy or entity semantics in route handlers.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::{
     Json, Router,
@@ -21,11 +22,18 @@ use sha2::{Digest, Sha256};
 use crate::catalog::scan::ScanMode;
 
 use crate::concept_map;
+use crate::graphviz;
 use crate::map_server::assets;
 use crate::map_server::error::MapServerError;
 use crate::map_server::markdown;
 use crate::map_server::shell::DOT_BODY_LIMIT;
 use crate::map_server::state::AppState;
+
+/// Budget for the `dot -V` health probe (short: this only checks the tool is
+/// present and answers, not a render). Distinct from `shell::DOT_TIMEOUT`,
+/// which bounds an actual render — the two budgets mean different things and
+/// stay named where each is enforced (DEC-143).
+const DOT_VERSION_TIMEOUT: Duration = Duration::from_secs(2);
 
 // ---------------------------------------------------------------------------
 // Request types
@@ -153,24 +161,28 @@ async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 
 async fn dot_version() -> Result<String, MapServerError> {
     use std::process::Stdio;
-    let child = tokio::process::Command::new("dot")
+    let child = tokio::process::Command::new(graphviz::DOT_PROGRAM)
         .arg("-V")
         .stdout(Stdio::null())
         .stderr(Stdio::piped()) // graphviz prints version to stderr
         .kill_on_drop(true)
         .spawn()
         .map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => MapServerError::ToolUnavailable { tool: "dot" },
+            std::io::ErrorKind::NotFound => MapServerError::ToolUnavailable {
+                tool: graphviz::DOT_PROGRAM,
+            },
             _ => MapServerError::Other(e.into()),
         })?;
-    let output = tokio::time::timeout(std::time::Duration::from_secs(2), child.wait_with_output())
+    let output = tokio::time::timeout(DOT_VERSION_TIMEOUT, child.wait_with_output())
         .await
-        .map_err(|_elapsed| MapServerError::Timeout { command: "dot" })?
+        .map_err(|_elapsed| MapServerError::Timeout {
+            command: graphviz::DOT_PROGRAM,
+        })?
         .map_err(|e| MapServerError::Other(e.into()))?;
 
     if !output.status.success() {
         return Err(MapServerError::CommandFailed {
-            command: "dot",
+            command: graphviz::DOT_PROGRAM,
             status: output.status.code(),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         });

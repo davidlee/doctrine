@@ -261,6 +261,7 @@ impl From<ConceptMapMutationError> for MapServerError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graphviz;
     use axum::body::to_bytes;
     use serde::Deserialize;
 
@@ -341,25 +342,27 @@ mod tests {
     #[tokio::test]
     async fn command_failed_422() {
         let err = MapServerError::CommandFailed {
-            command: "dot",
+            command: graphviz::DOT_PROGRAM,
             status: Some(1),
             stderr: "syntax error".into(),
         };
         let (status, body) = into_error_body(err.into_response()).await;
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(body.error, "command_failed");
-        assert_eq!(body.command.as_deref(), Some("dot"));
+        assert_eq!(body.command.as_deref(), Some(graphviz::DOT_PROGRAM));
         assert_eq!(body.status, Some(1));
         assert_eq!(body.stderr.as_deref(), Some("syntax error"));
     }
 
     #[tokio::test]
     async fn timeout_504() {
-        let err = MapServerError::Timeout { command: "dot" };
+        let err = MapServerError::Timeout {
+            command: graphviz::DOT_PROGRAM,
+        };
         let (status, body) = into_error_body(err.into_response()).await;
         assert_eq!(status, StatusCode::GATEWAY_TIMEOUT);
         assert_eq!(body.error, "timeout");
-        assert_eq!(body.command.as_deref(), Some("dot"));
+        assert_eq!(body.command.as_deref(), Some(graphviz::DOT_PROGRAM));
     }
 
     #[tokio::test]
@@ -375,7 +378,7 @@ mod tests {
     async fn stderr_truncation_at_8kib_boundary() {
         let long_stderr = "x".repeat(9 * 1024); // 9 KiB
         let err = MapServerError::CommandFailed {
-            command: "dot",
+            command: graphviz::DOT_PROGRAM,
             status: Some(1),
             stderr: long_stderr,
         };
@@ -390,7 +393,7 @@ mod tests {
         let short = "short error".to_string();
         let len = short.len();
         let err = MapServerError::CommandFailed {
-            command: "dot",
+            command: graphviz::DOT_PROGRAM,
             status: None,
             stderr: short,
         };
