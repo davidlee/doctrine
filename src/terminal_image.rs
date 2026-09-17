@@ -50,30 +50,80 @@ fn support_probe_timeout_text() -> String {
 
 // ── The image budget (RV-369 F-6) ──────────────────────────────────────────
 
-const BYTES_PER_MIB: usize = 1024 * 1024;
+/// Bytes a terminal spends holding one decoded pixel: 8-bit RGBA, which is
+/// what `dot -Tpng` emits and what the kitty protocol stores.
+const BYTES_PER_PIXEL: u64 = 4;
 
-/// The largest PNG `-X` will hand the terminal.
-///
-/// `DEC-256` bounds the placement in CELLS and nothing in bytes, which is not a
-/// resource bound: the whole corpus places into a perfectly reasonable
-/// 199 × 237 rectangle on top of a 62 MiB PNG that ghostty silently declines,
-/// leaving the user 237 blank rows (RV-369 F-6). `q=2` means the terminal's
-/// refusal is unreportable (F-7), so an image that would be rejected has to be
-/// refused HERE, before it is sent — the same shape as every other stop in
-/// [`prepare`], and the one POL-002 facet (3) asks for.
-///
-/// Measured on this corpus: a focused graph at `--depth 1` rasterises to 143 KB
-/// and draws; `--depth 2` to 559 KB; `--depth 3` to 9.6 MiB and 18109 px tall,
-/// which is ~900 rows of illegible scroll; the whole corpus to 62 MiB, which
-/// draws nothing at all. 8 MiB sits above every graph worth looking at and
-/// below every graph that is a smudge at any placement — and being refused is
-/// cheap, because the message names the two flags that narrow the graph.
-const MAX_IMAGE_BYTES: usize = 8 * BYTES_PER_MIB;
+/// The kitty graphics protocol's documented default image storage quota.
+const TERMINAL_IMAGE_QUOTA_BYTES: u64 = 320_000_000;
 
-/// Whole mebibytes, rounded UP — so a refused image never reads as smaller than
-/// the limit it exceeded.
-fn mib(bytes: usize) -> usize {
-    bytes.div_ceil(BYTES_PER_MIB)
+/// Pixels per megapixel — the unit the refusal speaks, because nobody converts
+/// a raster's dimensions into bytes by eye.
+const PIXELS_PER_MEGAPIXEL: u64 = 1_000_000;
+
+/// The largest raster `-X` will hand the terminal, in PIXELS.
+///
+/// `DEC-256` bounds the placement in CELLS and nothing in resources, which is
+/// not a bound at all: the whole corpus places into a perfectly reasonable
+/// 199 x 237 rectangle on top of a raster ghostty silently declines, leaving
+/// the user 237 blank rows (RV-369 F-6). `q=2` means the terminal's refusal is
+/// unreportable (F-7), so an image that would be rejected has to be refused
+/// HERE, before it is sent — the same shape as every other stop in [`prepare`],
+/// and the one POL-002 facet (3) asks for.
+///
+/// **Pixels, not bytes.** An earlier revision bounded the PNG's compressed
+/// size. That is the wrong unit twice over: the terminal budgets DECODED
+/// pixels, and PNG compresses a sparse line drawing by two orders of magnitude
+/// at a ratio that swings with the graph's density — so bytes and pixels are
+/// not even monotonically related, and no byte limit can be tuned into
+/// correctness. Measured: a focused `--depth 2` graph is a 3.09 MiB PNG that
+/// passed an 8 MiB byte budget comfortably and still drew nothing, because
+/// decoded it is 376 MB; a `--depth 1` graph in the same corpus decodes to
+/// 71 MB and draws.
+///
+/// This is a TRANSMISSION bound and nothing else. An earlier revision also put
+/// it below graphs it judged too dense to read; that judgement was not this
+/// guard's to make — `--depth` and a focus id are the user's, and a graph they
+/// choose to scroll is a graph they get. The only question here is whether the
+/// terminal will take it.
+///
+/// SECONDARY to [`MAX_IMAGE_DIMENSION`], which is what actually refuses the
+/// graphs seen in practice: a raster inside the per-side cap is at most
+/// 100 Mpx, so this only bites the square corner case the cap alone would let
+/// through. Both are backstops — [`fit_box`] scales every drawing inside both
+/// by construction — against a raster that arrives oversized anyway: a `dot`
+/// that ignores `-Gsize`, a future caller that does not fit.
+#[expect(
+    clippy::integer_division,
+    reason = "a whole number of pixels is the only meaningful budget, and truncation \
+              rounds it DOWN — the safe direction for a bound"
+)]
+const MAX_IMAGE_PIXELS: u64 = TERMINAL_IMAGE_QUOTA_BYTES / BYTES_PER_PIXEL;
+
+/// The largest raster either terminal accepts on a SINGLE side.
+///
+/// Measured, not inferred: `q=0` probes of stepped rasters in both terminals
+/// (SL-245 human acceptance). Same area, different shapes, identical verdicts:
+/// 8000 x 4000 stores; 2000 x 16000, 32000 x 1000 and 1000 x 32000 do not. So
+/// the bound is per-side, and area does not predict it. The tallest accepted
+/// were 6298 x 7621 (ghostty) and 1760 x 9090 (kitty); the shortest refused
+/// were 6298 x 10161 and 1760 x 13636, bracketing the cap in `[9090, 10161)`
+/// — kitty's documented `MAX_IMAGE_DIMENSION`, which ghostty mirrors.
+///
+/// Stricter than cairo's own 32767-px bitmap limit on both axes, so [`fit_box`]
+/// staying under this keeps graphviz's downscale warning ([`MSG_DOT_NOTES`])
+/// meaning what it says.
+///
+/// **kitty answers `ENOMEM:PNG image is too large`; ghostty does not answer at
+/// all** — not even with replies enabled. There is no runtime signal to react
+/// to in either case, which is why this is a stop before the write rather than
+/// an error path after it.
+const MAX_IMAGE_DIMENSION: u32 = 10_000;
+
+/// Whole megapixels, rounded UP — so a refused raster never reads as smaller
+/// than the limit it exceeded.
+fn megapixels(pixels: u64) -> u64 {
+    pixels.div_ceil(PIXELS_PER_MEGAPIXEL)
 }
 
 // ── Message placeholders ───────────────────────────────────────────────────
@@ -87,10 +137,13 @@ const PLACEHOLDER_ERROR: &str = "{error}";
 /// The probe budget, from [`support_probe_timeout_text`].
 const PLACEHOLDER_TIMEOUT: &str = "{timeout}";
 
-/// A size in whole mebibytes, from [`mib`].
-const PLACEHOLDER_MIB: &str = "{mib}";
+/// The raster's own dimensions, `<width>x<height>`.
+const PLACEHOLDER_RASTER: &str = "{raster}";
 
-/// [`MAX_IMAGE_BYTES`] in whole mebibytes.
+/// [`MAX_IMAGE_DIMENSION`], the per-side cap.
+const PLACEHOLDER_SIDE: &str = "{side}";
+
+/// [`MAX_IMAGE_PIXELS`] in whole megapixels.
 const PLACEHOLDER_LIMIT: &str = "{limit}";
 
 /// How `dot` terminated — [`DOT_STATUS_EXIT`] or [`DOT_STATUS_SIGNAL`].
@@ -155,8 +208,9 @@ const MSG_NOT_A_PNG: &str = "'dot -Tpng' produced output that is not a PNG";
 /// RV-369 F-6. Names the size, the limit, and BOTH flags that narrow a graph —
 /// the refusal has to be actionable, because it is the answer to the most
 /// obvious thing a user types (`doctrine graph -X`, no focus).
-const MSG_IMAGE_TOO_LARGE: &str = "--render needs a smaller graph: 'dot' produced a {mib} MiB image and the terminal is \
-     sent at most {limit} MiB; narrow it with a focus id or --depth, or drop -X to emit DOT";
+const MSG_IMAGE_TOO_LARGE: &str = "--render needs a smaller graph: 'dot' produced a {raster} image and the terminal takes \
+     at most {side} px on a side and {limit} Mpx in total; narrow it with a focus id or --depth, \
+     or drop -X to emit DOT";
 
 /// RV-369 F-8. `dot` exited zero and still had something to say — most usefully
 /// that it downscaled the drawing to fit cairo's bitmap limit, which means the
@@ -192,11 +246,12 @@ pub(crate) enum RenderRefusal {
     Unsupported,
     Unconfirmed,
     NoPixelSize,
-    /// The rasterised PNG exceeds [`MAX_IMAGE_BYTES`] (RV-369 F-6). A guard stop
-    /// like the others — the user acts on it by narrowing the graph — but the
-    /// only one that cannot be decided until after `dot` has run.
+    /// The raster exceeds [`MAX_IMAGE_PIXELS`] (RV-369 F-6). A guard stop like
+    /// the others — the user acts on it by narrowing the graph — but the only
+    /// one that cannot be decided until after `dot` has run.
     ImageTooLarge {
-        bytes: usize,
+        width: u32,
+        height: u32,
     },
 }
 
@@ -213,10 +268,11 @@ impl std::fmt::Display for RenderRefusal {
                 &MSG_UNCONFIRMED.replace(PLACEHOLDER_TIMEOUT, &support_probe_timeout_text()),
             ),
             Self::NoPixelSize => f.write_str(MSG_NO_PIXEL_SIZE),
-            Self::ImageTooLarge { bytes } => f.write_str(
+            Self::ImageTooLarge { width, height } => f.write_str(
                 &MSG_IMAGE_TOO_LARGE
-                    .replace(PLACEHOLDER_MIB, &mib(*bytes).to_string())
-                    .replace(PLACEHOLDER_LIMIT, &mib(MAX_IMAGE_BYTES).to_string()),
+                    .replace(PLACEHOLDER_RASTER, &format!("{width}x{height}"))
+                    .replace(PLACEHOLDER_SIDE, &MAX_IMAGE_DIMENSION.to_string())
+                    .replace(PLACEHOLDER_LIMIT, &megapixels(MAX_IMAGE_PIXELS).to_string()),
             ),
         }
     }
@@ -293,16 +349,60 @@ fn check_support(reply: Result<Option<Vec<u8>>, QueryError>) -> anyhow::Result<(
     }
 }
 
-/// Stop 5 — the rasterised image against [`MAX_IMAGE_BYTES`] (RV-369 F-6).
+/// Stop 5 — the rasterised image against [`MAX_IMAGE_PIXELS`] (RV-369 F-6).
 ///
 /// Last of the stops, and the only one that cannot run in [`prepare`]: nothing
 /// knows the size until `dot` has produced it. Pure, so the rule is testable
 /// without spawning graphviz.
-fn check_image_size(bytes: usize) -> Result<(), RenderRefusal> {
-    if bytes <= MAX_IMAGE_BYTES {
+fn check_image_size(size: kitty::PngSize) -> Result<(), RenderRefusal> {
+    let within_sides = size.width <= MAX_IMAGE_DIMENSION && size.height <= MAX_IMAGE_DIMENSION;
+    let within_total = u64::from(size.width) * u64::from(size.height) <= MAX_IMAGE_PIXELS;
+    if within_sides && within_total {
         return Ok(());
     }
-    Err(RenderRefusal::ImageTooLarge { bytes })
+    Err(RenderRefusal::ImageTooLarge {
+        width: size.width,
+        height: size.height,
+    })
+}
+
+/// The box `dot` scales the drawing into: as wide as the placement will ever
+/// be, and as tall as the remaining budget allows.
+///
+/// Width is `DEC-256`'s `max_columns` in pixels — the widest rectangle
+/// [`kitty::place`] will ever ask for — so the raster arrives at the size it
+/// will be displayed at. Below that and the terminal upscales a small bitmap;
+/// above it and the surplus pixels are decoded, counted against the terminal's
+/// quota, and thrown away.
+///
+/// Height is whatever [`MAX_IMAGE_PIXELS`] has left once that width is spent,
+/// which makes the box's AREA the budget: any drawing fitted into it is within
+/// budget by construction, whatever its aspect ratio.
+///
+/// BOTH sides are then clamped to [`MAX_IMAGE_DIMENSION`], which is the bound
+/// that actually bites. A wide window makes the area budget yield a TALLER box
+/// — width is its divisor — so on a 6270-px-wide high-DPI window the area
+/// rule alone asked for 12300 px of height and the terminal silently dropped
+/// it.
+/// Clamping is safe for the area invariant in a way that widening would not
+/// be: a `min` only ever shrinks the box.
+///
+/// A tall graph therefore binds on HEIGHT and comes out narrower than the
+/// window. That is the budget binding, and the alternative is a blank screen.
+#[expect(
+    clippy::integer_division,
+    reason = "truncation spends the remainder on nothing, keeping the box's area at or \
+              BELOW the budget — which is what makes `anything that fits is in budget` hold"
+)]
+fn fit_box(cell: CellGeometry) -> crate::graphviz::FitBox {
+    let width_px = u32::from(cell.columns.saturating_sub(1).max(1)) * u32::from(cell.cell_width);
+    let height_px = MAX_IMAGE_PIXELS / u64::from(width_px.max(1));
+    crate::graphviz::FitBox {
+        width_px: width_px.min(MAX_IMAGE_DIMENSION),
+        height_px: u32::try_from(height_px)
+            .unwrap_or(MAX_IMAGE_DIMENSION)
+            .min(MAX_IMAGE_DIMENSION),
+    }
 }
 
 /// The support probe's "stop reading" predicate: anything that is not
@@ -360,7 +460,11 @@ fn dot_status_text(status: Option<i32>) -> String {
               kitty.rs's two expects"
 )]
 pub(crate) fn render_dot(dot: &str, cell: &CellGeometry) -> anyhow::Result<Vec<u8>> {
-    match crate::graphviz::rasterise_png(dot.as_bytes(), OsStr::new(crate::graphviz::DOT_PROGRAM)) {
+    match crate::graphviz::rasterise_png(
+        dot.as_bytes(),
+        OsStr::new(crate::graphviz::DOT_PROGRAM),
+        fit_box(*cell),
+    ) {
         RasterOutcome::ToolUnavailable => Err(anyhow::anyhow!(MSG_DOT_NOT_FOUND)),
         RasterOutcome::CommandFailed { status, stderr } => Err(anyhow::anyhow!(
             MSG_DOT_FAILED
@@ -375,8 +479,8 @@ pub(crate) fn render_dot(dot: &str, cell: &CellGeometry) -> anyhow::Result<Vec<u
             if !notes.is_empty() {
                 warn(&MSG_DOT_NOTES.replace(PLACEHOLDER_STDERR, &notes));
             }
-            check_image_size(png.len())?;
             let size = kitty::png_size(&png).ok_or_else(|| anyhow::anyhow!(MSG_NOT_A_PNG))?;
+            check_image_size(size)?;
             Ok(kitty::encode_png(&png, kitty::place(size, cell)))
         }
     }
@@ -599,7 +703,8 @@ mod tests {
             RenderRefusal::Unconfirmed,
             RenderRefusal::NoPixelSize,
             RenderRefusal::ImageTooLarge {
-                bytes: MAX_IMAGE_BYTES + 1,
+                width: MAX_IMAGE_DIMENSION + 1,
+                height: MAX_IMAGE_DIMENSION + 1,
             },
         ];
         for refusal in &refusals {
@@ -611,30 +716,43 @@ mod tests {
 
     // ── RV-369 F-6: the image budget ───────────────────────────────────────
 
-    /// The bound is on BYTES, and it is inclusive at the limit. The corpus case
-    /// that convicted this (VH-2) was 62 MiB behind a placement of 199 × 237
-    /// cells — a cell rectangle nothing would object to, which is why the cell
-    /// bound could not catch it.
+    /// A raster of `width` x `height`, as `kitty::png_size` reports one.
+    fn raster(width: u32, height: u32) -> kitty::PngSize {
+        kitty::PngSize { width, height }
+    }
+
+    /// The bound is on PIXELS, and it is inclusive at the limit. The corpus
+    /// case that convicted this (VH-2) was a placement of 199 x 237 cells — a
+    /// cell rectangle nothing would object to, which is why the cell bound
+    /// could not catch it.
     #[test]
     fn the_image_budget_admits_the_limit_and_refuses_past_it() {
         assert!(
-            check_image_size(0).is_ok(),
+            check_image_size(raster(0, 0)).is_ok(),
             "an empty render is not too big"
         );
+
+        let square = u32::try_from(MAX_IMAGE_PIXELS.isqrt()).expect("a plausible budget");
         assert!(
-            check_image_size(MAX_IMAGE_BYTES).is_ok(),
+            check_image_size(raster(square, square)).is_ok(),
             "the limit itself is admitted"
         );
-        assert_eq!(
-            check_image_size(MAX_IMAGE_BYTES + 1),
-            Err(RenderRefusal::ImageTooLarge {
-                bytes: MAX_IMAGE_BYTES + 1
-            })
+        assert!(
+            check_image_size(raster(square + 1, square + 1)).is_err(),
+            "one pixel past the limit is refused"
         );
-        // The measured whole-corpus case.
-        assert!(check_image_size(64 * BYTES_PER_MIB).is_err());
-        // The measured `--depth 1` case, which VH-1 confirmed draws.
-        assert!(check_image_size(143 * 1024).is_ok());
+    }
+
+    /// The unit is the point, not the number: the measured `--depth 2` case is
+    /// a 3.09 MiB PNG that a byte budget of 8 MiB waved through and ghostty
+    /// then declined, because decoded it is 94 Mpx. A byte bound cannot order
+    /// these two correctly; a pixel bound does.
+    #[test]
+    fn the_budget_refuses_the_raster_a_byte_budget_admitted() {
+        // `--depth 1`, which VH-1 confirmed draws.
+        assert!(check_image_size(raster(3125, 5692)).is_ok());
+        // `--depth 2`, which drew nothing.
+        assert!(check_image_size(raster(7280, 12917)).is_err());
     }
 
     /// The refusal has to be actionable: it is the answer to `doctrine graph -X`
@@ -642,22 +760,84 @@ mod tests {
     #[test]
     fn the_size_refusal_names_the_size_the_limit_and_both_ways_to_narrow() {
         let message = RenderRefusal::ImageTooLarge {
-            bytes: 64 * BYTES_PER_MIB,
+            width: 2000,
+            height: 16000,
         }
         .to_string();
-        assert!(message.contains("64 MiB"), "{message}");
-        assert!(message.contains("8 MiB"), "{message}");
+        assert!(message.contains("2000x16000"), "{message}");
+        assert!(
+            message.contains(&MAX_IMAGE_DIMENSION.to_string()),
+            "{message}"
+        );
+        assert!(
+            message.contains(&format!("{} Mpx", megapixels(MAX_IMAGE_PIXELS))),
+            "{message}"
+        );
         assert!(message.contains("focus"), "{message}");
         assert!(message.contains("--depth"), "{message}");
     }
 
-    /// Rounded UP, so a refused image never reads as smaller than the limit it
-    /// just exceeded — `8 MiB + 1 byte` must not print as `8 MiB`.
+    /// Rounded UP, so a refused raster never reads as smaller than the limit it
+    /// just exceeded — one pixel over must not print as the limit.
     #[test]
     fn a_size_just_over_the_limit_does_not_print_as_the_limit() {
-        assert_eq!(mib(MAX_IMAGE_BYTES), 8);
-        assert_eq!(mib(MAX_IMAGE_BYTES + 1), 9);
-        assert_eq!(mib(0), 0);
+        let limit = megapixels(MAX_IMAGE_PIXELS);
+        assert_eq!(megapixels(MAX_IMAGE_PIXELS + 1), limit + 1);
+        assert_eq!(megapixels(0), 0);
+    }
+
+    /// The budget is a whole number of megapixels, so the refusal never names a
+    /// limit the guard does not actually enforce.
+    #[test]
+    fn the_budget_is_a_whole_number_of_megapixels() {
+        assert_eq!(
+            megapixels(MAX_IMAGE_PIXELS) * PIXELS_PER_MEGAPIXEL,
+            MAX_IMAGE_PIXELS
+        );
+    }
+
+    // ── The fit box ────────────────────────────────────────────────────────
+
+    /// The width `dot` is given is the width `kitty::place` will ask for, so
+    /// the raster is neither upscaled by the terminal nor decoded and thrown
+    /// away. `place` never reaches the right edge, hence `columns - 1`.
+    #[test]
+    fn the_fit_box_is_as_wide_as_the_widest_placement() {
+        let cell = check_geometry(&healthy_window()).ok().expect("geometry");
+        let fit = fit_box(cell);
+        let placement = kitty::place(raster(fit.width_px, fit.height_px), &cell);
+        assert_eq!(
+            u32::from(placement.columns) * u32::from(cell.cell_width),
+            fit.width_px,
+            "a raster fitted to the box places at exactly its own width"
+        );
+    }
+
+    /// The box's AREA is the budget, so anything scaled into it passes
+    /// [`check_image_size`] whatever its aspect ratio — which is what demotes
+    /// that check from the working limit to a backstop.
+    #[test]
+    fn anything_that_fits_the_box_is_within_budget() {
+        // 286 x 22 is the measured HiDPI ghostty window whose fitted box the
+        // area-only rule sent 12300 px tall, and which drew nothing.
+        for columns in [1_u16, 2, 80, 286, 400, u16::MAX] {
+            for cell_width in [1_u16, 8, 20, 22] {
+                let cell = CellGeometry {
+                    columns,
+                    cell_width,
+                    cell_height: 20,
+                };
+                let fit = fit_box(cell);
+                assert!(
+                    check_image_size(raster(fit.width_px, fit.height_px)).is_ok(),
+                    "{columns} columns x {cell_width} px: {fit:?} exceeds the budget"
+                );
+                assert!(
+                    fit.width_px <= MAX_IMAGE_DIMENSION && fit.height_px <= MAX_IMAGE_DIMENSION,
+                    "{fit:?} exceeds the per-side cap the terminals enforce"
+                );
+            }
+        }
     }
 
     #[test]

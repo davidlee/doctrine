@@ -17,6 +17,46 @@ use std::process::{Command, Output, Stdio};
 /// every `map_server` spawn site (DEC-143).
 pub(crate) const DOT_PROGRAM: &str = "dot";
 
+/// Output format: a PNG raster. `kitty::encode_png` transmits `f=100`.
+const ARG_FORMAT_PNG: &str = "-Tpng";
+
+/// Graph-level resolution override, `-Gdpi=<n>`.
+const ARG_DPI_PREFIX: &str = "-Gdpi=";
+
+/// Graph-level drawing size, `-Gsize=<w>,<h>!` — inches, not pixels.
+const ARG_SIZE_PREFIX: &str = "-Gsize=";
+
+/// Trailing `!` on `-Gsize`: the box is a MINIMUM as well as a maximum, so a
+/// drawing smaller than the box is scaled UP to meet it. Plain `size` only
+/// ever scales down, which is what left small graphs rendering native (SL-245
+/// human acceptance).
+const ARG_SIZE_FILL: &str = "!";
+
+/// Decimal places on the inch conversion — enough that a box stated in whole
+/// pixels round-trips at any plausible dpi.
+const SIZE_PRECISION: usize = 4;
+
+/// Raster resolution, in dots per inch.
+///
+/// This is only the UNIT the fit box is expressed in — [`FitBox`] decides how
+/// big the drawing actually comes out, so this is not a knob for apparent
+/// size. It wants to be high enough that the box divides into a sensible
+/// number of inches and the glyph rasterisation is crisp, and no higher:
+/// pixels past the terminal's own resolution are decoded, counted against its
+/// image quota, and thrown away.
+const RASTER_DPI: u32 = 384;
+
+/// The pixel box a drawing is scaled to fill — the terminal's usable width,
+/// and whatever height the caller's image budget leaves for it.
+///
+/// Pixels rather than inches because the caller reasons in cells and window
+/// geometry; converting to graphviz's units is this leaf's business.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FitBox {
+    pub(crate) width_px: u32,
+    pub(crate) height_px: u32,
+}
+
 /// Outcome of a `dot -Tpng` raster spawn.
 #[derive(Debug)]
 pub(crate) enum RasterOutcome {
@@ -45,8 +85,8 @@ pub(crate) enum RasterOutcome {
 ///
 /// `RealDotRenderer` (`map_server::shell`) is the async counterpart of this
 /// sync shell, for map-server's own request lifecycle (DEC-143).
-pub(crate) fn rasterise_png(dot: &[u8], program: &OsStr) -> RasterOutcome {
-    classify(run(dot, program))
+pub(crate) fn rasterise_png(dot: &[u8], program: &OsStr, fit: FitBox) -> RasterOutcome {
+    classify(run(dot, program, fit))
 }
 
 /// Spawn `program -Tpng`, write `dot` on its own thread, and collect the
@@ -58,9 +98,9 @@ pub(crate) fn rasterise_png(dot: &[u8], program: &OsStr) -> RasterOutcome {
 /// write (EX-7). The writer thread is never joined — nothing needs its
 /// result, and joining would buy nothing but a chance to block on a wedged
 /// child that `wait_with_output` is already waiting on.
-fn run(dot: &[u8], program: &OsStr) -> std::io::Result<Output> {
+fn run(dot: &[u8], program: &OsStr, fit: FitBox) -> std::io::Result<Output> {
     let mut child = Command::new(program)
-        .arg("-Tpng")
+        .args(raster_args(RASTER_DPI, fit))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -84,6 +124,23 @@ fn run(dot: &[u8], program: &OsStr) -> std::io::Result<Output> {
         drop(stdin.write_all(&dot_owned));
     });
     child.wait_with_output()
+}
+
+/// The arguments `dot` is spawned with: PNG out, at an explicit resolution,
+/// scaled to fill `fit`.
+fn raster_args(dpi: u32, fit: FitBox) -> [String; 3] {
+    let inches = |px: u32| f64::from(px) / f64::from(dpi.max(1));
+    [
+        ARG_FORMAT_PNG.to_owned(),
+        format!("{ARG_DPI_PREFIX}{dpi}"),
+        format!(
+            "{ARG_SIZE_PREFIX}{:.*},{:.*}{ARG_SIZE_FILL}",
+            SIZE_PRECISION,
+            inches(fit.width_px),
+            SIZE_PRECISION,
+            inches(fit.height_px)
+        ),
+    ]
 }
 
 /// Pure classification of a raw spawn result into a [`RasterOutcome`].
@@ -178,11 +235,46 @@ mod tests {
         }
     }
 
+    /// A box in inches is what graphviz speaks; the caller thinks in the
+    /// terminal's pixels, so the conversion is this leaf's job.
+    #[test]
+    fn raster_args_state_the_fit_box_in_inches_at_the_named_resolution() {
+        let args = raster_args(
+            96,
+            FitBox {
+                width_px: 960,
+                height_px: 480,
+            },
+        );
+        assert_eq!(args[0], "-Tpng");
+        assert_eq!(args[1], "-Gdpi=96");
+        assert_eq!(args[2], "-Gsize=10.0000,5.0000!");
+    }
+
+    /// The trailing `!` is the whole point. Without it `size` only ever scales
+    /// a drawing DOWN, and a graph smaller than the window would keep
+    /// rendering native-and-small — the symptom the fit box exists to fix.
+    #[test]
+    fn the_fit_box_is_a_minimum_as_well_as_a_maximum() {
+        let args = raster_args(
+            RASTER_DPI,
+            FitBox {
+                width_px: 100,
+                height_px: 100,
+            },
+        );
+        assert!(args[2].ends_with('!'), "{}", args[2]);
+    }
+
     #[test]
     fn rasterise_png_nonexistent_program_is_tool_unavailable() {
         let result = rasterise_png(
             b"digraph { a -> b }",
             OsStr::new("/nonexistent/definitely-not-a-dot-binary"),
+            FitBox {
+                width_px: 800,
+                height_px: 600,
+            },
         );
         assert!(matches!(result, RasterOutcome::ToolUnavailable));
     }
