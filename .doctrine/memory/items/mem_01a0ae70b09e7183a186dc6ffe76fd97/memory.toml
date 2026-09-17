@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0ae70b09e7183a186dc6ffe76fd97"
+memory_key = "mem.fact.kitty-graphics.image-size-limit"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Kitty graphics: per-side 10000 px cap, and ghostty refuses in silence"
+summary = "Terminals cap kitty graphics images at 10000 px per SIDE, not by area or bytes; ghostty sends no refusal reply at all"
+created = "2026-09-17"
+updated = "2026-09-17"
+
+[scope]
+paths = ["src/terminal_image.rs", "src/kitty.rs"]
+globs = []
+commands = []
+tags = ["kitty-graphics", "terminal", "ghostty", "rendering"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "0c9a2d93df243bbb27afce2626326e73831a656b"
+tree = "bb2f7fbfae757a582a9f2c0517606abedffea263"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "0c9a2d93df243bbb27afce2626326e73831a656b"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-245"
+
