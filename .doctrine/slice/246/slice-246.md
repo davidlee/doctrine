@@ -101,25 +101,52 @@ at 14 references rather than the multi-seam cost it had been assumed to be.
 
 ## Affected surface
 
-Narrowed by the inquiry (`DEC-145`, `DEC-146`, `DEC-147`); the exact touch-set
-is still `/design`'s.
+Narrowed by the inquiry (`DEC-145`, `DEC-146`, `DEC-147`), then widened at review
+by `DEC-261`. This is the orientation map; `design.md` § 5.6 carries the
+authoritative touch-set, and the two are not duplicates of each other.
+
+**The composed read** — the capability itself, reached from `doctrine inspect`.
 
 - `src/relation_graph.rs` — `InspectView` (`:572`), `inspect_from` (`:636`),
-  `render_from` (`:760`): the inbound derivation and the 1-hop render, and where
-  selection splits from rendering.
+  `render_from` (`:760`): the inbound derivation, and where selection splits from
+  rendering (`DEC-147`).
+- `src/knowledge.rs` — the per-id record accessor (sibling of `relation_edges`),
+  the level's block renderer, and the tier / empty-policy inputs that
+  `format_facet` **and** `facet_json` both take (`DEC-149`, `DEC-150`).
 - `src/commands/inspect.rs` — the verbosity level on `doctrine inspect`.
-- `src/knowledge.rs` — the per-id record accessor (sibling of `relation_edges`)
-  and `format_facet`'s two policy inputs, field selection and empty-handling.
-- `src/kinds/mod.rs` — `RECORD` (`:57`) / `is_record` (`:128`), the membership
-  predicate selection filters on.
-- `src/relation.rs` — the relation vocabulary and the inbound label captions.
-- `src/slice.rs`, `src/spec.rs`, `src/adr.rs`, `src/rfc.rs` — a one-line pointer
-  each, never the renderer.
 
-**Dropped by the inquiry.** `src/catalog/**` — `DEC-146` leaves the corpus scan
-untouched. `src/commands/design.rs` — `DEC-145` puts the render on `inspect`, not
-on the design read. `src/commands/relation.rs` — `relation list --target` is
-prior art for the derivation, not a touch site.
+**The design read** — a scope addition taken at review (`DEC-261`, superseding
+`DEC-260`).
+
+- `src/commands/design.rs` — `show` renders the design document plus the
+  knowledge block; `--format` gains `document` and defaults to it, and `prompt`
+  keeps the turn envelope unchanged.
+- `src/slice.rs` — the deprecated `SliceCommand::Design` leaf and
+  `scaffold_design_doc` retire; a `design_document` reader replaces them.
+- `src/commands/guard.rs`, `src/commands/cli.rs` — the rows keyed on the retiring
+  `SliceCommand::Design` variant delete with the variant; `design show` stays
+  read-classed.
+- `install/routing-process.md` and ~4 emitted strings — the migration itself:
+  every place naming `design show` as the turn read re-points at `--format
+  prompt`. Pricing this at 14 references is what made `DEC-261` decidable.
+
+**Test surface.** Three existing suites go red here *on purpose* — the retiring
+leaf's tests, one help assertion carrying `SL-233` `EX-5`, and the bare
+`design show` call sites. `design.md` § 5.6 names them; a red suite it does not
+name is the byte-identity alarm, not a golden to update.
+
+**Adjacent, and not a phase of this slice.** Five committed memories document
+`design show` as the envelope read. Re-attesting them is `CHR-073`, a
+`/reviewing-memory` follow-up — the corpus is not code and re-attestation is its
+own verb.
+
+**Dropped.** `src/catalog/**` — `DEC-146` leaves the corpus scan untouched.
+`src/commands/relation.rs` — `relation list --target` is prior art for the
+derivation, not a touch site. `src/relation.rs` — `DEC-148` filters on the
+source's kind and writes no label allow-list, so the relation vocabulary is read,
+not changed. `src/kinds/mod.rs` — `is_record` (`:128`) is consumed as-is.
+`src/spec.rs`, `src/adr.rs`, `src/rfc.rs` — the one-line pointer returned to
+`IMP-398` (see *Not the pointer line* above), so no `show` renderer is touched.
 
 ## Governing context
 

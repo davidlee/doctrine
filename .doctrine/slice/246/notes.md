@@ -88,6 +88,57 @@ for `IMP-398` (design §7.2 `D4`).
 carries the TOML-only analysis). `ISS-316` (`SPEC-019` governs four record kinds,
 the corpus has seven) predates the stage and stays open.
 
+## A third review pass, and what it would probe (2026-09-18, `reviewing`)
+
+Discharges `review.passes`. Written after round 2 integrated, at run revision 44.
+**A further pass is needed**, for two independent reasons.
+
+**1. Round 2 is not finished.** `RV-370` stands at `await=raiser` with ten
+dispositions unadjudicated — `F-4` and `F-9`..`F-17`. A disposition the raiser
+has neither verified nor contested is not terminal, and the run's
+`review-disposition-attested` contract will not take a pass as `conducted` while
+they stand.
+
+**2. The design moved after the reviewer read it.** Round 2 read **revision 38**.
+The integration adopted **revision 42** and moved five sections — `sec-3`,
+`sec-5`, `sec-7`, `sec-8`, `sec-9`, roughly 200 added lines. None of it has been
+read adversarially. Concretely, a round 3 would probe:
+
+- **§5.2 command grammar.** `--format` gaining `document` *and defaulting to it*,
+  `--json` refused alongside an explicit `--format`, `--full` refused on
+  `document`. Three refusals settled as user rulings during integration, so no
+  reviewer has attacked the grammar they produce.
+- **§5.2 `facet_fields` / `FacetValue`** as repaired for `F-12` and `F-13` — does
+  `C2` (both existing renders byte-identical) still hold once the marker slot
+  reaches the JSON arm, and does the `Full` entry match `show_json`'s payload.
+- **§5.5 and §9.2** — the in-block unreadable marker after `F-14` changed its
+  verification mode rather than its design. Is the one reachable case reachable
+  in the declared family now, or was the mode change the repair.
+- **§7.2 `D5`** and any ruling taken during integration: decided in the same
+  document that proposes it, which is the failure class round 1 raised as its
+  fourth line of attack.
+- **§8 `R6`** — replaced once at round 1 and rewritten again at round 2.
+- **§9.2's new cases and fixtures**, against `I1`–`I7` and `X1`–`X7` coverage.
+- **§3.3 `F5`'s migration count.** The four emitted-string sites were located
+  while re-pointing the selectors (`design_run/render/mod.rs:343`,
+  `design_run/refusal.rs:904`, `design_run/render/envelope.rs:1330`,
+  `commands/design.rs:1548`), but §5.6 still says "~4 sites" without naming them
+  — the exact shape `mem.pattern.design.counts-state-their-population` was
+  written from, one round earlier in this slice.
+- **The scope and selector set themselves.** `slice-246.md`'s *Affected surface*
+  was rewritten at revision 43 — it had listed `src/commands/design.rs` as
+  *dropped by the inquiry*, contradicting `DEC-261` outright — and the
+  design-target selectors were re-pointed off `DEC-260`'s siting at revision 44.
+  Both are post-round-2 and unread.
+
+**Not a substitute for the attestations.** Nine section attestations are
+outstanding and the run's review policy is `human-only`. An adversarial round
+cannot discharge them, and a round-3 reviewer reading revision 42+ still binds
+its own revision, not the human lane's.
+
+**Reviewer.** codex is out of credits; round 2 ran on an Opus fork with the bar
+bound on the ledger. Round 3 has the same constraint until credits return.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 42) · 55b41b97c
