@@ -243,3 +243,116 @@ legitimate and complete outcome.**
 Corpus hygiene (`IMP-403`), the `SPEC-019` record-kind gap (`ISS-316`), and
 implementation-level code review — there is still no code. `IMP-457` is closed
 as a duplicate of `IMP-393`; do not re-raise the overlap.
+
+---
+
+## Round 3 bar — added 2026-09-18, at run revision 45
+
+This is the round that decides whether the pass can be disposed `conducted`. The
+run's `review-disposition-attested` contract will not take a pass while
+dispositions stand unadjudicated, so the ten below are the gate, not the
+formality.
+
+Round 2 read **revision 38**. The design is now **revision 42** content, adopted
+after integration, with five sections moved — `sec-3`, `sec-5`, `sec-7`, `sec-8`,
+`sec-9`, roughly 200 added lines. Read the current text, not your recollection of
+it: `.doctrine/slice/246/design.md`.
+
+### Job 1 — adjudicate the ten dispositions
+
+`F-4` and `F-9`..`F-17` are all `answered`. Verify each (the disposition is
+accepted and terminal) or contest it (hands it back). Four make claims worth
+testing rather than accepting:
+
+- **`F-14` changed the verification mode, not the design.** Its disposition
+  retires the fixture and the named case, and asserts that `I5`'s in-block half
+  is verified **by construction** — `render_block` returns `String`, not
+  `Result`, so no path exists on which an unreadable selected record aborts the
+  block or vanishes from it. That is a claim about a signature that does not
+  exist yet. Attack it directly: does totality actually foreclose the failure
+  `I5` names, or does it only foreclose the *abort* half and leave the
+  *vanishes-from-it* half unwitnessed? A function returning `String` can still
+  return a string with the record missing from it.
+- **`F-13`'s repair puts the marker inside `facet` as `{"marker": …}`** at both
+  levels, and claims this keeps `Full`'s entry **exactly** `show_json`'s twelve
+  keys plus `caption`. Check that against `show_json`'s actual payload in
+  `src/knowledge.rs`, not against the design's description of it.
+- **`F-17`'s disposition rules `DEC-150` unsuperseded** on the grounds that
+  `facet_fields` *is* `DEC-150`'s per-kind match rewritten, not the separate
+  constant `DEC-150` rejected on drift grounds. That distinction is the whole
+  ruling. Read `DEC-150` (`doctrine knowledge show DEC-150`) and test it: if
+  `facet_fields` is a new table that a future field addition can leave stale
+  independently of `format_facet`, the drift argument `DEC-150` rejected is back
+  and the record needs superseding after all.
+- **`F-4`/`F-12` reduced `D1`** to "the two arms agree, mechanised by a shared
+  `facet_fields` under a shared `EmptyPolicy`", deferring the entry shape to
+  `D5` and § 5.2. Confirm `D1`, `D5` and § 5.2 now state one contract and not
+  two.
+
+`F-9`'s disposition records four user rulings; `F-10`'s rescopes `C1` and `I1`.
+Both are legitimate targets under Job 2 rather than here — the disposition is
+that the design changed, and what it changed to is new material.
+
+### Job 2 — attack the new material, which no reviewer has read
+
+Round 1's and round 2's bars still apply to it. The genuinely new or rewritten
+text at revision 42:
+
+- **§ 5.2 command grammar.** `--format` gains `document` **and defaults to it**;
+  `--json` is refused alongside an explicit `--format`; `--full` is refused on
+  `document`. Three refusals settled as user rulings during integration, so the
+  grammar they produce has been attacked by nobody. Is the refusal set complete
+  and are the three mutually consistent? Is a default-carrying `--format` on a
+  verb whose old default was a different rendering actually a move rather than a
+  removal, as the prose claims?
+- **§ 5.2 `facet_fields` reaching `facet_json`.** `facet_json` now takes
+  `EmptyPolicy` alongside `TierFilter`. Does `C2` — both existing renders
+  byte-identical — still hold once the JSON arm grows a policy parameter, and is
+  every existing caller compatible?
+- **§ 3.2 `C1` and § 5.5 `I1`, as rescoped by `F-10`.** The rescoping is honest
+  or it is the constraint defined down to what the design happens to satisfy.
+  Decide which.
+- **§ 5.6's table and its four notes**, especially the intended-red whitelist and
+  the claim that a red suite not named there is the `C1` alarm. Is the whitelist
+  exhaustive of the intended red?
+- **§ 3.3 `F5`'s population table** — new at round 2. Its four emitted-string
+  sites were re-derived independently and agree exactly, so the count is sound.
+  What is unread is the table's *completeness*: are those four populations the
+  whole migration?
+- **§ 7.2 `D5`** — a decision taken at review and never adversarially read.
+- **§ 8 `R6`** — rewritten twice now, once per round.
+- **§ 9.2's split cases and § 9.5's by-construction argument.**
+
+### Job 3 — the post-round-2 artefacts, unread by anyone
+
+Made at run revisions 43-45, after the round-2 integration:
+
+- **`slice-246.md`'s *Affected surface*, rewritten.** It had listed
+  `src/commands/design.rs` under *Dropped by the inquiry* — contradicting
+  `DEC-261`, which sites the design read in that file. Does the scope now assert
+  nothing the accepted decisions contradict, and omit nothing they add? Read it
+  with `doctrine slice show SL-246`.
+- **The design-target selector set, re-pointed** off `DEC-260`'s siting
+  (`doctrine slice selector list SL-246`). Does it match § 5.6's commitments?
+- **`notes.md`'s third-pass section**, which is this bar's source and may be
+  wrong about what is worth probing.
+
+### Bar
+
+Anything real, any severity. Hold the standing admissibility rules: cite what you
+attack, separate observation from prescription, and do not manufacture findings.
+**Raising nothing on the new material, while verifying or contesting the ten, is
+a legitimate and complete outcome** — and given two rounds have already run over
+this text, it is a plausible one.
+
+### Standing constraint
+
+The design **must stand alone**. It may not require the review chronology, the
+design run's state, or locally-invented terminology to be understood or
+implemented. A place where it does is itself a finding.
+
+### Out of scope, unchanged
+
+Corpus hygiene (`IMP-403`), the `SPEC-019` record-kind gap (`ISS-316`), the
+`IMP-457`/`IMP-393` overlap (closed as a duplicate), and implementation-level
+code review — there is still no code.

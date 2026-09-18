@@ -119,12 +119,11 @@ read adversarially. Concretely, a round 3 would probe:
   fourth line of attack.
 - **§8 `R6`** — replaced once at round 1 and rewritten again at round 2.
 - **§9.2's new cases and fixtures**, against `I1`–`I7` and `X1`–`X7` coverage.
-- **§3.3 `F5`'s migration count.** The four emitted-string sites were located
-  while re-pointing the selectors (`design_run/render/mod.rs:343`,
-  `design_run/refusal.rs:904`, `design_run/render/envelope.rs:1330`,
-  `commands/design.rs:1548`), but §5.6 still says "~4 sites" without naming them
-  — the exact shape `mem.pattern.design.counts-state-their-population` was
-  written from, one round earlier in this slice.
+- **§3.3 `F5`'s population table**, new at round 2 and unread. Its four
+  emitted-string sites were re-derived independently while re-pointing the
+  selectors and the two sets agree exactly, so the count is sound; what is
+  unread is the table's *completeness* — whether the four populations it names
+  are the whole migration.
 - **The scope and selector set themselves.** `slice-246.md`'s *Affected surface*
   was rewritten at revision 43 — it had listed `src/commands/design.rs` as
   *dropped by the inquiry*, contradicting `DEC-261` outright — and the
