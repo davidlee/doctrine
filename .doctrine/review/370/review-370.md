@@ -566,10 +566,23 @@ word and asked where the fourth was. `X5` and `I6` were then fixed by sweeping
 rather than by a further round.
 
 The residual is that the sweep is the only evidence the class is closed. It was
-performed at revision 59 over every edge case and invariant in §5.5; nothing
-structural makes a two-arm claim state both arms, and nothing will notice if a
-later edit states one. Recorded as
+performed at revision 59 over every edge case and invariant in §5.5, **audited
+independently by the raiser at round 8**, and extended at revision 61 to the one
+door the sweep could not close: `OQ-1`'s recommendation, which spelled its
+disclosure text-only. An open question's *recommendation* is exactly the prose a
+later implementer reads as a specification, so it now names both halves without
+answering the question. Nothing structural makes a two-arm claim state both
+arms, and nothing will notice if a later edit states one. Recorded as
 `mem.pattern.review.repair-inherits-finding-scope`.
+
+Two of the sweep's calls are structural rather than inspected, which is worth
+recording because it is what makes them durable: `X2` is arm-independent because
+JSON error formatting exists in this codebase only under `src/mcp_server/` and
+`src/map_server/` — the CLI command layer bails through `anyhow` and surfaces
+plain on stderr regardless of `--format`; and `X7` has no arm because stderr sits
+outside both renderings by construction. `I3` and `I4` resolve upstream of the
+split, in `select_knowledge`, and both arms map the same vector in the same
+order.
 
 Two process gaps were found and left unfixed, both recorded rather than
 absorbed: the slice scope has no staleness signal against its design

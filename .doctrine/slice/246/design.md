@@ -1316,6 +1316,18 @@ mode the reader cannot detect, which is the family `STD-003` exists for even
 though it does not literally cover this case. Left open because it is the one
 place this design would reach into the run, and that is worth a second opinion.
 
+*And if the answer is yes, it lands on both arms.* The text arm gets the line
+above; the JSON arm gets a sibling key on the document object — `"stale_run":
+{ "document_revision": N, "run_revision": M }` — not the rendered sentence,
+because `D1` binds the arms to one meaning and the JSON arm expresses state as
+structure everywhere else in this design. This clause decides nothing `OQ-1`
+leaves open; it only records that the answer has two halves, so whoever answers
+it cannot answer half. **That is deliberate**: every other two-arm claim in this
+design reached its second arm through a review finding (`F-18`, `F-23`, `F-30`,
+`F-31`), and `OQ-1` is the one door left through which a fifth could enter — an
+open question's recommendation is exactly the text a later implementer reads as
+a specification.
+
 **`OQ-2` — do the other kinds eventually want the level on their own `show`?**
 
 For `ADR`, `SPEC`, `PRD` and `RFC`, `show` already renders the document — so
