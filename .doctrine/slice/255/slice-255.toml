@@ -1,9 +1,9 @@
 id = 255
 slug = "provision-dispatch-workers-as-clones"
 title = "Provision dispatch workers as clones"
-status = "proposed"
+status = "abandoned"
 created = "2026-08-12"
-updated = "2026-08-12"
+updated = "2026-09-18"
 tags = ["area:dispatch", "area:worktree", "cluster:capsule"]
 
 [relationships]

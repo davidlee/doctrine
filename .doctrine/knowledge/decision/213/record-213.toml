@@ -5,9 +5,9 @@ id = 213
 slug = "re-scope-sl-254-to-the-arm-collapse-alone"
 title = "Re-scope SL-254 to the arm collapse alone"
 record_kind = "decision"
-status = "proposed"
+status = "accepted"
 created = "2026-08-12"
-updated = "2026-08-14"
+updated = "2026-09-18"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
