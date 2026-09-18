@@ -678,7 +678,7 @@ The framing is the part worth keeping. `F-23` was a route asserted without estab
 
 [[finding]]
 id = "F-31"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The empty inbound set is specified on the text arm only, sits outside render_block's map contract, and has a fixture with no named case"
 detail = """

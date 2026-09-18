@@ -523,3 +523,86 @@ expected outcome.
 ### Standing constraint and out of scope
 
 Unchanged from round 4.
+
+## Synthesis
+
+Seven rounds, 31 findings, all terminal — 29 verified, one withdrawn as a
+mis-raise (`F-19`, re-raised as `F-20`), one contest upheld (`F-14`). Two
+reviewers: rounds 1 and part of 2 on a GPT raiser, rounds 2-7 on Opus after
+codex ran out of credits. Yields 8, 9, 4, 5, 2, 1.
+
+### The closure story
+
+The draft was sound in its decisions and wrong in its evidence. Round 1's two
+blockers (`F-1`, `F-2`) were dissolved not by repair but by `DEC-261`, which
+re-sited the whole read from `slice design show` onto `doctrine design show` —
+the review's largest single change, and it came from attacking a governance
+claim (`SPEC-013`'s two-level grammar) rather than the design's logic.
+
+What the middle rounds found was a different genus: **the design kept asserting
+mechanisms it had not established**. `F-14` claimed a guarantee from a return
+type that carried one of three clauses. `F-18` specified a JSON shape with no
+producer. `F-20` sited an empty-state policy on functions that could not see its
+inputs. Those three were one defect — there was no per-record layer — and
+dependency-ordering the triage is what surfaced it. `D6` is the result.
+
+`D6` then produced `F-23`, because it carried the new policy parameters down to
+the leaf renderers and to nothing above them, leaving the by-design marker
+reachable at `Facets` and unreachable at `Full`. The repair withdrew
+`EmptyPolicy` outright rather than threading it up — fewer moving parts than the
+reviewer prescribed, and it made `C2` structural: `knowledge show` cannot reach
+a layer that marks. That is the shape of the whole review in miniature — the
+finding was right, its prescription was not the best repair, and the two were
+adjudicated separately.
+
+### The standing risk, and it is not in the design
+
+**A repair inherits the finding's scope.** Four times a repair satisfied the arm
+the finding named and left its twin — `F-13`/`F-18`, `F-23`, `F-30`, `F-31` —
+and none was carelessness: every one was verified against the tree before its
+disposition was written. The class was named in `F-30`'s disposition and *still*
+not swept, which is how `F-31` was found: a reviewer took that sentence at its
+word and asked where the fourth was. `X5` and `I6` were then fixed by sweeping
+rather than by a further round.
+
+The residual is that the sweep is the only evidence the class is closed. It was
+performed at revision 59 over every edge case and invariant in §5.5; nothing
+structural makes a two-arm claim state both arms, and nothing will notice if a
+later edit states one. Recorded as
+`mem.pattern.review.repair-inherits-finding-scope`.
+
+Two process gaps were found and left unfixed, both recorded rather than
+absorbed: the slice scope has no staleness signal against its design
+(`IMP-461`, four instances in this review alone), and the reviewing runbook
+stays discharged across adopt + materialise, so `review.passes` reported clear
+while its own text — "written after the last pass" — was false.
+
+### Tradeoffs consciously accepted
+
+- **`I5`'s in-block half is verified by construction, not by test** (§9.5). The
+  race it covers is unreachable in a black-box golden, and an injection seam
+  would exist only to prove the shape. Three clauses, three separate grounds —
+  the map forbids the drop, the never-empty contract forbids the empty render,
+  the return type forbids the abort. The never-empty contract is prose; its two
+  reachable floors are witnessed by §9.2 and only the scan/render race rests on
+  intention. That is stated rather than papered over.
+- **An `EVD` at `Only(Tier::Argument)` falls to the unfilled marker** — a
+  wrong-ish message for a state nothing enters, since the filter is constructed
+  nowhere. A fourth empty state would cost more than the named edge; the edge is
+  named in §5.2 so a future caller is told where it is rather than finding it.
+- **`knowledge show`'s concealing behaviour is preserved deliberately** (`C2`),
+  and `format_facet`/`facet_json`'s existing disagreement about absent fields
+  with it. Both are `IMP-403`'s.
+- **The five committed memories documenting `design show` as the envelope read
+  are routed to `/reviewing-memory`** (`CHR-073`), not to a phase — re-attesting
+  a memory is its own verb and the corpus is not code. They must land with or
+  before the code: a stale memory is injected into agent context.
+
+### What this review did not reach
+
+`notes.md`'s harvest was never audited on its own terms — it was read as a
+source for round bars and its claims tested against the tree, which is not the
+same check. §3.1's six three-level governance groups were verified at round 2
+and not re-run. And nine section attestations remain outstanding under
+`review_policy = human-only`; no round of this ledger discharges any of them,
+and each binds a revision the adversarial lane never read.
