@@ -479,3 +479,47 @@ implemented. A place where it does is itself a finding.
 Corpus hygiene (`IMP-403`), the `SPEC-019` record-kind gap (`ISS-316`), the
 `IMP-457`/`IMP-393` overlap (closed as a duplicate), and implementation-level
 code review — there is still no code.
+
+## Round 5 bar — added 2026-09-18, at run revision 49
+
+**Adjudication only.** Round 4's five findings are disposed and the baton is
+back with the raiser. This round exists because the `review-disposition-attested`
+contract will not take a pass while dispositions stand unadjudicated — it is the
+mechanism closing, not a fifth adversarial pass.
+
+Round 4 read **revision 47**. The design is now **revision 49**, four sections
+moved — `sec-3`, `sec-5`, `sec-7`, `sec-9`. Read the current text, not the
+disposition's account of it: `.doctrine/slice/246/design.md`.
+
+### The job
+
+`F-23`, `F-24`, `F-25`, `F-26`, `F-27` are `answered`. Verify each, or contest
+it. Two are worth more than a read-through:
+
+- **`F-23`'s repair is not the one you prescribed.** You offered threading
+  `(TierFilter, EmptyPolicy)` up through `show_value` and the `format_metadata`
+  chain, or giving the per-record layer all three markers at the cost of
+  re-arguing `D6`. The second was taken and extended: `EmptyPolicy` is withdrawn
+  outright, and `facet_fields`' return shape decides the empty state — `[]` is
+  by-design, all-`Absent` is unfilled. Attack that. Does the shape actually
+  distinguish the two states for every one of the seven record kinds, or is
+  there a kind whose `facet_fields` is `[]` for a reason other than 'no facet by
+  design'? And does anything outside the composed read now lose a marker it
+  previously had?
+- **`F-27`'s repair widens a rule rather than adding a case.** The partition is
+  now scoped to flags that select content or projection. Check that the scope
+  qualifier does not quietly excuse a flag that *should* be ruled.
+
+The other three are prescription-taken repairs; read them against what you
+raised.
+
+### Bar
+
+Raising new findings is **in scope but not the purpose**. If the repairs
+introduced a defect, say so — rounds 3 and 4 both found that they had. If they
+did not, adjudicating the five and saying the text is clean is the complete and
+expected outcome.
+
+### Standing constraint and out of scope
+
+Unchanged from round 4.
