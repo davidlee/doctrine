@@ -234,7 +234,7 @@ response = """Accepted on both the primary and the secondary. `facet_json` now t
 
 [[finding]]
 id = "F-14"
-status = "contested"
+status = "answered"
 severity = "major"
 title = "The in-block unreadable marker's one reachable case is unreachable in the declared test family"
 detail = """
@@ -245,8 +245,13 @@ A black-box golden spawns one process, and both the scan and the render happen i
 So `I5`'s in-block half is claimed, narrowed, specified — and unverifiable as `VT` in the family §9.2 declares. The fixture row and the named case both assert a capability the test type does not have.
 
 Suggested repair (a separate claim): either give that one case an in-process test with an injected read failure and say so in §9.2 — which is a deliberate departure from `DEC-151`'s black-box choice and should be recorded as one — or state that `I5`'s in-block half is verified by construction through `render_block`'s totality rather than by test, and drop the fixture row."""
-disposition = "accepted-verification-mode-changed"
-response = "Accepted, and it is the sharpest finding in the round — the design's own argument in section 5.2, applied to the design's own test, which is a check I should have run. The fixture row and the named case are both gone from section 9.2. Section 9.5 now records that `I5`'s in-block half is verified BY CONSTRUCTION: `render_block` returns `String`, not `Result`, so no path exists on which an unreadable selected record aborts the block or vanishes from it — the signature is the guarantee, and the claim is a claim about the signature. Your first option, an in-process test with an injected read failure, was considered and declined by the user: the seam would exist only to prove the type, and `DEC-151`'s black-box reasoning applies unchanged. Recorded in section 9.5 rather than left as a gap, on the principle your finding implies — a claimed `VT` that cannot fail is worse than an honest absence. Section 5.2 now points at 9.5 for it. Revision 42, sec-5, sec-9."
+disposition = "contest-upheld-shape-now-carries-i5"
+response = """
+Contest upheld. The observation defeats a specific claim: §9.5 said the `String` return meant no path exists on which a record 'aborts the block OR VANISHES FROM IT'. The second half does not follow, and your counter-example is the proof — `filter_map(|r| read_record(..).ok())` is total, compiles, and drops exactly the record STD-003 exists to disclose. `I5` has three clauses (line 968, and §3.1's STD-003 paragraph states them independently); totality foreclosed one.
+
+Repaired by your second option, taken with `F-18` because they wanted the same thing. §5.2 now names `render_record` / `record_value` — per record, total, contracted NEVER EMPTY — and defines `render_block` / `knowledge_value` as MAPS over them, never filters. §9.5 replaces the one-sentence argument with a table grounding each clause separately: the map shape forbids the drop, the never-empty contract forbids the empty render, the return type forbids the abort. §5.5 `I5` and §5.1's flowchart carry the same split, and §5.4's sequence now shows the three outcomes rather than two.
+
+Your first option — an in-process injected-failure test — stays declined, now for a better reason than before: the shape fixes what the seam would have proved. Revision 47, sec-3/5/7/8/9."""
 
 [[finding]]
 id = "F-15"
@@ -306,7 +311,7 @@ response = "Accepted as a documentation defect, and the user ruled against super
 
 [[finding]]
 id = "F-18"
-status = "open"
+status = "answered"
 severity = "major"
 title = "The JSON arm is specified as a shape with no producer"
 detail = """
@@ -321,6 +326,13 @@ Three claims elsewhere in the design rest on that absence, and each is weaker th
 (3) § 5.2 specifies `Full`'s entry as "the complete `knowledge show` payload — id, record_kind, slug, title, status, created, updated, tags, facet, evidence, relationships, body — plus `caption`". `show_json` (`src/knowledge.rs:1949-1989`) cannot be called for that value: it returns `anyhow::Result<String>` of a serialised `{"kind":"knowledge","knowledge":{…}}` envelope, and its `body` key is conditional on a `with_body` parameter. § 5.6 lists no change to it. So the twelve keys are a second, hand-written projection of the same payload, mechanised by nothing — the record-level instance of exactly the defect `facet_fields` was introduced to remove one level down, and the drift `DEC-150` rejected a separate field-list constant to avoid. A thirteenth key added to `show_json` renders in `knowledge show --json` and vanishes from the composed `Full` entry, which is `DEC-150`'s own words about its rejected alternative.
 
 Suggested repair (a separate claim): name the JSON producer in § 5.2 with its signature and its totality contract, give it a row in § 5.3 and § 5.6 beside `render_block`, and state how it obtains the record payload — most cheaply by splitting `show_json`'s map construction into a `fn show_value(record: &KnowledgeRecord, with_body: bool) -> serde_json::Value` that both `show_json` and the composed entry render from, which is the same move `facet_fields` makes one level down."""
+disposition = "accepted-design-changed"
+response = """
+Accepted in all three parts, and it is the finding that reorganised the repair. Verified against the tree, not the design's description: `show_json` (`knowledge.rs:1949`) returns `anyhow::Result<String>` of a `{kind, knowledge}` envelope, builds the twelve-key map inline, and gates `body` on `with_body` — so neither the envelope nor the string is usable as an entry, and the composed `Full` would have been a second hand-written projection. You named it correctly as `DEC-150`'s own argument one level up.
+
+(1) and (2) are repaired with `F-14`: `record_value` is the named JSON producer, total, owned in §5.3 and listed in §5.6, and `knowledge_value` is its set-level map. `R7`'s mitigation now reads 'exactly two public paths — the same map over the same per-record producers, and `SelectedRecord` is the only way into either', which is the half you said survives plus the half that had to be built. §9.5's by-construction argument now covers both arms because both are the same shape.
+
+(3) takes your suggested repair as offered: `show_value(record, with_body) -> serde_json::Value` splits out of `show_json`'s inline map, `show_json` serialises it inside its unchanged envelope (so `C2` holds — only the map acquires a name), and §5.2's `Full` row now names the call instead of listing twelve keys. §9.2's `full_json_carries_the_complete_knowledge_show_payload` gained the consequence: a thirteenth key appears without anyone editing this design. Recorded as `D6`. Revision 47, sec-5/7/8/9."""
 
 [[finding]]
 id = "F-19"
@@ -344,7 +356,7 @@ Suggested repair (a separate claim): either give `EmptyPolicy::Marked` the recor
 
 [[finding]]
 id = "F-20"
-status = "open"
+status = "answered"
 severity = "major"
 title = "The empty-state policy sits on facet-scoped functions that cannot see the marker inputs"
 detail = """
@@ -361,10 +373,17 @@ The other two markers are unaffected and the contrast locates the defect. The by
 Note this is not the round-1 question about whether the size hint is obtainable without reading the `.md`; `metadata()` answers that. It is that the function holding the policy cannot see the file at all.
 
 Suggested repair (a separate claim): either give `EmptyPolicy::Marked` the record-scoped data — the reference and the prose size, which `render_block` and its JSON sibling already have in hand before they call the facet renderer — or keep both facet renderers constant-only and site the unfilled marker's composition one level up in the block renderers, where the reference and the path are already known."""
+disposition = "accepted-design-changed"
+response = """
+Accepted. Verified verbatim — `{"marker": "<constant>"}` is the text, fifteen lines from a table row reading `(no facet recorded — 6.7 KB of prose: doctrine knowledge show QUE-206)`, and §3.1's STD-001 sentence asserted both markers were constants. Your framing located it: the contrast between the three markers is what shows the defect is siting, not expressibility.
+
+Repaired by your second option, and the choice between your two is not a preference. Giving `EmptyPolicy::Marked` the record-scoped payload would put a `metadata()` call behind `format_facet`, which `knowledge show` also calls — disk in the pure layer, which AGENTS.md forbids outright. So both facet renderers stay pure over `&RecordFacet` with `EmptyPolicy` narrowed to the by-design marker alone (the one the kind decides), and the unfilled and unreadable markers compose in `render_record` / `record_value`, which already hold the reference and the root and are already doing I/O.
+
+The three-empty-states table gains a 'composed by' column so the siting is visible rather than inferable, §3.1's sentence is corrected to one constant and two templates over a constant frame, and the JSON-marker paragraph now says which layer writes the slot and why — all three still ride inside `facet`, so `Full` is unchanged. §9.2's marker case now spans both arms, because the two markers are composed at different layers and a one-arm case would miss half of it. Recorded as `D6`. Revision 47, sec-3/5/7/9."""
 
 [[finding]]
 id = "F-21"
-status = "open"
+status = "answered"
 severity = "major"
 title = "The design show flag partition is neither complete nor internally consistent"
 detail = """
@@ -379,10 +398,19 @@ Two defects, both in text adopted at revision 42 and attacked by nobody.
 Secondarily on the same clause: "explicit" is a property of the invocation rather than of the value, so this rule alone obliges the implementation to consult clap's `ValueSource` to tell a defaulted `--format document` from a typed one. That machinery exists solely to support the one rule that does not follow from the partition, which is a cost the "one rule to remember" claim does not price.
 
 Suggested repair (a separate claim): rule `--known-revision` alongside `--full` as an envelope flag and add it to the grammar block, and restate `--json`'s refusal in the partition's own terms — refused with `--format prompt|json|status`, legal with `--format document` — or, if `--format document --json` is genuinely to be refused, say so explicitly and say why the document's two flags differ."""
+disposition = "accepted-design-changed"
+response = """
+Accepted on both, and the user ruled the fork the second one opened.
+
+(1) Verified: `--known-revision` is at `commands/design.rs:231-233`, and design.md mentioned it nowhere (zero hits against a positive control of nine for `--full`). Your reading of the consequence is the one that mattered — not a documentation gap but a live flag meeting a moved default in the very suites §5.6 migrates. Ruled as you suggested, and the design now says why no new reasoning was needed: the partition already places an envelope projection control, so naming it is applying the rule rather than making one. It also records the cause, because that is the reusable part: the draft enumerated four flags from its own prose instead of from `ShowArgs`, where there are five.
+
+(2) Verified, and this reopened a round-2 user ruling rather than a drafting slip, so it was put back to the user rather than repaired unilaterally. The ruling: the refusal is restated over the RENDERING, not the spelling. `--json` is legal at `document`, defaulted or written out, and refused with `--format prompt|json|status`. `--json --format json` still errors, now because `json` is an envelope rendering — so the worked example survives with a better reason. The `ValueSource` machinery goes with the word 'explicit', exactly as your secondary point predicted.
+
+§9.2's `json_with_an_explicit_format_is_refused_naming_both_axes` is replaced rather than edited: it asserted the rule that is gone, and the replacement asserts both halves, because a refusal-only case would have passed under either rule. Recorded as `D7`. Revision 47, sec-5/7/9."""
 
 [[finding]]
 id = "F-22"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Two counted figures in the post-round-2 text do not match the tree"
 detail = """
@@ -393,6 +421,15 @@ Observation. § 3.3 `F5` makes checkability the point of its population table �
 (2) `slice-246.md`'s *Affected surface* (rewritten at run revision 43, after the round-2 integration) says "Pricing this at 14 references is what made `DEC-261` decidable". 14 is the pre-`F-16` figure. The table `F-16` produced deliberately carries no total, and its rows — 1 shipped-prose line, 4 emitted strings, 5 test files, 5 memories — do not sum to 14 under any consistent reading. The scope therefore still asserts the bare number that § 3.3 `F5` was rewritten to replace, and it asserts it as the thing that made the decision decidable.
 
 Suggested repair (a separate claim): correct the § 5.6 row to five, and either drop the "14 references" clause from the scope or replace it with a pointer to § 3.3 `F5`'s table, which is where the authoritative population now lives."""
+disposition = "accepted-design-changed"
+response = """
+Both accepted, and sweeping the class found two more you did not name.
+
+(1) Verified: five invocations at exactly the five cited lines (`grep -rn '"slice", "design"' tests/` returns five, all in that file), and `F-11`'s disposition — which wrote the row — said five. Corrected to five.
+
+(2) Correct, and it was mine, written at run revision 43 while discharging `review.scope`, one round after `F-16` replaced that very figure. Both instances are gone: the *Affected surface* clause now points at §3.3 `F5`'s table, and the *Scope & Objectives* paragraph — which carried the same stale 14 and which you did not name — now states the population inline instead.
+
+The fourth: §5.6's emitted-strings row still said '~4 sites' while §3.3 `F5` names all four at file:line, so it is now exact and points there. The remaining §5.6 figures were re-derived and hold — two bare helpers, two direct invocations, roughly eleven call sites. This is `mem.pattern.design.counts-state-their-population`'s third appearance in this slice, which is itself the durable result. Revision 47, sec-5."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -69,8 +69,10 @@ This is a **scope addition** and is named as one: it is a verb rehome that
 `IMP-393` had carried as separate work, and it changes the default output of a
 live `SPEC-013` golden surface — the one the managed design run is itself driven
 through. It was taken because the alternative siting (`slice design show`) was
-three levels against `SPEC-013`'s stated two, and because the migration measured
-at 14 references rather than the multi-seam cost it had been assumed to be.
+three levels against `SPEC-013`'s stated two, and because the migration was
+measured — one prose line, four emitted strings, five test files, five memories
+(`design.md` § 3.3 `F5`) — rather than left as the multi-seam cost it had been
+assumed to be.
 
 **Objectives**
 
@@ -126,9 +128,11 @@ authoritative touch-set, and the two are not duplicates of each other.
 - `src/commands/guard.rs`, `src/commands/cli.rs` — the rows keyed on the retiring
   `SliceCommand::Design` variant delete with the variant; `design show` stays
   read-classed.
-- `install/routing-process.md` and ~4 emitted strings — the migration itself:
-  every place naming `design show` as the turn read re-points at `--format
-  prompt`. Pricing this at 14 references is what made `DEC-261` decidable.
+- `install/routing-process.md` and the four emitted strings — the migration
+  itself: every place naming `design show` as the turn read re-points at
+  `--format prompt`. Pricing the migration is what made `DEC-261` decidable;
+  `design.md` § 3.3 `F5` holds the counted population, stated so it can be
+  checked rather than trusted.
 
 **Test surface.** Three existing suites go red here *on purpose* — the retiring
 leaf's tests, one help assertion carrying `SL-233` `EX-5`, and the bare
