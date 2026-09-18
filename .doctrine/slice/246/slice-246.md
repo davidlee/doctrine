@@ -272,3 +272,10 @@ inbound record set keeps changing and a golden over it would rot:
 ## Summary
 
 ## Follow-Ups
+
+- **`IMP-457`** — *Design-run verbs occupy the document-render verb slots.* This
+  slice sites its design read at `slice design show` because `design show` is
+  taken by the run's turn envelope and `slice show` renders the scope. The
+  intended fix — rehome the envelope to `doctrine design state` and reclaim
+  `doctrine design show` for the document, after which this slice's verb
+  collapses into it — is recorded there, not done here.

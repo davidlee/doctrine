@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 260
+slug = "design-read-sites-on-slice-design-show"
+title = "The design read sites on `slice design show`; the deprecated leaf retires"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-18"
+updated = "2026-09-18"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-145 sited the composed knowledge render on `doctrine inspect`. That answered where the RENDERER lives; it did not deliver the read the slice exists for. No verb renders a design document at all: `slice show` excludes design/plan/notes by its own contract; `slice design` is a deprecated scaffold that now only delegates to `design materialise`; `design show` is the design RUN's turn envelope. So `inspect SL-244 --knowledge facets` would return the twelve rulings without the design they rule on — leaving the reader to stitch the argument to its conclusions by hand, which is the defect SL-246 exists to remove."
+choice = "The design-document read is a SECOND caller on DEC-147's renderer: `doctrine slice design show <SLICE> --knowledge <level>` renders design.md followed by the composed record block. `slice design` is promoted from a leaf verb to a group and its deprecated scaffold leaf is retired. `doctrine inspect` keeps DEC-145's generic cross-kind case unchanged."
+alternatives = ["A `--design` document selector on `slice show` — no new verb but it contradicts that verb’s stated contract (not design/plan/notes) and grows into a mutually-exclusive `--design`/`--plan`/`--notes` set the moment a second document wants a reader", "A new verb in the `design` group such as `design read` — adds a third read-ish name beside `show` and `inspect` in the very group whose naming is already the complaint (IMP-457)", "Make the design read the only surface and drop `inspect` from the slice — discards DEC-145’s argument that `inspect` already owns the inbound derivation and leaves IMP-398 S5 without the seam objective 3 exists to provide"]
+rationale = "SPEC-013 imposes the uniform `<kind> <verb>` grammar over a shared verb set in which `show` means render the document — `adr show` prints the ADR and `knowledge show` prints the record. The slice is the exception only because it owns four documents and `show` silently picks the scope. Nesting the read under `slice design` keeps `show` in its governed sense - leaves `slice show`'s stated contract literally true - and leaves an obvious slot for `slice plan show` instead of a mutually-exclusive flag set. DEC-147 already split selection from rendering precisely so a second caller costs a selection and no renderer. Parking on a deprecated verb signals temporary; IMP-457 carries the debt."
+consequences = ["SL-246 gains a read surface that does not exist today — the first verb that renders a design document — which is a scope addition beyond the affected surface the inquiry settled", "`slice design` becomes a group and its deprecated scaffold leaf is retired; its warning already points at `design start` so no migration path is lost", "DEC-145 is narrowed rather than contradicted — `inspect` remains the generic cross-kind composed read and keeps the transitive axis IMP-398 S5 must extend", "The renderer now has two callers (inspect’s selection and the slice design read’s) which is the shape DEC-147 predicted; a third caller costs a selection and no renderer", "The information architecture stays wrong and is knowingly carried — `design show` still renders the run envelope. IMP-457 holds the rehome to `design state` and the reclamation of `design show` for the document"]
+decided_by = "david"
+decided_on = "2026-09-18"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "narrows DEC-145's surface ruling to the generic cross-kind case"
+target = "DEC-145"
+
+[[relation]]
+label = "shapes"
+target = "SL-246"
