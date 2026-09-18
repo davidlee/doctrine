@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b281-562b-7a70-be1b-0253e17e1a58"
+recorded_at = "2026-09-18T03:13:35.787579709Z"
+kind = "friction"
+summary = "codex reviewer exhausted credits mid-turn after a full design read, producing no ledger action"
+detail = "Round 2 of RV-370 (/design reviewing stage, external adversarial pass via codex-cli MCP, gpt-5.6-sol). The reviewer read the brief, the ledger and the whole 1287-line design.md — 45,105 tokens — then terminated on 'ERROR: Your workspace is out of credits.' It verified/contested nothing and raised nothing, so the ledger correctly shows all 8 findings still 'answered' with the baton at the raiser. Cost: a full design read bought zero review, and the failure surfaced only in the transcript tail, not as a tool-level error — the MCP call returned an output-too-large notice, which reads like success. Mitigation for next time: the ledger is the durable record, so checking 'review status' rather than the agent's report caught it immediately. Worth knowing that an external reviewer can consume a large read and fail silently at the end; budget a status check after every external round rather than trusting the returned report."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -49,3 +49,34 @@ deliberately has no `authority` field precisely so a payload cannot claim one.
 Worked end to end on SL-248 (design run `dr-019fd432`, revisions 85→93): eight
 corrections across six sections, two adopt cycles, materialise byte-identical
 both times.
+
+
+
+## The two refusals that read wrong (SL-246, 2026-09-18)
+
+Both cost a round trip; both are in the adoption completeness check
+(`adopt_authored`, `src/design_run/run.rs`), which compares the CALLER's
+declared map.
+
+**`sections` values are DIGESTS, and the contract says otherwise.** `doctrine
+design contract --format prompt` prints the value type as `text`:
+
+    sections  {id(sec-): text}  optional
+
+which reads as the section's prose. Pass prose and it refuses:
+
+    adopt_authored's marker map is not complete and exact:
+    0 missing, 0 unknown, 9 mismatched
+
+Read the three counters as a diagnostic — `missing`/`unknown` compare the id
+SET, only `mismatched` compares values. So *everything mismatched, nothing
+missing* means the ids are right and the value FORM is wrong, not that the
+document drifted.
+
+**`sections` is mandatory, despite the contract marking it `optional`.**
+Omitting it refuses `9 missing, 0 unknown, 0 mismatched` — the check requires
+the declared map to cover every section the run holds. Optional in the wire
+schema, required in practice.
+
+Also worked on SL-246 (design run `dr-019fd1ab`, revision 37→38): eight of nine
+sections moved in one adopt cycle while integrating RV-370's findings.

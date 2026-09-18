@@ -90,25 +90,42 @@ the corpus has seven) predates the stage and stays open.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 37) · e8963204b
+fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 38) · 1d944fcfe
 
 ### Produced
-- `design.md` — nine sections, materialised at run revision 35; run moved
-  `inquiring` → `drafting` → `reviewing` (commits 6f49c0c85..e8963204b)
-- `DEC-260` — the design read's siting; taken in drafting, not from a node
-- minted: `IMP-457` — the design/slice verb-slot IA debt and its rehome;
-  `IMP-459` — the scan parses every record and keeps only its edges;
-  `IMP-460` — every kind's `show` loads the comparison pipeline twice
-- amended: `IMP-398` — the pointer line returned to it, with why it is not cheap
-- nine design-target selectors bound to §5.6; five stale `scope-relevant` seeds removed
-- no code touched this session; `doctrine validate` clean, `check gate` not run
-  (nothing to gate)
+- `RV-370` — the design review ledger, opened with a filled brief (round-1 bar +
+  ten lines of attack), `F-1`..`F-8` raised by codex, all eight disposed, and a
+  round-2 bar bound on the ledger
+- `DEC-261` — the design read reclaims `design show`; supersedes `DEC-260`,
+  which is now `superseded`
+- `design.md` rewritten and adopted at run revision 38 — eight of nine sections
+  moved (`sec-4` untouched); new §2.6, new `D5`, replaced `R6`
+- `slice-246.md` scope reconciled to `DEC-261` (discharges `review.scope`): the
+  verb rehome added as an explicit scope addition, objective 5 added
+- `IMP-457` closed `duplicate` of `IMP-393`, with the boundary written onto it
+- `SL-246 fulfils IMP-393 --degree partial`; `DEC-261 shapes SL-246`
+- one `friction` observation (codex credit exhaustion mid-round) — **uncommitted**
 
 ### Learned
 - `mem.fact.doctrine.show-is-not-cheap` — `<kind> show` measures slower than
   `inspect`; do not cost a design on `show` being a cheap per-entity read
+- `mem.pattern.review.bind-scope-bar-and-never-self-rule` — applied twice this
+  session, and it paid: `F-8` was found by the design's author, put to the
+  reviewer rather than self-ruled, and came back correctly narrowed (worker-mode
+  refusal only, not a lock or a write) and ruled distinct from `F-2`
+- `mem_019fdf95d07979d0a7172f75381ef58c` extended — `adopt_authored.sections`
+  takes section DIGESTS not bodies, and is mandatory though the contract prints
+  it optional; read the `missing`/`unknown`/`mismatched` counters as a diagnostic
+- §3 `F1`'s corpus-scan claim verified independently: every scan reads, parses
+  and validates all knowledge records and keeps only their edges — 362 records,
+  988,841 bytes
 
 ### Open
 - `QUE-223` — should the design read disclose that `design.md` is behind its run
 - `ASM-011` — inbound edges as a sufficient proxy, held with a measured miss
-- `DEC-260` — sites the read on a verb it expects to lose to `IMP-457`
+- `RV-370` round 2 **unrun** — 8 findings `answered`, baton at the raiser, run
+  reports `review_pass STALE`; codex exhausted its credits after reading the
+  design and took no ledger action
+- `SPEC-013`'s "two-level clap subcommand tree" clause is descriptively false of
+  six three-level groups under numbered entity kinds (`RV-370` `F-1`). `SL-246`
+  conforms so needs no `REV`; the clause still wants one. Not this slice's.
