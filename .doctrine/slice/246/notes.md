@@ -90,42 +90,65 @@ the corpus has seven) predates the stage and stays open.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 38) · 1d944fcfe
+fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 42) · 55b41b97c
 
 ### Produced
-- `RV-370` — the design review ledger, opened with a filled brief (round-1 bar +
-  ten lines of attack), `F-1`..`F-8` raised by codex, all eight disposed, and a
-  round-2 bar bound on the ledger
+- `RV-370` — the design review ledger: round-1 bar + ten lines of attack,
+  `F-1`..`F-8` raised by codex and disposed, round-2 bar bound, **round 2 run on
+  the Opus reviewer** (codex out of credits) — seven dispositions `verified`,
+  `F-4` `contested` and upheld, `F-9`..`F-17` raised, all ten adjudicated
+  correct and disposed. Ledger `await=raiser`, rounds 43
 - `DEC-261` — the design read reclaims `design show`; supersedes `DEC-260`,
   which is now `superseded`
-- `design.md` rewritten and adopted at run revision 38 — eight of nine sections
-  moved (`sec-4` untouched); new §2.6, new `D5`, replaced `R6`
-- `slice-246.md` scope reconciled to `DEC-261` (discharges `review.scope`): the
-  verb rehome added as an explicit scope addition, objective 5 added
+- `design.md` adopted at run revision 42, `materialise` byte-identical. Round 1
+  moved eight of nine sections at r38; round 2 moved five — `sec-3`, `sec-5`,
+  `sec-7`, `sec-8`, `sec-9`
+- `slice-246.md` scope reconciled to `DEC-261` and extended for round 2
+  (discharges `review.scope` for both rounds)
 - `IMP-457` closed `duplicate` of `IMP-393`, with the boundary written onto it
+- `IDE-054` — audit the CLI for format/content axis coupling (`F-9`'s declined
+  principled split); `originates_from SL-246`
+- `CHR-073` — re-attest the five memories naming `design show` as the envelope
+  read (`F-16`); `originates_from SL-246`. No `needs` gate minted
 - `SL-246 fulfils IMP-393 --degree partial`; `DEC-261 shapes SL-246`
-- one `friction` observation (codex credit exhaustion mid-round) — **uncommitted**
+- four `friction` observations, all committed — codex credit exhaustion, plus
+  three recorded on the round-2 reviewer's behalf (a fork cannot capture its own)
 
 ### Learned
 - `mem.fact.doctrine.show-is-not-cheap` — `<kind> show` measures slower than
   `inspect`; do not cost a design on `show` being a cheap per-entity read
-- `mem.pattern.review.bind-scope-bar-and-never-self-rule` — applied twice this
-  session, and it paid: `F-8` was found by the design's author, put to the
-  reviewer rather than self-ruled, and came back correctly narrowed (worker-mode
-  refusal only, not a lock or a write) and ruled distinct from `F-2`
-- `mem_019fdf95d07979d0a7172f75381ef58c` extended — `adopt_authored.sections`
-  takes section DIGESTS not bodies, and is mandatory though the contract prints
-  it optional; read the `missing`/`unknown`/`mismatched` counters as a diagnostic
+- `mem.pattern.review.bind-scope-bar-and-never-self-rule` — applied twice, and
+  it paid both rounds: `F-8` was found by the design's author and put to the
+  reviewer rather than self-ruled
+- `mem.pattern.design.counts-state-their-population` — a count asserted as
+  measured must name the population it counted over. From `F-16`, where the
+  figure was both uncheckable and wrong, from one cause
+- `mem.pattern.design-run.correcting-a-locked-run` extended twice —
+  `adopt_authored.sections` takes section DIGESTS not bodies and is mandatory
+  though the contract prints it optional; and the section body is a **raw byte
+  slice**, where a line-splitting implementation drops one newline too few on
+  every section but the last (diagnostic signature: last section matches,
+  earlier ones do not, whole-file hash matches)
 - §3 `F1`'s corpus-scan claim verified independently: every scan reads, parses
   and validates all knowledge records and keeps only their edges — 362 records,
   988,841 bytes
+- round 2's own negative result: the reviewer read and found sound §2.6, §3.1's
+  six three-level groups and acyclic claim, `F1`, `FacetValue` sufficiency, the
+  one-table feasibility, `Full`'s field list, the prose-size hint, `R5`, and
+  `F5`'s emitted-string count — at **revision 38**, which is why it cannot
+  attest revision 42
 
 ### Open
 - `QUE-223` — should the design read disclose that `design.md` is behind its run
 - `ASM-011` — inbound edges as a sufficient proxy, held with a measured miss
-- `RV-370` round 2 **unrun** — 8 findings `answered`, baton at the raiser, run
-  reports `review_pass STALE`; codex exhausted its credits after reading the
-  design and took no ledger action
+- **nine section attestations outstanding** — `sections_outstanding_review=9`,
+  `review_pass STALE`, `review_policy = human-only`. The attestation is a user
+  act (`declare` with `attests: sec-N`, `reviewer: human`) and an agent must not
+  author it. The adversarial lane cannot substitute: an attestation binds the
+  revision and `RV-370` read r38, five sections behind
+- `CHR-073` sequencing — must land with or before the code, since a stale memory
+  is injected into agent context. Whether it warrants a hard `needs` gate on
+  this slice is left to close, deliberately
 - `SPEC-013`'s "two-level clap subcommand tree" clause is descriptively false of
   six three-level groups under numbered entity kinds (`RV-370` `F-1`). `SL-246`
   conforms so needs no `REV`; the clause still wants one. Not this slice's.
