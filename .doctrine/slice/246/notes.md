@@ -116,8 +116,25 @@ is by-design, all-`Absent` is unfilled). `C2` becomes structural — `knowledge
 show` never enters a layer that can mark. `DEC-149`'s ruling stands; its siting
 clause moved, as `DEC-150`'s encoding clause already had.
 
-**A sixth adversarial pass is not warranted, and this is the first round where
-that is true.** The two grounds that carried rounds 3, 4 and 5 separate here:
+**Two claims, and they must not be run together.** The raiser made this
+distinction at round 7 and it is right:
+
+- *Is a further adversarial round warranted?* **No** — and the raiser agrees,
+  independently. Yields 8, 9, 4, 5, 2, 1; and more tellingly, the rounds at
+  revisions 51, 53 and 57 introduced no signature, no decision and no `DEC`.
+  There is no remaining surface where either of us expects a structural defect.
+  A further pass would be fishing.
+- *Is the ledger clean?* **That is a different sentence with a different truth
+  value**, and it has been false twice after being written. It is true only when
+  `doctrine review status RV-370` says every finding is terminal. Check it; do
+  not infer it from the paragraph above.
+
+**The sixth pass was not warranted either, on the reasoning below, and it still
+produced `F-30` and `F-31`.** That is not an argument for a seventh — both were
+nits-to-minors that changed no decision — but it is the reason the two claims
+are separated here.
+
+**Why the repair ground fails, which is the first round it has:** The two grounds that carried rounds 3, 4 and 5 separate here:
 
 1. **The ledger ground still holds** — `F-28` and `F-29` are `answered` and
    `RV-370` is `await=raiser`. The `review-disposition-attested` contract will
@@ -138,14 +155,34 @@ the text arm's `Full` marker route should name its mechanism (`format_metadata`
 returns `Vec<String>` whose facet block is its own element) rather than leave it
 to be rediscovered. Both were judged acceptable; neither was judged obvious.
 
-**Trend, stated without leaning on it.** Rounds raised 8, 9, 4, 5, 2. The count
+**Trend, stated without leaning on it.** Rounds raised 8, 9, 4, 5, 2, 1. The count
 never fell cleanly, but the *severity* did — blocker+major, major, major, one
 major, then a minor and a nit — and round 5's clean-on-inspection list was long
 and specific (every `file:line` in `design.md`, the `STD-001` template question,
 the layering rule against the tree, `D7`'s enforceability, `C2` under the policy
 parameters). Surface shrinking, tally flat.
 
-**The pattern worth naming.** Rounds 3, 4 and 5 each found their most structural
+**The review's most reusable result — a repair inherits the finding's scope.**
+Four times, a repair satisfied the arm the finding named and left its twin:
+`F-13`/`F-18` (the JSON arm), `F-23` (the `Full` level), `F-30` (the text arm),
+`F-31` (the block level). None was carelessness — every one was verified against
+the tree before its disposition was written. The finding frames the scope, and a
+repair that answers the finding reads as finished. The counter costs one
+question per disposition: **which arm did the finding name, and what is its
+twin?** Recorded as `mem.pattern.review.repair-inherits-finding-scope`, with
+`mem.pattern.review.repair-closes-a-subset-of-the-stated-class` as its sibling —
+that one's class is enumerated in the artefact, this one's is implicit in the
+claim's quantification, so there is no sentence to re-read.
+
+Second-order, and the reason this slice stopped: once a review has named the
+class, fixing the next instance is not enough. `F-31` was found by a reviewer
+taking a disposition's own sentence at its word. `X5` and `I6` were then found
+by **sweeping** the class at revision 59 rather than waiting for a seventh round
+— and `X2`, `X3`, `X4`, `X6`, `X7`, `I1`-`I5`, `I7` checked and found
+arm-independent or already qualified. That sweep is the reason to believe the
+class is closed. Nothing else is.
+
+**The earlier framing, kept because it is the weaker claim.** Rounds 3, 4 and 5 each found their most structural
 defect *in the previous round's repair*, not in the original draft: `F-23` was
 `F-20` displaced one layer up; `F-29` was `F-23`'s own test sited one step too
 late; `F-25` caught diagrams a self-attack pass had rewritten and left a state
@@ -160,7 +197,7 @@ revision — round 5 read 49, so it could not attest 51 either.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 51, materialised) · b00008681
+fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 59, materialised) · c93b0f69f
 
 ### Produced
 - `RV-370` — the design review ledger, **three rounds**, 22 findings. Round 1
