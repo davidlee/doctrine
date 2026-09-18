@@ -90,57 +90,77 @@ the corpus has seven) predates the stage and stays open.
 
 ## Review passes: where the ledger stands (2026-09-18, `reviewing`)
 
-Discharged `review.passes` at run revision 45; **updated in place** after round 3
+Discharged `review.passes` at run revision 51; **updated in place** after round 5
 ran, so it describes the next pass rather than the one that happened.
 
-**Round 3 ran** on an Opus raiser in the primary worktree, against revision 42.
-Nine of the ten dispositions verified with their claims re-derived from the tree;
-`F-14` contested and the contest upheld; `F-18`, `F-20`, `F-21`, `F-22` raised.
-All five adjudicated correct — no confabulations — and integrated at revision 46,
-materialised at 47.
+**Round 4 ran** on an Opus raiser in the primary worktree, against revision 47 —
+a different model from rounds 1-3, deliberately, for variety on a late pass. All
+five of round 3's dispositions verified with their claims re-derived from the
+tree. Five raised: `F-23` (major), `F-24`, `F-25`, `F-26`, `F-27`. Integrated at
+revision 48, materialised at 49.
 
-**A fourth pass is warranted**, on the same two grounds as the third, and they
-are structural rather than a judgement about quality:
+**Round 5 ran** on the same raiser, against revision 49, on an adjudication-only
+bar. All five verified — `F-23`'s repair tested kind by kind rather than accepted
+on the disposition's account. Two raised: `F-28` (minor), `F-29` (nit).
+Integrated at revision 50, materialised at 51. Its judgement: **lock it.**
 
-1. **`RV-370` is `await=raiser` again**, with five dispositions unadjudicated.
-   The `review-disposition-attested` contract will not take a pass as `conducted`
-   while they stand.
-2. **The repair is itself new design.** `F-14`, `F-18` and `F-20` shared one
-   cause — no per-record producer — so the fix introduced four function
-   signatures (`render_record`, `record_value`, `render_block`,
-   `knowledge_value`), a fifth (`show_value`) split out of `show_json`, a new
-   layering rule for the three markers, and two decisions (`D6`, `D7`). None of
-   that existed when round 3 read the design.
+**`F-23` was the structural one and is worth carrying forward.** Round 3's repair
+put a `Silent | Marked` policy on the two leaf facet renderers. That parameter
+had no route to `Full`: the entry there is `show_value`, and the text chain is
+`format_show` → `format_metadata`, none of which carries policy — so the
+by-design marker `X5` requires at *every* level was reachable at `Facets` and
+unreachable at `Full`, on both arms. The repair withdraws `EmptyPolicy` outright
+rather than threading it up: all three markers compose in the per-record
+producers, and `facet_fields`' return shape decides which (`[]` before filtering
+is by-design, all-`Absent` is unfilled). `C2` becomes structural — `knowledge
+show` never enters a layer that can mark. `DEC-149`'s ruling stands; its siting
+clause moved, as `DEC-150`'s encoding clause already had.
 
-What a round 4 would probe:
+**A sixth adversarial pass is not warranted, and this is the first round where
+that is true.** The two grounds that carried rounds 3, 4 and 5 separate here:
 
-- **`D6`'s layering.** Is the map shape actually sufficient for `I5`'s three
-  clauses, or does "never empty" still rest on a contract rather than a
-  construction? §9.5 now claims three separate grounds — test each.
-- **`show_value`'s split** against `C2`: `show_json` keeps its envelope, its
-  `Result` and its bytes, and only the map acquires a name. Verify against the
-  tree, as round 3 did for `F-13`.
-- **`D7`'s partition**, now five flags. Is it complete against `ShowArgs` this
-  time, and do the two document-side flags finally agree?
-- **§9.2's replaced cases** — one case was deleted rather than edited because it
-  asserted the rule `D7` retired. Is the replacement's two-part assertion right?
-- **The two diagrams** (§5.1, §5.4), repaired by self-attack rather than by the
-  review, and therefore read by nobody.
+1. **The ledger ground still holds** — `F-28` and `F-29` are `answered` and
+   `RV-370` is `await=raiser`. The `review-disposition-attested` contract will
+   not take a pass while they stand. But that is an **adjudication turn**, which
+   is the mechanism closing; it is not a pass.
+2. **The repair ground does not.** Every prior round's repair was new design —
+   round 3's introduced five signatures and two decisions, round 4's withdrew a
+   type and rewrote a layering rule. Round 5's repairs are one clause keying a
+   table row on the unfiltered table (`F-29`) and one sentence in the scope
+   (`F-28`). No signature, no decision, no `DEC` touched. There is no new
+   material for a sixth reader to be the first to read.
 
-**Trend, stated without leaning on it.** Rounds raised 8, 9, then 4, and round 3
-raised nothing against §3.3 `F5`, §2.6, or the `F1` corpus-scan claim. That is
-convergence, not completion — round 3's findings were the most structural of the
-three, and they were in material two rounds had already passed over.
+**If the adjudication contests either, that judgement is void** and a sixth pass
+is back on. Two points were put to the raiser explicitly rather than left to
+politeness: whether an `EVD` at `Only(Argument)` falling to the *unfilled* marker
+is the same "sited where its inputs are not" mistake in new clothes, and whether
+the text arm's `Full` marker route should name its mechanism (`format_metadata`
+returns `Vec<String>` whose facet block is its own element) rather than leave it
+to be rediscovered. Both were judged acceptable; neither was judged obvious.
+
+**Trend, stated without leaning on it.** Rounds raised 8, 9, 4, 5, 2. The count
+never fell cleanly, but the *severity* did — blocker+major, major, major, one
+major, then a minor and a nit — and round 5's clean-on-inspection list was long
+and specific (every `file:line` in `design.md`, the `STD-001` template question,
+the layering rule against the tree, `D7`'s enforceability, `C2` under the policy
+parameters). Surface shrinking, tally flat.
+
+**The pattern worth naming.** Rounds 3, 4 and 5 each found their most structural
+defect *in the previous round's repair*, not in the original draft: `F-23` was
+`F-20` displaced one layer up; `F-29` was `F-23`'s own test sited one step too
+late; `F-25` caught diagrams a self-attack pass had rewritten and left a state
+short. A repair round is where the next round's findings come from, and reading
+one's own repair is not the same check as a reader taking the model from it.
 
 **Not a substitute for the attestations.** Nine remain outstanding and the policy
 is `human-only`. An adversarial round cannot discharge them, and each binds a
-revision — round 3 read 42, so it could not have attested 47 either.
+revision — round 5 read 49, so it could not attest 51 either.
 
-**Reviewer.** codex remains out of credits; rounds 2 and 3 both ran on Opus.
+**Reviewer.** codex remains out of credits; rounds 2-5 all ran on Opus.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 47, runbook cleared) · 63516fa9e
+fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 51, materialised) · b00008681
 
 ### Produced
 - `RV-370` — the design review ledger, **three rounds**, 22 findings. Round 1
@@ -223,6 +243,23 @@ fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 47, runbook clear
   read them. The repair falsified both (`render_block` no longer reads records)
   and only the post-integration self-attack caught it. A diagram is a projection
   of the prose and goes stale silently with it. Candidate memory
+- **a repair round is where the next round's findings come from.** Rounds 3, 4
+  and 5 each found their most structural defect in the *previous* repair, not in
+  the draft: `F-23` was `F-20` displaced one layer up, `F-29` was `F-23`'s own
+  test sited one step too late. Round count is not what converges; severity is.
+  Candidate memory
+- **re-adopting a hand-edited `design.md`**: `adopt_authored.sections` is a map
+  of `sec-N` → the **full-length** sha256 hex of the section body, where the body
+  is everything after the marker line, `rstrip()` plus one trailing newline.
+  `design show` prints those digests truncated to 12 chars, which is the trap —
+  sending the truncation, or sending the section text, both refuse with
+  `0 missing, 0 unknown, 9 mismatched`. `ISS-320` already carries the gap
+  ("a section map nothing emits"); this is the working recipe. Candidate memory
+- **the slice scope has no staleness signal** — `design.md` is
+  section-fingerprinted so a moved section voids its own attestation, and
+  `slice-NNN.md` carries nothing equivalent. Four consecutive rounds repaired the
+  design and left the scope asserting something falsified (`F-22`, `F-26`,
+  `F-28`). Captured as `IMP-461`
 - round 2's own negative result: the reviewer read and found sound §2.6, §3.1's
   six three-level groups and acyclic claim, `F1`, `FacetValue` sufficiency, the
   one-table feasibility, `Full`'s field list, the prose-size hint, `R5`, and
@@ -236,7 +273,9 @@ fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 47, runbook clear
   `review_pass STALE`, `review_policy = human-only`. The attestation is a user
   act (`declare` with `attests: sec-N`, `reviewer: human`) and an agent must not
   author it. The adversarial lane cannot substitute: an attestation binds the
-  revision and `RV-370` read r38, five sections behind
+  revision, and the last adversarial read was revision 49 against a document now
+  at 51. **This is the only thing between the design and its lock** — the ledger
+  needs one adjudication turn, which is running; the nine are the user's
 - `CHR-073` sequencing — must land with or before the code, since a stale memory
   is injected into agent context. Whether it warrants a hard `needs` gate on
   this slice is left to close, deliberately

@@ -1063,6 +1063,17 @@ This is the same move `facet_fields` makes one level down, for the same reason,
 and it is why `C2` still holds: `show_json` keeps its envelope, its `Result`, and
 its bytes — only the map it was already building acquires a name.
 
+**The text arm assembles from parts, and not from `format_show`.** Marking is
+the composed read's act on the result there too, but the obvious candidate
+cannot take it: `format_show` (`src/knowledge.rs:1835`) is `format_metadata`
+plus the prose body (§2.2) and returns a flat `String` in which the facet block
+is no longer addressable. `format_metadata` (`:1795`) returns `Vec<String>`, and
+the facet block is its own element — `parts.push(format_facet(&record.facet))`
+at `:1815`. So `render_record` substitutes that element and appends the body:
+no string surgery, and the same act as `record_value`'s on the JSON arm. The
+return shape is the load-bearing fact, which is why it is stated here rather
+than left in §2.2's description of what the function contains.
+
 Table and JSON agreeing is deliberate and is now mechanised rather than
 asserted: both filter the same `facet_fields` table by the same tier (§5.2).
 The divergence they must not repeat — `format_facet` silent on an absent field,

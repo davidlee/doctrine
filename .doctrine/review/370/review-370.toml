@@ -588,7 +588,7 @@ New §9.2 case: `path_is_legal_at_every_rendering` — what stops a later readin
 
 [[finding]]
 id = "F-28"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "slice-246.md still gives format_facet and facet_json an empty-policy input that D6 withdrew at revision 49"
 detail = """
@@ -617,7 +617,7 @@ That pattern is the actionable part, not this instance. The scope carries no run
 
 [[finding]]
 id = "F-29"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "The by-design test is stated over a filtered facet_fields but glossed as an unfiltered property"
 detail = """
@@ -644,6 +644,37 @@ Accepted, and the latent case is real: `DEC-150`'s tiers make every `EVD` and `H
 Repaired as you scoped it. The first row is now keyed on `[]` **before** any tier filter, and a clause states why the order is load-bearing rather than incidental: `CPT` is the only kind whose table is empty unfiltered, so by-design and unfilled cannot collide — and the collision is latent under the two filters this design passes, not absent from the type. Your per-kind counts are quoted in it (`DEC` 3, `QUE` 3, `CON` 4, `ASM` 4, `EVD` 3, `HYP` 2), since they are what makes the claim checkable rather than asserted.
 
 One thing your probe found that I am recording rather than repairing: the text arm's `Full` marker route is stated as a location and not a mechanism. You are right that it is reachable — `format_metadata` returns `Vec<String>` whose facet block is its own element — and right that the design never names that property while spelling out the JSON equivalent three times. I am leaving it as specification thinness on your own reading, with §9.2's new case as what the implementer fails against. If you think that judgement is wrong, contest this one. Revision 51, sec-5."""
+
+[[finding]]
+id = "F-30"
+status = "answered"
+severity = "nit"
+title = "The text arm's Full marker route is a requirement without a mechanism, and 5.2's vocabulary points at the function that cannot take it"
+detail = """
+Observation, raised as a new finding rather than by contesting `F-29`, because the argument is one I did not have when I probed this and declined to raise it.
+
+The JSON arm's `Full` marker route is named three times and its mechanism is explicit: § 5.2's level table says "`record_value` writing the marker over the `facet` slot", and the sentence that makes it work is stated outright — "`show_value` takes no policy: it projects the record, and marking is the composed read's act on the result."
+
+The text arm has the identical structure and no twin for that sentence. `format_show` and `format_metadata` take no policy either, and marking is likewise the composed read's act on their result — but the design never says what "the result" is on this arm. It is stated once, in § 9.2's `a_concept_carries_the_by_design_marker_at_full_on_both_arms`, as a location: "into the rendered metadata on the text arm".
+
+What I previously called thinness, and now think is a little more than that: § 5.2's own vocabulary points a reader at the one function that cannot do it. `Full` is defined as "The complete record, prose body included", and § 2.2 defines `format_show` (`src/knowledge.rs:1835`) as exactly that — "`format_metadata` plus the prose body". A reader taking the obvious route reaches for `format_show`, which returns a flat `String` in which the facet block is not addressable, and has to back out.
+
+The route that works depends on a property of the existing code the design does not state anywhere. `format_metadata` (`:1795`) returns `Vec<String>`, not `String`, and the facet block is its own element — `parts.push(format_facet(&record.facet))` at `:1815`. So `render_record` can substitute that element and append the body, with no string surgery. § 2.2 describes `format_metadata`'s *contents* (identity line, dates, tags, then `format_facet`, `format_evidence`, the relation axes) and not its return shape, which is the one fact that makes the arm work.
+
+Why this is a nit and not more. The route exists — I checked it — and § 9.2's case is a named `VT` that an implementer taking the `format_show` route fails rather than ships. Nothing here is unreachable, misattributed or untested, which were the three grounds that made `F-20`, `F-23` and `F-25` real. The cost is an implementer's detour, not a defect in the design.
+
+Why it is worth a line at all. `F-23` was exactly a route the design asserted without having established which function supplied it, and the repair's response to that was to spell the JSON route out. The text arm got the requirement and not the same treatment, and it is the arm whose obvious candidate is the wrong one.
+
+Suggested repair (a separate claim): one clause in § 5.2 saying the text arm's `Full` entry is assembled from `format_metadata`'s parts with the facet element replaced, rather than from `format_show` — the same sentence the JSON arm already has, pointed at the function that can take it."""
+disposition = "accepted-design-changed"
+response = """
+Accepted, and raising it as a new finding rather than contesting `F-29` was the right call — the argument is different from the one you declined, and the ledger reads correctly with both on it.
+
+Verified before disposing: `format_show` (`src/knowledge.rs:1835`) returns a flat `String`; `format_metadata` (`:1795`) returns `Vec<String>` with the facet block as its own element (`parts.push(format_facet(&record.facet))` at `:1815`). Your reading of §2.2 is right too — it describes what `format_metadata` contains and never its return shape, which is the one fact the arm depends on.
+
+§5.2 gains the twin sentence, sited beside `show_value`'s: the text arm's `Full` entry is assembled from `format_metadata`'s parts with the facet element substituted and the body appended, explicitly not from `format_show`, and the return shape is stated here rather than left in §2.2's description of contents.
+
+The framing is the part worth keeping. `F-23` was a route asserted without establishing which function supplied it; the repair spelled out the JSON route and left the text arm holding the requirement alone — on the arm whose obvious candidate is the wrong one. That is the third time in this review that a repair has discharged one arm of a two-arm claim. Revision 53, sec-5."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
