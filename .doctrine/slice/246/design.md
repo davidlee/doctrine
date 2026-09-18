@@ -1187,7 +1187,10 @@ with no design fails immediately and cheaply, before a corpus scan is paid for.
   per-record producers, not the block: `knowledge_value`'s `Option` expresses the
   absence of the whole block at `Skip`, never the absence of a record within
   one.
-- `I6` — the three empty states render three distinct messages.
+- `I6` — the three empty states render three distinct messages, **on both arms
+  and at every level**. The arm clause is `D1`'s; the level clause is what `F-23`
+  cost, and a `Facets`-only reading of this invariant is what let that defect
+  stand for three rounds.
 - `I7` — nothing on this path writes.
 
 **Edge cases.**
@@ -1208,8 +1211,10 @@ with no design fails immediately and cheaply, before a corpus scan is paid for.
 - `X4` — **a record is reachable under two labels and renders nothing.** One
   entry, one marker. `I3` settles it before the renderer sees it.
 - `X5` — **a `CPT` in the selection.** Renders the by-design marker, never the
-  unfilled one, at every level. At `Full` its prose body is the content, so the
-  marker sits above a body rather than instead of one.
+  unfilled one, at every level, **on both arms**. At `Full` its prose body is the
+  content, so the marker accompanies a body rather than standing in for one — on
+  the text arm above it, on the JSON arm as the `facet` key beside `body`. The
+  spelling differs because the two renderings differ; the claim does not.
 - `X6` — **the subject is a record itself.** `Shapes` legally targets record
   kinds, so `inspect DEC-145 --knowledge facets` is well-formed and renders one
   hop. It does not recurse; that is `IMP-398` S5.
