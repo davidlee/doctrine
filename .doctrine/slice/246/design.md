@@ -43,17 +43,18 @@ that already knows which record it wants.
 And between them sits the surface that should have joined them, which turns out
 not to exist at all: **no verb renders a design document.** `doctrine slice
 show` renders the slice's scope and excludes design, plan and notes by its own
-stated contract. `doctrine slice design` is a deprecated scaffold. `doctrine
-design show` is the design *run*'s turn envelope — machine state, not a
-document. Reading `SL-244`'s design today means opening the file.
+stated contract. `doctrine slice design` is a deprecated scaffold. And
+`doctrine design show` — the verb whose name promises exactly this everywhere
+else in the CLI — renders the design *run*'s turn envelope: machine state, not
+a document. Reading `SL-244`'s design today means opening the file.
 
 So the composed read has to bring its own reader.
 
 ### Target behaviour
 
-`doctrine slice design show <SLICE> --knowledge <level>` renders the design
-document, followed by the content of the knowledge records that shape it, under
-an explicit level:
+`doctrine design show <SLICE> --knowledge <level>` renders the design document,
+followed by the content of the knowledge records that shape it, under an
+explicit level:
 
 | level | renders |
 |---|---|
@@ -70,7 +71,7 @@ The same composition is available generically, one level up, on `doctrine
 inspect <ID> --knowledge <level>`: any entity that carries knowledge
 relationships, rendered with its records instead of their ids. That is where the
 renderer lives (`DEC-145`) and where a later transitive closure will extend it.
-The design read is its second caller (`DEC-260`), and the reason the slice
+The design read is its second caller (`DEC-261`), and the reason the slice
 exists.
 
 ### Where the boundary sits
@@ -84,8 +85,16 @@ on the *authoring* path. The recursive knowledge closure — walking
 record-to-record edges and halting at non-record nodes — is separate work; this
 design leaves a seam for it and stops at one hop. Facet hygiene is not in scope:
 where the corpus has left a record's fields unfilled, this design says so plainly
-rather than compensating. And the information-architecture defect that forced the
-verb's siting is carried knowingly, not fixed (`IMP-457`).
+rather than compensating.
+
+**Reclaimed, not worked around.** An earlier draft sited this read at `slice
+design show` and carried the information-architecture defect knowingly. `DEC-261`
+supersedes that: `design show` renders the document, as `show` does everywhere
+else, and the run's turn envelope keeps its three existing renderings under
+`--format prompt|json|status`. Only the default moves. That makes the verb this
+slice's destination rather than a parking space, and it is why `IMP-393`'s
+complaint is partly discharged here (`fulfils`, degree `partial`) instead of
+deferred whole.
 
 ### What success looks like
 
@@ -244,14 +253,32 @@ The neighbouring verbs that look like they might be one are not:
 | `design show <SLICE>` | the design **run**'s turn envelope: stage, traversal, frontier, counts, change rows |
 | `design materialise <SLICE>` | renders the run's sections *into* `design.md` — a write, not a read |
 
-So the motivating read has no surface to attach to and no adjacent verb to
-widen. `DEC-260` sites it at `slice design show <SLICE>`, promoting `slice
-design` to a group and retiring the deprecated leaf, which is the smallest
-change that keeps `show` in the sense `SPEC-013` gives it. `IMP-457` records
-that `design show` is occupying the verb this read should eventually own, and
-carries the rehome to `design state`.
+So the motivating read has no surface to attach to — but it does have a verb
+whose name already means it, currently occupied.
 
-### 2.6 What pins the current behaviour
+### 2.6 The occupied verb already names its occupant
+
+`doctrine design show` does not merely happen to render the envelope. It renders
+it under an explicit selector:
+
+```
+--format <FORMAT>  Which rendering of the turn envelope to emit
+                   [default: prompt]  [possible values: prompt, json, status]
+```
+
+The writer's rendering is **already called `prompt`**, and two of the three
+values are already non-default. So reclaiming `show` for the document does not
+require naming the envelope something new, inventing a verb, or migrating
+callers to a synonym: it moves one default. `DEC-261` takes that, and the
+`design` group keeps `prompt`, `json` and `status` unchanged under the names
+they already carry.
+
+`IMP-393` reached this conclusion on 2026-08-03 and is the carrier this slice
+partially discharges. `IMP-457`, minted during this slice's drafting, restates
+the same complaint and is redundant against it — reconciled rather than left
+standing as a parallel carrier.
+
+### 2.7 What pins the current behaviour
 
 `SPEC-013` pins rendered output byte-exact per verb through black-box goldens.
 The relevant suites are `tests/e2e_inspect_golden.rs`,
@@ -299,10 +326,22 @@ directions:
   each kind's own component."* So the field tiers of `DEC-150` are
   `knowledge`'s to decide, and the spec does not have to be amended to hold them.
 
-The spec describes a two-level subcommand tree, and `slice design show <SLICE>`
-is three levels. That is not a deviation: `doctrine slice selector
-add|note|list|rm|doctor` is already a three-level group under `slice`, so the
-grammar precedent exists and `DEC-260`'s siting matches it.
+The spec states the shape as well as owning it: *"The surface is a two-level
+clap subcommand tree."* `doctrine design show <SLICE>` is two levels, so this
+design conforms rather than deviating, and no governance has to move for it to
+land. That is the decisive property `DEC-261` bought and the earlier siting did
+not have.
+
+The point is worth stating because the earlier siting got it wrong in a
+particular way. `slice design show` is three levels, and the draft defended it
+by pointing at `slice selector` as precedent — which is not an argument a design
+is entitled to make. A precedent does not amend a normative clause; only a
+`REV` does. The observation underneath was true and is recorded here so it is
+not lost: the clause is already descriptively false of its own governed surface,
+since `slice selector`, `spec req`, `spec interactions`, `revision change`,
+`memory sync` and `knowledge edit <kind>` are all three-level groups under
+numbered entity kinds. Reconciling the clause against that population is real
+work and belongs to whoever picks it up; `SL-246` no longer needs it.
 
 **`SPEC-019` — the knowledge-record entity surface** specifies four record
 kinds. `EVD`, `HYP` and `CPT` are ungoverned (`ISS-316`). `DEC-150` handles that
@@ -340,10 +379,16 @@ records exist at all.
   are shared machinery; the existing kind-`show` and `knowledge` suites are the
   proof and must stay green **unchanged**. `SL-246` does not alter `knowledge
   show`'s output — the concealing behaviour there belongs to `IMP-403`.
-- **`C3` — read-only.** Nothing on this path writes. That is worth stating
-  because the verb being repurposed, `slice design`, currently *writes*: it
-  delegates to `design materialise`. Retiring the leaf removes the write; the
-  group's `show` must not inherit it.
+- **`C3` — read-only.** Nothing on this path writes. Worth stating twice over.
+  The deprecated `slice design <ID>` leaf currently *writes* — it delegates to
+  `design materialise` — and it retires here, taking its write with it. And the
+  verb being reclaimed sits in a group whose other members (`start`, `apply`,
+  `materialise`) all write, so `design show` must stay the read it already is.
+  Note where this is enforced: `write_class` in `src/commands/guard.rs` is this
+  codebase's read/write classifier, it feeds the pre-dispatch worker guard, and
+  a surface misclassified there is refused outright under `DOCTRINE_WORKER=1`.
+  `C3` is a claim about that table, not only about the filesystem, so §5.6 names
+  the file.
 - **`C4` — one renderer, one field-order table.** The levels cannot be allowed to
   disagree about which fields exist or in what order, so they must be bounds on
   one code path, not two implementations. This is the `Detail::{Normal, Full}`
@@ -406,11 +451,17 @@ abstraction written now for `IMP-398` S5 is speculative; every coupling to
 at one point only: the caption is selection-supplied *text*, because at one hop
 it is an inbound label and at depth three it is a path.
 
-**`F5` — building on an information architecture known to be wrong.** The read
-this slice exists to deliver has to be sited around `design show` meaning the run
-envelope and `slice show` meaning the scope. `DEC-260` takes the cheap local
-answer and `IMP-457` carries the rehome. The tension is real and is being
-deliberately deferred, not resolved.
+**`F5` — a defect cheap to work around and nearly as cheap to fix.** The read
+this slice exists to deliver had nowhere correct to sit, because `design show`
+meant the run envelope and `slice show` meant the scope. The draft worked
+around it and filed the debt. Measured instead of assumed, the fix is 14
+references in tree — one prose line in `install/routing-process.md`, roughly
+four emitted strings naming `design show --full`, and `design show`'s own
+default-output goldens; `handover/SKILL.md` already passes `--format status`
+explicitly and does not move. `DEC-261` therefore resolves the tension rather
+than deferring it. What remains is a real cost, not a residual worry: a live
+default changes, including the one the managed design run is itself driven
+through, and this slice absorbs a rehome that was scoped as separate work.
 
 <!-- doctrine:section sec-4 -->
 ## 4. Guiding Principles
@@ -466,7 +517,7 @@ rendering never meet except through a value type.
 flowchart TB
   subgraph cl["command layer — composes, owns no policy"]
     CI["commands/inspect.rs<br/>relations + knowledge + actionability"]
-    CSD["commands/slice_design.rs<br/>design.md + knowledge"]
+    CSD["commands/design.rs — show<br/>design.md + knowledge"]
   end
   subgraph eng["engine"]
     SEL["relation_graph::select_knowledge<br/>pure: InspectView → Vec&lt;SelectedRecord&gt;"]
@@ -589,24 +640,54 @@ a megabyte of prose it throws away.
 
 #### The tiered facet render
 
-`format_facet` gains two policy inputs and stays the single field-order table
-(`C4`, `DEC-150`):
+`C4` says one field-order table. The draft satisfied that for the *text* render
+and left JSON out, which does not hold: `facet_json` is a second, hand-written
+per-kind projection, structurally independent of `format_facet`. Annotating
+tiers inside `format_facet` would have made the text arm tier-aware and the
+JSON arm silently untiered — reproducing, in a new surface, precisely the
+divergence `D1` says must not be reproduced.
+
+So the single source moves one level down, to a structured projection both arms
+render from:
 
 ```rust
-/// Which tier a facet field belongs to. Annotated on each field line inside
-/// the existing per-kind match — NOT a separate field-list constant, which
-/// could drift from the order table beside it.
+/// Which tier a facet field belongs to.
 enum Tier { Deciding, Argument }
+
+/// One facet field, in template order, with its tier. The ONE per-kind
+/// ordered table (C4): the existing per-kind match is rewritten to yield
+/// these instead of emitting strings, so text and JSON cannot disagree about
+/// which fields exist, in what order, or which tier they sit in.
+struct FacetField {
+    key: &'static str,
+    tier: Tier,
+    value: FacetValue,     // Text(String) | List(Vec<String>) | Absent
+}
+
+/// The single field-order table. Total; order is the template's.
+fn facet_fields(facet: &RecordFacet) -> Vec<FacetField>;
 
 /// How a facet with nothing to show is rendered.
 enum EmptyPolicy { Silent, Marked }
 
+/// Text render — filters `facet_fields` by tier, then formats.
 fn format_facet(facet: &RecordFacet, tier: TierFilter, empty: EmptyPolicy) -> String;
+
+/// JSON render — filters the SAME `facet_fields` by the SAME tier.
+fn facet_json(facet: &RecordFacet, tier: TierFilter) -> serde_json::Value;
 ```
 
 `knowledge show` passes `(all tiers, Silent)` and its goldens stay byte-identical
-(`C2`). The composed read passes `(Deciding, Marked)` at `Facets` and
-`(all tiers, Marked)` at `Full`.
+(`C2`) — `facet_fields` reproduces the current order, and the current text
+formatting sits unchanged on top of it. The composed read passes
+`(Deciding, Marked)` at `Facets` and `(all tiers, Marked)` at `Full`.
+
+This is a refactor of shared machinery, so `C2` is the gate that proves it: both
+`format_facet`'s and `facet_json`'s existing output must not move. Their current
+disagreement about absent fields — text silent, JSON emitting `null` — is
+preserved deliberately at `all tiers`, because changing it is `IMP-403`'s and
+not this slice's. What `facet_fields` buys now is that the *tier filter* reaches
+both, which is the property `D1` asserted and had no mechanism for.
 
 The per-kind tiers are `DEC-150`'s: `DEC` context/choice/rationale; `QUE`
 question/why_matters/answer; `CON` statement/source/applies_to/waiver_reason;
@@ -627,41 +708,90 @@ they must not share wording (`P5`):
 The prose-size hint costs a `metadata()` call, not a read — which is what keeps
 it compatible with `Facets` never opening the `.md`.
 
+**Which of these a reader can actually reach.** The third is rarer than the
+draft implied, and saying so is the honest version. `scan_entities` drops an
+entity whose `outbound_for` fails, and for a record that call is
+`knowledge::relation_edges` → `read_record`, which parses the TOML *and* reads
+the `.md` unconditionally. So a record with an absent or malformed `.toml`, or
+an absent `.md`, never enters the `InspectView`, is never selected, and cannot
+reach `render_block` to be marked. It is disclosed instead by the scan
+diagnostic `run_inspect` already writes to **stderr** before its output — the
+existing mechanism, which this design does not replace and the new read surface
+must perform identically.
+
+The in-block marker therefore covers one reachable case only: a record that
+scanned cleanly and then failed between the scan and the render. That is a
+genuine race rather than a corpus defect, and it is why `render_block` stays
+total (§5.2) — not so that a common failure renders prettily, but so that a rare
+one cannot take the other fourteen records down with it. `STD-003` is satisfied
+across both: every degraded read is disclosed, each on the surface that can
+actually see it.
+
 #### Command grammar
 
 ```
-doctrine inspect <ID> [--knowledge <skip|facets|full>]
-doctrine slice design show <SLICE> [--knowledge <skip|facets|full>] [--json]
+doctrine inspect <ID> [--knowledge <skip|facets|full>] [--transitive]
+doctrine design show <SLICE> [--knowledge <skip|facets|full>] [--format <fmt>] [--json]
 ```
 
-`--knowledge` defaults to `skip` on both. `slice design` is promoted from a leaf
-verb to a group (`DEC-260`); its deprecated scaffold leaf retires, and the
-three-level grammar matches the existing `slice selector add|note|list|rm|doctor`
-precedent.
+`--knowledge` defaults to `skip` on both, and both are two levels (`SPEC-013`).
+
+`design show` changes meaning (`DEC-261`): it renders the design **document**,
+and the run's turn envelope moves to `--format prompt`. The `--format` values
+`prompt`, `json` and `status` keep their current renderings and names; only the
+default moves. The deprecated `slice design <ID>` leaf retires as it would have
+anyway, and `slice design` is **not** promoted to a group.
+
+**`--knowledge` and `--transitive` are mutually exclusive.** `run_inspect`
+returns from the transitive branch before the one-hop composition, so a level
+passed alongside `--transitive` would be accepted and silently ignored — the
+failure this CLI rejects rather than tolerates elsewhere. A non-`skip` level
+with `--transitive` errors, and the error names `IMP-398` S5 as the work that
+would make the pair meaningful. Declining to *build* transitive knowledge
+(§7.3) is a non-goal; this is the refusal that non-goal implies and the draft
+left unstated.
 
 The JSON arm carries the same level, structurally rather than as rendered text:
-`inspect --json` gains an additive `"knowledge"` key, and `slice design show
---json` emits `{ "kind": "slice-design", "slice", "document", "knowledge" }`.
-Each entry is `{ reference, caption, facet | null, marker?, body? }`, tier-filtered
-at `Facets` exactly as the table is. Table and JSON agreeing is deliberate: the
-existing divergence between `format_facet` and `facet_json` — one silent, the
-other emitting every field as `null` — is the defect this design must not repeat.
+`inspect --json` gains an additive `"knowledge"` key, and `design show --json`
+emits `{ "kind": "design", "slice", "document", "knowledge" }`.
+
+Each entry is a record object plus the caption that reached it, and **what it
+contains is the level's business, not the entry's**:
+
+| level | the entry carries |
+|---|---|
+| `Facets` | `{ reference, caption, facet }`, where `facet` is `facet_json(…, Deciding)` — the deciding fields only, or `marker` in place of `facet` when there are none |
+| `Full` | the complete `knowledge show` payload — `id, record_kind, slug, title, status, created, updated, tags, facet, evidence, relationships, body` — plus `caption` |
+
+`Full` carrying the complete payload is what closes `OQ-3`, and the draft could
+not have both: it claimed `Full` "renders a complete record" while specifying an
+entry of five keys that dropped nine of `show_json`'s. One of those had to give,
+and the level's stated meaning is the one worth keeping.
+
+Table and JSON agreeing is deliberate and is now mechanised rather than
+asserted: both filter the same `facet_fields` table by the same tier (§5.2).
+The divergence they must not repeat — `format_facet` silent on an absent field,
+`facet_json` emitting `null` — is preserved unchanged at `all tiers` because
+fixing it is `IMP-403`'s, and is simply invisible at `Deciding`, where an absent
+field is not in the tier's output on either arm.
 
 ### 5.3 Data, State & Ownership
 
 There is no state. Every surface here is read-only, nothing is cached across
-invocations, and nothing is written — which is worth stating because the verb
-being repurposed currently *writes* (`C3`): the retired leaf delegated to
-`design materialise`. The group's `show` must not inherit that.
+invocations, and nothing is written — worth stating because the `design` group
+around this verb writes (`start`, `apply`, `materialise`) and the retiring
+`slice design` leaf wrote too, by delegating to `design materialise`. `show`
+does not inherit either, and `write_class` in `src/commands/guard.rs` is where
+that is asserted to the rest of the system.
 
 Ownership, restated as a rule per module:
 
 | module | owns |
 |---|---|
-| `knowledge` | `RecordFacet`, the field-order table, the tiers, the three markers, `SelectedRecord`, `KnowledgeLevel`, `render_block` |
+| `knowledge` | `RecordFacet`, `facet_fields` (the one field-order table), the tiers, the three markers, `SelectedRecord`, `KnowledgeLevel`, `render_block`, both facet renders |
 | `relation_graph` | the inbound derivation (unchanged) and `select_knowledge` |
 | `slice` | reading `design.md` off disk |
-| `commands/*` | composition and flag lowering; **no policy** |
+| `commands/*` | composition, flag lowering, and the scan-diagnostic pass; **no policy** |
 
 Within one render pass a record is read at most once — guaranteed by dedup in
 selection, not by a cache. There is no cache.
@@ -671,18 +801,19 @@ selection, not by a cache. There is no cache.
 ```mermaid
 sequenceDiagram
   participant U as caller
-  participant C as commands/slice_design
+  participant C as commands/design — show
   participant S as slice
   participant RG as relation_graph
   participant K as knowledge
   participant FS as disk
 
-  U->>C: slice design show SL-244 --knowledge facets
+  U->>C: design show SL-244 --knowledge facets
   C->>S: design_document(root, 244)
   S->>FS: read .doctrine/slice/244/design.md
   S-->>C: document (verbatim) — or a clean error if absent
   C->>RG: scan_entities + inspect_from("SL-244")
-  RG-->>C: InspectView (inbound groups, (label, role)-keyed)
+  RG-->>C: InspectView + scan diagnostics
+  C-->>U: diagnostics to stderr (pruned records — STD-003)
   C->>RG: select_knowledge(&view)
   RG-->>C: 15 SelectedRecord — record-kind sources only, deduped
   C->>K: render_block(root, &selected, Facets)
@@ -690,7 +821,7 @@ sequenceDiagram
     K->>FS: read record-NNN.toml (no .md at Facets)
     alt read ok
       K->>K: format_facet(facet, Deciding, Marked)
-    else read failed
+    else read failed (raced the scan)
       K->>K: disclose by name and reason (STD-003)
     end
   end
@@ -707,15 +838,19 @@ with no design fails immediately and cheaply, before a corpus scan is paid for.
 
 - `I1` — at `Skip`, output is byte-identical to the pre-SL-246 surface, in both
   formats, on every affected verb. Structural: `Skip` returns before any read.
-- `I2` — the `Facets` field set is a subset of `Full`'s, in the same order. By
-  construction: one field-order table with a tier filter (`C4`).
+- `I2` — the `Facets` field set is a subset of `Full`'s, in the same order, **in
+  both table and JSON**. By construction: one `facet_fields` table with a tier
+  filter, rendered twice (`C4`).
 - `I3` — each record appears at most once per render, under the caption of the
   first group it was reached through.
 - `I4` — output is deterministic and permutation-invariant: group order from
   `RelationLabel`'s `Ord`, sources by `EntityKey` (prefix lexicographic, id
   numeric — correct past id 999).
-- `I5` — a selected record that cannot be read is named in the output. It is
-  never dropped, never rendered as empty, and never aborts the block.
+- `I5` — a **selected** record that cannot be read is named in the output: never
+  dropped, never rendered as empty, never aborting the block. A record that
+  failed *before* selection was pruned by the scan and is named on stderr
+  instead — the two disclosures are disjoint and together cover every degraded
+  read (`STD-003`).
 - `I6` — the three empty states render three distinct messages.
 - `I7` — nothing on this path writes.
 
@@ -727,7 +862,9 @@ with no design fails immediately and cheaply, before a corpus scan is paid for.
 - `X2` — **the slice has no `design.md`.** A clean error naming the repair —
   `SL-999: no design document (doctrine design start SL-999)` — not an empty
   document.
-- `X3` — **`design.md` is behind its design run.** Open; see §6 `OQ-1`.
+- `X3` — **`design.md` is behind its design run.** Open; see §6 `OQ-1`. Note the
+  re-siting sharpens it: the reader is now inside the `design` group, so reaching
+  run state is no longer a new dependency, only a choice.
 - `X4` — **a record is reachable under two labels and renders nothing.** One
   entry, one marker. `I3` settles it before the renderer sees it.
 - `X5` — **a `CPT` in the selection.** Renders the by-design marker, never the
@@ -736,9 +873,10 @@ with no design fails immediately and cheaply, before a corpus scan is paid for.
 - `X6` — **the subject is a record itself.** `Shapes` legally targets record
   kinds, so `inspect DEC-145 --knowledge facets` is well-formed and renders one
   hop. It does not recurse; that is `IMP-398` S5.
-- `X7` — **a malformed `[facet]` table.** `read_record` already validates; a
-  validation failure is `I5`'s disclosure path, not a panic and not a partial
-  facet.
+- `X7` — **a malformed `[facet]` table.** `read_record` validates, so the record
+  fails `outbound_for` during the scan and is pruned before selection: it is
+  disclosed on stderr, not by an in-block marker. Neither a panic nor a partial
+  facet either way. This is the case the draft mis-routed to `I5`.
 
 **Assumptions.**
 
@@ -754,30 +892,48 @@ with no design fails immediately and cheaply, before a corpus scan is paid for.
 
 | path | change |
 |---|---|
-| `src/knowledge.rs` | `KnowledgeLevel`, `SelectedRecord`, `render_block`, the facet-only read path, `Tier`/`EmptyPolicy` on `format_facet`, the three marker constants |
+| `src/knowledge.rs` | `KnowledgeLevel`, `SelectedRecord`, `render_block`, the facet-only read path, `facet_fields` + `Tier`/`EmptyPolicy` under `format_facet` **and** `facet_json`, the three marker constants |
 | `src/relation_graph.rs` | `select_knowledge` — pure, over `InspectView` |
 | `src/kinds/mod.rs` | none expected; `is_record` (`:128`) is consumed as-is |
-| `src/commands/inspect.rs` | `--knowledge` on `InspectArgs`; compose relations + block + actionability |
-| `src/commands/slice_design.rs` | **new** — the `slice design show` handler |
-| `src/slice.rs` | `SliceCommand::Design` becomes a group with `Show`; the deprecated leaf and `scaffold_design_doc` retire; a `design_document` reader |
-| `src/commands/design.rs` | `run_deprecated_slice_design` retires |
-| `src/commands/cli.rs` | the residual `SliceCommand::Design` dispatch arm (`:1531`) **deletes** |
+| `src/commands/inspect.rs` | `--knowledge` on `InspectArgs`; the `--transitive` refusal; compose relations + block + actionability |
+| `src/commands/design.rs` | `show` renders the document + block; `--format` default moves to it, `prompt`/`json`/`status` unchanged; `run_deprecated_slice_design` retires |
+| `src/slice.rs` | the deprecated `SliceCommand::Design` leaf and `scaffold_design_doc` retire; a `design_document` reader |
+| `src/commands/guard.rs` | the `SliceCommand::Design => Write("slice design")` row **deletes** with the variant; `design show` stays `Read` |
+| `src/commands/cli.rs` | the residual `SliceCommand::Design` dispatch arm (`:1531`) **deletes** with the variant |
+| `install/routing-process.md` | the one prose line naming `design show` as the turn read |
+| emitted strings | ~4 sites naming `design show --full` / `design show` as the envelope re-point at `--format prompt` |
 | `tests/e2e_inspect_golden.rs` | synthetic-corpus goldens at all three levels (`DEC-151`) |
-| `tests/e2e_slice_design_show_golden.rs` | **new** — the composed design read |
+| `tests/e2e_design_show_golden.rs` | **new** — the composed design read; and `design show`'s moved default |
 | `tests/e2e_knowledge_cli_golden.rs` | unchanged — the `C2` proof |
 
-The `cli.rs` row is a payoff rather than a cost. That residual arm exists only
-because the deprecated leaf had to forward through `design materialise`, which
-`crate::slice` could not reach without closing a cycle. Retiring the leaf
-removes the forward, so `SliceCommand::Design` routes through `slice::dispatch`
-like every other slice verb and a documented `ADR-001` workaround goes with it.
+Three notes on this table, each of them a correction the review forced.
+
+**The `cli.rs` and `guard.rs` rows are the deprecation's payoff, and nothing
+more.** Both rows exist because `SliceCommand::Design` exists; retiring the
+deprecated leaf deletes the variant and takes both with it. The draft claimed
+more than that — that the deletion let `SliceCommand::Design` route through
+`slice::dispatch` like every other slice verb — which was wrong, because a
+handler under `src/commands/` is not reachable from `crate::slice` without
+closing the `ADR-001` cycle the residual arm was there to avoid. Under
+`DEC-261` no nested slice verb exists, so nothing needs routing and the claim
+is simply withdrawn.
+
+**`guard.rs` is in the table because `C3` is a claim about it.** `write_class`
+feeds the pre-dispatch worker guard; a read surface carrying a `Write` class is
+refused outright under `DOCTRINE_WORKER=1`. The draft asserted read-only-ness
+and omitted the file that enforces it — the sort of omission `I7` makes easy,
+since nothing in the design's own vocabulary points at a classifier table.
+
+**`install/routing-process.md` and the emitted strings are the migration**, and
+they are in the table because pricing them is what made `DEC-261` decidable.
 
 <!-- doctrine:section sec-6 -->
 ## 6. Open Questions & Unknowns
 
-The inquiry's six questions are closed — `DEC-145` through `DEC-151`, with
-`DEC-260` added in drafting. Three questions remain, none of them blocking, and
-each has a recommendation rather than a shrug.
+The inquiry's six questions are closed — `DEC-145` through `DEC-151` — with
+`DEC-260` added in drafting and superseded by `DEC-261` at review. Two questions
+remain, neither blocking, each with a recommendation rather than a shrug.
+`OQ-3` has been closed by the review and moves to §7.
 
 **`OQ-1` — should the design read disclose that `design.md` is behind its run?**
 
@@ -786,9 +942,12 @@ document on disk is a render of them. The two can diverge — a section declared
 and not yet materialised, or a hand edit that moved the document out from under
 the run. A reader given the stale document is told nothing.
 
-Disclosing it means `commands/slice_design` reads design-run state, which is a
-new dependency for a case that is rare and self-correcting (the next
-`materialise` clears it).
+Disclosing it means the reader consults design-run state for a case that is rare
+and self-correcting (the next `materialise` clears it). `DEC-260` counted that
+as a new dependency; under `DEC-261` it is not one — the reader now lives in
+`commands/design.rs` beside the run's own verbs, so the cost is a state read
+rather than a crossing. The question is therefore cheaper than it was when it
+was raised, and correspondingly easier to answer yes.
 
 *Recommendation: disclose.* One line above the document — `note: design.md is
 behind its run (revision N); doctrine design materialise SL-244` — costs a
@@ -802,31 +961,23 @@ place this design would reach into the run, and that is worth a second opinion.
 
 For `ADR`, `SPEC`, `PRD` and `RFC`, `show` already renders the document — so
 `adr show ADR-004 --knowledge facets` would be the natural composed read for
-them, exactly as `slice design show` is for a slice. `DEC-145` rejected the
-per-kind arm on cost, and nothing in that reasoning has changed; but `DEC-260`'s
-observation that `show` *is* the document-render verb makes the per-kind arm
-the more coherent long-term shape rather than merely a more expensive one.
+them, exactly as `design show` is for a slice's design. `DEC-145` rejected the
+per-kind arm on cost, and nothing in that reasoning has changed; but `DEC-261`
+strengthens the long-term case, because after it `show --knowledge` *is* the
+shape on one kind already, and a second is a repeat rather than a precedent.
 
 *Recommendation: not now, and not never.* `inspect --knowledge` serves those
-kinds correctly today. Revisit when `IMP-457`'s rehome lands, since that work is
-already opening every `show` surface.
-
-**`OQ-3` — is `full` distinguishable enough from `knowledge show`?**
-
-`Full` renders a complete record; `format_show` already does exactly that. If
-the composed `full` output is byte-for-byte what `knowledge show` produces per
-record, then `full` is a convenience — fifteen commands collapsed into one —
-rather than a distinct level, and that is fine. But it should be a deliberate
-answer, because if it *diverges* there are two full-record renders to keep in
-step, which is the drift `C4` exists to prevent.
-
-*Recommendation: make `Full` delegate to the same render `knowledge show` uses,
-with only the caption and the `Marked` empty policy differing.* Confirm during
-implementation; it is a code-reading question, not a design fork.
+kinds correctly today. Revisit under `IMP-393`, which owns the reader-facing
+render across the board.
 
 **Not open, and recorded so they are not reopened by accident.** The JSON arm's
 shape (§5.2), reading the document verbatim rather than parsing it (`A2`), and
-the empty-set message (`X1`) were all settled in drafting — see §7.2.
+the empty-set message (`X1`) were settled in drafting — see §7.2. `OQ-3`, which
+asked whether `Full` is distinguishable from `knowledge show`, was closed at
+review: it was not the code-reading question this section called it. `Full`
+carries the complete `knowledge show` payload plus a caption, on both arms, and
+the shared `facet_fields` table is what keeps the two renders from drifting —
+see §5.2 and `D5`.
 
 <!-- doctrine:section sec-7 -->
 ## 7. Decisions, Rationale & Alternatives
@@ -845,12 +996,13 @@ normative; these lines are a map, not a restatement.
 | `DEC-149` | An unfilled facet is marked, never papered over; the renderer is built for a healthy corpus. |
 | `DEC-150` | The `facets` level carries what rules, not the argument; tiers annotate the existing per-kind field match. |
 | `DEC-151` | Synthetic-corpus goldens pin the mechanics; the `SL-244` specimen claim is verified by agent. |
-| `DEC-260` | The design-document read is a second caller, sited at `slice design show`; the deprecated leaf retires. |
+| `DEC-261` | The design-document read reclaims `doctrine design show`; the turn envelope keeps `--format prompt`. Supersedes `DEC-260`, which sited it at `slice design show`. |
 
 ### 7.2 Decisions this drafting stage takes
 
-Four, none of which was an inquiry node. Each is settled here rather than
-deferred, and named so §6 is not confused with them.
+Four from drafting, none of which was an inquiry node, plus one the review
+closed. Each is settled here rather than deferred, and named so §6 is not
+confused with them.
 
 **`D1` — the JSON arm carries the level structurally, and agrees with the
 table.** Each record is an object — `{ reference, caption, facet | null,
@@ -891,12 +1043,29 @@ back up, and drafting put it down again.
 
 *Why.* It is unconditional, so unlike every other output change here it cannot
 hide behind a level flag: it changes the default output of six `show`
-renderers and moves all of their `SPEC-013` goldens. That is the multi-seam cost
+renderers and moves all of their `SPEC-013` goldens. (`DEC-261` moves *one*
+default, on one verb, for a reason that pays for itself — which is the
+distinction, not a reversal of this one.) That is the multi-seam cost
 `DEC-145` chose `inspect` to avoid, arriving by the back door. Notably *not* the
 reason: expense. Checking that assumption is what turned up `IMP-460` — those
 `show` paths already load the comparison pipeline twice, and `adr show`
 measures slower than `inspect` does with a full corpus scan. The count is
 affordable. Returned to `IMP-398` with both findings.
+
+**`D5` — `Full` carries the complete record, and one table feeds both renders.**
+Closed at review, where `OQ-3` had left it. `Full`'s entry is the whole
+`knowledge show` payload plus the caption that reached it; `Facets` filters the
+same `facet_fields` table by tier, on the text arm and the JSON arm alike.
+
+*Why.* `OQ-3` framed this as a code-reading question — does the composed `Full`
+happen to match `knowledge show`? It was a fork, because the draft answered it
+two ways at once: §6 said `Full` renders a complete record while §5.2 specified
+an entry of five keys that dropped nine of `show_json`'s. Something had to give,
+and the level's meaning is worth more than the entry's brevity. The second half
+matters more. `C4` promised one field-order table, and annotating tiers inside
+`format_facet` would have delivered that to the text render only, leaving
+`facet_json` — a separate hand-written per-kind projection — untiered. `D1`
+declares that table and JSON must not diverge; before this, nothing made it so.
 
 ### 7.3 Alternatives rejected at design, with their grounds
 
@@ -922,9 +1091,17 @@ affordable. Returned to `IMP-398` with both findings.
   render in `show` and vanish from the composed read.
 - **A live-corpus invariant test.** Rejected by `DEC-151` on inspection rather
   than availability; see §9.5.
-- **A `--design` selector on `slice show`.** Rejected by `DEC-260`: it
-  contradicts that verb's stated contract and becomes a mutually-exclusive flag
-  set the moment a second document wants a reader.
+- **A `--design` selector on `slice show`.** Rejected by `DEC-260` and the
+  rejection stands under `DEC-261`: it contradicts that verb's stated contract
+  and becomes a mutually-exclusive flag set the moment a second document wants a
+  reader.
+- **Siting the read at `slice design show`.** `DEC-260`'s answer, superseded by
+  `DEC-261`. It is recorded here rather than erased because the reason it lost
+  is instructive: it was three levels against `SPEC-013`'s stated two, and it
+  was chosen over an alternative set that was missing its best member —
+  `IMP-393` had already named reclaiming `design show`, and `design show`'s own
+  `--format [default: prompt]` meant the envelope needed no new name. Cheapness
+  was assumed rather than measured on both sides.
 
 <!-- doctrine:section sec-8 -->
 ## 8. Risks & Mitigations
@@ -968,19 +1145,29 @@ is the alarm.
 **`R5` — retiring `slice design <ID>` breaks anyone scripting it.**
 
 *Mitigated:* it is already deprecated and already prints a warning naming its
-replacement, and the replacement — `design start`, `design materialise` — is
-what the shim has been forwarding to. The removal completes a deprecation rather
-than starting one. *Residual:* accepted.
+replacement — verified at review, not assumed — and the replacement (`design
+start`, `design materialise`) is what the shim has been forwarding to. The
+removal completes a deprecation rather than starting one. *Residual:* accepted.
 
-**`R6` — the verb is deliberately temporary and may ossify.** `DEC-260` sites
-the read at `slice design show` only because `design show` is occupied by the
-run envelope; `IMP-457` plans to free it, after which this verb should collapse
-into `design show`.
+**`R6` — `design show`'s default output changes under existing callers.** This
+replaces the risk the draft carried here, which was that a deliberately
+temporary verb would ossify. `DEC-261` retires that risk by making the verb the
+destination; the risk that arrives in its place is the migration.
 
-*Mitigated:* the intent is recorded on `IMP-457` with the collapse named, and
-§1 and §3 `F5` both say plainly that the siting is a workaround. *Residual:*
-recorded intent is weaker than a deadline. If `IMP-457` never runs, doctrine
-keeps a verb whose only justification is a defect elsewhere.
+`design show` is a `SPEC-013` byte-exact golden surface, and it is the surface
+the managed design run is itself driven through — including by the skills that
+drive it and by an agent's habit. After this, a bare `design show` returns a
+document where it used to return a turn envelope.
+
+*Mitigated:* the envelope is not renamed, moved, or reduced — it keeps all three
+renderings under the `--format` values it already has, so every caller's repair
+is to add `--format prompt` and none is to learn a new verb. The population was
+counted rather than estimated: 14 references, of which
+`.agents/skills/handover/SKILL.md` already passes `--format status` and does not
+move. *Residual, and real:* an agent mid-run on a stale prompt gets a document
+and must notice. The goldens turn red on the change, which is the alarm, but
+they do not reach prose in skills — so `install/routing-process.md` is in §5.6's
+table explicitly rather than left to a sweep.
 
 **`R7` — the two callers diverge.** The whole point of one renderer is that
 `inspect` and the design read cannot disagree about what a record looks like.
@@ -1017,7 +1204,9 @@ The fixture corpus needs one of each interesting shape:
 | a `CPT` | the by-design marker, distinct wording, at every level |
 | a record reachable under two inbound labels | dedup — one entry, first caption wins (`I3`) |
 | a backlog item and a review pointing inbound | source-kind selection excludes both (`DEC-148`) |
-| a record whose `.toml` is absent or malformed | `STD-003` disclosure by name; the other records still render (`I5`) |
+| a record whose `.toml` is absent or malformed | the **scan** prunes it and names it on stderr; the other records still render (`I5`, `X7`) |
+| a record present at scan and unreadable at render | the in-block marker — the one reachable path to it (`I5`) |
+| records at ids 998, 999, 1000, 1001 | numeric ordering survives selection and dedup (`I4`) |
 | an entity with no inbound records | the explicit empty-set line (`D3`) |
 | a slice with no `design.md` | the clean error naming `design start` (`X2`) |
 
@@ -1030,17 +1219,29 @@ Named cases, one per claim:
 - `a_record_reached_twice_renders_once_under_the_first_caption` — `I3`.
 - `selection_excludes_non_record_sources` — `DEC-148`.
 - `an_unfilled_facet_and_a_concept_render_different_markers` — `I6`.
-- `an_unreadable_record_is_named_and_the_block_continues` — `I5`, `STD-003`.
-- `json_and_table_carry_the_same_records_at_the_same_level` — `D1`.
-- `slice_design_show_renders_the_document_then_the_block`
-- `slice_design_show_on_a_slice_without_a_design_errors_cleanly` — `X2`.
+- `a_pruned_record_is_named_on_stderr_and_the_block_renders_the_rest` — `I5`,
+  `X7`, `STD-003`. The reachable half: the record never reaches `render_block`.
+- `a_record_unreadable_after_selection_is_named_in_the_block` — `I5`. The other
+  half, reached by removing the file between scan and render.
+- `json_and_table_carry_the_same_fields_at_the_same_level_for_every_kind` —
+  `D1`, `D5`, `I2`. Content parity per record kind, not record membership.
+- `full_json_carries_the_complete_knowledge_show_payload` — `D5`.
+- `design_show_renders_the_document_then_the_block`
+- `design_show_on_a_slice_without_a_design_errors_cleanly` — `X2`.
+- `design_show_defaults_to_the_document_and_format_prompt_keeps_the_envelope` —
+  `DEC-261`, and the `R6` alarm.
+- `a_non_skip_level_with_transitive_is_refused_naming_imp_398_s5` — §5.2.
 - `output_is_permutation_invariant_across_scan_order` — `I4`.
+- `selection_orders_ids_numerically_past_999` — `I4`'s other clause. The named
+  case above proves independence from input order and nothing about numeric
+  ordering, and `select_knowledge` is new flattening-and-dedup logic that can
+  regress to canonical-string ordering while staying permutation-invariant.
 
 ### 9.3 By agent (`VA`)
 
 The acceptance claim, which is a judgement and is verified as one (`DEC-151`).
 
-An agent runs `doctrine slice design show SL-244 --knowledge facets` against the
+An agent runs `doctrine design show SL-244 --knowledge facets` against the
 real corpus at audit and attests that the rulings surfaced and the cost was
 acceptable. The attestation **must record enough to be re-derived**:
 
