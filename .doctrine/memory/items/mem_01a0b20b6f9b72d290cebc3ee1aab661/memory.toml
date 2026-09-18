@@ -1,0 +1,54 @@
+memory_uid = "mem_01a0b20b6f9b72d290cebc3ee1aab661"
+memory_key = "mem.fact.graphviz.gsize-rounds-up"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "graphviz rounds -Gsize up — never fit a raster to a hard cap exactly"
+summary = "A drawing fitted to a -Gsize box comes back 1-2px larger than the box; leave slack under any hard pixel cap."
+created = "2026-09-18"
+updated = "2026-09-18"
+
+[scope]
+paths = ["src/terminal_image.rs", "src/graphviz.rs"]
+globs = []
+commands = []
+tags = ["area:graph", "area:render"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "fd995f39b109a6f2b9d44e9fd1ccacbee56a76d6"
+tree = "3e441ada8909c39cc387061e110a012ac2f54a70"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "fd995f39b109a6f2b9d44e9fd1ccacbee56a76d6"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "backlog"
+ref = "ISS-460"
+
+[[relation]]
+label = "related"
+target = "mem_01a0aea27bb471a2abe570783449a049"
+
+[[relation]]
+label = "related"
+target = "mem_01a0ae70b09e7183a186dc6ffe76fd97"
+
