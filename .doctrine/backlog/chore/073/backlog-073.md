@@ -1,0 +1,47 @@
+# CHR-073: Re-attest five memories that document design show as the envelope read
+
+<!-- Backlog item body — context, detail, links. The structured, queried fields
+     live in the sister `backlog-NNN.toml`; this prose is free-form and is never
+     structurally parsed (the storage rule). -->
+
+## Why this is not optional
+
+`SL-246` reclaims `doctrine design show` for the design document (`DEC-261`);
+the turn envelope moves to `--format prompt`. Five committed memories under
+`.doctrine/memory/items/` document the *old* meaning.
+
+A stale shipped doc waits to be read. A stale memory is **injected** into an
+agent's context by `memory retrieve` and the `memory surface` hook — so it is
+read by default, by every agent, without anyone choosing to consult it. That
+makes this the worst-placed population in the whole migration, and it is the
+one a code sweep and the goldens both miss (`RV-370` `F-16`; the goldens reach
+neither skill prose nor the corpus).
+
+## The five
+
+| item | what it says now |
+|---|---|
+| `mem_019fc255625877e09ba55d5e11d7c5cb` | titled *"Design run state: read via show, not the raw TOML"*; instructs "Read design-run state with `doctrine design show <slice>`" and tabulates `doctrine design show 243`. **Its thesis inverts** — the correct read becomes `--format prompt` |
+| `mem_019facc21a1b7c50a6d5b2eb7ec7f3c9` (`:54,58`) | compare a fingerprint against "what `design show` displays" |
+| `mem_019fdf95d07979d0a7172f75381ef58c` (`:31`) | same fingerprint-comparison instruction |
+| `mem_019ff439bede7fb29c7c09b7fd76d893` (`:2`) | "`design show`'s `declaration_example` shows …" |
+| `mem_019fcd1727fa7061b771179b113f5726` (`:17,21`) | references the verb as the envelope read |
+
+Verified present at `RV-370` round 2. Line numbers will drift; the uids will not.
+
+## Why it is a chore and not a phase
+
+Re-attesting a memory is its own verb (`doctrine memory record` / `verify`), the
+corpus is not code, and none of `SL-246`'s phases touch it — a phase that edited
+memories would be doing unrelated work under a code-shaped exit criterion. So it
+rides a `/reviewing-memory` pass instead.
+
+**But it must land with or before the code**, not after: between the reclaim
+shipping and these edits, every agent that retrieves one of the five is told to
+run a command that now does something different. Sequence it into the slice's
+close, not its backlog drift.
+
+## Done when
+
+Each of the five is corrected and re-verified (`doctrine memory verify <key>`),
+and none of them instructs a bare `design show` for run state.

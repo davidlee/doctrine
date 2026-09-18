@@ -309,3 +309,18 @@ inbound record set keeps changing and a golden over it would rot:
   not need this reconciled, but the clause is descriptively false of its own
   governed surface and someone should carry a `REV` for it. Surfaced by `RV-370`
   `F-1`; not this slice's to fix.
+- **`CHR-073`** — *Re-attest the five memories naming `design show` as the
+  envelope read.* Surfaced by `RV-370` `F-16`, which found them missing from a
+  migration count the design called measured. Not a phase — re-attesting a
+  memory is its own verb and the corpus is not code — but **not deferrable
+  either**: a stale memory is injected into every agent's context by `memory
+  retrieve` and the surface hook, so between the reclaim shipping and these
+  edits every agent is told to run a command that now means something else.
+  Sequence it into close rather than letting it drift. Whether it warrants a
+  hard `needs` gate on this slice is a judgement left to close.
+- **`IDE-054`** — *Audit the CLI for format/content axis coupling.* `RV-370`
+  `F-9` found `--format` (a content selection) and `--json` (an encoding)
+  colliding on `design show` with no stated precedence. This slice resolved its
+  own instance the cheap way and declined the principled split on cost;
+  `IDE-054` asks whether the coupling is widespread enough to be worth a
+  standard.
