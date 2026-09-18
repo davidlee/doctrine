@@ -15,6 +15,7 @@
     flake-parts,
     rust-overlay,
     crane,
+    nixpkgs,
     ...
   }:
     flake-parts.lib.mkFlake {inherit inputs;} {
@@ -32,13 +33,33 @@
         homeManagerModules.satan-attrd = import ./nix/module.nix;
       };
 
-      perSystem = {
-        pkgs,
-        system,
-        ...
-      }: let
-        inherit (pkgs) lib stdenv;
-        isLinux = stdenv.isLinux;
+      perSystem = {system, ...}: let
+        pkgs = import nixpkgs {
+          inherit system;
+          overlays = [rust-overlay.overlays.default];
+        };
+
+        inherit (pkgs) lib;
+
+        # THE toolchain. Every consumer takes this one binding: the devshell,
+        # `just lint`/`gate`, and the crane build below. Beta, not nightly — and
+        # release.yml's `dtolnay/rust-toolchain@beta` is a fourth consumer that
+        # must track this channel by hand (see its comment; a channel split broke
+        # v0.11.0..v0.17.1). Extensions are devshell conveniences and do not
+        # affect codegen, so crane sharing this derivation is free.
+        rust = pkgs.rust-bin.beta.latest.default.override {
+          extensions = ["rust-src" "rust-analyzer" "rust-docs"];
+        };
+
+        # NOT stdenvAdapters.useMoldLinker: it injects -fuse-ld=mold through
+        # mkDerivationFromStdenv, i.e. only into derivations built with it — here
+        # just webModules/webDist (bun/vite, nothing native to link). It never
+        # reaches crane (craneLib is built over plain pkgs) nor a devshell
+        # `cargo build`. mold arrives via CARGO_BUILD_RUSTFLAGS in .envrc instead.
+        # It also throws outright on darwin ("Mold can't be used to emit Mach-O"),
+        # and this stdenv is forced on every darwin eval path.
+        inherit (pkgs) stdenv;
+        isLinux = stdenv.hostPlatform.isLinux;
 
         jailLib =
           if isLinux
@@ -58,8 +79,8 @@
           jujutsu
           jjui
           just
-          rust-bin.beta.latest.default
-          rust-analyzer
+          rust # the single toolchain, incl. rust-analyzer
+          mold # must be on PATH for .envrc's -C link-arg=-fuse-ld=mold
           helix
           cargo-edit # `cargo set-version` for the release recipe
           # tokei
@@ -318,11 +339,12 @@
         # plugins/ and install/ (git-tracked, embedded via rust-embed) and
         # crates/cordage (workspace member) are included automatically. The
         # built web dist is grafted on top (it is gitignored, hence absent).
-        # Build with the SAME toolchain the devshell + `just lint` use
-        # (rust-bin.beta.latest); crane defaults to nixpkgs-stable rustc, and
-        # the version skew flips lint verdicts (e.g. unfulfilled_lint_expectations
-        # on consts referenced only by a dead fn → spurious -D warnings failure).
-        craneLib = (crane.mkLib pkgs).overrideToolchain pkgs.rust-bin.beta.latest.default;
+        # Build with the SAME toolchain the devshell + `just lint` use — the
+        # `rust` binding above, not a second spelling of it. Crane defaults to
+        # nixpkgs-stable rustc, and the version skew flips lint verdicts (e.g.
+        # unfulfilled_lint_expectations on consts referenced only by a dead fn →
+        # spurious -D warnings failure).
+        craneLib = (crane.mkLib pkgs).overrideToolchain rust;
         # cleanCargoSource keeps ONLY .rs/.toml/.lock, silently stripping every
         # non-rust embedded asset (RustEmbed folders + include_str! targets) —
         # the folders survive via their .toml siblings so it still compiles, but
@@ -362,10 +384,12 @@
           };
         };
       in {
-        _module.args.pkgs = import inputs.nixpkgs {
-          inherit system;
-          overlays = [rust-overlay.overlays.default];
-        };
+        # The SAME instance the let block above uses — not a second
+        # `import nixpkgs`. Two instantiations per system double the eval and
+        # hand the devshell module a different pkgs than `packages` is built
+        # from, which forks drvs and rebuilds from scratch (see the `dirge`
+        # note below for that failure mode).
+        _module.args.pkgs = pkgs;
 
         packages =
           jailPkgs
@@ -413,7 +437,7 @@
           # flag it passes through `-nodefaultlibs`. Append so a caller's own
           # RUSTFLAGS survive. No-op off darwin (glibc provides iconv) and off
           # nix (Apple's /usr/bin/cc finds the SDK's libiconv.tbd natively).
-          devshell.startup.iconv-rustflags.text = lib.optionalString stdenv.isDarwin ''
+          devshell.startup.iconv-rustflags.text = lib.optionalString stdenv.hostPlatform.isDarwin ''
             export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-L ${pkgs.libiconv}/lib"
           '';
 

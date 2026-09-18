@@ -3,4 +3,12 @@ export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 export DIRENV_LAYOUT_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/direnv/layouts/doctrine"
 export SCCACHE_DIR="$HOME/.cache/sccache"
 export RUSTC_WRAPPER=sccache
+# mold: fast linker, Linux-only (mold cannot emit Mach-O). Deliberately here and
+# not in .cargo/config.toml — crane's cleanCargoSource keeps .cargo/config.toml
+# on purpose, so a committed flag rides into the nix sandbox, where mold is
+# absent and the link dies. It would also break a plain `cargo build` for
+# anyone without mold on PATH.
+if [[ "$(uname -s)" == Linux ]]; then
+  export CARGO_BUILD_RUSTFLAGS="-C link-arg=-fuse-ld=mold"
+fi
 use flake . --impure
