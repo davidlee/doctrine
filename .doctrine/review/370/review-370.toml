@@ -68,19 +68,12 @@ Integration: `I5`, `X7` and the §9.2 fixture row are being rewritten against th
 
 [[finding]]
 id = "F-4"
-status = "contested"
+status = "answered"
 severity = "major"
 title = "The `full` JSON shape is neither a complete record nor single-source"
 detail = "Observation: SL-246 §5.2 lines 642-648 and D1 define every JSON entry as `{ reference, caption, facet | null, marker?, body? }`, while §6 OQ-3 lines 814-825 says `Full` renders a complete record and should delegate to the same render as `knowledge show`. The current complete record projections include identity, kind, slug, title, status, dates, tags, evidence, relationships, facet, and body: see `format_metadata` at `src/knowledge.rs:1793-1831`, `format_show` at 1834-1838, and `show_json` at 1943-1988. The proposed JSON object omits most of those fields. It also cannot satisfy C4 and D1 as described: the only shared field-order mechanism specified is the text-returning `format_facet`, while current `facet_json` at 1991 onward is a separate handwritten per-kind projection. The planned test checks only that JSON and table carry the same record identities, not the same tiered content. Suggested repair: make the full JSON contract explicitly contain the complete knowledge-show payload, and define one ordered structured facet projection from which both text and JSON are rendered. Add parity cases for common metadata and every record kind at both levels, not only record membership."
-disposition = "accepted-design-changed"
-response = """
-Observation ACCEPTED in full. Verified, and it is an internal contradiction rather than an omission.
-
-`show_json` (`src/knowledge.rs`) projects `id, record_kind, slug, title, status, created, updated, tags, [body], facet, evidence, relationships`. §5.2's proposed entry is `{ reference, caption, facet | null, marker?, body? }`, which drops nine of those. §6 `OQ-3` simultaneously says `Full` "renders a complete record" and recommends delegating to the same render `knowledge show` uses. Those two statements cannot both hold. The finding is right that the design contradicts itself across §5.2/D1 and OQ-3.
-
-The second half is equally correct and is the more damaging one. `facet_json` is a separate hand-written per-kind projection, structurally independent of `format_facet`. The design's stated mechanism for `C4` — annotate tiers on the existing per-kind match inside `format_facet` — reaches only the TEXT path. D1 asserts that table and JSON agreeing is deliberate and must not repeat the `format_facet`/`facet_json` divergence, then specifies no mechanism that would make `facet_json` tier-aware. The goal was stated and left unmechanised, which is exactly the defect D1 names.
-
-Integration: §5.2 and D1 are being rewritten to define one ordered structured facet projection that both the text and JSON renders derive from, so `C4` binds both arms rather than one; `Full`'s JSON contract is being stated explicitly as the complete `knowledge show` payload plus caption; and `OQ-3` is being closed against that rather than left as a "code-reading question", since the finding has shown it is a design fork. §9.2's parity case is being widened from record-membership to tiered content per kind at both levels."""
+disposition = "accepted-d1-repaired"
+response = "Contest upheld — the finding was right and the earlier disposition overpromised. It undertook to rewrite section 5.2 and `D1`; only 5.2 moved, so `D1` kept specifying the superseded five-key entry while `D5` two paragraphs below specified the twelve-key payload. `D1` is now reduced to the decision it actually is — that the two arms agree, mechanised by a shared `facet_fields` under a shared `EmptyPolicy` — and no longer states an entry shape at all; section 5.2 and `D5` own that. See `F-12`, which is the same defect raised directly, and `F-13`, which is it one layer along on the JSON arm. Revision 42, sec-7."
 
 [[finding]]
 id = "F-5"
@@ -148,7 +141,7 @@ Recorded for the ledger: this candidate was found by the design's author, who de
 
 [[finding]]
 id = "F-9"
-status = "open"
+status = "answered"
 severity = "major"
 title = "The reclaimed `design show` flag set is undefined at four points"
 detail = """
@@ -163,10 +156,12 @@ Observation. §5.2's command-grammar block specifies `doctrine design show <SLIC
 (4) `--knowledge` combined with `--format prompt|json|status` is undefined: whether the block appends to the turn envelope, is refused, or is ignored.
 
 Suggested repair (a separate claim): resolve `DEC-261`'s fork explicitly in §5.2 and §5.6, state the precedence or drop `--json` in favour of a `--format` value, and give `--full` and `--knowledge`-with-`--format` the same explicit refusal or composition rule the design already gives `--knowledge`-with-`--transitive`."""
+disposition = "accepted-design-changed"
+response = "Accepted in all four parts, and all four were live forks rather than documentation gaps — your note under 'could not check' asked exactly the right question, and nothing had been ruled verbally. The user ruled each; section 5.2 now records them. (1) `--format` gains `document` and `document` becomes the default, closing the fork `DEC-261` left open. The no-default alternative is rejected in the prose as a removal dressed as a move: it takes `--format` from total to partial and leaves the new default invisible in `--help`. The four value names are one `STD-001` constant set. (2) `--json` keeps the document read's JSON and is refused alongside an explicit `--format`, rather than inventing a precedence between two axes; your point that `inspect`'s collapse at `inspect.rs:59` does not transfer is quoted as the reason. The principled content/encoding split is named in the design and declined on cost, and `IDE-054` now carries the general question of whether the CLI couples the two axes elsewhere and whether that is worth a standard. (3) `--full` is legal only with `--format prompt|json|status` and refused on the document rendering — widened from your `prompt|status` because `--format json` is an envelope rendering too, so the honest rule is 'every envelope rendering'. (4) `--knowledge` with an envelope `--format` is refused. That was the part your finding named which the first integration pass missed; catching it while writing this disposition is why it is here rather than in a round 3. The four rules are now stated as one partition — `--knowledge` and `--json` belong to the document, `--full` to the envelope, each refused outside its own — which is one rule to remember instead of four interactions to look up. Revision 42, sec-5 and sec-9."
 
 [[finding]]
 id = "F-10"
-status = "open"
+status = "answered"
 severity = "major"
 title = "`C1` and `I1` are false of `design show`, and the `skip` golden is unsatisfiable"
 detail = """
@@ -177,10 +172,12 @@ The contradiction reaches `VT`. §9.2 names `skip_is_byte_identical_to_the_prior
 A charitable reading is available — that `C1` binds the *flag's* neutrality rather than the verb's output, so adding `--knowledge` changes nothing by itself. That reading is coherent and is probably what was meant, but it is not what either clause says, and §9.2's named case picks the stronger one.
 
 Suggested repair (a separate claim): scope `C1`/`I1` to the surfaces this design adds to — `inspect` in both formats, and `design show --format prompt|json|status` — state `design show`'s bare default as deliberately not byte-identical with `R6` as its carrier, and split the §9.2 case accordingly."""
+disposition = "accepted-design-changed"
+response = "Accepted, including the charitable reading — it was what was meant, and you were right that it is not what either clause said. `C1` (section 3.2) and `I1` (section 5.5) are rescoped to the surfaces this design *adds the level to*: `inspect` in both formats, and `design show`'s envelope renderings. Both now state explicitly that `design show`'s bare default is NOT covered, that `DEC-261` moves it deliberately, and that the constraint binds the flag's neutrality rather than the verb's stability — with `R6` named as the carrier and section 5.6 as the whitelist. The section 9.2 contradiction is resolved by splitting the case rather than choosing between the two: `skip_is_byte_identical_to_the_prior_surface` is now `inspect`-only, and `design_show_envelope_renderings_are_byte_identical_to_the_prior_default` carries `C1`'s other half on the reclaimed verb. Revision 42, sec-3, sec-5, sec-9."
 
 [[finding]]
 id = "F-11"
-status = "open"
+status = "answered"
 severity = "major"
 title = "§5.6's impact table omits every existing test bound to the two retired surfaces"
 detail = """
@@ -194,10 +191,12 @@ Observation. §5.6 lists three test files — `tests/e2e_inspect_golden.rs`, a n
 This is more than bookkeeping. §9.1 tells the implementer that a red existing suite is the `C1` alarm; after this change several existing suites go red for a reason that is intended, so the alarm cannot be distinguished from the migration unless the table says which is which.
 
 Suggested repair: name the five files in §5.6 with their disposition — retire, migrate, or re-premise — and qualify §9.1's unchanged-green claim to the suites that are genuinely invariant under `DEC-261`."""
+disposition = "accepted-design-changed"
+response = "Accepted, and the framing — 'this is more than bookkeeping' — is the part that changed the repair. All five files are now in section 5.6 with an explicit disposition each: `e2e_design_materialise.rs` retires with the leaf; `e2e_subcommand_help.rs` is re-premised, not dropped, with `SL-233` PHASE-04 `EX-5` re-expressed against `--format prompt --full` and the premise inversion spelled out in section 5.2; the three fixture/state/projection files migrate with an explicit `--format prompt`. A fourth table note now separates the intended red from the alarm: those three rows are the whitelist, and a red suite not named there is the `C1` alarm and must not be updated as a golden. Section 9.1 carries the same qualification, so the distinction lives in the table rather than in the implementer's judgement at the moment the build breaks. Revision 42, sec-5, sec-9."
 
 [[finding]]
 id = "F-12"
-status = "open"
+status = "answered"
 severity = "major"
 title = "§7.2 `D1` still specifies the superseded five-key JSON entry"
 detail = """
@@ -208,10 +207,12 @@ Observation. §5.2 and `D5` now specify `Full`'s JSON entry as the complete `kno
 `F-4`'s disposition undertook to rewrite "§5.2 and D1". Only §5.2 moved.
 
 Suggested repair: reduce `D1` to the decision it actually is — that the JSON arm carries the level structurally rather than as rendered text — and let `D5` own the entry shape; or delete `D1`'s shape clause and cross-reference `D5`."""
+disposition = "accepted-design-changed"
+response = "Accepted — the document did specify the JSON contract twice, incompatibly, in a section that introduces its decisions as settled. `D1` now states only what it decides (the two arms agree, and what mechanises that) and defers the entry shape to `D5` and section 5.2 explicitly. Your observation that `D5`'s own rationale describes this very contradiction as the thing it was minted to remove is what made the repair obvious. Revision 42, sec-7."
 
 [[finding]]
 id = "F-13"
-status = "open"
+status = "answered"
 severity = "major"
 title = "The `Full` JSON entry has no marker slot, so `I6` and `X5` hold on the text arm only"
 detail = """
@@ -228,10 +229,12 @@ The `facet_fields` refactor does carry the *tier* to both arms, which is what `F
 Secondary, in the same signature block: `TierFilter` appears in both signatures and is never defined; only `enum Tier { Deciding, Argument }` is. The relation between a two-variant `Tier` and a filter that must also express "all tiers" is left to the implementer.
 
 Suggested repair: give `facet_json` the same `EmptyPolicy` parameter, or state where the `Full` JSON entry's `marker` key sits and what `facet` holds beneath it."""
+disposition = "accepted-design-changed"
+response = """Accepted on both the primary and the secondary. `facet_json` now takes `EmptyPolicy` alongside `TierFilter`, with a comment stating why: a marker the text arm emits and the JSON arm omits is `I6` unmet on half the surface, which is the defect `facet_fields` exists to prevent. The marker now rides INSIDE `facet` as `{"marker": ...}` in place of the field object, at both levels — chosen over a sibling key at the entry level because it keeps `Full`'s entry exactly `show_json`'s twelve keys plus `caption` with nothing bolted on, and it makes the two levels one entry shape rather than two. `X5` therefore holds at every level on both arms as written, and the section 5.2 entry table is updated on both rows. Secondary accepted: `TierFilter` is now defined as `All | Only(Tier)`, with a note that `All` is not the two variants spelled twice but the existing whole-facet render that `knowledge show` must pass to stay byte-identical under `C2`. All call sites in the design now name the variant. Your verification that `FacetValue` is sufficient for all seven kinds is why the repair needed no widening of the value type. Revision 42, sec-5."""
 
 [[finding]]
 id = "F-14"
-status = "open"
+status = "answered"
 severity = "major"
 title = "The in-block unreadable marker's one reachable case is unreachable in the declared test family"
 detail = """
@@ -242,10 +245,12 @@ A black-box golden spawns one process, and both the scan and the render happen i
 So `I5`'s in-block half is claimed, narrowed, specified — and unverifiable as `VT` in the family §9.2 declares. The fixture row and the named case both assert a capability the test type does not have.
 
 Suggested repair (a separate claim): either give that one case an in-process test with an injected read failure and say so in §9.2 — which is a deliberate departure from `DEC-151`'s black-box choice and should be recorded as one — or state that `I5`'s in-block half is verified by construction through `render_block`'s totality rather than by test, and drop the fixture row."""
+disposition = "accepted-verification-mode-changed"
+response = "Accepted, and it is the sharpest finding in the round — the design's own argument in section 5.2, applied to the design's own test, which is a check I should have run. The fixture row and the named case are both gone from section 9.2. Section 9.5 now records that `I5`'s in-block half is verified BY CONSTRUCTION: `render_block` returns `String`, not `Result`, so no path exists on which an unreadable selected record aborts the block or vanishes from it — the signature is the guarantee, and the claim is a claim about the signature. Your first option, an in-process test with an injected read failure, was considered and declined by the user: the seam would exist only to prove the type, and `DEC-151`'s black-box reasoning applies unchanged. Recorded in section 9.5 rather than left as a gap, on the principle your finding implies — a claimed `VT` that cannot fail is worse than an honest absence. Section 5.2 now points at 9.5 for it. Revision 42, sec-5, sec-9."
 
 [[finding]]
 id = "F-15"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "§9.2's `prefix subset` case contradicts `I2`, §9.5 and `DEC-150`'s tiers"
 detail = """
@@ -257,10 +262,12 @@ Observation. §9.2 names the case `facets_fields_are_a_prefix_subset_of_full_in_
 Taken at its word the case fails against §9.2's own first fixture, "a filled `DEC`", whose stated purpose is that `alternatives` appears only at `Full`.
 
 Suggested repair: rename the case to the subsequence property that `I2` and §9.5 both state."""
+disposition = "accepted-design-changed"
+response = "Accepted; the case name asserted a stronger property than `I2` and section 9.5 both state, and it was false against section 9.2's own first fixture. Renamed to `facets_fields_are_a_subsequence_of_full_in_template_order`, and the case now carries your counter-example inline so it cannot silently strengthen again: a `DEC`'s deciding fields are template positions 1, 2 and 4 because `alternatives` sits between `choice` and `rationale`, and an `ASM`'s are 1, 2, 3 and 7. Verified against `format_facet` at `knowledge.rs:1869` and `:1879`. Revision 42, sec-9."
 
 [[finding]]
 id = "F-16"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "The counted migration population omits the committed memory corpus"
 detail = """
@@ -278,10 +285,12 @@ These are authored, committed, and surfaced into agent context by `memory retrie
 The decision is not threatened: five memory edits is still small against the multi-seam cost `DEC-145` chose `inspect` to avoid, so `F5`'s conclusion survives. What is threatened is the count `F5` calls measured, and §5.6's completeness on exactly the axis `R6` identifies as its residual.
 
 Suggested repair: add a memory-corpus row to §5.6, or route it to a named `/reviewing-memory` follow-up in `R6` and restate the count as bounding code and docs only."""
+disposition = "accepted-design-changed"
+response = "Accepted, and your reading of which half is worse is now in the design: a stale doc waits to be read, a stale memory is injected into an agent's context by `memory retrieve` and the surface hook. Section 3.3 `F5` no longer carries a bare number — it states the population as a table so the count can be checked rather than trusted: 1 shipped-prose line, 4 emitted strings (with the three `--full` sites and the one bare site named at file:line), 5 test files enumerated in section 5.6, 5 committed memories. `R6` is updated to match and to say that goldens reach neither skill prose nor the memory corpus, which is why both are in the table rather than left to a sweep. Section 5.6 gains a memory-corpus row routing the five edits to a `/reviewing-memory` pass rather than this slice's phases, because re-attesting a memory is its own verb and the corpus is not code. Your separate note — that 'verify the count' was unbounded as posed because the figure named no denominator — is recorded as a friction observation on your behalf, since a fork cannot capture its own. Revision 42, sec-3, sec-5, sec-8."
 
 [[finding]]
 id = "F-17"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "`DEC-150`'s stated encoding is superseded by §5.2 with nothing recording it"
 detail = """
@@ -292,6 +301,8 @@ Observation. `DEC-150` is `accepted` and normative. Its `choice` rules the tiers
 This slice shows what a changed premise costs here: `DEC-260` was superseded by `DEC-261` rather than quietly rewritten. The same move is available and cheap.
 
 Suggested repair: amend or supersede `DEC-150` with the `facet_fields` encoding, or state in §5.2 and §7.1 that the ruling's encoding clause is now carried one level down and why the ruling is unaffected."""
+disposition = "accepted-design-changed"
+response = "Accepted as a documentation defect, and the user ruled against superseding. `DEC-150` stands unsuperseded: what it actually ruled — one table, one field order, one place, and NOT the separate constant it rejected on drift grounds — is untouched, because `facet_fields` IS that per-kind match rewritten rather than a constant beside it. Your own finding says this, and it is the distinction from `DEC-260`, whose *conclusion* changed. What moved is the encoding clause, so the design now records the move in both places you named: section 5.2 quotes the clause and the `show_opt_line`/`show_list_line` consequence, states that neither helper grows anything under `facet_fields`, and says the annotation sits on the field rather than on its rendered line; section 7.1's row says the ruling is intact, the record stands, and the encoding clause is what shifted. Revision 42, sec-5, sec-7."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
