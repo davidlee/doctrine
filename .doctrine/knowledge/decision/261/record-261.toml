@@ -1,0 +1,48 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 261
+slug = "the-design-read-reclaims-design-show-the-turn-envelope-keeps-format-prompt"
+title = "The design read reclaims `design show`; the turn envelope keeps `--format prompt`"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-18"
+updated = "2026-09-18"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = """
+DEC-260 sited the design-document read at `doctrine slice design show <SLICE>`, promoting `slice design` from a deprecated leaf to a group. RV-370 F-1 and F-6 defeated the basis for that siting on two counts, neither of which was available when DEC-260 was taken.
+
+F-1: SPEC-013 states outright that "the surface is a two-level clap subcommand tree", carried by active REQ-197. `slice design show` is three levels. DEC-260's rationale asserted this "is not a deviation" on the strength of the `slice selector` precedent — but a precedent does not amend a normative clause, so the design was making a governance claim it was not entitled to make.
+
+F-6: DEC-260's alternative set was incomplete. IMP-393 (opened 2026-08-03, six weeks before DEC-260) already states the same defect and names a resolution DEC-260 never evaluated: `doctrine design show` already carries `--format <FORMAT> [default: prompt] [possible values: prompt, json, status]`, so the writer's turn-envelope rendering is ALREADY named `prompt`. DEC-260 considered `design read` as a new verb in the group, but not reclaiming `show` itself."""
+choice = """
+`doctrine design show <SLICE>` renders the design DOCUMENT, followed by the composed knowledge block under `--knowledge <level>`. The design run's turn envelope keeps its existing, already-named rendering at `doctrine design show <SLICE> --format prompt`, and `--format`'s default moves from `prompt` to the document.
+
+`slice design` is NOT promoted to a group; the deprecated scaffold leaf still retires, as DEC-260 ruled. `doctrine inspect <ID> --knowledge <level>` keeps DEC-145's generic cross-kind case unchanged."""
+alternatives = ["Keep DEC-260's `slice design show` siting and carry the SPEC-013 deviation knowingly under a REV that reconciles the two-level clause against its existing violators — coherent", " and the minimal change", " but it leaves governance debt behind and keeps R6's temporary-verb ossification risk alive", " A `--design` document selector on `slice show` — DEC-260 rejected it and that rejection stands: it contradicts that verb's stated contract and grows into a mutually-exclusive flag set", " A new verb in the `design` group such as `design read` — DEC-260 rejected it and that rejection stands: a third read-ish name in the group whose naming is already the complaint", " Re-open the whole siting question at `inquiring` — rejected on cost; the alternative set is now complete and the fork is decidable on the evidence in hand"]
+rationale = """
+It is the only option that leaves no governance debt. `design show` is two levels, so SPEC-013's grammar clause is satisfied rather than deviated from, and no REV is needed to land this slice. F-1 dissolves rather than being carried.
+
+Three further findings dissolve with it. F-2 (no acyclic route from `slice::dispatch` to a handler under `commands/`) does not arise, because the handler joins the existing `design` group handlers in `src/commands/design.rs`, which is already reachable. F-8 (the read-only surface inheriting `Write("slice design")` in `src/commands/guard.rs` and being refused under `DOCTRINE_WORKER=1`) does not arise, because `SliceCommand::Design` is not promoted. R6 (a deliberately temporary verb that may ossify) does not arise, because this IS the destination IMP-393 and IMP-457 were both holding.
+
+The migration was priced rather than feared. DEC-260 took the cheap local answer against an unmeasured cost; measured, it is 14 references in tree. `.agents/skills/handover/SKILL.md` already passes `--format status` explicitly and is unaffected; `install/routing-process.md` carries one prose line; roughly four emitted strings name `design show --full`; and `design show`'s own default-output goldens move. That is small, and materially smaller than the multi-seam cost DEC-145 chose `inspect` to avoid.
+
+It also makes `show` mean the same thing here as everywhere else in the CLI, which is the convention IMP-393 filed against and the sense SPEC-013 gives the verb."""
+consequences = ["`design show`'s DEFAULT output changes — a live surface with SPEC-013 byte-exact goldens", " and the surface the managed design run is itself driven through. The goldens move with it and every caller relying on the bare-`show` default gets a different artefact", " SL-246 absorbs the verb rehome that IMP-393 and IMP-457 were carrying as separate work; the slice's scope grows accordingly and `slice-246.md` must say so", " IMP-457 is redundant against IMP-393 and should be reconciled into it or given a non-overlapping boundary; SL-246 already records `fulfils IMP-393 --degree partial`", " The `--format` enum gains a value for the document or the default is re-keyed; the run envelope's three existing renderings (`prompt`", " `json`", " `status`) are preserved unchanged under their current names", " IMP-457's planned rename of the envelope to `design state` is superseded by keeping it on `--format prompt`; whether `design state` is still wanted as an alias is IMP-393's call", " not this slice's"]
+decided_by = "david"
+decided_on = "2026-09-18"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = ["DEC-260"]   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-246"
