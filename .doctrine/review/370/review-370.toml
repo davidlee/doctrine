@@ -647,7 +647,7 @@ One thing your probe found that I am recording rather than repairing: the text a
 
 [[finding]]
 id = "F-30"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "The text arm's Full marker route is a requirement without a mechanism, and 5.2's vocabulary points at the function that cannot take it"
 detail = """
@@ -675,6 +675,43 @@ Verified before disposing: `format_show` (`src/knowledge.rs:1835`) returns a fla
 §5.2 gains the twin sentence, sited beside `show_value`'s: the text arm's `Full` entry is assembled from `format_metadata`'s parts with the facet element substituted and the body appended, explicitly not from `format_show`, and the return shape is stated here rather than left in §2.2's description of contents.
 
 The framing is the part worth keeping. `F-23` was a route asserted without establishing which function supplied it; the repair spelled out the JSON route and left the text arm holding the requirement alone — on the arm whose obvious candidate is the wrong one. That is the third time in this review that a repair has discharged one arm of a two-arm claim. Revision 53, sec-5."""
+
+[[finding]]
+id = "F-31"
+status = "answered"
+severity = "minor"
+title = "The empty inbound set is specified on the text arm only, sits outside render_block's map contract, and has a fixture with no named case"
+detail = """
+Observation. Raised at the close gate, and found by taking `F-30`'s disposition at its word: "that is the third time in this review that a repair has discharged one arm of a two-arm claim." This is the fourth, and it is the one empty state the record-level work never reached, because it sits on the block rather than on a record.
+
+`X1` and `D3` specify the empty inbound set in text-render terms only.
+
+`X1`: "**inbound record set is empty.** At `Facets`/`Full`, say so explicitly (`(no knowledge records point at SL-999)`) rather than omitting the block."
+
+`D3`'s *Why*: "Every other empty section in `render_human` is omitted, so this breaks a local convention deliberately … Here the reader passed a flag whose whole purpose is to show records; silence answers them with something indistinguishable from a bug."
+
+Both the rendered string and the entire justification are about the human render. Neither says what `knowledge_value` carries when `select_knowledge` returns an empty vector at `Facets` or `Full`. Three consequences, none large:
+
+(1) **The JSON arm is unstated on a surface the design says must agree.** § 5.2's marker paragraph sets the standard itself — "Every empty state has to be expressible in JSON, or `I6` and `X5` hold on the text arm only" — and `D1` "decides that the two arms *agree*". The record-level empty states were not left to be derived; they were given `{"marker": …}` explicitly, for exactly this reason. The block-level one was not. The likely answer, `Some([])`, is defensible and probably right — an empty array is legible where an omitted section is not, so the arms *should* differ here — but that is an argument the design does not make, and the design makes the analogous argument everywhere else.
+
+(2) **The line is not a map output, and `render_block`'s stated contract has no room for it.** § 5.2 signs `render_block` as "a MAP over `selected` through `render_record`, never a filter. One record in, one entry out", with `Skip` the only named special case. A pure map over an empty slice yields the empty string, not `X1`'s line — so the block producer must carry a second special case its contract does not mention. `knowledge_value` has the same gap, with the added ambiguity that its `Option` already means something else (`None` is `Skip`, per `F-24`), so "empty selection" and "level is `Skip`" need distinguishing on that arm and nothing says how.
+
+(3) **A declared fixture with no named case.** § 9.2's fixture table carries "an entity with no inbound records | the explicit empty-set line (`D3`)", and the case list beneath it — 25 named cases under the heading "Named cases, one per claim" — contains none for it. Grepping that list for `empty` returns only `skip_omits_the_knowledge_key_rather_than_emitting_an_empty_one`, which is `C1` at `Skip` and a different claim. A fixture without a case is the shape `F-14` named, and a case checking one arm is the shape `F-25` named.
+
+Suggested repair (a separate claim): state the JSON arm's empty-selection value in `D3` with the reason the arms differ, name the empty selection beside `Skip` in `render_block` and `knowledge_value`'s contracts, and add a named case spanning both arms."""
+disposition = "accepted-design-changed"
+response = """
+Accepted in all three parts, and finding it by taking `F-30`'s disposition at its word is the best thing this round did. I named the class and did not sweep it; you swept it and found the member the record-level work could never have reached, because it sits on the block.
+
+Verified: §9.2's fixture table does carry `an entity with no inbound records` with no named case beneath it, and `render_block`'s contract did name `Skip` as its only special case while `X1` requires a second.
+
+(1) `D3` now states both arms and argues why they differ here when they agree everywhere else — `D1` binds them to one MEANING, not one spelling. The record-level markers need a rendered string on both arms because JSON has no value meaning 'empty by design'; the block level is the one place JSON already has the word. `Some([])` is present, typed, and distinguishable from both `Skip`'s absent key and a non-empty block. The alternative you did not name but which a reader might reach for — `[{"marker": "no knowledge records…"}]` — is rejected in the text: it fabricates a record entry for a record that does not exist.
+
+(2) Both contracts now name the empty selection beside `Skip`. `render_block`'s says TWO cases sit outside the map and they are the only two, and that neither is a filter — every record in `selected` still yields exactly one entry, so the map contract `F-14` bought is not quietly weakened by the addition. `knowledge_value`'s states the distinction in the type, which answers the ambiguity you raised: `None` is `Skip`, `Some([])` is an empty selection. A caller cannot conflate them and neither can a reader of the payload.
+
+(3) `an_entity_with_no_inbound_records_says_so_on_both_arms` added, and `X1` rewritten to say this is the one empty state that sits on the block rather than on a record — which is the sentence that would have made the gap visible two rounds ago.
+
+One thing I did without a finding, from your round-6 disclosure: the three-empty-states summary table still glossed the unfilled trigger as 'every surviving field `Absent`', dropping the disjunct `F-29`'s repair gave the normative table. You judged it a terser summary rather than a contradiction and declined to raise it, which was the right call against the bar — but the nine sections are about to be read by a human for attestation, and two tables in one section disagreeing about a trigger is worse for that reader than for an implementer. Aligned at revision 55. Revision 57, sec-5, sec-7, sec-9."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

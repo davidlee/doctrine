@@ -677,7 +677,12 @@ pub(crate) fn record_value(
 
 /// The knowledge block: a MAP over `selected` through `render_record`, never a
 /// filter. One record in, one entry out.
-/// `Skip` returns the empty string without reading anything.
+///
+/// TWO cases sit outside the map, and they are the only two. `Skip` returns the
+/// empty string without reading anything. An EMPTY `selected` at `Facets` or
+/// `Full` returns `X1`'s explicit line rather than the map's empty string — the
+/// reader asked, so silence would read as a bug (`D3`). Neither is a filter:
+/// every record in `selected` still yields exactly one entry.
 pub(crate) fn render_block(
     root: &Path,
     selected: &[SelectedRecord],
@@ -691,6 +696,12 @@ pub(crate) fn render_block(
 /// re-test each call site has to remember. The text arm needs no equivalent:
 /// concatenating the empty string IS absence there, which is why its sibling
 /// returns a bare `String` and this one does not return a bare `Value`.
+///
+/// The two empties are therefore distinct IN THE TYPE, which is the point:
+/// `None` is `Skip` (no block was asked for), `Some([])` is an empty selection
+/// at `Facets` or `Full` (a block was asked for and nothing points here — `D3`,
+/// `X1`). A caller cannot conflate them, and neither can a reader of the
+/// payload.
 pub(crate) fn knowledge_value(
     root: &Path,
     selected: &[SelectedRecord],
@@ -1182,8 +1193,12 @@ with no design fails immediately and cheaply, before a corpus scan is paid for.
 **Edge cases.**
 
 - `X1` — **inbound record set is empty.** At `Facets`/`Full`, say so explicitly
-  (`(no knowledge records point at SL-999)`) rather than omitting the block. The
-  reader asked; silence would be indistinguishable from a bug.
+  rather than omitting the block — `(no knowledge records point at SL-999)` on
+  the text arm, `[]` on the JSON arm (`D3`). The reader asked; silence would be
+  indistinguishable from a bug. This is the one empty state that sits on the
+  BLOCK rather than on a record, which is why `render_block` and
+  `knowledge_value` each carry it as a named case beside `Skip` (§5.2) and the
+  three record-level markers do not reach it.
 - `X2` — **the slice has no `design.md`.** A clean error naming the repair —
   `SL-999: no design document (doctrine design start SL-999)` — not an empty
   document.
@@ -1370,7 +1385,7 @@ policing. Verbatim is total; parsed is not.
 
 **`D3` — an empty inbound set is stated, not omitted.** At `Facets` or `Full`,
 an entity with no inbound records renders `(no knowledge records point at
-SL-999)`.
+SL-999)` on the text arm and `[]` — present, and empty — on the JSON arm.
 
 *Why.* Every other empty section in `render_human` is omitted, so this breaks a
 local convention deliberately. The convention is right when the reader did not
@@ -1378,6 +1393,17 @@ ask — an absent `danglers:` section costs nothing. Here the reader passed a fl
 whose whole purpose is to show records; silence answers them with something
 indistinguishable from a bug. This is `P5` at the level of the block rather than
 the record.
+
+*And why the two arms differ here, when everywhere else they agree.* `D1` binds
+the arms to one *meaning*, not one spelling, and the record-level markers need a
+rendered string on both arms because JSON has no value that means "empty by
+design" — hence `{"marker": …}`. The block level is the one place where JSON
+already has the word: `[]` is present, typed, and distinguishable from both
+`Skip`'s absent key (`F-24`) and a non-empty block, so it says exactly what the
+text arm's sentence says and needs no sentence to say it. Rendering `[{"marker":
+"no knowledge records…"}]` would be worse than silence — it fabricates a record
+entry for a record that does not exist. The arms agree in meaning and differ in
+spelling, which is `D1` satisfied rather than `D1` excepted.
 
 **`D4` — the pointer line on each kind's `show` leaves this slice.** `DEC-145`
 had already excluded it ("not part of this decision"); the scope had picked it
@@ -1650,6 +1676,11 @@ Named cases, one per claim:
 - `skip_omits_the_knowledge_key_rather_than_emitting_an_empty_one` — `C1` on the
   JSON arm. `knowledge_value` returns `None` at `Skip` and the caller omits the
   key; both `"knowledge": null` and `"knowledge": []` are breaches.
+- `an_entity_with_no_inbound_records_says_so_on_both_arms` — `D3`, `X1`. The
+  declared fixture had no case: the text arm's line and the JSON arm's `[]`, and
+  the pair with the case above is what pins `Skip`'s absent key apart from an
+  empty selection's present-and-empty one. The block-level empty state is the one
+  the record-level markers cannot reach.
 - `a_pruned_record_is_named_on_stderr_and_the_block_renders_the_rest` — `I5`,
   `X7`, `STD-003`. The reachable half: the record never reaches `render_block`.
 - `json_and_table_carry_the_same_fields_at_the_same_level_for_every_kind` —
