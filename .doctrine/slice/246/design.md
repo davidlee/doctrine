@@ -856,8 +856,8 @@ must not share wording (`P5`):
 
 | state | rendered | decided by |
 |---|---|---|
-| author left the facet unfilled | `(no facet recorded — 6.7 KB of prose: doctrine knowledge show QUE-206)` | every surviving field `Absent` |
-| the kind has no facet by design | `(no facet by design — a concept rides its prose body)` | `facet_fields` returns `[]` |
+| author left the facet unfilled | `(no facet recorded — 6.7 KB of prose: doctrine knowledge show QUE-206)` | nothing survives the tier, or every field that does is `Absent` |
+| the kind has no facet by design | `(no facet by design — a concept rides its prose body)` | `facet_fields` returns `[]` **before** the tier filter |
 | the record could not be read | `(unreadable: record not found at …/record-140.toml)` | `read_record` failed |
 
 All three are composed by `render_record` / `record_value` (`D6`). The third
