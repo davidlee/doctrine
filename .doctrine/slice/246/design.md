@@ -262,3 +262,193 @@ directory rather than reading the repository's own `.doctrine/` tree, precisely
 because `inspect` reads only authored TOML: fixed bytes in, byte-exact bytes out.
 That existing choice is the one this design extends.
 
+<!-- doctrine:section sec-3 -->
+## 3. Forces & Constraints
+
+### 3.1 Governance that binds
+
+**`ADR-004` — relations are stored outbound-only; reciprocity is derived.** The
+inbound set is a reverse scan recomputed on every query, never a stored
+back-edge. `inspect_from` already works this way and this design inherits it:
+nothing here may cache a reciprocal edge, and the selection step reads the
+derivation rather than any stored field.
+
+**`ADR-001` — module layering, leaf ← engine ← command, no cycles.** Three
+placements are forced rather than chosen:
+
+- `RecordFacet` parsing and the field-order table stay owned by `knowledge`.
+  Moving either into the catalog scan would smear a kind's private schema across
+  the layer that is supposed to be kind-blind.
+- `relation_graph` may call down into `knowledge` (it does not today;
+  `knowledge` imports nothing from `relation_graph`, so the edge is acyclic),
+  but the reverse would be a cycle.
+- Composition of the *design document* with the record block sits at the
+  command layer, the only layer permitted to depend on both the slice's document
+  reader and the record renderer — the same rule that already forces `inspect`'s
+  actionability block to be appended by `commands/inspect.rs` rather than by
+  `relation_graph`.
+
+**`SPEC-013` — the CLI surface.** Two clauses bind, and they cut in different
+directions:
+
+- It owns the *shape*: the `<kind> <verb>` grammar, the byte-exact per-verb
+  goldens, the JSON envelope. Any flag this design adds, and every golden that
+  moves with it, is SPEC-013's business.
+- It explicitly does **not** own the content: *"The per-kind `show` content —
+  which facets render and how a kind reassembles its TOML and prose — belongs to
+  each kind's own component."* So the field tiers of `DEC-150` are
+  `knowledge`'s to decide, and the spec does not have to be amended to hold them.
+
+The spec describes a two-level subcommand tree, and `slice design show <SLICE>`
+is three levels. That is not a deviation: `doctrine slice selector
+add|note|list|rm|doctor` is already a three-level group under `slice`, so the
+grammar precedent exists and `DEC-260`'s siting matches it.
+
+**`SPEC-019` — the knowledge-record entity surface** specifies four record
+kinds. `EVD`, `HYP` and `CPT` are ungoverned (`ISS-316`). `DEC-150` handles that
+honestly rather than inventing governance: those three have so few fields that
+every one is a deciding field, so the honest subset is all of them, and for
+`CPT` it is none.
+
+**`SPEC-018`** fixes the inbound label vocabulary and the role dimension that
+`(label, role)` grouping keys on.
+
+**`STD-001` — no magic strings.** The level names, the tier annotation, and both
+empty-state markers are named constants with one definition each.
+
+**`STD-003` — no silent skip; a degraded read is disclosed.** This one reaches
+further than the inquiry did, and it is the reason for `X4` below. Selection
+yields a set of record ids and then reads them. A record that fails to read —
+absent file, unparseable TOML — must be **tolerated** (the other records still
+render) and **disclosed by name** (the reader is told which record and why). It
+may not be dropped from the output, absorbed into an empty string, or counted as
+"no content". Note the distinction this design must hold: a record that *cannot
+be read* and a record whose author left the facet *empty* are different facts
+and get different treatment — the first is STD-003's, the second is
+`DEC-149`'s.
+
+**`STD-002`** governs the naming; **`PRD-019`** and **`PRD-010`** are why the
+records exist at all.
+
+### 3.2 Constraints on the change
+
+- **`C1` — the default is byte-identical.** `skip` must reproduce today's bytes
+  exactly, on every verb this design touches, in both table and JSON. `DEC-146`
+  buys this by construction rather than by care: the level flag that asks for
+  content is the same flag that pays for it.
+- **`C2` — the behaviour-preservation gate.** `format_facet` and `format_metadata`
+  are shared machinery; the existing kind-`show` and `knowledge` suites are the
+  proof and must stay green **unchanged**. `SL-246` does not alter `knowledge
+  show`'s output — the concealing behaviour there belongs to `IMP-403`.
+- **`C3` — read-only.** Nothing on this path writes. That is worth stating
+  because the verb being repurposed, `slice design`, currently *writes*: it
+  delegates to `design materialise`. Retiring the leaf removes the write; the
+  group's `show` must not inherit it.
+- **`C4` — one renderer, one field-order table.** The levels cannot be allowed to
+  disagree about which fields exist or in what order, so they must be bounds on
+  one code path, not two implementations. This is the `Detail::{Normal, Full}`
+  precedent in `src/design_run/render/envelope.rs`, whose own comment states the
+  principle.
+- **`C5` — the corpus scan is not widened.** `ScannedEntity` gains no
+  `RecordFacet` (`DEC-146`).
+- **`C6` — the seam must extend, not be replaced.** `IMP-398` S5's transitive
+  knowledge view writes a second *selection* and reuses the renderer untouched
+  (`DEC-147`, objective 3). No depth parameter and no traversal abstraction
+  enters this slice.
+- **`C7` — `read_record` reads the `.md` unconditionally** and errors when it is
+  absent (`src/knowledge.rs:1647`). The `facets` level never renders prose, so it
+  either pays for a body it discards or the accessor grows a facet-only path.
+
+### 3.3 Forces in tension
+
+**`F1` — what the corpus scan already costs, versus what `DEC-146` assumed.**
+This is a correction the drafting stage found, and it changes an argument
+without changing the decision.
+
+`scan_entities` calls `outbound_for` per entity (`src/catalog/scan.rs:192`),
+which for a record prefix dispatches to `knowledge::relation_edges` (`:65`) →
+`read_record`. So **every corpus scan already reads, parses and validates all
+360 knowledge records — around 964 KB of prose bodies — and keeps only their
+relation edges.** `doctrine inspect SL-244` pays that before it prints anything,
+and completes in about 220 ms end to end.
+
+Two consequences. `DEC-146`'s stated cost — *"2 file reads per selected record…
+zero at the `skip` default"* — describes reads that are **not new**; the scan has
+already read those same records moments earlier and thrown the content away. And
+`DEC-146`'s rejection of the scan-carried arm rested on *"every corpus scan pays
+the parse, including `validate`, `survey`, the priority graph and `backlog
+show`, none of which want it"* — but they already pay it.
+
+The decision survives, on a repaired argument: what the scan-carried arm would
+add is not the parse but **retention** — holding 360 parsed records in memory for
+every consumer, to save a dozen re-reads that measurement puts deep in the noise.
+Per-id reads at the render layer remain right, and `C7`'s facet-only path becomes
+the more interesting half of the question, since it is the seam that would let
+`IMP-459` stop the scan reading a megabyte of prose it discards.
+
+**`F2` — honesty versus noise in the empty case.** Four of the specimen's fifteen
+records render nothing at the `facets` level, and a marker on each is the honest
+answer (`DEC-149`). But `CPT` is permanently in that state *by construction* —
+a concept has no facet fields because its prose body is the payload — so one
+marker for both cases would libel every concept in the corpus and train readers
+to ignore the marker. Two markers, and `STD-003` adds a third distinct state:
+the record that could not be read at all.
+
+**`F3` — cost versus completeness.** The `facets` level costs ~30% of `full` on
+the specimen, not the order of magnitude first assumed. A level that saves 70%
+has to be *right* about what it keeps; `DEC-150`'s criterion — what rules, and
+what would change whether the ruling still stands — is doing the work that the
+size argument alone cannot.
+
+**`F4` — generality now versus the closure later.** Every line of traversal
+abstraction written now for `IMP-398` S5 is speculative; every coupling to
+`RelationLabel` written now is a refactor S5 must undo. `DEC-147` resolves this
+at one point only: the caption is selection-supplied *text*, because at one hop
+it is an inbound label and at depth three it is a path.
+
+**`F5` — building on an information architecture known to be wrong.** The read
+this slice exists to deliver has to be sited around `design show` meaning the run
+envelope and `slice show` meaning the scope. `DEC-260` takes the cheap local
+answer and `IMP-457` carries the rehome. The tension is real and is being
+deliberately deferred, not resolved.
+
+<!-- doctrine:section sec-4 -->
+## 4. Guiding Principles
+
+Six principles, each with a concrete consequence in §5. They are the tie-breakers
+this design reaches for when two shapes both work.
+
+**P1 — Route to what exists before building.** The inbound derivation, the
+`(label, role)` grouping, the deterministic source ordering, the per-kind record
+render and its field-order table are all already written and already tested.
+Most of this slice is wiring, and the parts that look like new code should be
+suspected of being duplication first. The one genuinely new thing is a reader
+for a document that has never had one.
+
+**P2 — One code path, bounded; never two that could agree today.** The three
+levels are bounds on a single renderer over a single field-order table. Two
+implementations that currently produce consistent output are a defect waiting for
+the next field to be added to one of them.
+
+**P3 — The reader pays only for what they asked for.** `skip` is the default and
+is byte-identical to today's output. Every cost this design adds is behind a flag
+whose presence *is* the consent. This is what makes the byte-identical default a
+property of the structure rather than a promise someone has to keep.
+
+**P4 — Render for the corpus we intend, and state the gap.** Where a record's
+facet is unfilled, say so and move on. Do not fall back to prose, do not
+backfill, and do not silently omit. A renderer built around the corpus's current
+defects bakes them in and has to be undone when they are fixed; a renderer that
+marks them costs nothing once they are, because the marker simply stops firing.
+
+**P5 — Different facts get different words.** Three empty states arrive at the
+renderer and they are not the same thing: an author left the facet blank, the
+kind has no facet by design, or the record could not be read. Collapsing them
+into one message is what turns a marker into noise the reader learns to skip.
+
+**P6 — Seam for the next caller; abstract for none.** The selection/rendering
+split exists because a second and third caller are already known — the generic
+`inspect` case, the design read, and later the transitive closure. It goes
+exactly as far as making the renderer indifferent to how its input was selected,
+and no further. No depth parameter, no traversal trait, no label-keyed renderer.
+
