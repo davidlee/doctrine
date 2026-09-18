@@ -141,7 +141,7 @@ bound on the ledger. Round 3 has the same constraint until credits return.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 42) · 55b41b97c
+fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 45, runbook cleared) · 9aa1ab257
 
 ### Produced
 - `RV-370` — the design review ledger: round-1 bar + ten lines of attack,
@@ -154,8 +154,17 @@ fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 42) · 55b41b97c
 - `design.md` adopted at run revision 42, `materialise` byte-identical. Round 1
   moved eight of nine sections at r38; round 2 moved five — `sec-3`, `sec-5`,
   `sec-7`, `sec-8`, `sec-9`
-- `slice-246.md` scope reconciled to `DEC-261` and extended for round 2
-  (discharges `review.scope` for both rounds)
+- `slice-246.md` scope reconciled to `DEC-261` — in two passes. The first
+  (`876d86a40`) added the scope-addition prose and objective 5 but left
+  *Affected surface* untouched, where `src/commands/design.rs` still sat under
+  *Dropped by the inquiry*. `review.scope` was recorded here as discharged on
+  that pass; it was not. Rewritten at revision 43 as an orientation map over
+  § 5.6, and discharged then
+- design-target selectors re-pointed off `DEC-260`'s siting at revision 44 —
+  two removed, eleven added, including the four emitted-string sites located
+  in the doing. `selector doctor`: one unmatched, the § 5.6-new golden
+- the `reviewing` runbook is **cleared** — `review.scope`, `review.selectors`,
+  `review.passes` all attested
 - `IMP-457` closed `duplicate` of `IMP-393`, with the boundary written onto it
 - `IDE-054` — audit the CLI for format/content axis coupling (`F-9`'s declined
   principled split); `originates_from SL-246`
@@ -183,6 +192,17 @@ fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 42) · 55b41b97c
 - §3 `F1`'s corpus-scan claim verified independently: every scan reads, parses
   and validates all knowledge records and keeps only their edges — 362 records,
   988,841 bytes
+- **reconciling a scope to a decision means walking every section of it.** The
+  `DEC-261` reconciliation rewrote the prose the decision was about and left the
+  *Affected surface* list asserting the opposite — `src/commands/design.rs`
+  *dropped*. A scope's derived-feeling lists (affected surface, selectors) are
+  exactly where a decision goes stale silently, because nothing reads them until
+  planning. Candidate memory
+- **a runbook step is discharged by the machine, not by prose claiming it.**
+  The harvest asserted `review.scope` discharged "for both rounds"; the run had
+  never taken the discharge, and re-facing it is what surfaced the stale list.
+  The two failures are the same failure from opposite ends — the machine was
+  right and the note was wrong. Candidate memory
 - round 2's own negative result: the reviewer read and found sound §2.6, §3.1's
   six three-level groups and acyclic claim, `F1`, `FacetValue` sufficiency, the
   one-table feasibility, `Full`'s field list, the prose-size hint, `R5`, and
