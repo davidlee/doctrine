@@ -56,6 +56,11 @@ intent = "design-target"
 note = "Design-target set committed by design.md §5.6"
 
 [[relation]]
+label = "fulfils"
+degree = "partial"
+target = "IMP-393"
+
+[[relation]]
 label = "governed_by"
 target = "ADR-004"
 
