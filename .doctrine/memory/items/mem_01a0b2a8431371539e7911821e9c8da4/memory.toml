@@ -1,0 +1,51 @@
+memory_uid = "mem_01a0b2a8431371539e7911821e9c8da4"
+memory_key = "mem.pattern.design.counts-state-their-population"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "A measured count in a design must state its population"
+summary = "A count asserted as measured must name the population it counted over, or be restated as an estimate — and code sweeps reach neither skill prose nor the memory corpus"
+created = "2026-09-18"
+updated = "2026-09-18"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["design", "review", "authoring", "migration"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "9d58b415b3d57c08cb54793247e676eca0f09842"
+ref_name = "refs/heads/edge"
+checkout_state_id = "019143db55fe872fa2d1200fe6659391396a552871802bb332509cb9ed5d9318"
+base_commit = "78bd623d46db3f1edcd1e3c28850ab6f26bb0ff0"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-370"
+
+[[source]]
+kind = "slice"
+ref = "SL-246"
+

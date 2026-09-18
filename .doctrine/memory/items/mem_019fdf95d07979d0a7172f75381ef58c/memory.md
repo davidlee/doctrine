@@ -80,3 +80,29 @@ schema, required in practice.
 
 Also worked on SL-246 (design run `dr-019fd1ab`, revision 37→38): eight of nine
 sections moved in one adopt cycle while integrating RV-370's findings.
+
+## Footgun: computing the section body by splitting on lines
+
+The rule is a **raw byte slice**, and a line-splitting implementation silently
+gets it wrong in a way that looks almost right.
+
+Splitting the file into lines, joining `lines[after_marker:next_marker]`, and
+stripping one trailing newline drops **one newline too few** for every section
+but the last. A non-final section's slice runs up to the start of the next
+marker line, so it ends with the blank separator line: the body legitimately
+*keeps* a trailing newline after the rule removes one. The final section's slice
+ends at EOF with a single newline, so the same buggy code produces the right
+answer there.
+
+The signature of the bug is therefore diagnostic and worth recognising on
+sight: **the last section matches, every earlier one does not, and the
+whole-file hash matches.** That combination means the extraction rule, not the
+file.
+
+Do it on the raw text instead — find marker lines with
+`^<!-- doctrine:section (sec-\d+) -->\n` under MULTILINE, slice from the match
+end to the next match start (or EOF), then remove exactly one trailing newline.
+
+This is why the positive control above is not optional ceremony: it cost one
+cheap run to catch, and an unverified `adopt_authored` would have written eight
+wrong section fingerprints into the run.
