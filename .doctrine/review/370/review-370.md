@@ -174,3 +174,72 @@ Three things to rule on:
 The design **must stand alone**. It may not require the review chronology, the
 design run's state, or locally-invented terminology to be understood or
 implemented. A place where it does is itself a finding.
+
+---
+
+## Round 2 bar — added 2026-09-18, after integration
+
+Round 1 raised `F-1`..`F-8`; all eight are disposed and the baton is back with
+the raiser. The design was then rewritten: eight of its nine sections moved
+(`sec-4` alone is untouched), adopted at run revision 38.
+
+### Two jobs, and they are different
+
+**1. Adjudicate the eight dispositions.** Each finding is `answered`. Verify it
+(the disposition is accepted, terminal) or contest it (hands it back). Three
+dispositions make claims worth testing rather than accepting:
+
+- `F-1`, `F-2`, `F-8` are disposed `dissolved-by-dec-261` — the defect is gone
+  because its premise is gone, not because it was repaired. Test the premise:
+  is `doctrine design show <SLICE>` actually two levels and actually conformant;
+  does the handler now sit somewhere `ADR-001` permits; is `guard.rs`'s
+  `SliceCommand::Design` row genuinely deleted by the leaf retirement rather
+  than needing a nested classification.
+- `F-3`'s disposition **corrects your finding** — it says `run_inspect` already
+  writes scan diagnostics to stderr, so the repair is deleting an unreachable
+  second disclosure rather than building a first one. Check that correction. If
+  it is wrong, contest.
+- `F-1`'s disposition **rejects part of your prescription** — revising SPEC-013
+  before implementation inverts this project's mechanism (a `REV` is minted
+  after design and applied at reconcile). That is the user's ruling, not a
+  negotiating position; contest the *reasoning* if it is wrong, not the ruling.
+
+**2. Attack the new material, which has been read by nobody.** This is the
+larger job. Round 1's bar and lines of attack still apply to it. The genuinely
+new text:
+
+- **§2.6** — wholly new. The claim that `design show --format [default: prompt]`
+  makes reclaiming `show` a one-default move.
+- **§3.1** — rewritten. Now claims SL-246 *conforms* to SPEC-013 and needs no
+  governance to move. Also asserts six named three-level groups exist under
+  numbered entity kinds; verify the list.
+- **§3.3 `F5`** — rewritten, and it asserts a measured migration cost of 14
+  references with a specific breakdown. Verify the count and the breakdown.
+- **§5.2** — the `facet_fields` structured projection is new design, not a
+  repair of old text. Attack it as unreviewed: does it actually let `C2` hold
+  (both existing renders byte-identical) while making the tier filter reach
+  both arms? Is `FacetValue` sufficient for every kind's fields? Does the JSON
+  `Full` entry as now specified actually match `show_json`'s payload?
+- **§5.2 / `I5` / `X7` / §9.2** — the split of the disclosure population into
+  scan-pruned (stderr) and race (in-block). Is the split exhaustive? Is the
+  race case actually reachable in a test without fabricating it?
+- **§5.6** — rewritten table plus three notes. Is the table now complete?
+- **§6** — `OQ-3` closed and moved to `D5`; `OQ-1` and `OQ-2` re-argued.
+- **§7.2 `D5`** — new decision, taken at review, never adversarially read.
+- **§8 `R6`** — wholly replaced. The old ossification risk is gone; the new
+  migration risk is unreviewed.
+- **§9.2** — six new named cases and three new fixtures.
+
+### Bar
+
+Anything real, any severity — the new material is first-pass, not late-round.
+But hold the round-1 admissibility rules: cite what you attack, separate
+observation from prescription, and do not manufacture findings. **Raising
+nothing on the new material, while verifying or contesting the eight, is a
+legitimate and complete outcome.**
+
+### Out of scope, unchanged
+
+Corpus hygiene (`IMP-403`), the `SPEC-019` record-kind gap (`ISS-316`), and
+implementation-level code review — there is still no code. `IMP-457` is closed
+as a duplicate of `IMP-393`; do not re-raise the overlap.
