@@ -34,6 +34,12 @@ include = [
   "/LICENSE-MIT",
 ]
 
+# compile time haxx
+[profile.dev]
+opt-level = 1
+[profile.dev.package."*"]
+opt-level = 3
+
 # cargo-binstall: fetch the prebuilt release asset instead of compiling (SL-174).
 # Asset names are the §5.2 contract shared with install.sh + release.yml — change
 # all three together (R2). `{ target }` is the rustc triple, matching the
