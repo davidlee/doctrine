@@ -48,10 +48,13 @@ costs **~30% of `full`** (31.8 KB vs 107 KB across the fifteen records) — a re
 saving, but not the order of magnitude first assumed; see `research/research.md`
 § *The specimen, re-measured*.
 
-**A pointer from where the question is asked.** Under `DEC-145` the renderer
-lives on one seam, which leaves discoverability unsolved: an agent asks this
-question at `<kind> show`. Each kind's `show` therefore gains a one-line pointer
-naming the inbound record count and the command — never the renderer itself.
+**Not the pointer line.** `DEC-145` leaves discoverability unsolved — an agent
+asks this question at `<kind> show` — and names a one-line pointer there as "the
+separate, cheap answer; it is not part of this decision." Drafting confirmed it
+is separate and found it is not cheap: it touches six `show` renderers, moves
+every one of their byte-exact goldens, and unlike this slice's levels it is
+unconditional, so it changes default output everywhere. Returned to `IMP-398`
+with the finding.
 
 **Objectives**
 

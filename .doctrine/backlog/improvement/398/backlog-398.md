@@ -159,9 +159,38 @@ knowledge records in relation to the entities they annotate, across all entity
 kinds that carry knowledge relationships. The *composed content read* half has
 left this card for `SL-246`.
 
+## The pointer line, returned from SL-246
+
+`DEC-145` sited the composed read on `doctrine inspect` and said in its own
+consequences that discoverability is *not* solved by that choice — an agent asks
+the question at `<kind> show` — and that a pointer line on each kind's `show` is
+"the separate, cheap answer; it is not part of this decision."
+
+`SL-246` briefly carried the pointer in scope and then put it back here, because
+the cheapness does not survive contact:
+
+- It touches every kind's `show` renderer — `governance` (ADR/POL/STD/RFC),
+  `spec` (PRD/SPEC), `slice`, `backlog`, `revision` — and moves every one of
+  their `SPEC-013` byte-exact goldens. That is the multi-seam cost `DEC-145`
+  chose `inspect` to avoid, arriving by the back door.
+- It is unconditional. `SL-246`'s levels are byte-identical by default because
+  the flag that asks for content is the flag that pays for it; a pointer line
+  has no such flag and changes the default output of every kind.
+
+What it is **not** blocked by, and what `SL-246` checked: the inbound count is
+not too expensive for a per-entity read. Those `show` paths already do
+corpus-scale work — see `IMP-460`, where `adr show` measures *slower* than
+`inspect`. Cost is not the objection; unconditional surface change across six
+renderers is.
+
+Worth doing, behind an opt-in or as part of a deliberate pass over every kind's
+`show`. Not worth smuggling into a slice about something else.
+
 ## Related
 
-- `SL-246`: the sliced half — entity reads carry their knowledge records
+- `SL-246`: the sliced half — entity reads carry their knowledge records; also
+  where the pointer line was scoped and descoped, with `DEC-260` on siting
+- `IMP-460`: why the count is affordable — those `show` paths already scan
 - `ISS-306`: `knowledge show/inspect` render no inbound reciprocity — same defect
   as **B**, scoped one entity-kind narrower; fix together
 - `IDE-009`: knowledge lint verb — now also holds the prose-cited-but-unlinked

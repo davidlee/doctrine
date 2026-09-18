@@ -772,3 +772,315 @@ because the deprecated leaf had to forward through `design materialise`, which
 removes the forward, so `SliceCommand::Design` routes through `slice::dispatch`
 like every other slice verb and a documented `ADR-001` workaround goes with it.
 
+<!-- doctrine:section sec-6 -->
+## 6. Open Questions & Unknowns
+
+The inquiry's six questions are closed — `DEC-145` through `DEC-151`, with
+`DEC-260` added in drafting. Three questions remain, none of them blocking, and
+each has a recommendation rather than a shrug.
+
+**`OQ-1` — should the design read disclose that `design.md` is behind its run?**
+
+A managed design run holds sections and a materialisation watermark; the
+document on disk is a render of them. The two can diverge — a section declared
+and not yet materialised, or a hand edit that moved the document out from under
+the run. A reader given the stale document is told nothing.
+
+Disclosing it means `commands/slice_design` reads design-run state, which is a
+new dependency for a case that is rare and self-correcting (the next
+`materialise` clears it).
+
+*Recommendation: disclose.* One line above the document — `note: design.md is
+behind its run (revision N); doctrine design materialise SL-244` — costs a
+cheap state read and nothing else, and the whole value of the managed run is
+that the document reflects it. Silently serving a stale document is the failure
+mode the reader cannot detect, which is the family `STD-003` exists for even
+though it does not literally cover this case. Left open because it is the one
+place this design would reach into the run, and that is worth a second opinion.
+
+**`OQ-2` — do the other kinds eventually want the level on their own `show`?**
+
+For `ADR`, `SPEC`, `PRD` and `RFC`, `show` already renders the document — so
+`adr show ADR-004 --knowledge facets` would be the natural composed read for
+them, exactly as `slice design show` is for a slice. `DEC-145` rejected the
+per-kind arm on cost, and nothing in that reasoning has changed; but `DEC-260`'s
+observation that `show` *is* the document-render verb makes the per-kind arm
+the more coherent long-term shape rather than merely a more expensive one.
+
+*Recommendation: not now, and not never.* `inspect --knowledge` serves those
+kinds correctly today. Revisit when `IMP-457`'s rehome lands, since that work is
+already opening every `show` surface.
+
+**`OQ-3` — is `full` distinguishable enough from `knowledge show`?**
+
+`Full` renders a complete record; `format_show` already does exactly that. If
+the composed `full` output is byte-for-byte what `knowledge show` produces per
+record, then `full` is a convenience — fifteen commands collapsed into one —
+rather than a distinct level, and that is fine. But it should be a deliberate
+answer, because if it *diverges* there are two full-record renders to keep in
+step, which is the drift `C4` exists to prevent.
+
+*Recommendation: make `Full` delegate to the same render `knowledge show` uses,
+with only the caption and the `Marked` empty policy differing.* Confirm during
+implementation; it is a code-reading question, not a design fork.
+
+**Not open, and recorded so they are not reopened by accident.** The JSON arm's
+shape (§5.2), reading the document verbatim rather than parsing it (`A2`), and
+the empty-set message (`X1`) were all settled in drafting — see §7.2.
+
+<!-- doctrine:section sec-7 -->
+## 7. Decisions, Rationale & Alternatives
+
+### 7.1 Accepted records this design implements
+
+The inquiry's rulings, each carried by a decision record. The records are
+normative; these lines are a map, not a restatement.
+
+| record | ruling |
+|---|---|
+| `DEC-145` | The composed knowledge render rides `doctrine inspect`, not a flag on five `show` verbs and not a new verb. |
+| `DEC-146` | Record content is read per-id at the render layer; the corpus scan gains no `RecordFacet`. |
+| `DEC-147` | Selection is split from rendering; a record's caption is selection-supplied text, not a `RelationLabel`. |
+| `DEC-148` | Selection filters on the source's kind (`kinds::is_record`), not on a relation-label allow-list. |
+| `DEC-149` | An unfilled facet is marked, never papered over; the renderer is built for a healthy corpus. |
+| `DEC-150` | The `facets` level carries what rules, not the argument; tiers annotate the existing per-kind field match. |
+| `DEC-151` | Synthetic-corpus goldens pin the mechanics; the `SL-244` specimen claim is verified by agent. |
+| `DEC-260` | The design-document read is a second caller, sited at `slice design show`; the deprecated leaf retires. |
+
+### 7.2 Decisions this drafting stage takes
+
+Four, none of which was an inquiry node. Each is settled here rather than
+deferred, and named so §6 is not confused with them.
+
+**`D1` — the JSON arm carries the level structurally, and agrees with the
+table.** Each record is an object — `{ reference, caption, facet | null,
+marker?, body? }` — tier-filtered at `Facets` exactly as the table is, rather
+than a blob of rendered text.
+
+*Why.* The alternative that recommends itself is to let JSON emit everything and
+leave filtering to the caller, which is what `facet_json` does today: it emits
+every field with absent ones as `null`, while `format_facet` on the same record
+emits nothing at all. That divergence is precisely the defect `DEC-149` had to
+work around, and reproducing it in a new surface would be choosing the bug. One
+level, two renderings, same content.
+
+**`D2` — the design document renders verbatim, markers and all.**
+`design_run::document::parse` is available and would strip the
+`<!-- doctrine:section sec-N -->` markers, giving cleaner output.
+
+*Why not.* That parser can refuse seven distinct ways on a hand-edited file.
+Handing a reader a parse refusal instead of their document is a worse failure
+than showing them an HTML comment that most renderers hide anyway, and it would
+make a read path fail on input the authoring path is already responsible for
+policing. Verbatim is total; parsed is not.
+
+**`D3` — an empty inbound set is stated, not omitted.** At `Facets` or `Full`,
+an entity with no inbound records renders `(no knowledge records point at
+SL-999)`.
+
+*Why.* Every other empty section in `render_human` is omitted, so this breaks a
+local convention deliberately. The convention is right when the reader did not
+ask — an absent `danglers:` section costs nothing. Here the reader passed a flag
+whose whole purpose is to show records; silence answers them with something
+indistinguishable from a bug. This is `P5` at the level of the block rather than
+the record.
+
+**`D4` — the pointer line on each kind's `show` leaves this slice.** `DEC-145`
+had already excluded it ("not part of this decision"); the scope had picked it
+back up, and drafting put it down again.
+
+*Why.* It is unconditional, so unlike every other output change here it cannot
+hide behind a level flag: it changes the default output of six `show`
+renderers and moves all of their `SPEC-013` goldens. That is the multi-seam cost
+`DEC-145` chose `inspect` to avoid, arriving by the back door. Notably *not* the
+reason: expense. Checking that assumption is what turned up `IMP-460` — those
+`show` paths already load the comparison pipeline twice, and `adr show`
+measures slower than `inspect` does with a full corpus scan. The count is
+affordable. Returned to `IMP-398` with both findings.
+
+### 7.3 Alternatives rejected at design, with their grounds
+
+- **Widen `ScannedEntity` with a `RecordFacet`.** Rejected by `DEC-146`, and the
+  rejection's *argument* is repaired in §3 `F1`: every consumer already pays the
+  parse, so what the arm would add is retention, not parsing. The conclusion
+  survives; the reasoning printed on the record does not, and §3 says so rather
+  than quietly agreeing with it.
+- **Put the level on `--transitive` now.** Rejected by `DEC-147`: it is the
+  explicit non-goal, `Shapes` legally targets record kinds so the
+  knowledge-to-knowledge halting rule is undecided, and `TransitiveView` would
+  need reconciling. That is building `IMP-398` S5, not seaming for it.
+- **A `--knowledge-labels` allow-list.** Rejected by `DEC-148`. It can be added
+  on top later; it cannot be subtracted.
+- **Fall back to prose when the facet is empty.** Rejected by `DEC-149`: the
+  level's cost becomes unbounded — `QUE-206` alone is 6.7 KB, most of the
+  measured budget for all fifteen records — and it launders the defect, since
+  the reader can no longer tell a record carrying a ruling from one that does
+  not.
+- **A per-kind field-list constant beside `format_facet`.** What `STD-001` would
+  suggest, rejected by `DEC-150`: it would sit next to the match that already
+  carries the field order, and a field added to one and not the other would
+  render in `show` and vanish from the composed read.
+- **A live-corpus invariant test.** Rejected by `DEC-151` on inspection rather
+  than availability; see §9.5.
+- **A `--design` selector on `slice show`.** Rejected by `DEC-260`: it
+  contradicts that verb's stated contract and becomes a mutually-exclusive flag
+  set the moment a second document wants a reader.
+
+<!-- doctrine:section sec-8 -->
+## 8. Risks & Mitigations
+
+**`R1` — the facet tier is routinely empty, and the level shows it.** Measured
+in the research round: decisions 24% populated, questions 10%, assumptions 37%,
+evidence 58%, constraints 60%. Population is all-or-nothing — every decision
+carrying one textual field carries all of them — so the question is never
+*which* fields but *whether the record has a facet at all*.
+
+*Mitigated* by `DEC-149`: the gap is marked, so the reader learns something true
+rather than nothing. *Residual, and it is real:* on the acceptance specimen four
+of fifteen records render a marker instead of content. A reader could reasonably
+conclude the feature does not work. The marker's wording carries that weight —
+it must read as *this record has no ruling recorded*, not as *the renderer found
+nothing*. `IMP-403` is the corpus-side fix and is not this slice's.
+
+**`R2` — inbound noise swamps the signal.** `SL-244` carries 28 inbound edges,
+11 of them `references(originates_from)` from backlog items.
+
+*Mitigated* by `DEC-148`: filtering on the source's kind excludes all 11,
+because a backlog item is not a knowledge record. *Residual:* low. The filter is
+a kind-membership test, not a curated list, so it cannot drift out of step with
+the relation vocabulary.
+
+**`R3` — the level is not worth its price.** `facets` costs ~30% of `full`, not
+the order of magnitude first assumed.
+
+*Mitigated* by `DEC-150`'s criterion — what rules, not the argument — which is
+what makes the 70% saving land on the argument fields rather than on anything
+load-bearing. *Residual:* a judgement call, and `DEC-151` routes it to a
+by-agent verification rather than pretending a test can settle it.
+
+**`R4` — the byte-identical default is a claim, and claims rot.** `C1` is
+structural at `Skip`, but only the goldens prove it stayed structural.
+
+*Mitigated:* the `Skip`-level goldens are part of `VT`, and `C2` keeps the
+existing `knowledge` and kind-`show` suites green **unchanged** — a change there
+is the alarm.
+
+**`R5` — retiring `slice design <ID>` breaks anyone scripting it.**
+
+*Mitigated:* it is already deprecated and already prints a warning naming its
+replacement, and the replacement — `design start`, `design materialise` — is
+what the shim has been forwarding to. The removal completes a deprecation rather
+than starting one. *Residual:* accepted.
+
+**`R6` — the verb is deliberately temporary and may ossify.** `DEC-260` sites
+the read at `slice design show` only because `design show` is occupied by the
+run envelope; `IMP-457` plans to free it, after which this verb should collapse
+into `design show`.
+
+*Mitigated:* the intent is recorded on `IMP-457` with the collapse named, and
+§1 and §3 `F5` both say plainly that the siting is a workaround. *Residual:*
+recorded intent is weaker than a deadline. If `IMP-457` never runs, doctrine
+keeps a verb whose only justification is a defect elsewhere.
+
+**`R7` — the two callers diverge.** The whole point of one renderer is that
+`inspect` and the design read cannot disagree about what a record looks like.
+Nothing structural stops a future caller from formatting its own block.
+
+*Mitigated:* `render_block` is the only public path to a rendered record set,
+and `SelectedRecord` is the only way in. *Residual:* low, and `IMP-398` S5 is
+the next caller — it should be reviewed against this invariant, not merely for
+correctness.
+
+<!-- doctrine:section sec-9 -->
+## 9. Quality Engineering & Validation
+
+### 9.1 The gate
+
+`doctrine check gate` — clippy at zero warnings plus the named-package test run
+— before every commit. The behaviour-preservation gate (`C2`) is the sharper
+instrument: `tests/e2e_knowledge_cli_golden.rs` and every kind's `show` suite
+must stay green **unchanged**. A diff there is not a golden to update; it is the
+alarm that `Skip` stopped being byte-identical.
+
+### 9.2 By test (`VT`)
+
+Synthetic-corpus goldens, seeded in a temp dir the way
+`tests/e2e_inspect_golden.rs` already does — fixed bytes in, byte-exact bytes
+out (`DEC-151`).
+
+The fixture corpus needs one of each interesting shape:
+
+| fixture | proves |
+|---|---|
+| a filled `DEC` | tier filtering — `context`/`choice`/`rationale` at `Facets`, `alternatives`/`consequences` appearing only at `Full` |
+| an unfilled `DEC` | `DEC-149`'s unfilled marker, with the prose-size hint |
+| a `CPT` | the by-design marker, distinct wording, at every level |
+| a record reachable under two inbound labels | dedup — one entry, first caption wins (`I3`) |
+| a backlog item and a review pointing inbound | source-kind selection excludes both (`DEC-148`) |
+| a record whose `.toml` is absent or malformed | `STD-003` disclosure by name; the other records still render (`I5`) |
+| an entity with no inbound records | the explicit empty-set line (`D3`) |
+| a slice with no `design.md` | the clean error naming `design start` (`X2`) |
+
+Named cases, one per claim:
+
+- `skip_is_byte_identical_to_the_prior_surface` — table and JSON, both verbs.
+- `facets_carries_deciding_fields_only`
+- `full_carries_every_field_and_the_prose_body`
+- `facets_fields_are_a_prefix_subset_of_full_in_the_same_order` — `I2`.
+- `a_record_reached_twice_renders_once_under_the_first_caption` — `I3`.
+- `selection_excludes_non_record_sources` — `DEC-148`.
+- `an_unfilled_facet_and_a_concept_render_different_markers` — `I6`.
+- `an_unreadable_record_is_named_and_the_block_continues` — `I5`, `STD-003`.
+- `json_and_table_carry_the_same_records_at_the_same_level` — `D1`.
+- `slice_design_show_renders_the_document_then_the_block`
+- `slice_design_show_on_a_slice_without_a_design_errors_cleanly` — `X2`.
+- `output_is_permutation_invariant_across_scan_order` — `I4`.
+
+### 9.3 By agent (`VA`)
+
+The acceptance claim, which is a judgement and is verified as one (`DEC-151`).
+
+An agent runs `doctrine slice design show SL-244 --knowledge facets` against the
+real corpus at audit and attests that the rulings surfaced and the cost was
+acceptable. The attestation **must record enough to be re-derived**:
+
+- the record ids surfaced, and under which captions;
+- the ids excluded, and why they were excluded;
+- the rendered byte count at each of the three levels.
+
+`SL-244`'s authored corpus is committed, so the evidence is reconstructible in
+principle — but only if the attestation names what it saw. "Looked fine" is the
+accidental default and does not discharge this.
+
+### 9.4 By human (`VH`)
+
+One question, and it is the one the feature lives or dies on: *reading a design
+this way, do you reach for it again?* `R3` says a 30% saving has to be right
+about what it keeps, and no test can tell you whether it is.
+
+### 9.5 What is deliberately not verified here
+
+**A live-corpus invariant test** asserting that `facets` output is a subsequence
+of `full` and that `skip` is byte-identical to today's. Declined by `DEC-151`
+on inspection, not on unavailability — the plumbing exists, and
+`tests/e2e_relation_migration_storage.rs` reads the committed `.doctrine/`
+directly as precedent.
+
+Two reasons it still loses. Half of it degenerates into the arm already
+rejected: "`skip` is byte-identical to today's" needs a stored baseline of
+today's output, which *is* a live-corpus golden. And "`facets` is a subsequence
+of `full`" holds by construction under `C4`'s single field-order table with a
+tier filter, so the test re-proves a structural guarantee and catches only a
+refactor that abandons the design — which the fixture goldens catch anyway.
+
+The concrete brittleness avoided: a line-wise subsequence assertion over the
+whole corpus goes red the day someone writes a multi-line TOML string into a
+facet. A corpus edit reddening the build is a worse outcome than the defect the
+test was watching for.
+
+**`knowledge show`'s concealing behaviour** is not fixed here. `format_facet`
+gains the policy inputs; `knowledge show` keeps passing `(all tiers, Silent)`
+and its output does not move. The fix belongs to `IMP-403`, and this design's
+contribution is that it becomes a policy flip at one call site rather than a
+rewrite.
+
