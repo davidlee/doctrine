@@ -113,8 +113,10 @@ authoritative touch-set, and the two are not duplicates of each other.
   `render_from` (`:760`): the inbound derivation, and where selection splits from
   rendering (`DEC-147`).
 - `src/knowledge.rs` — the per-id record accessor (sibling of `relation_edges`),
-  the level's block renderer, and the tier / empty-policy inputs that
-  `format_facet` **and** `facet_json` both take (`DEC-149`, `DEC-150`).
+  the per-record and block renderers, and the tier filter that `format_facet`
+  **and** `facet_json` both take (`DEC-149`, `DEC-150`). Neither gains an
+  empty-state policy: all three markers compose one layer up, in the per-record
+  producers (`design.md` §5.2, `D6`).
 - `src/commands/inspect.rs` — the verbosity level on `doctrine inspect`.
 
 **The design read** — a scope addition taken at review (`DEC-261`, superseding

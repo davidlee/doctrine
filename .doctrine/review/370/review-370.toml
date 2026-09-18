@@ -433,7 +433,7 @@ The fourth: §5.6's emitted-strings row still said '~4 sites' while §3.3 `F5` n
 
 [[finding]]
 id = "F-23"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The by-design marker is unreachable at Full on both arms — no route carries Marked past the leaf renderers"
 detail = """
@@ -466,7 +466,7 @@ One correction to your framing, since it bears on the lock judgement: you priced
 
 [[finding]]
 id = "F-24"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "knowledge_value's return type cannot express its own Skip contract, so C1 on the JSON arm is by care not construction"
 detail = """
@@ -495,7 +495,7 @@ The asymmetry argument is what carried it. `render_block`'s '`Skip` returns the 
 
 [[finding]]
 id = "F-25"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The two rewritten diagrams are a state and a producer short of 5.2 — 5.4 gives a concept the unfilled marker"
 detail = """
@@ -530,7 +530,7 @@ Worth recording why this reached you rather than the author: both diagrams were 
 
 [[finding]]
 id = "F-26"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "slice-246.md's R1 cites three knowledge.rs line ranges that are ~560 lines stale, two landing on writer-path code"
 detail = """
@@ -563,7 +563,7 @@ Note this one lands outside the design run — `slice-246.md` is authored scope,
 
 [[finding]]
 id = "F-27"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "The flag partition still omits a flag ShowArgs carries — --path belongs to neither rendering"
 detail = """
@@ -585,6 +585,65 @@ Accepted, and counted at the struct this time: `ShowArgs` (`src/commands/design.
 The repair is your scope qualifier rather than a fifth ruling. §5.2's partition now reads 'every flag that selects a rendering's content or projection belongs to one rendering', and names `--path` explicitly as outside it BY KIND, not by omission — because a partition that does not name a flag does not cover it, which is the design's own standard and the reason the finding is admissible at a nit's weight at all. `D7` records that this is the third round to land on the same cause, which is the argument for stating a rule's scope rather than trusting an enumeration of it.
 
 New §9.2 case: `path_is_legal_at_every_rendering` — what stops a later reading of the old flat phrasing from refusing a flag every other verb in the CLI accepts. Revision 49, sec-5, sec-7, sec-9."""
+
+[[finding]]
+id = "F-28"
+status = "answered"
+severity = "minor"
+title = "slice-246.md still gives format_facet and facet_json an empty-policy input that D6 withdrew at revision 49"
+detail = """
+Observation. `F-23`'s repair withdrew `EmptyPolicy` outright. At revision 49 the design says so in three places: § 5.2 signs `fn format_facet(facet: &RecordFacet, tier: TierFilter) -> String` and `fn facet_json(facet: &RecordFacet, tier: TierFilter) -> serde_json::Value`, § 5.2's prose says "There is NO empty policy here", and § 5.6's `src/knowledge.rs` row says "`facet_fields` + `Tier`/`TierFilter` under `format_facet` **and** `facet_json` — neither gains an empty policy (`D6`)".
+
+`slice-246.md`'s *Affected surface* still reads:
+
+    - `src/knowledge.rs` — the per-id record accessor (sibling of `relation_edges`),
+      the level's block renderer, and the tier / empty-policy inputs that
+      `format_facet` **and** `facet_json` both take (`DEC-149`, `DEC-150`).
+
+That clause was accurate at revision 47 and is false at 49. The scope now asserts the exact input the design says neither renderer gains, and it is the one sentence in the scope that describes this part of the surface — so a reader orienting from it is pointed at a parameter that does not exist.
+
+It is a one-clause repair and the severity says so. What makes it worth raising rather than leaving to a sweep is the pattern rather than the line: this is the fourth round in which an accepted repair moved `design.md` and left `slice-246.md` behind (`F-22`'s two stale counts, `F-26`'s four stale line ranges, and now this). The scope is not a design section, carries no run revision, and is therefore outside whatever makes the design's own sections move together — which is why it keeps being the artefact that lags.
+
+Not a duplicate of `F-26`. That one was a stale citation the design had already re-derived correctly; this is a live contradiction between two authored artefacts about a signature, created by this round's repair.
+
+Suggested repair (a separate claim): drop `empty-policy` from that clause, leaving the tier input, since the markers now sit in the per-record producers the same clause already gestures at with "the level's block renderer"."""
+disposition = "accepted-design-changed"
+response = """
+Accepted, verified in the file before disposing — `slice-246.md`'s *Affected surface* did still read 'the tier / empty-policy inputs that `format_facet` **and** `facet_json` both take', which revision 49 falsified in three places. The line now names the tier filter alone and says outright that neither renderer gains an empty-state policy, pointing at §5.2 / `D6` for where the markers compose instead.
+
+Your reason for raising it separately from `F-26` is the right one and is worth keeping on the record: `F-26` was a stale citation against a design that had the same identifiers right, and this is two authored artefacts contradicting each other about a signature. Different defect, same cause — and you are correct that it is the fourth consecutive round in which a repair moved `design.md` and left the scope behind.
+
+That pattern is the actionable part, not this instance. The scope carries no run revision, so nothing makes it stale by construction the way a section fingerprint does; it is reconciled by whoever remembers. I am not inventing a mechanism for that inside this disposition — it is a platform question, not an `SL-246` one — but it will be raised at harvest rather than dropped. Revision 51 is unaffected; this one lands in authored scope."""
+
+[[finding]]
+id = "F-29"
+status = "answered"
+severity = "nit"
+title = "The by-design test is stated over a filtered facet_fields but glossed as an unfiltered property"
+detail = """
+Observation. § 5.2's new state table is headed by a filtered list and its first row is glossed by an unfiltered property:
+
+    | `facet_fields(facet)`, filtered by tier | the state | what is composed |
+    | `[]` — the kind has no fields at all    | by design | the by-design marker |
+    | every surviving field `Absent`          | unfilled  | the unfilled marker |
+    | anything else                           | renders   | hand it to the leaf renderer |
+
+Row 2's "surviving" reads the filtered list. Row 1's "the kind has no fields at all" is a property of the *unfiltered* table — after a tier filter, `[]` means "no field survived this tier", which is a different predicate. The two coincide only for the filters the design actually passes, and the header claims otherwise.
+
+For the design as specified nothing misclassifies, and this is why the severity is a nit. The composed read passes `Only(Deciding)` at `Facets` and `All` at `Full`, `knowledge show` passes `All`, and under `DEC-150`'s tiers every kind but `CPT` keeps at least one deciding field — `DEC` 3, `QUE` 3, `CON` 4, `ASM` 4, `EVD` 3, `HYP` 2, `CPT` 0. So `[]` and all-`Absent` never collide on any reachable path, for any of the seven kinds.
+
+The latent case is `TierFilter::Only(Tier::Argument)`, which the design's own two enums make constructible and nothing constructs. `DEC-150` gives `EVD` all three of its fields and `HYP` both of its as deciding, so under that filter both yield `[]` and are classified by-design — two kinds that have a facet, told they have none. That is the shape the bar asked after: a `facet_fields` that is `[]` for a reason other than the kind having no facet.
+
+The reason this is worth a line rather than a shrug is what the surrounding prose claims for the mechanism: "`facet_fields` was already the single source of *which fields exist*; it is therefore also the single source of *which empty state this is*." That inference is sound over the unfiltered table and does not survive a filter, so the sentence proves slightly more than the table supports.
+
+Suggested repair (a separate claim): say the by-design test reads `facet_fields` unfiltered and the unfilled test reads it filtered — one clause, and it makes the rule filter-independent. Narrowing `TierFilter` so `Only(Argument)` is unrepresentable would do the same job and is the larger change."""
+disposition = "accepted-design-changed"
+response = """
+Accepted, and the latent case is real: `DEC-150`'s tiers make every `EVD` and `HYP` field deciding, so `Only(Tier::Argument)` — constructible from `TierFilter` as §5.2 signs it — yields `[]` for both, and a by-design test sited after the filter would tell an `EVD` it has no facet.
+
+Repaired as you scoped it. The first row is now keyed on `[]` **before** any tier filter, and a clause states why the order is load-bearing rather than incidental: `CPT` is the only kind whose table is empty unfiltered, so by-design and unfilled cannot collide — and the collision is latent under the two filters this design passes, not absent from the type. Your per-kind counts are quoted in it (`DEC` 3, `QUE` 3, `CON` 4, `ASM` 4, `EVD` 3, `HYP` 2), since they are what makes the claim checkable rather than asserted.
+
+One thing your probe found that I am recording rather than repairing: the text arm's `Full` marker route is stated as a location and not a mechanism. You are right that it is reachable — `format_metadata` returns `Vec<String>` whose facet block is its own element — and right that the design never names that property while spelling out the JSON equivalent three times. I am leaving it as specification thinness on your own reading, with §9.2's new case as what the implementer fails against. If you think that judgement is wrong, contest this one. Revision 51, sec-5."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

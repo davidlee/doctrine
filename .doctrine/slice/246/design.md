@@ -799,11 +799,21 @@ neither. Siting any marker below them would be siting a policy where its inputs
 are not, so none of them sits there — and the state is read off the table's own
 return rather than off a second match on the kind:
 
-| `facet_fields(facet)`, filtered by tier | the state | what is composed |
+| what `facet_fields` yields | the state | what is composed |
 |---|---|---|
-| `[]` — the kind has no fields at all | by design | the by-design marker |
-| every surviving field `Absent` | the author left it unfilled | the unfilled marker |
+| `[]` **before** any tier filter — the kind has no facet at all | by design | the by-design marker |
+| the kind has fields, but none survives the tier or every one that does is `Absent` | the author left it unfilled | the unfilled marker |
 | anything else | it renders | nothing; hand it to the leaf renderer |
+
+The first test is on the **unfiltered** table, and that is load-bearing rather
+than incidental: `CPT` is the only kind whose table is empty before filtering, so
+by-design and unfilled cannot collide. Testing it after the filter would collide
+the moment a tier selected nothing for a kind that does have a facet — latent
+under the two filters this design passes, since `Only(Deciding)` leaves every
+other kind at least one field (`DEC` 3, `QUE` 3, `CON` 4, `ASM` 4, `EVD` 3,
+`HYP` 2), and immediate under `Only(Argument)`, where `DEC-150`'s tiers leave
+`EVD` and `HYP` empty. `TierFilter` admits that variant whether or not this
+slice constructs it.
 
 `facet_fields` was already the single source of *which fields exist*; it is
 therefore also the single source of *which empty state this is*. One table
