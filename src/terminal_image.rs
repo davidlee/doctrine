@@ -91,8 +91,9 @@ const PIXELS_PER_MEGAPIXEL: u64 = 1_000_000;
 /// graphs seen in practice: a raster inside the per-side cap is at most
 /// 100 Mpx, so this only bites the square corner case the cap alone would let
 /// through. Both are backstops — [`fit_box`] scales every drawing inside both
-/// by construction — against a raster that arrives oversized anyway: a `dot`
-/// that ignores `-Gsize`, a future caller that does not fit.
+/// with [`RASTER_ROUNDING_SLACK`] to spare — against a raster that arrives
+/// oversized anyway: a `dot` that ignores `-Gsize`, a future caller that does
+/// not fit.
 #[expect(
     clippy::integer_division,
     reason = "a whole number of pixels is the only meaningful budget, and truncation \
@@ -119,6 +120,35 @@ const MAX_IMAGE_PIXELS: u64 = TERMINAL_IMAGE_QUOTA_BYTES / BYTES_PER_PIXEL;
 /// to in either case, which is why this is a stop before the write rather than
 /// an error path after it.
 const MAX_IMAGE_DIMENSION: u32 = 10_000;
+
+/// Pixels of headroom [`fit_box`] leaves under every transmission bound.
+///
+/// `dot` rounds the scaled bitmap UP. A drawing fitted to a box of exactly
+/// [`MAX_IMAGE_DIMENSION`] comes back one or two pixels OVER it, so fitting to
+/// the bound exactly refused graphs that render: `doctrine graph RFC-025 -X`
+/// produced 1294 x 10002 for a 10000-px box and tripped the backstop written
+/// for a `dot` that ignored `-Gsize` altogether (ISS-460). A dpi sweep over
+/// that same graph found +1 px at some fifty resolutions and +2 px at nine.
+///
+/// Four rather than two: the overshoot is graphviz's rounding, not a documented
+/// contract, and four pixels cost 0.04% of a side.
+const RASTER_ROUNDING_SLACK: u32 = 4;
+
+/// The per-side bound [`fit_box`] fits a drawing to — the cap less the slack
+/// graphviz may round back on.
+const FITTED_IMAGE_DIMENSION: u32 = MAX_IMAGE_DIMENSION - RASTER_ROUNDING_SLACK;
+
+/// The area bound [`fit_box`] fits a drawing to: [`MAX_IMAGE_PIXELS`] less the
+/// most area [`RASTER_ROUNDING_SLACK`] can add back to a raster already inside
+/// the per-side cap — `slack * (width + height + slack)`, largest when both
+/// sides sit at [`MAX_IMAGE_DIMENSION`].
+///
+/// A function rather than a `const` because widening a `u32` is not const and
+/// `as` is denied workspace-wide.
+fn fitted_pixel_budget() -> u64 {
+    let slack = u64::from(RASTER_ROUNDING_SLACK);
+    MAX_IMAGE_PIXELS - slack * (2 * u64::from(MAX_IMAGE_DIMENSION) + slack)
+}
 
 /// Whole megapixels, rounded UP — so a refused raster never reads as smaller
 /// than the limit it exceeded.
@@ -396,11 +426,11 @@ fn raster_dpi(cell: CellGeometry) -> u32 {
 /// at the size it will be displayed at, rather than having its surplus pixels
 /// decoded, counted against the terminal's quota, and thrown away.
 ///
-/// Height is whatever [`MAX_IMAGE_PIXELS`] has left once that width is spent,
-/// which makes the box's AREA the budget: any drawing fitted into it is within
-/// budget by construction, whatever its aspect ratio.
+/// Height is whatever [`fitted_pixel_budget`] has left once that width is
+/// spent, which makes the box's AREA the budget: any drawing fitted into it is
+/// within budget by construction, whatever its aspect ratio.
 ///
-/// BOTH sides are then clamped to [`MAX_IMAGE_DIMENSION`], which is the bound
+/// BOTH sides are then clamped to [`FITTED_IMAGE_DIMENSION`], which is the bound
 /// that actually bites. A wide window makes the area budget yield a TALLER box
 /// — width is its divisor — so on a 6270-px-wide high-DPI window the area
 /// rule alone asked for 12300 px of height and the terminal silently dropped
@@ -417,12 +447,12 @@ fn raster_dpi(cell: CellGeometry) -> u32 {
 )]
 fn fit_box(cell: CellGeometry) -> crate::graphviz::FitBox {
     let width_px = u32::from(cell.columns.saturating_sub(1).max(1)) * u32::from(cell.cell_width);
-    let height_px = MAX_IMAGE_PIXELS / u64::from(width_px.max(1));
+    let height_px = fitted_pixel_budget() / u64::from(width_px.max(1));
     crate::graphviz::FitBox {
-        width_px: width_px.min(MAX_IMAGE_DIMENSION),
+        width_px: width_px.min(FITTED_IMAGE_DIMENSION),
         height_px: u32::try_from(height_px)
-            .unwrap_or(MAX_IMAGE_DIMENSION)
-            .min(MAX_IMAGE_DIMENSION),
+            .unwrap_or(FITTED_IMAGE_DIMENSION)
+            .min(FITTED_IMAGE_DIMENSION),
         dpi: raster_dpi(cell),
     }
 }
@@ -873,30 +903,58 @@ mod tests {
         );
     }
 
+    /// The window geometries the fit box's invariants are checked over: the
+    /// extremes of what a terminal can report, plus the measured 286 x 22 HiDPI
+    /// ghostty window whose fitted box the area-only rule sent 12300 px tall,
+    /// and which drew nothing.
+    fn window_geometries() -> impl Iterator<Item = CellGeometry> {
+        [1_u16, 2, 80, 286, 400, u16::MAX]
+            .into_iter()
+            .flat_map(|columns| {
+                [1_u16, 8, 20, 22]
+                    .into_iter()
+                    .map(move |cell_width| CellGeometry {
+                        columns,
+                        cell_width,
+                        cell_height: 20,
+                    })
+            })
+    }
+
     /// The box's AREA is the budget, so anything scaled into it passes
     /// [`check_image_size`] whatever its aspect ratio — which is what demotes
     /// that check from the working limit to a backstop.
     #[test]
     fn anything_that_fits_the_box_is_within_budget() {
-        // 286 x 22 is the measured HiDPI ghostty window whose fitted box the
-        // area-only rule sent 12300 px tall, and which drew nothing.
-        for columns in [1_u16, 2, 80, 286, 400, u16::MAX] {
-            for cell_width in [1_u16, 8, 20, 22] {
-                let cell = CellGeometry {
-                    columns,
-                    cell_width,
-                    cell_height: 20,
-                };
-                let fit = fit_box(cell);
-                assert!(
-                    check_image_size(raster(fit.width_px, fit.height_px)).is_ok(),
-                    "{columns} columns x {cell_width} px: {fit:?} exceeds the budget"
-                );
-                assert!(
-                    fit.width_px <= MAX_IMAGE_DIMENSION && fit.height_px <= MAX_IMAGE_DIMENSION,
-                    "{fit:?} exceeds the per-side cap the terminals enforce"
-                );
-            }
+        for cell in window_geometries() {
+            let fit = fit_box(cell);
+            assert!(
+                check_image_size(raster(fit.width_px, fit.height_px)).is_ok(),
+                "{cell:?}: {fit:?} exceeds the budget"
+            );
+            assert!(
+                fit.width_px <= MAX_IMAGE_DIMENSION && fit.height_px <= MAX_IMAGE_DIMENSION,
+                "{fit:?} exceeds the per-side cap the terminals enforce"
+            );
+        }
+    }
+
+    /// `dot` hands back a raster a pixel or two LARGER than the box it was
+    /// given, because it rounds the scaled bitmap up (ISS-460). The box leaves
+    /// room for that, so the rounding cannot trip the backstop — which exists
+    /// for a `dot` that ignored `-Gsize`, not for one that honoured it.
+    #[test]
+    fn a_raster_rounded_up_past_the_box_is_still_within_the_bounds() {
+        for cell in window_geometries() {
+            let fit = fit_box(cell);
+            let overshot = raster(
+                fit.width_px + RASTER_ROUNDING_SLACK,
+                fit.height_px + RASTER_ROUNDING_SLACK,
+            );
+            assert!(
+                check_image_size(overshot).is_ok(),
+                "{cell:?}: {fit:?} rounded up by {RASTER_ROUNDING_SLACK} px is refused"
+            );
         }
     }
 
