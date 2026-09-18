@@ -234,7 +234,7 @@ response = """Accepted on both the primary and the secondary. `facet_json` now t
 
 [[finding]]
 id = "F-14"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The in-block unreadable marker's one reachable case is unreachable in the declared test family"
 detail = """
@@ -311,7 +311,7 @@ response = "Accepted as a documentation defect, and the user ruled against super
 
 [[finding]]
 id = "F-18"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The JSON arm is specified as a shape with no producer"
 detail = """
@@ -356,7 +356,7 @@ Suggested repair (a separate claim): either give `EmptyPolicy::Marked` the recor
 
 [[finding]]
 id = "F-20"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The empty-state policy sits on facet-scoped functions that cannot see the marker inputs"
 detail = """
@@ -383,7 +383,7 @@ The three-empty-states table gains a 'composed by' column so the siting is visib
 
 [[finding]]
 id = "F-21"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The design show flag partition is neither complete nor internally consistent"
 detail = """
@@ -410,7 +410,7 @@ Accepted on both, and the user ruled the fork the second one opened.
 
 [[finding]]
 id = "F-22"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Two counted figures in the post-round-2 text do not match the tree"
 detail = """
@@ -430,6 +430,116 @@ Both accepted, and sweeping the class found two more you did not name.
 (2) Correct, and it was mine, written at run revision 43 while discharging `review.scope`, one round after `F-16` replaced that very figure. Both instances are gone: the *Affected surface* clause now points at §3.3 `F5`'s table, and the *Scope & Objectives* paragraph — which carried the same stale 14 and which you did not name — now states the population inline instead.
 
 The fourth: §5.6's emitted-strings row still said '~4 sites' while §3.3 `F5` names all four at file:line, so it is now exact and points there. The remaining §5.6 figures were re-derived and hold — two bare helpers, two direct invocations, roughly eleven call sites. This is `mem.pattern.design.counts-state-their-population`'s third appearance in this slice, which is itself the durable result. Revision 47, sec-5."""
+
+[[finding]]
+id = "F-23"
+status = "open"
+severity = "major"
+title = "The by-design marker is unreachable at Full on both arms — no route carries Marked past the leaf renderers"
+detail = """
+Observation. § 5.2 sites the by-design marker on the facet renderers — "`facet_json` writes the by-design marker under `Marked`" — and the three-empty-states table gives its `composed by` column as "`format_facet` / `facet_json`, under `Marked`". `X5` requires that "a `CPT` therefore renders the by-design marker on both arms at every level", `I6` requires three distinct messages, and `DEC-149`'s `consequences` field makes this normative rather than merely design text: "`format_facet` gains two policy inputs … with `knowledge show` passing (all fields, silent) … and the composed read passing (subset, marked)."
+
+At `Facets` this is reachable. `render_record` holds the `KnowledgeRecord` after reading it, so it can call the facet renderers directly with `(Only(Deciding), Marked)`. At `Full` it is not, and the call graph in the tree is what settles it.
+
+`format_facet` has exactly one caller: `format_metadata` (`src/knowledge.rs:1815`), whose signature is `fn format_metadata(record: &KnowledgeRecord) -> Vec<String>` (`:1795`) — no policy parameter. Its own two callers are `format_show` (`:1835`) and `format_inspect` (`:1842`), likewise parameterless, and both are what `knowledge show` / `knowledge inspect` call and must keep calling at `(All, Silent)` for `C2`. `facet_json` has exactly one caller: `show_json` (`:1968`), and § 5.2 splits its map out as `fn show_value(record: &KnowledgeRecord, with_body: bool) -> serde_json::Value` — two parameters, neither a `TierFilter` nor an `EmptyPolicy`. § 5.2 then specifies the `Full` entry as `show_value(record, with_body = true)` … "plus `caption`, with `facet` carrying `{"marker": …}` on a kind that has none".
+
+So at `Full` the design names a value that the function it names cannot produce. `show_value` must pass one `(tier, empty)` pair down to `facet_json`: `(All, Silent)` is what `show_json` needs for `C2` byte-identity — today `knowledge show --json` on a `CPT` emits `"facet": {}`, from `facet_json`'s `RecordFacet::Concept(_) => json!({})` arm (`src/knowledge.rs:2041`) — and `(All, Marked)` is what `X5` needs. The text arm has the identical gap one chain over: a `Full` text render routed through `format_show` reaches `format_facet` at `(All, Silent)`.
+
+`record_value` cannot close it, because § 5.2 assigns it only two of the three markers: "`record_value` writes the unfilled and unreadable markers into the same slot." A `CPT` at `Full` is in neither state — its facet is empty by design, not unfilled — so on the design as written it falls through to an unmarked `{}`.
+
+The pattern: the new policy parameters were carried to the two leaf renderers and to nothing above them. § 5.6's `src/knowledge.rs` row names `facet_fields`, the markers, `show_value` and the four producers, and names neither `format_metadata`, `format_show`, nor any policy parameter on `show_value`.
+
+Suggested repair (a separate claim): thread `(TierFilter, EmptyPolicy)` through `show_value` and the `format_metadata` / `format_show` chain with `(All, Silent)` at the existing call sites, and list them in § 5.6 — or state that `render_record` / `record_value` own all three markers, which contradicts `D6`'s layering rule as written and would need `D6` re-argued."""
+
+[[finding]]
+id = "F-24"
+status = "open"
+severity = "minor"
+title = "knowledge_value's return type cannot express its own Skip contract, so C1 on the JSON arm is by care not construction"
+detail = """
+Observation. § 5.2 signs the JSON block producer as
+
+    pub(crate) fn knowledge_value(root: &Path, selected: &[SelectedRecord], level: KnowledgeLevel) -> serde_json::Value;
+
+and documents its `Skip` behaviour as: "`Skip` omits the key entirely rather than emitting an empty array — the key is additive, and byte-identity at `Skip` (`C1`) means absent, not empty."
+
+A function returning `serde_json::Value` cannot omit a key. Omission is the caller's act. As signed, `knowledge_value` at `Skip` must return *some* `Value` — `Null`, or an empty array — and whichever it returns, a caller that inserts it produces `"knowledge": null` or `"knowledge": []`, neither of which is byte-identical to today's payload. The guarantee therefore lives nowhere in the function the design names for it; it lives in an unstated `if level != Skip` at each of the two call sites (`commands/inspect.rs`, `commands/design.rs`).
+
+This is asymmetric with its own sibling, and the asymmetry is why it reads as settled when it is not. `render_block`'s contract — "`Skip` returns the empty string without reading anything" — *is* expressible in `-> String`, because concatenating an empty string is the text arm's version of absence. JSON has no empty value that means absent, so the same sentence does not transfer, and § 5.2 carries it over as though it did.
+
+It bears on a claim the design makes structural rather than careful. `I1` says byte-identity at `Skip` is "Structural: `Skip` returns before any read", and `C1` says `DEC-146` "buys this by construction rather than by care". On the text arm that holds. On the JSON arm, as signed, `C1` depends on every caller re-testing the level after calling a function that was given the level — which is care, not construction, and is exactly the shape `P2` warns about ("two implementations that currently produce consistent output").
+
+`F-18`'s repair was to make the JSON arm "named, owned and total like its sibling". It reached parity on totality and on the map shape, and stopped short at `Skip`.
+
+Suggested repair (a separate claim): sign it `-> Option<serde_json::Value>`, `None` at `Skip`, so the absence is in the type and the caller has nothing to remember. That also makes the two arms the same shape at `Skip` rather than only at `Facets` and `Full`."""
+
+[[finding]]
+id = "F-25"
+status = "open"
+severity = "minor"
+title = "The two rewritten diagrams are a state and a producer short of 5.2 — 5.4 gives a concept the unfilled marker"
+detail = """
+Observation. Both diagrams were rewritten at revision 47 to carry `D6`'s map-and-markers model, and both are a state or a producer short of § 5.2. The prose is right in each case; the picture beside it is not, and the picture is what a reader takes the model from.
+
+(1) § 5.4's sequence `alt` has three arms for a record inside the loop:
+
+    alt read ok, tier has fields   -> format_facet(facet, Deciding, Marked)
+    else read ok, tier empty       -> metadata() for the prose size; unfilled marker — names the record (DEC-149)
+    else read failed (raced the scan) -> unreadable marker — by name and reason (STD-003)
+
+§ 5.2 names four outcomes for a selected record, not three: the tier renders, the facet is unfilled, the kind has no facet by design, or the read failed. The diagram's second arm is keyed on "tier empty", which is true of every `CPT` by construction (`RecordFacet::Concept(_)` yields nothing — `src/knowledge.rs:1918`, and `DEC-149`'s rationale says so outright). So the diagram routes a concept to the unfilled marker and to a `metadata()` prose-size call, producing "(no facet recorded — …)" for a record that has no facet to record.
+
+That is the exact collapse `F2`, `P5`, `I6`, `X5` and `DEC-149`'s two-marker ruling exist to forbid — `DEC-149`: "a marker reading as a defect would libel every concept in the corpus and would train readers to ignore it." It is also the one thing § 9.2's `an_unfilled_facet_and_a_concept_render_different_markers` is named to catch, so the design's own test case contradicts its own sequence diagram.
+
+(2) § 5.1's flowchart node reads:
+
+    KR["knowledge::render_record — reads one record, renders at level<br/>render_block / knowledge_value — map over the set, one entry each"]
+
+`record_value` is absent. § 5.2 names four producers and § 5.3's ownership row lists all four; the node names three, and the one it drops is the JSON per-record producer whose absence was `F-18`. The prose directly under the diagram carries it ("The JSON arm is the same map through `record_value`"), so the node is incomplete rather than wrong — but it is the diagram of the very split `D6` was taken to make visible.
+
+Suggested repair (a separate claim): give § 5.4's `alt` a fourth arm keyed on the kind rather than on emptiness, ordered before the unfilled arm, and add `record_value` to § 5.1's `KR` node."""
+
+[[finding]]
+id = "F-26"
+status = "open"
+severity = "minor"
+title = "slice-246.md's R1 cites three knowledge.rs line ranges that are ~560 lines stale, two landing on writer-path code"
+detail = """
+Observation. `slice-246.md`'s `R1` names the mechanism it is describing by file and line, three times, and all three are stale — by roughly 560 lines, which is enough that two of them land on unrelated writer-path code rather than merely near-miss:
+
+| cited in the scope | actually at | what is at the cited line today |
+|---|---|---|
+| `format_facet` (`src/knowledge.rs:1302-1364`) | `:1867-1925` | the doc comment and head of `apply_facet_edits`, a writer |
+| `show_opt_line` (`:1286-1291`) | `:1848-1853` | the `FACET_TABLE` constant |
+| `facet_json` (`:1432-1462`) | `:1994-2041` | the middle of an unrelated `opt_text_line` sequence |
+
+A fourth, in *Design inputs carried from research*: the `Detail::{Normal, Full}` precedent is cited as `src/design_run/render/envelope.rs:86-117`; `Detail` is declared at `:117`, so the range covers a `declaration_example_json!` macro and stops where the enum starts.
+
+`design.md` is clean on the same identifiers — § 2.2 cites `format_facet` at `:1867`, `show_opt_line` at `:1848`, `facet_json` at `:1994`, all correct. So these were re-derived once, for the design, and the scope was left holding the numbers it inherited. The provenance is visible: `DEC-149`'s `context` field carries the same three ranges, and they were correct when that record was taken on 2026-08-05.
+
+This is `F-22`'s class in the same document. That finding's disposition swept counts — the `~4 sites`, the two `14 references` — and reported the sweep closed ("the remaining § 5.6 figures were re-derived and hold"). The sweep was over counts; `file:line` citations are the same promise to the same reader and were not in it. `slice-246.md` is a live orientation document, not a settled record, and the design directs readers to it for the affected surface.
+
+Not raised against `DEC-149`: a settled record's `context` is a snapshot of what was true when it was taken, and re-deriving it is not this slice's business.
+
+Suggested repair (a separate claim): drop the line ranges from `slice-246.md`'s `R1` and cite `design.md` § 2.2, which holds the same identifiers with current lines and is where the authoritative version already lives — rather than re-deriving a second copy that can go stale independently."""
+
+[[finding]]
+id = "F-27"
+status = "open"
+severity = "nit"
+title = "The flag partition still omits a flag ShowArgs carries — --path belongs to neither rendering"
+detail = """
+Observation. § 5.2 and `D7` state the flag rule universally: "**each flag belongs to one rendering** — `--knowledge` and `--json` to the document, `--full` and `--known-revision` to the envelope — **and is refused outside it.** One rule to remember instead of five interactions to look up."
+
+`ShowArgs` (`src/commands/design.rs:228-243`) carries a sixth: `-p` / `--path` (`:241-242`), the explicit project root. It belongs to neither rendering, is legal at both, and is named nowhere in § 5.2, § 5.6 or `D7`. It is not a dormant flag — it is passed on every `design show` invocation in the migrating suites (`tests/design_fixture/mod.rs:74` and `tests/e2e_design_state.rs:226` both build `["design", "show", SLICE, "-p", "."]`).
+
+The design supplies the standard this is measured against, when it rules `--known-revision`: "a partition that does not name a flag does not cover it." On that standard the partition still does not partition.
+
+This is genuinely lighter than `F-21`'s instance and the severity reflects it. `--path` is universal root resolution, present on every `Args` struct in the codebase, and nobody would refuse it at either rendering — so nothing is silently accepted and ignored, which is what made `--known-revision` bite. What is defective is the claim, not the grammar: "each flag belongs to one rendering and is refused outside it" is false of a flag the verb carries, and the "one rule to remember" is one rule plus an unstated exception.
+
+It is also the third appearance of the cause `D7` already named and stated as the reusable part — "the draft enumerated four flags from its own prose rather than from `ShowArgs`, where there are five." `ShowArgs` has five *fields*, one of which is the positional `slice`, and four of which are flags; add the two this slice introduces and there are six. The re-derivation went to the right struct and still counted the rendering-relevant ones rather than the flags.
+
+Suggested repair (a separate claim): scope the partition to rendering controls in one clause — `--path` resolves the root and is orthogonal to the rendering — rather than adding a fifth ruling for a flag that needs no rule."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
