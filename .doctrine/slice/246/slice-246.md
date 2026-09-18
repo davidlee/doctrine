@@ -40,13 +40,18 @@ citations are explicitly *not* consulted — see Non-Goals.
 | level | renders |
 |---|---|
 | skip | no knowledge (the current, default read) |
-| facets | the deciding fields only — a `DEC`'s `choice` + `rationale`, a `QUE`'s `question` + `why_matters` |
+| facets | the deciding fields only — what rules and what changes whether the ruling still stands, never the argument that got there (`DEC-150` fixes the set per kind: a `DEC`'s `context` + `choice` + `rationale`, a `QUE`'s `question` + `why_matters` + `answer`) |
 | full | complete record bodies |
 
 The middle level is the one that earns the feature. Measured on the specimen it
 costs **~30% of `full`** (31.8 KB vs 107 KB across the fifteen records) — a real
 saving, but not the order of magnitude first assumed; see `research/research.md`
 § *The specimen, re-measured*.
+
+**A pointer from where the question is asked.** Under `DEC-145` the renderer
+lives on one seam, which leaves discoverability unsolved: an agent asks this
+question at `<kind> show`. Each kind's `show` therefore gains a one-line pointer
+naming the inbound record count and the command — never the renderer itself.
 
 **Objectives**
 
@@ -75,14 +80,25 @@ saving, but not the order of magnitude first assumed; see `research/research.md`
 
 ## Affected surface
 
-Seeded as coarse `scope-relevant` selectors; the exact touch-set is `/design`'s.
+Narrowed by the inquiry (`DEC-145`, `DEC-146`, `DEC-147`); the exact touch-set
+is still `/design`'s.
 
-- `src/knowledge.rs` — record read model, facet access, `list`/`show` seam
-- `src/relation.rs` — the relation vocabulary and inbound derivation
-- `src/commands/relation.rs` — where `relation list --target` already derives it
-- `src/catalog/**` — hydration and the key-indexed read model
-- `src/slice.rs`, `src/spec.rs`, `src/adr.rs` — the per-kind `show` renders
-- `src/commands/design.rs` — the design-run read surface
+- `src/relation_graph.rs` — `InspectView` (`:572`), `inspect_from` (`:636`),
+  `render_from` (`:760`): the inbound derivation and the 1-hop render, and where
+  selection splits from rendering.
+- `src/commands/inspect.rs` — the verbosity level on `doctrine inspect`.
+- `src/knowledge.rs` — the per-id record accessor (sibling of `relation_edges`)
+  and `format_facet`'s two policy inputs, field selection and empty-handling.
+- `src/kinds/mod.rs` — `RECORD` (`:57`) / `is_record` (`:128`), the membership
+  predicate selection filters on.
+- `src/relation.rs` — the relation vocabulary and the inbound label captions.
+- `src/slice.rs`, `src/spec.rs`, `src/adr.rs`, `src/rfc.rs` — a one-line pointer
+  each, never the renderer.
+
+**Dropped by the inquiry.** `src/catalog/**` — `DEC-146` leaves the corpus scan
+untouched. `src/commands/design.rs` — `DEC-145` puts the render on `inspect`, not
+on the design read. `src/commands/relation.rs` — `relation list --target` is
+prior art for the derivation, not a touch site.
 
 ## Governing context
 
@@ -127,7 +143,8 @@ tells the reader *less* than opening the record would.
 **R2 — inbound noise swamps the signal.** `SL-244` carries 28 inbound edges, of
 which **11 are `references(originates_from)` from backlog items** — harvest
 exhaust, not design content. An uncurated inbound render makes the common read
-worse. Which labels qualify is `OQ-3`.
+worse. Mitigated by `DEC-148` — selection filters on the source's kind, which
+excludes all 11 because a backlog item is not a knowledge record.
 
 **R3 — token cost.** `full` on `SL-244` is 3,456 lines plus sixteen records.
 Bounded by construction (`skip` is the default), but the dial's levels must be
@@ -137,35 +154,44 @@ worth their price on every axis the project weighs.
 shapes this entity", accepting the ~10 cited-but-unlinked records as a known,
 separately-tracked miss.
 
+All six were dispositioned in the design run's inquiry and are closed. They are
+kept here as the record of what was open; the ruling is the `DEC`, not this list.
+
 **OQ-1 — surface.** A flag on the existing `<kind> show` / design read, or a
 distinct kind-agnostic verb (`knowledge digest <ref>`)? Determines whether this
-is one seam or one per kind.
+is one seam or one per kind. → **`DEC-145`**: neither; it rides `doctrine
+inspect`, the kind-agnostic inbound view that already exists.
 
 **OQ-2 — facet selection per record kind.** Which fields constitute the
-`facets` level for each of the seven record kinds.
+`facets` level for each of the seven record kinds. → **`DEC-150`**.
 
-**OQ-3 — label curation.** Which inbound labels qualify: `shapes` and
-`references(concerns)` clearly; `references(originates_from)` clearly not.
-Allow-list, grouping, or caller-controlled.
+**OQ-3 — label curation.** *As framed, superseded.* The question assumed the
+fix was curating which inbound labels qualify. → **`DEC-148`**: it is not a
+label question. Selection filters on the SOURCE's kind (`kinds::is_record`), and
+no label allow-list is written. The noise this OQ named — `originates_from`
+backlog rows, and `reviews` — comes from sources that are not knowledge records
+at all, so a label list would have excluded it only by coincidence. `DEC-148`
+also explicitly rejects dropping `concerned by`, which this OQ's framing invited.
 
 **OQ-4 — empty-facet rendering.** Visible gap marker versus silent blank
-versus fallback to prose.
+versus fallback to prose. → **`DEC-149`**: marked, two distinct markers
+(unfilled record vs. a kind with no facet by design), no prose fallback.
 
 **OQ-5 — closure seam shape.** How far to factor the inbound derivation now so
 S5's typed traversal extends it (objective 3) without speculative generality.
+→ **`DEC-147`**: split selection from rendering; the record's caption is
+selection-supplied text, not a `RelationLabel`. Nothing else is generalised.
 
-**OQ-6 — the composition seam** (added post-research). `CatalogEntity`
-(`src/catalog/hydrate.rs:111-113`) carries identity and body but **no facet**, so
-the inbound derivation `relation list --target` already performs cannot render
-facets as-is. Either `CatalogEntity` grows a `RecordFacet`, or each composing
-`show` calls `knowledge::read_record` per inbound id. The load-bearing
-architectural choice.
+**OQ-6 — the composition seam** (added post-research). *Premise void.* It scoped
+the choice as `CatalogEntity` growing a `RecordFacet` versus a per-id read.
+→ **`DEC-146`**: `CatalogEntity` is not on `inspect`'s path, so that arm is moot;
+the live comparison was against `ScannedEntity` growing one, and the ruling is a
+per-id read at the render layer with the corpus scan untouched.
 
-**Post-research reordering.** `OQ-4` is primary and `OQ-2` is largely settled by
-evidence — governance declares no field tiering and the corpus populates facets
-as an all-or-nothing unit (35/35/35 on decisions), so field selection is
-low-stakes and gap handling is the whole design. See
-`research/research.md` § *Design-input deltas*.
+**Post-research reordering.** `OQ-4` is primary — and `DEC-149` is what made it
+so, since ruling that the renderer is built for a healthy corpus invalidated the
+fill-rate argument `OQ-2`'s research answer rested on. Field selection was **not**
+low-stakes after all: see `DEC-150`.
 
 ## Design inputs carried from research
 
@@ -180,13 +206,19 @@ that must survive it are inlined here and in `ISS-316`.
   code path rather than two implementations that could disagree*. The three
   levels should be one renderer under different bounds. Nothing in the tree today
   is a three-level detail dial — this would be the first.
-- **`OQ-2`'s evidence-backed answer, for the four *governed* kinds:** `DEC`
-  `context`+`choice`+`rationale`; `QUE` `question`+`why_matters`; `CON`
-  `statement`+`source`+`applies_to`; `ASM` `claim`+`confidence`+`basis`.
-  Excluded as bulk-without-signal on the current corpus: `alternatives`,
-  `consequences`, `decided_*`, `answer`/`answered_*` (0 of 38 populated),
-  `validated_*`, `waiver_*`. Closed enums are ~100% populated wherever a facet
-  exists, so including them is cheap and reliable.
+- **`OQ-2`'s research answer is partly superseded — see `DEC-150`.** It proposed
+  `DEC` `context`+`choice`+`rationale`; `QUE` `question`+`why_matters`; `CON`
+  `statement`+`source`+`applies_to`; `ASM` `claim`+`confidence`+`basis`, excluding
+  `alternatives`, `consequences`, `decided_*`, `answer`/`answered_*`, `validated_*`
+  and `waiver_*`. Two different arguments were doing that work, and only one
+  survived: `alternatives`/`consequences` are excluded as bulk (they are most of
+  the cost — `DEC-080`'s facet renders at ~4.5 KB against a 274-byte body), but the
+  short status fields were excluded on **current fill rate** (`answer`: 0 of 38),
+  and `DEC-149`'s healthy-corpus ruling voids that argument. `DEC-150` restores
+  `answer` to `QUE`, `waiver_reason` to `CON` and `invalidated_by` to `ASM` — each
+  is short and each changes whether the record still binds — and rules the three
+  ungoverned kinds honestly: `EVD` and `HYP` take all their fields, `CPT` has none
+  and renders `DEC-149`'s by-design marker.
 - **`EVD`/`HYP`/`CPT` have no governance to defer to** — `ISS-316`. `SPEC-019`
   specifies four record kinds, not seven. Any field list for those three is
   **invention, and must be labelled as such** rather than presented as derived.
@@ -195,10 +227,13 @@ that must survive it are inlined here and in `ISS-316`.
   (`knowledge.rs:570-573`).
 - **The inbound label set is closed and pre-named** (`src/relation.rs`):
   `shaped_by` (`:528`), `concerned by` (`:426`), `spawned_by` (`:542`),
-  `supported_by`/`disputed_by` (`:699`/`:712`), `superseded by`. `OQ-3` is a
-  selection from six named labels, not a judgement call — and the specimen argues
-  the answer, since `references(concerns)` contributed exactly the three
-  empty-facet decisions.
+  `supported_by`/`disputed_by` (`:699`/`:712`), `superseded by`. **The inference
+  drawn from this is superseded by `DEC-148`**: the closed six is a *consequence*
+  of filtering on source kind — those are by definition the labels a record can
+  point outward with — not a list to select from. And the specimen does not argue
+  for dropping `concerned by`: `DEC-144` arrives under it and is substantive, so
+  curating it out to dodge three empty facets would fix the wrong thing. That
+  defect is `DEC-149`'s.
 - **`Shapes` targets include the record kinds themselves** (`:530-531`), so
   knowledge→knowledge edges are legal. Objective 3's seam for `IMP-398`'s
   recursive view is real, not hypothetical.
@@ -216,6 +251,23 @@ that must survive it are inlined here and in `ISS-316`.
 actually pay. Closure additionally requires the existing kind-`show` suites green
 unchanged (the behaviour-preservation gate on shared machinery), and the default
 read byte-identical to today's.
+
+`DEC-151` splits how that is proven, because the specimen is a live slice whose
+inbound record set keeps changing and a golden over it would rot:
+
+- **By test.** Synthetic-corpus goldens pin the mechanics at all three levels —
+  a filled `DEC`, an unfilled one, a `CPT`, a record reachable under two inbound
+  labels (the `EVD-012` dedup case), and a backlog item plus a review as inbound
+  noise.
+- **By agent, at audit.** The specimen claim itself. The attestation must name
+  the record ids surfaced, the ids excluded, and the rendered byte count at each
+  level — enough to re-derive, since `SL-244`'s authored corpus is committed. An
+  attestation reading "looked fine" does not discharge it.
+- **Declined on inspection, not unavailability:** a live-corpus invariant test
+  asserting `facets` ⊆ `full` and `skip` byte-identical to today's. Half of it
+  needs a stored baseline of today's output, which *is* the live golden it was
+  meant to avoid; the other half holds by construction under `DEC-150`'s single
+  field-order table. See `DEC-151`.
 
 ## Summary
 
