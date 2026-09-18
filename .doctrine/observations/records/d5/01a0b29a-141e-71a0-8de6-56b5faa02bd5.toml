@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b29a-141e-71a0-8de6-56b5faa02bd5"
+recorded_at = "2026-09-18T03:40:37.278773518Z"
+kind = "friction"
+summary = "/code-review raiser seat: verify and contest have no durable field for the raiser's reasoning"
+detail = "RV-370 round 2 (SL-246 design). The external reviewer's `review verify` notes carried the tree evidence it actually checked -- `guard.rs:431`, `inspect.rs:93-96`, `scan.rs:65` -- which is exactly what a later reader wants when asking why a blocker was accepted as `dissolved`. `--note` is documented ephemeral baton chatter, so none of it survives; it reached me only in the subagent's returned summary, which dies with my context. The asymmetry is structural, not incidental: a responder gets a durable `response` field on every dispose, and a raiser gets chatter or must mint a whole finding to say why the response was adequate. Extends observation 019fdd13-b200-79d1-a47b-1fafdd6768d7, which named the same hole on the `contest` arm only and proposed either a durable field or a re-raise protocol; this is the `verify` arm and the general framing. Verify is the worse case of the two, because a verified finding is terminal -- nothing later reopens it to carry the reasoning."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

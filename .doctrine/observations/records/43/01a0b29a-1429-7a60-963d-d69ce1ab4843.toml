@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b29a-1429-7a60-963d-d69ce1ab4843"
+recorded_at = "2026-09-18T03:40:37.289408691Z"
+kind = "friction"
+summary = "A design that states a measured count without its denominator is cheap to write and expensive to review"
+detail = "RV-370 round 2. SL-246's design priced a migration at '14 references in tree, counted rather than estimated' (design.md section 3.3 F5, section 8 R6). The round-2 bar asked the reviewer to verify the count. It could not be verified as posed: the figure names no predicate, and `grep -rn 'design show'` returns roughly 100 files spanning observations, review ledgers and slice notes, so deciding which subset was migration-relevant was most of the cost of testing the claim -- and the reviewer still found the count wrong (F-16: five committed memories omitted). The asymmetry is the point: an unqualified count costs the author one sentence and the reviewer an unbounded search. Candidate rule for the /design drafting and reviewing obligations -- a count asserted as measured must state the population it counted over, or be restated as an estimate."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b29a-142d-70b0-8ffb-10a12fee19c5"
+recorded_at = "2026-09-18T03:40:37.293697378Z"
+kind = "friction"
+summary = "Recursive grep from the repo root reports skills under plugins/doctrine/skills/, not .agents/skills/"
+detail = "RV-370 round 2. The reviewer needed to establish which skills reference `design show`. A recursive grep from the repo root surfaced the hit under `plugins/doctrine/skills/handover/SKILL.md` and not under `.agents/skills/handover/SKILL.md`, costing an extra round trip to establish that the two paths carry the same content. Any agent grepping for skill text from the root hits this: the duplicate roots make a single hit look like the whole population, or make the authored copy look absent. Worth either a note in the file-map memory or a canonical-root convention for skill greps."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
