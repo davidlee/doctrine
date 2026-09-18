@@ -12,5 +12,61 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-246"
 
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "blocker"
+title = "`slice design show` violates the governed two-level CLI grammar"
+detail = "Observation: SL-246 §3.1 lines 291-305 acknowledges that SPEC-013 defines a two-level subcommand tree, then declares the proposed three-level `doctrine slice design show` surface non-deviating solely because `slice selector` is an existing precedent. SPEC-013 Uniform command grammar and active REQ-197 explicitly require `doctrine <kind> <verb>` for numbered entity kinds. An existing deeper command does not amend or waive that normative contract. The same conflict is carried into §5.2 lines 630-640 and normative DEC-260. This leaves the primary reader surface in direct conflict with active governance, so the design is not implementable as approved. Suggested repair: either site the capability on a conforming two-level verb, or revise SPEC-013 and REQ-197 through the governance path before implementation, explicitly defining the allowed nested-group exception and its conformance tests."
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "major"
+title = "The claimed dispatch-arm deletion has no acyclic route to the new handler"
+detail = "Observation: SL-246 §5.6 lines 753-773 places the new handler in `src/commands/slice_design.rs`, deletes the residual `src/commands/cli.rs` arm, and says the nested command will route through `slice::dispatch`. The current arm at `src/commands/cli.rs:1524-1533` and `run_deprecated_slice_design` at `src/commands/design.rs:2043-2047` both document why `crate::slice` cannot call into `crate::commands`: that reverse edge closes an ADR-001 command-tier cycle. Retiring the materialisation forwarder removes its payload, but it does not create a route from `slice::dispatch` to a handler that the design still places under `commands`. As written, the new handler is either unreachable from the claimed generic arm or requires the same forbidden reverse dependency, so the §5.6 payoff and code-impact plan cannot both be true. Suggested repair: specify an acyclic dispatch seam explicitly, such as top-level routing or injected operations, and retain whatever `cli.rs` wiring that seam needs; alternatively relocate the handler to a layer `slice::dispatch` can legally call and demonstrate the ADR-001 dependency direction."
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "major"
+title = "The unreadable-record guarantee is unreachable for scan-pruned records"
+detail = "Observation: SL-246 §3.1 lines 319-328, §5.5 I5/X7, and §9.2 promise that an absent or malformed record is retained by name as an in-place unreadable marker while the block continues. Selection, however, is defined over `InspectView` produced from `scan_entities`. At `src/catalog/scan.rs:179-202`, either a metadata-read failure or an `outbound_for` failure emits a diagnostic and `continue`s, removing that entity from the scanned corpus. For knowledge records, `outbound_for` reaches `knowledge::relation_edges`, whose `read_record` at `src/knowledge.rs:1637-1648` parses and validates the TOML and unconditionally reads the Markdown body. Thus the absent-TOML, malformed-facet, and missing-body cases are pruned before `select_knowledge`; `render_block` cannot name a record it never receives. The §9 fixture and named I5 test therefore cannot exercise the claimed path without a race or fabricated input, and the design does not specify surfacing scan diagnostics on both new table and JSON surfaces. Suggested repair: separate pre-selection scan failures from post-selection record-read failures, specify how each command and format discloses scan diagnostics, and test both paths. If records with valid TOML but missing prose must remain selectable, give relation scanning a TOML-only accessor rather than routing through full `read_record`."
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "major"
+title = "The `full` JSON shape is neither a complete record nor single-source"
+detail = "Observation: SL-246 §5.2 lines 642-648 and D1 define every JSON entry as `{ reference, caption, facet | null, marker?, body? }`, while §6 OQ-3 lines 814-825 says `Full` renders a complete record and should delegate to the same render as `knowledge show`. The current complete record projections include identity, kind, slug, title, status, dates, tags, evidence, relationships, facet, and body: see `format_metadata` at `src/knowledge.rs:1793-1831`, `format_show` at 1834-1838, and `show_json` at 1943-1988. The proposed JSON object omits most of those fields. It also cannot satisfy C4 and D1 as described: the only shared field-order mechanism specified is the text-returning `format_facet`, while current `facet_json` at 1991 onward is a separate handwritten per-kind projection. The planned test checks only that JSON and table carry the same record identities, not the same tiered content. Suggested repair: make the full JSON contract explicitly contain the complete knowledge-show payload, and define one ordered structured facet projection from which both text and JSON are rendered. Add parity cases for common metadata and every record kind at both levels, not only record membership."
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "major"
+title = "`inspect --transitive --knowledge` has no defined behavior"
+detail = "Observation: SL-246 adds `--knowledge` to the existing `inspect` command in §5.2 and `src/commands/inspect.rs`, but never defines its interaction with the already-public `--transitive` mode. The current command scans, then returns from the transitive branch at `src/commands/inspect.rs:98-117` before the one-hop relation and actionability composition. A straightforward implementation of the design therefore accepts `--knowledge facets|full` and silently ignores it whenever `--transitive` is also present. That violates the explicit level dial and the existing CLI policy of rejecting unsupported combinations; §7.3 lines 908-911 only says not to implement transitive knowledge yet, which does not define a refusal. Suggested repair: declare non-`skip` knowledge levels incompatible with `--transitive` for SL-246, enforce the conflict in clap or command validation, and add a black-box test whose error points to IMP-398 S5. Implementing transitive selection instead would exceed the stated scope."
+
+[[finding]]
+id = "F-6"
+status = "open"
+severity = "major"
+title = "DEC-260 omits the prior carrier and R6 relies on a duplicate"
+detail = "Observation: IMP-393 predates IMP-457 by six weeks and already states the same governed defect: `design show` is occupied by a writer turn envelope rather than the reader document. It also carries the composed reader-facing render and presents a smaller alternative that DEC-260 never evaluates: make bare `design show` the reader render while retaining the already-named `--format prompt` writer projection. IMP-457 duplicates the complaint and intended rehome, and even describes SL-246 as taking a selector on `slice show` although the design proposes `slice design show`. Nevertheless SL-246 §3 F5 and §8 R6 lines 975-983 treat IMP-457 as the sole carrier and mitigation, while the actual slice relationship already records partial fulfillment of IMP-393. This leaves DEC-260 decided against an incomplete alternative set and makes R6 point to a redundant, factually stale carrier, contrary to the no-parallel-implementation rule. Suggested repair: reconcile IMP-457 into IMP-393 or state a non-overlapping boundary, update F5/R6 and the slice fulfillment boundary to the surviving carrier, and re-adjudicate DEC-260 against the `design show` reader default plus explicit `--format prompt` alternative before retaining the temporary nested verb."
+
+[[finding]]
+id = "F-7"
+status = "open"
+severity = "minor"
+title = "The new ordering test does not pin the past-999 invariant"
+detail = "Observation: SL-246 §5.5 I4 explicitly promises numeric source ordering past id 999, but the §9.2 fixture table does not require any four-digit ids and the named `output_is_permutation_invariant_across_scan_order` case proves only independence from input order. Existing relation-graph coverage may protect the upstream `InspectView`, but `select_knowledge` is new flattening and dedup logic that can regress to canonical-string ordering while remaining permutation-invariant. The proposed test therefore does not prove the strongest clause of I4 on the new output surface. Suggested repair: seed the knowledge-selection golden with otherwise comparable ids around 998, 999, 1000, and 1001, and assert numeric order after selection and dedup."
+
+[[finding]]
+id = "F-8"
+status = "open"
+severity = "major"
+title = "The read-only design surface inherits a worker-mode write refusal"
+detail = 'Observation: SL-246 C3 at §3.2 lines 343-346, §5.3 lines 652-655, and I7 at §5.5 line 720 require the promoted `slice design show` path to be read-only and not inherit the retired leaf write. The exact §5.6 code-impact table at lines 755-767 omits `src/commands/guard.rs`, and none of its rows covers the whole-command classification owned there. Today `write_class` maps every `SliceCommand::Design { .. }` to `Write("slice design")` (`src/commands/guard.rs:63-66`), while the cited `slice selector` precedent nests its group and classifies `Doctor` as `Read` separately from the mutating subverbs (`:82-88`). This classification has one production consequence: `main` calls `worker_guard` before dispatch (`src/main.rs:259-266`), and under `DOCTRINE_WORKER=1` a `Write` classification exits nonzero with an authored-write refusal before the new handler can run (`src/commands/guard.rs:442-471`). It does not acquire a lock, regenerate boot state, or make the handler write; outside worker mode it passes through. Therefore implementing the declared touch-set leaves the new read-only surface unusable in confined workers. This is distinct from F-2: F-2 concerns the later dispatch edge and ADR-001 cycle, whereas this refusal happens before dispatch and survives any repair to that route. Suggested repair: add `src/commands/guard.rs` and worker-guard coverage to §5.6, and specify nested classification for the promoted group so `Show` is `Read`.'
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
