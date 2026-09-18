@@ -533,14 +533,38 @@ codex ran out of credits. Yields 8, 9, 4, 5, 2, 1.
 
 ### The closure story
 
-The draft was sound in its decisions and wrong in its evidence. Round 1's two
-blockers (`F-1`, `F-2`) were dissolved not by repair but by `DEC-261`, which
-re-sited the whole read from `slice design show` onto `doctrine design show` —
-the review's largest single change, and it came from attacking a governance
-claim (`SPEC-013`'s two-level grammar) rather than the design's logic.
+The draft was sound in its decisions and wrong in its evidence. Round 1's
+`F-1` — its only blocker — was dissolved not by repair but by `DEC-261`, which
+re-sited the whole read from `slice design show` onto `doctrine design show`:
+the review's largest single change, and it came from attacking a **governance
+entitlement** (`SPEC-013`'s two-level grammar, `REQ-197`) rather than the
+design's logic. The logic was fine; the design lacked the authority to declare
+three levels non-deviating on a precedent.
 
-What the middle rounds found was a different genus: **the design kept asserting
-mechanisms it had not established**. `F-14` claimed a guarantee from a return
+**One genus, surfacing at successively lower layers.** It is tempting to date
+*the design asserts mechanisms it has not established* to the middle rounds. It
+was there in round 1. `F-2` (major, not a blocker — round 1 raised one) attacked
+a **code-reachability** claim: the design said the handler would route through
+`slice::dispatch` once the residual arm was deleted, and that route does not
+exist without closing an `ADR-001` cycle — `cli.rs:1524-1533` and
+`run_deprecated_slice_design` being the two places the tree already documents
+why. `ADR-001` appears there as the reason the route is blocked, not as a clause
+the design had no right to invoke. So the arc reads:
+
+| round | layer the unestablished mechanism sat in |
+|---|---|
+| 1 | governance entitlement (`F-1`) |
+| 1 | dispatch reachability (`F-2`) |
+| 2-3 | the missing per-record layer (`F-14`, `F-18`, `F-20`) |
+| 4 | the call chain above the leaf renderers (`F-23`) |
+| 5-7 | the arm twins (`F-25`, `F-30`, `F-31`) |
+
+The characteristic failure was constant from the first round; only its depth
+changed. That is the version worth telling a future author, because "the early
+rounds were about governance and it got sloppier later" is both flattering and
+false.
+
+The middle rounds are where the genus was most expensive: `F-14` claimed a guarantee from a return
 type that carried one of three clauses. `F-18` specified a JSON shape with no
 producer. `F-20` sited an empty-state policy on functions that could not see its
 inputs. Those three were one defect — there was no per-record layer — and
@@ -601,8 +625,13 @@ while its own text — "written after the last pass" — was false.
   intention. That is stated rather than papered over.
 - **An `EVD` at `Only(Tier::Argument)` falls to the unfilled marker** — a
   wrong-ish message for a state nothing enters, since the filter is constructed
-  nowhere. A fourth empty state would cost more than the named edge; the edge is
-  named in §5.2 so a future caller is told where it is rather than finding it.
+  nowhere. **This is a tradeoff and not a deferred defect, and the distinction is
+  load-bearing:** `F-20` and `F-23` were *structural* — the marker's inputs were
+  unreachable from the function assigned to produce it, so the specified output
+  could not be produced on any path. Here every input is present, the output *is*
+  produced, and only its wording is wrong. A fourth empty state would cost more
+  than the named edge; the edge is named in §5.2 so a future caller is told where
+  it is rather than finding it.
 - **`knowledge show`'s concealing behaviour is preserved deliberately** (`C2`),
   and `format_facet`/`facet_json`'s existing disagreement about absent fields
   with it. Both are `IMP-403`'s.
@@ -613,9 +642,40 @@ while its own text — "written after the last pass" — was false.
 
 ### What this review did not reach
 
+**Not one figure in `research/research.md` was ever checked.** This is the
+largest gap and it went unnoticed for seven rounds. The design load-bears on
+those measurements throughout — `facets` costing ~30% of `full` (31.8 KB against
+107 KB across fifteen records), the per-kind fill rates (decisions 24%, questions
+10%, assumptions 37%, evidence 58%, constraints 60%), "population is
+all-or-nothing", "4 of the 15 render nothing", `QUE-206` at 6.7 KB. `R1`, `R3`,
+`F3`, `DEC-149`'s healthy-corpus ruling and `DEC-150`'s field-selection criterion
+all rest on them, and the 6.7 KB figure is **hard-coded into a marker string the
+design specifies verbatim**. The review verified counts (`F-22`), citations
+(`F-26`) and signatures relentlessly and pointed none of that at the one artefact
+whose numbers decide whether the middle level is worth building at all.
+
+It is worse for a later auditor than for this review: `research/` is **runtime
+tier and untracked**, so the cited numbers cannot be re-read, and re-running
+`doctrine slice research 246` produces new measurements rather than those. See
+`IMP-462`.
+
+**§4 (Guiding Principles) never moved in seven rounds.** `sec-4` alone carries
+its original fingerprint; the round-2 bar noted it was untouched and no bar
+afterwards listed it. `P1`–`P6` are the tie-breakers §5 reaches for, and no
+reviewer has read them adversarially.
+
+**`OQ-1`'s text-only recommendation was named and not adjudicated.** The raiser
+flagged it at round 8 as an advisory and declined to raise it — reasonably, at a
+close gate against an explicitly open question. It was repaired at revision 61
+without a finding, so the review reached it and never ruled on it.
+
 `notes.md`'s harvest was never audited on its own terms — it was read as a
 source for round bars and its claims tested against the tree, which is not the
 same check. §3.1's six three-level governance groups were verified at round 2
-and not re-run. And nine section attestations remain outstanding under
-`review_policy = human-only`; no round of this ledger discharges any of them,
-and each binds a revision the adversarial lane never read.
+and not re-run.
+
+And nine section attestations remain outstanding under `review_policy =
+human-only`; no round of this ledger discharges any of them. **Each binds a
+revision the adversarial lane never read** — the ledger closed reading 59, the
+document is at 61, so the attestor is the first reader of the `OQ-1` paragraph
+and the `X5`/`I6` sweep.

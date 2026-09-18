@@ -304,6 +304,14 @@ fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 59, materialised)
   attest revision 42
 
 ### Open
+- **nothing ever checked a figure in `research/research.md`** — seven rounds
+  verified counts, citations and signatures and pointed none of it at the one
+  artefact whose numbers decide whether the middle level is worth building.
+  `research/` is runtime tier and untracked, so the cited figures cannot be
+  re-read and a re-run produces different ones. `IMP-462`
+- **§4 never moved in seven rounds** — `sec-4` alone carries its original
+  fingerprint. `P1`-`P6` are the tie-breakers §5 reaches for and no reviewer has
+  read them adversarially. The attestor is their first adversarial reader
 - `QUE-223` — should the design read disclose that `design.md` is behind its run
 - `ASM-011` — inbound edges as a sufficient proxy, held with a measured miss
 - **nine section attestations outstanding** — `sections_outstanding_review=9`,
