@@ -356,3 +356,126 @@ implemented. A place where it does is itself a finding.
 Corpus hygiene (`IMP-403`), the `SPEC-019` record-kind gap (`ISS-316`), the
 `IMP-457`/`IMP-393` overlap (closed as a duplicate), and implementation-level
 code review — there is still no code.
+
+## Round 4 bar — added 2026-09-18, at run revision 47
+
+Rounds 1–3 were read by one reviewer. **This round's raiser is a different model**
+— Claude Opus, not the incumbent. You inherit the raiser role and this ledger
+whole; you did not write the earlier findings and you are not bound to agree with
+them. Where you think an earlier finding was wrong, say so as a new finding
+rather than reopening a terminal one.
+
+Round 3 read **revision 45**. The design is now **revision 47** content, adopted
+after integration, with five sections moved — `sec-3`, `sec-5`, `sec-7`, `sec-8`,
+`sec-9`, roughly 345 changed lines. Read the current text, not the diff's story
+about it: `.doctrine/slice/246/design.md`.
+
+The integration's own account is `git show 63516fa9e` — useful for locating what
+moved, **not** as evidence that it moved correctly.
+
+### Job 1 — adjudicate the five dispositions
+
+`F-14`, `F-18`, `F-20`, `F-21`, `F-22` are all `answered`. Verify each (accepted,
+terminal) or contest it (hands it back). Four are worth testing rather than
+accepting:
+
+- **`F-14`'s contest was *upheld*, so the thing to adjudicate is the repair, not
+  the concession.** The disposition grants that `-> String` foreclosed only
+  `I5`'s abort clause, and re-grounds the other two: the *map shape* forbids the
+  drop, and `render_record` / `record_value`'s **never-empty contract** forbids
+  the empty render (§ 5.2, § 9.5's table). Attack the second ground directly. A
+  map is a shape a reader can check; a "contracted never-empty" function is a
+  doc comment. If the never-empty clause is enforced by nothing but the
+  implementer's intention, then the repair moved one clause from the type system
+  to prose and called it by-construction — which is the same defect `F-14`
+  named, one layer along. Decide whether that is so.
+- **`F-18`'s repair gives the JSON arm `record_value` and `knowledge_value`.**
+  `knowledge_value` at `Skip` **omits the key** rather than emitting an empty
+  array, justified by `C1` byte-identity. Check that against `inspect --json`'s
+  actual payload and against what `C1` says: is an absent key byte-identical to
+  today, and does any existing consumer of that payload distinguish absent from
+  empty?
+- **`F-20`'s repair splits the three markers across two layers** — the by-design
+  marker stays on `format_facet` / `facet_json` under `Marked`; the unfilled and
+  unreadable markers move to `render_record` / `record_value`. The stated reason
+  is that `metadata()` behind `format_facet` would put disk in a pure layer that
+  `knowledge show` also calls. Test the premise: is `format_facet` actually in a
+  layer that is pure today, and does `knowledge show`'s call path make that
+  claim true? If the facet renderers already sit above the disk, the repair's
+  justification is wrong even if its shape is right.
+- **`F-21`'s repair adds `--known-revision` to the partition**, on the ground
+  that the draft "enumerated four flags from its own prose rather than from
+  `ShowArgs`, where there are five". **Count them yourself** in
+  `src/commands/design.rs`. If `ShowArgs` carries a sixth, the partition is
+  still not a partition and the repair repeated the original error.
+- **`F-22`** repaired two counts and the integration's own sweep claims two more
+  (`slice-246.md`'s second "14 references", § 5.6's "~4 sites"). Re-check all
+  four against the tree. A count sweep that stopped one short is the finding.
+
+### Job 2 — attack the new material, which no reviewer has read
+
+Rounds 1–3's bars still apply to it. `D6` and `D7` are **decisions taken at
+review**, written by the responder, and read adversarially by nobody:
+
+- **§ 5.2's five signatures** — `render_record`, `record_value`, `render_block`,
+  `knowledge_value`, `show_value`. Unwritten code asserted to compile, to be
+  total, and to be never-empty. Attack each assertion separately.
+- **`show_value` split out of `show_json`** (`src/knowledge.rs:1949`). The claim
+  is that `show_json` builds that twelve-key map inline, so naming it leaves
+  `show_json`'s envelope, `Result` and bytes unchanged (`C2`). Read the function.
+  If the map is not inline, or if the split changes what `show_json` can return,
+  `C2` is at risk and `Full`'s entry has no single projection.
+- **The layering rule itself** — "the per-record producers may touch the disk,
+  the facet renderers stay pure". Check it against `ADR-001` (module layering,
+  no cycles) and against the pure/imperative split `AGENTS.md` states. A rule
+  that is right in this design and wrong in the codebase is a finding.
+- **`D7`'s machinery argument.** It claims the round-2 rule would have forced
+  the implementation to read clap's `ValueSource` to tell a defaulted `document`
+  from a written one, and that restating the refusal over the *rendering*
+  removes that. Verify the second half: is the new rule enforceable from the
+  resolved `--format` value alone?
+- **§ 9.2's replacement case**,
+  `json_is_legal_at_the_document_rendering_and_refused_at_every_envelope_one`.
+  Its stated point is that it asserts a **pair**, so it cannot pass under the
+  round-2 rule it replaces. Check that: does the legal half actually fail under
+  the retired rule, or does the retired rule also permit `--json` alone?
+- **§ 5.1's flowchart node and § 5.4's sequence**, both rewritten to carry the
+  map. Do they now agree with § 5.2 — and does § 5.4's three-outcome `alt` cover
+  the states § 5.2 names, no more and no fewer?
+- **§ 3.1's `STD-001` restatement** — "one of the three is a bare constant, the
+  other two are templates over a constant frame". Does `STD-001` actually admit
+  a template as a single-source constant, or is that a widening of the standard
+  written to fit the design? Read `STD-001`.
+- **§ 8 `R6`**, now rewritten three times, once per round.
+
+### Job 3 — the post-round-3 artefacts, unread by anyone
+
+- **`slice-246.md`, rewritten again at the round-3 integration** (14 lines).
+  Read it with `doctrine slice show SL-246`. Does the scope now assert nothing
+  the accepted decisions contradict, and omit nothing `D6` / `D7` add?
+- **`notes.md`, its harvest rewritten through round 3** (`git show ff0fdb02a`).
+  It is this bar's source and may be wrong about what is worth probing.
+
+### Bar
+
+Anything real, any severity. Hold the standing admissibility rules: cite what you
+attack, separate observation from prescription, and do not manufacture findings.
+
+Round yields have gone **8 → 9 → 4**. That is convergence, and it means the
+honest expected outcome of this round is *small*. **Raising nothing on the new
+material, while verifying or contesting the five, is a legitimate and complete
+outcome** and should be stated plainly if it is what you find. A fourth round
+that manufactures four findings to match the third is worse than a fourth round
+that raises none.
+
+### Standing constraint
+
+The design **must stand alone**. It may not require the review chronology, the
+design run's state, or locally-invented terminology to be understood or
+implemented. A place where it does is itself a finding.
+
+### Out of scope, unchanged
+
+Corpus hygiene (`IMP-403`), the `SPEC-019` record-kind gap (`ISS-316`), the
+`IMP-457`/`IMP-393` overlap (closed as a duplicate), and implementation-level
+code review — there is still no code.
