@@ -12,35 +12,48 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/knowledge.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/relation.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/relation.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/catalog/**"
-intent = "scope-relevant"
+intent = "design-target"
+note = "Design-target set committed by design.md §5.6"
 
 [[selector]]
 selector = "src/slice.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/spec.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/adr.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "Design-target set committed by design.md §5.6"
 
 [[selector]]
 selector = "src/commands/design.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "Design-target set committed by design.md §5.6"
+
+[[selector]]
+selector = "src/relation_graph.rs"
+intent = "design-target"
+note = "Design-target set committed by design.md §5.6"
+
+[[selector]]
+selector = "src/commands/inspect.rs"
+intent = "design-target"
+note = "Design-target set committed by design.md §5.6"
+
+[[selector]]
+selector = "src/commands/slice_design.rs"
+intent = "design-target"
+note = "Design-target set committed by design.md §5.6"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "Design-target set committed by design.md §5.6"
+
+[[selector]]
+selector = "tests/e2e_inspect_golden.rs"
+intent = "design-target"
+note = "Design-target set committed by design.md §5.6"
+
+[[selector]]
+selector = "tests/e2e_slice_design_show_golden.rs"
+intent = "design-target"
+note = "Design-target set committed by design.md §5.6"
 
 [[relation]]
 label = "governed_by"

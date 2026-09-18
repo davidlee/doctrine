@@ -452,3 +452,323 @@ split exists because a second and third caller are already known — the generic
 exactly as far as making the renderer indifferent to how its input was selected,
 and no further. No depth parameter, no traversal trait, no label-keyed renderer.
 
+<!-- doctrine:section sec-5 -->
+## 5. Proposed Design
+
+### 5.1 System Model
+
+Three pieces, split where `DEC-147` says to split: **selection** decides which
+records and what to call them; **rendering** turns records into bytes; the
+**command layer** composes a subject with the rendered block. Selection and
+rendering never meet except through a value type.
+
+```mermaid
+flowchart TB
+  subgraph cl["command layer — composes, owns no policy"]
+    CI["commands/inspect.rs<br/>relations + knowledge + actionability"]
+    CSD["commands/slice_design.rs<br/>design.md + knowledge"]
+  end
+  subgraph eng["engine"]
+    SEL["relation_graph::select_knowledge<br/>pure: InspectView → Vec&lt;SelectedRecord&gt;"]
+    KR["knowledge::render_block<br/>reads each record by id, renders at level"]
+    IF["relation_graph::inspect_from<br/>(unchanged)"]
+    SD["slice::design_document<br/>reads design.md verbatim"]
+  end
+  SR(["SelectedRecord { reference, caption }<br/>owned by knowledge — the only type they share"])
+
+  CI --> IF --> SEL
+  CSD --> SD
+  CSD --> IF
+  CSD --> SEL
+  SEL --> SR --> KR
+  CI --> KR
+  CSD --> KR
+```
+
+*Ownership, and the one type that crosses. `SelectedRecord` is defined in
+`knowledge` so that `relation_graph` depends on `knowledge` and never the
+reverse — the edge is acyclic today and this keeps it so.*
+
+Two things the diagram is making a point of.
+
+**Selection is pure.** It takes an `InspectView` that has already been derived
+and returns a list. It performs no reads, so a second selection — the design
+read's, and later the transitive closure's — is a pure function to write, not a
+second traversal to maintain.
+
+**The command layer owns composition and no policy.** It decides *what to put
+next to what*; it never decides which fields render or what an empty facet
+means. This is forced, not preferred: `catalog::scan::outbound_for` already
+calls `slice::relation_edges`, so a handler living in `src/slice.rs` that
+reached into `relation_graph` would close a cycle. The composition has to be one
+layer up, which is where `commands/inspect.rs` already appends its actionability
+block for the identical reason.
+
+### 5.2 Interfaces & Contracts
+
+#### The level
+
+```rust
+// src/knowledge.rs — STD-001: the three names have one definition.
+/// How much of each inbound knowledge record a composed read carries.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum KnowledgeLevel {
+    /// No knowledge block. Byte-identical to the pre-SL-246 surface.
+    #[default]
+    Skip,
+    /// Per record: the fields that say what rules, and what would change
+    /// whether the ruling still stands (DEC-150). Never reads the `.md`.
+    Facets,
+    /// The complete record, prose body included.
+    Full,
+}
+
+impl KnowledgeLevel {
+    pub(crate) fn as_str(self) -> &'static str { … }   // "skip" | "facets" | "full"
+}
+```
+
+`Default` is `Skip`, which is `C1` expressed in the type rather than remembered
+at each call site.
+
+#### Selection
+
+```rust
+// src/knowledge.rs — the shared value type, defined here so the dependency
+// runs relation_graph → knowledge and never back.
+/// One record chosen for a composed read, with the text it renders under.
+/// `caption` is TEXT, not a `RelationLabel` (DEC-147): at one hop it is the
+/// derived inbound verb; at depth N it will be a path, and the renderer must
+/// not have to change to learn that.
+pub(crate) struct SelectedRecord {
+    pub(crate) reference: String,   // canonical ref, e.g. "DEC-145"
+    pub(crate) caption: String,     // e.g. "shaped_by", "concerned by"
+}
+
+// src/relation_graph.rs
+/// Select the knowledge records pointing at the inspected entity — pure over an
+/// already-derived view. Filters on the SOURCE prefix via `kinds::is_record`
+/// (DEC-148), keeps the view's group order and each group's `EntityKey` sort,
+/// and deduplicates by reference with the first caption winning.
+pub(crate) fn select_knowledge(view: &InspectView) -> Vec<SelectedRecord>;
+```
+
+Dedup belongs here and not in the renderer (`DEC-147`): `EVD-012` already
+arrives under two inbound labels at one hop on the specimen, and at N hops a
+record arrives at several depths. Keeping it in selection leaves the renderer
+ignorant of traversal entirely.
+
+#### Rendering
+
+```rust
+// src/knowledge.rs
+/// Render the knowledge block for a composed read. Reads each selected record
+/// by id — the kind-module accessor, sibling of `relation_edges` (DEC-146) —
+/// and renders it at `level`.
+///
+/// TOTAL: never returns `Err`. A record that cannot be read is disclosed in
+/// place, by name and reason, and the remaining records still render (STD-003).
+/// `Skip` returns the empty string without reading anything.
+pub(crate) fn render_block(
+    root: &Path,
+    selected: &[SelectedRecord],
+    level: KnowledgeLevel,
+) -> String;
+```
+
+The totality is the design's expression of `STD-003`, not a convenience: a
+composed read that bailed on one unreadable record would deny the caller the
+other fourteen, and one that dropped it silently would launder a corpus defect
+into a well-formed answer.
+
+`Facets` reads only `record-NNN.toml`. This is `C7` discharged: `read_record`
+reads the `.md` unconditionally and errors when it is absent, so `render_block`
+takes a facet-only path at `Facets` rather than paying for a body it discards.
+That path is the seam `IMP-459` would later ride to stop the corpus scan reading
+a megabyte of prose it throws away.
+
+#### The tiered facet render
+
+`format_facet` gains two policy inputs and stays the single field-order table
+(`C4`, `DEC-150`):
+
+```rust
+/// Which tier a facet field belongs to. Annotated on each field line inside
+/// the existing per-kind match — NOT a separate field-list constant, which
+/// could drift from the order table beside it.
+enum Tier { Deciding, Argument }
+
+/// How a facet with nothing to show is rendered.
+enum EmptyPolicy { Silent, Marked }
+
+fn format_facet(facet: &RecordFacet, tier: TierFilter, empty: EmptyPolicy) -> String;
+```
+
+`knowledge show` passes `(all tiers, Silent)` and its goldens stay byte-identical
+(`C2`). The composed read passes `(Deciding, Marked)` at `Facets` and
+`(all tiers, Marked)` at `Full`.
+
+The per-kind tiers are `DEC-150`'s: `DEC` context/choice/rationale; `QUE`
+question/why_matters/answer; `CON` statement/source/applies_to/waiver_reason;
+`ASM` claim/confidence/basis/invalidated_by; `EVD` all three; `HYP` both; `CPT`
+none.
+
+#### The three empty states
+
+`DEC-149`'s two markers plus `STD-003`'s third. Each is a named constant, and
+they must not share wording (`P5`):
+
+| state | rendered |
+|---|---|
+| author left the facet unfilled | `(no facet recorded — 6.7 KB of prose: doctrine knowledge show QUE-206)` |
+| the kind has no facet by design | `(no facet by design — a concept rides its prose body)` |
+| the record could not be read | `(unreadable: record not found at …/record-140.toml)` |
+
+The prose-size hint costs a `metadata()` call, not a read — which is what keeps
+it compatible with `Facets` never opening the `.md`.
+
+#### Command grammar
+
+```
+doctrine inspect <ID> [--knowledge <skip|facets|full>]
+doctrine slice design show <SLICE> [--knowledge <skip|facets|full>] [--json]
+```
+
+`--knowledge` defaults to `skip` on both. `slice design` is promoted from a leaf
+verb to a group (`DEC-260`); its deprecated scaffold leaf retires, and the
+three-level grammar matches the existing `slice selector add|note|list|rm|doctor`
+precedent.
+
+The JSON arm carries the same level, structurally rather than as rendered text:
+`inspect --json` gains an additive `"knowledge"` key, and `slice design show
+--json` emits `{ "kind": "slice-design", "slice", "document", "knowledge" }`.
+Each entry is `{ reference, caption, facet | null, marker?, body? }`, tier-filtered
+at `Facets` exactly as the table is. Table and JSON agreeing is deliberate: the
+existing divergence between `format_facet` and `facet_json` — one silent, the
+other emitting every field as `null` — is the defect this design must not repeat.
+
+### 5.3 Data, State & Ownership
+
+There is no state. Every surface here is read-only, nothing is cached across
+invocations, and nothing is written — which is worth stating because the verb
+being repurposed currently *writes* (`C3`): the retired leaf delegated to
+`design materialise`. The group's `show` must not inherit that.
+
+Ownership, restated as a rule per module:
+
+| module | owns |
+|---|---|
+| `knowledge` | `RecordFacet`, the field-order table, the tiers, the three markers, `SelectedRecord`, `KnowledgeLevel`, `render_block` |
+| `relation_graph` | the inbound derivation (unchanged) and `select_knowledge` |
+| `slice` | reading `design.md` off disk |
+| `commands/*` | composition and flag lowering; **no policy** |
+
+Within one render pass a record is read at most once — guaranteed by dedup in
+selection, not by a cache. There is no cache.
+
+### 5.4 Lifecycle, Operations & Dynamics
+
+```mermaid
+sequenceDiagram
+  participant U as caller
+  participant C as commands/slice_design
+  participant S as slice
+  participant RG as relation_graph
+  participant K as knowledge
+  participant FS as disk
+
+  U->>C: slice design show SL-244 --knowledge facets
+  C->>S: design_document(root, 244)
+  S->>FS: read .doctrine/slice/244/design.md
+  S-->>C: document (verbatim) — or a clean error if absent
+  C->>RG: scan_entities + inspect_from("SL-244")
+  RG-->>C: InspectView (inbound groups, (label, role)-keyed)
+  C->>RG: select_knowledge(&view)
+  RG-->>C: 15 SelectedRecord — record-kind sources only, deduped
+  C->>K: render_block(root, &selected, Facets)
+  loop per selected record
+    K->>FS: read record-NNN.toml (no .md at Facets)
+    alt read ok
+      K->>K: format_facet(facet, Deciding, Marked)
+    else read failed
+      K->>K: disclose by name and reason (STD-003)
+    end
+  end
+  K-->>C: block
+  C-->>U: document, then block
+```
+
+The order of the two reads is deliberate. The document is read first so a slice
+with no design fails immediately and cheaply, before a corpus scan is paid for.
+
+### 5.5 Invariants, Assumptions & Edge Cases
+
+**Invariants.**
+
+- `I1` — at `Skip`, output is byte-identical to the pre-SL-246 surface, in both
+  formats, on every affected verb. Structural: `Skip` returns before any read.
+- `I2` — the `Facets` field set is a subset of `Full`'s, in the same order. By
+  construction: one field-order table with a tier filter (`C4`).
+- `I3` — each record appears at most once per render, under the caption of the
+  first group it was reached through.
+- `I4` — output is deterministic and permutation-invariant: group order from
+  `RelationLabel`'s `Ord`, sources by `EntityKey` (prefix lexicographic, id
+  numeric — correct past id 999).
+- `I5` — a selected record that cannot be read is named in the output. It is
+  never dropped, never rendered as empty, and never aborts the block.
+- `I6` — the three empty states render three distinct messages.
+- `I7` — nothing on this path writes.
+
+**Edge cases.**
+
+- `X1` — **inbound record set is empty.** At `Facets`/`Full`, say so explicitly
+  (`(no knowledge records point at SL-999)`) rather than omitting the block. The
+  reader asked; silence would be indistinguishable from a bug.
+- `X2` — **the slice has no `design.md`.** A clean error naming the repair —
+  `SL-999: no design document (doctrine design start SL-999)` — not an empty
+  document.
+- `X3` — **`design.md` is behind its design run.** Open; see §6 `OQ-1`.
+- `X4` — **a record is reachable under two labels and renders nothing.** One
+  entry, one marker. `I3` settles it before the renderer sees it.
+- `X5` — **a `CPT` in the selection.** Renders the by-design marker, never the
+  unfilled one, at every level. At `Full` its prose body is the content, so the
+  marker sits above a body rather than instead of one.
+- `X6` — **the subject is a record itself.** `Shapes` legally targets record
+  kinds, so `inspect DEC-145 --knowledge facets` is well-formed and renders one
+  hop. It does not recurse; that is `IMP-398` S5.
+- `X7` — **a malformed `[facet]` table.** `read_record` already validates; a
+  validation failure is `I5`'s disclosure path, not a panic and not a partial
+  facet.
+
+**Assumptions.**
+
+- `A1` — the inbound edge set is a sufficient proxy for "the knowledge that
+  shapes this entity", accepting the ~10 cited-but-unlinked records on the
+  specimen as a known, separately-tracked miss.
+- `A2` — reading the design document verbatim, markers included, is preferable
+  to parsing it. `design_run::document::parse` can refuse seven ways on a
+  hand-edited file, and handing a reader a refusal instead of their document is
+  a worse failure than showing them an HTML comment. See §7.
+
+### 5.6 Code Impact
+
+| path | change |
+|---|---|
+| `src/knowledge.rs` | `KnowledgeLevel`, `SelectedRecord`, `render_block`, the facet-only read path, `Tier`/`EmptyPolicy` on `format_facet`, the three marker constants |
+| `src/relation_graph.rs` | `select_knowledge` — pure, over `InspectView` |
+| `src/kinds/mod.rs` | none expected; `is_record` (`:128`) is consumed as-is |
+| `src/commands/inspect.rs` | `--knowledge` on `InspectArgs`; compose relations + block + actionability |
+| `src/commands/slice_design.rs` | **new** — the `slice design show` handler |
+| `src/slice.rs` | `SliceCommand::Design` becomes a group with `Show`; the deprecated leaf and `scaffold_design_doc` retire; a `design_document` reader |
+| `src/commands/design.rs` | `run_deprecated_slice_design` retires |
+| `src/commands/cli.rs` | the residual `SliceCommand::Design` dispatch arm (`:1531`) **deletes** |
+| `tests/e2e_inspect_golden.rs` | synthetic-corpus goldens at all three levels (`DEC-151`) |
+| `tests/e2e_slice_design_show_golden.rs` | **new** — the composed design read |
+| `tests/e2e_knowledge_cli_golden.rs` | unchanged — the `C2` proof |
+
+The `cli.rs` row is a payoff rather than a cost. That residual arm exists only
+because the deprecated leaf had to forward through `design materialise`, which
+`crate::slice` could not reach without closing a cycle. Retiring the leaf
+removes the forward, so `SliceCommand::Design` routes through `slice::dispatch`
+like every other slice verb and a documented `ADR-001` workaround goes with it.
+
