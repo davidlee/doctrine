@@ -3,52 +3,61 @@
 
 ## 1. Design Problem
 
-### What a reader cannot do today
+### A design document is no longer a whole document
 
 Doctrine's managed design workflow split a slice's design in two. The argument
-lives in the slice's `design.md`; the rulings live in **knowledge records** —
-separate entities, one per settled decision, question, assumption, constraint,
-piece of evidence, hypothesis or concept, each with its own files. The split is
-deliberate and it is not the problem. The problem is that nothing puts the two
-back together at read time.
+stays in the slice's `design.md`; the **rulings** moved out into knowledge
+records — separate entities, one per settled decision, question, assumption,
+constraint, piece of evidence, hypothesis or concept, each with its own files.
 
-Take `SL-244` as the specimen. Its `design.md` is 3,456 lines and cites twenty
-decision records by id, quoting fragments of them inline. Fifteen knowledge
-records point *at* the slice. `doctrine slice show SL-244` names **none** of
-them: it renders the entity's own file, which carries only the relations the
-slice itself authored — the outbound ones. Every kind's `show` behaves the same
-way for the same reason.
+The split is deliberate and it is not the problem. A ruling that lives in its
+own record can be cited by other designs, superseded on its own terms, and found
+by anything that walks relations — none of which a paragraph buried in a 3,000
+line document can do. The problem is that the document was left holding the
+argument for conclusions it no longer contains, and nothing puts the two back
+together for a reader.
 
-So the reader who wants what a design actually ruled has three bad options: read
-the argument and trust the quoted fragments; run a second command to get a list
-of ids and then a third command per id; or skip the records entirely. In
-practice agents do the third.
+`SL-244` is the specimen. Its `design.md` is 3,456 lines and cites twenty
+decision records by id, quoting fragments of them inline — `DEC-121` appears
+eight times as quoted phrases, because the author kept having to restate a
+ruling the document could not show. Fifteen knowledge records point at the
+slice. Reading that design as it stands means reading an argument whose
+conclusions are somewhere else, and taking the quoted fragments on trust.
 
-### The derivation is not missing
+**This is the subject of the slice.** Not "render an entity's inbound records" —
+that is the mechanism. The thing being fixed is that you cannot read a design.
 
-The reverse direction already works. Relations are stored outbound-only and
-reciprocity is derived (`ADR-004`), and `doctrine inspect <ID>` is the command
-that derives it — a kind-agnostic view that groups an entity's inbound edges
-under their derived verbs (`shaped_by`, `concerned by`, `originated from`). Run
-against `SL-244` it finds all fifteen records correctly.
+### What is missing is a read, not a derivation
 
-It emits **ids**. A reader who wanted content now has fifteen more commands to
-run, and no indication which of the fifteen are worth running.
+Two halves of the answer already exist, and the gap is precisely between them.
 
-Separately, `doctrine knowledge show <ref>` and `doctrine knowledge inspect
-<ref>` already render a record's content, the second without its prose body.
+Relations are stored outbound-only and reciprocity is derived (`ADR-004`).
+`doctrine inspect <ID>` is the command that derives it: a kind-agnostic view
+that groups an entity's inbound edges under their derived verbs. Run against
+`SL-244` it finds all fifteen records correctly — and prints their **ids**.
 
-Both halves exist. Nothing joins them, and no surface leads an agent from the
-question to either one.
+`doctrine knowledge show <ref>` renders a record's content, and `doctrine
+knowledge inspect <ref>` renders it without the prose body. Both need a caller
+that already knows which record it wants.
+
+And between them sits the surface that should have joined them, which turns out
+not to exist at all: **no verb renders a design document.** `doctrine slice
+show` renders the slice's scope and excludes design, plan and notes by its own
+stated contract. `doctrine slice design` is a deprecated scaffold. `doctrine
+design show` is the design *run*'s turn envelope — machine state, not a
+document. Reading `SL-244`'s design today means opening the file.
+
+So the composed read has to bring its own reader.
 
 ### Target behaviour
 
-One command renders an entity together with the **content** of the knowledge
-records that point at it, under an explicit verbosity level:
+`doctrine slice design show <SLICE> --knowledge <level>` renders the design
+document, followed by the content of the knowledge records that shape it, under
+an explicit level:
 
 | level | renders |
 |---|---|
-| `skip` | no knowledge — byte-identical to today's output, and the default |
+| `skip` | the document alone — the default |
 | `facets` | per record, the fields that say what rules and what would change whether the ruling still stands |
 | `full` | the complete record |
 
@@ -57,27 +66,34 @@ about 30% of `full` — 31.8 KB against 107 KB across the fifteen records — wh
 is a real saving but not an order of magnitude, so it has to be *right* about
 which fields it keeps rather than merely smaller.
 
+The same composition is available generically, one level up, on `doctrine
+inspect <ID> --knowledge <level>`: any entity that carries knowledge
+relationships, rendered with its records instead of their ids. That is where the
+renderer lives (`DEC-145`) and where a later transitive closure will extend it.
+The design read is its second caller (`DEC-260`), and the reason the slice
+exists.
+
 ### Where the boundary sits
 
-**In.** One hop. Relation-keyed. Inbound only. Any subject kind that carries
-knowledge relationships. The render lands on one command, and each kind's `show`
-gains a one-line pointer to it so the reader who asks the question where it is
-naturally asked is told where the answer lives.
+**In.** One hop. Inbound. Relation-keyed. The design document plus its records,
+and the generic entity case that shares the renderer with it.
 
 **Out.** Prose citations are not consulted: `SL-244`'s design cites roughly ten
 records it holds no edge to, and closing that gap is a validate-and-warn concern
-on the *authoring* path, not a read-path scan. The recursive knowledge closure —
-walking record-to-record edges and halting at non-record nodes — is a separate
-piece of work; this design leaves a seam for it and stops at one hop. Facet
-hygiene is not in scope either: where the corpus has left a record's fields
-unfilled, this design says so plainly rather than compensating.
+on the *authoring* path. The recursive knowledge closure — walking
+record-to-record edges and halting at non-record nodes — is separate work; this
+design leaves a seam for it and stops at one hop. Facet hygiene is not in scope:
+where the corpus has left a record's fields unfilled, this design says so plainly
+rather than compensating. And the information-architecture defect that forced the
+verb's siting is carried knowingly, not fixed (`IMP-457`).
 
 ### What success looks like
 
-Reading `SL-244` at the `facets` level surfaces the rulings of the twelve
-decisions that shape it, without the eleven backlog rows that merely originated
-it, at a cost a working agent would pay on purpose. The existing `show` output
-for every kind is unchanged, byte for byte, unless the reader asks for more.
+Reading `SL-244`'s design at the `facets` level gives you the argument *and* the
+twelve rulings that shape it, in one output, without the eleven backlog rows
+that merely originated the slice — at a cost a working agent would pay on
+purpose. Every existing read is unchanged, byte for byte, unless the reader asks
+for more.
 
 <!-- doctrine:section sec-2 -->
 ## 2. Current State
@@ -111,7 +127,9 @@ flowchart LR
 
 *The two halves and the missing edge between them. `inspect` derives which
 records point at an entity and prints their ids; `knowledge` can render a
-record's content but only when a caller already knows which record it wants.*
+record's content but only when a caller already knows which record it wants.
+Absent from the diagram because it is absent from the tree: any reader for
+`design.md` itself — see §2.5.*
 
 ### 2.1 `doctrine inspect` derives the inbound set correctly
 
@@ -202,7 +220,38 @@ residue. Adding a facet parse back to the scan would walk that decision
 backwards, and would charge every consumer — `validate`, `survey`, the priority
 graph, `backlog show` — for a parse only one of them wants.
 
-### 2.4 What pins the current behaviour
+
+### 2.5 No verb renders a design document
+
+`SPEC-013` imposes the uniform `<kind> <verb>` grammar over a shared verb set —
+`new`, `list`, `show`, `status` — and across the corpus `show` means *render the
+entity's document*. `doctrine adr show ADR-004` prints the ADR's prose.
+`doctrine rfc show RFC-031` prints the RFC's. `doctrine knowledge show DEC-145`
+prints the record's.
+
+The slice is the exception, and the exception is not an accident of
+implementation. A slice owns **four** documents — scope, design, plan, notes —
+and `show` picks one of them. Its help text says so outright: *"Show one slice:
+its metadata and scope body (not design/plan/notes)."* The other three have no
+reader.
+
+The neighbouring verbs that look like they might be one are not:
+
+| verb | what it actually does |
+|---|---|
+| `slice show <ID>` | metadata + scope body; design/plan/notes excluded by contract |
+| `slice design <ID>` | deprecated scaffold — now only delegates to `design materialise`, which **writes** the file |
+| `design show <SLICE>` | the design **run**'s turn envelope: stage, traversal, frontier, counts, change rows |
+| `design materialise <SLICE>` | renders the run's sections *into* `design.md` — a write, not a read |
+
+So the motivating read has no surface to attach to and no adjacent verb to
+widen. `DEC-260` sites it at `slice design show <SLICE>`, promoting `slice
+design` to a group and retiring the deprecated leaf, which is the smallest
+change that keeps `show` in the sense `SPEC-013` gives it. `IMP-457` records
+that `design show` is occupying the verb this read should eventually own, and
+carries the rehome to `design state`.
+
+### 2.6 What pins the current behaviour
 
 `SPEC-013` pins rendered output byte-exact per verb through black-box goldens.
 The relevant suites are `tests/e2e_inspect_golden.rs`,
