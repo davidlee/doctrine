@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b455-d3f5-7751-b981-b0b6547655ee"
+recorded_at = "2026-09-18T11:45:18.837216131Z"
+kind = "friction"
+summary = "/feedback: re-adopting a hand-edited design.md needs a section digest map nothing emits"
+detail = "adopt_authored.sections wants sec-N -> FULL-LENGTH sha256 of the section body (everything after the marker line, rstrip() plus one newline). design show prints those digests truncated to 12 chars. Sending the truncation, or sending the section text the contract's type line calls 'text', both refuse identically: '0 missing, 0 unknown, 9 mismatched' - a message that names neither the expected encoding nor the length. Cost four apply attempts plus a read of src/design_run/run.rs to find the comparison. Reverse-engineered the normalisation by reproducing the pre-edit file's nine reported fingerprints. ISS-320 already carries the gap; this adds the working recipe and the cost."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

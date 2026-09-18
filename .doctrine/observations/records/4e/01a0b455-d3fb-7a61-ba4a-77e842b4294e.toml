@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b455-d3fb-7a61-ba4a-77e842b4294e"
+recorded_at = "2026-09-18T11:45:18.84315985Z"
+kind = "friction"
+summary = "/feedback: the reviewing runbook stays discharged across adopt+materialise, so it cannot signal a re-review"
+detail = "SL-246's reviewing runbook (review.scope, review.selectors, review.passes) refused all three discharges with 'every step of this runbook is already discharged against its current definition' - after two adversarial rounds, four design revisions and four moved sections. review.passes' own text requires its statement be 'written after the last pass', which was false at the moment the gate reported clear. The runbook tracks its own definition, not the document it attested. Same class as IMP-461 (slice scope has no staleness signal against its design), one gate along; adjacent to ISS-359."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
