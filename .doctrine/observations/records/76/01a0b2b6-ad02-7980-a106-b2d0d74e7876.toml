@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b2b6-ad02-7980-a106-b2d0d74e7876"
+recorded_at = "2026-09-18T04:11:51.426733477Z"
+kind = "friction"
+summary = "/design: `slice notes <ID>` is a scaffolder, not a read — the reflex read costs a refusal"
+detail = "Resuming SL-246's design run, I reached for the slice notes to read the Harvest section and ran `doctrine slice notes SL-246`. It refused: 'Refusing to overwrite existing .doctrine/slice/246/notes.md'. The verb creates the file; there is no read verb for it, so the read falls back to sed/cat over the raw path — which the guardrails otherwise tell agents not to do. Same shape as IMP-393 / DEC-261: a writer-facing operation occupying the slot an agent reads as the reader-facing one. Cost is small per hit but it is a guaranteed hit on every cold resume."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
