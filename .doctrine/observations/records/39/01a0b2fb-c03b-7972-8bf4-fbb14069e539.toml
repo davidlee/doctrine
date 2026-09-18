@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b2fb-c03b-7972-8bf4-fbb14069e539"
+recorded_at = "2026-09-18T05:27:18.331727595Z"
+kind = "friction"
+summary = "/code-review raiser on RV-370: review raise accepted a shell-mangled title and fixing it cost a withdraw"
+detail = "Passing --title in double quotes with a leading backticked identifier let bash command-substitute it, so 'review raise' stored a title beginning with a space and missing its subject. The CLI accepted it without complaint. Titles are fixed at raise and there is no edit verb, so the repair was 'review withdraw' plus a re-raise under a new id — a terminal withdrawn row on the ledger that reads like a retracted claim rather than a typo, plus a gap in the finding numbering. A cheap guard (reject a title that is empty, leading-whitespace, or starts mid-sentence) would have caught it at the point of entry."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
