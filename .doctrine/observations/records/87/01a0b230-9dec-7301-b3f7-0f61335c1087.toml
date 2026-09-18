@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b230-9dec-7301-b3f7-0f61335c1087"
+recorded_at = "2026-09-18T01:45:25.740750207Z"
+kind = "friction"
+summary = "backlog terminal statuses: resolved vs closed is undocumented"
+detail = "While closing IMP-434 I needed to choose between the two terminal backlog statuses (resolved | closed). Neither reference/glossary.md nor reference/using-doctrine.md draws the distinction (grepped both, positive control: using-doctrine matched 'resolved' three times in unrelated prose), and src/backlog.rs carries no doc comment on it. Resolved it by corpus precedent instead — delivered improvements sit at 'resolved' (IMP-401, IMP-276), CHR-048 at 'closed' — which cost four extra tool calls to establish and still leaves the rule inferred rather than known. The resolution vocabulary IS documented (terminal requires one); the status pair is not."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
