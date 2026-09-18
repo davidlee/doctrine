@@ -88,71 +88,81 @@ for `IMP-398` (design §7.2 `D4`).
 carries the TOML-only analysis). `ISS-316` (`SPEC-019` governs four record kinds,
 the corpus has seven) predates the stage and stays open.
 
-## A third review pass, and what it would probe (2026-09-18, `reviewing`)
+## Review passes: where the ledger stands (2026-09-18, `reviewing`)
 
-Discharges `review.passes`. Written after round 2 integrated, at run revision 44.
-**A further pass is needed**, for two independent reasons.
+Discharged `review.passes` at run revision 45; **updated in place** after round 3
+ran, so it describes the next pass rather than the one that happened.
 
-**1. Round 2 is not finished.** `RV-370` stands at `await=raiser` with ten
-dispositions unadjudicated — `F-4` and `F-9`..`F-17`. A disposition the raiser
-has neither verified nor contested is not terminal, and the run's
-`review-disposition-attested` contract will not take a pass as `conducted` while
-they stand.
+**Round 3 ran** on an Opus raiser in the primary worktree, against revision 42.
+Nine of the ten dispositions verified with their claims re-derived from the tree;
+`F-14` contested and the contest upheld; `F-18`, `F-20`, `F-21`, `F-22` raised.
+All five adjudicated correct — no confabulations — and integrated at revision 46,
+materialised at 47.
 
-**2. The design moved after the reviewer read it.** Round 2 read **revision 38**.
-The integration adopted **revision 42** and moved five sections — `sec-3`,
-`sec-5`, `sec-7`, `sec-8`, `sec-9`, roughly 200 added lines. None of it has been
-read adversarially. Concretely, a round 3 would probe:
+**A fourth pass is warranted**, on the same two grounds as the third, and they
+are structural rather than a judgement about quality:
 
-- **§5.2 command grammar.** `--format` gaining `document` *and defaulting to it*,
-  `--json` refused alongside an explicit `--format`, `--full` refused on
-  `document`. Three refusals settled as user rulings during integration, so no
-  reviewer has attacked the grammar they produce.
-- **§5.2 `facet_fields` / `FacetValue`** as repaired for `F-12` and `F-13` — does
-  `C2` (both existing renders byte-identical) still hold once the marker slot
-  reaches the JSON arm, and does the `Full` entry match `show_json`'s payload.
-- **§5.5 and §9.2** — the in-block unreadable marker after `F-14` changed its
-  verification mode rather than its design. Is the one reachable case reachable
-  in the declared family now, or was the mode change the repair.
-- **§7.2 `D5`** and any ruling taken during integration: decided in the same
-  document that proposes it, which is the failure class round 1 raised as its
-  fourth line of attack.
-- **§8 `R6`** — replaced once at round 1 and rewritten again at round 2.
-- **§9.2's new cases and fixtures**, against `I1`–`I7` and `X1`–`X7` coverage.
-- **§3.3 `F5`'s population table**, new at round 2 and unread. Its four
-  emitted-string sites were re-derived independently while re-pointing the
-  selectors and the two sets agree exactly, so the count is sound; what is
-  unread is the table's *completeness* — whether the four populations it names
-  are the whole migration.
-- **The scope and selector set themselves.** `slice-246.md`'s *Affected surface*
-  was rewritten at revision 43 — it had listed `src/commands/design.rs` as
-  *dropped by the inquiry*, contradicting `DEC-261` outright — and the
-  design-target selectors were re-pointed off `DEC-260`'s siting at revision 44.
-  Both are post-round-2 and unread.
+1. **`RV-370` is `await=raiser` again**, with five dispositions unadjudicated.
+   The `review-disposition-attested` contract will not take a pass as `conducted`
+   while they stand.
+2. **The repair is itself new design.** `F-14`, `F-18` and `F-20` shared one
+   cause — no per-record producer — so the fix introduced four function
+   signatures (`render_record`, `record_value`, `render_block`,
+   `knowledge_value`), a fifth (`show_value`) split out of `show_json`, a new
+   layering rule for the three markers, and two decisions (`D6`, `D7`). None of
+   that existed when round 3 read the design.
 
-**Not a substitute for the attestations.** Nine section attestations are
-outstanding and the run's review policy is `human-only`. An adversarial round
-cannot discharge them, and a round-3 reviewer reading revision 42+ still binds
-its own revision, not the human lane's.
+What a round 4 would probe:
 
-**Reviewer.** codex is out of credits; round 2 ran on an Opus fork with the bar
-bound on the ledger. Round 3 has the same constraint until credits return.
+- **`D6`'s layering.** Is the map shape actually sufficient for `I5`'s three
+  clauses, or does "never empty" still rest on a contract rather than a
+  construction? §9.5 now claims three separate grounds — test each.
+- **`show_value`'s split** against `C2`: `show_json` keeps its envelope, its
+  `Result` and its bytes, and only the map acquires a name. Verify against the
+  tree, as round 3 did for `F-13`.
+- **`D7`'s partition**, now five flags. Is it complete against `ShowArgs` this
+  time, and do the two document-side flags finally agree?
+- **§9.2's replaced cases** — one case was deleted rather than edited because it
+  asserted the rule `D7` retired. Is the replacement's two-part assertion right?
+- **The two diagrams** (§5.1, §5.4), repaired by self-attack rather than by the
+  review, and therefore read by nobody.
+
+**Trend, stated without leaning on it.** Rounds raised 8, 9, then 4, and round 3
+raised nothing against §3.3 `F5`, §2.6, or the `F1` corpus-scan claim. That is
+convergence, not completion — round 3's findings were the most structural of the
+three, and they were in material two rounds had already passed over.
+
+**Not a substitute for the attestations.** Nine remain outstanding and the policy
+is `human-only`. An adversarial round cannot discharge them, and each binds a
+revision — round 3 read 42, so it could not have attested 47 either.
+
+**Reviewer.** codex remains out of credits; rounds 2 and 3 both ran on Opus.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 45, runbook cleared) · 9aa1ab257
+fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 47, runbook cleared) · 63516fa9e
 
 ### Produced
-- `RV-370` — the design review ledger: round-1 bar + ten lines of attack,
-  `F-1`..`F-8` raised by codex and disposed, round-2 bar bound, **round 2 run on
-  the Opus reviewer** (codex out of credits) — seven dispositions `verified`,
-  `F-4` `contested` and upheld, `F-9`..`F-17` raised, all ten adjudicated
-  correct and disposed. Ledger `await=raiser`, rounds 43
+- `RV-370` — the design review ledger, **three rounds**, 22 findings. Round 1
+  (codex): `F-1`..`F-8`. Round 2 (Opus, codex out of credits): seven `verified`,
+  `F-4` contested and upheld, `F-9`..`F-17` raised. Round 3 (Opus, in the primary
+  worktree so it recorded its own friction): nine `verified` with their claims
+  re-derived from the tree, `F-14` contested and upheld, `F-18`/`F-20`/`F-21`/
+  `F-22` raised. All fourteen round-2 and round-3 findings adjudicated correct —
+  no confabulation in any round. Ledger `await=raiser`, rounds 64.
+  `F-19` is a withdrawn row, not a retracted claim: a shell-mangled `--title` at
+  raise, with no edit verb to repair it
 - `DEC-261` — the design read reclaims `design show`; supersedes `DEC-260`,
   which is now `superseded`
-- `design.md` adopted at run revision 42, `materialise` byte-identical. Round 1
-  moved eight of nine sections at r38; round 2 moved five — `sec-3`, `sec-5`,
-  `sec-7`, `sec-8`, `sec-9`
+- `design.md` adopted at run revision 46 and materialised at 47, byte-identical.
+  Round 1 moved eight of nine sections at r38; rounds 2 and 3 each moved the same
+  five — `sec-3`, `sec-5`, `sec-7`, `sec-8`, `sec-9`. `sec-4` has never moved
+- `D6` and `D7`, the round-3 decisions. `D6`: one per-record producer per arm
+  (`render_record` / `record_value`), the block a **map** over it, `show_value`
+  split out of `show_json`, and each marker composed at the layer that holds what
+  it must name. `D7`: the flag partition is stated over **renderings**, not
+  spellings — which retired the round-2 `--json` rule at the user's ruling, and
+  made `--known-revision` decidable without a fourth ruling
 - `slice-246.md` scope reconciled to `DEC-261` — in two passes. The first
   (`876d86a40`) added the scope-addition prose and objective 5 but left
   *Affected surface* untouched, where `src/commands/design.rs` still sat under
@@ -163,7 +173,7 @@ fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 45, runbook clear
   two removed, eleven added, including the four emitted-string sites located
   in the doing. `selector doctor`: one unmatched, the § 5.6-new golden
 - the `reviewing` runbook is **cleared** — `review.scope`, `review.selectors`,
-  `review.passes` all attested
+  `review.passes` all attested, and it stayed cleared across the round-3 adoption
 - `IMP-457` closed `duplicate` of `IMP-393`, with the boundary written onto it
 - `IDE-054` — audit the CLI for format/content axis coupling (`F-9`'s declined
   principled split); `originates_from SL-246`
@@ -202,6 +212,17 @@ fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 45, runbook clear
   never taken the discharge, and re-facing it is what surfaced the stale list.
   The two failures are the same failure from opposite ends — the machine was
   right and the note was wrong. Candidate memory
+- **three findings can share one cause, and integrating them flat rewrites the
+  same block three times.** `F-14` (a guarantee claimed from a return type),
+  `F-18` (a JSON arm with no producer) and `F-20` (an empty-state policy sited
+  where its inputs are unreachable) were one defect: there was no per-record
+  layer. Dependency-ordering the triage before adjudicating is what surfaced it.
+  Candidate memory
+- **the self-attack pass earns its place on diagrams.** Round 3 found nothing
+  wrong with §5.1's flowchart or §5.4's sequence — they were correct when it
+  read them. The repair falsified both (`render_block` no longer reads records)
+  and only the post-integration self-attack caught it. A diagram is a projection
+  of the prose and goes stale silently with it. Candidate memory
 - round 2's own negative result: the reviewer read and found sound §2.6, §3.1's
   six three-level groups and acyclic claim, `F1`, `FacetValue` sufficiency, the
   one-table feasibility, `Full`'s field list, the prose-size hint, `R5`, and
