@@ -1,0 +1,31 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 223
+slug = "should-the-design-read-disclose-that-designmd-is-behind-its-run"
+title = "Should the design read disclose that design.md is behind its run?"
+record_kind = "question"
+status = "open"
+created = "2026-09-18"
+updated = "2026-09-18"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+question = "A managed design run holds sections plus a materialisation watermark; design.md on disk is a render of them. The two can diverge — a section declared and not yet materialised; a hand edit that moved the document out from under the run. Should `slice design show` detect that and say so?"
+why_matters = "It is the one place SL-246's design would reach into design-run state, which is a new dependency for commands/slice_design. Against that: the whole value of a managed run is that the document reflects it, and a reader silently served a stale document cannot detect the problem — the STD-003 family of harm, even though STD-003 does not literally cover a document that is merely behind. Recommendation on the design (section 6 OQ-1): disclose, one line above the document naming the repair. Left open for a second opinion because of the coupling."
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-246"

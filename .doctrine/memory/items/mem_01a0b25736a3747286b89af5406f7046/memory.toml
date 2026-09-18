@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0b25736a3747286b89af5406f7046"
+memory_key = "mem.fact.doctrine.show-is-not-cheap"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "A per-entity <kind> show is not a cheap read — it is slower than inspect"
+summary = "A per-entity `<kind> show` does corpus-scale work twice over — it measures slower than `inspect`; never cost a design on the assumption that show is cheap"
+created = "2026-09-18"
+updated = "2026-09-18"
+
+[scope]
+paths = ["src/priority/surface.rs"]
+globs = []
+commands = ["doctrine adr show", "doctrine inspect"]
+tags = ["area:cli", "perf", "measurement"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7de5d1c3f557787aafe6014fc46834759a2c74b2"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d3f7e89c671668e9d29f7ff6cefad5d9d2eb6d9c11fb6303c723ab2450c3c010"
+base_commit = "e8963204bf660f4551ac812da3e982e925e55a87"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-246"
+

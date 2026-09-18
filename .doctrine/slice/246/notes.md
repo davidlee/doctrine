@@ -79,10 +79,10 @@ disposable. If it is lost the decisions survive; the map does not.
 | `inq-6` | field selection | `DEC-150` — what rules, not the argument |
 | `inq-7` | test strategy | `DEC-151` — synthetic goldens + agent attestation |
 
-**Raised and deliberately not made nodes** — drafting detail, revisit if they
-turn out to be decisions: the flag and level naming (`--knowledge
-skip|facets|full`?), and whether each kind's `show` gains `DEC-145`'s pointer
-line.
+**Raised and deliberately not made nodes** — both settled in drafting, neither
+turning out to be a node: the flag and level naming landed as `--knowledge
+skip|facets|full` (design §5.2), and `DEC-145`'s pointer line left the slice
+for `IMP-398` (design §7.2 `D4`).
 
 **Spun out of this stage.** `IMP-403` (knowledge facets systematically unfilled —
 carries the TOML-only analysis). `ISS-316` (`SPEC-019` governs four record kinds,
@@ -90,10 +90,25 @@ the corpus has seven) predates the stage and stays open.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 37) · e8963204b
 
 ### Produced
+- `design.md` — nine sections, materialised at run revision 35; run moved
+  `inquiring` → `drafting` → `reviewing` (commits 6f49c0c85..e8963204b)
+- `DEC-260` — the design read's siting; taken in drafting, not from a node
+- minted: `IMP-457` — the design/slice verb-slot IA debt and its rehome;
+  `IMP-459` — the scan parses every record and keeps only its edges;
+  `IMP-460` — every kind's `show` loads the comparison pipeline twice
+- amended: `IMP-398` — the pointer line returned to it, with why it is not cheap
+- nine design-target selectors bound to §5.6; five stale `scope-relevant` seeds removed
+- no code touched this session; `doctrine validate` clean, `check gate` not run
+  (nothing to gate)
 
 ### Learned
+- `mem.fact.doctrine.show-is-not-cheap` — `<kind> show` measures slower than
+  `inspect`; do not cost a design on `show` being a cheap per-entity read
 
 ### Open
+- `QUE-223` — should the design read disclose that `design.md` is behind its run
+- `ASM-011` — inbound edges as a sufficient proxy, held with a measured miss
+- `DEC-260` — sites the read on a verb it expects to lose to `IMP-457`
