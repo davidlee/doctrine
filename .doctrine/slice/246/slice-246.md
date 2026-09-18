@@ -178,16 +178,19 @@ in the research round (2026-08-05):
   at the `facets` level — `QUE-206`, `DEC-140`, `DEC-141`, `DEC-142` — and all
   four carry substantial prose (`QUE-206` is 6.7 KB).
 
-The mechanism is the renderer itself: `format_facet`
-(`src/knowledge.rs:1302-1364`) emits the `\n[facet]\n` header **only when at
-least one axis is populated**, and `show_opt_line` (`:1286-1291`) drops absent
-fields silently — its doc comment says so outright. An empty facet therefore
-renders as *nothing at all*: not a blank block, not a header. The render
-**reproduces** the half-invisible failure this risk names
+The mechanism is the renderer itself: `format_facet` emits the `\n[facet]\n`
+header **only when at least one axis is populated**, and `show_opt_line` drops
+absent fields silently — its doc comment says so outright. An empty facet
+therefore renders as *nothing at all*: not a blank block, not a header. The
+render **reproduces** the half-invisible failure this risk names
 (`mem.pattern.doctrine.amend-knowledge-both-tiers`; observed on `DEC-099`,
 `ASM-007`, `QUE-201`) rather than merely failing to fill it. Note the JSON path
-disagrees — `facet_json` (`:1432-1462`) emits every field with `Option` → `null`
-— so `OQ-4` reconciles two existing behaviours rather than inventing one.
+disagrees — `facet_json` emits every field with `Option` → `null` — so `OQ-4`
+reconciles two existing behaviours rather than inventing one.
+
+All three are cited at current `file:line` in `design.md` §2.2, which is where
+the authoritative version lives. This document deliberately keeps no second copy
+to go stale independently.
 
 Objective 4 is the mitigation. A naive middle level inherits the concealment and
 tells the reader *less* than opening the record would.
@@ -253,7 +256,7 @@ that must survive it are inlined here and in `ISS-316`.
 
 - **Ride the `Detail` precedent, do not invent a dial.** `design show --full`
   widens a `Detail::{Normal, Full}` enum
-  (`src/design_run/render/envelope.rs:86-117`) whose comment states the
+  (`src/design_run/render/envelope.rs`) whose comment states the
   principle: the caps are what make *"normal is a subsequence of full" the same
   code path rather than two implementations that could disagree*. The three
   levels should be one renderer under different bounds. Nothing in the tree today

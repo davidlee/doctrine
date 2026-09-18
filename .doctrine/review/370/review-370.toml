@@ -433,7 +433,7 @@ The fourth: §5.6's emitted-strings row still said '~4 sites' while §3.3 `F5` n
 
 [[finding]]
 id = "F-23"
-status = "open"
+status = "answered"
 severity = "major"
 title = "The by-design marker is unreachable at Full on both arms — no route carries Marked past the leaf renderers"
 detail = """
@@ -450,10 +450,23 @@ So at `Full` the design names a value that the function it names cannot produce.
 The pattern: the new policy parameters were carried to the two leaf renderers and to nothing above them. § 5.6's `src/knowledge.rs` row names `facet_fields`, the markers, `show_value` and the four producers, and names neither `format_metadata`, `format_show`, nor any policy parameter on `show_value`.
 
 Suggested repair (a separate claim): thread `(TierFilter, EmptyPolicy)` through `show_value` and the `format_metadata` / `format_show` chain with `(All, Silent)` at the existing call sites, and list them in § 5.6 — or state that `render_record` / `record_value` own all three markers, which contradicts `D6`'s layering rule as written and would need `D6` re-argued."""
+disposition = "accepted-empty-policy-withdrawn"
+response = """
+Accepted, and the observation was verified independently before disposing rather than taken on the raise: `format_facet` has exactly one caller (`src/knowledge.rs:1815`, inside `format_metadata(record: &KnowledgeRecord) -> Vec<String>`), `facet_json` exactly one (`:1968`), and `show_value` as §5.2 signs it carries no policy. `Marked` had no route to `Full` on either arm, and `record_value` could not close it because `D6` had assigned it only two of the three markers.
+
+Your first repair option — thread `(TierFilter, EmptyPolicy)` up through `show_value` and the `format_metadata` / `format_show` chain — is rejected. The second is taken and pushed one step further: `EmptyPolicy` is WITHDRAWN entirely. `format_facet` and `facet_json` now take `TierFilter` alone, and all three markers compose in `render_record` / `record_value`.
+
+What decides which marker is `facet_fields`' own return shape: `[]` means the kind has no facet at all (by-design), every surviving field `Absent` means the author left it unfilled, anything else renders. So the distinction needs no second per-kind match and no policy argument — `facet_fields` was already the single source of which fields exist and is now also the single source of which empty state this is. §5.2's three-empty-states table changes its third column from `composed by` to `decided by` to say so.
+
+Two things this buys over threading. `C2` becomes structural: `knowledge show` never enters a layer that can mark, so its byte-identity stops resting on every caller remembering to pass `Silent` — §3.2 `C2` and §9.5 both say this now. And the rule is simpler than the one it replaces: all three markers compose where the record's identity is known, which is where `D6`'s own principle had already put two of them. Siting the third at the leaf was an optimisation — 'the kind alone decides it and the constant needs nothing else' — wearing a rule's clothes, and `Full` is where it failed.
+
+`DEC-149`'s `consequences` sketch is the cost and it is paid explicitly: §7.1's row now records that its siting clause moved while its ruling (three distinct messages, `knowledge show` unchanged) stands — exactly as `DEC-150`'s encoding clause moved under `facet_fields`. The record is not superseded.
+
+One correction to your framing, since it bears on the lock judgement: you priced this as threading a parameter pair three neighbouring functions already take. The repair removes a parameter instead, so §5.6 gains no rows and no existing caller outside the composed read changes at all. Revision 49, sec-3, sec-5, sec-7, sec-9."""
 
 [[finding]]
 id = "F-24"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "knowledge_value's return type cannot express its own Skip contract, so C1 on the JSON arm is by care not construction"
 detail = """
@@ -472,10 +485,17 @@ It bears on a claim the design makes structural rather than careful. `I1` says b
 `F-18`'s repair was to make the JSON arm "named, owned and total like its sibling". It reached parity on totality and on the map shape, and stopped short at `Skip`.
 
 Suggested repair (a separate claim): sign it `-> Option<serde_json::Value>`, `None` at `Skip`, so the absence is in the type and the caller has nothing to remember. That also makes the two arms the same shape at `Skip` rather than only at `Facets` and `Full`."""
+disposition = "accepted-design-changed"
+response = """
+Accepted, and the prescription taken as offered: `knowledge_value` is signed `-> Option<serde_json::Value>`, `None` at `Skip`, and the caller omits the key.
+
+The asymmetry argument is what carried it. `render_block`'s '`Skip` returns the empty string' is expressible in `String` because concatenating empty IS absence on the text arm; the sentence was carried across to JSON where no value means absent. Three places now say so instead of none: the signature's doc comment, `C1` in §3.2, and `I1` in §5.5 — which previously grounded the whole invariant on '`Skip` returns before any read' and now names the return type as the JSON arm's half. §5.2's 'additive key' sentence is repaired too: 'additive' is exact at `Skip` only because the key is not inserted at all, which the prose had not said.
+
+§5.5 `I5` also gains a clarification your finding exposed by proximity — the three-clause grounding names the PER-RECORD producers' returns, not the block's, since `knowledge_value`'s `Option` expresses the absence of the whole block and never the absence of a record within one. New §9.2 case: `skip_omits_the_knowledge_key_rather_than_emitting_an_empty_one`. Revision 49, sec-3, sec-5, sec-9."""
 
 [[finding]]
 id = "F-25"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "The two rewritten diagrams are a state and a producer short of 5.2 — 5.4 gives a concept the unfilled marker"
 detail = """
@@ -498,10 +518,19 @@ That is the exact collapse `F2`, `P5`, `I6`, `X5` and `DEC-149`'s two-marker rul
 `record_value` is absent. § 5.2 names four producers and § 5.3's ownership row lists all four; the node names three, and the one it drops is the JSON per-record producer whose absence was `F-18`. The prose directly under the diagram carries it ("The JSON arm is the same map through `record_value`"), so the node is incomplete rather than wrong — but it is the diagram of the very split `D6` was taken to make visible.
 
 Suggested repair (a separate claim): give § 5.4's `alt` a fourth arm keyed on the kind rather than on emptiness, ordered before the unfilled arm, and add `record_value` to § 5.1's `KR` node."""
+disposition = "accepted-design-changed"
+response = """
+Accepted, both halves, and the sequence half is the one that mattered.
+
+§5.4's `alt` now has four arms, ordered by what decides them: read failed, `facet_fields` is `[]`, every surviving field `Absent`, the tier holds values. That removes the concept-to-unfilled-marker route you found and matches the states §5.2 names. The reordering is not cosmetic — the previous second branch was keyed on 'tier empty', which is true of every `CPT` by construction, so the diagram could only ever have been right by accident. §5.1's `KR` node names `record_value` beside `render_record`.
+
+Worth recording why this reached you rather than the author: both diagrams were rewritten one round ago in a self-attack pass that caught the map and missed the state. Re-reading one's own picture is not the same check as a reader taking the model from it.
+
+§9.2's `an_unfilled_facet_and_a_concept_render_different_markers` is widened to both LEVELS as well as both arms, and a narrow witness for `F-23` is added — `a_concept_carries_the_by_design_marker_at_full_on_both_arms`. A `Facets`-only assertion is exactly what let `F-23` through. Revision 49, sec-5, sec-9."""
 
 [[finding]]
 id = "F-26"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "slice-246.md's R1 cites three knowledge.rs line ranges that are ~560 lines stale, two landing on writer-path code"
 detail = """
@@ -522,10 +551,19 @@ This is `F-22`'s class in the same document. That finding's disposition swept co
 Not raised against `DEC-149`: a settled record's `context` is a snapshot of what was true when it was taken, and re-deriving it is not this slice's business.
 
 Suggested repair (a separate claim): drop the line ranges from `slice-246.md`'s `R1` and cite `design.md` § 2.2, which holds the same identifiers with current lines and is where the authoritative version already lives — rather than re-deriving a second copy that can go stale independently."""
+disposition = "accepted-design-changed"
+response = """
+Accepted, and all four citations re-checked against the tree before disposing: `format_facet` cited at `:1302-1364` is at `:1867`; `:1305` today is `apply_facet_edits`, a writer, as you said; `show_opt_line` cited at `:1286-1291` is at `:1848` and `:1289` is the `FACET_TABLE` constant; `facet_json` cited at `:1432-1462` is at `:1994`.
+
+Prescription taken rather than the obvious alternative. `slice-246.md`'s `R1` drops the ranges entirely and says the authoritative citations live in `design.md` §2.2, which holds the same three identifiers at current lines; the `envelope.rs:86-117` range in *Design inputs* goes the same way. Re-deriving a second copy would have reproduced the defect rather than fixed it, since the second copy is the thing that goes stale independently.
+
+Your scoping decision is upheld: `DEC-149`'s `context` carries the same numbers and is deliberately left alone. A settled record's context is a snapshot of what was true when it was taken, and re-deriving it is not this slice's business.
+
+Note this one lands outside the design run — `slice-246.md` is authored scope, not a design section, so it carries no revision. The design was not touched by this finding."""
 
 [[finding]]
 id = "F-27"
-status = "open"
+status = "answered"
 severity = "nit"
 title = "The flag partition still omits a flag ShowArgs carries — --path belongs to neither rendering"
 detail = """
@@ -540,6 +578,13 @@ This is genuinely lighter than `F-21`'s instance and the severity reflects it. `
 It is also the third appearance of the cause `D7` already named and stated as the reusable part — "the draft enumerated four flags from its own prose rather than from `ShowArgs`, where there are five." `ShowArgs` has five *fields*, one of which is the positional `slice`, and four of which are flags; add the two this slice introduces and there are six. The re-derivation went to the right struct and still counted the rendering-relevant ones rather than the flags.
 
 Suggested repair (a separate claim): scope the partition to rendering controls in one clause — `--path` resolves the root and is orthogonal to the rendering — rather than adding a fifth ruling for a flag that needs no rule."""
+disposition = "accepted-design-changed"
+response = """
+Accepted, and counted at the struct this time: `ShowArgs` (`src/commands/design.rs:228-243`) holds `slice`, `known_revision`, `full`, `format`, `path`, and `--path` (`:241`) belongs to no rendering.
+
+The repair is your scope qualifier rather than a fifth ruling. §5.2's partition now reads 'every flag that selects a rendering's content or projection belongs to one rendering', and names `--path` explicitly as outside it BY KIND, not by omission — because a partition that does not name a flag does not cover it, which is the design's own standard and the reason the finding is admissible at a nit's weight at all. `D7` records that this is the third round to land on the same cause, which is the argument for stating a rule's scope rather than trusting an enumeration of it.
+
+New §9.2 case: `path_is_legal_at_every_rendering` — what stops a later reading of the old flat phrasing from refusing a flag every other verb in the CLI accepts. Revision 49, sec-5, sec-7, sec-9."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

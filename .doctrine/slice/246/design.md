@@ -355,9 +355,9 @@ every one is a deciding field, so the honest subset is all of them, and for
 **`STD-001` — no magic strings.** The level names, the tier annotation, and the
 three empty-state messages each have exactly one definition. Only one of the
 three is a bare constant — the by-design marker, which the kind alone decides.
-The other two name the record they are about, so they are templates over a
-constant frame, and that is what sites them in the per-record producer rather
-than in the facet renderers (§5.2).
+The other two name the record, so they are templates over a constant frame.
+All three are composed in the per-record producer (`D6`) — the only layer that
+can reach what the two templates have to say (§5.2).
 
 **`STD-003` — no silent skip; a degraded read is disclosed.** This one reaches
 further than the inquiry did, and it is the reason for `X4` below. Selection
@@ -380,7 +380,9 @@ records exist at all.
   `doctrine inspect` in both table and JSON, and `doctrine design show` under
   each of its envelope renderings (`--format prompt|json|status`). `DEC-146`
   buys this by construction rather than by care: the level flag that asks for
-  content is the same flag that pays for it.
+  content is the same flag that pays for it, and on the JSON arm the block's
+  absence sits in `knowledge_value`'s return type rather than in a level re-test
+  each caller has to remember (§5.2).
   The one surface `C1` does **not** cover is `design show`'s bare default, which
   `DEC-261` moves from the turn envelope to the design document deliberately.
   That is a migration, carried by `R6` and whitelisted in §5.6 — not a breach.
@@ -389,7 +391,10 @@ records exist at all.
 - **`C2` — the behaviour-preservation gate.** `format_facet` and `format_metadata`
   are shared machinery; the existing kind-`show` and `knowledge` suites are the
   proof and must stay green **unchanged**. `SL-246` does not alter `knowledge
-  show`'s output — the concealing behaviour there belongs to `IMP-403`.
+  show`'s output — the concealing behaviour there belongs to `IMP-403`. Under
+  `D6` that is structural rather than careful: the markers compose in the
+  composed read's per-record layer, which `knowledge show` never enters, so
+  there is no policy argument it could pass wrongly.
 - **`C3` — read-only.** Nothing on this path writes. Worth stating twice over.
   The deprecated `slice design <ID>` leaf currently *writes* — it delegates to
   `design materialise` — and it retires here, taking its write with it. And the
@@ -548,7 +553,7 @@ flowchart TB
   end
   subgraph eng["engine"]
     SEL["relation_graph::select_knowledge<br/>pure: InspectView → Vec&lt;SelectedRecord&gt;"]
-    KR["knowledge::render_record — reads one record, renders at level<br/>render_block / knowledge_value — map over the set, one entry each"]
+    KR["knowledge::render_record / record_value — read ONE record at level<br/>render_block / knowledge_value — map over the set, one entry each"]
     IF["relation_graph::inspect_from<br/>(unchanged)"]
     SD["slice::design_document<br/>reads design.md verbatim"]
   end
@@ -652,9 +657,10 @@ ignorant of traversal entirely.
 /// accessor, sibling of `relation_edges` (DEC-146).
 ///
 /// TOTAL, and never empty: every input yields an entry. A record that cannot be
-/// read yields the unreadable marker, by name and reason; a record with nothing
-/// in the tier yields the unfilled marker. Both are composed HERE, because this
-/// is the layer that knows which record this is and may touch the disk.
+/// read yields the unreadable marker, by name and reason; a record whose tier
+/// holds nothing yields the unfilled or the by-design marker, chosen by the
+/// shape `facet_fields` returns. All THREE are composed HERE, because this is
+/// the only layer that knows which record this is and may touch the disk (D6).
 pub(crate) fn render_record(
     root: &Path,
     selected: &SelectedRecord,
@@ -679,13 +685,17 @@ pub(crate) fn render_block(
 ) -> String;
 
 /// The `"knowledge"` value on the JSON arm: the same map through `record_value`.
-/// `Skip` omits the key entirely rather than emitting an empty array — the key
-/// is additive, and byte-identity at `Skip` (`C1`) means absent, not empty.
+/// `None` at `Skip`, and the caller omits the key — byte-identity at `Skip`
+/// (`C1`) means ABSENT, not empty, and no `serde_json::Value` can express
+/// absence. `Option` puts that absence in the type rather than in a level
+/// re-test each call site has to remember. The text arm needs no equivalent:
+/// concatenating the empty string IS absence there, which is why its sibling
+/// returns a bare `String` and this one does not return a bare `Value`.
 pub(crate) fn knowledge_value(
     root: &Path,
     selected: &[SelectedRecord],
     level: KnowledgeLevel,
-) -> serde_json::Value;
+) -> Option<serde_json::Value>;
 ```
 
 **Two producers, and the block is a map over them.** Both arms are specified
@@ -704,9 +714,9 @@ record: `selected.iter().filter_map(|r| read_record(..).ok())` compiles, never
 returns `Err`, and silently drops exactly the record `STD-003` exists to
 disclose. So the first clause is carried by the *map*, which yields one entry
 per element of `selected` and has no arm that yields none, and the second by
-`render_record`'s never-empty contract, which has the unreadable and unfilled
-markers as its two floors. Totality alone would leave two of the three clauses
-resting on the implementer's good intentions.
+`render_record`'s never-empty contract, which has the three markers as its
+floors. Totality alone would leave two of the three clauses resting on the
+implementer's good intentions.
 
 That is also why totality is the design's expression of `STD-003` rather than a
 convenience: a composed read that bailed on one unreadable record would deny the
@@ -763,23 +773,14 @@ struct FacetField {
 /// The single field-order table. Total; order is the template's.
 fn facet_fields(facet: &RecordFacet) -> Vec<FacetField>;
 
-/// Whether a facet with nothing to show carries the BY-DESIGN marker — the one
-/// empty state the kind alone decides. Applies to BOTH arms: a marker the text
-/// render emits and the JSON render omits is `I6` unmet on half the surface,
-/// which is the defect `facet_fields` exists to prevent.
-///
-/// The other two markers are NOT here. Both name the record, and the unfilled
-/// one sizes its prose, so neither is reachable from `&RecordFacet` and one of
-/// them touches the disk. They compose in `render_record` / `record_value`,
-/// which hold the reference and the root; these two stay pure.
-enum EmptyPolicy { Silent, Marked }
+/// Text render — filters `facet_fields` by tier, then formats. There is NO
+/// empty policy here: a facet with nothing to show renders nothing, and the
+/// marker that stands in its place is composed one layer up (D6).
+fn format_facet(facet: &RecordFacet, tier: TierFilter) -> String;
 
-/// Text render — filters `facet_fields` by tier, then formats.
-fn format_facet(facet: &RecordFacet, tier: TierFilter, empty: EmptyPolicy) -> String;
-
-/// JSON render — filters the SAME `facet_fields` by the SAME tier, under the
-/// SAME empty policy.
-fn facet_json(facet: &RecordFacet, tier: TierFilter, empty: EmptyPolicy) -> serde_json::Value;
+/// JSON render — filters the SAME `facet_fields` by the SAME tier. Same
+/// silence on an empty result, for the same reason.
+fn facet_json(facet: &RecordFacet, tier: TierFilter) -> serde_json::Value;
 ```
 
 **Where the markers sit on the JSON arm.** Every empty state has to be
@@ -791,19 +792,40 @@ at both levels. That keeps `Full`'s entry exactly `show_value`'s twelve keys plu
 the two levels' entries one shape rather than two. A `CPT` therefore renders the
 by-design marker on both arms at every level, which is `X5` as written.
 
-Which layer *writes* that slot differs, and the difference is the rule rather
-than an accident of factoring. `facet_json` writes the by-design marker under
-`Marked`, because the kind alone decides it and the constant needs nothing else.
-`record_value` writes the unfilled and unreadable markers into the same slot,
-because only it knows which record this is, whether the file was there, and how
-much prose sits beside it. The text arm splits identically between `format_facet`
-and `render_record`. One slot, three messages, two layers — and the layer is
-chosen by what the message has to know.
+**One layer writes all three, and `facet_fields` decides which.** The per-record
+producers hold the reference and the root, so they can name the record and size
+its prose; the facet renderers receive the parsed `[facet]` table and can do
+neither. Siting any marker below them would be siting a policy where its inputs
+are not, so none of them sits there — and the state is read off the table's own
+return rather than off a second match on the kind:
 
-`knowledge show` passes `(All, Silent)` and its goldens stay byte-identical
-(`C2`) — `facet_fields` reproduces the current order, and the current text
-formatting sits unchanged on top of it. The composed read passes
-`(Only(Deciding), Marked)` at `Facets` and `(All, Marked)` at `Full`.
+| `facet_fields(facet)`, filtered by tier | the state | what is composed |
+|---|---|---|
+| `[]` — the kind has no fields at all | by design | the by-design marker |
+| every surviving field `Absent` | the author left it unfilled | the unfilled marker |
+| anything else | it renders | nothing; hand it to the leaf renderer |
+
+`facet_fields` was already the single source of *which fields exist*; it is
+therefore also the single source of *which empty state this is*. One table
+answers both questions, which is `C4` reaching one question further than it was
+written for, and it is why the by-design case needs no kind match of its own.
+
+**This is why there is no empty-policy parameter.** The round-3 draft gave the
+leaf renderers a `Silent | Marked` input so the composed read could mark while
+`knowledge show` stayed silent. That parameter had no route to `Full`: the entry
+there is `show_value`, and the text chain is `format_show` → `format_metadata`,
+none of which carries policy — so the marker `X5` requires at *every* level was
+reachable at `Facets` and unreachable at `Full`, on both arms. Threading the
+pair up through four functions was the alternative and is rejected in `D6`:
+marking is the composed read's business, the composed read owns the per-record
+layer, and nothing above the leaf renderers needs to know the concept exists.
+
+`knowledge show` therefore stays byte-identical (`C2`) **by construction rather
+than by passing `Silent`** — it never enters a layer that can mark. It passes
+`All` and nothing else; `facet_fields` reproduces the current order and the
+current text formatting sits unchanged on top of it. The composed read passes
+`Only(Deciding)` at `Facets` and `All` at `Full`, and composes the markers
+itself.
 
 This is a refactor of shared machinery, so `C2` is the gate that proves it: both
 `format_facet`'s and `facet_json`'s existing output must not move. Their current
@@ -822,18 +844,20 @@ none.
 `DEC-149`'s two markers plus `STD-003`'s third. Each has one definition and they
 must not share wording (`P5`):
 
-| state | rendered | composed by |
+| state | rendered | decided by |
 |---|---|---|
-| author left the facet unfilled | `(no facet recorded — 6.7 KB of prose: doctrine knowledge show QUE-206)` | `render_record` / `record_value` |
-| the kind has no facet by design | `(no facet by design — a concept rides its prose body)` | `format_facet` / `facet_json`, under `Marked` |
-| the record could not be read | `(unreadable: record not found at …/record-140.toml)` | `render_record` / `record_value` |
+| author left the facet unfilled | `(no facet recorded — 6.7 KB of prose: doctrine knowledge show QUE-206)` | every surviving field `Absent` |
+| the kind has no facet by design | `(no facet by design — a concept rides its prose body)` | `facet_fields` returns `[]` |
+| the record could not be read | `(unreadable: record not found at …/record-140.toml)` | `read_record` failed |
 
-Only the middle one is a bare constant. The other two name the record, so they
-are templates over a constant frame — which is why the third column is not
-bookkeeping: a marker that must name `QUE-206` and size its prose cannot be
-produced by a function that receives only the parsed `[facet]` table. Siting the
-policy where its inputs are not is the defect this column exists to make
-un-writable.
+All three are composed by `render_record` / `record_value` (`D6`). The third
+column is what each one is *decided* by, and every decision is a property of
+`facet_fields`' return or of the read — not a second per-kind match, and not a
+policy argument. Only the middle message is a bare constant; the other two name
+the record, so they are templates over a constant frame, and a marker that must
+name `QUE-206` and size its prose cannot be produced by a function that receives
+only the parsed `[facet]` table. Siting the policy where its inputs are not is
+the defect this section exists to make un-writable.
 
 The prose-size hint costs a `metadata()` call, not a read — which is what keeps
 it compatible with `Facets` never opening the `.md`, and it is also why the hint
@@ -925,12 +949,20 @@ would double the composition surface and its goldens for a reading nobody has
 asked for. `--knowledge` is therefore legal at the `document` rendering, with or
 without `--json`, and refused with `--format prompt|json|status`.
 
-That completes a partition rather than a fourth special case: **each flag
-belongs to one rendering** — `--knowledge` and `--json` to the document, `--full`
-and `--known-revision` to the envelope — **and is refused outside it.** One rule
-to remember instead of five interactions to look up, and it is the conservative
-direction: allowing a composition later is additive, withdrawing one would not
-be.
+That completes a partition rather than a fourth special case: **every flag that
+selects a rendering's content or projection belongs to one rendering** —
+`--knowledge` and `--json` to the document, `--full` and `--known-revision` to
+the envelope — **and is refused outside it.** One rule to remember instead of
+five interactions to look up, and it is the conservative direction: allowing a
+composition later is additive, withdrawing one would not be.
+
+The qualifier is load-bearing, because `ShowArgs` carries one flag the partition
+does not rule. `--path` (`src/commands/design.rs:241`) resolves the project
+root: it selects no content and no projection, is legal at every rendering, and
+sits on every `Args` struct in this codebase. It is outside the partition **by
+kind, not by omission** — which is the distinction a flat "each flag" cannot
+make, and the third time this design has miscounted `ShowArgs` by enumerating
+from its own prose rather than from the struct (`D7`).
 
 **`--full` belongs to the envelope, and is refused when the rendering is the
 document.** It widens the turn-envelope projection — *the caps lift and the
@@ -979,17 +1011,20 @@ would make the pair meaningful. Declining to *build* transitive knowledge
 left unstated.
 
 The JSON arm carries the same level, structurally rather than as rendered text:
-`inspect --json` gains an additive `"knowledge"` key whose value is
-`knowledge_value` (above), and `design show --json` carries one under the
-document (above).
+`inspect --json` gains an additive `"knowledge"` key carrying whatever
+`knowledge_value` returns (above), and `design show --json` carries one under
+the document (above). "Additive" is exact at `Skip`, where `knowledge_value`
+returns `None` and the key is not inserted at all — which is `C1` on this arm,
+and why the producer returns `Option` rather than a value the caller would have
+to recognise as meaning-absent.
 
 Each entry is a record object plus the caption that reached it, and **what it
 contains is the level's business, not the entry's**:
 
 | level | the entry carries |
 |---|---|
-| `Facets` | `{ reference, caption, facet }`, where `facet` is `facet_json(…, Only(Deciding), Marked)` — the deciding fields only, or `{"marker": …}` when the tier is empty |
-| `Full` | `show_value(record, with_body = true)` — `id, record_kind, slug, title, status, created, updated, tags, facet, evidence, relationships, body` — plus `caption`, with `facet` carrying `{"marker": …}` on a kind that has none |
+| `Facets` | `{ reference, caption, facet }`, where `facet` is `facet_json(…, Only(Deciding))` — the deciding fields only, or the marker `record_value` writes in their place when the tier holds nothing |
+| `Full` | `show_value(record, with_body = true)` — `id, record_kind, slug, title, status, created, updated, tags, facet, evidence, relationships, body` — plus `caption`, with `record_value` writing the marker over the `facet` slot when the tier holds nothing. `show_value` takes no policy: it projects the record, and marking is the composed read's act on the result |
 
 `Full` carrying the complete payload is what closes `OQ-3`, and the draft could
 not have both: it claimed `Full` "renders a complete record" while specifying an
@@ -1038,7 +1073,7 @@ Ownership, restated as a rule per module:
 
 | module | owns |
 |---|---|
-| `knowledge` | `RecordFacet`, `facet_fields` (the one field-order table), the tiers, the three markers, `SelectedRecord`, `KnowledgeLevel`, both facet renders, `show_value`, and the four composed-read producers — `render_record` / `record_value` per record, `render_block` / `knowledge_value` over a set |
+| `knowledge` | `RecordFacet`, `facet_fields` (the one field-order table), the tiers, the three markers (composed only in the per-record producers — `D6`), `SelectedRecord`, `KnowledgeLevel`, both facet renders, `show_value`, and the four composed-read producers — `render_record` / `record_value` per record, `render_block` / `knowledge_value` over a set |
 | `relation_graph` | the inbound derivation (unchanged) and `select_knowledge` |
 | `slice` | reading `design.md` off disk |
 | `commands/*` | composition, flag lowering, and the scan-diagnostic pass; **no policy** |
@@ -1070,13 +1105,15 @@ sequenceDiagram
   loop map over selected — one entry out per record in
     K->>K: render_record(root, &record, Facets)
     K->>FS: read record-NNN.toml (no .md at Facets)
-    alt read ok, tier has fields
-      K->>K: format_facet(facet, Deciding, Marked)
-    else read ok, tier empty
+    alt read failed (raced the scan)
+      K->>K: unreadable marker — by name and reason (STD-003)
+    else facet_fields is [] — the kind has no facet
+      K->>K: by-design marker — the bare constant (DEC-149)
+    else every surviving field is Absent
       K->>FS: metadata() for the prose size
       K->>K: unfilled marker — names the record (DEC-149)
-    else read failed (raced the scan)
-      K->>K: unreadable marker — by name and reason (STD-003)
+    else the tier holds values
+      K->>K: format_facet(facet, Deciding)
     end
   end
   K-->>C: block
@@ -1093,7 +1130,9 @@ with no design fails immediately and cheaply, before a corpus scan is paid for.
 - `I1` — at `Skip`, output is byte-identical to the pre-`SL-246` surface on
   every surface this design *adds the level to*: `inspect` in both formats, and
   `design show --format prompt|json|status`. Structural: `Skip` returns before
-  any read. It does **not** cover `design show`'s bare default, which `DEC-261`
+  any read, and on the JSON arm `knowledge_value`'s `Option` carries the other
+  half — absence is in the return type, so no caller can insert an empty key
+  (§5.2). It does **not** cover `design show`'s bare default, which `DEC-261`
   moves deliberately (`C1`, `R6`); the invariant is the flag's neutrality, not
   the verb's stability.
 - `I2` — the `Facets` field set is a subset of `Full`'s, in the same order, **in
@@ -1112,7 +1151,10 @@ with no design fails immediately and cheaply, before a corpus scan is paid for.
   verified **by construction** and deliberately not by test (§9.5). The three
   clauses have three different grounds, on both arms: the map shape forbids the
   drop, `render_record` / `record_value`'s never-empty contract forbids the empty
-  render, and the `String` / `Value` return forbids the abort (§5.2).
+  render, and *their* `String` / `Value` return forbids the abort (§5.2) — the
+  per-record producers, not the block: `knowledge_value`'s `Option` expresses the
+  absence of the whole block at `Skip`, never the absence of a record within
+  one.
 - `I6` — the three empty states render three distinct messages.
 - `I7` — nothing on this path writes.
 
@@ -1154,7 +1196,7 @@ with no design fails immediately and cheaply, before a corpus scan is paid for.
 
 | path | change |
 |---|---|
-| `src/knowledge.rs` | `KnowledgeLevel`, `SelectedRecord`, the facet-only read path, `facet_fields` + `Tier`/`EmptyPolicy` under `format_facet` **and** `facet_json`, the three markers, `show_value` split out of `show_json`'s inline map, and the four composed-read producers (`render_record`, `record_value`, `render_block`, `knowledge_value`) |
+| `src/knowledge.rs` | `KnowledgeLevel`, `SelectedRecord`, the facet-only read path, `facet_fields` + `Tier`/`TierFilter` under `format_facet` **and** `facet_json` — neither gains an empty policy (`D6`) — the three markers, `show_value` split out of `show_json`'s inline map, and the four composed-read producers (`render_record`, `record_value`, `render_block`, `knowledge_value`) |
 | `src/relation_graph.rs` | `select_knowledge` — pure, over `InspectView` |
 | `src/kinds/mod.rs` | none expected; `is_record` (`:128`) is consumed as-is |
 | `src/commands/inspect.rs` | `--knowledge` on `InspectArgs`; the `--transitive` refusal; compose relations + block + actionability |
@@ -1269,7 +1311,7 @@ normative; these lines are a map, not a restatement.
 | `DEC-146` | Record content is read per-id at the render layer; the corpus scan gains no `RecordFacet`. |
 | `DEC-147` | Selection is split from rendering; a record's caption is selection-supplied text, not a `RelationLabel`. |
 | `DEC-148` | Selection filters on the source's kind (`kinds::is_record`), not on a relation-label allow-list. |
-| `DEC-149` | An unfilled facet is marked, never papered over; the renderer is built for a healthy corpus. |
+| `DEC-149` | An unfilled facet is marked, never papered over; the renderer is built for a healthy corpus. Its `consequences` sketch sited the empty-state policy on `format_facet` as two inputs; §5.2 composes all three markers one layer up instead (`D6`). The ruling (three distinct messages, `knowledge show` unchanged) is intact and the record stands unsuperseded; its siting clause is what moved, as `DEC-150`'s encoding clause did. |
 | `DEC-150` | The `facets` level carries what rules, not the argument; tiers annotate the existing per-kind field match — which §5.2 carries one level down into `facet_fields`. The ruling (one table, one place, not a separate constant) is intact and the record stands unsuperseded; its encoding clause is what moved. |
 | `DEC-151` | Synthetic-corpus goldens pin the mechanics; the `SL-244` specimen claim is verified by agent. |
 | `DEC-261` | The design-document read reclaims `doctrine design show`; the turn envelope keeps `--format prompt`. Supersedes `DEC-260`, which sited it at `slice design show`. |
@@ -1285,8 +1327,8 @@ table.** The level is expressed in the shape of each record entry —
 tier-filtered at `Facets` exactly as the table is — rather than as a blob of
 rendered text. The entry's shape at each level is `D5`'s and §5.2's and is
 deliberately not restated here: what `D1` decides is that the two arms *agree*.
-What makes them agree is `D6`'s layering — one `facet_fields` under one
-`EmptyPolicy`, one `show_value`, and one per-record producer per arm.
+What makes them agree is `D6`'s layering — one `facet_fields`, one `show_value`,
+and one per-record producer per arm composing the markers for both.
 
 *Why.* The alternative that recommends itself is to let JSON emit everything and
 leave filtering to the caller, which is what `facet_json` does today: it emits
@@ -1350,8 +1392,8 @@ declares that table and JSON must not diverge; before this, nothing made it so.
 Taken at review, round 3. `render_record` and `record_value` each render a single
 `SelectedRecord`, totally and never emptily; `render_block` and `knowledge_value`
 are maps over them; `show_value` splits out of `show_json` so `Full`'s entry is a
-call rather than a re-typed key list. Each of the three markers is composed at the
-layer that holds what it must name.
+call rather than a re-typed key list. All three markers are composed at the
+per-record layer — the one layer that holds what any of them must name.
 
 *Why.* Three findings, one cause. The draft named exactly one block function
 returning `String`, and then asked three things of it that a return type cannot
@@ -1366,6 +1408,23 @@ because all three wanted the same thing: somewhere that holds one record's
 identity, is allowed to touch the disk, and is shared by both arms. The facet
 renderers stay pure over `&RecordFacet` — `knowledge show` calls them too, and
 `metadata()` behind them would put the disk in the pure layer.
+
+*Repaired at round 4.* As first written, `D6` kept the by-design marker on the
+facet renderers under an `EmptyPolicy` parameter, on the ground that the kind
+alone decides it and the constant needs nothing else. `F-23` showed that ground
+was an optimisation rather than a rule, and that it did not survive `Full`: the
+entry there is `show_value` and the text chain is `format_show` →
+`format_metadata`, none of which carries policy, so the marker `X5` requires at
+every level was reachable at `Facets` and unreachable at `Full`, on both arms.
+Threading `(TierFilter, EmptyPolicy)` up through four functions was the
+alternative, and it is rejected on two counts: it adds machinery to carry a
+decision the per-record layer can already make, and it leaves `C2` resting on
+every caller remembering to pass `Silent`. Withdrawing `EmptyPolicy` instead
+puts all three markers where `D6`'s own principle had already put two of them,
+lets `facet_fields`' return shape decide which state a record is in, and makes
+`knowledge show`'s byte-identity structural — it cannot reach a layer that
+marks. `DEC-149`'s ruling stands; only its siting clause moves, exactly as
+`DEC-150`'s encoding clause did under `facet_fields` (§7.1).
 
 **`D7` — the flag partition is stated over renderings, not over spellings.**
 Taken at review, round 3. Each flag belongs to one rendering and is refused
@@ -1385,6 +1444,13 @@ what makes `--known-revision` decidable without a fourth ruling: it is an envelo
 projection control, so the partition places it beside `--full`. The draft had
 listed four flags because it enumerated them from its own prose rather than from
 `ShowArgs`, where there are five.
+
+*Repaired at round 4.* `F-27` found the recount had reached the right struct and
+still stopped at the rendering-relevant flags, missing `--path` — which belongs
+to no rendering at all. The rule is now scoped to flags that select content or
+projection, so `--path` falls outside it by kind rather than by oversight
+(§5.2). Three rounds have now landed on the same cause, which is the argument
+for stating the rule's scope rather than trusting an enumeration of it.
 
 ### 7.3 Alternatives rejected at design, with their grounds
 
@@ -1552,9 +1618,17 @@ Named cases, one per claim:
 - `a_record_reached_twice_renders_once_under_the_first_caption` — `I3`.
 - `selection_excludes_non_record_sources` — `DEC-148`.
 - `an_unfilled_facet_and_a_concept_render_different_markers` — `I6`, on both
-  arms. The two are composed at different layers under `D6` — `render_record` /
-  `record_value` and the facet renderers — so a case that checked one arm would
-  miss half of what `D6` has to get right.
+  arms **and at both levels**. All three markers are composed in one layer under
+  `D6`, so the arm half is cheap; the level half is what `F-23` cost, and a case
+  that checked `Facets` alone would have passed over it.
+- `a_concept_carries_the_by_design_marker_at_full_on_both_arms` — `X5`, `D6`.
+  The narrow witness for `F-23`: at `Full` the entry is `show_value`'s payload,
+  so the marker has to be written over its `facet` slot on the JSON arm and into
+  the rendered metadata on the text arm. Before the repair there was no route to
+  either.
+- `skip_omits_the_knowledge_key_rather_than_emitting_an_empty_one` — `C1` on the
+  JSON arm. `knowledge_value` returns `None` at `Skip` and the caller omits the
+  key; both `"knowledge": null` and `"knowledge": []` are breaches.
 - `a_pruned_record_is_named_on_stderr_and_the_block_renders_the_rest` — `I5`,
   `X7`, `STD-003`. The reachable half: the record never reaches `render_block`.
 - `json_and_table_carry_the_same_fields_at_the_same_level_for_every_kind` —
@@ -1576,6 +1650,10 @@ Named cases, one per claim:
   §5.2; the flag that would otherwise be accepted and silently ignored.
 - `known_revision_is_refused_on_the_document_the_way_full_is` — `D7`. The
   second envelope flag, and the one the draft's partition omitted.
+- `path_is_legal_at_every_rendering` — `D7`'s scope qualifier. `--path` selects
+  no content and no projection, so the partition does not reach it; the case is
+  what stops a later reading of "each flag belongs to one rendering" from
+  refusing a flag every other verb accepts.
 - `design_show_help_names_full_as_the_envelope_widening` — `SL-233` PHASE-04
   `EX-5`, re-premised rather than dropped (§5.6).
 - `a_non_skip_level_with_transitive_is_refused_naming_imp_398_s5` — §5.2.
@@ -1649,7 +1727,7 @@ So all three clauses are grounded separately, and on both arms:
 | clause | what forecloses it |
 |---|---|
 | never **dropped** | the block is a `map` over `selected`, not a `filter_map` — one entry out per record in, with no arm that yields none |
-| never **rendered as empty** | `render_record` / `record_value` are contracted never-empty, with the unreadable and unfilled markers as their two floors |
+| never **rendered as empty** | `render_record` / `record_value` are contracted never-empty, with the three markers as their floors — and `facet_fields`' return shape, not a policy argument, decides which floor a record lands on (`D6`) |
 | never **aborting** | the `String` / `serde_json::Value` return — no `Err` to propagate |
 
 The alternative was an in-process test with an injected read failure — a
@@ -1660,8 +1738,11 @@ than an honest absence — and because a by-construction claim that reaches one
 clause of three is the same defect wearing better clothes.
 
 **`knowledge show`'s concealing behaviour** is not fixed here. `format_facet`
-gains the policy inputs; `knowledge show` keeps passing `(All, Silent)`
-and its output does not move. The fix belongs to `IMP-403`, and this design's
-contribution is that it becomes a policy flip at one call site rather than a
-rewrite.
+gains only the tier filter, and at `All` its output does not move — the
+concealment is preserved deliberately (`C2`). The fix belongs to `IMP-403`, and
+this design's contribution to it is structural rather than a switch to flip:
+after `facet_fields`, an absent field is *representable* (`FacetValue::Absent`)
+and both arms render from the same table, so disclosing it becomes one change in
+one renderer instead of the same change made twice in two independent per-kind
+projections that already disagree about it.
 
