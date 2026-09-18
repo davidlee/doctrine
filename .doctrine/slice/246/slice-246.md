@@ -56,6 +56,22 @@ every one of their byte-exact goldens, and unlike this slice's levels it is
 unconditional, so it changes default output everywhere. Returned to `IMP-398`
 with the finding.
 
+**A reader for the design document, on the verb that already names it.** Added
+at review (`DEC-261`, superseding `DEC-260`). No verb renders a design document
+today: `slice show` excludes it by contract, `slice design` is a deprecated
+scaffold, and `design show` renders the design *run*'s turn envelope. This slice
+reclaims `doctrine design show <SLICE>` for the document and moves the envelope
+to `--format prompt` — a value that already exists and is already its default
+rendering's name, so nothing is renamed and no caller learns a new verb. The
+deprecated `slice design <ID>` leaf retires with it.
+
+This is a **scope addition** and is named as one: it is a verb rehome that
+`IMP-393` had carried as separate work, and it changes the default output of a
+live `SPEC-013` golden surface — the one the managed design run is itself driven
+through. It was taken because the alternative siting (`slice design show`) was
+three levels against `SPEC-013`'s stated two, and because the migration measured
+at 14 references rather than the multi-seam cost it had been assumed to be.
+
 **Objectives**
 
 1. An entity read can carry its inbound knowledge records' content.
@@ -63,6 +79,8 @@ with the finding.
 3. The inbound derivation is factored so a later transitive closure (`IMP-398`
    S5 — the recursive knowledge view) extends it rather than replaces it.
 4. Empty facets are legible as gaps, not as absence of content.
+5. `doctrine design show` means what `show` means everywhere else in the CLI,
+   and the turn envelope stays reachable under a name it already has.
 
 ## Non-Goals
 
@@ -276,9 +294,18 @@ inbound record set keeps changing and a golden over it would rot:
 
 ## Follow-Ups
 
-- **`IMP-457`** — *Design-run verbs occupy the document-render verb slots.* This
-  slice sites its design read at `slice design show` because `design show` is
-  taken by the run's turn envelope and `slice show` renders the scope. The
-  intended fix — rehome the envelope to `doctrine design state` and reclaim
-  `doctrine design show` for the document, after which this slice's verb
-  collapses into it — is recorded there, not done here.
+- **`IMP-393`** — *Reader-facing design render for review.* This slice reclaims
+  `doctrine design show` for the design document and partially discharges that
+  item (`fulfils`, degree `partial`). What stays open there: the slice's other
+  three documents (plan, notes, and the scope `slice show` renders), and the
+  fuller reader-facing render — run metadata, attestation standing, open
+  inquiries, the navigable neighbourhood — none of which this slice delivers.
+  `IMP-457` was minted during drafting for the same defect and is **closed as a
+  duplicate** of `IMP-393` (`RV-370` `F-6`).
+- **`SPEC-013`'s two-level clause.** The spec states *"The surface is a two-level
+  clap subcommand tree"*, and six groups under numbered entity kinds are already
+  three levels — `slice selector`, `spec req`, `spec interactions`, `revision
+  change`, `memory sync`, `knowledge edit <kind>`. `SL-246` conforms and so does
+  not need this reconciled, but the clause is descriptively false of its own
+  governed surface and someone should carry a `REV` for it. Surfaced by `RV-370`
+  `F-1`; not this slice's to fix.

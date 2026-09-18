@@ -63,3 +63,33 @@ renders — want the same treatment or an explicit decision not to give it to th
 - `SL-246` — the slice that surfaced it and worked around it.
 - `SPEC-013` — the CLI surface spec that makes `show` a governed expectation.
 - `STD-002` — naming conventions.
+
+## Closed as duplicate of IMP-393 (2026-09-18)
+
+`IMP-393` — *Reader-facing design render for review*, opened 2026-08-03 —
+already carries this complaint, six weeks earlier and in the same terms: `show`
+means *render the entity's document* everywhere in the CLI, `design show`
+renders the writer's turn envelope instead, and the fix is either reverting
+`show` to the convention or rehoming the envelope. `IMP-393` also names a
+resolution this item did not: `design show`'s own `--format` slot already
+spells the writer rendering `prompt`, so the reader render can become the
+default without inventing a name for the envelope.
+
+This item was minted during `SL-246`'s drafting without `IMP-393` being found —
+the parallel-carrier failure the no-parallel-implementation rule exists to
+prevent. `RV-370` `F-6` caught it.
+
+**What happened to the substance.** `SL-246` took `IMP-393`'s route under
+`DEC-261`: `doctrine design show <SLICE>` renders the design document, the turn
+envelope keeps `prompt`/`json`/`status` under `--format`, and only the default
+moves. The rehome this item planned is therefore *done* for the `design` group
+rather than deferred, and `SL-246` records `fulfils IMP-393 --degree partial`.
+
+**What remains, and lives on `IMP-393`.** The slice's other three documents —
+plan, notes, and the scope `slice show` renders — still have no reader or an
+implicit one. The rename of the envelope to `design state` proposed here is
+superseded by keeping it on `--format prompt`; whether `design state` is still
+wanted as an alias is `IMP-393`'s call. And `IMP-393`'s fuller reader-facing
+render — run metadata, attestation standing, open inquiries, the navigable
+neighbourhood — is untouched by `SL-246`, which delivers the document plus its
+knowledge records and no run state.

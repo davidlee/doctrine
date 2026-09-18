@@ -5,8 +5,8 @@ id = 457
 slug = "design-run-verbs-occupy-the-document-render-verb-slots"
 title = "Design-run verbs occupy the document-render verb slots"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "duplicate"
 created = "2026-09-18"
 updated = "2026-09-18"
 tags = ["area:cli", "area:design-run"]
@@ -37,3 +37,7 @@ label = "references"
 role = "concerns"
 descriptor = "naming conventions the rehome must satisfy"
 target = "STD-002"
+
+[[relation]]
+label = "related"
+target = "IMP-393"
