@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b84f-fb12-7db1-a9ce-ea9aa10f3a01"
+recorded_at = "2026-09-19T06:17:24.498672403Z"
+kind = "friction"
+summary = "research: pi-scout and pi-research both dead, deepseek API key rejected (401)"
+detail = "Shaping session (no skill). ./scripts/pi-scout exited 1 after 'Authentication Fails, Your api key is invalid'. Both .pi/agents profiles (scout, researcher) use deepseek, so the project's only sanctioned research path is down; fell back to reading the ledgers in the interactive context."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

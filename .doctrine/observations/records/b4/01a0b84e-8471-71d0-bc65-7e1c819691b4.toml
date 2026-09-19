@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b84e-8471-71d0-bc65-7e1c819691b4"
+recorded_at = "2026-09-19T06:15:48.593359673Z"
+kind = "friction"
+summary = "boot floor directive: 'prompt resolve --band model --model <id>' fails, --role is required"
+detail = "Boot snapshot's Model band section prescribes 'doctrine prompt resolve --band model --model <id>'. doctrine 0.44.3 rejects it: 'required arguments were not provided: --role <ROLE>'. The snapshot names no role value, so the floor directive cannot be followed as written. Skipped the band load (best-effort)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
