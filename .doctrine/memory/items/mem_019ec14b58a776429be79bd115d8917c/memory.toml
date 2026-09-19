@@ -6,7 +6,7 @@ status = "active"
 title = "Relate entities via doctrine link, not hand-authored relation rows"
 summary = "Relate entities via doctrine link (Writable axes) — never hand-author [[relation]] rows; RELATION_RULES is the vocabulary, typed-spine axes stay typed"
 created = "2026-06-13"
-updated = "2026-06-13"
+updated = "2026-09-19"
 
 [scope]
 paths = ["src/relation.rs"]

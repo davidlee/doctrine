@@ -27,3 +27,15 @@ and in the jail `cargo build` writes to `~/.cargo/doctrine-target-jail/debug`
 is almost always a stale installed binary, not a real gap
 ([[mem.pattern.relation.authored-rows-tooling-half-wired]]) — re-resolve the dev
 binary via `cargo metadata … target_directory` before concluding anything.
+
+**Roleful labels demand a role — choose by the claim, not by convenience.**
+`references` is the one roleful label: a bare `doctrine link A references B` is
+refused with `references requires a role — author it with --role
+<originates_from|concerns>` (or `implements`, where the source set admits it).
+The three roles are closed (ADR-016) and the target set narrows as the claim
+sharpens: `implements` = a slice implements canonical truth (SPEC/PRD/REQ);
+`originates_from` = this work came out of that work (backlog↔backlog, backlog↔slice);
+`concerns` = aboutness/relevance, the widest — work or record → any numbered entity
+— and the right choice for "this item is about that RFC / discussion / decision".
+`related` is a *peer* edge, the weaker catch-all: when a claim-bearing role fits,
+use it and skip `related` rather than authoring both.
