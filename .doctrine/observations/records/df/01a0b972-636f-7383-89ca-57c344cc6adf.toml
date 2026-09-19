@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b972-636f-7383-89ca-57c344cc6adf"
+recorded_at = "2026-09-19T11:34:36.655462471Z"
+kind = "friction"
+summary = "/design: design apply refuses a multi-node declare batch after the first apply, with a misleading 'unknown node: <id>' naming a node the batch itself creates"
+detail = "SL-260, run dr-01a0b96d. First apply declared inq-1..inq-7 in one batch: accepted, all seven created with parent and needs edges. Every later multi-node batch was refused with 'unknown node: <first-new-id>' — inq-8..inq-14 as one batch, then inq-9..inq-14 as one batch. Each of those same nodes applied individually with identical JSON, in the same order, succeeded. So the payload was valid; only the batching differed. Cost: seven extra applies plus three bisecting ones, and the error message points at a node the batch is creating rather than at whatever the refusal is actually about, so it reads as a payload bug rather than a batching limit. Either batching after the first apply is unsupported (then say so) or the id-minting pass computes from pre-batch state (then the message should name that)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
