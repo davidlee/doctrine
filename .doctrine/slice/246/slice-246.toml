@@ -110,6 +110,10 @@ selector = "src/kinds/mod.rs"
 intent = "scope-relevant"
 note = "C2's instrument — must stay green UNCHANGED; a diff here is the alarm"
 
+[[selector]]
+selector = "src/selection.rs"
+intent = "design-target"
+
 [[relation]]
 label = "fulfils"
 degree = "partial"

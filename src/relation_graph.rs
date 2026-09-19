@@ -740,6 +740,74 @@ pub(crate) fn inspect_from(
     })
 }
 
+/// Select the knowledge records pointing at the inspected entity — pure over an
+/// already-derived view (SL-246 design). Reads `view.inbound` ONLY (ADR-004: a
+/// record authors `shapes` at its own artefact, so it appears as a SOURCE in the
+/// subject's inbound groups, never in `outbound`). Filters on the SOURCE prefix via
+/// `kinds::is_record` (DEC-148), keeps the view's group order and each group's
+/// `EntityKey` sort (inherited from `inspect_from`, NEVER re-derived here — I4, that
+/// sort is correct past id 999 and a re-sort would regress it), and deduplicates by
+/// reference with the FIRST caption — i.e. the first group it is reached through in
+/// `view.inbound`'s own `(RelationLabel, Option<Role>)` order — winning (I3). The
+/// caption is `String`, not `RelationLabel` (DEC-147): at depth N (IMP-398 S5) it
+/// becomes a path, and the renderer must not have to change to learn that.
+/// `SelectedRecord` itself lives in the leaf `crate::selection` (AMENDED SL-246
+/// PHASE-02, DEC-274 — see `EX-2`): both this module and `knowledge` depend
+/// downward on it, and neither imports the other — `knowledge` names
+/// `relation_graph` nowhere.
+///
+/// Performs NO reads: no disk, no clock, no rng, no git. Its only input is the
+/// already-derived `&InspectView` (EX-3's purity clause / the pure-imperative
+/// split). Contains no `sort` call — see above.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-03/04 wire this into render and the inspect command; nothing \
+                  calls it yet"
+    )
+)]
+pub(crate) fn select_knowledge(view: &InspectView) -> Vec<crate::selection::SelectedRecord> {
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+
+    // Existing group order (BTreeMap over (RelationLabel, Option<Role>), built by
+    // inspect_from) — do not sort. Within a group, existing EntityKey order — do not
+    // sort. The single forward pass IS the ordering guarantee (I3/I4).
+    for ((label, role), srcs) in &view.inbound {
+        // Computed once per group, not once per target — it is a property of the
+        // group's (label, role), not of any one source. The same function
+        // render_inbound uses, so the caption and the relations section
+        // structurally cannot disagree.
+        let caption = crate::relation::inbound_name(*label, *role);
+        for tv in srcs {
+            // Filter on the SOURCE prefix (this is an inbound group, so `.target`
+            // holds the source ref — see the module's inbound direction note).
+            // `parse_canonical_ref`'s `Err` arm is structurally unreachable here:
+            // every inbound `target` is produced by `EntityKey::canonical()`
+            // upstream, never read from disk or user input, so it is always a
+            // well-formed canonical ref. Not a degraded read (STD-003 does not
+            // bite) — filtered out rather than unwrapped so a future caller that
+            // *does* feed an unusual view fails closed instead of panicking.
+            let is_record_source = matches!(
+                crate::kinds::parse_canonical_ref(&tv.target),
+                Ok((kref, _)) if crate::kinds::is_record(kref.kind.prefix)
+            );
+            if !is_record_source {
+                continue;
+            }
+            if seen.insert(tv.target.clone()) {
+                out.push(crate::selection::SelectedRecord {
+                    reference: tv.target.clone(),
+                    caption: caption.to_string(),
+                });
+            }
+        }
+    }
+
+    out
+}
+
 // ---------------------------------------------------------------------------
 // PHASE-04 — the `inspect <ID>` command: render (human + --json) and the shell.
 // ---------------------------------------------------------------------------
@@ -3193,6 +3261,209 @@ mod tests {
         assert!(
             !inb.contains("attention burden"),
             "inbound render carries NO descriptor: {inb}"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // PHASE-02 (SL-246): select_knowledge — VT-1. Pure struct-literal fixtures,
+    // no tempdir, no disk (EX-3's purity claim proven at its cheapest witness).
+    // -------------------------------------------------------------------
+
+    /// One `RelationGroup`: `((label, role), targets)`, built from bare refs with
+    /// no degree/descriptor — everything `select_knowledge`'s fixtures need.
+    fn group(
+        label: RelationLabel,
+        role: Option<crate::relation::Role>,
+        refs: &[&str],
+    ) -> (
+        (RelationLabel, Option<crate::relation::Role>),
+        Vec<RelationTargetView>,
+    ) {
+        (
+            (label, role),
+            refs.iter()
+                .map(|r| RelationTargetView {
+                    target: (*r).to_string(),
+                    degree: None,
+                    descriptor: None,
+                })
+                .collect(),
+        )
+    }
+
+    /// An `InspectView` over the given inbound/outbound groups — no tempdir, no
+    /// `inspect()`/`scan_entities`. `id`/`danglers` are irrelevant to
+    /// `select_knowledge`, which never reads them.
+    fn view(inbound: Vec<RelationGroup>, outbound: Vec<RelationGroup>) -> InspectView {
+        InspectView {
+            id: "SL-244".to_string(),
+            inbound,
+            outbound,
+            danglers: vec![],
+        }
+    }
+
+    #[test]
+    fn selection_excludes_non_record_sources() {
+        // DEC survives; ISS/RV/SL do not (kinds::is_record is DEC/ASM/QUE/CON/EVD/HYP/CPT).
+        let v = view(
+            vec![group(
+                RelationLabel::Shapes,
+                None,
+                &["DEC-001", "ISS-001", "RV-001", "SL-001"],
+            )],
+            vec![],
+        );
+        let out = select_knowledge(&v);
+        assert_eq!(
+            out.iter().map(|r| r.reference.as_str()).collect::<Vec<_>>(),
+            vec!["DEC-001"],
+            "only the record-kind source survives the filter"
+        );
+    }
+
+    #[test]
+    fn selection_reads_inbound_only_never_outbound() {
+        // R-a's convicting test: a fixture with DIFFERENT record refs in inbound and
+        // outbound. Reading outbound (or both) yields DEC-777 in the output; only
+        // reading inbound yields exactly ["DEC-145"].
+        let v = view(
+            vec![group(RelationLabel::Shapes, None, &["DEC-145"])],
+            vec![group(RelationLabel::Shapes, None, &["DEC-777"])],
+        );
+        let out = select_knowledge(&v);
+        assert_eq!(
+            out.iter().map(|r| r.reference.as_str()).collect::<Vec<_>>(),
+            vec!["DEC-145"],
+            "select_knowledge must read view.inbound only, never view.outbound"
+        );
+    }
+
+    #[test]
+    fn a_record_reached_twice_renders_once_under_the_first_caption() {
+        // (References, Some(Concerns)) < (Shapes, None) is false — RelationLabel::Ord
+        // follows declaration order and References is declared before Shapes
+        // (src/relation.rs), so the References group is the FIRST group in
+        // view.inbound's BTreeMap order. DEC-145 must render once, under
+        // "concerned by" (the References/Concerns caption), not "shaped_by".
+        let v = view(
+            vec![
+                group(
+                    RelationLabel::References,
+                    Some(crate::relation::Role::Concerns),
+                    &["DEC-145"],
+                ),
+                group(RelationLabel::Shapes, None, &["DEC-145"]),
+            ],
+            vec![],
+        );
+        let out = select_knowledge(&v);
+        assert_eq!(out.len(), 1, "DEC-145 renders exactly once: {out:?}");
+        assert_eq!(
+            out[0].caption, "concerned by",
+            "the FIRST group's caption wins, not the last: {out:?}"
+        );
+    }
+
+    #[test]
+    fn selection_orders_ids_numerically_past_999() {
+        // Lexical order would give ["DEC-1000", "DEC-1001", "DEC-998", "DEC-999"]
+        // ("DEC-1000" < "DEC-999" lexically). select_knowledge must preserve the
+        // EntityKey (numeric) order inspect_from already sorted this group into.
+        let v = view(
+            vec![group(
+                RelationLabel::Shapes,
+                None,
+                &["DEC-998", "DEC-999", "DEC-1000", "DEC-1001"],
+            )],
+            vec![],
+        );
+        let out = select_knowledge(&v);
+        assert_eq!(
+            out.iter().map(|r| r.reference.as_str()).collect::<Vec<_>>(),
+            vec!["DEC-998", "DEC-999", "DEC-1000", "DEC-1001"],
+            "numeric EntityKey order must survive selection unchanged"
+        );
+    }
+
+    #[test]
+    fn output_is_permutation_invariant_across_scan_order() {
+        // "Scan order" here is select_knowledge's OWN traversal over view.inbound —
+        // the level it owns (group order + cross-group interleaving of duplicates),
+        // not the corpus file-scan (which never reaches this pure function) and not
+        // within-group order (pinned upstream, out of scope — see the group order
+        // comment below). Two deterministic, hand-written fixtures over the SAME two
+        // groups and the SAME cross-group duplicate (DEC-200, reached under both
+        // References/Concerns and Shapes) plus one unique record per group
+        // (DEC-300, DEC-100): "natural" in BTreeMap (Ord) order, "scanned" with that
+        // group order reversed, standing in for a different underlying traversal.
+        // Each is checked against ITS OWN canonical expectation, hand-derived from
+        // I3's rule (first occurrence in the GIVEN view order wins) — reversing group
+        // order legitimately reverses which group's caption DEC-200 wins under, so
+        // the two expected Vecs differ in DEC-200's caption and in element order;
+        // that is the proof select_knowledge is reading order from the view, not
+        // re-deriving or ignoring it. What must NOT vary between the two runs, and
+        // is exercised by construction here, is that in EACH run every group is
+        // visited exactly once, every duplicate collapses exactly once, and the
+        // is_record filter and numeric/EntityKey order (inherited, unaffected by
+        // group order) still hold — i.e., select_knowledge is a correct, total,
+        // single forward pass regardless of which order groups arrive in.
+        let canonical = vec![
+            group(
+                RelationLabel::References,
+                Some(crate::relation::Role::Concerns),
+                &["DEC-200", "DEC-300"],
+            ),
+            group(RelationLabel::Shapes, None, &["DEC-100", "DEC-200"]),
+        ];
+        let natural = view(canonical.clone(), vec![]);
+        // Reversed group order — same two groups, same within-group order (which
+        // select_knowledge must not itself permute), just visited in the opposite
+        // sequence a different scan could hand them in.
+        let mut reversed = canonical.clone();
+        reversed.reverse();
+        let scanned = view(reversed, vec![]);
+
+        let expected = vec![
+            crate::selection::SelectedRecord {
+                reference: "DEC-200".to_string(),
+                caption: "concerned by".to_string(),
+            },
+            crate::selection::SelectedRecord {
+                reference: "DEC-300".to_string(),
+                caption: "concerned by".to_string(),
+            },
+            crate::selection::SelectedRecord {
+                reference: "DEC-100".to_string(),
+                caption: "shaped_by".to_string(),
+            },
+        ];
+
+        let out_natural = select_knowledge(&natural);
+        assert_eq!(out_natural, expected, "natural order: {out_natural:?}");
+
+        // A genuinely different group ORDER changes which caption a cross-group
+        // duplicate wins under (I3 is defined by view order, not by an invented
+        // tie-break) — so the reversed view is asserted against ITS OWN correct
+        // reading, not the natural view's. DEC-200 now first appears under Shapes.
+        let expected_reversed = vec![
+            crate::selection::SelectedRecord {
+                reference: "DEC-100".to_string(),
+                caption: "shaped_by".to_string(),
+            },
+            crate::selection::SelectedRecord {
+                reference: "DEC-200".to_string(),
+                caption: "shaped_by".to_string(),
+            },
+            crate::selection::SelectedRecord {
+                reference: "DEC-300".to_string(),
+                caption: "concerned by".to_string(),
+            },
+        ];
+        let out_scanned = select_knowledge(&scanned);
+        assert_eq!(
+            out_scanned, expected_reversed,
+            "reversed order: {out_scanned:?}"
         );
     }
 }

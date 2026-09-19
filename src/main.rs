@@ -100,6 +100,7 @@ mod rfc;
 mod risk;
 mod root;
 mod search;
+mod selection;
 mod slice;
 mod spec;
 mod standard;

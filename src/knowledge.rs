@@ -939,6 +939,53 @@ impl TierFilter {
     }
 }
 
+// STD-001: the three names ("skip"/"facets"/"full") have one definition — this enum's
+// `as_str`. PHASE-04 makes this a `clap::ValueEnum`; the value names must come from
+// here, never from a second literal list.
+/// How much of each inbound knowledge record a composed read carries (SL-246
+/// design). `Default = Skip` is C1 expressed in the type: adding the level changes
+/// nothing by itself, so no call site has to remember the safe default and no later
+/// caller can accidentally default to a level that reads the corpus.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the level onto InspectArgs; nothing calls this yet"
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum KnowledgeLevel {
+    /// No knowledge block. Byte-identical to the pre-SL-246 surface.
+    #[default]
+    Skip,
+    /// Per record: the fields that say what rules, and what would change whether
+    /// the ruling still stands (DEC-150). Never reads the `.md` prose body.
+    Facets,
+    /// The complete record, prose body included.
+    Full,
+}
+
+impl KnowledgeLevel {
+    /// The lowercase CLI token for this level — `skip` / `facets` / `full`. The
+    /// exhaustive match (no wildcard arm) makes a future fourth variant a compile
+    /// error here, not a silent gap.
+    ///
+    /// A method is its own dead-code unit distinct from the enum it is defined on
+    /// (the enum's `expect(dead_code)` does not cover it) — PHASE-04 wires the
+    /// first non-test caller.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "PHASE-04 wires the level onto InspectArgs")
+    )]
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            KnowledgeLevel::Skip => "skip",
+            KnowledgeLevel::Facets => "facets",
+            KnowledgeLevel::Full => "full",
+        }
+    }
+}
+
 /// One facet field: its key, the shape a writer must emit for it, and the tier it
 /// belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -6680,5 +6727,21 @@ target = \"SL-249\"
                 }
             }
         }
+    }
+
+    // -------------------------------------------------------------------
+    // PHASE-02 (SL-246): KnowledgeLevel — VT-2.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn knowledge_level_default_is_skip() {
+        assert_eq!(KnowledgeLevel::default(), KnowledgeLevel::Skip);
+    }
+
+    #[test]
+    fn knowledge_level_as_str_covers_all_three_variants() {
+        assert_eq!(KnowledgeLevel::Skip.as_str(), "skip");
+        assert_eq!(KnowledgeLevel::Facets.as_str(), "facets");
+        assert_eq!(KnowledgeLevel::Full.as_str(), "full");
     }
 }

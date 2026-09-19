@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 274
+slug = "selectedrecord-sites-in-a-leaf-module-not-knowledge"
+title = "SelectedRecord sites in a leaf module, not knowledge"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-19"
+updated = "2026-09-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-246 PHASE-02's EX-2 sited SelectedRecord in src/knowledge.rs so that the dependency would run relation_graph -> knowledge and never back, citing ADR-001 (design.md:571: 'the edge is acyclic today and this keeps it so'). Implementing that siting turned tests/architecture_layering.rs red three ways on one cause: TangleGrew { tier: Command, baseline: 76, actual: 77 }. The siting's premise is contradicted by the authored tier map: layering.toml:105,121 classify BOTH knowledge and relation_graph as tier 'command', so the edge is a same-tier peer edge rather than a tier-crossing one, and a reverse path knowledge -> install -> boot -> memory -> priority -> relation_graph already existed (all five hops verified in source; the boot -> memory hop is the use crate::{... memory ...} at src/boot.rs:30). The new import therefore CLOSED a cycle and grew a frozen, monotone ratchet. Siting the type in relation_graph instead would have been +1 symmetrically, so EX-2's direction choice never avoided the cost — it only picked a side."
+choice = "SelectedRecord moves to a new LEAF module, src/selection.rs, with an additive layering.toml leaf row. Both relation_graph and knowledge depend on the leaf; neither imports the other. The frozen command tangle baseline stays 76 — it is NOT bumped. EX-2 keeps its immutable id and its text is amended in place to record the adaptation and its reason. design.md is NOT edited: the design is locked, and the divergence is carried by this record plus the amended criterion."
+alternatives = ["Bump [tangle_baseline] command 76 -> 77 — precedented twice in layering.toml itself (SL-220 PHASE-06 86->99 and SL-204 PHASE-04 99->76) which calls the bump 'an orchestrator-owned governance edit'. REJECTED because it loosens a monotone architectural ratchet to accommodate a placement whose own justification was mistaken while a remedy existed that costs nothing architecturally.", "Leave EX-2's siting and accept the red gate. NOT VIABLE because PHASE-03's EN-1 requires PHASE-02 exited.", "Site SelectedRecord in relation_graph instead. NO BETTER because the edge is symmetric — either direction is +1 between two modules already in the command SCC."]
+rationale = "The design's INVARIANT is preserved and only its siting clause moved. design.md:560 states the invariant as 'SelectedRecord ... the only type they share'; the leaf siting keeps that exactly, and delivers the one-way-dependency goal EX-2 exists for MORE completely than EX-2's letter managed — under the leaf siting neither peer imports the other at all, where the original had relation_graph importing knowledge. This is the same species of adaptation design.md's own DEC-reconciliation table already records twice, where it says of DEC-149 that 'its siting clause is what moved, as DEC-150's encoding clause did' while the ruling stood intact. A mechanism too narrow to deliver its own ruling yields to the ruling. SelectedRecord is two owned Strings of pure data, which is a textbook leaf citizen on the file's own precedent (boundary = leaf, 'recorded source-delta row type — pure serde'; dep_seq = leaf, 'dependency-sequence data types — pure')."
+consequences = ["The frozen command tangle ratchet stays intact at 76 so it retains its power to catch the next unintended cycle.", "src/selection.rs is a new leaf module with a new layering.toml row. PHASE-03 and PHASE-04 import SelectedRecord from crate::selection rather than crate::knowledge — a one-line import change and not a redesign.", "A placement mandate justified by a layering argument should be checked against the layering gate that enforces it BEFORE implementation. Neither the design nor the plan nor the phase sheet consulted layering.toml so the conflict surfaced only on the end-of-phase gate run.", "EX-2's amended text is the durable record of the divergence for /audit and /reconcile. design.md stays untouched because it is locked."]
+decided_by = "david"
+decided_on = "2026-09-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-246"
