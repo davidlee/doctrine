@@ -1,0 +1,73 @@
+Instrument for RFC-026 E11. Three prompts, run in order on 2026-09-19 by a
+read-only research agent; output is ../classification.md (sections 1-4, 5, 6).
+
+=== 1. Base classification ===
+Read-only research in the doctrine repo. Do not edit, create, or commit anything.
+
+TOOLS. Use the CLI, not raw files: `doctrine review show RV-NNN`,
+`doctrine slice show SL-NNN`, `doctrine review list`. Check `--help` for flags;
+do not guess them. Prefer ./target/debug/doctrine if it exists, else `doctrine`.
+
+QUESTION. When design review fails to converge, what are the findings about?
+We are testing this hypothesis: most blocker/major design-review findings
+concern things that are cheap to reverse and that a thin implementation would
+settle. Only a minority concern commitments that are costly to reverse.
+
+POPULATION.
+  Group N (non-convergent / heavily reviewed), fixed list:
+    RV-325 (reviews SL-233), RV-370 (reviews SL-246), RV-307 (reviews SL-230),
+    the design-facet ledger(s) on SL-232, on SL-249, and on SL-238.
+  Group C (comparison): the 6 most recent design-facet ledgers that concluded
+    with 10 or fewer findings. Select by that rule only; list the ids you
+    picked and the command that produced the list.
+
+FOR EACH LEDGER report: slice id, a one-sentence description of what the slice
+changes, design.md line count, rounds, and total findings by severity.
+
+FOR EVERY blocker and major finding (all of them, no sampling; if a ledger
+makes that infeasible, say so and state exactly which findings you covered),
+assign exactly ONE class:
+
+  A  COSTLY SURFACE: concerns a commitment that is expensive to reverse:
+     persisted authored format/schema or corpus migration; public CLI or skill
+     surface that agents depend on; binding governance (ADR/SPEC/POL/STD/REQ);
+     confinement or security boundary; a released artefact.
+  B  MECHANISM PREDICTION: the design asserted code-level detail (call chain,
+     type, signature, data shape, reachability, file location) that was wrong
+     or unestablished, and that compiling or implementing a thin version would
+     have exposed.
+  C  ARTEFACT PROSE: concerns the document itself: internal inconsistency,
+     stale restatement of a fact owned elsewhere, review history/notes
+     sections, citations, numbering, wording.
+  D  MISSING INTENT: could not be resolved because a human-owned input was
+     absent: no stated adversary, threat model, unacceptable outcome, scope
+     boundary, or product intent.
+  E  OTHER: say what, in under 10 words.
+
+Also mark each finding R if its target text was written to repair an earlier
+finding (a repair-of-a-repair), else leave blank.
+
+OUTPUT (markdown, compact):
+  1. One table per group: ledger | slice | design lines | rounds | findings
+     (blocker/major/minor/nit) | count of A / B / C / D / E | count marked R.
+  2. One flat table of the classified findings: ledger | F-N | severity |
+     class | R | <=12-word reason. This is the evidence; keep it complete.
+  3. Totals: A/B/C/D/E percentages for Group N and for Group C, side by side.
+  4. At most 10 lines of caveats: ambiguous classifications (give F-N ids and
+     the two classes you hesitated between), ledgers you could not read, and
+     anything that contradicts the hypothesis.
+
+RULES. Classify from the finding's own text and its disposition, not from the
+slice title. When unsure between two classes, pick one and list it under
+caveats. Do not speculate; write "unknown" rather than guess. Do not summarise
+the design or recommend anything.
+
+=== 2. Delegation test (added to FOR EACH LEDGER) ===
+Also report: does the design delegate its normative statements to knowledge
+records (DEC/ASM/EVD etc.) rather than restating them — yes / partial / no,
+with one line of evidence.
+
+=== 3. B1/B2 split (class-B rows only) ===
+For each class-B finding, split: B1 = a compile or a thin happy-path
+implementation would expose it; B2 = only a hostile or edge-case input
+would expose it (implementation compiles and passes ordinary tests).
