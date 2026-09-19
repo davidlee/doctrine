@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 263
+slug = "routed-finding-verify-asserts-transcription-not-repair"
+title = "Routed-finding verify asserts transcription, not repair"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-19"
+updated = "2026-09-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-260 adopts RFC-026 P10's routing convention: at disposition the author gives each blocker or major finding one route from a closed set, and demonstrate/probe/control findings are not repaired in prose but become criteria on a phase. ADR-007 D-C5 assigns the verify act to the raiser and never states what the raiser must check, so the existing standard is implicit ('the repair is accepted'). Scope section 3 proposed that the raiser verify on the strength of the criterion existing on the first phase, with the criterion authored before the verify. That sentence cannot execute: phases postdate the design lock (design run locks, then slice plan, then slice phases), so at the moment a design-review raiser would verify there is no phase to carry a criterion."
+choice = "For a finding whose disposition carries a route: prefix naming demonstrate, probe or control, the raiser's verify asserts THAT THE OBLIGATION WAS CORRECTLY TRANSCRIBED ONTO A PHASE CRITERION, not that the defect is repaired. This is a convention-level redefinition of an existing verb and the convention text names it as one rather than letting two readings coexist. The verify is deferred past the design lock. Three facts make the weaker claim safe rather than an escape hatch: (1) it is self-labelling - the route token sits in the same immutable disposition field as the status, so any reader of the ledger sees route:probe and knows which of the two claims that verified carries, with no new field and no schema change; (2) the evidential weight transfers rather than evaporating - a criterion carries a VT/VA/VH verification mode and gates phase completion through machinery that already exists, which is why P10 specified criteria on a phase rather than a note somewhere; (3) the design lock does not need the verify at all - it needs the raiser's concluded marker plus the review-disposed act, and doctrine review conclude states in its own help that open findings are fine because disposing them is the responder's work afterwards."
+alternatives = ["One standard restated at the right altitude - 'the raiser verifies when the response discharges the finding by the means its disposition names', repair text for review and owner-fix, a criterion for the other three. Rejected: a routed verified and an ordinary verified become indistinguishable in the ledger, and since verified is terminal with no verb out of it (src/review.rs:703-728) that indistinguishability is permanent. The trial counts whether the instrument produced the evidence it promised, which postdates the verify, so this records a claim about the future as though it were a claim about the present - P10's would-kill 'a routed finding is admitted unresolved', hidden rather than prevented.", "Defer the verify to slice close and keep verify's meaning unchanged, the raiser verifying on the evidence the instrument actually produced. Rejected: it obliges the raiser to return at close, and the raiser is typically an external reviewer whose session is long gone; it also collapses the trial's per-finding count into the verify act, re-coupling the two things routing just separated.", "Mint a distinct raiser act instead of touching verify. Rejected: there is no other terminal verb, and minting one is a src/ change, which breaks SL-260's no-tooling constraint and newly binds STD-001, STD-003 and POL-002. Recorded so a reviewer does not re-propose it."]
+rationale = "The decisive fact is that verified is terminal and immutable, so whatever a routed verified means it means forever and at audit time. Collapsing two genuinely different claims into one label therefore cannot be corrected later, and it corrupts the trial's own counting, which is the instrument SL-260 exists to stand up. Naming the redefinition costs one sentence of shipped prose and buys a ledger that is readable at grain. The sequencing analysis is what makes the deferral available: the design lock gate is undisposed_blockers, which blocks only on open and contested (src/review.rs:1705), and a routed finding is answered from the moment it is disposed; the gate that requires terminal resolution is the slice close, doc_unresolved_blockers (src/review.rs:1669). The two predicates differ by exactly the answered state, deliberately, and DEC-138 requires that asymmetry be stated wherever it is relied on."
+consequences = ["Scope section 3's sentence is amended: 'the criterion must be authored before the verify' becomes 'the raiser's verify on a routed finding is deferred past the design lock, and the criterion must be authored before it'.", "The convention text must state the redefinition explicitly, on both surfaces, per DEC-103 corollary 2.", "A routed finding's verified is readable as a weaker claim only because the route token is present, so the recording shape in scope section 2 becomes load-bearing for the ledger's honesty, not merely for the counting method.", "inq-4 (does the accumulation rule reach a verified disposition) and inq-7 (where the unenforced-by-construction record lives) unblock.", "The design review pass concludes with routed findings answered rather than verified, which is already what the design lock permits and needs no dispensation."]
+decided_by = "owner"
+decided_on = "2026-09-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-260"

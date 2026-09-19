@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 267
+slug = "convention-completed-with-p10s-three-dropped-clauses"
+title = "Convention completed with P10's three dropped clauses"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-19"
+updated = "2026-09-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-260's scope fixes five things about the routing convention (recording shape, raiser ruling, adversary rule, settle-first test, accumulation rule). inq-1 asked whether that set is complete. Checking the settled content - DEC-263, DEC-264, DEC-265, DEC-266 plus scope sections 2 to 4 - line by line against RFC-026 P10 found three clauses of P10's own text missing, lost by the same omission that had dropped the settle-first test and the accumulation rule."
+choice = "Three clauses are added, completing the set. (1) THE SCOPE BOUNDARY: the convention applies to blocker and major findings only; minor and nit dispositions are unchanged. (2) A CONTROL MUST NAME ITS FAULT: per P10, name the concrete incorrect candidate the check must reject, and observe it rejected - a control establishes discrimination against a named fault, not completeness against all faults. This is the exact symmetric obligation to the adversary clause already required for probe. (3) AN OWNER-FIX MUST SWEEP THE AFFECTED CLASS: per P10, remove the duplicate, verify the surviving owner, sweep the affected class. The first two are implied by the route's own definition; the third is not, and it is the load-bearing one."
+alternatives = ["Add the scope boundary only, leaving control and owner-fix at route-name granularity and their per-route obligations in RFC-026. Rejected: probe's adversary clause is already in the convention, so this leaves the three instrument routes inconsistently specified - one with a naming obligation and two without.", "Treat the set as complete as it stood. Rejected: it does not survive a reviewer holding P10 open, and two of the three gaps are would-kill conditions of the trial itself."]
+rationale = "Each of the three closes a specific failure the evidence already names. Without the scope boundary a responder may route every severity, and the counting pass selects on severity, so the trial would mix populations. Without a named fault a control is unfalsifiable, which is P10's would-kill 'a negative control is reported as rejected when it was not'. Without the sweep clause an owner-fix reproduces the twin-arm failure mode recorded at mem_01a0b45d375873e3ae691d75bea8760d - a repair inherits the finding's scope, satisfies the arm that was attacked and leaves its twin while reading as complete, observed four times in one review (RV-370, SL-246). The apparent objection, that more obligations per route means more for the owner to interpret and so runs at P10's would-kill 'the routes need the owner to interpret', runs backwards: these clauses say concretely what each route owes, which is less interpretation rather than more."
+consequences = ["The convention text carries a severity scope boundary, a naming obligation on control symmetric with probe's adversary clause, and a sweep obligation on owner-fix.", "All three are P10's own words, so the design cites rather than argues them.", "The counting method's severity selection is now justified by the convention rather than by the command's filter alone.", "The owner-fix sweep clause gives the convention a second point of contact with the twin-arm failure mode, which routing does not otherwise address."]
+decided_by = "owner"
+decided_on = "2026-09-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-260"

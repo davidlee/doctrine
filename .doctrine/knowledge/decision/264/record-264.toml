@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 264
+slug = "accumulation-rule-hangs-on-responder-and-raiser-both"
+title = "Accumulation rule hangs on responder and raiser both"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-19"
+updated = "2026-09-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "RFC-026 P10 rules that 'when several of them attack one mechanism, that changes the argument and reopens the design decision; another test is not a disposition' (rfc-026.md:1853-1855). SL-260's approved scope dropped the rule; the pre-design research round put it back as delta D-6 and it was folded into scope section 3. P10 does not say who acts on it or when. DEC-263 settles the surrounding mechanics: a routed finding is answered through the design lock and only reaches verified at slice close, and dispose refuses an answered finding, so the only verb that moves one is the raiser's contest."
+choice = "The accumulation rule is hung at BOTH moments it fires, per DEC-103 corollary 2. The responder's half, delivered at disposition: do not route a second finding against a mechanism that already carries one - reopen the design decision instead. The raiser's half, delivered at the reviewing turn: where several routed findings attack one mechanism, contest rather than verify, because what is in doubt is the design decision and not the repairs. The halves are not redundant; they are different acts with different force. The responder's half is advisory and prevents the mess. The raiser's half has real teeth - contest moves the finding to contested, and contested blocks the design lock (undisposed_blockers, src/review.rs:1705), so the lock stays shut until the design decision is re-argued. Additionally, and as a named residue: accumulation discovered AFTER a verify cannot reopen the disposition, because no verb transitions a finding out of verified (src/review.rs:703-728). The recorded remedy is a prose amendment on the RV .md stating what changed and why, with the verified disposition standing as the audit-time record. The convention carries that as one sentence."
+alternatives = ["Hang it on the raiser only. Rejected: the raiser has real teeth via contest but is the party least likely to hold the whole pattern in view, and in this project's setup is usually an external reviewer on a fresh context.", "Hang it on the responder only. Rejected: it is delivered at exactly the moment routing happens, which is the DEC-103 argument, but it is advisory and the responder is the party motivated not to notice.", "Leave the post-verified case to the existing memory rather than shipping a sentence about it. Rejected by the owner in favour of the sentence: it is the case a reader will hit and get wrong, and the cost is one line of prose."]
+rationale = "SL-260 leads its placement argument on DEC-103 corollary 2 - an obligation firing at several moments is hung at every one of them. Hanging this particular obligation on a single moment would be inconsistent with the slice's own headline warrant in a way a reviewer will raise. The two halves also happen to decompose cleanly along the turn machine: the responder acts at dispose, the raiser acts at verify or contest, and only the raiser's act is enforceable. Stating both is therefore honest about which half carries force, which is the same discipline DEC-103's residue rule asks for elsewhere in this slice."
+consequences = ["The convention text carries three accumulation sentences: the responder's rule, the raiser's rule, and the post-verified residue with its prose-amendment remedy.", "Reopening a design decision through contest is an existing, enforced path; the convention adds no mechanism and needs no tooling for this rule.", "A contested routed finding blocks the design lock, so the accumulation rule is the one part of the routing convention with mechanical teeth. That asymmetry should be stated alongside the unenforced-by-construction items rather than left implicit."]
+decided_by = "owner"
+decided_on = "2026-09-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-260"

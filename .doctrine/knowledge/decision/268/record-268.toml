@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 268
+slug = "operative-rule-in-the-fixed-fragment-scoped-route-axis-in-the-ledger-doc"
+title = "Operative rule in the fixed fragment; scoped route axis in the ledger doc"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-19"
+updated = "2026-09-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-260 places the routing convention on two shipped surfaces. install/design-prompts/reviewing.md is the per-turn process fragment a design run delivers on every reviewing turn, marked customization fixed (publication/manifest.toml:254-261). install/review-ledger.md section 4 publishes the disposition vocabulary, is marked customization customizable (:443-451), and states in its own header that it owns the INVARIANT protocol shared by every review skill - audit, code-review and inquisition. So section 4 is the all-reviews surface, while the fragment fires only inside a design run's reviewing turn. DEC-103 corollary 2 requires delivery at every firing moment; it does not require identical bytes."
+choice = "Each surface carries text written for its own moment, and the fragment carries the operative rule. install/design-prompts/reviewing.md gets the full operative convention, because it fires exactly where routing happens and because it is fixed, so no client install can customise it away. install/review-ledger.md section 4 gets the route axis alongside the existing disposition vocabulary, the recording shape, and an EXPLICIT SCOPE LINE: provisional, applies to design-review ledgers under the RFC-026 trial, with the rule itself held in the reviewing fragment. The scope line is not decoration - without it the route axis binds every RV ledger in the project, audits and code reviews included, which widens the intervention past P10's trial population (the design ledgers of the next three code-changing slices) and makes the counting pass's denominator wrong."
+alternatives = ["Identical text on both surfaces. Rejected: it either carries the design-review scope qualifier into a doc that owns the all-reviews protocol, where the qualifier does not make sense in place, or it omits the qualifier and silently widens the trial population.", "Put the convention in the reviewing fragment only. Foreclosed: the approved scope requires both surfaces, DEC-103 requires delivery at both moments, and section 4 is where the disposition vocabulary lives, so a route axis absent there is undiscoverable to anyone reading the vocabulary."]
+rationale = "The two surfaces fire at different moments over different populations, which is exactly the case DEC-103 corollary 2 covers - hang the obligation at every moment - without implying the same words at each. The customization asymmetry decides which surface carries the rule rather than the pointer: a client that has customised review-ledger.md takes the fragment and not section 4 (research.md X-4), so the operative rule must live in the surface that cannot be lost. Scoping section 4 is the difference between a trial with a defined population and an intervention shipped project-wide under cover of a trial."
+consequences = ["The convention is authored twice, deliberately and asymmetrically: operative rule in the fixed fragment, route axis plus scope line plus pointer in the customizable reference doc.", "The trial population stays the design ledgers of the eligible slices; audit and code-review ledgers are explicitly out.", "A client install that has customised review-ledger.md still receives the operative rule through the fragment.", "AT TRIAL CONCLUSION the appropriate scope is revisited and re-decided (owner, 2026-09-19). If the mechanisms are adopted, whether they extend from design-review ledgers to audit and code-review ledgers is an open decision, not an automatic consequence of a successful trial. Recorded as a follow-up alongside the already-deferred delivery-channel question."]
+decided_by = "owner"
+decided_on = "2026-09-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-260"

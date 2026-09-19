@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 265
+slug = "every-severe-finding-carries-an-explicit-route-no-default"
+title = "Every severe finding carries an explicit route; no default"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-19"
+updated = "2026-09-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "RFC-026 P10 gives five routes keyed on the question behind the finding: review (should we accept this commitment and its consequences), demonstrate (can these parts connect as proposed), probe (does the mechanism withstand the adversary), control (would the planned check notice failure), owner-fix (do two accounts of one fact disagree). SL-260's scope raised OQ-1: should the convention name a default route for a finding the responder cannot classify, or require an explicit review? A default risks becoming the escape hatch the ledger's anti-escape guardrails already fight; requiring an explicit choice risks stalling a disposition."
+choice = "No default. Every blocker or major finding carries an explicit route, and review is a legitimate explicit choice rather than a fallback. Where the responder genuinely cannot classify a finding, the convention does not invent a new escape - it cites the guardrail that already ships at install/review-ledger.md:164-166: unresolved ambiguity after reading the design and governance means stop and consult, and do not improvise a disposition. That section is the natural owner of the case and sits on one of the two surfaces the convention already touches, so the convention points at it rather than restating it."
+alternatives = ["Default to review. Rejected: review is the status quo prose loop, the route that produces repair text, which is the very thing the trial is trying to reduce. A free default to it silently nulls the intervention, and the counting pass cannot distinguish a review chosen on the merits from a route never chosen. The trial would then read 'routing did not help' when the truth was 'routing was not used', and with three ledgers and no pass mark there is no headroom to absorb that confound.", "Default to review but require a one-clause reason when it is taken. Rejected: it adds a prose obligation nothing checks, to soften a stalling problem the recommended option does not have."]
+rationale = "Choosing a route means naming the question behind the finding, so 'I cannot classify this' is really 'I do not know what this finding is asking' - a poor state in which to be writing a disposition at all, and one the shipped anti-escape guardrails already route to consult. The decisive argument is measurement rather than discipline: scope section 6's counting command already tests the route: prefix as a boolean, so under an explicit-choice rule a missing route is a datum, while under a default rule it is a silence indistinguishable from a deliberate choice. P10's would-kill list includes 'the routes need the owner to interpret', which cannot be evaluated at all if the hard cases can be discharged by omission."
+consequences = ["The convention text states that every severe finding carries an explicit route and cites install/review-ledger.md's anti-escape guardrails for the unclassifiable case rather than restating them.", "A severe finding whose disposition carries no route: prefix is counted as a convention miss, not as an implicit review.", "No new escape vocabulary is introduced, which keeps SL-260 inside its 'no new normative surface' constraint."]
+decided_by = "owner"
+decided_on = "2026-09-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-260"

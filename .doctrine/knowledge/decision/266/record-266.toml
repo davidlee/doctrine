@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 266
+slug = "route-set-stays-prose-only-the-choice-is-stated-not-implied"
+title = "Route set stays prose-only; the choice is stated, not implied"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-19"
+updated = "2026-09-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Closed vocabularies in this codebase carry as_str plus parse plus an ALL or KNOWN set, lockstep-tested - Severity, FindingStatus, Facet, Fragment (research.md thread 2, naming precedents). SL-260's route set is a closed vocabulary of five values and does not take that shape. A reviewer who knows the codebase will read the omission as a defect unless the choice is stated."
+choice = "The route set is prose-only by construction, and the design says so rather than leaving it as an omission. Code-backing it would mean a parse plus ALL under src/, which is exactly the change SL-260's scope names as its own tripwire: a src/ change newly binds STD-001 (no magic strings), STD-003 (no silent skip) and POL-002 (platform independence), and fails the no-tooling claim the slice makes. The statement is recorded alongside the unenforced-by-construction items, since it is the same kind of fact - a deliberate absence of mechanism, named rather than hidden. Paired with it: if the trial validates the convention, giving the route set the codebase's standard closed-vocabulary shape is a named follow-up, alongside the already-deferred delivery-channel question."
+alternatives = ["Give the route set the standard shape now - as_str, parse, an ALL set, lockstep tests. Rejected: it is a src/ change, which the owner-approved scope already forecloses as the slice's tripwire. Recorded so a reviewer does not re-propose it without also re-opening the constraint.", "Say nothing and let the shape speak for itself. Rejected: the research round predicted this as a finding a reviewer will raise, and an unstated choice is indistinguishable from an oversight."]
+rationale = "The answer is forced by a constraint the owner already approved, so this is a statement rather than a decision; what is genuinely chosen is that it be stated, and where. Stating it next to the unenforced-by-construction record groups the slice's deliberate absences of mechanism in one place, which is the DEC-103 residue discipline applied consistently rather than case by case. Naming the promotion as a follow-up costs one line and prevents the trial's outcome being quietly read as a mandate for code-backing, which would change the intervention."
+consequences = ["The design states the prose-only choice and its reason, grouped with the unenforced-by-construction items (see inq-7).", "A follow-up records that code-backing the route set is available if the trial validates the convention, and that taking it changes the intervention."]
+decided_by = "agent, on an owner-approved constraint - the no-tooling tripwire in SL-260 scope"
+decided_on = "2026-09-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-260"
