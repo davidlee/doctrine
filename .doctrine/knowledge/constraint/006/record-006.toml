@@ -1,0 +1,32 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 6
+slug = "routing-convention-is-unenforced-by-construction"
+title = "Routing convention is unenforced by construction"
+record_kind = "constraint"
+status = "active"
+created = "2026-09-19"
+updated = "2026-09-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+statement = "The SL-260 design-review routing convention is UNENFORCED BY CONSTRUCTION. No shipped mechanism validates that a route was chosen, that the chosen route is in the closed set, that a probe stated its adversary, that a control named its fault, that an owner-fix swept its class, that the settle-first test was applied, or that a phase criterion was authored before a routed finding was verified. The only mechanical check in the whole convention is the RAISER half of the accumulation rule: contest moves a finding from answered to contested, and contested blocks the design lock (undisposed_blockers, src/review.rs:1705). Everything else is detected, if at all, after the fact by the trial's counting pass, which is post-hoc measurement and not enforcement. Enforcing any of it would require a src/ change, which SL-260's scope forecloses as its own tripwire (a src/ change newly binds STD-001, STD-003 and POL-002). This record is the residue register DEC-103 requires: its residue rule holds that where an obligation genuinely has no locatable delivery moment it stays prose AND is recorded as unenforced-by-construction, with each item carrying why no delivery moment was found. PLACEMENT: the convention text on both surfaces carries a one-line pointer to this record - the convention is enforced only by the counting pass - so the FACT of non-enforcement is delivered at the point of effect while the enumeration stays pull-tier audit material. The enumeration was deliberately not inlined: it would ship an eight-row apology in a fragment delivered every reviewing turn and bury the operative rules under caveats about them."
+source = "technical"
+applies_to = ["Routed verify asserts transcription, not repair (DEC-263) - doctrine review verify takes only an ephemeral --note, documented as NOT rationale (src/review.rs:2670-2673), and its gate checks status and role and never content (src/review.rs:2834). Nothing can check that a phase criterion was authored before the verify.", "Every severe finding carries an explicit route (DEC-265) - nothing validates the --disposition field; it is free text and E1 found 61 distinct values already in use.", "A probe route states its adversary in --response - nothing parses --response. Worse, a double-quoted shell argument silently eats backtick spans, so an eaten clause is indistinguishable from an absent one (see inq-12, inq-13).", "A control route names the concrete incorrect candidate its check must reject (DEC-267) - nothing parses --response.", "An owner-fix route sweeps the affected class (DEC-267) - nothing observes whether a sweep happened.", "The settle-first test bounding when a routed finding may stay open past the gate - nothing evaluates external reliance, durable state, authority or exposure, dependency spread, or governing meaning.", "The responder half of the accumulation rule (DEC-264) - advisory by construction; the responder is the party motivated not to notice.", "The route set is prose-only rather than a code-backed closed vocabulary (DEC-266) - a named absence of mechanism, recorded here rather than left as an omission."]
+waiver_reason = ""
+waived_by     = ""
+waived_on     = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-260"
