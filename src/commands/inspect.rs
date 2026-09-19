@@ -18,6 +18,10 @@ pub(crate) struct InspectArgs<'a> {
     pub direction: crate::relation_graph::TransitiveDir,
     pub labels: Vec<String>,
     pub max_depth: Option<String>,
+    /// SL-246: how much of each inbound knowledge record the composed read
+    /// carries. `Skip` (the default) leaves the surface byte-identical to the
+    /// pre-SL-246 output.
+    pub knowledge: crate::knowledge::KnowledgeLevel,
 }
 
 /// Parse `--max-depth` (design §5 / EX-2): absent → `Some(5)` (the uniform default);
@@ -58,6 +62,20 @@ pub(crate) fn run_inspect(
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let resolved = if args.json { Format::Json } else { args.format };
     let id = args.id;
+
+    // SL-246 EX-2: a non-Skip `--knowledge` level composes the inbound knowledge
+    // block over the 1-hop relation view; `--transitive` walks N hops with no
+    // block at all. The two are mutually exclusive because the transitive
+    // knowledge closure is not built (IMP-398 S5) — sited first, ahead of the
+    // SL-138 F2 memory-ref refusal below, for deterministic precedence.
+    if !matches!(args.knowledge, crate::knowledge::KnowledgeLevel::Skip) && args.transitive {
+        anyhow::bail!(
+            "--knowledge {} cannot be combined with --transitive: the transitive \
+             knowledge closure is not built (IMP-398 S5). Use --knowledge skip, or \
+             drop --transitive.",
+            args.knowledge.as_str()
+        );
+    }
 
     let is_memory_ref = matches!(
         crate::memory::MemoryRef::parse(id),
@@ -119,22 +137,52 @@ pub(crate) fn run_inspect(
 
     let out = match resolved {
         Format::Table => {
-            // Relation render FIRST (the cheap oracle): its F6 existence gate (inside
-            // render_from → inspect_from on the relation projection) errors a ghost id
-            // BEFORE the heavier priority block is built.
-            let relation = crate::relation_graph::render_from(&scanned, &root, id, Format::Table)?;
+            // View + gate FIRST (the cheap oracle): F6's existence gate (inside
+            // inspect_from) errors a ghost id BEFORE the heavier knowledge/priority
+            // work. Held so `select_knowledge` below reuses this ONE build (SL-246
+            // T4) rather than a second corpus-derived graph.
+            let view = crate::relation_graph::inspect_from(&scanned, &root, id)?;
+            let relation = crate::relation_graph::render_view(&root, &view, Format::Table)?;
+            // SL-246 EX-1: composes relations + the knowledge block + actionability.
+            // `commands/inspect.rs` owns no policy about which fields render or what
+            // an empty facet means — it only calls select_knowledge / render_block.
+            // The section frame is gated on the LEVEL (a property), never on
+            // `render_block`'s output being empty (a proxy) — D-c.
+            let knowledge_section: String =
+                if matches!(args.knowledge, crate::knowledge::KnowledgeLevel::Skip) {
+                    String::new()
+                } else {
+                    let selected = crate::relation_graph::select_knowledge(&view);
+                    let block =
+                        crate::knowledge::render_block(&root, id, &selected, args.knowledge);
+                    ["\nknowledge:\n".to_string(), block].concat()
+                };
             // Only reached for a minted id (the render gate passed).
             let block = crate::priority::surface::actionability_block_from(&scanned, &root, id)?;
             let block = crate::priority::render::actionability_block_human(&block);
-            format!("{relation}{block}")
+            [relation, knowledge_section, block].concat()
         }
         Format::Json => {
-            // Relation view + gate FIRST, then the priority block (gate inside
+            // View + gate FIRST, then the knowledge and priority blocks (gate inside
             // inspect_from on the relation projection).
             let view = crate::relation_graph::inspect_from(&scanned, &root, id)?;
             let block = crate::priority::surface::actionability_block_from(&scanned, &root, id)?;
             let mut value = crate::relation_graph::inspect_value(&view);
             if let Some(obj) = value.as_object_mut() {
+                // The Option IS the omission mechanism (SL-246 EX-1/VT-1): a `Skip`
+                // read inserts NOTHING, never `null` or `[]`. The key lands
+                // alphabetically between `kind` and `outbound` (BTreeMap Map).
+                // Gated on the LEVEL up front (mirrors the table arm — T4 refactor:
+                // both arms now do select → produce in the same order, at the same
+                // gate, rather than always selecting and gating the produce step).
+                if !matches!(args.knowledge, crate::knowledge::KnowledgeLevel::Skip) {
+                    let selected = crate::relation_graph::select_knowledge(&view);
+                    if let Some(knowledge) =
+                        crate::knowledge::knowledge_value(&root, &selected, args.knowledge)
+                    {
+                        obj.insert("knowledge".to_string(), knowledge);
+                    }
+                }
                 obj.insert(
                     "actionability".to_string(),
                     crate::priority::render::actionability_block_value(&block),

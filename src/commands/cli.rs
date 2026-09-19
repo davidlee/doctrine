@@ -269,6 +269,18 @@ pub(crate) enum Command {
         #[arg(long, requires = "transitive")]
         max_depth: Option<String>,
 
+        /// Compose the inbound knowledge records at this reading level: `skip`
+        /// reads nothing (the default, byte-identical to the pre-SL-246 surface);
+        /// `facets` reads the deciding-tier fields only; `full` reads the whole
+        /// record, prose body included. Refused together with `--transitive`
+        /// (IMP-398 S5 — the transitive knowledge closure is not built).
+        #[arg(
+            long,
+            value_parser = crate::knowledge::KnowledgeLevel::from_str,
+            default_value_t = crate::knowledge::KnowledgeLevel::default()
+        )]
+        knowledge: crate::knowledge::KnowledgeLevel,
+
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -1583,6 +1595,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             direction,
             labels,
             max_depth,
+            knowledge,
             path,
         } => crate::commands::inspect::run_inspect(
             path,
@@ -1594,6 +1607,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 direction: direction.to_transitive(),
                 labels,
                 max_depth,
+                knowledge,
             },
         ),
         Command::Survey {

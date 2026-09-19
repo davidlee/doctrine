@@ -610,8 +610,8 @@ pub(crate) struct InspectView {
 ///
 /// The own-scan convenience wrapper over [`inspect_from`] for callers that do NOT
 /// already hold a corpus scan — the unit suite below. The command layer (`main.rs`)
-/// holds the single F2 scan and calls `inspect_from`/`render_from` directly, so in a
-/// non-test build this wrapper has no caller.
+/// holds the single F2 scan and calls [`inspect_from`] / [`render_view`] directly, so
+/// in a non-test build this wrapper has no caller.
 #[cfg_attr(
     not(test),
     expect(
@@ -759,14 +759,6 @@ pub(crate) fn inspect_from(
 /// Performs NO reads: no disk, no clock, no rng, no git. Its only input is the
 /// already-derived `&InspectView` (EX-3's purity clause / the pure-imperative
 /// split). Contains no `sort` call — see above.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-03/04 wire this into render and the inspect command; nothing \
-                  calls it yet"
-    )
-)]
 pub(crate) fn select_knowledge(view: &InspectView) -> Vec<crate::selection::SelectedRecord> {
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut out = Vec::new();
@@ -812,32 +804,23 @@ pub(crate) fn select_knowledge(view: &InspectView) -> Vec<crate::selection::Sele
 // PHASE-04 — the `inspect <ID>` command: render (human + --json) and the shell.
 // ---------------------------------------------------------------------------
 
-/// Render the relation view of `id` to a string from a PRE-SCANNED entity slice (the
-/// command-layer seam, SL-047 §5.4 + SL-050 F2): `main.rs`'s `inspect` handler builds
-/// the single corpus scan ONCE, calls this for the relation portion, then APPENDS the
-/// priority actionability block BELOW it (the composition lives at the command layer,
-/// which alone may depend on both `relation_graph` and `priority`; ADR-001 forbids
-/// `relation_graph` from calling up into `priority`). The relation portion stays
-/// byte-identical — the appended block is additive (EX-2 / VT-2 behaviour-preserving).
-/// No trailing newline on JSON (the golden contract); the human surface ends in `\n`.
-///
-/// Delegates through [`inspect_from`], so it inherits the F6 existence gate (a
-/// never-minted id errors before any render). `root` is retained for the queried
-/// entity's own per-entity re-reads (`inspect_from`'s outbound + `render_human`'s
-/// interaction types).
-pub(crate) fn render_from(
-    scanned: &[ScannedEntity],
+/// Render an ALREADY-BUILT [`InspectView`] to a string (SL-246 PHASE-04 T4) — the
+/// half of the `inspect_from` + `render_view` composition that follows the F6
+/// existence gate ([`inspect_from`] builds the view; this renders it). Factored out
+/// so a caller that needs the view for a further purpose (the command layer's
+/// `select_knowledge`) builds the graph once and renders from the same view,
+/// rather than calling `inspect_from` a second time.
+pub(crate) fn render_view(
     root: &Path,
-    id: &str,
+    view: &InspectView,
     format: Format,
 ) -> anyhow::Result<String> {
-    let view = inspect_from(scanned, root, id)?;
     match format {
         // The queried entity's per-edge interaction `type` is re-read from the
         // SOURCE here (C2 / §5.3) — a human-render annotation only; never carried
         // in `InspectView`.
-        Format::Table => render_human(root, &view),
-        Format::Json => render_json(&view),
+        Format::Table => render_human(root, view),
+        Format::Json => render_json(view),
     }
 }
 
@@ -1242,10 +1225,10 @@ fn walk_transitive(
 /// existence gate — so a never-minted id errors identically (EX-4). Relation-only:
 /// no `priority` up-call (ADR-001).
 ///
-/// `_root` is retained for call-site symmetry with [`inspect_from`] / [`render_from`]
-/// (the PHASE-03 command layer threads the same `(scanned, root, id, …)` tuple), per
-/// the §5 signature; the relation-only walk reads nothing per-entity from disk, so it
-/// is currently unused here.
+/// `_root` is retained for call-site symmetry with [`inspect_from`] (the PHASE-03
+/// command layer threads the same `(scanned, root, id, …)` tuple), per the §5
+/// signature; the relation-only walk reads nothing per-entity from disk, so it is
+/// currently unused here.
 ///
 /// # Errors
 ///
@@ -3246,14 +3229,16 @@ mod tests {
         let scanned = scan(root);
 
         // Source outbound row carries the descriptor.
-        let out = render_from(&scanned, root, "SL-001", Format::Table).unwrap();
+        let view = inspect_from(&scanned, root, "SL-001").unwrap();
+        let out = render_view(root, &view, Format::Table).unwrap();
         assert!(
             out.contains("REQ-005 — \"attention burden\""),
             "outbound concerns row shows the descriptor: {out}"
         );
 
         // Target inbound row omits the descriptor entirely (D3).
-        let inb = render_from(&scanned, root, "REQ-005", Format::Table).unwrap();
+        let view = inspect_from(&scanned, root, "REQ-005").unwrap();
+        let inb = render_view(root, &view, Format::Table).unwrap();
         assert!(
             inb.contains("concerned by: SL-001"),
             "inbound concerns row present: {inb}"

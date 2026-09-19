@@ -920,13 +920,6 @@ pub(crate) enum Tier {
 /// this one (D6): a filter that keeps nothing renders nothing, and the marker that
 /// stands in its place is composed one layer up, where the record reference and the
 /// root are in hand.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "EX-3 admits Only(Tier) now; the Facets render level constructs it"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TierFilter {
     All,
@@ -950,13 +943,6 @@ impl TierFilter {
 /// design). `Default = Skip` is C1 expressed in the type: adding the level changes
 /// nothing by itself, so no call site has to remember the safe default and no later
 /// caller can accidentally default to a level that reads the corpus.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the level onto InspectArgs; nothing calls this yet"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum KnowledgeLevel {
     /// No knowledge block. Byte-identical to the pre-SL-246 surface.
@@ -970,6 +956,15 @@ pub(crate) enum KnowledgeLevel {
 }
 
 impl KnowledgeLevel {
+    /// Every variant, in declaration order — the single enumeration `FromStr`'s
+    /// error message and `ALL`-driven callers derive from (STD-001: one definition
+    /// of the three names, never a second literal list).
+    pub(crate) const ALL: [KnowledgeLevel; 3] = [
+        KnowledgeLevel::Skip,
+        KnowledgeLevel::Facets,
+        KnowledgeLevel::Full,
+    ];
+
     /// The lowercase CLI token for this level — `skip` / `facets` / `full`. The
     /// exhaustive match (no wildcard arm) makes a future fourth variant a compile
     /// error here, not a silent gap.
@@ -977,16 +972,39 @@ impl KnowledgeLevel {
     /// A method is its own dead-code unit distinct from the enum it is defined on
     /// (the enum's `expect(dead_code)` does not cover it) — PHASE-04 wires the
     /// first non-test caller.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "PHASE-04 wires the level onto InspectArgs")
-    )]
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             KnowledgeLevel::Skip => "skip",
             KnowledgeLevel::Facets => "facets",
             KnowledgeLevel::Full => "full",
         }
+    }
+}
+
+impl std::str::FromStr for KnowledgeLevel {
+    type Err = anyhow::Error;
+
+    /// Finds by [`KnowledgeLevel::as_str`] over [`KnowledgeLevel::ALL`] — never a
+    /// second `match` spelling the three names (STD-001, the orchestrator's
+    /// ruling). The error message is derived from the same `ALL` so a fourth
+    /// variant cannot desync it.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        KnowledgeLevel::ALL
+            .into_iter()
+            .find(|level| level.as_str() == s)
+            .ok_or_else(|| {
+                let names: Vec<&str> = KnowledgeLevel::ALL.map(KnowledgeLevel::as_str).to_vec();
+                anyhow::anyhow!(
+                    "unknown knowledge level `{s}` (expected one of: {})",
+                    names.join(", ")
+                )
+            })
+    }
+}
+
+impl std::fmt::Display for KnowledgeLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -1259,13 +1277,6 @@ impl FacetValue {
     /// empty — so an unfilled record's lists arrive as `List(vec![])` and an
     /// `Absent`-only test would miss an unfilled `CON` at either level and an
     /// unfilled `DEC` at `full`.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "PHASE-04 wires the composed read onto InspectArgs"
-        )
-    )]
     fn is_blank(&self) -> bool {
         match self {
             FacetValue::Absent => true,
@@ -2352,13 +2363,6 @@ fn facet_json(facet: &RecordFacet, tier: TierFilter) -> serde_json::Value {
 /// Which of DEC-149 + STD-003's empty states a record's facet is in, read off
 /// `facet_fields`' own return rather than a second match on the kind (EX-2,
 /// DEC-262).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FacetState {
     /// The kind carries no facet fields at all — a design fact, not a gap.
@@ -2380,13 +2384,6 @@ enum FacetState {
 /// `Argument` rows at all, so under `TierFilter::Only(Tier::Argument)` — which the
 /// type admits today — their filtered set is empty while their table is not, and
 /// an `EVD` would claim "no facet by design", which is a lie.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn facet_state(kind: RecordKind, kept: &[FacetField]) -> FacetState {
     if facet_fields(kind).is_empty() {
         return FacetState::ByDesign;
@@ -2404,13 +2401,6 @@ const PROSE_SIZE_DIVISOR: f64 = 1000.0;
 
 /// The prose-size hint: the size of the body a reader can fall back to when the
 /// facet says nothing.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn prose_size(bytes: usize) -> String {
     #[expect(
         clippy::as_conversions,
@@ -2428,26 +2418,12 @@ fn prose_size(bytes: usize) -> String {
 /// *body* sketches a different spelling and gives this marker a prose size too; the
 /// design's table supersedes the sketch on spelling (§7.1) and the plan's `EX-2`
 /// agrees, attaching the hint to the UNFILLED state only.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 const FACET_BY_DESIGN_MARKER: &str = "(no facet by design — a concept rides its prose body)";
 
 /// DEC-149's unfilled marker: the kind HAS facet fields and every one the tier
 /// keeps is blank. The honest minimum — it states the gap and compensates for
 /// nothing, naming the prose the reader can fall back to and the command that
 /// shows it.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn unfilled_facet_marker(reference: &str, prose_bytes: usize) -> String {
     format!(
         "(no facet recorded — {} of prose: doctrine knowledge show {reference})",
@@ -2462,13 +2438,6 @@ fn unfilled_facet_marker(reference: &str, prose_bytes: usize) -> String {
 ///
 /// The plain `Display`, never `{err:#}`: the alternate form chains every cause with
 /// newlines, and a newline inside a marker breaks the block.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn unreadable_marker(err: &anyhow::Error) -> String {
     format!("(unreadable: {err})")
 }
@@ -2482,13 +2451,6 @@ fn unreadable_marker(err: &anyhow::Error) -> String {
 /// this repeats the id that `format_metadata`'s own first line carries, and that
 /// mild redundancy is cheaper than two shapes for PHASE-04 to pin and a reader to
 /// learn.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn entry_header(selected: &SelectedRecord) -> String {
     format!("{} ({})\n", selected.reference, selected.caption)
 }
@@ -2496,13 +2458,6 @@ fn entry_header(selected: &SelectedRecord) -> String {
 /// A marker in the TEXT arm's facet slot. Mirrors `format_facet`'s own frame — a
 /// blank line, then the content — so the marker sits exactly where the block it
 /// stands in for would have (D-h: the slot is named, never indexed).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn facet_marker_block(marker: &str) -> String {
     format!("\n{marker}\n")
 }
@@ -2511,13 +2466,6 @@ fn facet_marker_block(marker: &str) -> String {
 /// levels (EX-3). Never a sibling key: writing it over the slot is what keeps
 /// `Full`'s entry exactly `show_value`'s keys plus `caption`, with nothing bolted
 /// onto the payload to carry a marker — the F-23 fix.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn facet_marker_value(marker: &str) -> serde_json::Value {
     serde_json::json!({ "marker": marker })
 }
@@ -2528,13 +2476,6 @@ fn facet_marker_value(marker: &str) -> serde_json::Value {
 ///
 /// The ONE definition of the level → tier mapping (STD-001), shared by both arms,
 /// so neither can render a different tier than the other for the same level.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn level_reading(level: KnowledgeLevel) -> Option<(TierFilter, bool)> {
     match level {
         KnowledgeLevel::Skip => None,
@@ -2552,13 +2493,6 @@ fn level_reading(level: KnowledgeLevel) -> Option<(TierFilter, bool)> {
 /// both callers route it to the same unreadable marker a read failure gets (D-d).
 /// Selection only ever emits record prefixes, so it is unreachable in practice —
 /// but totality is literal and STD-003 forbids the silent skip.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn read_selected(root: &Path, reference: &str) -> anyhow::Result<KnowledgeRecord> {
     let (kind, id) = resolve_ref(reference)?;
     read_record(root, kind, id)
@@ -2569,13 +2503,6 @@ fn read_selected(root: &Path, reference: &str) -> anyhow::Result<KnowledgeRecord
 /// The ONE state decision and the ONE spelling, consumed by BOTH arms — which is
 /// what makes I6's two-arm clause hold by construction rather than by two sets of
 /// assertions that happen to agree (EX-2).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn facet_marker(record: &KnowledgeRecord, tier: TierFilter) -> Option<String> {
     match facet_state(record.record_kind, &facet_field_values(&record.facet, tier)) {
         FacetState::Renders => None,
@@ -2589,13 +2516,6 @@ fn facet_marker(record: &KnowledgeRecord, tier: TierFilter) -> Option<String> {
 
 /// The TEXT arm's facet slot content: the rendered block, or the marker that
 /// stands in for it.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn facet_slot(record: &KnowledgeRecord, tier: TierFilter) -> String {
     match facet_marker(record, tier) {
         Some(marker) => facet_marker_block(&marker),
@@ -2604,13 +2524,6 @@ fn facet_slot(record: &KnowledgeRecord, tier: TierFilter) -> String {
 }
 
 /// The JSON arm's `facet` slot value: the field object, or the marker in its place.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn facet_slot_value(record: &KnowledgeRecord, tier: TierFilter) -> serde_json::Value {
     match facet_marker(record, tier) {
         Some(marker) => facet_marker_value(&marker),
@@ -2621,13 +2534,6 @@ fn facet_slot_value(record: &KnowledgeRecord, tier: TierFilter) -> serde_json::V
 /// The identity keys a `Facets` (and `Skip`) entry carries — the reference and the
 /// caption — plus the facet slot when the level read one. Exactly three keys at
 /// `Facets`, exactly two at `Skip`.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn identity_value(
     selected: &SelectedRecord,
     facet: Option<serde_json::Value>,
@@ -2647,13 +2553,6 @@ fn identity_value(
 /// A `Full` entry: EXACTLY `show_value`'s keys plus `caption`, with the facet slot
 /// written over (EX-3). No `reference` key — `show_value`'s `id` already carries
 /// it, and "exactly `show_value`'s keys plus `caption`" is the criterion.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn full_entry_value(
     record: &KnowledgeRecord,
     caption: &str,
@@ -2681,13 +2580,6 @@ fn full_entry_value(
 ///
 /// `Skip` renders the IDENTITY ONLY and reads nothing (D-c). No caller can reach
 /// it — `render_block` returns before the map — but totality is literal.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 pub(crate) fn render_record(
     root: &Path,
     selected: &SelectedRecord,
@@ -2722,13 +2614,6 @@ pub(crate) fn render_record(
 /// On an unreadable record there is no `show_value` payload to write a marker
 /// over, so the `Full` entry degrades to the identity plus the marker — it still
 /// names the record and still discloses the reason (STD-003).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 pub(crate) fn record_value(
     root: &Path,
     selected: &SelectedRecord,
@@ -2753,13 +2638,6 @@ pub(crate) fn record_value(
 /// X1's line for a subject nothing points at (D3). The reader ASKED, so silence
 /// would read as a bug: the block says so explicitly and names what it was asked
 /// about.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 fn no_records_line(subject: &str) -> String {
     format!("(no knowledge records point at {subject})\n")
 }
@@ -2774,13 +2652,6 @@ fn no_records_line(subject: &str) -> String {
 /// returns the empty string HAVING READ NOTHING, and an EMPTY `selected` returns
 /// X1's line. Neither is a filter — every record in a non-empty `selected` still
 /// yields exactly one entry.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 pub(crate) fn render_block(
     root: &Path,
     subject: &str,
@@ -2810,13 +2681,6 @@ pub(crate) fn render_block(
 ///
 /// No `subject` parameter: X1 on this arm IS the empty array, which says exactly
 /// what the text arm's sentence says and needs no sentence to say it (D3).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 wires the composed read onto InspectArgs"
-    )
-)]
 pub(crate) fn knowledge_value(
     root: &Path,
     selected: &[SelectedRecord],
@@ -7293,6 +7157,32 @@ target = \"SL-249\"
         assert_eq!(KnowledgeLevel::Skip.as_str(), "skip");
         assert_eq!(KnowledgeLevel::Facets.as_str(), "facets");
         assert_eq!(KnowledgeLevel::Full.as_str(), "full");
+    }
+
+    // -------------------------------------------------------------------
+    // PHASE-04 (SL-246) T1: KnowledgeLevel's CLI parse + display (EX-1, STD-001).
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn knowledge_level_round_trips_as_str_through_from_str_for_every_variant() {
+        use std::str::FromStr;
+        for level in KnowledgeLevel::ALL {
+            let parsed = KnowledgeLevel::from_str(level.as_str())
+                .unwrap_or_else(|e| panic!("{} should parse: {e}", level.as_str()));
+            assert_eq!(parsed, level, "round-trip for {}", level.as_str());
+            // Display delegates to as_str (clap's default_value_t requirement).
+            assert_eq!(parsed.to_string(), level.as_str());
+        }
+    }
+
+    #[test]
+    fn knowledge_level_from_str_on_an_unknown_token_names_the_three_levels() {
+        use std::str::FromStr;
+        let err = KnowledgeLevel::from_str("bogus").expect_err("bogus must not parse");
+        let msg = err.to_string();
+        assert!(msg.contains("skip"), "names skip: {msg}");
+        assert!(msg.contains("facets"), "names facets: {msg}");
+        assert!(msg.contains("full"), "names full: {msg}");
     }
 
     // -------------------------------------------------------------------

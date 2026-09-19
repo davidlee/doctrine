@@ -21,13 +21,6 @@
 /// `RelationLabel` (DEC-147): at one hop it is the derived inbound verb
 /// (`crate::relation::inbound_name`); at depth N (IMP-398 S5) it becomes a path,
 /// and the renderer must not have to change to learn that.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-03 render consumes this; select_knowledge constructs it now"
-    )
-)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SelectedRecord {
     pub(crate) reference: String,
