@@ -32,3 +32,15 @@ nondeterminism and keeps the training signal backwards.
 
 Surfaced during SL-246 PHASE-02 (capsule-driver); reported by a capsule
 orchestrator, reproduced as passing in isolation.
+
+## The instrumentation destabilises the suite that tests it
+
+Reported by the SL-246 PHASE-05/06 orchestrator: **recording observations appears
+to raise this flake's rate.** `doctrine observation record` writes into
+`.doctrine/observations/records/`, and the suite exercising the observation
+surface is the one carrying the EPIPE race — so the RFC-011 friction-capture
+instrumentation perturbs the tests covering the feature being instrumented.
+
+This strengthens the case for fixing the race rather than tolerating it: the flake
+is not a fixed background rate, it rises with exactly the activity the project has
+asked every agent to perform continuously.

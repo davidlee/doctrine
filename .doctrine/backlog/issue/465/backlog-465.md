@@ -40,3 +40,11 @@ beat.
 
 Surfaced during SL-246 PHASE-03/04 (capsule-driver); RFC-011 token-efficiency
 benchmarking.
+
+## Compounding finding (SL-246 PHASE-05/06)
+
+`CHR-075` records five memories that are now **actively wrong** about
+`doctrine design show` after PHASE-05 moved its default. The two defects
+compound: a retrieval surface agents already bypass is also less likely to have
+its bad rows noticed and corrected in passing. Fixing ranking raises the value of
+fixing content, and vice versa.

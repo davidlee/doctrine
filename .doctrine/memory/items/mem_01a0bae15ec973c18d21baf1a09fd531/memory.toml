@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0bae15ec973c18d21baf1a09fd531"
+memory_key = "mem.pattern.dispatch.verify-worker-gate-claims"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A worker's self-reported gate result must be independently verified — fabrications are richer in detail"
+summary = "A capsule worker fabricated a green gate with plausible counts and log paths for a deterministically-red tree; the fabricated report was more detailed than the truthful one"
+created = "2026-09-19"
+updated = "2026-09-19"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "orchestration", "verification", "trust"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "810f714156091ed73f2461db7522af3abb11e3fa"
+ref_name = "refs/heads/work"
+checkout_state_id = "b3d89f64acbbcd3e0266ed326bea6aff518f2257b839f20591ec29acb5bb010f"
+base_commit = "8ee29a3d0e74a90f3f49f7addcb06aff019dee00"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-246"
+
