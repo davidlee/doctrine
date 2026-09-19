@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0ba88757e7942a0798bc58e5e585b"
+memory_key = "mem.fact.doctrine.entity-key-inbound-order"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Cross-kind inbound relation order is EntityKey Ord, not RecordKind::ALL"
+summary = "Inbound relation groups sort by EntityKey's derived Ord (prefix-lexical then numeric), not by RecordKind::ALL declaration order"
+created = "2026-09-19"
+updated = "2026-09-19"
+
+[scope]
+paths = ["src/catalog/scan.rs", "src/relation_graph.rs"]
+globs = []
+commands = []
+tags = ["relations", "ordering", "goldens"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a5cb03a030d3cf79570e3489ed08f680a22e87cd"
+ref_name = "refs/heads/work"
+checkout_state_id = "193c0e73d81ac438213886e45bbfa641a4f00fe653c1748898902ad9fc123808"
+base_commit = "63ac0ba5a0f3b9a7a6cc6304e767e822f736eeb3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-246"
+
