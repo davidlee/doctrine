@@ -75,6 +75,22 @@ absorb a delivery confound on top of `E11`'s own. Delivery is therefore held at
 maximum strength so it does not confound the thing under test, and **the
 delivery-channel question is deferred, not answered** (see *Follow-Ups*).
 
+**The two surfaces carry different text, written for different moments**
+(`DEC-268`). `reviewing.md` holds the **operative rule** — it fires exactly where
+routing happens and its `customization` is `fixed`, so no client install can
+customise it away. `review-ledger.md` §4 holds the route axis alongside the
+existing disposition vocab, the recording shape, a pointer to the fragment, and
+an **explicit scope line**: provisional, design-review ledgers, under the
+`RFC-026` trial. That scope line is load-bearing — that doc states in its own
+header that it owns the *invariant* protocol shared by **every** review skill, so
+an unqualified route axis there would bind audit and code-review ledgers too,
+widening the intervention past `P10`'s trial population and making the counting
+pass's denominator wrong. The `customization` asymmetry points the same way:
+`reviewing.md` is `fixed`, `review-ledger.md` is `customizable`
+(`publication/manifest.toml:254-261`, `:443-451`), so a client that customised
+the ledger doc keeps the fragment and loses §4 — the rule must live where it
+cannot be lost.
+
 The text marks itself provisional and cites `RFC-026`. Landing on `edge` is not
 release; whether it ships to client installs is a separate decision the user
 makes at tag time while the trial is live.
@@ -92,6 +108,27 @@ both are preserved in the one field behind a fixed leading token:
 ```
 --disposition "route:<route> <vocab>"     e.g.  route:probe fix-now
 ```
+
+**The convention applies to `blocker` and `major` findings only**; `minor` and
+`nit` dispositions are unchanged (`DEC-267`). Without that boundary a responder
+may route every severity, and the counting pass selects on severity, so the trial
+would mix populations.
+
+**Every severe finding carries an explicit route; there is no default**
+(`DEC-265`). `review` is a legitimate explicit choice, not a fallback. Where the
+responder genuinely cannot classify a finding, the convention adds no new escape
+— it cites the guardrail that already ships at `install/review-ledger.md:164-166`
+(*"Unresolved ambiguity after reading the design and governance → stop and
+`/consult`. Do not improvise a disposition."*). A default to `review` would be
+worse than a gap: `review` is the status quo prose loop, so a free default
+silently nulls the intervention, and the counting pass could not tell a `review`
+chosen on the merits from a route never chosen.
+
+**The route set stays prose-only, and the design says so** (`DEC-266`). Every
+other closed vocabulary here carries `parse` + `ALL` + lockstep tests
+(`Severity`, `FindingStatus`, `Fragment`); this one cannot, because that is a
+`src/` change and therefore the slice's own tripwire. Stated, not left as an
+omission a reviewer finds.
 
 No schema change, no new kind, no tooling: the counting method is a regex over
 ledger output.
@@ -112,13 +149,32 @@ on rather than left to read as a bug. The convention states it.
 So the ruling this slice owes is the **raiser's**, at slice close — not a
 dispensation for the design lock. Its resolution: a routed finding **is** disposed — `DEC-138` settles that
 disposition binds the responder's turn, not the raiser's assent — so what stays
-open is the *obligation*, not the ledger row. The convention must therefore state
-the raiser's side: **the raiser verifies a routed finding on the strength of the
-criterion existing on the first phase, not on repair text, and the criterion must
-be authored before the verify.**
+open is the *obligation*, not the ledger row. The convention states the raiser's
+side: **for a routed finding, `verify` asserts that the obligation was correctly
+transcribed onto a phase criterion — not that the defect is repaired** — and the
+convention names that as a redefinition of an existing verb rather than letting
+two readings coexist (`DEC-263`).
 
-Without that sentence the raiser's honest move is to contest, and the convention
-is unimplementable without a code change — which would break the no-tooling
+**That verify is deferred past the design lock.** Phases postdate the lock
+(`design → locked`, then `slice plan`, then `slice phases`), so at design-review
+time there is no phase to carry a criterion and the raiser cannot check one
+exists. Nothing breaks: the lock needs the raiser's `conclude` marker and the
+`review-disposed` act, and `review conclude` states in its own help that *"open
+findings are fine: disposing them is the responder's work afterwards."* The
+routed finding stays `answered` through the lock and is verified later, against
+the slice close — which is the gate named above.
+
+The weaker claim is safe rather than an escape hatch for three reasons. It is
+**self-labelling**: the `route:` token sits in the same immutable field as the
+status, so a reader sees `route:probe` and knows which claim that `verified`
+carries. The evidential weight **transfers rather than evaporating**: a criterion
+carries a `VT`/`VA`/`VH` mode and gates phase completion through machinery that
+already exists — which is why `P10` said *criteria on a phase* and not *a note
+somewhere*. And the redefinition is **stated**, so the trial's own counting is
+not corrupted by two readings of `verified`.
+
+Without this ruling the raiser's honest move is to contest, and the convention is
+unimplementable without a code change — which would break the no-tooling
 constraint outright.
 
 **When a routed finding may stay open is a bounded question, and `P10` already
@@ -136,33 +192,92 @@ the test would silently remove a kill criterion from the trial.
 attack one mechanism, that changes the argument and reopens the design decision;
 another test is not a disposition."* A second `demonstrate` or `probe` against a
 mechanism that already carries one is not a route — it is evidence the design
-decision itself is wrong, and the convention says so.
+decision itself is wrong. **The rule hangs on both parties** (`DEC-264`,
+`DEC-103` corollary 2 applied to the slice's own headline warrant): the
+responder's half, at disposition, is *do not route a second finding against a
+mechanism that already carries one*; the raiser's half, at the reviewing turn, is
+*contest rather than verify*. They are not redundant — the responder's half is
+advisory and prevents the mess, the raiser's half has teeth, because `contest`
+moves the finding to `contested` and `contested` blocks the design lock. **This
+is the one clause of the convention that fires preventively.**
 
-**Both rules above, and the raiser-side ruling, are recorded as unenforced by
-construction** — `DEC-103`'s residue clause, which requires an obligation with no
-locatable delivery moment to stay prose *and be labelled as such* rather than
-defended as legitimate. The mechanical fact: `doctrine review verify` takes only
-a `--note` that is ephemeral baton chatter, explicitly *"NOT rationale"*
-(`src/review.rs:2670-2673`), and its gate checks status and role and never
-content (`src/review.rs:2834`). Nothing can check that a phase criterion was
-authored before the verify. The convention records that rather than implying an
-enforcement it does not have.
+**Post-`verified`, accumulation cannot reopen the disposition.** No verb
+transitions a finding out of `verified` (`src/review.rs:703-728`), so a verified
+disposition is the immutable audit-time record. The remedy is a prose amendment
+on the `RV` `.md` stating what changed and why, with the verified disposition
+standing as the record of what was decided then. One sentence in the convention,
+because it is the case a reader will hit and get wrong.
 
-### 4. Who states the adversary for a `probe`
+**Almost none of this is enforced, and that is recorded rather than implied.**
+`DEC-103`'s residue clause requires an obligation with no locatable delivery
+moment to stay prose *and be labelled unenforced-by-construction*, each item
+carrying why. `CON-006` is that register: ten clauses, each with the code site
+proving it. Two clauses have any mechanical force and they are asymmetric — the
+raiser half of the accumulation rule, which fires preventively at the design
+lock; and transcription, which is caught transitively at the slice close and is
+therefore **audit-grade only**, arriving many agent sessions after the phase it
+should have guarded has already run. It detects a dropped obligation; it does not
+stop the defect going unguarded through execution. The convention text carries a
+one-line pointer to `CON-006` on both surfaces — the *fact* of non-enforcement is
+delivered at the point of effect; the enumeration stays pull-tier.
 
-`P10` leaves this open. The rule this slice fixes: **the responder states it in
-`--response` at disposition**, one sentence in the form *must hold against X,
-need not hold against Y*. The ledger-grain detector `P10` asks for is the
-counting pass itself — a `probe`-routed finding whose response carries no
-adversary clause is counted as such.
+### 4. What each instrument route owes, and who states it
 
-Also **unenforced by construction** (`DEC-103` residue): nothing parses
-`--response`, so the counting pass is the only detector and it runs after the
-trial, not at disposition.
+All of it goes in `--response` at disposition, by the responder.
 
-Rejected: stating it in slice scope. Too early (the adversary is not known at
-scope time) and too coarse — `E11` records `RV-314` raising five separate
-git-configuration routes against one mechanism.
+- **`probe` — the adversary.** `P10` leaves this open; the rule this slice fixes
+  is one sentence in the form *must hold against X, need not hold against Y*.
+  Rejected: stating it in slice scope — too early (the adversary is not known at
+  scope time) and too coarse, since `E11` records `RV-314` raising five separate
+  git-configuration routes against one mechanism.
+- **`control` — the named fault** (`DEC-267`). `P10`: *"name the concrete
+  incorrect candidate the check must reject, and observe it rejected"*; a control
+  establishes discrimination against a **named** fault, not completeness against
+  all faults. The exact symmetric obligation to `probe`'s adversary, and its
+  absence is `P10`'s would-kill *"a negative control is reported as rejected when
+  it was not"*.
+- **`owner-fix` — the sweep** (`DEC-267`). `P10`: *"remove the duplicate, verify
+  the surviving owner, sweep the affected class."* The third clause is the one
+  that is not implied by the route's own definition, and it is the twin-arm
+  failure mode observed four times in one review (`RV-370`/`SL-246`), where a
+  repair inherits the finding's scope and leaves its twin while reading as
+  complete.
+- **All three instrument routes — a criterion sketch and a placement
+  constraint** (`DEC-271`). The responder cannot name a host phase: phases are
+  devised at planning, well after disposition. What *is* knowable at disposition
+  is what the criterion must assert, and what the obligation needs of its host
+  (*"must run after the parser exists"*, *"needs a worktree branch"*). The
+  placement decision belongs to whoever writes the plan, who reads both off the
+  `RV` ledger they must already open in order to transcribe — so the plan-time
+  half is delivered without a third normative surface. The planner places the
+  obligation on the **earliest phase that satisfies the stated constraint**
+  (`DEC-272`), first phase by default; how late it may go is bounded by the
+  settle-first test above, and an obligation with no admissible host is a routing
+  error handled by `contest`.
+
+**Form, not just content** (`DEC-269`). All of the above is written as plain
+prose with no code spans — no backticks, no `$` — and the responder reads the
+stored value back with `review show --json` before moving on. `--response` is
+free text passed through a shell, where a backtick span is command substitution:
+the `dispose` succeeds, the receipt reads clean, and the quoted spans are stored
+empty. The ledger is turn-based with no amend verb, so the damage is permanent
+until the raiser contests. This is a pre-existing hazard that SL-260 makes
+expensive, because `--response` becomes the recording site for the one fact
+`P10` flagged *Open*. The rule dodges it rather than repairing it: a shell-quoting
+recipe in a shipped reference doc would lean doctrine's guidance on the host's
+shell, and the content rule is shell-agnostic.
+
+The ledger-grain detector `P10` asks for is the counting pass itself — a
+`probe`-routed finding whose response carries no adversary clause is counted as
+such. **An eaten clause and an absent one count the same** (`DEC-270`): the trial
+measures whether the convention produced a usable clause, not why it did not, and
+attributing a miss is a blame question the trial does not ask. The residual risk
+is confounding rather than detection, so the guard is on the analysis and belongs
+to the trial-report chore (item 8): check for response truncation before reading
+a high miss rate as a routing failure.
+
+Every rule in this section is unenforced by construction — nothing parses
+`--response`. See `CON-006`.
 
 ### 5. Eligibility rules for the three trial slices
 
@@ -214,6 +329,14 @@ One line, using what already exists. Under `.doctrine/slice/NNN/`, only
 (`.gitignore:47-50`) — **a sibling directory commits**. So a contained probe
 script needs nothing but a name that is not `research/`. A codebase-wide probe
 goes to a worktree branch via `doctrine worktree fork`.
+
+**The name is `probes/`** (`DEC-273`) — created on demand, never eagerly. It
+states one route rather than a category, so it cannot become a dumping ground for
+evidence that belongs in the test suite, which is what `IMP-324`'s shrinkage
+depends on; and it matches the route token literally, so `route:probe` → `probes/`
+needs no mapping remembered. One trap to carry into the convention text: a file
+named `handover.md` inside `probes/` would still be gitignored, because
+`.gitignore:29` matches that name at any depth.
 
 ### 8. The trial-report hook
 
@@ -306,14 +429,20 @@ not on trial outcomes, which postdate this slice:
    `RFC-026`.
 2. A rebuilt-and-installed tree delivers it — verified through rendered output,
    not through the source file (a stale embed is silent).
-3. The eligibility rules, the recording shape, the raiser-side ruling, `P10`'s
-   settle-first test, the accumulation rule, the adversary rule, and the counting
-   method are each stated in one place with no second copy.
+3. Each of these is stated in one place with no second copy: the eligibility
+   rules; the recording shape; the severity boundary and the no-default rule; the
+   raiser-side ruling and its deferral past the design lock; `P10`'s settle-first
+   test; both halves of the accumulation rule and the post-`verified` residue; the
+   per-route obligations (`probe` adversary, `control` named fault, `owner-fix`
+   sweep, criterion sketch and placement constraint); the plain-prose form rule;
+   the placement rule; and the counting method.
    Exception, by `DEC-103` corollary 2: the routing convention itself is
    deliberately delivered on both surfaces of item 1 — that is the rule, not a
-   duplicate.
-4. The unenforced-by-construction items — the raiser-side ruling and the probe
-   adversary clause — are recorded as such, not left implying enforcement.
+   duplicate. The two surfaces carry *different* text (`DEC-268`), and §4 of the
+   ledger doc carries the design-review scope line.
+4. `CON-006` exists and is cited from both surfaces, so the fact of
+   non-enforcement is delivered at the point of effect and the enumeration is
+   reachable. Nothing in the convention implies an enforcement it does not have.
 5. The trial-report chore exists and is gated `after` this slice.
 6. `P10`'s *Open* clause in `RFC-026` records where its two items were settled.
 7. No file under `src/` is touched.
@@ -332,3 +461,14 @@ not on trial outcomes, which postdate this slice:
 - **Release decision** — whether the provisional convention ships to client
   installs, made at tag time while the trial is live.
 - **`IMP-463`** — the cost instrument, sibling.
+- **Re-decide the convention's scope at trial conclusion** (owner, 2026-09-19).
+  §4's copy is scoped to design-review ledgers for the trial. If the mechanisms
+  are adopted, whether they extend to audit and code-review ledgers is an open
+  decision, not an automatic consequence of a successful trial.
+- **Code-backing the route set** — available if the trial validates the
+  convention (`DEC-266`). Taking it changes the intervention and newly binds
+  three standards; it is not licensed by a good trial result on its own.
+- **Hanging the promotion obligation in the `/plan` surface** (`DEC-271`). The
+  purest `DEC-103` reading, declined here on surface cost. This is the named next
+  move if the trial observes routed obligations dropped between plan and
+  execute — the gap the close gate detects too late to prevent.
