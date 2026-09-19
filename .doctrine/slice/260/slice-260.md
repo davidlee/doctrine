@@ -45,12 +45,28 @@ Two shipped files already own this surface; the convention rides them rather tha
 minting a new normative surface:
 
 - `install/design-prompts/reviewing.md` — the attack-surface fragment the design
-  run delivers **every reviewing turn**, i.e. at the moment routing happens.
+  run delivers on **every reviewing turn**, i.e. at the moment routing happens.
+  Precisely: the fragment is emitted every turn, and its *body* is elided when
+  the caller declares a current `name@digest` receipt
+  (`src/commands/design.rs:2605-2631`). So the agent either holds the current
+  bytes or is re-sent them, and an edit invalidates every held receipt. That is
+  a stronger guarantee than "re-sent each time", not a weaker one.
 - `install/review-ledger.md` §4 (*Dispose + resolve*), which already publishes
   the disposition vocab the route sits alongside.
 
-Delivery strength is a deliberate choice, not convenience. `P10`'s first trial
-question is whether agents can choose and execute the right route without
+**`DEC-103` (*Instruction is delivered at the point of effect*) requires both
+surfaces; it does not merely tolerate them.** Routing bites at two moments — when
+the responder composes a disposition (the reviewing fragment) and when anyone
+reads the disposition vocabulary (the ledger doc) — and `DEC-103` corollary 2
+holds that *"an obligation firing at several moments is hung at EVERY one of
+them, not demoted to prose"*, while corollary 1 holds that *"DRY is the wrong
+model for agent instruction"*. Writing the convention once and referencing it
+from the other surface is precisely the deletion `DEC-103` was written against.
+This is the warrant; the trial-design argument below is support that reaches the
+same place independently.
+
+Delivery strength is also a deliberate choice, not convenience. `P10`'s first
+trial question is whether agents can choose and execute the right route without
 repeated human steering, and its *would-kill* list includes *"the routes need the
 owner to interpret"*. A convention behind an **elective** fetch (a standard's
 body, reachable only via `doctrine standard show` or `/canon`) makes a miss
@@ -82,11 +98,19 @@ ledger output.
 
 ### 3. The raiser-side ruling (the gate teeth)
 
-`P10` says the design gate may close with a routed finding open. This needs an
-explicit ruling, because `blocker` is the one severity that gates the target's
-close and an unresolved blocker refuses the `audit→reconcile` transition.
+**Name the gate precisely — two exist, and they differ by exactly one state.**
+The design run's `reviewing → locked` gate blocks only on blockers in `open` or
+`contested` (`undisposed_blockers`, `src/review.rs:1705`). A routed finding is
+`answered` from the moment it is disposed, so **it never held the design lock**:
+`P10`'s *"the design gate may close with them open"* is already true today and
+needs no ruling. The gate that does bind is the **slice close** —
+`doc_unresolved_blockers` (`src/review.rs:1669`), which refuses `audit→reconcile`
+and `reconcile→done` while a blocker is short of `verified`. The split is
+deliberate, and `DEC-138` requires the asymmetry be stated wherever it is relied
+on rather than left to read as a bug. The convention states it.
 
-The resolution: a routed finding **is** disposed — `DEC-138` settles that
+So the ruling this slice owes is the **raiser's**, at slice close — not a
+dispensation for the design lock. Its resolution: a routed finding **is** disposed — `DEC-138` settles that
 disposition binds the responder's turn, not the raiser's assent — so what stays
 open is the *obligation*, not the ledger row. The convention must therefore state
 the raiser's side: **the raiser verifies a routed finding on the strength of the
@@ -97,6 +121,33 @@ Without that sentence the raiser's honest move is to contest, and the convention
 is unimplementable without a code change — which would break the no-tooling
 constraint outright.
 
+**When a routed finding may stay open is a bounded question, and `P10` already
+bounds it.** The convention carries its test rather than leaving *"may close with
+the obligation open"* unbounded: a finding **must be settled first when the next
+step adds external reliance, durable state, authority or exposure, dependency
+spread, or governing meaning on top of the thing in doubt**; otherwise the
+bounded next step may proceed with the finding named — measuring the cost to
+regain an *accepted* state, not the cost to regenerate a diff. This is not
+decoration. `P10`'s own *would-kill* list includes *"a protected boundary is
+crossed while one is open"*, which is this test's violation condition; dropping
+the test would silently remove a kill criterion from the trial.
+
+**Accumulation reopens the design decision.** `P10`: *"when several of them
+attack one mechanism, that changes the argument and reopens the design decision;
+another test is not a disposition."* A second `demonstrate` or `probe` against a
+mechanism that already carries one is not a route — it is evidence the design
+decision itself is wrong, and the convention says so.
+
+**Both rules above, and the raiser-side ruling, are recorded as unenforced by
+construction** — `DEC-103`'s residue clause, which requires an obligation with no
+locatable delivery moment to stay prose *and be labelled as such* rather than
+defended as legitimate. The mechanical fact: `doctrine review verify` takes only
+a `--note` that is ephemeral baton chatter, explicitly *"NOT rationale"*
+(`src/review.rs:2670-2673`), and its gate checks status and role and never
+content (`src/review.rs:2834`). Nothing can check that a phase criterion was
+authored before the verify. The convention records that rather than implying an
+enforcement it does not have.
+
 ### 4. Who states the adversary for a `probe`
 
 `P10` leaves this open. The rule this slice fixes: **the responder states it in
@@ -104,6 +155,10 @@ constraint outright.
 need not hold against Y*. The ledger-grain detector `P10` asks for is the
 counting pass itself — a `probe`-routed finding whose response carries no
 adversary clause is counted as such.
+
+Also **unenforced by construction** (`DEC-103` residue): nothing parses
+`--response`, so the counting pass is the only detector and it runs after the
+trial, not at disposition.
 
 Rejected: stating it in slice scope. Too early (the adversary is not known at
 scope time) and too coarse — `E11` records `RV-314` raising five separate
@@ -134,8 +189,23 @@ audit findings, and whether the slice completed. Baseline is `E11`; slice scope
 differs, so these are **not comparable defect rates**. A second rater
 re-classifies.
 
-Prefer a documented command over a script. A script, if one is needed, is the
-only tooling this slice may add.
+**No script.** The method is a documented command over existing JSON output,
+verified by running it during the pre-design research round:
+
+```sh
+for rv in 365 368 370; do doctrine review show RV-$rv --json; done \
+  | jq -r '.review as $r | $r.finding[]
+      | select(.severity=="blocker" or .severity=="major")
+      | [$r.id, .id, .severity,
+         ((.disposition//"«none»")|split(" ")[0]),
+         ((.disposition//"")|test("^route:"))] | @tsv'
+```
+
+One row per severe finding, carrying the route prefix as a tested boolean. The
+`// ""` guard is load-bearing: an undisposed finding has a null disposition and
+`split` fails without it. So the earlier *"a script, if one is needed"* hedge
+resolves — **this slice adds no tooling at all**, which is the stronger
+constraint and is kept as one (see *What this slice deletes*).
 
 ### 7. A committed home for probe evidence
 
@@ -161,6 +231,12 @@ measurement apparatus.
   standard. An earlier draft of this scope proposed one and it was dropped: a
   standard alongside the shipped files is the two-surface posture `E11` measured
   at 24.5% artefact-prose findings, and `P2`'s own kill clause.
+- **All tooling** — not *minimal* tooling, none. `STD-001` (magic strings),
+  `STD-003` (no silent skip) and `POL-002` (platform independence) each scope to
+  `src/` or to shipped reader behaviour, so the slice as scoped lands outside
+  every standard that would otherwise bind it. **If this slice acquires a `src/`
+  change, three standards newly bind and the no-tooling claim has failed.** That
+  is a tripwire, not a preference.
 - **Prose repair for three of the five routes**, which is the point. Measurable
   as design line growth during review.
 - **`IMP-324`** (*No durable sink for design-round probe evidence*) shrinks to
@@ -190,7 +266,6 @@ measurement apparatus.
 - `install/design-prompts/reviewing.md` — the convention clause.
 - `install/review-ledger.md` — §4 route axis alongside the disposition vocab.
 - `.doctrine/rfc/026/` — `P10`'s *Open* items resolve to items 4 and 5.
-- `scripts/` — only if the counting method needs more than a documented command.
 
 Shipped assets under `install/` are embedded (`src/asset_source.rs`), so the
 convention reaches agents only after `cargo build` then `doctrine install`. That
@@ -231,11 +306,17 @@ not on trial outcomes, which postdate this slice:
    `RFC-026`.
 2. A rebuilt-and-installed tree delivers it — verified through rendered output,
    not through the source file (a stale embed is silent).
-3. The eligibility rules, the recording shape, the raiser-side ruling, the
-   adversary rule, and the counting method are each stated in one place with no
-   second copy.
-4. The trial-report chore exists and is gated `after` this slice.
-5. `P10`'s *Open* clause in `RFC-026` records where its two items were settled.
+3. The eligibility rules, the recording shape, the raiser-side ruling, `P10`'s
+   settle-first test, the accumulation rule, the adversary rule, and the counting
+   method are each stated in one place with no second copy.
+   Exception, by `DEC-103` corollary 2: the routing convention itself is
+   deliberately delivered on both surfaces of item 1 — that is the rule, not a
+   duplicate.
+4. The unenforced-by-construction items — the raiser-side ruling and the probe
+   adversary clause — are recorded as such, not left implying enforcement.
+5. The trial-report chore exists and is gated `after` this slice.
+6. `P10`'s *Open* clause in `RFC-026` records where its two items were settled.
+7. No file under `src/` is touched.
 
 ## Summary
 
