@@ -364,6 +364,15 @@ pub(crate) enum Confidence {
 
 impl Confidence {
     /// The kebab string for render (matches the serde rename). Pure.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the show arms now render closed tokens through serde; as_str survives as \
+                      the contract mirror that pins those tokens (EX-8) and as the cfg(test) \
+                      TOML round-trip's emit"
+        )
+    )]
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Confidence::Low => "low",
@@ -391,6 +400,15 @@ pub(crate) enum Provenance {
 
 impl Provenance {
     /// The kebab string for render.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the show arms now render closed tokens through serde; as_str survives as \
+                      the contract mirror that pins those tokens (EX-8) and as the cfg(test) \
+                      TOML round-trip's emit"
+        )
+    )]
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Provenance::Inspection => "inspection",
@@ -420,6 +438,15 @@ pub(crate) enum Basis {
 
 impl Basis {
     /// The kebab string for render (matches the serde rename). Pure.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the show arms now render closed tokens through serde; as_str survives as \
+                      the contract mirror that pins those tokens (EX-8) and as the cfg(test) \
+                      TOML round-trip's emit"
+        )
+    )]
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Basis::Observation => "observation",
@@ -457,6 +484,15 @@ pub(crate) enum ConstraintSource {
 
 impl ConstraintSource {
     /// The kebab string for render (matches the serde rename). Pure.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the show arms now render closed tokens through serde; as_str survives as \
+                      the contract mirror that pins those tokens (EX-8) and as the cfg(test) \
+                      TOML round-trip's emit"
+        )
+    )]
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             ConstraintSource::Canon => "canon",
@@ -508,6 +544,15 @@ pub(crate) struct KnowledgeRecord {
     pub(crate) body: String,
 }
 
+// Each of the seven facet structs below derives `Serialize` for exactly one reader:
+// `facet_serde_form`, which projects the typed facet's values through serde because
+// Rust has no reflection over struct fields and DEC-169 refused a proc macro for it.
+// Nothing else serialises them — the on-disk emit goes through `render_record_toml` /
+// `toml_edit`. Consequently there are deliberately NO `rename` attributes: each
+// struct's field names already equal its `facet_fields` row names character for
+// character, and `each_kinds_typed_facet_serialises_exactly_its_table_row` is what
+// keeps that true (a drifted name would silently project as `FacetValue::Absent`).
+
 /// The typed facet, kind-dispatched (one variant per kind — no untyped bag). Built
 /// by `validate` off the kind-blind `RawFacet` superset, so the wrong kind's fields
 /// can never reach the wrong variant.
@@ -524,7 +569,7 @@ pub(crate) enum RecordFacet {
 
 /// The assumption facet — `confidence` is assumption-only (§9). Every optional
 /// field is `""`/`[]` → absent.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub(crate) struct AssumptionFacet {
     claim: Option<String>,
     confidence: Option<Confidence>,
@@ -538,7 +583,7 @@ pub(crate) struct AssumptionFacet {
 
 /// The decision facet (§9). `alternatives`/`consequences` are lists; every `…_by`
 /// is free-text attribution; `…_on` is an unvalidated ISO date string.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub(crate) struct DecisionFacet {
     context: Option<String>,
     choice: Option<String>,
@@ -550,7 +595,7 @@ pub(crate) struct DecisionFacet {
 }
 
 /// The question facet (§9).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub(crate) struct QuestionFacet {
     question: Option<String>,
     why_matters: Option<String>,
@@ -561,7 +606,7 @@ pub(crate) struct QuestionFacet {
 
 /// The constraint facet (§9). `applies_to` is a list; `source` is the closed
 /// `ConstraintSource` enum.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub(crate) struct ConstraintFacet {
     statement: Option<String>,
     source: Option<ConstraintSource>,
@@ -572,7 +617,7 @@ pub(crate) struct ConstraintFacet {
 }
 
 /// The evidence facet — an observed datum with provenance and confidence.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub(crate) struct EvidenceFacet {
     pub(crate) datum: Option<String>,
     pub(crate) provenance: Option<Provenance>,
@@ -580,7 +625,7 @@ pub(crate) struct EvidenceFacet {
 }
 
 /// The hypothesis facet — a testable proposition that predicts an outcome.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub(crate) struct HypothesisFacet {
     pub(crate) proposition: Option<String>,
     pub(crate) predicts: Option<String>,
@@ -589,7 +634,7 @@ pub(crate) struct HypothesisFacet {
 /// The concept facet — currently empty (D2, unit struct). Every concept rides
 /// its attributed prose body; the facet exists only to satisfy the kind-scaffold
 /// contract (a `[facet]` header even when empty).
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
 pub(crate) struct ConceptFacet {}
 
 /// The shared evidence block (all seven kinds, §9): free-text citations. Never the
@@ -855,13 +900,63 @@ fn validate_facet(kind: RecordKind, raw: RawFacet) -> anyhow::Result<RecordFacet
 // convenience, not an enforced invariant.
 // ---------------------------------------------------------------------------
 
-/// One facet field: its key, and the shape a writer must emit for it.
+/// Which tier a facet field belongs to (DEC-150). `Deciding` is the minimum set a
+/// reader needs to act on the record; `Argument` is the supporting material that
+/// justifies it — the bulk (DEC-080 measures a decision facet at ~4.5 KB against a
+/// 274-byte prose body, almost all of it `alternatives`/`consequences`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Tier {
+    Deciding,
+    Argument,
+}
+
+/// Which tiers a render keeps. `All` is NOT `Deciding` and `Argument` spelled
+/// twice — it is the existing whole-facet render, and `knowledge show` passes it to
+/// stay byte-identical. Neither renderer takes an empty-state argument alongside
+/// this one (D6): a filter that keeps nothing renders nothing, and the marker that
+/// stands in its place is composed one layer up, where the record reference and the
+/// root are in hand.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "EX-3 admits Only(Tier) now; the Facets render level constructs it"
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TierFilter {
+    All,
+    Only(Tier),
+}
+
+impl TierFilter {
+    /// Whether a field of `tier` survives this filter.
+    fn keeps(self, tier: Tier) -> bool {
+        match self {
+            TierFilter::All => true,
+            TierFilter::Only(only) => only == tier,
+        }
+    }
+}
+
+/// One facet field: its key, the shape a writer must emit for it, and the tier it
+/// belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct FacetFieldRow {
     pub(crate) name: &'static str,
     /// Read by the pins (which derive each field's test value from it) and by
     /// PHASE-04's `toml_edit` write dispatch.
     pub(crate) shape: FieldShape,
+    /// DEC-150's ruling for this field, pinned by
+    /// `the_deciding_tier_matches_dec_150s_per_kind_ruling`.
+    ///
+    /// **Do not give `FacetFieldRow` a `Default` impl, a `tier` fallback, or write
+    /// `..Default::default()` in a row literal.** The drift canary
+    /// `the_facet_table_union_holds_exactly_raw_facets_serde_keys` forces a new
+    /// facet field to gain a row, and a mandatory field on a plain struct literal
+    /// then forces that row to name a tier — a compile error. Any default turns
+    /// that compile error into a silent mis-tiering.
+    pub(crate) tier: Tier,
 }
 
 /// The emit shape of a facet field — free text, a list of strings, or one token
@@ -878,34 +973,42 @@ const ASSUMPTION_FACET_FIELDS: &[FacetFieldRow] = &[
     FacetFieldRow {
         name: "claim",
         shape: FieldShape::Text,
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "confidence",
         shape: FieldShape::Closed(Confidence::KNOWN),
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "basis",
         shape: FieldShape::Closed(Basis::KNOWN),
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "validation_plan",
         shape: FieldShape::Text,
+        tier: Tier::Argument,
     },
     FacetFieldRow {
         name: "validated_by",
         shape: FieldShape::Text,
+        tier: Tier::Argument,
     },
     FacetFieldRow {
         name: "validated_on",
         shape: FieldShape::Text,
+        tier: Tier::Argument,
     },
     FacetFieldRow {
         name: "invalidated_by",
         shape: FieldShape::Text,
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "invalidated_on",
         shape: FieldShape::Text,
+        tier: Tier::Argument,
     },
 ];
 
@@ -913,30 +1016,37 @@ const DECISION_FACET_FIELDS: &[FacetFieldRow] = &[
     FacetFieldRow {
         name: "context",
         shape: FieldShape::Text,
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "choice",
         shape: FieldShape::Text,
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "alternatives",
         shape: FieldShape::List,
+        tier: Tier::Argument,
     },
     FacetFieldRow {
         name: "rationale",
         shape: FieldShape::Text,
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "consequences",
         shape: FieldShape::List,
+        tier: Tier::Argument,
     },
     FacetFieldRow {
         name: "decided_by",
         shape: FieldShape::Text,
+        tier: Tier::Argument,
     },
     FacetFieldRow {
         name: "decided_on",
         shape: FieldShape::Text,
+        tier: Tier::Argument,
     },
 ];
 
@@ -944,22 +1054,27 @@ const QUESTION_FACET_FIELDS: &[FacetFieldRow] = &[
     FacetFieldRow {
         name: "question",
         shape: FieldShape::Text,
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "why_matters",
         shape: FieldShape::Text,
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "answer",
         shape: FieldShape::Text,
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "answered_by",
         shape: FieldShape::Text,
+        tier: Tier::Argument,
     },
     FacetFieldRow {
         name: "answered_on",
         shape: FieldShape::Text,
+        tier: Tier::Argument,
     },
 ];
 
@@ -967,26 +1082,32 @@ const CONSTRAINT_FACET_FIELDS: &[FacetFieldRow] = &[
     FacetFieldRow {
         name: "statement",
         shape: FieldShape::Text,
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "source",
         shape: FieldShape::Closed(ConstraintSource::KNOWN),
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "applies_to",
         shape: FieldShape::List,
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "waiver_reason",
         shape: FieldShape::Text,
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "waived_by",
         shape: FieldShape::Text,
+        tier: Tier::Argument,
     },
     FacetFieldRow {
         name: "waived_on",
         shape: FieldShape::Text,
+        tier: Tier::Argument,
     },
 ];
 
@@ -994,16 +1115,19 @@ const EVIDENCE_FACET_FIELDS: &[FacetFieldRow] = &[
     FacetFieldRow {
         name: "datum",
         shape: FieldShape::Text,
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "provenance",
         shape: FieldShape::Closed(Provenance::KNOWN),
+        tier: Tier::Deciding,
     },
     // Legitimately shared with the assumption row — multiplicity ACROSS rows is
     // sound (§5.5 "The one shared field name"); only within a row is it damage.
     FacetFieldRow {
         name: "confidence",
         shape: FieldShape::Closed(Confidence::KNOWN),
+        tier: Tier::Deciding,
     },
 ];
 
@@ -1011,10 +1135,12 @@ const HYPOTHESIS_FACET_FIELDS: &[FacetFieldRow] = &[
     FacetFieldRow {
         name: "proposition",
         shape: FieldShape::Text,
+        tier: Tier::Deciding,
     },
     FacetFieldRow {
         name: "predicts",
         shape: FieldShape::Text,
+        tier: Tier::Deciding,
     },
 ];
 
@@ -1035,6 +1161,120 @@ pub(crate) const fn facet_fields(kind: RecordKind) -> &'static [FacetFieldRow] {
         RecordKind::Hypothesis => HYPOTHESIS_FACET_FIELDS,
         RecordKind::Concept => CONCEPT_FACET_FIELDS,
     }
+}
+
+/// One facet field with its value, in template order — what a renderer consumes.
+struct FacetField {
+    key: &'static str,
+    /// The row's tier, carried through so a caller that asked for `All` can still
+    /// tell the two tiers apart.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "EX-3 admits the tier on the projected field now; the Facets level reads it"
+        )
+    )]
+    tier: Tier,
+    value: FacetValue,
+}
+
+/// A facet field's value as the renderers need it.
+///
+/// `Absent` means a **null text/closed field only**. An empty list stays
+/// `List(vec![])`, and that distinction is load-bearing: `knowledge show` renders
+/// absence asymmetrically across its two arms and must keep doing so. The text arm
+/// conceals (`Absent` and `List(vec![])` both emit nothing); the JSON arm emits
+/// every field of the filtered set, `Absent` as `null` and `List(vec![])` as `[]`.
+/// Collapsing an empty list into `Absent` would move `[]` to `null` on the JSON arm.
+enum FacetValue {
+    Text(String),
+    List(Vec<String>),
+    Absent,
+}
+
+/// The typed facet as its serde form, with the kind that owns it.
+///
+/// The **only** per-kind dispatch the value projection performs, and it names
+/// variants, never fields — so the authored table stays the single enumeration of
+/// per-kind field names (C4). `RecordFacet` carries no `kind()` helper; this
+/// dispatch is where the kind comes from.
+///
+/// DEC-169's read-through-serde idiom, third application in this file (the others
+/// are `Declaration::WIRE_KEYS` and the `RawFacet` union canary): Rust has no
+/// reflection over struct fields, so the derive is the reader. Each facet struct's
+/// field names already equal its row names exactly — no `rename` attributes — and
+/// `each_kinds_typed_facet_serialises_exactly_its_table_row` is what holds that
+/// true, since a drifted field name would otherwise silently read as `Absent`.
+fn facet_serde_form(facet: &RecordFacet) -> (RecordKind, serde_json::Value) {
+    fn form<T: Serialize>(kind: RecordKind, facet: &T) -> (RecordKind, serde_json::Value) {
+        // Infallible for these types (no custom `Serialize`, no non-string map
+        // keys, no floats) and unreachable in practice; `unwrap_used` /
+        // `expect_used` / `panic` are denied, so the total branch yields `Null`,
+        // which the caller reads as "no fields" rather than dropping any.
+        (
+            kind,
+            serde_json::to_value(facet).unwrap_or(serde_json::Value::Null),
+        )
+    }
+    match facet {
+        RecordFacet::Assumption(f) => form(RecordKind::Assumption, f),
+        RecordFacet::Decision(f) => form(RecordKind::Decision, f),
+        RecordFacet::Question(f) => form(RecordKind::Question, f),
+        RecordFacet::Constraint(f) => form(RecordKind::Constraint, f),
+        RecordFacet::Evidence(f) => form(RecordKind::Evidence, f),
+        RecordFacet::Hypothesis(f) => form(RecordKind::Hypothesis, f),
+        RecordFacet::Concept(f) => form(RecordKind::Concept, f),
+    }
+}
+
+/// The values of a facet's fields, in the authored table's order, filtered to
+/// `tier` — the single projection both `show` arms render from.
+///
+/// **Not** named `facet_fields` (DEC-262): that name belongs to the authored table
+/// this reads, which keeps its name, its signature and its `const fn`-ness. This is
+/// "the values of the facet fields"; that is "the facet fields".
+///
+/// Each row's `name` is looked up in the serde form and its JSON value interpreted
+/// through the row's declared `FieldShape`, so the shape column is load-bearing
+/// here too. The closed enums need no special case: all four derive
+/// `#[serde(rename_all = "kebab-case")]` and each one's `as_str` returns exactly
+/// that token (`every_closed_enums_serde_token_equals_its_as_str` pins it), so
+/// `Option<Confidence>` serialises to precisely what `map(Confidence::as_str)`
+/// rendered before.
+///
+/// Totality without panics: a failed serialisation or a non-object form yields no
+/// fields at all, making every field `Absent`. That is not an STD-003 silent skip —
+/// the branch is unreachable once
+/// `each_kinds_typed_facet_serialises_exactly_its_table_row` is green, and its only
+/// observable consequence is an empty render, never a field quietly dropped from a
+/// render that claims to be complete.
+fn facet_field_values(facet: &RecordFacet, tier: TierFilter) -> Vec<FacetField> {
+    let (kind, serialised) = facet_serde_form(facet);
+    let empty = serde_json::Map::new();
+    let fields = serialised.as_object().unwrap_or(&empty);
+
+    facet_fields(kind)
+        .iter()
+        .filter(|row| tier.keeps(row.tier))
+        .map(|row| FacetField {
+            key: row.name,
+            tier: row.tier,
+            value: match (row.shape, fields.get(row.name)) {
+                (FieldShape::List, Some(serde_json::Value::Array(items))) => FacetValue::List(
+                    items
+                        .iter()
+                        .map(|item| item.as_str().unwrap_or_default().to_owned())
+                        .collect(),
+                ),
+                (
+                    FieldShape::Text | FieldShape::Closed(_),
+                    Some(serde_json::Value::String(text)),
+                ) => FacetValue::Text(text.clone()),
+                _ => FacetValue::Absent,
+            },
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -1812,7 +2052,7 @@ fn format_metadata(record: &KnowledgeRecord) -> Vec<String> {
     if !record.tags.is_empty() {
         parts.push(format!("tags: {}\n", record.tags.join(", ")));
     }
-    parts.push(format_facet(&record.facet));
+    parts.push(format_facet(&record.facet, TierFilter::All));
     parts.push(format_evidence(&record.evidence));
     // shapes, spawns, governed_by, supports, disputes axes
     for label in [
@@ -1861,62 +2101,27 @@ fn show_list_line(key: &str, xs: &[String]) -> String {
     }
 }
 
-/// Render the kind-dispatched `[facet]` block for `show` — the populated axes only,
-/// in template field order, under a `\n[facet]\n` header that appears only when the
-/// facet carries at least one populated axis.
-fn format_facet(facet: &RecordFacet) -> String {
-    let body = match facet {
-        RecordFacet::Assumption(f) => [
-            show_opt_line("claim", f.claim.as_deref()),
-            show_opt_line("confidence", f.confidence.map(Confidence::as_str)),
-            show_opt_line("basis", f.basis.map(Basis::as_str)),
-            show_opt_line("validation_plan", f.validation_plan.as_deref()),
-            show_opt_line("validated_by", f.validated_by.as_deref()),
-            show_opt_line("validated_on", f.validated_on.as_deref()),
-            show_opt_line("invalidated_by", f.invalidated_by.as_deref()),
-            show_opt_line("invalidated_on", f.invalidated_on.as_deref()),
-        ]
-        .concat(),
-        RecordFacet::Decision(f) => [
-            show_opt_line("context", f.context.as_deref()),
-            show_opt_line("choice", f.choice.as_deref()),
-            show_list_line("alternatives", &f.alternatives),
-            show_opt_line("rationale", f.rationale.as_deref()),
-            show_list_line("consequences", &f.consequences),
-            show_opt_line("decided_by", f.decided_by.as_deref()),
-            show_opt_line("decided_on", f.decided_on.as_deref()),
-        ]
-        .concat(),
-        RecordFacet::Question(f) => [
-            show_opt_line("question", f.question.as_deref()),
-            show_opt_line("why_matters", f.why_matters.as_deref()),
-            show_opt_line("answer", f.answer.as_deref()),
-            show_opt_line("answered_by", f.answered_by.as_deref()),
-            show_opt_line("answered_on", f.answered_on.as_deref()),
-        ]
-        .concat(),
-        RecordFacet::Constraint(f) => [
-            show_opt_line("statement", f.statement.as_deref()),
-            show_opt_line("source", f.source.map(ConstraintSource::as_str)),
-            show_list_line("applies_to", &f.applies_to),
-            show_opt_line("waiver_reason", f.waiver_reason.as_deref()),
-            show_opt_line("waived_by", f.waived_by.as_deref()),
-            show_opt_line("waived_on", f.waived_on.as_deref()),
-        ]
-        .concat(),
-        RecordFacet::Evidence(f) => [
-            show_opt_line("datum", f.datum.as_deref()),
-            show_opt_line("provenance", f.provenance.map(Provenance::as_str)),
-            show_opt_line("confidence", f.confidence.map(Confidence::as_str)),
-        ]
-        .concat(),
-        RecordFacet::Hypothesis(f) => [
-            show_opt_line("proposition", f.proposition.as_deref()),
-            show_opt_line("predicts", f.predicts.as_deref()),
-        ]
-        .concat(),
-        RecordFacet::Concept(_) => String::new(),
-    };
+/// Render the `[facet]` block for `show` — the fields `tier` keeps, in the authored
+/// table's order, under a `\n[facet]\n` header that appears only when the body is
+/// non-empty.
+///
+/// This arm CONCEALS what the JSON arm emits: an absent field and an empty list
+/// both render nothing at all, so the header disappears with them. A concept (no
+/// rows) and a facet whose kept fields are all absent both return `""`, which is
+/// why `show` prints no `[facet]` block for either.
+///
+/// Takes no empty-state argument beside `tier` (D6): a filter that keeps nothing
+/// renders nothing, and the marker that stands in its place is composed one layer
+/// up, in the caller that holds the record reference and the root.
+fn format_facet(facet: &RecordFacet, tier: TierFilter) -> String {
+    let body: String = facet_field_values(facet, tier)
+        .iter()
+        .map(|field| match &field.value {
+            FacetValue::Text(text) => show_opt_line(field.key, Some(text)),
+            FacetValue::List(items) => show_list_line(field.key, items),
+            FacetValue::Absent => String::new(),
+        })
+        .collect();
     if body.is_empty() {
         String::new()
     } else {
@@ -1940,13 +2145,22 @@ fn format_evidence(e: &Evidence) -> String {
     }
 }
 
-/// Render the `Json` for show (`with_body=true`) or inspect (`with_body=false`).
-/// The shared `{kind, …}` envelope (the `backlog::show_json` precedent). The validated
-/// record's fields are private and its closed enums render via `as_str`, so the JSON is
-/// projected by hand (not a derive): the flat identity, the kind-dispatched `[facet]`,
-/// and the shared `[evidence]`. Pure over the record's own state (no cross-corpus
-/// scan). `serde_json` sorts object keys.
-fn show_json(record: &KnowledgeRecord, with_body: bool) -> anyhow::Result<String> {
+/// The record as a JSON object — the flat identity, the kind-dispatched `[facet]`,
+/// the shared `[evidence]` and the relationship axes, with `body` gated by
+/// `with_body`.
+///
+/// The **inner** object, not the `{kind, knowledge}` envelope: `show_json`
+/// serialises this inside that envelope, and a composed render level can add its
+/// own keys to it. One projection, two callers.
+///
+/// The validated record's fields are private, so the JSON is projected here rather
+/// than derived wholesale. Pure over the record's own state (no cross-corpus scan).
+/// `serde_json` sorts object keys.
+///
+/// Takes no empty-state argument, for the same reason neither facet renderer does
+/// (D6): the marker that stands in for an empty render is composed one layer up,
+/// where the record reference and the root are in hand.
+fn show_value(record: &KnowledgeRecord, with_body: bool) -> serde_json::Value {
     let mut inner = serde_json::Map::new();
     inner.insert(
         "id".into(),
@@ -1965,7 +2179,7 @@ fn show_json(record: &KnowledgeRecord, with_body: bool) -> anyhow::Result<String
     if with_body {
         inner.insert("body".into(), serde_json::json!(record.body));
     }
-    inner.insert("facet".into(), serde_json::json!(facet_json(&record.facet)));
+    inner.insert("facet".into(), facet_json(&record.facet, TierFilter::All));
     inner.insert(
         "evidence".into(),
         serde_json::json!({
@@ -1981,63 +2195,45 @@ fn show_json(record: &KnowledgeRecord, with_body: bool) -> anyhow::Result<String
         "supports": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::Supports),
         "disputes": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::Disputes),
     }));
+    serde_json::Value::Object(inner)
+}
+
+/// Render the `Json` for show (`with_body=true`) or inspect (`with_body=false`) —
+/// `show_value` inside the shared `{kind, …}` envelope (the `backlog::show_json`
+/// precedent).
+fn show_json(record: &KnowledgeRecord, with_body: bool) -> anyhow::Result<String> {
     let value = serde_json::json!({
         "kind": "knowledge",
-        "knowledge": inner,
+        "knowledge": show_value(record, with_body),
     });
     serde_json::to_string_pretty(&value).context("failed to serialize knowledge show JSON")
 }
 
-/// The kind-dispatched `[facet]` JSON object — every field present (optional fields as
-/// `null`, lists as arrays), so the shape is stable per kind. Closed enums render via
-/// `as_str`.
-fn facet_json(facet: &RecordFacet) -> serde_json::Value {
-    match facet {
-        RecordFacet::Assumption(f) => serde_json::json!({
-            "claim": f.claim,
-            "confidence": f.confidence.map(Confidence::as_str),
-            "basis": f.basis.map(Basis::as_str),
-            "validation_plan": f.validation_plan,
-            "validated_by": f.validated_by,
-            "validated_on": f.validated_on,
-            "invalidated_by": f.invalidated_by,
-            "invalidated_on": f.invalidated_on,
-        }),
-        RecordFacet::Decision(f) => serde_json::json!({
-            "context": f.context,
-            "choice": f.choice,
-            "alternatives": f.alternatives,
-            "rationale": f.rationale,
-            "consequences": f.consequences,
-            "decided_by": f.decided_by,
-            "decided_on": f.decided_on,
-        }),
-        RecordFacet::Question(f) => serde_json::json!({
-            "question": f.question,
-            "why_matters": f.why_matters,
-            "answer": f.answer,
-            "answered_by": f.answered_by,
-            "answered_on": f.answered_on,
-        }),
-        RecordFacet::Constraint(f) => serde_json::json!({
-            "statement": f.statement,
-            "source": f.source.map(ConstraintSource::as_str),
-            "applies_to": f.applies_to,
-            "waiver_reason": f.waiver_reason,
-            "waived_by": f.waived_by,
-            "waived_on": f.waived_on,
-        }),
-        RecordFacet::Evidence(f) => serde_json::json!({
-            "datum": f.datum,
-            "provenance": f.provenance.map(Provenance::as_str),
-            "confidence": f.confidence.map(Confidence::as_str),
-        }),
-        RecordFacet::Hypothesis(f) => serde_json::json!({
-            "proposition": f.proposition,
-            "predicts": f.predicts,
-        }),
-        RecordFacet::Concept(_) => serde_json::json!({}),
+/// The `[facet]` JSON object for the fields `tier` keeps — **every** such field
+/// present, so the shape is stable per kind: an absent text/closed field is `null`
+/// and an empty list is `[]`.
+///
+/// This arm EMITS what the text arm conceals, and that asymmetry is deliberate and
+/// byte-pinned by the `show --json` golden. `FacetValue::Absent` becomes `null`;
+/// `FacetValue::List(vec![])` becomes `[]` and must never collapse into `null`.
+///
+/// Concept falls out for free rather than by special case: no rows means an empty
+/// map, which is the `{}` the golden expects. Key order needs no thought —
+/// `serde_json` is not built with `preserve_order`, so objects are `BTreeMap`-backed
+/// and keys sort however they are inserted.
+fn facet_json(facet: &RecordFacet, tier: TierFilter) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    for field in facet_field_values(facet, tier) {
+        let value = match field.value {
+            FacetValue::Text(text) => serde_json::Value::String(text),
+            FacetValue::List(items) => {
+                serde_json::Value::Array(items.into_iter().map(serde_json::Value::String).collect())
+            }
+            FacetValue::Absent => serde_json::Value::Null,
+        };
+        object.insert(field.key.to_owned(), value);
     }
+    serde_json::Value::Object(object)
 }
 
 /// Shared shell: root-find → resolve → read → render. The `format_table` fn and
@@ -4798,6 +4994,224 @@ target = \"SL-249\"
         }
     }
 
+    /// `T1` — the tier column matches DEC-150's per-kind ruling.
+    ///
+    /// A **mapping-oracle** test, not an STD-001 breach: the oracle is a
+    /// governance ruling (DEC-150's `choice`) external to the code, and a ruling
+    /// is the only thing that can convict a mis-tiered row. Restating it here is
+    /// the point — a table compared against itself cannot fail.
+    #[test]
+    fn the_deciding_tier_matches_dec_150s_per_kind_ruling() {
+        let ruling: [(RecordKind, &[&str]); 7] = [
+            (
+                RecordKind::Assumption,
+                &["claim", "confidence", "basis", "invalidated_by"],
+            ),
+            (RecordKind::Decision, &["context", "choice", "rationale"]),
+            (RecordKind::Question, &["question", "why_matters", "answer"]),
+            (
+                RecordKind::Constraint,
+                &["statement", "source", "applies_to", "waiver_reason"],
+            ),
+            (RecordKind::Evidence, &["datum", "provenance", "confidence"]),
+            (RecordKind::Hypothesis, &["proposition", "predicts"]),
+            // Concept's row is empty by design (DEC-172/DEC-173) — a case, not an
+            // exception: no rows, so no tiers.
+            (RecordKind::Concept, &[]),
+        ];
+
+        for (kind, deciding) in ruling {
+            let tabled: Vec<&str> = facet_fields(kind)
+                .iter()
+                .filter(|row| row.tier == Tier::Deciding)
+                .map(|row| row.name)
+                .collect();
+            assert_eq!(
+                tabled,
+                deciding.to_vec(),
+                "{}: the Deciding rows must be exactly DEC-150's ruling, in template order",
+                kind.as_str()
+            );
+        }
+    }
+
+    /// `T2`'s canary — the typed side of the same read-through-serde bargain.
+    ///
+    /// `facet_field_values` gets its values by looking each table row's `name` up in
+    /// the typed facet's serde form, so a struct field whose name has drifted from
+    /// its row name would silently project as `Absent` and quietly empty a render.
+    /// This convicts that: for every kind, the serde key set of the typed facet
+    /// equals its row names, and each row's serialised value agrees with the shape
+    /// the row declares.
+    #[test]
+    fn each_kinds_typed_facet_serialises_exactly_its_table_row() {
+        let full_input = populated_union();
+
+        for kind in RecordKind::ALL {
+            let facet = validate_facet(kind, raw_facet_from(&full_input))
+                .expect("the fully populated union validates for every kind");
+            let (dispatched, serialised) = facet_serde_form(&facet);
+            assert_eq!(
+                dispatched,
+                kind,
+                "{}: the variant dispatch must report its own kind",
+                kind.as_str()
+            );
+
+            let object = serialised
+                .as_object()
+                .expect("a typed facet serialises to an object");
+            let on_the_wire: BTreeSet<&str> = object.keys().map(String::as_str).collect();
+            let row: BTreeSet<&str> = facet_fields(kind).iter().map(|f| f.name).collect();
+            assert_eq!(
+                on_the_wire,
+                row,
+                "{}: the typed facet's serde keys must EQUAL its table row",
+                kind.as_str()
+            );
+
+            for field in facet_fields(kind) {
+                let value = object
+                    .get(field.name)
+                    .expect("the key sets just compared equal");
+                match field.shape {
+                    FieldShape::Text | FieldShape::Closed(_) => assert!(
+                        value.is_null() || value.is_string(),
+                        "{}: {} is declared {:?} so it must serialise null-or-string, got {value}",
+                        kind.as_str(),
+                        field.name,
+                        field.shape
+                    ),
+                    FieldShape::List => assert!(
+                        value.is_array(),
+                        "{}: {} is declared List so it must serialise to an array, got {value}",
+                        kind.as_str(),
+                        field.name
+                    ),
+                }
+            }
+        }
+    }
+
+    /// `R2` — every closed enum's serde token equals its `as_str`.
+    ///
+    /// `EX-8` claims the closed facet tokens still render via their enum's `as_str`
+    /// after the hand-written per-kind matches are gone. They now render through
+    /// serde instead, so this makes that claim true **by test** rather than by the
+    /// doc comment on each `as_str`. The variant list is not restated — it comes
+    /// from `clap::ValueEnum::value_variants`, which every one of the four derives.
+    #[test]
+    fn every_closed_enums_serde_token_equals_its_as_str() {
+        fn check<E>(as_str: impl Fn(E) -> &'static str)
+        where
+            E: clap::ValueEnum + Copy + Serialize + std::fmt::Debug + 'static,
+        {
+            for variant in E::value_variants() {
+                assert_eq!(
+                    serde_json::to_value(variant).expect("a closed token serialises"),
+                    serde_json::Value::String(as_str(*variant).to_owned()),
+                    "{variant:?}: the serde token must equal as_str"
+                );
+            }
+        }
+        check(Confidence::as_str);
+        check(Provenance::as_str);
+        check(Basis::as_str);
+        check(ConstraintSource::as_str);
+    }
+
+    /// `VT-3` — the `Facets` field set is an order-preserving **subsequence** of the
+    /// full field set, for every kind.
+    ///
+    /// One input read two ways in the same test: one fully-populated facet per kind,
+    /// projected at `TierFilter::All` and at `Only(Tier::Deciding)`. The old reading
+    /// is pinned and the new rule is shown to be what moved the answer.
+    ///
+    /// A subsequence, never a prefix and never merely a subset: a decision's
+    /// deciding fields are template positions 1, 2 and 4, and an assumption's are 1,
+    /// 2, 3 and 7, so a prefix assertion or a `BTreeSet` subset assertion would both
+    /// pass while missing the property.
+    ///
+    /// What this does NOT cover: a fully-populated fixture never yields
+    /// `FacetValue::Absent`, so the text-conceals / JSON-emits-null asymmetry is
+    /// proved by the byte-exact `show` goldens, not here. Do not widen this test to
+    /// reach for it.
+    #[test]
+    fn facets_fields_are_a_subsequence_of_full_in_template_order() {
+        let full_input = populated_union();
+
+        for kind in RecordKind::ALL {
+            let facet = validate_facet(kind, raw_facet_from(&full_input))
+                .expect("the fully populated union validates for every kind");
+            let projected = facet_field_values(&facet, TierFilter::All);
+            let full: Vec<&str> = projected.iter().map(|f| f.key).collect();
+            let facets: Vec<&str> = facet_field_values(&facet, TierFilter::Only(Tier::Deciding))
+                .iter()
+                .map(|f| f.key)
+                .collect();
+
+            if kind == RecordKind::Concept {
+                // A case, not an exception — and stated explicitly, because two
+                // empty lists satisfy every subsequence check vacuously.
+                assert!(
+                    full.is_empty() && facets.is_empty(),
+                    "concept's facet is empty by design at both filters"
+                );
+                continue;
+            }
+
+            // Anti-vacuity for the other six.
+            assert!(
+                !full.is_empty(),
+                "{}: the unfiltered projection must not be empty",
+                kind.as_str()
+            );
+            assert!(
+                !facets.is_empty(),
+                "{}: every non-concept kind has at least one deciding field",
+                kind.as_str()
+            );
+
+            // The tier the projection reports agrees with the filter it implements.
+            let by_reported_tier: Vec<&str> = projected
+                .iter()
+                .filter(|f| f.tier == Tier::Deciding)
+                .map(|f| f.key)
+                .collect();
+            assert_eq!(
+                by_reported_tier,
+                facets,
+                "{}: filtering the unfiltered projection by its own tier column must \
+                 give the same keys as asking for that tier",
+                kind.as_str()
+            );
+
+            if kind == RecordKind::Decision {
+                // Teeth for the walk below: DEC's deciding fields sit at template
+                // positions 1, 2 and 4, so the subsequence is deliberately NOT a
+                // prefix. If this ever becomes a prefix the walk has stopped
+                // discriminating and the assertion should be re-derived, not deleted.
+                assert_ne!(
+                    full.get(..facets.len()),
+                    Some(facets.as_slice()),
+                    "decision's deciding fields must not be a prefix of its full set"
+                );
+            }
+
+            let mut matched = 0usize;
+            for key in &full {
+                if facets.get(matched) == Some(key) {
+                    matched += 1;
+                }
+            }
+            assert_eq!(
+                matched,
+                facets.len(),
+                "{}: {facets:?} must be an order-preserving subsequence of {full:?}",
+                kind.as_str()
+            );
+        }
+    }
     /// `R5` — every shipped `install/templates/knowledge-*.toml` seeds exactly its
     /// kind's row: no more, no fewer (`VT-2`, `EX-5`).
     ///
