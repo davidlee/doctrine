@@ -901,7 +901,7 @@ impl fmt::Display for Refusal {
                 f,
                 "the turn envelope cannot be reduced to its {budget}-byte ceiling: every \
                  bounded list is empty and the undroppable fields alone render {rendered} \
-                 bytes — read the run with `design show --full` instead of trusting a \
+                 bytes — read the run with `design show --format prompt --full` instead of trusting a \
                  malformed projection"
             ),
             // All four things `EX-2` asks for: the subject, its kind, the key,

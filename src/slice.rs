@@ -551,6 +551,48 @@ pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
 /// module-local design/plan/notes sub-kinds that nest under it.
 pub(crate) use crate::kinds::SLICE_DIR;
 
+/// The authored design document's file name.
+///
+/// It lives here rather than in `commands::design` because the *layout* it
+/// completes is this module's (`SLICE_DIR` above, the `{id:03}` directory below).
+/// One spelling for every reader and writer of the file — STD-001.
+pub(crate) const DESIGN_DOC: &str = "design.md";
+
+/// The authored design document's path for a slice.
+pub(crate) fn design_doc_path(root: &Path, slice: u32) -> PathBuf {
+    root.join(SLICE_DIR)
+        .join(format!("{slice:03}"))
+        .join(DESIGN_DOC)
+}
+
+/// The authored design document, **verbatim** — markers included, unparsed
+/// (SL-246 `EX-2`).
+///
+/// **Deliberately `read_to_string` and nothing else.**
+/// [`crate::design_run::document::parse`] can refuse seven ways on a hand-edited
+/// file, and handing a reader a refusal instead of their document is the worse
+/// failure (`A2`): the caller asked for the prose, not for a verdict on its
+/// grammar. So no decomposition, no marker validation, no normalisation — the
+/// bytes on disk are the answer.
+///
+/// Absence is an **error naming the repair** (`X2`/`EX-4`), never an empty
+/// document: a reader who cannot tell "there is no design" from "the design is
+/// blank" has been told nothing. This is the whole reason it is not
+/// `Option`-valued like `commands::design`'s watermark reader, which has the
+/// opposite policy for the opposite reason (absence is a legitimate *cold* state
+/// there).
+pub(crate) fn design_document(root: &Path, slice: u32) -> anyhow::Result<String> {
+    let path = design_doc_path(root, slice);
+    match fs::read_to_string(&path) {
+        Ok(text) => Ok(text),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            let id = listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice);
+            anyhow::bail!("{id}: no design document (doctrine design start {id})")
+        }
+        Err(error) => Err(error).with_context(|| format!("read {}", path.display())),
+    }
+}
+
 /// clap `ArgGroup` id for `record-delta`'s two mutually exclusive recording modes
 /// — the safe `--commit <S>` vs the raw `--start/--end` range (STD-001, design
 /// SL-189 §5.2). Membership + `required = true` on each member make the group

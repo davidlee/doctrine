@@ -1327,7 +1327,10 @@ pub(crate) fn status(envelope: &TurnEnvelope) -> Vec<String> {
         lines.push(format!("  next         {obligation}"));
     }
     if envelope.truncated {
-        lines.push("  (this projection is bounded; `design show --full` widens it)".to_owned());
+        lines.push(
+            "  (this projection is bounded; `design show --format prompt --full` widens it)"
+                .to_owned(),
+        );
     }
     lines
 }

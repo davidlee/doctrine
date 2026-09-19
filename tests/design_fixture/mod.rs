@@ -70,8 +70,23 @@ impl DesignRun {
         }
     }
 
+    /// `design show` at the `prompt` rendering — the turn envelope, budgeted.
+    ///
+    /// SL-246 `EX-7`: the flag is now EXPLICIT. `DEC-261` moved the bare default to
+    /// the design document, so every caller here that means "the envelope" says so.
     pub(crate) fn show(&self, extra: &[&str]) -> String {
-        let mut args = vec!["design", "show", SLICE, "-p", "."];
+        self.show_as("prompt", extra)
+    }
+
+    /// `design show` at a named rendering.
+    ///
+    /// **One argv builder for every rendering.** A caller that prepended its own
+    /// `--format` on top of a hard-coded one would hand clap a repeated flag, which
+    /// it refuses outright (`the argument '--format <FORMAT>' cannot be used
+    /// multiple times`) — so the format is a parameter rather than something a
+    /// caller splices in.
+    pub(crate) fn show_as(&self, format: &str, extra: &[&str]) -> String {
+        let mut args = vec!["design", "show", SLICE, "-p", ".", "--format", format];
         args.extend_from_slice(extra);
         run(&self.root, &args)
     }

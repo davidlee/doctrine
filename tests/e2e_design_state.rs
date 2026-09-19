@@ -221,9 +221,13 @@ impl Fixture {
         run(&self.root, &args)
     }
 
-    /// `design show`, budgeted.
+    /// `design show` at the `prompt` rendering — the turn envelope, budgeted.
+    ///
+    /// SL-246 `EX-7`: explicit since `DEC-261` moved the bare default to the design
+    /// document. Safe to prepend here (unlike `design_fixture`'s helper) because no
+    /// caller in this file passes a `--format` of its own.
     fn show(&self, extra: &[&str]) -> String {
-        let mut args = vec!["design", "show", SLICE, "-p", "."];
+        let mut args = vec!["design", "show", SLICE, "-p", ".", "--format", "prompt"];
         args.extend_from_slice(extra);
         run(&self.root, &args)
     }
@@ -527,7 +531,15 @@ fn unknown_schema_version_is_refused_with_a_useful_message() {
     )
     .unwrap();
 
-    let error = fail(&fixture.root, &["design", "show", SLICE, "-p", "."]);
+    // SL-246 `EX-7`: `--format prompt` is LOAD-BEARING, not cosmetic. What this case
+    // names is the SNAPSHOT-PARSE refusal, and after `DEC-261` the bare verb renders
+    // the design document, which reads the snapshot optionally and would render
+    // happily — `fail()` would then panic on a successful run and the case would stop
+    // testing its own name.
+    let error = fail(
+        &fixture.root,
+        &["design", "show", SLICE, "-p", ".", "--format", "prompt"],
+    );
     assert!(
         error.contains("unsupported design-run snapshot version 99"),
         "{error}"
@@ -1806,7 +1818,11 @@ fn over_bound_payload_terms_are_refused_at_construction_and_on_the_wire() {
     );
     std::fs::write(&fixture.snapshot, &doctored).unwrap();
 
-    let shown = run(&fixture.root, &["design", "show", SLICE, "-p", "."]);
+    // SL-246 `EX-7`: explicit, so the claim stays about the envelope's renderings.
+    let shown = run(
+        &fixture.root,
+        &["design", "show", SLICE, "-p", ".", "--format", "prompt"],
+    );
     assert!(
         !shown.contains(&over_id),
         "the over-bound value reaches no rendering, whole or trimmed: {shown}"

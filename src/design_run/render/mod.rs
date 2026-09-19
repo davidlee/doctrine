@@ -340,7 +340,7 @@ fn abbreviate_digest(digest: &str) -> String {
 fn delta_unavailable_line(floor: u64, known_revision: u64) -> String {
     format!(
         "changes: UNAVAILABLE — the change log covers revisions from {floor} onward, \
-         and revision {known_revision} is below that floor; see `design show --full`"
+         and revision {known_revision} is below that floor; see `design show --format prompt --full`"
     )
 }
 

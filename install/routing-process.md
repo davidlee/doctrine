@@ -45,7 +45,8 @@ Finished a coherent unit → `/harvest`. Handing off to fresh context → `/hand
 Agent confusion / stale memory corpus → `/reviewing-memory`.
 
 **Core process:** `doctrine slice new` (scope) → `doctrine design start` opens
-the managed design run; read the turn with `doctrine design show`, mutate it
+the managed design run; read the design with `doctrine design show` (the turn
+envelope under `--format prompt`), mutate it
 with `doctrine design apply`, write the authored prose with
 `doctrine design materialise`, and re-enter a cold context with
 `doctrine design resume` — the run locks when its gate clears →

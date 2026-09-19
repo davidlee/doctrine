@@ -428,6 +428,14 @@ ConceptMapCommand::New { .. } => Write("concept-map new"),
         // `resume` are projections and `contract` renders a pure function of the
         // binary, so those three mutate neither tier (design §5.3 rule 1 names
         // exactly this split; SL-251 adds `contract`, which reads no tier at all).
+        //
+        // SL-246 `EX-6`: `show`'s surface WIDENED — under DEC-261 the bare verb
+        // renders the authored design document and its inbound knowledge block,
+        // so it now reads the authored tier as well as runtime state — and the
+        // classification is unchanged, because it still writes NEITHER. The row
+        // stays where it is on purpose: a read surface carrying a `Write` class
+        // would be refused outright under `DOCTRINE_WORKER=1`, which is precisely
+        // the corpus-reading context the composed read exists to serve (`C3`).
         Command::Design { command } => match command {
             crate::commands::design::DesignCommand::Start(_) => Write("design start"),
             crate::commands::design::DesignCommand::Apply(_) => Write("design apply"),

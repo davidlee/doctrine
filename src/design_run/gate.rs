@@ -1330,6 +1330,28 @@ impl fmt::Display for Unmet {
 /// A predicate plus a separate explainer would be two derivations that can
 /// disagree, and a gate that refuses while the explanation says nothing is wrong
 /// is worse than either alone.
+/// Is `design.md` something other than the document this run last materialised?
+///
+/// The document Doctrine last wrote, against the document it reads now.
+/// `materialised` is what makes absence answerable: a run that has never
+/// materialised has no watermark and no document, and "equal" there means *nothing
+/// to compare*, not *current*.
+///
+/// **Extracted so it has exactly one spelling** (STD-001). [`satisfied`]'s
+/// `EngineSource::Materialisation` arm derives [`Cause::MaterialisationStale`] from
+/// it, and SL-246's `design show` document arm derives `OQ-1`'s staleness
+/// disclosure from it. Staleness in this system is **fingerprint identity, never a
+/// revision comparison** — which is why the disclosure's `document_revision` is
+/// `null` by construction: in the `!materialised` branch Doctrine never wrote the
+/// document, and in the mismatch branch what is on disk is not Doctrine's render.
+/// Neither has a revision to report.
+pub(crate) fn materialisation_stale(
+    run: &DesignSnapshot,
+    authored: Option<&super::ids::Fingerprint>,
+) -> bool {
+    !run.authored.materialised || run.authored.watermark.as_ref() != authored
+}
+
 pub(crate) fn satisfied(
     condition: Condition,
     run: &DesignSnapshot,
@@ -1344,12 +1366,7 @@ pub(crate) fn satisfied(
             }
         }
         DerivationRule::Engine(EngineSource::Materialisation) => {
-            // The document Doctrine last wrote, against the document it reads
-            // now. `materialised` is what makes absence answerable: a run that
-            // has never materialised has no watermark and no document, and
-            // "equal" there means *nothing to compare*, not *current*.
-            if !run.authored.materialised || run.authored.watermark != derived.authored_fingerprint
-            {
+            if materialisation_stale(run, derived.authored_fingerprint.as_ref()) {
                 causes.push(Cause::MaterialisationStale);
             }
         }

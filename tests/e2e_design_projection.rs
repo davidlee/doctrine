@@ -88,10 +88,12 @@ impl DesignRun {
     }
 
     /// The turn envelope itself, as the JSON rendering of the same model.
+    ///
+    /// SL-246 `EX-7`: routed through `show_as` rather than prepending `--format
+    /// json` to `show`'s argv — `show` now carries an explicit `--format prompt`,
+    /// and clap refuses a repeated `--format`.
     fn envelope(&self, extra: &[&str]) -> Value {
-        let mut args = vec!["--format", "json"];
-        args.extend_from_slice(extra);
-        serde_json::from_str(&self.show(&args)).expect("the JSON rendering parses")
+        serde_json::from_str(&self.show_as("json", extra)).expect("the JSON rendering parses")
     }
 }
 

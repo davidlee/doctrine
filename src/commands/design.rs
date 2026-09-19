@@ -72,6 +72,7 @@
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use clap::{Subcommand, ValueEnum as _};
@@ -101,7 +102,12 @@ use crate::relation::{RelationEdge, RelationLabel, Role};
 // ── Named constants (STD-001) ─────────────────────────────────────────────
 
 /// The authored design document, under the slice's authored tree.
-const DESIGN_DOC: &str = "design.md";
+///
+/// SL-246 `EX-2`: the name and the path now live in `crate::slice`, beside the
+/// `SLICE_DIR` layout they complete and beside `slice::design_document`, the
+/// verbatim reader `design show` renders. Re-exported here so this module's eight
+/// message sites keep one spelling (STD-001).
+use crate::slice::{DESIGN_DOC, design_doc_path};
 // The stable section marker `materialise` writes and re-adoption addresses is
 // `design_run::document::MARKER_OPEN`/`MARKER_CLOSE`, single-sourced beside the
 // grammar that recognises it (STD-001). This module never re-spells it.
@@ -157,8 +163,9 @@ const APPLY_ABOUT: &str = "Validate and apply one sparse idempotent mutation";
 pub(crate) enum DesignCommand {
     /// Create a design run for a slice.
     Start(StartArgs),
-    /// Show the current turn: active path, nearby frontier, blockers, counts and
-    /// material changes. `--full` widens it.
+    /// Read the design: the document and its knowledge block by default, or a
+    /// rendering of the run's turn envelope under `--format prompt|json|status`,
+    /// where `--full` widens the projection.
     Show(ShowArgs),
     // The third push point (SL-251 `sec-6`): the contract's ADDRESS, never its
     // body, at the verb whose payload it describes. `about` feeds the family
@@ -178,16 +185,24 @@ pub(crate) enum DesignCommand {
     Contract(ContractArgs),
 }
 
-/// Which rendering of the turn envelope to emit (DEC-064).
+/// Which rendering `design show` emits (DEC-064, DEC-261).
 ///
-/// **Only `prompt` is budgeted.** `json`'s framing overhead differs and `status`
-/// is for a human at a terminal, so neither is what the token-cost claim is
-/// about — the sketch says so, and this enum is where that distinction becomes
-/// operational.
+/// **Three of the four render the turn envelope; the default renders the design
+/// document.** That asymmetry is the point of DEC-261: `design show SL-NNN` is the
+/// verb an agent reaches for to *read the design*, and before this it answered with
+/// run state. The envelope renderings are unchanged and unrenamed — only which one
+/// a bare invocation selects moved.
+///
+/// Among the envelope renderings **only `prompt` is budgeted.** `json`'s framing
+/// overhead differs and `status` is for a human at a terminal, so neither is what
+/// the token-cost claim is about — the sketch says so, and this enum is where that
+/// distinction becomes operational.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
 pub(crate) enum ShowFormat {
-    /// The budgeted rendering that enters an agent's context.
+    /// The design document itself, with its knowledge block.
     #[default]
+    Document,
+    /// The budgeted rendering that enters an agent's context.
     Prompt,
     /// The same envelope, as a machine surface.
     Json,
@@ -224,18 +239,49 @@ pub(crate) struct StartArgs {
 }
 
 /// Arguments for `design show`.
+///
+/// **The flags partition over the RENDERING** (design §5.2, `D7`): `--knowledge`
+/// and `--json` belong to the document, `--full` and `--known-revision` to the turn
+/// envelope, and each is refused outside its own side. `--path` is outside the
+/// partition **by kind, not by omission** — it selects no content and no
+/// projection, and sits on every `Args` struct in this codebase. The refusals are
+/// stated over the rendering rather than over how the rendering was *spelled*, so
+/// they live in [`run_show`] as guards and not as clap `conflicts_with` (which
+/// cannot express "conflicts with three of four values").
 #[derive(clap::Args, Debug)]
 pub(crate) struct ShowArgs {
     /// The slice, e.g. `SL-233`.
     slice: String,
     /// Project changes since this revision (default: the previous revision).
+    /// Requires `--format prompt|json|status`.
     #[arg(long)]
     known_revision: Option<u64>,
-    /// Widen the projection: the caps lift and the output may scale with the run.
+    /// Widen the turn envelope's projection: the caps lift and the output may
+    /// scale with the run. Requires `--format prompt|json|status`.
     #[arg(long)]
     full: bool,
-    /// Which rendering of the turn envelope to emit.
-    #[arg(long, value_enum, default_value_t = ShowFormat::Prompt)]
+    /// Compose the design document's inbound knowledge block at this level.
+    ///
+    /// The level type, its tokens and its error text are single-sourced on
+    /// [`crate::knowledge::KnowledgeLevel`] — `inspect` declares the same flag with
+    /// the same idiom (`commands/cli.rs`), and a second spelling would breach
+    /// STD-001.
+    #[arg(
+        long,
+        value_parser = crate::knowledge::KnowledgeLevel::from_str,
+        default_value_t = crate::knowledge::KnowledgeLevel::default()
+    )]
+    knowledge: crate::knowledge::KnowledgeLevel,
+    /// Emit the design document as JSON.
+    ///
+    /// A different axis from `--format`: that one names *what* is rendered, this
+    /// one *how* the document rendering is encoded. They are deliberately NOT
+    /// collapsed the way `inspect` collapses them — `--format json` here is an
+    /// envelope rendering that predates this flag.
+    #[arg(long)]
+    json: bool,
+    /// Which rendering to emit (default: the design document).
+    #[arg(long, value_enum, default_value_t = ShowFormat::default())]
     format: ShowFormat,
     /// Explicit project root (default: auto-detect).
     #[arg(short = 'p', long)]
@@ -339,13 +385,6 @@ fn resolve_root(path: Option<PathBuf>) -> Result<PathBuf> {
 /// The slice id a `SL-233`/`233` reference names.
 fn slice_id(reference: &str) -> Result<u32> {
     crate::listing::parse_ref(crate::kinds::SL, "a slice", reference)
-}
-
-/// The authored design document for a slice.
-fn design_doc_path(root: &Path, slice: u32) -> PathBuf {
-    root.join(crate::kinds::SLICE_DIR)
-        .join(format!("{slice:03}"))
-        .join(DESIGN_DOC)
 }
 
 /// The authored bytes, or `None` when the document is absent.
@@ -1545,7 +1584,7 @@ fn start(root: &Path, slice: u32, from_design: bool, pre_write: PreWriteHook<'_>
     if path.exists() {
         anyhow::bail!(
             "slice {slice:03} already has a design run at {} — v1 holds one active run \
-             per slice; use `doctrine design show` to read it",
+             per slice; use `doctrine design show --format prompt` to read it",
             path.display()
         );
     }
@@ -2208,27 +2247,258 @@ fn outstanding_by_severity(root: &Path, run: &DesignSnapshot) -> Result<Outstand
     })
 }
 
-fn run_show(args: ShowArgs) -> Result<()> {
-    let root = resolve_root(args.path)?;
+fn run_show(mut args: ShowArgs) -> Result<()> {
+    refuse_off_partition(&args)?;
+    let root = resolve_root(args.path.take())?;
     let slice = slice_id(&args.slice)?;
-    let run = read_snapshot(&root, slice)?;
+    // Wildcard-free (the house rule `contract_text` states below): a fifth
+    // rendering must be a compile error here, not a silently-defaulted one. Each
+    // envelope arm builds the turn through `envelope_turn`, which is what keeps
+    // `read_snapshot` — and its refusal when there is no run — off the document
+    // path entirely.
+    match args.format {
+        ShowFormat::Document => show_document(&root, slice, &args),
+        ShowFormat::Prompt => emit(&envelope::prompt(&envelope_turn(&root, slice, &args)?)),
+        ShowFormat::Status => emit(&envelope::status(&envelope_turn(&root, slice, &args)?)),
+        ShowFormat::Json => {
+            emit(&[
+                serde_json::to_string_pretty(&envelope_turn(&root, slice, &args)?)
+                    .context("render the turn envelope as JSON")?,
+            ])
+        }
+    }
+}
+
+/// The flag partition of design §5.2 / `D7`, as four refusals (SL-246 `EX-3`).
+///
+/// **Stated over the RENDERING, never over the spelling.** `--json` is legal at
+/// `document` whether `document` was defaulted or written out, so this consults
+/// `args.format`'s *value* and never clap's `ValueSource`; and it is not clap
+/// `conflicts_with`, which cannot express "conflicts with three of four values".
+///
+/// `--path` is absent on purpose. It selects no content and no projection and sits
+/// on every `Args` struct in this codebase, so the partition does not reach it — it
+/// is outside **by kind, not by omission** (`F-27`: three design rounds miscounted
+/// `ShowArgs` by enumerating from prose instead of from the struct).
+///
+/// Sited ahead of every read, so a refused invocation costs nothing — in
+/// particular `--knowledge` never pays the corpus scan it names.
+fn refuse_off_partition(args: &ShowArgs) -> Result<()> {
+    if matches!(args.format, ShowFormat::Document) {
+        if args.full {
+            anyhow::bail!(
+                "--full widens the turn envelope's projection, and --format document \
+                 renders the design document, which is not a projection and has nothing \
+                 to widen. Use `--format prompt --full`, or drop --full."
+            );
+        }
+        if args.known_revision.is_some() {
+            anyhow::bail!(
+                "--known-revision selects what the turn envelope's change projection is \
+                 diffed against, and --format document renders the design document, which \
+                 carries no change log. Use `--format prompt --known-revision <N>`, or \
+                 drop --known-revision."
+            );
+        }
+        return Ok(());
+    }
+    // The rendering's own token, taken from the `ValueEnum` derive rather than
+    // hand-spelled — clap single-sources the four names from the variant names, and a
+    // second list here is exactly the duplication STD-001 forbids.
+    let rendering = args
+        .format
+        .to_possible_value()
+        .map_or_else(|| "?".to_owned(), |value| value.get_name().to_owned());
+    // Refused on a NON-DEFAULT LEVEL rather than on the flag being present: `skip`
+    // is the default, and a defaulted value cannot be an error. Mirrors
+    // `commands/inspect.rs`'s `--transitive` refusal.
+    if !matches!(args.knowledge, crate::knowledge::KnowledgeLevel::Skip) {
+        anyhow::bail!(
+            "--knowledge {} composes the design document's inbound knowledge block, and \
+             --format {rendering} renders the run's turn envelope, which has no such \
+             block. Use --format document (the default), or --knowledge skip.",
+            args.knowledge.as_str(),
+        );
+    }
+    if args.json {
+        anyhow::bail!(
+            "--json encodes the design document, and --format {rendering} renders the \
+             run's turn envelope. Use --format document (the default) for --json, or \
+             --format json for the envelope as a machine surface."
+        );
+    }
+    Ok(())
+}
+
+/// The turn envelope the three envelope renderings share: snapshot → baseline →
+/// detail → projection.
+///
+/// Reached only from an envelope arm of [`run_show`]'s match, which is what keeps
+/// [`read_snapshot`] — and its refusal when there is no run — off the document path.
+fn envelope_turn(root: &Path, slice: u32, args: &ShowArgs) -> Result<TurnEnvelope> {
+    let run = read_snapshot(root, slice)?;
     let known = baseline(&run, args.known_revision);
     let detail = if args.full {
         Detail::Full
     } else {
         Detail::Normal
     };
-    let turn = project(&root, &run, known, detail)?;
-    match args.format {
-        ShowFormat::Prompt => emit(&envelope::prompt(&turn)),
-        ShowFormat::Status => emit(&envelope::status(&turn)),
-        ShowFormat::Json => {
-            emit(
-                &[serde_json::to_string_pretty(&turn)
-                    .context("render the turn envelope as JSON")?],
-            )
+    project(root, &run, known, detail)
+}
+
+/// The `document` rendering: the design document, then its knowledge block
+/// (SL-246 `EX-1`/`EX-2`/`EX-4`/`EX-5`, DEC-261).
+///
+/// Composition only — this function owns no policy about which knowledge fields
+/// render or what an empty facet means. It calls `select_knowledge` /
+/// `render_block` / `knowledge_value`, the same four producers
+/// `commands/inspect.rs` calls, and frames the block the same way. A second
+/// implementation would be the failure PHASE-04 exists to prevent.
+///
+/// The scan is gated on the LEVEL (a property), never on the block's output being
+/// empty (a proxy): at the default `skip` a document read must not pay a ~360-record
+/// corpus walk (`A-d`/`I1`).
+///
+/// Emitted with `write!`, not [`emit`], which appends a newline per line and would
+/// break `EX-2`'s verbatim contract.
+fn show_document(root: &Path, slice: u32, args: &ShowArgs) -> Result<()> {
+    let canonical = crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice);
+    let document = crate::slice::design_document(root, slice)?;
+    let stale = stale_run_revision(root, slice, &document)?;
+    let level = args.knowledge;
+    let selected = select_inbound_knowledge(root, &canonical, level)?;
+
+    let out = if args.json {
+        let mut object = serde_json::Map::new();
+        object.insert("kind".to_owned(), serde_json::json!("design"));
+        object.insert("slice".to_owned(), serde_json::json!(canonical));
+        object.insert("document".to_owned(), serde_json::json!(document));
+        if let Some(selected) = selected.as_deref() {
+            // The `Option` IS the omission mechanism: at `Skip` the key is ABSENT,
+            // never `null` and never `[]`.
+            if let Some(knowledge) = crate::knowledge::knowledge_value(root, selected, level) {
+                object.insert("knowledge".to_owned(), knowledge);
+            }
         }
+        if let Some(run_revision) = stale {
+            // `D1`: the JSON arm carries the STRUCTURE of the same fact the text arm
+            // renders as a sentence — not the sentence.
+            object.insert(
+                "stale_run".to_owned(),
+                serde_json::json!({
+                    "document_revision": serde_json::Value::Null,
+                    "run_revision": run_revision,
+                }),
+            );
+        }
+        serde_json::to_string_pretty(&serde_json::Value::Object(object))
+            .context("render the design document as JSON")?
+    } else {
+        // Assembled as a `Vec<String>` and concatenated once, not accumulated with
+        // `push_str(&format!(…))` — the house string-building shape.
+        let mut parts = Vec::new();
+        if let Some(run_revision) = stale {
+            parts.push(format!(
+                "note: {DESIGN_DOC} is behind its run (revision {run_revision}); \
+                 doctrine design materialise {canonical}\n"
+            ));
+        }
+        parts.push(document);
+        if let Some(selected) = selected.as_deref() {
+            parts.push("\nknowledge:\n".to_owned());
+            parts.push(crate::knowledge::render_block(
+                root, &canonical, selected, level,
+            ));
+        }
+        parts.concat()
+    };
+    write!(std::io::stdout().lock(), "{out}")?;
+    Ok(())
+}
+
+/// The inbound knowledge records for a subject, or `None` at the `Skip` level.
+///
+/// **`None` means "not asked for", and it costs nothing to produce.** The gate is on
+/// the LEVEL (a property), never on the selection turning out empty (a proxy), so at
+/// the default a document read pays no corpus walk at all — `A-d`/`I1`, and the
+/// difference is ~2 ms against ~245 ms on this repo's own corpus. `Some(vec![])` is a
+/// genuinely empty selection and stays distinct from it, which is what lets the two
+/// renderers say different things about the two states.
+///
+/// Same preamble as `commands/inspect.rs`: one shared scan, its degradation
+/// diagnostics to stderr *before* normal output (STD-003 — a degraded read is
+/// disclosed, never silently skipped), then the view. The existence gate rides
+/// `inspect_from`, so a subject whose record cannot be read errors here rather than
+/// yielding an empty block; propagated, because the caller asked for the block.
+fn select_inbound_knowledge(
+    root: &Path,
+    subject: &str,
+    level: crate::knowledge::KnowledgeLevel,
+) -> Result<Option<Vec<crate::selection::SelectedRecord>>> {
+    if matches!(level, crate::knowledge::KnowledgeLevel::Skip) {
+        return Ok(None);
     }
+    let mut diagnostics = Vec::new();
+    let scanned = crate::relation_graph::scan_entities(
+        root,
+        &mut diagnostics,
+        crate::catalog::scan::ScanMode::default(),
+    )?;
+    for diag in &diagnostics {
+        writeln!(
+            std::io::stderr(),
+            "{}: {}",
+            diag.file.display(),
+            diag.message
+        )?;
+    }
+    let view = crate::relation_graph::inspect_from(&scanned, root, subject)?;
+    Ok(Some(crate::relation_graph::select_knowledge(&view)))
+}
+
+/// `OQ-1`/`EX-5`: the run revision a stale `design.md` is behind, or `None` when
+/// there is nothing to be behind.
+///
+/// **The predicate is the engine's own** — [`design_run::gate::materialisation_stale`],
+/// the same one that derives `Cause::MaterialisationStale` ("`design.md` is not the
+/// document this run last materialised"). A second staleness test on this path
+/// would be two derivations that can disagree (STD-001). The fingerprint side
+/// hashes the bytes already in hand, never a second read: a re-read could see a
+/// different document than the one being printed.
+///
+/// `None` in three situations, and the first is the common one. **No run at all** —
+/// runtime state is per-worktree and gitignored, so a landed slice has 200 KB of
+/// authored design and no snapshot. **A snapshot that will not parse** — disclosed
+/// on stderr and then skipped (STD-003, `Q-2`): refusing a document read over run
+/// state the reader did not ask for reproduces `A2`'s failure in a second costume,
+/// and it is not hypothetical, since a long-lived run can carry an event this binary
+/// cannot read. **An aligned document** — the bytes on disk are what the run last
+/// materialised.
+fn stale_run_revision(root: &Path, slice: u32, document: &str) -> Result<Option<u64>> {
+    let path = crate::state::design_snapshot_path(root, slice);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let run = match std::fs::read_to_string(&path).map_err(anyhow::Error::from) {
+        Ok(text) => snapshot::parse(&text),
+        Err(error) => Err(error),
+    };
+    let run = match run {
+        Ok(run) => run,
+        Err(error) => {
+            writeln!(
+                std::io::stderr(),
+                "{}: {error} — the design document renders without its run disclosure",
+                path.display()
+            )?;
+            return Ok(None);
+        }
+    };
+    let fingerprint = authored_fingerprint(document);
+    Ok(
+        design_run::gate::materialisation_stale(&run, Some(&fingerprint))
+            .then_some(run.run.revision),
+    )
 }
 
 // ── contract ──────────────────────────────────────────────────────────────

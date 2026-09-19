@@ -114,6 +114,11 @@ note = "C2's instrument — must stay green UNCHANGED; a diff here is the alarm"
 selector = "src/selection.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/design_run/gate.rs"
+intent = "design-target"
+note = "DISCOVERED in PHASE-05, not in design.md 5.6's touch-set. EX-5's staleness disclosure had to derive from the engine's OWN predicate rather than duplicate it (STD-001), so materialisation_stale was EXTRACTED from gate.rs::satisfied's EngineSource::Materialisation arm and is now shared by Cause::MaterialisationStale and design show's document arm. Pure extraction: the predicate body and comment move verbatim, satisfied calls it, gate behaviour unchanged. 5.6 missed this file because OQ-1 was drafted on a revision-comparison model of staleness; the engine actually implements fingerprint identity (watermark vs authored_fingerprint), which is the same root cause as EX-5's document_revision being structurally null. Reconcile input."
+
 [[relation]]
 label = "fulfils"
 degree = "partial"
