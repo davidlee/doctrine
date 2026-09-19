@@ -5,17 +5,17 @@ id = 223
 slug = "should-the-design-read-disclose-that-designmd-is-behind-its-run"
 title = "Should the design read disclose that design.md is behind its run?"
 record_kind = "question"
-status = "open"
+status = "answered"
 created = "2026-09-18"
-updated = "2026-09-18"
+updated = "2026-09-19"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 question = "A managed design run holds sections plus a materialisation watermark; design.md on disk is a render of them. The two can diverge — a section declared and not yet materialised; a hand edit that moved the document out from under the run. Should `slice design show` detect that and say so?"
 why_matters = "It is the one place SL-246's design would reach into design-run state, which is a new dependency for commands/slice_design. Against that: the whole value of a managed run is that the document reflects it, and a reader silently served a stale document cannot detect the problem — the STD-003 family of harm, even though STD-003 does not literally cover a document that is merely behind. Recommendation on the design (section 6 OQ-1): disclose, one line above the document naming the repair. Left open for a second opinion because of the coupling."
-answer      = ""
-answered_by = ""
-answered_on = ""
+answer = "Yes — disclose. Taken at planning on 2026-09-19 on the design's own recommendation (SL-246 design.md section 6, OQ-1). After DEC-261 re-sited the reader into commands/design.rs beside the run's own verbs, consulting run state is a state read rather than a new dependency, so the coupling that held this open is gone. It lands on BOTH arms, per OQ-1's own clause: a `note: design.md is behind its run (revision N); doctrine design materialise SL-NNN` line above the document on the text arm, and a sibling `stale_run: { document_revision, run_revision }` key on the document object on the JSON arm — not the rendered sentence, because D1 binds the arms to one meaning and the JSON arm expresses state as structure everywhere else in this design. Folded into SL-246 PHASE-05."
+answered_by = "david.lee"
+answered_on = "2026-09-19"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []

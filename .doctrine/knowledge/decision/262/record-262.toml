@@ -1,0 +1,53 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 262
+slug = "tiers-ride-the-authored-facet-row-not-a-second-table"
+title = "Tiers ride the authored facet row, not a second table"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-19"
+updated = "2026-09-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = """
+SL-246's design (section 5.2) specifies a NEW `facet_fields(facet: &RecordFacet) -> Vec<FacetField>` as C4's single field-order table, collapsing the two hand-written per-kind projections in `format_facet` (src/knowledge.rs:1867) and `facet_json` (:1994). Re-grepping the tree at planning found the name and the role already occupied: `pub(crate) const fn facet_fields(kind: RecordKind) -> &'static [FacetFieldRow]` at src/knowledge.rs:1028, documented as "every field one record kind owns, in template order - the single authored derivation of the per-kind field sets (STD-001)". The tree therefore holds THREE per-kind facet enumerations, not the two the design counted. Writing section 5.2 as literally specified would add a fourth and leave C4's "one table" claim true of two functions and false of the tree.
+"""
+choice       = """
+Extend the authored table rather than add a second one. `FacetFieldRow` gains a `tier: Tier` column, so DEC-150's tier annotation sits on the authored row. The value-bearing projection the composed read needs is a DIFFERENTLY NAMED function that reads a record through `facet_fields(kind)` and yields `Vec<FacetField> { key, tier, value }`; `format_facet` and `facet_json` both render from it with a `TierFilter`. DEC-150 is not superseded and neither is SL-246's design: the ruling (one table, one field order, one place, not a separate field-list constant) is unchanged and is in fact better served. Only the implementation sketch in section 5.2 moves, exactly as that section already records DEC-150's own sketch moving under `facet_fields`.
+"""
+alternatives = [
+  "Reopen the design run to `drafting`, repair sections 5.2 and 5.6, re-attest and re-lock. Correct, and rejected on cost: editing section 5 voids its attestation and section 5 is 750 lines. Nothing in the repair changes a ruling, so the expensive path buys prose accuracy alone.",
+  "Implement section 5.2 literally with the new function renamed to avoid the collision, accepting two per-kind tables. Rejected: C4 false of the tree, no drift canary on the new table, and a second place for a field order to be got wrong.",
+]
+rationale    = """
+Three reasons, in order of weight. (1) C4 is a claim about the tree. A second per-kind table satisfies the sentence and defeats the purpose, and is the parallel implementation the project forbids outright. (2) The existing rows already carry a drift canary: `RawFacet` derives Serialize solely so a facet field added without a matching row fails the suite (DEC-169's idiom). A tier column on those rows inherits that protection; a tier column on a new table does not, and would need its own canary or would silently drift. (3) DEC-150 rules the tiers are "a tier annotation on each field ... not a separate field-list constant". The authored row IS each field; annotating it is closer to what DEC-150 ruled than annotating a second structure derived beside it. The design's own precedent governs the disposition: it already handled one case of a ruling standing while its sketch moved, and said so in section 7.1.
+"""
+consequences = [
+  "SL-246 PHASE-01's EX-1 and EX-2 are written against this record rather than against section 5.2's literal signature; plan.toml cites DEC-262.",
+  "`FacetFieldRow` becomes tier-bearing, so every consumer of `facet_fields(kind)` - the settleable-transition derivation and the toml_edit write dispatch among them - sees a wider row. None reads the new column, so the change is additive.",
+  "SL-246's design.md section 5.2 and 5.6 now describe an implementation that is not the one built. The divergence is deliberate, bounded to the sketch, and is a reconciliation item for /audit rather than a defect.",
+  "Section 9.2's named case `facets_fields_are_a_subsequence_of_full_in_template_order` keeps its meaning and may need its subject renamed to the projection's actual name.",
+]
+decided_by   = "david.lee"
+decided_on   = "2026-09-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the tier-annotation ruling whose implementation sketch this moves, without superseding it"
+target = "DEC-150"
+
+[[relation]]
+label = "shapes"
+target = "SL-246"

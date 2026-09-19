@@ -13,42 +13,42 @@ after = []                      # slice→work soft sequence: { to, rank }
 [[selector]]
 selector = "src/knowledge.rs"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "design.md §5.6 touch-set — the authoritative list; drafted from it rather than from a re-run of the drifted research baseline"
 
 [[selector]]
 selector = "src/slice.rs"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "design.md §5.6 touch-set — the authoritative list; drafted from it rather than from a re-run of the drifted research baseline"
 
 [[selector]]
 selector = "src/commands/design.rs"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "design.md §5.6 touch-set — the authoritative list; drafted from it rather than from a re-run of the drifted research baseline"
 
 [[selector]]
 selector = "src/relation_graph.rs"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "design.md §5.6 touch-set — the authoritative list; drafted from it rather than from a re-run of the drifted research baseline"
 
 [[selector]]
 selector = "src/commands/inspect.rs"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "design.md §5.6 touch-set — the authoritative list; drafted from it rather than from a re-run of the drifted research baseline"
 
 [[selector]]
 selector = "src/commands/cli.rs"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "design.md §5.6 touch-set — the authoritative list; drafted from it rather than from a re-run of the drifted research baseline"
 
 [[selector]]
 selector = "tests/e2e_inspect_golden.rs"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "tests and shipped prose the §5.6 table names, including the three intentional-red rows"
 
 [[selector]]
 selector = "src/commands/guard.rs"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "design.md §5.6 touch-set — the authoritative list; drafted from it rather than from a re-run of the drifted research baseline"
 
 [[selector]]
 selector = "src/design_run/render/mod.rs"
@@ -68,37 +68,47 @@ note = "Design-target set committed by design.md §5.6 (DEC-261)"
 [[selector]]
 selector = "install/routing-process.md"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "tests and shipped prose the §5.6 table names, including the three intentional-red rows"
 
 [[selector]]
 selector = "tests/e2e_design_show_golden.rs"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "tests and shipped prose the §5.6 table names, including the three intentional-red rows"
 
 [[selector]]
 selector = "tests/e2e_design_materialise.rs"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "tests and shipped prose the §5.6 table names, including the three intentional-red rows"
 
 [[selector]]
 selector = "tests/e2e_subcommand_help.rs"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "tests and shipped prose the §5.6 table names, including the three intentional-red rows"
 
 [[selector]]
 selector = "tests/design_fixture/mod.rs"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "tests and shipped prose the §5.6 table names, including the three intentional-red rows"
 
 [[selector]]
 selector = "tests/e2e_design_state.rs"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "tests and shipped prose the §5.6 table names, including the three intentional-red rows"
 
 [[selector]]
 selector = "tests/e2e_design_projection.rs"
 intent = "design-target"
-note = "Design-target set committed by design.md §5.6 (DEC-261)"
+note = "tests and shipped prose the §5.6 table names, including the three intentional-red rows"
+
+[[selector]]
+selector = "tests/e2e_knowledge_cli_golden.rs"
+intent = "scope-relevant"
+note = "C2's instrument — must stay green UNCHANGED; a diff here is the alarm"
+
+[[selector]]
+selector = "src/kinds/mod.rs"
+intent = "scope-relevant"
+note = "C2's instrument — must stay green UNCHANGED; a diff here is the alarm"
 
 [[relation]]
 label = "fulfils"

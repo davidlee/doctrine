@@ -1,0 +1,196 @@
+# Implementation plan for SL-246 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-246"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "The single facet table"
+objective = """
+Collapse the two hand-written per-kind facet projections — `format_facet` (text) \
+and `facet_json` (JSON) — onto the AUTHORED field table that already exists, and \
+split `show_value` out of `show_json`'s inline map. Behaviour-preserving: \
+`knowledge show` does not move a byte on either arm. This is C4's single \
+field-order table, corrected by DEC-262: the table is not new, and the tier rides \
+its authored row rather than a second structure beside it.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-246's design run is locked (revision 66) and the slice is at `ready`." },
+  { id = "EN-2", text = "`doctrine check gate` is green at the branch point, so a later red suite is attributable to this slice." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Per DEC-262: the pre-existing authored table `facet_fields(kind: RecordKind) -> &[FacetFieldRow]` (`src/knowledge.rs:1028`) gains a `tier` column on `FacetFieldRow`, and is the ONLY per-kind facet field enumeration left in the tree. The design's §5.2 sketch names a NEW function of the same name; that name is occupied and the role is filled, so the sketch moves and DEC-150's ruling stands untouched." },
+  { id = "EX-2", text = "`format_facet`'s per-kind match (`:1867`) and `facet_json`'s (`:1994`) are BOTH rewritten to render through the authored table — not duplicated beside it, and not collapsed onto a second table. C4 is then a claim about the tree, which is the point of it." },
+  { id = "EX-3", text = "`Tier { Deciding, Argument }`, `TierFilter { All, Only(Tier) }`, and the value-bearing projection `FacetField { key, tier, value }` with `FacetValue { Text, List, Absent }` are defined in `src/knowledge.rs`. The projection is named for what it is and NOT `facet_fields` (the collision DEC-262 records). `TierFilter::Only(Argument)` is admitted by the type whether or not this slice constructs it." },
+  { id = "EX-4", text = "The tier column inherits the existing drift canary: `RawFacet` derives `Serialize` so that a facet field added without a matching row fails the suite (DEC-169's idiom). A field gaining a row must therefore also gain a tier, by construction rather than by review." },
+  { id = "EX-5", text = "`format_facet(facet, tier)` and `facet_json(facet, tier)` both filter the SAME `facet_fields` by the SAME tier. Neither takes an empty-state policy argument (D6): a facet with nothing to show renders nothing, and the marker that stands in its place is composed one layer up in PHASE-03." },
+  { id = "EX-6", text = "`show_value(record, with_body) -> serde_json::Value` is split out of `show_json`, which now calls it. No second hand-written projection of the record remains." },
+  { id = "EX-7", text = "C2 holds: `knowledge show` is byte-identical on both arms at `TierFilter::All`, including its existing concealment of absent fields (IMP-403 is NOT fixed here). `tests/e2e_knowledge_cli_golden.rs` is green UNCHANGED — a diff there is the alarm, not a golden to update." },
+]
+verification = [
+  { id = "VT-1", expects = "the tier column sits on the authored row, the tier types and the value projection exist, and show_value is split out of show_json", test_file = "src/knowledge.rs", keywords = ["enum Tier", "enum TierFilter", "struct FacetField", "enum FacetValue", "fn show_value", "tier: Tier"], waived = false },
+  { id = "VT-2", expects = "C2's alarm: the pre-existing knowledge show goldens still assert byte-exactness and still pass, with the file unedited", test_file = "tests/e2e_knowledge_cli_golden.rs", keywords = ["knowledge_show_table_is_byte_exact", "knowledge_show_json_is_byte_exact"], waived = false },
+  { id = "VT-3", expects = "I2 by construction: the Facets field set is a subsequence of Full's in template order, for every record kind, on the shared table", test_file = "src/knowledge.rs", keywords = ["facets_fields_are_a_subsequence_of_full_in_template_order"], waived = false },
+  { id = "VA-1", expects = "grep confirms exactly ONE per-kind facet field enumeration survives in src/ — the authored `FacetFieldRow` tables. A positive control is required: the same grep must find three at the phase's branch point (the authored rows, format_facet's match, facet_json's match). C4 is a claim about the tree, not about the two functions the design named." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Level and selection"
+objective = """
+Add the verbosity level as a type whose Default is Skip, and the pure selection \
+that turns an already-derived `InspectView` into an ordered, deduplicated list of \
+records with captions. No disk, no rendering, no command wiring — selection is a \
+pure function, so a second caller (the design read, and later IMP-398 S5's \
+transitive closure) extends it rather than re-traversing.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 exited: `facet_fields` is the single table and the suites are green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`KnowledgeLevel { Skip, Facets, Full }` in `src/knowledge.rs`, deriving `Default` with `Skip` as the default — C1 expressed in the type rather than remembered at each call site — plus `as_str()` yielding `skip`/`facets`/`full` (STD-001: one definition of the three names)." },
+  { id = "EX-2", text = "`SelectedRecord { reference: String, caption: String }` is defined in `src/knowledge.rs`, NOT in `relation_graph`, so the dependency runs relation_graph → knowledge and never back (ADR-001). `caption` is text, not a `RelationLabel` (DEC-147): at depth N it becomes a path and the renderer must not change to learn that." },
+  { id = "EX-3", text = "`relation_graph::select_knowledge(view: &InspectView) -> Vec<SelectedRecord>` is pure — it performs no reads — filters on the SOURCE prefix via `kinds::is_record` (DEC-148), keeps the view's group order and each group's `EntityKey` sort, and deduplicates by reference with the first caption winning (I3)." },
+  { id = "EX-4", text = "I4 holds at the selection layer: output is permutation-invariant across scan order, and ids sort numerically past 999 (998, 999, 1000, 1001), not as canonical strings." },
+]
+verification = [
+  { id = "VT-1", expects = "selection is pure over InspectView, filters by source kind, dedups first-caption-wins, and orders numerically past 999 under a shuffled input", test_file = "src/relation_graph.rs", keywords = ["fn select_knowledge", "selection_excludes_non_record_sources", "a_record_reached_twice_renders_once_under_the_first_caption", "selection_orders_ids_numerically_past_999", "output_is_permutation_invariant_across_scan_order"], waived = false },
+  { id = "VT-2", expects = "the level type defaults to Skip and names itself", test_file = "src/knowledge.rs", keywords = ["enum KnowledgeLevel", "struct SelectedRecord", "fn as_str"], waived = false },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "The composed render — per-record producers, then the block"
+objective = """
+Build the two layers the review's hardest findings were all about. The per-record \
+producers hold the reference and the root, so all three empty-state markers are \
+composed there and nowhere else (D6); the set-level producers are a MAP over them, \
+never a filter, which is what makes I5's never-dropped clause a property of the \
+shape rather than a promise.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 exited: `KnowledgeLevel`, `SelectedRecord` and `select_knowledge` exist and are tested." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`render_record(root, selected, level) -> String` and `record_value(root, selected, level) -> serde_json::Value` are TOTAL and never empty: every input yields an entry." },
+  { id = "EX-2", text = "All three markers are composed in the per-record producers, and the state is read off `facet_fields`' own return rather than a second match on the kind: `[]` BEFORE any tier filter means by-design (only `CPT`); fields exist but none survives the tier or every survivor is `Absent` means unfilled, carrying the prose-size hint; `read_record` failure means unreadable, named by reason and path. The by-design test is on the UNFILTERED table — testing it after the filter collides the two states the moment a tier selects nothing for a kind that does have a facet." },
+  { id = "EX-3", text = "The markers ride INSIDE `facet` on the JSON arm as `{\"marker\": …}` in place of the field object, at BOTH levels. This is what keeps Full's entry exactly `show_value`'s keys plus `caption` with nothing bolted on, and what makes I6/X5 hold on both arms at every level rather than on the text arm at Facets only (the F-23 defect)." },
+  { id = "EX-4", text = "`render_block(root, selected, level) -> String` is a map over `render_record`, never a `filter_map`. Exactly two cases sit outside the map: `Skip` returns the empty string without reading anything, and an EMPTY `selected` at Facets/Full returns X1's explicit line (D3)." },
+  { id = "EX-5", text = "`knowledge_value(root, selected, level) -> Option<serde_json::Value>` returns `None` at Skip so the caller omits the key. The two empties are distinct IN THE TYPE: `None` is Skip, `Some([])` is an empty selection. Neither `\"knowledge\": null` nor `\"knowledge\": []` may appear at Skip." },
+  { id = "EX-6", text = "I7 holds: nothing on this path writes." },
+]
+verification = [
+  { id = "VT-1", expects = "the four composed-read producers exist with the contracted signatures and totality", test_file = "src/knowledge.rs", keywords = ["fn render_record", "fn record_value", "fn render_block", "fn knowledge_value"], waived = false },
+  { id = "VT-2", expects = "the three markers are distinct, on both arms and at both levels — the narrow witness for F-23 is a CPT at Full, where the entry is show_value's payload and the marker must be written over its facet slot", test_file = "src/knowledge.rs", keywords = ["an_unfilled_facet_and_a_concept_render_different_markers", "a_concept_carries_the_by_design_marker_at_full_on_both_arms"], waived = false },
+  { id = "VA-1", expects = "read the block producers and confirm the map shape: no `filter_map`, no `?` that could drop a selected record, and no arm yielding zero entries for one input. I5's never-dropped clause is verified by construction (§9.5) and this is that construction being looked at." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "`inspect --knowledge` — the generic composed read"
+objective = """
+Wire the level onto `doctrine inspect <ID>`, where the renderer lives and where \
+IMP-398 S5's transitive closure will later extend it. This is the first surface a \
+user can reach, and it delivers objectives 1, 2 and 4 on their own before the \
+scope addition touches a live golden surface.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 exited: the composed render is complete on both arms with all three markers." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`--knowledge <skip|facets|full>` is on `InspectArgs`, defaulting to `skip`; `commands/inspect.rs` composes relations + the knowledge block + actionability, and owns no policy about which fields render or what an empty facet means." },
+  { id = "EX-2", text = "`--knowledge` at a non-Skip level with `--transitive` is refused, naming IMP-398 S5. The two are mutually exclusive because the closure is not built." },
+  { id = "EX-3", text = "I1 holds on `inspect`: at Skip, both formats are byte-identical to the pre-SL-246 surface." },
+  { id = "EX-4", text = "X6 holds: `inspect DEC-145 --knowledge facets` is well-formed — `shapes` legally targets record kinds — and renders one hop without recursing." },
+  { id = "EX-5", text = "The synthetic fixture corpus of DEC-151 is seeded in a temp dir as `tests/e2e_inspect_golden.rs` already does, carrying one of each interesting shape: a filled DEC, an unfilled DEC, a CPT, a record reachable under two inbound labels, a backlog item and a review pointing inbound, a record whose `.toml` is absent or malformed, records at ids 998/999/1000/1001, and an entity with no inbound records." },
+]
+verification = [
+  { id = "VT-1", expects = "Skip is byte-identical on both formats and the JSON arm OMITS the key rather than emitting an empty one", test_file = "tests/e2e_inspect_golden.rs", keywords = ["skip_is_byte_identical_to_the_prior_surface", "skip_omits_the_knowledge_key_rather_than_emitting_an_empty_one"], waived = false },
+  { id = "VT-2", expects = "the levels carry what DEC-150 says they carry, and the two arms agree per record kind", test_file = "tests/e2e_inspect_golden.rs", keywords = ["facets_carries_deciding_fields_only", "full_carries_every_field_and_the_prose_body", "json_and_table_carry_the_same_fields_at_the_same_level_for_every_kind", "full_json_carries_the_complete_knowledge_show_payload"], waived = false },
+  { id = "VT-3", expects = "the two block-level cases the record markers cannot reach, and the two disclosures of STD-003's disjoint halves", test_file = "tests/e2e_inspect_golden.rs", keywords = ["an_entity_with_no_inbound_records_says_so_on_both_arms", "a_pruned_record_is_named_on_stderr_and_the_block_renders_the_rest"], waived = false },
+  { id = "VT-4", expects = "the transitive refusal names its carrier", test_file = "tests/e2e_inspect_golden.rs", keywords = ["a_non_skip_level_with_transitive_is_refused_naming_imp_398_s5"], waived = false },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Reclaim `doctrine design show` for the document"
+objective = """
+The scope addition (DEC-261). `design show <SLICE>` renders the design document \
+followed by its knowledge block; the run's turn envelope keeps its three existing \
+renderings under `--format prompt|json|status`, so nothing is renamed and no caller \
+learns a new verb — only the default moves. Carries the flag partition, X2's clean \
+error, OQ-1's staleness disclosure on both arms, and the priced migration.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 exited: the composed read works end-to-end on `inspect`, so this phase adds a second caller rather than a second implementation." },
+  { id = "EN-2", text = "The intentional-red whitelist is understood before the build breaks: §5.6 names exactly three suites that go red on purpose here — the retiring leaf's tests (PHASE-06), the EX-5 help assertion, and the bare-`design show` call sites. ANY OTHER red suite is the C1 alarm and must not be updated as a golden." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`--format` gains `document`, and `document` becomes the default. `prompt`, `json` and `status` are unchanged byte-for-byte — I1's other half on the reclaimed verb (the invariant is the flag's neutrality, not the verb's stability; the bare default moves deliberately)." },
+  { id = "EX-2", text = "`slice::design_document` reads `design.md` VERBATIM, markers included, and does not parse it (A2): `design_run::document::parse` can refuse seven ways on a hand-edited file, and handing a reader a refusal instead of their document is the worse failure." },
+  { id = "EX-3", text = "The flag partition holds with four refusals and one scope qualifier: `--json` and `--knowledge` belong to the document rendering and are refused at every envelope one; `--full` and `--known-revision` belong to the envelope and are refused at `document`; `--path` selects no content and no projection, so the partition does not reach it and it stays legal everywhere." },
+  { id = "EX-4", text = "X2 holds: a slice with no `design.md` gets a clean error naming the repair (`doctrine design start SL-NNN`), not an empty document." },
+  { id = "EX-5", text = "OQ-1 is implemented as its recommendation, on BOTH arms (QUE-223, answered 2026-09-19): the text arm gets a `note:` line above the document naming the revision gap and the `doctrine design materialise` repair; the JSON arm gets a sibling `stale_run: { document_revision, run_revision }` key on the document object — the structure, not the rendered sentence, because D1 binds the arms to one meaning." },
+  { id = "EX-6", text = "`commands/guard.rs` classifies `design show` as `Read`, so the surface survives the pre-dispatch worker guard under DOCTRINE_WORKER=1 (C3). A read surface carrying a `Write` class is refused outright." },
+  { id = "EX-7", text = "The migration is complete and was priced, not discovered: the four emitted strings naming `design show --full` / `design show` as the envelope re-point at `--format prompt`; `install/routing-process.md`'s one prose line moves; the two bare-`design show` helpers (`tests/design_fixture/mod.rs:74`, `tests/e2e_design_state.rs:226`) and the two direct invocations (`e2e_design_state.rs:530,1809`) each gain an explicit `--format prompt`; `tests/e2e_design_projection.rs` follows." },
+  { id = "EX-8", text = "SL-233 PHASE-04's EX-5 is RE-PREMISED, not dropped: `design_show_is_the_narrow_surface_and_names_its_own_widening` (`tests/e2e_subcommand_help.rs:103`) rests on the premise that `show`'s default is the envelope's narrow end, which DEC-261 voids. The criterion is re-expressed against `--format prompt --full`." },
+]
+verification = [
+  { id = "VT-1", expects = "the composed design read, its moved default, and X2's clean error", test_file = "tests/e2e_design_show_golden.rs", keywords = ["design_show_renders_the_document_then_the_block", "design_show_defaults_to_format_document", "design_show_on_a_slice_without_a_design_errors_cleanly", "design_show_envelope_renderings_are_byte_identical_to_the_prior_default"], waived = false },
+  { id = "VT-2", expects = "the flag partition, all four refusals plus the --path qualifier. The --json case asserts BOTH legal spellings and the refusal: a case that only checked the refusal would pass under the round-2 rule this replaces", test_file = "tests/e2e_design_show_golden.rs", keywords = ["json_is_legal_at_the_document_rendering_and_refused_at_every_envelope_one", "knowledge_with_an_envelope_rendering_is_refused", "full_is_refused_on_the_document_and_legal_on_every_envelope_rendering", "known_revision_is_refused_on_the_document_the_way_full_is", "path_is_legal_at_every_rendering"], waived = false },
+  { id = "VT-3", expects = "OQ-1: a document behind its run is disclosed on both arms — the note line on the text arm, the stale_run key on the JSON arm", test_file = "tests/e2e_design_show_golden.rs", keywords = ["a_document_behind_its_run_is_disclosed_on_both_arms"], waived = false },
+  { id = "VT-4", expects = "SL-233 PHASE-04 EX-5 re-premised against --format prompt --full rather than deleted", test_file = "tests/e2e_subcommand_help.rs", keywords = ["design_show_help_names_full_as_the_envelope_widening"], waived = false },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Retire the deprecated `slice design` leaf"
+objective = """
+The deprecation's payoff, and nothing more. `SliceCommand::Design` exists only to \
+carry a deprecated scaffold that `design start` replaced; deleting the variant takes \
+the guard row and the residual dispatch arm with it. Last, so the reclaimed surface \
+has landed before the old one goes.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 exited: `doctrine design show` renders the document, so no reader depends on the deprecated leaf." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`SliceCommand::Design` is deleted, and with it `slice::scaffold_design_doc` (`src/slice.rs:781`) and `commands/design.rs::run_deprecated_slice_design` (`:2053`)." },
+  { id = "EX-2", text = "The `SliceCommand::Design => Write(\"slice design\")` row in `src/commands/guard.rs` deletes WITH the variant, and the residual dispatch arm in `src/commands/cli.rs:1531` deletes with it. Neither is a separate decision: both rows exist only because the variant does." },
+  { id = "EX-3", text = "No routing claim is made. A handler under `src/commands/` is not reachable from `crate::slice` without closing the ADR-001 cycle the residual arm existed to avoid; under DEC-261 no nested slice verb exists, so nothing needs routing." },
+  { id = "EX-4", text = "`tests/e2e_design_materialise.rs` retires its five deprecated-leaf invocations (`:599,605,606,668,702`) — they test the leaf's warning and its forwarding to `design materialise`. The leaf goes; these go with it. The rest of the suite stays." },
+  { id = "EX-5", text = "`doctrine check gate` is green with NO suite red. The three intentional-red rows of §5.6 are now all discharged, so from here any red is the C1 alarm." },
+]
+verification = [
+  { id = "VT-1", expects = "the surviving materialise suite still exercises `design materialise` directly, with no `slice design` invocation left in it", test_file = "tests/e2e_design_materialise.rs", keywords = ["design\", \"materialise\""], waived = false },
+  { id = "VA-1", expects = "grep the tree and confirm absence, which no keyword mandate can express: `SliceCommand::Design`, `scaffold_design_doc` and `run_deprecated_slice_design` return no hits in src/, and no `[\"slice\", \"design\"` invocation survives in tests/. A positive control is required — the same greps must return hits at the phase's branch point." },
+  { id = "VA-2", expects = "the acceptance claim of DEC-151, run against the REAL corpus: `doctrine design show SL-244 --knowledge facets`. The attestation must record enough to be re-derived — the record ids surfaced and under which captions, the ids excluded and why, and the rendered byte count at each of the three levels. \"Looked fine\" does not discharge this." },
+  { id = "VH-1", expects = "the question the feature lives or dies on: reading SL-244's design this way, do you reach for it again? R3 says a 30% saving has to be right about what it keeps, and no test can tell you whether it is." },
+]
+specs             = []
+requirements      = []
