@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 271
+slug = "promotion-leg-stays-in-the-convention-close-gate-teeth-are-audit-grade"
+title = "Promotion leg stays in the convention; close-gate teeth are audit-grade"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-19"
+updated = "2026-09-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "RFC-026 P10 says demonstrate, probe and control findings are not repaired in prose but become entry or exit criteria on the first phase. SPEC-031 owns criterion identity and evolution and is silent on promoting a finding into a criterion, so the leg has no governance owner and no tooling check. The form has precedent: .doctrine/slice/026/plan.toml:46 carries EX-3 with an inline (RV-093 F-1) citation. The transcription cannot happen at disposition, because the plan does not exist until after the design lock - the same sequencing fact that produced DEC-263."
+choice = "The convention states the leg and adds no surface. A routed obligation becomes an entry or exit criterion on a phase citing RV-NNN F-n inline in the criterion text reusing the precedent at .doctrine/slice/026/plan.toml:46. AMENDED 2026-09-19 (owner): an earlier form of this decision had the responder name the host phase at disposition. That is impossible - phases are devised at planning well after the design review - so what the responder states in --response is the part that IS knowable at disposition: a CRITERION SKETCH (what the criterion must assert) and a PLACEMENT CONSTRAINT (what the obligation requires of its host - that it run after the parser exists say or that it needs a worktree branch). The placement decision belongs to whoever writes the plan. The obligation travels with the finding: the planner reads the sketch and the constraint off the RV ledger they must already be reading in order to transcribe at all so the plan-time half is delivered without a third normative surface. Enforcement is transitive and AUDIT-GRADE RATHER THAN PREVENTIVE: DEC-263 holds the raiser does not verify until the criterion exists and an unverified blocker refuses the slice close (doc_unresolved_blockers src/review.rs:1669). That bites at audit-to-reconcile many agent sessions after the phase that should have carried the criterion has already run. It detects a dropped obligation; it does not prevent the defect the finding named from going unguarded through execution. The design says so rather than claiming teeth it does not have."
+alternatives = ["Also hang the obligation in the /plan surface, where transcription actually fires. The purest DEC-103 reading, and rejected on cost: it mints a third normative touchpoint and widens the slice's Affected surface beyond its two install/ files, against the no-new-normative-surface constraint. Named as the place a reviewer is most likely to push, and as the obvious follow-up if the trial shows obligations being dropped between plan and execute.", "Give the promotion leg a knowledge record of its own, cited from the convention. Rejected: it adds an entity with no delivery moment for the one obligation that does have a mechanical consequence."]
+rationale = "The form needs no invention so the only real question is ownership and the close gate supplies a structural incentive that exhortation cannot. Two owner corrections are carried rather than argued away. First: a gate at slice close is an audit mechanism and by the time it fires the execution it was meant to protect has happened. Second: the responder cannot name a phase that does not yet exist. What survives of the preventive half is the criterion sketch and the placement constraint - both fully knowable at disposition - which convert plan-time transcription from an act of recall into a copy and remove the failure where an obligation survives but its content does not."
+consequences = ["The convention gains two sentences: the criterion form with its inline RV-NNN F-n citation; and the responder's criterion sketch plus placement constraint stated in --response at disposition", "CON-006 is corrected. Two clauses have teeth rather than one: the raiser half of the accumulation rule where contest blocks the design lock; and transcription transitively at the slice close. The transcription entry must record that its enforcement is audit-grade and arrives after execution", "The placement decision is the planner's and is delivered through the RV ledger itself rather than through a third normative surface", "If the trial observes routed obligations dropped between plan and execute then hanging the obligation in the /plan surface is the named next move", "The sketch and the constraint share --response with the adversary clause so DEC-269's plain-prose and read-back rules cover them too"]
+decided_by = "owner"
+decided_on = "2026-09-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-260"

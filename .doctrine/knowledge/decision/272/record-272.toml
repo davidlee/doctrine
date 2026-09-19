@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 272
+slug = "earliest-phase-that-can-host-bounded-by-the-settle-first-test"
+title = "Earliest phase that can host, bounded by the settle-first test"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-19"
+updated = "2026-09-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "RFC-026 P10 places a routed obligation on 'the first phase, which already owns obligations'. SL-260's research round raised OQ-4: nothing requires a first phase to exist or to be the right host, and a probe needing a worktree branch may not fit a phase whose first deliverable is a doc edit. DEC-271 already has the responder state at disposition which phase the obligation will land on, so a placement rule has somewhere to live at no extra cost."
+choice = "The obligation lands on the EARLIEST PHASE THAT SATISFIES THE RESPONDER'S STATED PLACEMENT CONSTRAINT. AMENDED 2026-09-19 (owner): the rule is addressed to the PLANNER not the responder because phases do not exist at disposition. The first phase is the default wherever the constraint permits it and needs no justification; a later phase is permitted and the plan records which and why. How late placement may go is bounded by a rule the convention already carries rather than a new one - the settle-first test. If the phases between the design and the chosen host add external reliance durable state authority or exposure dependency spread or governing meaning on top of the thing in doubt then the finding must be settled first and may not be routed at all. That turns P10's own would-kill condition - a protected boundary is crossed while one is open - into a precondition on routing rather than a post-hoc failure. Where the plan as written contains no phase that can host the obligation before such a boundary the routing was wrong: the raiser contests and the finding returns for re-disposition."
+alternatives = ["Strictly the first phase, as P10 words it. Rejected: it forces a mismatch, placing criteria for a mechanism implemented in a later phase onto a phase where they cannot be exercised, which produces a criterion that is either vacuous or false.", "Any phase, with no placement rule. Rejected: the point of naming the first phase is that deferring an obligation to the last phase defeats the settle-first discipline entirely."]
+rationale = "The bound already exists in the convention, so the placement rule costs a sentence and no new concept. Deriving the limit from the settle-first test also makes the two rules mutually reinforcing: the test stops being an abstract instruction about when a finding may stay open and becomes the concrete thing a responder consults when choosing a host phase. The contest path for an unhostable obligation needs no addition either, since contest is already the raiser's verb and already blocks the design lock."
+consequences = ["The convention states the earliest-phase-that-satisfies-the-constraint rule with the first phase as the unjustified default", "The rule is addressed to the planner and reaches them through the RV ledger the transcription already requires them to read", "The settle-first test acquires a second concrete point of use which should make it more likely to be applied than a standalone instruction would be", "An obligation with no admissible host phase is a routing error handled by contest with no new mechanism", "This rule is unenforced by construction and joins the CON-006 register"]
+decided_by = "agent, derived from the owner's prior decisions at DEC-267 (settle-first test in the convention) and DEC-271 (responder names the landing phase)"
+decided_on = "2026-09-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-260"

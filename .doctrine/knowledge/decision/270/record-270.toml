@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 270
+slug = "eaten-and-absent-adversary-clauses-count-the-same"
+title = "Eaten and absent adversary clauses count the same"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-19"
+updated = "2026-09-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "RFC-026 P10 leaves Open 'who states the adversary for a probe route, and what detects at ledger grain that none was stated'. SL-260 scope section 4 answers the first half (the responder, in --response) and answers the second with 'the counting pass itself'. inq-13 asked whether that answer survives DEC-269's hazard: can the counting pass distinguish an adversary clause the shell ate from one that was never written?"
+choice = "It cannot, and it does not need to. Both are convention misses. The trial measures WHETHER THE CONVENTION PRODUCED A USABLE ADVERSARY CLAUSE, not why it failed to; attributing a miss to mangling rather than omission is a blame question and the trial assigns no blame. So P10's Open item stands answered as scope section 4 answers it: the counting pass detects absence at ledger grain, and absence is the measured fact. Two guards are attached rather than a mechanism. First, DEC-269's read-back step puts a detector at the moment of writing, which makes mangling rare by construction and is the only point at which it is still repairable. Second, a confound guard on the analysis: if the trial observes a high adversary-clause miss rate, the counting pass spot-checks whether the surrounding responses show truncation before concluding that routing failed - a miss rate inflated by a shell hazard is not evidence about routing."
+alternatives = ["Add a detector that distinguishes the two causes. Rejected: it requires parsing --response, which is a src/ change, foreclosed by the slice's tripwire; and it would buy a distinction the measurement does not use.", "Treat an eaten clause as not a miss, on the grounds that the responder complied. Rejected: it makes the count depend on an unobservable intention, and it rewards exactly the failure the read-back step exists to prevent."]
+rationale = "The question dissolves once the measurement's purpose is stated precisely. P10 asks for ledger-grain detection that no adversary was stated, and absence in the stored field is exactly that; the cause of the absence is outside what the trial claims to measure. The residual risk is not detection but CONFOUNDING - a systematic shell hazard could inflate the miss rate and be misread as a routing failure - and that is an analysis-time guard, not a mechanism the convention needs to carry."
+consequences = ["P10's Open item on ledger-grain detection is answered as scope section 4 states it, with no addition to the convention text.", "The trial's analysis carries a confound guard: check for response truncation before reading a high miss rate as a routing result.", "The confound guard belongs in the trial-report chore (scope item 8), not in the shipped convention."]
+decided_by = "agent, on the owner's prior decision at DEC-269 and P10's own framing of what the trial measures"
+decided_on = "2026-09-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-260"

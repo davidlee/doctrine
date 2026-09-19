@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 273
+slug = "probe-evidence-commits-to-slicennnprobes"
+title = "Probe evidence commits to slice/NNN/probes/"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-19"
+updated = "2026-09-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-260 scope section 7 needs a committed home for a throwaway probe script. Under .doctrine/slice/NNN/ only research/, phases, handover.md and inquisition.md are gitignored (.gitignore:47-51), so a sibling directory commits with no gitignore change. For demonstrate and control routes the evidence becomes an ordinary test in the repo, so the directory serves the probe route alone - which is what shrank IMP-324 (no durable sink for design-round probe evidence) to a single line. This rests on .gitignore and on no authority: ADR-019 governs projection of shipped assets and does not reach slice-local evidence."
+choice = "The directory is .doctrine/slice/NNN/probes/, created on demand and never eagerly. The name states one route rather than a category, so it cannot become a dumping ground for evidence that belongs in the test suite, and it matches the route token literally - a finding disposed route:probe puts its script in probes/. A codebase-wide probe still goes to a worktree branch via doctrine worktree fork rather than into the slice. One caution carries into the convention text: a file named handover.md inside probes/ would be gitignored, because .gitignore:29 matches that name at any depth."
+alternatives = ["evidence/. Rejected: it overclaims. It would invite demonstrate and control artefacts that should be ordinary tests in the repo, which is precisely the outcome IMP-324's shrinkage depends on avoiding.", "artifacts/. Rejected: vague enough to attract anything, and it says nothing about which route produced the contents."]
+rationale = "Naming the narrowest true thing is what keeps the directory from becoming apparatus, which is the corpus's characteristic failure mode and the one SL-260's What this slice deletes section is written against. The literal match to the route token also means no mapping has to be remembered or documented."
+consequences = ["No .gitignore change is required; the directory commits by default.", "The convention text names probes/ and notes the handover.md trap.", "The design cites .gitignore:47-51 as the mechanism and states plainly that no governance authority covers slice-local evidence, rather than citing one that does not exist."]
+decided_by = "agent, on scope section 7's stated constraints"
+decided_on = "2026-09-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-260"

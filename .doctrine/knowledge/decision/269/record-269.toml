@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 269
+slug = "adversary-clause-is-plain-prose-read-back-before-moving-on"
+title = "Adversary clause is plain prose, read back before moving on"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-19"
+updated = "2026-09-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-260 scope section 4 records the probe adversary clause in doctrine review dispose --response, in the form 'must hold against X, need not hold against Y'. The memory sweep surfaced mem_019fbc7514097c42aa042ab7bb2206c6: --response is free text, and in a double-quoted shell argument every backtick span is command substitution. The dispose succeeds, the receipt reads clean, and the quoted spans are stored as empty strings. The ledger is turn-based with no amend verb, so the damage is permanent until the raiser contests, which costs a whole round. The hazard pre-exists SL-260 and is not caused by it, but SL-260 changes what it costs: --response becomes the recording site for the one fact P10 flagged Open, and the trial's counting pass reads an eaten clause as an absent one."
+choice = "The convention carries a CONTENT RULE rather than a tooling fix or a quoting recipe: the adversary clause is written as plain prose in the prescribed form, with no code spans - no backticks and no dollar signs - and the responder reads the stored value back with doctrine review show --json before moving on. This dodges the hazard rather than repairing it, adds no tooling, and is shell-agnostic. It is the first HOW TO WRITE IT rule in the convention, as distinct from a WHAT TO RECORD rule, and that widening is deliberate and named."
+alternatives = ["Say nothing, on the grounds that the hazard pre-exists and a memory already covers it. Rejected: the trial's own instrument would be known-unreliable with the design silent about it, which is a blocker-shaped omission.", "Ship the general remedy - write the prose to a file and invoke without a shell. Correct advice at the wrong tier: it is a bash quoting recipe, and shipping one in a reference doc makes doctrine's guidance lean on the host's shell, which sits badly against POL-002's first prohibition even where it does not strictly bite. The recipe stays in the memory corpus where it already lives.", "Move the adversary clause into --disposition alongside the route. Rejected: identical hazard, and it overloads a field already carrying two axes.", "Fix the quoting hazard in tooling. Foreclosed: a src/ change, which the slice's own tripwire rules out."]
+rationale = "An adversary described in plain prose is more legible than one hidden in code spans, so the rule costs nothing in expressiveness and removes the failure mode at its source. A content rule also survives a change of shell, a change of harness, and a client project with different habits, which a quoting recipe does not. The read-back step puts the detector at the moment of writing, which is the cheapest place to catch a silent truncation and the only place it can still be repaired."
+consequences = ["The convention's probe clause gains a form constraint (plain prose, no code spans) and a read-back step.", "With no code spans to eat, the distinguish-eaten-from-absent problem largely stops arising - see inq-13.", "The rule is itself unenforced by construction and joins the CON-006 register.", "The convention now contains one rule about how to write a field, not only about what to record in it; that precedent is named so it is not extended casually."]
+decided_by = "owner"
+decided_on = "2026-09-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-260"
