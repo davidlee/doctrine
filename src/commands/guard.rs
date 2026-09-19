@@ -62,7 +62,6 @@ ConceptMapCommand::New { .. } => Write("concept-map new"),
         },
         Command::Slice { command } => match command {
             crate::slice::SliceCommand::New { .. } => Write("slice new"),
-            crate::slice::SliceCommand::Design { .. } => Write("slice design"),
             crate::slice::SliceCommand::Plan { .. } => Write("slice plan"),
             crate::slice::SliceCommand::Phases { .. } => Write("slice phases"),
             crate::slice::SliceCommand::Notes { .. } => Write("slice notes"),

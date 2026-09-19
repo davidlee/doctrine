@@ -356,10 +356,6 @@ mod write_class_tests {
     #[test]
     fn slice_split() {
         assert_eq!(cls(&["doctrine", "slice", "new"]), Some("slice new"));
-        assert_eq!(
-            cls(&["doctrine", "slice", "design", "0"]),
-            Some("slice design")
-        );
         assert_eq!(cls(&["doctrine", "slice", "plan", "0"]), Some("slice plan"));
         assert_eq!(
             cls(&["doctrine", "slice", "phases", "0"]),

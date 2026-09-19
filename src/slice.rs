@@ -170,17 +170,6 @@ pub(crate) enum SliceCommand {
         path: Option<PathBuf>,
     },
 
-    /// Scaffold a design-doc sibling into an existing slice.
-    Design {
-        /// Slice id to attach the design doc to.
-        #[arg(value_parser = parse_cli_id)]
-        id: u32,
-
-        /// Explicit project root (default: auto-detect).
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
-    },
-
     /// Scaffold an implementation plan (plan.toml + plan.md) into a slice.
     Plan {
         /// Slice id to attach the plan to.
@@ -456,12 +445,6 @@ pub(crate) enum SliceCommand {
 pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
     match cmd {
         SliceCommand::New { title, slug, path } => run_new(path, title, slug),
-        SliceCommand::Design { .. } => {
-            anyhow::bail!(
-                "SliceCommand::Design is handled by the residual cli.rs dispatch \
-                 (SL-233 PHASE-14 EX-4: the shim forwards to `design materialise`)"
-            )
-        }
         SliceCommand::Plan { id, path } => run_plan(path, id),
         SliceCommand::Phases { id, prune, path } => run_phases(path, id, prune),
         SliceCommand::Notes { id, path } => run_notes(path, id),
@@ -608,28 +591,6 @@ const CLOSE_DRIFT_RECIPE_MEMORY: &str = "mem.pattern.doctrine.close-drift-discha
 /// value lives in the leaf `kinds` module (SL-204 PHASE-02).
 pub(crate) use crate::kinds::SLICE_KIND;
 
-/// The one spelling of the `doctrine slice design` deprecation notice (STD-001;
-/// SL-233 PHASE-14 EX-4).
-///
-/// Emitted on EVERY invocation of the shim, not once per process: a latch would
-/// let the second and later calls of a session pass silently, and a warning a
-/// caller can outrun is not a warning. It names both destinations because the
-/// shim has two arms and the caller does not know which one they are in — new
-/// work goes to `design start`, an existing document to `design start
-/// --from-design`, which adopts it as the run's baseline rather than clobbering
-/// it. The legacy scaffold and the managed writer are mutually exclusive
-/// (DEC-075), so this text is the migration, not an apology for it.
-pub(crate) const DESIGN_DEPRECATION_NOTICE: &str = "warning: `doctrine slice design` is deprecated. \
-     Start a managed design run with `doctrine design start <SLICE>`; to bring an \
-     existing design.md into a run, use `doctrine design start <SLICE> --from-design`.";
-
-/// The non-reserved design-doc sibling: one `design.md` under an existing slice.
-const DESIGN_KIND: Kind = Kind {
-    dir: SLICE_DIR,
-    prefix: crate::kinds::SL,
-    stem: "",
-};
-
 /// The implementation-plan facet: `plan.toml` (authored relational `plan.overview`
 /// rows) + `plan.md` (prose) under an existing slice — the first multi-file
 /// sub-artefact, on the transactional writer (slice-004 D1/D4).
@@ -665,14 +626,6 @@ fn render_md(title: &str) -> anyhow::Result<String> {
     Ok(crate::install::asset_text("templates/slice.md")?.replace("{{title}}", title))
 }
 
-/// Render `design.md` from the embedded template: `{{ref}}` (parent canonical
-/// id) + `{{title}}` (parent title) — a design doc has no id/slug of its own.
-fn render_design(canonical_id: &str, title: &str) -> anyhow::Result<String> {
-    Ok(crate::install::asset_text("templates/design.md")?
-        .replace("{{ref}}", canonical_id)
-        .replace("{{title}}", title))
-}
-
 /// The slice fileset: sister TOML, prose body, and `<id>-<slug>` symlink, all
 /// relative to the slice tree root (the symlink sits beside the numeric dir).
 fn slice_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
@@ -692,16 +645,6 @@ fn slice_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
             target: name,
         },
     ])
-}
-
-/// The design-doc fileset: one prose `design.md` under the parent slice dir.
-fn design_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
-    let (id, canonical) = (ctx.id, ctx.canonical);
-    let name = format!("{id:03}");
-    Ok(vec![Artifact::File {
-        rel_path: PathBuf::from(format!("{name}/design.md")),
-        body: render_design(canonical, ctx.title)?,
-    }])
 }
 
 /// Render `plan.toml` from the template: `{{ref}}` is the parent canonical id.
@@ -800,52 +743,6 @@ pub(crate) fn run_new(
         .numeric_id()
         .context("slice kind must yield a numeric id")?;
     writeln!(io::stdout(), "Created slice {id:03}: {}", out.dir.display())?;
-    Ok(())
-}
-
-/// The NO-RUN arm of the deprecated `doctrine slice design <id>` shim
-/// (SL-233 PHASE-14, EX-4).
-///
-/// It keeps the legacy scaffold-only contract: create `design.md` from the
-/// template only when the slice has none, and otherwise retain the no-clobber
-/// refusal. It **never creates or reconstructs runtime state** — the legacy
-/// fallback and the managed writer are mutually exclusive rather than parallel
-/// writers (DEC-075), so a document scaffolded here is adopted into a run by
-/// `doctrine design start --from-design`, not by this command growing a second
-/// way to reach a run.
-///
-/// The arm stays here because the scaffold it writes is a slice-shaped authored
-/// entity (`DESIGN_KIND` over `design_scaffold`, both this module's own). Its
-/// caller — the arm selection and the live-run forward — lives in
-/// `commands::design` instead, beside the `materialise` it must forward
-/// *through*: `commands → slice` is the established direction (ADR-001), and
-/// calling the other way would close a command-tier cycle.
-pub(crate) fn scaffold_design_doc(root: &Path, id: u32) -> anyhow::Result<()> {
-    let slice_root = root.join(SLICE_DIR);
-    // The design doc inherits its parent's title (the only context its template
-    // needs); reading it confirms the parent exists before we materialise.
-    let meta = meta::read_meta(&slice_root, "slice", id, "SL")?;
-    let date = crate::clock::today();
-    let out = entity::materialise(
-        &DESIGN_KIND,
-        design_scaffold,
-        &LocalFs,
-        root,
-        &MaterialiseRequest::InExisting { id },
-        &Inputs {
-            slug: "",
-            title: &meta.title,
-            date: &date,
-        },
-        &[], // inert for InExisting (trunk ids only affect Fresh allocation)
-        &mut entity::local_reserved(), // inert for InExisting (no id allocation)
-    )?;
-
-    writeln!(
-        io::stdout(),
-        "Created design doc: {}",
-        out.dir.join("design.md").display()
-    )?;
     Ok(())
 }
 
@@ -3640,14 +3537,6 @@ mod tests {
         assert!(!body.contains("{{title}}"));
     }
 
-    #[test]
-    fn render_design_substitutes_ref_and_title() {
-        let body = render_design("SL-003", "My Title").unwrap();
-        assert!(body.contains("Design SL-003: My Title"));
-        assert!(!body.contains("{{ref}}"));
-        assert!(!body.contains("{{title}}"));
-    }
-
     // --- scaffolds ---
 
     #[test]
@@ -3721,22 +3610,6 @@ mod tests {
         assert_eq!(plan.phases[0].id, "PHASE-01");
     }
 
-    #[test]
-    fn design_scaffold_is_a_single_file_no_symlink() {
-        let ctx = ScaffoldCtx {
-            id: 3,
-            canonical: "SL-003",
-            slug: "",
-            title: "Vendor skills",
-            date: "2026-06-03",
-        };
-        let fileset = design_scaffold(&ctx).unwrap();
-        assert_eq!(fileset.len(), 1);
-        assert!(matches!(&fileset[0],
-            Artifact::File { rel_path, body }
-            if rel_path == Path::new("003/design.md") && body.contains("Design SL-003: Vendor skills")));
-    }
-
     // --- behaviour preservation: a materialised slice is well-formed ---
 
     #[test]
@@ -3772,68 +3645,6 @@ mod tests {
 
         let metas = meta::read_metas(&root.join(SLICE_DIR), "slice", "SL").unwrap();
         assert_eq!(metas, vec![meta(1, "proposed", "my-slug", "My Title")]);
-    }
-
-    // --- design verb: non-reserved sibling over an existing slice ---
-
-    #[test]
-    fn design_materialises_under_an_existing_slice_with_no_symlink() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-        make_slice(root, "my-slug", "My Title", "2026-06-03");
-        let slice_root = root.join(SLICE_DIR);
-
-        let out = entity::materialise(
-            &DESIGN_KIND,
-            design_scaffold,
-            &LocalFs,
-            root,
-            &MaterialiseRequest::InExisting { id: 1 },
-            &Inputs {
-                slug: "",
-                title: "My Title",
-                date: "2026-06-03",
-            },
-            &[],
-            &mut entity::local_reserved(),
-        )
-        .unwrap();
-
-        assert_eq!(out.eid.numeric_id(), Some(1));
-        let body = fs::read_to_string(slice_root.join("001/design.md")).unwrap();
-        assert!(body.contains("Design SL-001: My Title"));
-        // no second numeric dir, no extra symlink
-        assert!(!slice_root.join("002").exists());
-    }
-
-    #[test]
-    fn design_refuses_to_clobber_an_existing_doc() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-        make_slice(root, "my-slug", "My Title", "2026-06-03");
-        let slice_root = root.join(SLICE_DIR);
-        fs::write(slice_root.join("001/design.md"), "hand-written").unwrap();
-
-        let err = entity::materialise(
-            &DESIGN_KIND,
-            design_scaffold,
-            &LocalFs,
-            root,
-            &MaterialiseRequest::InExisting { id: 1 },
-            &Inputs {
-                slug: "",
-                title: "My Title",
-                date: "2026-06-03",
-            },
-            &[],
-            &mut entity::local_reserved(),
-        )
-        .unwrap_err();
-        assert!(err.to_string().contains("Refusing to overwrite"));
-        assert_eq!(
-            fs::read_to_string(slice_root.join("001/design.md")).unwrap(),
-            "hand-written"
-        );
     }
 
     // --- plan facet: the first multi-file sub-artefact ---

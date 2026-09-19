@@ -2065,46 +2065,6 @@ fn run_materialise(args: MaterialiseArgs) -> Result<()> {
     materialise(&root, slice, &|| {})
 }
 
-/// `doctrine slice design <id>` — the DEPRECATED compatibility shim
-/// (SL-233 PHASE-14 EX-4, design §5.2).
-///
-/// Two arms, mutually exclusive with each other exactly as the legacy fallback
-/// and the managed writer are mutually exclusive (DEC-075):
-///
-/// - **live run** — forward to [`materialise`], the function `design
-///   materialise` itself calls. Not a copy of it: the foreign-edit guard, the
-///   renderer, the pre-write re-check and the re-baseline are reached through
-///   ONE seam, so the two verbs produce identical bytes and identical refusals
-///   by construction rather than by two implementations agreeing;
-/// - **no run** — [`crate::slice::scaffold_design_doc`], the legacy
-///   scaffold-only contract, unchanged.
-///
-/// The entry lives HERE rather than in `crate::slice` because `materialise` is
-/// this module's own: routing the other way would put a production
-/// `slice → commands` edge opposite the `commands → slice` edge the CLI
-/// dispatch already carries, closing a command-tier cycle (ADR-001). The notice
-/// it emits stays a named constant in `crate::slice` beside the incumbent it
-/// deprecates (STD-001).
-///
-/// The notice goes to **stderr**, before anything can fail: stdout carries the
-/// command's own output, and a warning that arrives only on the success path is
-/// not emitted on every invocation.
-pub(crate) fn run_deprecated_slice_design(path: Option<PathBuf>, slice: u32) -> Result<()> {
-    writeln!(
-        std::io::stderr(),
-        "{}",
-        crate::slice::DESIGN_DEPRECATION_NOTICE
-    )?;
-    let root = resolve_root(path)?;
-    // Presence of the snapshot IS the live-run question — the same file
-    // `read_snapshot` refuses on, asked without turning its absence into an
-    // error the legacy arm would have to interpret.
-    if crate::state::design_snapshot_path(&root, slice).exists() {
-        return materialise(&root, slice, &|| {});
-    }
-    crate::slice::scaffold_design_doc(&root, slice)
-}
-
 /// Render the run's sections into authored prose, then re-baseline.
 fn materialise(root: &Path, slice: u32, pre_write: PreWriteHook<'_>) -> Result<()> {
     let foreign_edit = injected_authored_edit();

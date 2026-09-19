@@ -119,6 +119,16 @@ selector = "src/design_run/gate.rs"
 intent = "design-target"
 note = "DISCOVERED in PHASE-05, not in design.md 5.6's touch-set. EX-5's staleness disclosure had to derive from the engine's OWN predicate rather than duplicate it (STD-001), so materialisation_stale was EXTRACTED from gate.rs::satisfied's EngineSource::Materialisation arm and is now shared by Cause::MaterialisationStale and design show's document arm. Pure extraction: the predicate body and comment move verbatim, satisfied calls it, gate behaviour unchanged. 5.6 missed this file because OQ-1 was drafted on a revision-comparison model of staleness; the engine actually implements fingerprint identity (watermark vs authored_fingerprint), which is the same root cause as EX-5's document_revision being structurally null. Reconcile input."
 
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+note = "DISCOVERED in PHASE-06, not in design.md 5.6's touch-set. src/main.rs's own write_class_tests module duplicates guard write-classification coverage via argv parsing (IMP-010 F-3) rather than by matching the variant, so slice_split asserts cls([doctrine,slice,design,0]) == Some(slice design) — pinning the very guard.rs row EX-2 mandates deleting. Unsatisfiable jointly with EX-2, so the assertion is entailed to go. This is intentional-red whitelist row 1's species (the retiring leaf's tests) in a file 5.6 never grepped: 5.6's greps covered src/slice.rs, src/commands/*.rs and tests/, never src/main.rs. Adjudicated as an enumeration defect in the whitelist, not a C1 alarm. Reconcile input."
+
+[[selector]]
+selector = "tests/e2e_boot_map_golden.rs"
+intent = "design-target"
+note = "DISCOVERED in PHASE-06, not in design.md 5.6's touch-set — the THIRD such site after src/design_run/gate.rs (PHASE-05) and src/main.rs. boot_map_sublines_a_command_with_distinctive_verbs asserts the boot map's slice sub-line carries distinctive verbs [design, plan, phases]. That list is computed DYNAMICALLY by cli.rs::distinctive() introspecting the live clap subcommand tree and subtracting SPINE, so deleting SliceCommand::Design (EX-1/EX-2) correctly removes design from it while the golden's hardcoded expectation still names it. Unsatisfiable jointly with EX-1/EX-2, so the expectation is entailed to drop to [plan, phases]; the test's actual purpose (distinctive verbs present, SPINE verbs absent) is fully preserved. Whitelist row 1's species (a test pinning the retiring surface) in a file 5.6 never grepped. Reconcile input."
+
 [[relation]]
 label = "fulfils"
 degree = "partial"

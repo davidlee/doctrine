@@ -1533,15 +1533,6 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             },
         ),
         Command::ConceptMap { command } => crate::concept_map::dispatch(command, color),
-        // The deprecated `slice design` shim routes into `commands::design`, not
-        // into `slice::dispatch`: its live-run arm forwards THROUGH the same
-        // `materialise` the canonical verb calls, and reaching that from
-        // `crate::slice` would face a production edge back at this one
-        // (SL-233 PHASE-14 EX-4; ADR-001). Same residual-dispatch shape as
-        // `Memory { Sync }` below.
-        Command::Slice {
-            command: crate::slice::SliceCommand::Design { id, path },
-        } => crate::commands::design::run_deprecated_slice_design(path, id),
         Command::Slice { command } => crate::slice::dispatch(command, color),
         Command::Memory {
             command:

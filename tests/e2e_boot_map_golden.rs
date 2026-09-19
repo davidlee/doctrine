@@ -145,7 +145,8 @@ fn boot_map_never_renders_a_family_key_as_a_bare_command() {
 }
 
 /// A command WITH distinctive verbs in a non-suppressed family gets an indented
-/// sub-line (e.g. `slice` carries design/plan/phases…).
+/// sub-line (e.g. `slice` carries plan/phases…). `design` left this set when
+/// SL-246 retired the deprecated `slice design` leaf.
 #[test]
 fn boot_map_sublines_a_command_with_distinctive_verbs() {
     let out = boot_map_stdout();
@@ -153,7 +154,7 @@ fn boot_map_sublines_a_command_with_distinctive_verbs() {
         .lines()
         .find(|l| l.starts_with("  slice "))
         .expect("slice sub-line present");
-    for verb in ["design", "plan", "phases"] {
+    for verb in ["plan", "phases"] {
         assert!(
             sub.split_whitespace().any(|t| t == verb),
             "slice sub-line must carry distinctive verb `{verb}`"
