@@ -35,6 +35,10 @@ use serde::{Deserialize, Serialize};
 use crate::dtoml;
 use crate::entity::{self, Artifact, Fileset, Inputs, Kind, MaterialiseRequest, ScaffoldCtx};
 use crate::listing::{self, Format, ListArgs};
+// `knowledge` -> `selection` is command -> leaf (ADR-001, DEC-274): the composed
+// read consumes the one type it shares with `relation_graph`, and neither peer
+// imports the other.
+use crate::selection::SelectedRecord;
 use crate::tomlfmt::toml_string;
 // `toml_array_inner` is spliced only by the test-only hand-emit render subtree
 // (production list-writes go via the template seed), so its import is `#[cfg(test)]`.
@@ -1240,6 +1244,37 @@ enum FacetValue {
     Absent,
 }
 
+impl FacetValue {
+    /// Whether this value carries nothing a reader could act on — `Absent`, or a
+    /// list with no items. The ONE definition of "blank" (STD-001, SL-246 `EX-2` as
+    /// amended), consumed by `facet_state` and therefore by BOTH render arms, so
+    /// they cannot disagree about which empty state a record is in.
+    ///
+    /// Deliberately NOT a change to what `FacetValue` MEANS or to how either leaf
+    /// renderer projects it: `List(vec![])` still serialises as `[]` on the JSON
+    /// arm and still renders nothing on the text arm (PHASE-01 `EX-7`). The
+    /// widening is needed because facet list rows are bare `Vec<String>`, never
+    /// `Option<Vec<String>>` (`DecisionFacet::alternatives`, `::consequences`,
+    /// `ConstraintFacet::applies_to`), and every shipped template seeds them
+    /// empty — so an unfilled record's lists arrive as `List(vec![])` and an
+    /// `Absent`-only test would miss an unfilled `CON` at either level and an
+    /// unfilled `DEC` at `full`.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "PHASE-04 wires the composed read onto InspectArgs"
+        )
+    )]
+    fn is_blank(&self) -> bool {
+        match self {
+            FacetValue::Absent => true,
+            FacetValue::List(items) => items.is_empty(),
+            FacetValue::Text(_) => false,
+        }
+    }
+}
+
 /// The typed facet as its serde form, with the kind that owns it.
 ///
 /// The **only** per-kind dispatch the value projection performs, and it names
@@ -2079,7 +2114,23 @@ pub(crate) fn materialise_record_at(
 
 /// Render the metadata portion of a [`KnowledgeRecord`] — a PURE fn of the record's
 /// OWN local state ("cannot go stale"), shared by `format_show` and `format_inspect`.
+///
+/// Delegates to [`format_metadata_with_facet`] with the facet block the whole-facet
+/// render produces, so `knowledge show`'s bytes cannot move: the only production
+/// caller passes exactly what the inlined line computed (PHASE-01 `EX-7` / C2, with
+/// `tests/e2e_knowledge_cli_golden.rs` green and UNEDITED as the proof).
 fn format_metadata(record: &KnowledgeRecord) -> Vec<String> {
+    format_metadata_with_facet(record, &format_facet(&record.facet, TierFilter::All))
+}
+
+/// `format_metadata`'s parts with the `[facet]` element SUPPLIED BY THE CALLER —
+/// the addressable slot the composed read writes a marker into (D6, D-h).
+///
+/// The slot is NAMED, never indexed: the facet element sits at index 3 or 4
+/// depending on whether the record has tags (the `tags` push above it is
+/// conditional), so substituting "element 4" would be both a latent bug and an
+/// unnamed magic index (STD-001).
+fn format_metadata_with_facet(record: &KnowledgeRecord, facet_block: &str) -> Vec<String> {
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!(
         "{} — {}\n",
@@ -2099,7 +2150,7 @@ fn format_metadata(record: &KnowledgeRecord) -> Vec<String> {
     if !record.tags.is_empty() {
         parts.push(format!("tags: {}\n", record.tags.join(", ")));
     }
-    parts.push(format_facet(&record.facet, TierFilter::All));
+    parts.push(facet_block.to_owned());
     parts.push(format_evidence(&record.evidence));
     // shapes, spawns, governed_by, supports, disputes axes
     for label in [
@@ -2281,6 +2332,505 @@ fn facet_json(facet: &RecordFacet, tier: TierFilter) -> serde_json::Value {
         object.insert(field.key.to_owned(), value);
     }
     serde_json::Value::Object(object)
+}
+
+// ---------------------------------------------------------------------------
+// The composed read (SL-246 §5.2, D6) — the per-record producers, then the block.
+//
+// This is the ONLY layer that knows WHICH record is being rendered and may touch
+// the disk, so all three of DEC-149 + STD-003's empty-state markers are composed
+// HERE and nowhere else. Neither leaf renderer (`format_facet` / `facet_json`)
+// takes an empty-state argument: that parameter WAS the F-23 defect, because it
+// had no route to the `Full` level on either arm (`show_value` and
+// `format_show` → `format_metadata` carry no policy).
+//
+// Both arms read their state decision off ONE function (`facet_marker`) and share
+// ONE spelling per state, so they CANNOT disagree about which empty state a record
+// is in (I6, X5). That is structural, not a pair of assertions that agree today.
+// ---------------------------------------------------------------------------
+
+/// Which of DEC-149 + STD-003's empty states a record's facet is in, read off
+/// `facet_fields`' own return rather than a second match on the kind (EX-2,
+/// DEC-262).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FacetState {
+    /// The kind carries no facet fields at all — a design fact, not a gap.
+    ByDesign,
+    /// The kind has fields, but none survives the tier or every survivor is blank.
+    Unfilled,
+    /// Hand it to the leaf renderer; no marker.
+    Renders,
+}
+
+/// `kind` decides by-design off the UNFILTERED table; `kept` (the tier-filtered
+/// projection) decides unfilled.
+///
+/// **The order of the two tests is load-bearing.** An `all`-shaped predicate is
+/// vacuously true over an empty set, so a `CPT` would read as `Unfilled` if the
+/// by-design test did not run first. And testing by-design AFTER the filter would
+/// collide the two states the moment a tier selects nothing for a kind that DOES
+/// have a facet: `facet_fields(Evidence)` and `facet_fields(Hypothesis)` have no
+/// `Argument` rows at all, so under `TierFilter::Only(Tier::Argument)` — which the
+/// type admits today — their filtered set is empty while their table is not, and
+/// an `EVD` would claim "no facet by design", which is a lie.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn facet_state(kind: RecordKind, kept: &[FacetField]) -> FacetState {
+    if facet_fields(kind).is_empty() {
+        return FacetState::ByDesign;
+    }
+    if kept.iter().all(|field| field.value.is_blank()) {
+        return FacetState::Unfilled;
+    }
+    FacetState::Renders
+}
+
+/// The divisor for the unfilled marker's prose-size hint — DECIMAL KB, matching
+/// DEC-149's measured figure for `QUE-206` (a 6744-byte body reads `6.7 KB`; the
+/// binary divisor would say `6.6`). One named definition (STD-001).
+const PROSE_SIZE_DIVISOR: f64 = 1000.0;
+
+/// The prose-size hint: the size of the body a reader can fall back to when the
+/// facet says nothing.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn prose_size(bytes: usize) -> String {
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_precision_loss,
+        reason = "a KB hint is approximate by construction; no safe std usize->f64 API"
+    )]
+    let kb = bytes as f64 / PROSE_SIZE_DIVISOR;
+    format!("{kb:.1} KB")
+}
+
+/// DEC-149's by-design marker: the kind has no facet at all, and that is a design
+/// fact rather than an authoring gap.
+///
+/// A BARE constant — no size hint, no reference — per design §5.2's table. DEC-149's
+/// *body* sketches a different spelling and gives this marker a prose size too; the
+/// design's table supersedes the sketch on spelling (§7.1) and the plan's `EX-2`
+/// agrees, attaching the hint to the UNFILLED state only.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+const FACET_BY_DESIGN_MARKER: &str = "(no facet by design — a concept rides its prose body)";
+
+/// DEC-149's unfilled marker: the kind HAS facet fields and every one the tier
+/// keeps is blank. The honest minimum — it states the gap and compensates for
+/// nothing, naming the prose the reader can fall back to and the command that
+/// shows it.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn unfilled_facet_marker(reference: &str, prose_bytes: usize) -> String {
+    format!(
+        "(no facet recorded — {} of prose: doctrine knowledge show {reference})",
+        prose_size(prose_bytes)
+    )
+}
+
+/// STD-003's disclosure: the record could not be read. Names BOTH the reason and
+/// the path, never a silent skip — `read_record`'s own `with_context` already
+/// spells exactly the design's words ("record not found at {path}" / "Failed to
+/// parse {path}").
+///
+/// The plain `Display`, never `{err:#}`: the alternate form chains every cause with
+/// newlines, and a newline inside a marker breaks the block.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn unreadable_marker(err: &anyhow::Error) -> String {
+    format!("(unreadable: {err})")
+}
+
+/// The one-line identity every composed entry opens with, at EVERY level — the
+/// single definition PHASE-04 goldens (STD-001, D-i). Names the reference the
+/// reader can `knowledge show`, and the caption that says why this record is here
+/// (DEC-147: text, not a `RelationLabel`, so depth-N paths need no renderer change).
+///
+/// One spelling for all three levels rather than a per-level variant: at `Full`
+/// this repeats the id that `format_metadata`'s own first line carries, and that
+/// mild redundancy is cheaper than two shapes for PHASE-04 to pin and a reader to
+/// learn.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn entry_header(selected: &SelectedRecord) -> String {
+    format!("{} ({})\n", selected.reference, selected.caption)
+}
+
+/// A marker in the TEXT arm's facet slot. Mirrors `format_facet`'s own frame — a
+/// blank line, then the content — so the marker sits exactly where the block it
+/// stands in for would have (D-h: the slot is named, never indexed).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn facet_marker_block(marker: &str) -> String {
+    format!("\n{marker}\n")
+}
+
+/// A marker in the JSON arm's `facet` slot, IN PLACE of the field object, at BOTH
+/// levels (EX-3). Never a sibling key: writing it over the slot is what keeps
+/// `Full`'s entry exactly `show_value`'s keys plus `caption`, with nothing bolted
+/// onto the payload to carry a marker — the F-23 fix.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn facet_marker_value(marker: &str) -> serde_json::Value {
+    serde_json::json!({ "marker": marker })
+}
+
+/// What a reading level asks of a record: which tier's facet fields, and whether
+/// the WHOLE record (prose body included) rides along. `None` is `Skip` — the
+/// identity only, with nothing read.
+///
+/// The ONE definition of the level → tier mapping (STD-001), shared by both arms,
+/// so neither can render a different tier than the other for the same level.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn level_reading(level: KnowledgeLevel) -> Option<(TierFilter, bool)> {
+    match level {
+        KnowledgeLevel::Skip => None,
+        KnowledgeLevel::Facets => Some((TierFilter::Only(Tier::Deciding), false)),
+        KnowledgeLevel::Full => Some((TierFilter::All, true)),
+    }
+}
+
+/// The SINGLE read the composed render performs (A-1) — resolve the reference,
+/// then read the record. Both arms and both reading levels route through here, so
+/// a later facet-only read at `Facets` (design §5.6 / C7, which no PHASE-03
+/// criterion mandates) is this one function's change and no caller's.
+///
+/// A `resolve_ref` failure is RETURNED, never `?`-propagated out of a producer:
+/// both callers route it to the same unreadable marker a read failure gets (D-d).
+/// Selection only ever emits record prefixes, so it is unreachable in practice —
+/// but totality is literal and STD-003 forbids the silent skip.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn read_selected(root: &Path, reference: &str) -> anyhow::Result<KnowledgeRecord> {
+    let (kind, id) = resolve_ref(reference)?;
+    read_record(root, kind, id)
+}
+
+/// The marker a read record's facet stands behind, or `None` when it renders.
+///
+/// The ONE state decision and the ONE spelling, consumed by BOTH arms — which is
+/// what makes I6's two-arm clause hold by construction rather than by two sets of
+/// assertions that happen to agree (EX-2).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn facet_marker(record: &KnowledgeRecord, tier: TierFilter) -> Option<String> {
+    match facet_state(record.record_kind, &facet_field_values(&record.facet, tier)) {
+        FacetState::Renders => None,
+        FacetState::ByDesign => Some(FACET_BY_DESIGN_MARKER.to_owned()),
+        FacetState::Unfilled => Some(unfilled_facet_marker(
+            &record.record_kind.canonical_id(record.id),
+            record.body.len(),
+        )),
+    }
+}
+
+/// The TEXT arm's facet slot content: the rendered block, or the marker that
+/// stands in for it.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn facet_slot(record: &KnowledgeRecord, tier: TierFilter) -> String {
+    match facet_marker(record, tier) {
+        Some(marker) => facet_marker_block(&marker),
+        None => format_facet(&record.facet, tier),
+    }
+}
+
+/// The JSON arm's `facet` slot value: the field object, or the marker in its place.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn facet_slot_value(record: &KnowledgeRecord, tier: TierFilter) -> serde_json::Value {
+    match facet_marker(record, tier) {
+        Some(marker) => facet_marker_value(&marker),
+        None => facet_json(&record.facet, tier),
+    }
+}
+
+/// The identity keys a `Facets` (and `Skip`) entry carries — the reference and the
+/// caption — plus the facet slot when the level read one. Exactly three keys at
+/// `Facets`, exactly two at `Skip`.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn identity_value(
+    selected: &SelectedRecord,
+    facet: Option<serde_json::Value>,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    object.insert(
+        "reference".to_owned(),
+        serde_json::json!(selected.reference),
+    );
+    object.insert("caption".to_owned(), serde_json::json!(selected.caption));
+    if let Some(facet) = facet {
+        object.insert("facet".to_owned(), facet);
+    }
+    serde_json::Value::Object(object)
+}
+
+/// A `Full` entry: EXACTLY `show_value`'s keys plus `caption`, with the facet slot
+/// written over (EX-3). No `reference` key — `show_value`'s `id` already carries
+/// it, and "exactly `show_value`'s keys plus `caption`" is the criterion.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn full_entry_value(
+    record: &KnowledgeRecord,
+    caption: &str,
+    facet: serde_json::Value,
+) -> serde_json::Value {
+    let mut value = show_value(record, true);
+    // `show_value` always returns an object; the guard is what keeps this total
+    // without `unwrap`/`expect` (both denied) rather than a branch with meaning.
+    if let Some(object) = value.as_object_mut() {
+        object.insert("facet".to_owned(), facet);
+        object.insert("caption".to_owned(), serde_json::json!(caption));
+    }
+    value
+}
+
+/// ONE inbound knowledge record, rendered for the text arm — TOTAL and NEVER
+/// empty: every input yields an entry (EX-1).
+///
+/// The three floors, all composed here (EX-2): a record that cannot be read (or
+/// whose reference will not resolve) yields the unreadable marker, by reason and
+/// path; a record whose kind has no facet yields the by-design marker; a record
+/// whose kept fields are all blank yields the unfilled marker with its prose-size
+/// hint. There is no `Result`, no `Option`, and no early return that produces
+/// nothing.
+///
+/// `Skip` renders the IDENTITY ONLY and reads nothing (D-c). No caller can reach
+/// it — `render_block` returns before the map — but totality is literal.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+pub(crate) fn render_record(
+    root: &Path,
+    selected: &SelectedRecord,
+    level: KnowledgeLevel,
+) -> String {
+    let header = entry_header(selected);
+    let Some((tier, whole_record)) = level_reading(level) else {
+        return header;
+    };
+    let record = match read_selected(root, &selected.reference) {
+        Ok(record) => record,
+        Err(err) => {
+            return format!("{header}{}", facet_marker_block(&unreadable_marker(&err)));
+        }
+    };
+    let slot = facet_slot(&record, tier);
+    if whole_record {
+        let mut parts = vec![header];
+        parts.extend(format_metadata_with_facet(&record, &slot));
+        parts.push(format!("\n{}", record.body));
+        parts.concat()
+    } else {
+        format!("{header}{slot}")
+    }
+}
+
+/// ONE inbound knowledge record, projected for the JSON arm — TOTAL and NEVER
+/// empty, the same three floors as `render_record` and the same `facet_marker`
+/// decision behind them (EX-1, EX-2, I6).
+///
+/// The marker rides INSIDE `facet` at BOTH levels, never as a sibling key (EX-3).
+/// On an unreadable record there is no `show_value` payload to write a marker
+/// over, so the `Full` entry degrades to the identity plus the marker — it still
+/// names the record and still discloses the reason (STD-003).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+pub(crate) fn record_value(
+    root: &Path,
+    selected: &SelectedRecord,
+    level: KnowledgeLevel,
+) -> serde_json::Value {
+    let Some((tier, whole_record)) = level_reading(level) else {
+        return identity_value(selected, None);
+    };
+    match read_selected(root, &selected.reference) {
+        Err(err) => identity_value(selected, Some(facet_marker_value(&unreadable_marker(&err)))),
+        Ok(record) => {
+            let facet = facet_slot_value(&record, tier);
+            if whole_record {
+                full_entry_value(&record, &selected.caption, facet)
+            } else {
+                identity_value(selected, Some(facet))
+            }
+        }
+    }
+}
+
+/// X1's line for a subject nothing points at (D3). The reader ASKED, so silence
+/// would read as a bug: the block says so explicitly and names what it was asked
+/// about.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+fn no_records_line(subject: &str) -> String {
+    format!("(no knowledge records point at {subject})\n")
+}
+
+/// The knowledge block on the text arm: a MAP over `selected` through
+/// `render_record`, never a filter. One record in, ONE entry out — that is what
+/// makes I5's never-dropped clause a property of the SHAPE rather than a promise
+/// (§9.5). No `filter_map`, no `?`, and no arm that yields zero entries for one
+/// input.
+///
+/// Exactly TWO cases sit outside the map, and they are the only two: `Skip`
+/// returns the empty string HAVING READ NOTHING, and an EMPTY `selected` returns
+/// X1's line. Neither is a filter — every record in a non-empty `selected` still
+/// yields exactly one entry.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+pub(crate) fn render_block(
+    root: &Path,
+    subject: &str,
+    selected: &[SelectedRecord],
+    level: KnowledgeLevel,
+) -> String {
+    if matches!(level, KnowledgeLevel::Skip) {
+        return String::new();
+    }
+    if selected.is_empty() {
+        return no_records_line(subject);
+    }
+    selected
+        .iter()
+        .map(|record| render_record(root, record, level))
+        .collect::<Vec<String>>()
+        .join("\n")
+}
+
+/// The knowledge block on the JSON arm — the same MAP, and `None` at `Skip` so the
+/// caller omits the key entirely (EX-5).
+///
+/// The two empties are distinct IN THE TYPE: `None` is `Skip`, `Some([])` is an
+/// empty selection. So neither `"knowledge": null` nor `"knowledge": []` can
+/// appear at `Skip` — there is no value for a caller to insert. `Skip` also reads
+/// nothing.
+///
+/// No `subject` parameter: X1 on this arm IS the empty array, which says exactly
+/// what the text arm's sentence says and needs no sentence to say it (D3).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 wires the composed read onto InspectArgs"
+    )
+)]
+pub(crate) fn knowledge_value(
+    root: &Path,
+    selected: &[SelectedRecord],
+    level: KnowledgeLevel,
+) -> Option<serde_json::Value> {
+    if matches!(level, KnowledgeLevel::Skip) {
+        return None;
+    }
+    Some(serde_json::Value::Array(
+        selected
+            .iter()
+            .map(|record| record_value(root, record, level))
+            .collect(),
+    ))
 }
 
 /// Shared shell: root-find → resolve → read → render. The `format_table` fn and
@@ -6743,5 +7293,778 @@ target = \"SL-249\"
         assert_eq!(KnowledgeLevel::Skip.as_str(), "skip");
         assert_eq!(KnowledgeLevel::Facets.as_str(), "facets");
         assert_eq!(KnowledgeLevel::Full.as_str(), "full");
+    }
+
+    // -------------------------------------------------------------------
+    // PHASE-03 (SL-246) T1: the blank predicate and the state reader.
+    // -------------------------------------------------------------------
+
+    /// Ruling 1's third mandated name. ONE input read TWO ways in the same test
+    /// (`mem_019fe872ab8b7672946494c88aabb8c0`): the widening says an empty list
+    /// is blank, and PHASE-01 `EX-7` says the very same value still serialises as
+    /// `[]`. Both readings of the same bytes, so the reading is the only variable.
+    #[test]
+    fn an_empty_list_field_counts_as_blank_but_still_serialises_as_an_empty_array() {
+        // the widening: an empty list is blank, a populated one is not.
+        assert!(
+            FacetValue::List(Vec::new()).is_blank(),
+            "an empty list carries nothing a reader could act on"
+        );
+        assert!(FacetValue::Absent.is_blank(), "an absent field is blank");
+        assert!(
+            !FacetValue::List(vec!["a".to_string()]).is_blank(),
+            "a populated list is not blank"
+        );
+        assert!(
+            !FacetValue::Text("x".to_string()).is_blank(),
+            "present text is not blank"
+        );
+
+        // PHASE-01 EX-7's guard, on the SAME value: `List([])` is still `[]`, not
+        // `null`, on the JSON arm — the widening did not touch what the value MEANS.
+        let facet = RecordFacet::Constraint(ConstraintFacet::default());
+        let json = facet_json(&facet, TierFilter::All);
+        assert_eq!(
+            json.get("applies_to"),
+            Some(&serde_json::json!([])),
+            "the blank predicate must not move an empty list to null (PHASE-01 EX-7)"
+        );
+        assert_eq!(
+            json.get("statement"),
+            Some(&serde_json::Value::Null),
+            "an absent text field is still null"
+        );
+        // and the same value, read through the predicate, is blank.
+        let kept = facet_field_values(&facet, TierFilter::All);
+        assert!(
+            kept.iter().all(|field| field.value.is_blank()),
+            "a default constraint facet is entirely blank"
+        );
+        assert!(!kept.is_empty(), "the verdict was reached over real fields");
+    }
+
+    // -------------------------------------------------------------------
+    // PHASE-03 (SL-246) T1b: `facet_state` reads by-design off the UNFILTERED
+    // table, and tests it FIRST.
+    // -------------------------------------------------------------------
+
+    /// A shipped-scaffold record on disk, read back — the REAL default state, not a
+    /// hand-built approximation of it.
+    fn scaffolded(root: &Path, kind: RecordKind, id: u32) -> KnowledgeRecord {
+        seed_from_template(root, kind, id);
+        read_record(root, kind, id).expect("the seeded scaffold reads back")
+    }
+
+    /// One `SelectedRecord` for `kind`/`id`, with a caption the assertions can find.
+    fn picked(kind: RecordKind, id: u32) -> SelectedRecord {
+        SelectedRecord {
+            reference: kind.canonical_id(id),
+            caption: "shaped_by".to_string(),
+        }
+    }
+
+    #[test]
+    fn facet_state_reads_by_design_off_the_unfiltered_table_for_every_kind() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        for (index, kind) in RecordKind::ALL.into_iter().enumerate() {
+            let id = u32::try_from(index).unwrap() + 1;
+            let record = scaffolded(root, kind, id);
+            let kept = facet_field_values(&record.facet, TierFilter::All);
+            let state = facet_state(kind, &kept);
+            if matches!(kind, RecordKind::Concept) {
+                assert!(
+                    facet_fields(kind).is_empty(),
+                    "CPT is the only kind whose table is empty before filtering"
+                );
+                assert_eq!(
+                    state,
+                    FacetState::ByDesign,
+                    "{} has no facet by design",
+                    kind.as_str()
+                );
+            } else {
+                // mem_019fe9b7500f74c1ad80e90d974ab880: assert the verdict AND the
+                // size of the evidence it was reached over — `all()` over an empty
+                // set is vacuously true, so a mis-seeded fixture would pass here for
+                // entirely the wrong reason.
+                assert!(
+                    !kept.is_empty(),
+                    "{}'s unfilled verdict must be reached over real fields",
+                    kind.as_str()
+                );
+                assert_eq!(
+                    state,
+                    FacetState::Unfilled,
+                    "a scaffolded {} is unfilled, not by-design",
+                    kind.as_str()
+                );
+            }
+        }
+    }
+
+    /// The ORDER of `facet_state`'s two tests, discriminated: `facet_fields(Evidence)`
+    /// has no `Argument` rows, so under `Only(Argument)` the FILTERED set is empty
+    /// while the table is not. A by-design test sited after the filter would call an
+    /// `EVD` "no facet by design", which is a lie.
+    #[test]
+    fn a_tier_that_keeps_nothing_is_unfilled_not_by_design() {
+        let tmp = tempfile::tempdir().unwrap();
+        let record = scaffolded(tmp.path(), RecordKind::Evidence, 1);
+        let kept = facet_field_values(&record.facet, TierFilter::Only(Tier::Argument));
+        assert!(
+            kept.is_empty(),
+            "EVD has no Argument rows, so the filtered set is empty"
+        );
+        assert!(
+            !facet_fields(RecordKind::Evidence).is_empty(),
+            "but its unfiltered table is not"
+        );
+        assert_eq!(
+            facet_state(RecordKind::Evidence, &kept),
+            FacetState::Unfilled,
+            "by-design is decided on the UNFILTERED table, never the kept set"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // PHASE-03 (SL-246) T2: the three marker strings — one definition each,
+    // shared verbatim by both arms.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn the_three_markers_are_spelled_exactly_once_each() {
+        // decimal KB, one decimal place: DEC-149 measured QUE-206's 6744-byte body
+        // as `6.7 KB`. The binary divisor would say `6.6`.
+        assert_eq!(prose_size(6744), "6.7 KB");
+        assert_eq!(prose_size(0), "0.0 KB");
+
+        let unfilled = unfilled_facet_marker("QUE-206", 6744);
+        assert_eq!(
+            unfilled,
+            "(no facet recorded — 6.7 KB of prose: doctrine knowledge show QUE-206)"
+        );
+        assert_eq!(
+            FACET_BY_DESIGN_MARKER,
+            "(no facet by design — a concept rides its prose body)"
+        );
+        let err = anyhow::anyhow!("record not found at /corpus/question/140/record-140.toml");
+        let unreadable = unreadable_marker(&err);
+        assert_eq!(
+            unreadable,
+            "(unreadable: record not found at /corpus/question/140/record-140.toml)"
+        );
+        // STD-003: names both the reason and the path, on ONE line — a newline inside
+        // a marker would break the block.
+        assert!(!unreadable.contains('\n'));
+        assert!(!unfilled.contains('\n'));
+        assert!(!FACET_BY_DESIGN_MARKER.contains('\n'));
+
+        // DEC-149: three DISTINCT markers, never shared wording.
+        assert_ne!(unfilled, FACET_BY_DESIGN_MARKER);
+        assert_ne!(unfilled, unreadable);
+        assert_ne!(FACET_BY_DESIGN_MARKER, unreadable);
+    }
+
+    /// A-2 / D-e, pinned rather than inferred: the byte count the size hint is taken
+    /// from is `record.body.len()`, and that equals the `.md` file's own size — so the
+    /// hint a real record renders is the file's decimal-KB size.
+    #[test]
+    fn the_prose_size_hint_is_taken_from_the_bodys_own_bytes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_from_template(root, RecordKind::Question, 206);
+        let md = root
+            .join(RecordKind::Question.kind().dir)
+            .join("206")
+            .join("record-206.md");
+        let on_disk = std::fs::metadata(&md).unwrap().len();
+        let record = read_record(root, RecordKind::Question, 206).unwrap();
+        assert_eq!(
+            u64::try_from(record.body.len()).unwrap(),
+            on_disk,
+            "read_record must not strip the body, or the size hint would be a lie"
+        );
+        assert!(on_disk > 0, "the body the hint describes is non-empty");
+    }
+
+    // -------------------------------------------------------------------
+    // PHASE-03 (SL-246) T3 / T5: the per-record producers — EX-1 totality.
+    // -------------------------------------------------------------------
+
+    const EVERY_LEVEL: [KnowledgeLevel; 3] = [
+        KnowledgeLevel::Skip,
+        KnowledgeLevel::Facets,
+        KnowledgeLevel::Full,
+    ];
+
+    #[test]
+    fn the_per_record_producers_are_total_and_never_empty_at_every_level() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_from_template(root, RecordKind::Decision, 7);
+        let selected = picked(RecordKind::Decision, 7);
+        for level in EVERY_LEVEL {
+            let text = render_record(root, &selected, level);
+            assert!(
+                !text.is_empty(),
+                "render_record is never empty at {}",
+                level.as_str()
+            );
+            assert!(
+                text.contains("DEC-007"),
+                "every entry names its record at {}",
+                level.as_str()
+            );
+            assert!(
+                text.contains("shaped_by"),
+                "every entry names its caption at {}",
+                level.as_str()
+            );
+            let value = record_value(root, &selected, level);
+            assert!(
+                value.is_object(),
+                "record_value is an object at {}",
+                level.as_str()
+            );
+            assert!(
+                !value.as_object().unwrap().is_empty(),
+                "record_value is never an empty object at {}",
+                level.as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn an_unreadable_record_is_disclosed_by_reason_and_path_on_both_arms() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // nothing seeded: the read fails.
+        let selected = picked(RecordKind::Question, 140);
+        for level in [KnowledgeLevel::Facets, KnowledgeLevel::Full] {
+            let text = render_record(root, &selected, level);
+            assert!(
+                text.contains("(unreadable: record not found at"),
+                "the text arm discloses the reason at {}: {text}",
+                level.as_str()
+            );
+            assert!(
+                text.contains("record-140.toml"),
+                "and the path at {}: {text}",
+                level.as_str()
+            );
+            assert!(
+                text.contains("QUE-140"),
+                "and still names the record at {}: {text}",
+                level.as_str()
+            );
+
+            let value = record_value(root, &selected, level);
+            let marker = value
+                .pointer("/facet/marker")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            assert!(
+                marker.starts_with("(unreadable: record not found at"),
+                "the JSON arm carries the same marker inside `facet` at {}: {value}",
+                level.as_str()
+            );
+            assert!(marker.contains("record-140.toml"));
+            assert_eq!(
+                value.get("reference").and_then(serde_json::Value::as_str),
+                Some("QUE-140"),
+                "an unreadable entry still names the record it could not read"
+            );
+        }
+    }
+
+    /// D-d: a reference that will not even resolve routes to the SAME unreadable
+    /// marker, never a silent skip and never a propagated `Err` (STD-003, EX-1).
+    #[test]
+    fn a_reference_that_does_not_resolve_is_disclosed_not_dropped() {
+        let tmp = tempfile::tempdir().unwrap();
+        let selected = SelectedRecord {
+            reference: "NOPE-1".to_string(),
+            caption: "shaped_by".to_string(),
+        };
+        let text = render_record(tmp.path(), &selected, KnowledgeLevel::Facets);
+        assert!(text.contains("(unreadable:"), "{text}");
+        assert!(text.contains("NOPE-1"), "{text}");
+        let value = record_value(tmp.path(), &selected, KnowledgeLevel::Facets);
+        assert!(value.pointer("/facet/marker").is_some(), "{value}");
+    }
+
+    #[test]
+    fn a_full_entry_is_exactly_show_values_keys_plus_caption() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // a CPT, so a MARKER is present in the facet slot — the point of the test is
+        // that a marker bolts NOTHING onto the payload (EX-3, the F-23 fix).
+        let record = scaffolded(root, RecordKind::Concept, 3);
+        let selected = picked(RecordKind::Concept, 3);
+        let entry = record_value(root, &selected, KnowledgeLevel::Full);
+
+        let mut expected: BTreeSet<String> = show_value(&record, true)
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect();
+        expected.insert("caption".to_string());
+        let actual: BTreeSet<String> = entry.as_object().unwrap().keys().cloned().collect();
+        assert_eq!(
+            actual, expected,
+            "a Full entry is show_value's keys plus caption, and NOTHING else"
+        );
+        assert!(
+            !actual.contains("marker"),
+            "the marker is never a sibling key — it is written over the facet slot"
+        );
+        assert!(
+            !actual.contains("reference"),
+            "show_value's `id` already carries the reference at Full"
+        );
+        assert_eq!(
+            entry
+                .pointer("/facet/marker")
+                .and_then(serde_json::Value::as_str),
+            Some(FACET_BY_DESIGN_MARKER),
+            "the marker rides INSIDE facet, in place of the field object: {entry}"
+        );
+    }
+
+    #[test]
+    fn a_facets_entry_is_exactly_reference_caption_and_facet() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_from_template(root, RecordKind::Decision, 7);
+        let entry = record_value(
+            root,
+            &picked(RecordKind::Decision, 7),
+            KnowledgeLevel::Facets,
+        );
+        let keys: BTreeSet<String> = entry.as_object().unwrap().keys().cloned().collect();
+        assert_eq!(
+            keys,
+            ["caption", "facet", "reference"]
+                .into_iter()
+                .map(String::from)
+                .collect::<BTreeSet<String>>()
+        );
+        // and at Skip, the identity ONLY — two keys, no facet.
+        let skipped = record_value(root, &picked(RecordKind::Decision, 7), KnowledgeLevel::Skip);
+        let skip_keys: BTreeSet<String> = skipped.as_object().unwrap().keys().cloned().collect();
+        assert_eq!(
+            skip_keys,
+            ["caption", "reference"]
+                .into_iter()
+                .map(String::from)
+                .collect::<BTreeSet<String>>()
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // PHASE-03 (SL-246) T6: VT-2's two mandated marker tests. Each reads ONE
+    // fixture TWO ways in the SAME test — text and JSON — at BOTH levels
+    // (mem_019fe872ab8b7672946494c88aabb8c0, R-a).
+    // -------------------------------------------------------------------
+
+    /// The marker a text-arm entry carries, or `""`. Reads the rendered entry the way
+    /// a reader would rather than re-deriving it.
+    fn text_marker(rendered: &str) -> String {
+        rendered
+            .lines()
+            .find(|line| line.starts_with("(no facet") || line.starts_with("(unreadable:"))
+            .unwrap_or_default()
+            .to_string()
+    }
+
+    /// The marker a JSON-arm entry carries inside `facet`, or `""`.
+    fn json_marker(entry: &serde_json::Value) -> String {
+        entry
+            .pointer("/facet/marker")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    }
+
+    #[test]
+    fn an_unfilled_facet_and_a_concept_render_different_markers() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_from_template(root, RecordKind::Question, 206);
+        seed_from_template(root, RecordKind::Concept, 9);
+        let unfilled = picked(RecordKind::Question, 206);
+        let concept = picked(RecordKind::Concept, 9);
+
+        for level in [KnowledgeLevel::Facets, KnowledgeLevel::Full] {
+            // the kept set the unfilled verdict was reached over is non-zero, so the
+            // verdict is not vacuous (mem_019fe9b7500f74c1ad80e90d974ab880).
+            let (tier, _) = level_reading(level).unwrap();
+            let record = read_record(root, RecordKind::Question, 206).unwrap();
+            assert!(!facet_field_values(&record.facet, tier).is_empty());
+
+            let unfilled_text = text_marker(&render_record(root, &unfilled, level));
+            let unfilled_json = json_marker(&record_value(root, &unfilled, level));
+            let concept_text = text_marker(&render_record(root, &concept, level));
+            let concept_json = json_marker(&record_value(root, &concept, level));
+
+            // four renderings, one input each, at this level.
+            assert!(
+                unfilled_text.starts_with("(no facet recorded — "),
+                "unfilled, text, {}: {unfilled_text}",
+                level.as_str()
+            );
+            assert!(
+                unfilled_text.contains("doctrine knowledge show QUE-206"),
+                "the unfilled marker names the record: {unfilled_text}"
+            );
+            assert_eq!(
+                concept_text,
+                FACET_BY_DESIGN_MARKER,
+                "concept, text, {}",
+                level.as_str()
+            );
+
+            // both arms carry the SAME string for the same state, because one
+            // function decides it (I6).
+            assert_eq!(
+                unfilled_json,
+                unfilled_text,
+                "both arms, {}",
+                level.as_str()
+            );
+            assert_eq!(concept_json, concept_text, "both arms, {}", level.as_str());
+
+            // and the two states are DIFFERENT strings, not merely both non-empty.
+            assert_ne!(
+                unfilled_text,
+                concept_text,
+                "DEC-149: distinct markers, never shared wording ({})",
+                level.as_str()
+            );
+            assert_ne!(unfilled_json, concept_json, "{}", level.as_str());
+        }
+    }
+
+    /// F-23's narrow witness: at `Full` the JSON entry is `show_value`'s payload, so
+    /// the marker must appear as the value of `facet`; on the text arm it must sit
+    /// inside the rendered metadata, above the prose body.
+    #[test]
+    fn a_concept_carries_the_by_design_marker_at_full_on_both_arms() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let record = scaffolded(root, RecordKind::Concept, 9);
+        let concept = picked(RecordKind::Concept, 9);
+
+        let text = render_record(root, &concept, KnowledgeLevel::Full);
+        assert!(text.contains(FACET_BY_DESIGN_MARKER), "{text}");
+        let marker_at = text.find(FACET_BY_DESIGN_MARKER).unwrap();
+        let body_at = text.find(record.body.trim()).unwrap();
+        assert!(
+            marker_at < body_at,
+            "the marker sits in the metadata, above the prose body: {text}"
+        );
+
+        let entry = record_value(root, &concept, KnowledgeLevel::Full);
+        assert_eq!(
+            entry
+                .pointer("/facet/marker")
+                .and_then(serde_json::Value::as_str),
+            Some(FACET_BY_DESIGN_MARKER),
+            "at Full the marker is the value of `facet`, not a sibling: {entry}"
+        );
+        assert_eq!(
+            entry.get("caption").and_then(serde_json::Value::as_str),
+            Some("shaped_by")
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // PHASE-03 (SL-246) T7: Ruling 1's mandated coverage — the two kind/level
+    // cases the NARROW (`Absent`-only) predicate misses.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn an_unfilled_constraint_is_marked_unfilled_on_both_arms_at_both_levels() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_from_template(root, RecordKind::Constraint, 4);
+        let selected = picked(RecordKind::Constraint, 4);
+
+        for level in [KnowledgeLevel::Facets, KnowledgeLevel::Full] {
+            let (tier, _) = level_reading(level).unwrap();
+            let record = read_record(root, RecordKind::Constraint, 4).unwrap();
+            let kept = facet_field_values(&record.facet, tier);
+            assert!(!kept.is_empty(), "the verdict is reached over real fields");
+            // `applies_to` is a Tier::Deciding bare `Vec<String>`, so it survives BOTH
+            // tiers as `List([])` and can never be `Absent` — this is exactly the case
+            // the narrow predicate misses.
+            assert!(
+                kept.iter().any(|field| matches!(
+                    (field.key, &field.value),
+                    ("applies_to", FacetValue::List(items)) if items.is_empty()
+                )),
+                "a scaffolded CON keeps an empty-list field at {}",
+                level.as_str()
+            );
+
+            let text = text_marker(&render_record(root, &selected, level));
+            assert!(
+                text.starts_with("(no facet recorded — "),
+                "text arm, {}: got {text:?}",
+                level.as_str()
+            );
+            assert!(
+                text.contains("doctrine knowledge show CON-004"),
+                "the UNFILLED marker, naming the record: {text}"
+            );
+            assert_ne!(
+                text, FACET_BY_DESIGN_MARKER,
+                "a CON has a facet — this is unfilled, not by-design"
+            );
+            assert_eq!(
+                json_marker(&record_value(root, &selected, level)),
+                text,
+                "JSON arm, {}",
+                level.as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn an_unfilled_decision_is_marked_unfilled_at_full_on_both_arms() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_from_template(root, RecordKind::Decision, 5);
+        let selected = picked(RecordKind::Decision, 5);
+
+        // At Full the tier is `All`, so the survivors include `alternatives` and
+        // `consequences` — both `Tier::Argument` bare `Vec<String>`, both `List([])`.
+        let record = read_record(root, RecordKind::Decision, 5).unwrap();
+        let kept = facet_field_values(&record.facet, TierFilter::All);
+        assert!(!kept.is_empty());
+        let empty_lists = kept
+            .iter()
+            .filter(|field| matches!(&field.value, FacetValue::List(items) if items.is_empty()))
+            .count();
+        assert_eq!(
+            empty_lists, 2,
+            "a scaffolded DEC keeps two empty-list fields at Full"
+        );
+
+        let text = text_marker(&render_record(root, &selected, KnowledgeLevel::Full));
+        assert!(text.starts_with("(no facet recorded — "), "got {text:?}");
+        assert!(text.contains("doctrine knowledge show DEC-005"), "{text}");
+        assert_ne!(text, FACET_BY_DESIGN_MARKER);
+        assert_eq!(
+            json_marker(&record_value(root, &selected, KnowledgeLevel::Full)),
+            text,
+            "both arms carry the same marker at Full"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // PHASE-03 (SL-246) T8: the block producers — a MAP, with exactly two cases
+    // outside it (EX-4, EX-5, I5).
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn the_block_is_a_map_so_an_unreadable_record_is_never_dropped() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_from_template(root, RecordKind::Decision, 1);
+        seed_from_template(root, RecordKind::Question, 2);
+        // QUE-999 is NOT seeded: the one record a `filter_map` would silently drop.
+        let selected = vec![
+            picked(RecordKind::Decision, 1),
+            picked(RecordKind::Question, 999),
+            picked(RecordKind::Question, 2),
+        ];
+
+        for level in [KnowledgeLevel::Facets, KnowledgeLevel::Full] {
+            let text = render_block(root, "SL-246", &selected, level);
+            for reference in ["DEC-001", "QUE-999", "QUE-002"] {
+                assert!(
+                    text.contains(reference),
+                    "{reference} survives the map at {}: {text}",
+                    level.as_str()
+                );
+            }
+            assert!(
+                text.contains("(unreadable:"),
+                "the unreadable record is DISCLOSED, not dropped (STD-003)"
+            );
+
+            let value = knowledge_value(root, &selected, level).unwrap();
+            let entries = value.as_array().unwrap();
+            assert_eq!(
+                entries.len(),
+                selected.len(),
+                "N records in, N entries out at {}",
+                level.as_str()
+            );
+            assert!(
+                entries
+                    .iter()
+                    .all(|entry| !entry.is_null()
+                        && entry.as_object().is_some_and(|o| !o.is_empty())),
+                "no entry is empty at {}",
+                level.as_str()
+            );
+        }
+    }
+
+    /// `Skip` reads NOTHING, discriminated by withholding an input only the reading
+    /// path needs (`mem_019fe20c79d47da28cfb143c7ae21a2a`): the root cannot possibly
+    /// be read, so SUCCESS is the evidence. An output assertion would still pass with
+    /// the early return deleted.
+    #[test]
+    fn at_skip_the_block_producers_read_nothing_at_all() {
+        let unreadable_root = Path::new("/nonexistent/there-is-no-corpus-here");
+        let selected = vec![picked(RecordKind::Decision, 1)];
+        assert_eq!(
+            render_block(unreadable_root, "SL-246", &selected, KnowledgeLevel::Skip),
+            "",
+            "Skip returns the empty string having read nothing"
+        );
+        assert_eq!(
+            knowledge_value(unreadable_root, &selected, KnowledgeLevel::Skip),
+            None,
+            "Skip omits the key entirely — no value for a caller to insert"
+        );
+    }
+
+    #[test]
+    fn an_empty_selection_says_so_rather_than_falling_silent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        for level in [KnowledgeLevel::Facets, KnowledgeLevel::Full] {
+            assert_eq!(
+                render_block(root, "SL-999", &[], level),
+                "(no knowledge records point at SL-999)\n",
+                "X1 names the subject it was asked about at {}",
+                level.as_str()
+            );
+            assert_eq!(
+                knowledge_value(root, &[], level),
+                Some(serde_json::json!([])),
+                "X1 on the JSON arm IS the empty array at {}",
+                level.as_str()
+            );
+        }
+    }
+
+    /// EX-5: the two empties are distinct IN THE TYPE, so neither `"knowledge": null`
+    /// nor `"knowledge": []` can arise at `Skip` — there is no `Value` to insert.
+    #[test]
+    fn skip_and_an_empty_selection_are_distinct_in_the_type() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let skip = knowledge_value(root, &[], KnowledgeLevel::Skip);
+        let empty = knowledge_value(root, &[], KnowledgeLevel::Facets);
+        assert_eq!(skip, None);
+        assert_eq!(empty, Some(serde_json::json!([])));
+        assert_ne!(skip, empty);
+        // the caller's own `if let Some(..)` is what omits the key; there is nothing
+        // it could insert at Skip, null included.
+        let mut envelope = serde_json::Map::new();
+        if let Some(block) = skip {
+            envelope.insert("knowledge".to_owned(), block);
+        }
+        assert!(
+            !envelope.contains_key("knowledge"),
+            "Skip leaves the key absent, not null and not empty"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // PHASE-03 (SL-246) T9: I7 / EX-6 — nothing on this path writes.
+    // -------------------------------------------------------------------
+
+    /// Every file under `dir` as (path, bytes) — so a changed byte, a created file and
+    /// a removed file are all one comparison.
+    fn snapshot(dir: &Path) -> BTreeSet<(PathBuf, Vec<u8>)> {
+        let mut out = BTreeSet::new();
+        let mut stack = vec![dir.to_path_buf()];
+        while let Some(next) = stack.pop() {
+            for entry in std::fs::read_dir(&next).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else {
+                    out.insert((path.clone(), std::fs::read(&path).unwrap()));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn the_composed_read_writes_nothing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        for (index, kind) in RecordKind::ALL.into_iter().enumerate() {
+            seed_from_template(root, kind, u32::try_from(index).unwrap() + 1);
+        }
+        let before = snapshot(root);
+        // mem_019fe687859a7e73a06fc1b1881ff80b: an absence probe cannot tell "not
+        // there" from "never looked", so pin that the tree it compares is non-empty.
+        assert_eq!(
+            before.len(),
+            RecordKind::ALL.len() * 2,
+            "toml + md per kind"
+        );
+
+        let readable: Vec<SelectedRecord> = RecordKind::ALL
+            .into_iter()
+            .enumerate()
+            .map(|(index, kind)| picked(kind, u32::try_from(index).unwrap() + 1))
+            .collect();
+        let missing = vec![picked(RecordKind::Question, 999)];
+
+        for level in EVERY_LEVEL {
+            for selection in [readable.as_slice(), missing.as_slice(), &[]] {
+                let _ = render_block(root, "SL-246", selection, level);
+                let _ = knowledge_value(root, selection, level);
+                for one in selection {
+                    let _ = render_record(root, one, level);
+                    let _ = record_value(root, one, level);
+                }
+            }
+        }
+
+        assert_eq!(
+            snapshot(root),
+            before,
+            "the corpus is byte-identical, with no file created or removed (I7)"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // PHASE-03 (SL-246) T4: the addressable facet slot — behaviour preserved.
+    // -------------------------------------------------------------------
+
+    /// The extraction's behaviour-preservation gate at unit scope (the e2e goldens
+    /// are the real one): `format_metadata` must pass exactly what the inlined line
+    /// computed, so the slot it fills is the whole-facet render at `TierFilter::All`.
+    #[test]
+    fn format_metadata_fills_the_facet_slot_with_the_whole_facet_render() {
+        let tmp = tempfile::tempdir().unwrap();
+        let record = scaffolded(tmp.path(), RecordKind::Decision, 1);
+        assert_eq!(
+            format_metadata(&record),
+            format_metadata_with_facet(&record, &format_facet(&record.facet, TierFilter::All))
+        );
+        // and the slot is addressed by NAME, not by index: a record with tags shifts
+        // the facet element's position, and the substitution must not care.
+        let mut tagged = record.clone();
+        tagged.tags = vec!["a".to_string()];
+        let slot = "\nSLOT\n";
+        assert!(
+            format_metadata_with_facet(&tagged, slot).contains(&slot.to_string()),
+            "the named slot survives a tags push above it"
+        );
+        assert!(format_metadata_with_facet(&record, slot).contains(&slot.to_string()));
     }
 }
