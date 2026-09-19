@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b89a-cc6d-77a0-b80c-2684ed8a45e7"
+recorded_at = "2026-09-19T07:39:07.7571083Z"
+kind = "friction"
+summary = "/design: section attestation looked eleven-submissions-deep because nothing says declare batches"
+detail = "Walking SL-246's lock with the user, I handed them a per-section recipe: one design apply submission per section plus two closing checkpoint_acts, each needing a freshly re-read known_revision. The user pushed back on the bureaucracy. Checking the source afterwards, ApplyRequest.declare is a Vec<Declaration> validated as one batch (src/design_run/run.rs:377) — nine attestations fit in one submission and always did. The contract output prints payload types but never says which shape performs an attestation, nor that the array batches; both were found by trial (summary refused as inert on att-, then body refused, then the bare triple worked). Captured as IMP-464."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
