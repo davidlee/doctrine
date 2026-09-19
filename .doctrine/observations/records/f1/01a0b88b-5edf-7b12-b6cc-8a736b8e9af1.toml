@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b88b-5edf-7b12-b6cc-8a736b8e9af1"
+recorded_at = "2026-09-19T07:22:16.671978678Z"
+kind = "friction"
+summary = "linking a backlog item to an RFC: the natural verb (doctrine link A references B) is refused"
+detail = "Asked to link IMP-463 to RFC-026. `doctrine link IMP-463 references RFC-026` fails: `references` is the one roleful label (ADR-016), so the author must already know the role taxonomy and re-derive which of implements/originates_from/concerns applies. The refusal message does list the legal roles (good), but the generic illegal-for-source refusal lists only `references` among the legal labels, never the roles. Cost: two rejected attempts plus reading RELATION_RULES before the right edge (references --role concerns) could be authored. Skill in use: none routed; direct entity-relation task."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
