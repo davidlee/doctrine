@@ -6,13 +6,31 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-20 · design locked (run revision 79) · c92d41b73
 
 ### Produced
+- design stage complete — `design.md` 1132 lines / 9 sections, run locked
+  (commits 55dba9875, 97b38e7cc, d1a91114c, c92d41b73)
+- `RV-371` — adversarial design pass; concluded and done, synthesis written
+- minted: `DEC-263`–`DEC-273`, `DEC-275`, `DEC-276`, `CON-006` — the decision set
+  §7.1 tabulates
+- minted: `ISS-472` — a false rationale in two shipped doc comments;
+  `ISS-473` — `knowledge edit` list flags sever items containing commas
+- no `src/` change, by design (§9.1 item 7 is the tripwire, checkable by diff)
 
 ### Learned
+- `mem.pattern.review.verify-judges-the-account-too`
 
 ### Open
+- `CON-006` — the residue register; every unenforced clause with its code site.
+  Binds `/plan`: no phase criterion may assume a check `CON-006` says is absent.
+- design §6 holds `Q1`/`Q2`/`Q4`/`Q5`. **Deliberately not minted as `QUE`
+  records.** `Q2` and `Q4` are trial-conclusion decisions and the trial-report
+  chore is their intended owner; that chore is a close criterion (§9.1 item 5),
+  so it does not exist yet. Minting now would create the second owner `RFC-026`
+  `P2` exists to prevent. Mint them onto the chore when `/plan` schedules it.
+- `ISS-320` — re-adopting an edited `design.md` needs a section map nothing
+  emits. Hit again this session; relevant to anyone editing the locked design.
 
 ---
 

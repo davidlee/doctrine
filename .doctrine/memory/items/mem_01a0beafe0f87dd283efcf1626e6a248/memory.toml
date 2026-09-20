@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0beafe0f87dd283efcf1626e6a248"
+memory_key = "mem.pattern.review.verify-judges-the-account-too"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Verify judges the artefact and the account — contest a response that misdescribes its own repair"
+summary = "At verify, read the artefact, not the response's claim about it; contest when the account is wrong even if the artefact is now right."
+created = "2026-09-20"
+updated = "2026-09-20"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["review", "adversarial-review", "feedback", "design"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1a83cf16579efafb0935a358706191832671a830"
+ref_name = "refs/heads/edge"
+checkout_state_id = "4dfa3bfadc9f807a0fe3c61f8182a3d29df8594d114944bafb1c43fa6f83f08e"
+base_commit = "c92d41b731fffa624f66973a6157dbdfd52e343c"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-371"
+
