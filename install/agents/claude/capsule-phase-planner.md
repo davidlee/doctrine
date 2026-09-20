@@ -4,6 +4,7 @@ description: Doctrine capsule phase planner — expands ONE authored phase into 
 doctrine-role: worker
 model: opus
 tools: Read, Grep, Glob, Bash, Write
+maxTurns: 40
 skills: phase-plan
 color: blue
 ---
@@ -26,6 +27,9 @@ class, not a job title — it gates MCP grants, and you hold none. A distinct
   is wrong, say so in your hand-back.
 - **Read entities via `doctrine <kind> show <ID>`**, never raw TOML/MD — a `.md`
   body may be empty by design and `show` synthesizes both tiers.
+- **Run every command in the foreground.** Never background a retrieval or a
+  `show` — you have nothing else to do while it runs, and each completion wakes
+  you for a turn you did not need.
 - **You cannot ask the human.** `AskUserQuestion` is withheld from every
   subagent. Ambiguity you cannot resolve from the design goes in your hand-back
   for the orchestrator to escalate.

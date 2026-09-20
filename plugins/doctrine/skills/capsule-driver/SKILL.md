@@ -1,6 +1,6 @@
 ---
 name: capsule-driver
-description: Use to drive a slice's phases to completion through in-session capsule subagents in the MAIN worktree — you are the super-orchestrator seat, spawning capsule-orchestrators that each charter 2-4 phases and spawn their own planners and workers. No worktrees, no dispatch, no confinement. Use when you want a whole slice implemented under a tight context budget without handing the tree to confined workers. Not for confined or parallel-worktree execution — that is /dispatch.
+description: Use to drive a slice's phases to completion through in-session capsule subagents in the MAIN worktree — you are the super-orchestrator seat, spawning capsule-orchestrators that each charter ~3 phases and spawn their own planners and workers. No worktrees, no dispatch, no confinement. Use when you want a whole slice implemented under a tight context budget without handing the tree to confined workers. Not for confined or parallel-worktree execution — that is /dispatch.
 ---
 # Capsule driver (the super-orchestrator seat)
 
@@ -18,7 +18,7 @@ tiering exists so that no single context exceeds ~250k tokens, where both cost
 and output quality degrade:
 
     you (interactive, human attached)
-      └── capsule-orchestrator     charters 2-4 phases, verifies, commits
+      └── capsule-orchestrator     charters ~3 phases, verifies, commits
             ├── capsule-phase-planner   one phase → runtime sheet
             └── capsule-worker          one phase → source delta
 
@@ -42,18 +42,34 @@ hand-backs.
    confinement. Confirm no other agent is active in this tree before you start.
 4. **The slice is planned.** Design locked, `plan.toml` authored, phases exist.
    This skill implements a plan; it does not make one.
+5. **Background tasks off.** Export `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`
+   into the session env before you start. The whole tree is strictly serial —
+   `TaskOutput` is withheld from every subagent, so no agent here can even read
+   a running child — and the harness backgrounds by default, so every spawn
+   becomes a completion notification that re-invokes its parent at that parent's
+   full context. Without the switch the tiers below fall back to *asking* for
+   foreground, which is model-mediated, not guaranteed.
+
+   **Set it out of band — per session, never in `settings.json`.** It is scoped
+   to this seat's run, not to the repo: it also disables `run_in_background` on
+   Bash, which other work in this tree legitimately uses. Do not make it a
+   project setting to save a step.
 
 ## The loop
 
 1. Charter an orchestrator: a named slice and a contiguous run of phases,
-   typically 2–4. Spawn `capsule-orchestrator` with that charter, the slice id,
+   typically 3. Spawn `capsule-orchestrator` with that charter, the slice id,
    and any standing constraint the human has set.
 2. Read its hand-back. Check the per-worker model choices carry real arguments —
    "the default" is not one. Check what it adapted in the plan.
-3. Charter the next orchestrator for the next run of phases. Expect to spawn a
-   fresh one every 2–4 phases rather than resuming a tired one.
-4. Record friction as it is reported to you (`doctrine observation record`).
-5. **Halt when phase implementation is complete. Do not begin audit.**
+3. **Reap it.** `TaskStop` the orchestrator the moment you hold its hand-back.
+   It is discharged; left standing it can be woken by a stray notification and
+   pay a full turn at its accumulated context to report nothing. Confirm it is
+   gone from `/tasks` before you charter the next one.
+4. Charter the next orchestrator for the next run of phases. Always spawn a
+   fresh one rather than resuming a tired one.
+5. Record friction as it is reported to you (`doctrine observation record`).
+6. **Halt when phase implementation is complete. Do not begin audit.**
 
 ## What you escalate to the human
 
