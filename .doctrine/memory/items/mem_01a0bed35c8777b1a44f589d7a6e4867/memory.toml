@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0bed35c8777b1a44f589d7a6e4867"
+memory_key = "mem.pattern.plan.path-tripwire-commit-scoped-not-range-diff"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Path tripwire criteria on edge need commit-scoped git log, not a range diff"
+summary = "A VT asserting a slice never touched a path must use git log --grep='SL-NNN' -- <path>; a base..HEAD range diff on the shared edge branch attributes concurrent slices' commits to yours."
+created = "2026-09-20"
+updated = "2026-09-20"
+
+[scope]
+paths = [".doctrine/slice/"]
+globs = []
+commands = ["git diff", "git log"]
+tags = ["plan", "verification", "shared-branch", "edge", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "daf3f72b8c134b5539ba5ebcb96e801c0d5e9e1b"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b7affda65530690ef0ef5f4aed3db6bf74e3b00f87c17a18f0f9605cc02aa8bf"
+base_commit = "fa227ce48b4aa8617d7ed36503b0c9342e36536b"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

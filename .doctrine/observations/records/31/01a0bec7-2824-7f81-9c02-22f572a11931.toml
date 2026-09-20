@@ -1,0 +1,23 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bec7-2824-7f81-9c02-22f572a11931"
+recorded_at = "2026-09-20T12:25:18.116311778Z"
+kind = "friction"
+summary = "/plan: the plan.toml scaffold's VT-mandate example is invalid TOML"
+detail = """
+The template written by `doctrine slice plan` (and the same example in plugins/doctrine/skills/plan/SKILL.md step 4) shows the structured VT mandate as a multi-line inline table:
+  { id = "VT-1",
+    expects = "...",
+    test_file = "src/plan.rs", ... }
+TOML 1.0 forbids newlines inside an inline table, so an author who copies the shape verbatim gets a parse error. Cost one full authoring round-trip of plan.toml (rewrite every verification row onto one line). Every real plan.toml in the corpus uses the single-line form, so the template is the only place the wrong shape appears."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

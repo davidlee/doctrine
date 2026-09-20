@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bec7-4467-7430-8862-76f1c3d0ffd9"
+recorded_at = "2026-09-20T12:25:25.351471735Z"
+kind = "friction"
+summary = "/plan: .doctrine/state/ is unlistable — 316 of its 356 entries are per-session mem-surface-seen files"
+detail = "`ls .doctrine/state/` during orientation returned 356 entries, 316 of them one-per-session `mem-surface-seen-<uuid>.txt` markers. The listing alone burned several thousand tokens of context and buried the forty entries an agent is actually looking for (boot.md, dispatch/, slice/, review/, phases). The markers are runtime tier and correctly gitignored, but they are unbounded and never pruned, so the cost grows with every session and any agent that lists the directory pays it. A per-session marker subdirectory, or a prune on boot, would dissolve it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

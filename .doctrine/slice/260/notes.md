@@ -6,31 +6,39 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-20 · design locked (run revision 79) · c92d41b73
+fresh-as-of: 2026-09-20 · plan authored, slice ready · fa227ce48
 
 ### Produced
-- design stage complete — `design.md` 1132 lines / 9 sections, run locked
-  (commits 55dba9875, 97b38e7cc, d1a91114c, c92d41b73)
-- `RV-371` — adversarial design pass; concluded and done, synthesis written
-- minted: `DEC-263`–`DEC-273`, `DEC-275`, `DEC-276`, `CON-006` — the decision set
-  §7.1 tabulates
-- minted: `ISS-472` — a false rationale in two shipped doc comments;
-  `ISS-473` — `knowledge edit` list flags sever items containing commas
-- no `src/` change, by design (§9.1 item 7 is the tripwire, checkable by diff)
+- plan authored — `plan.toml` (3 phases) + `plan.md`, phase sheets materialised,
+  slice `proposed → ready` (commits 279175ebd, 0c34a6ee6, fa227ce48)
+- standing substrate from the design stage: `design.md` locked at run revision
+  79; `RV-371` concluded and done; `DEC-263`–`DEC-273`, `DEC-275`, `DEC-276`,
+  `CON-006`
+- minted: `ISS-474` — the `slice plan` scaffold and the plan skill ship a
+  multi-line, and therefore invalid, TOML example of the `VT` mandate;
+  `ISS-475` — no lifecycle stage settles a slice's own `DEC` records
+- two friction observations recorded this stage and committed with this sweep
+- no `src/` change; the tripwire's commit-scoped check and its positive control
+  both run clean. `doctrine check gate` not run this stage — no code modified
 
 ### Learned
-- `mem.pattern.review.verify-judges-the-account-too`
+- `mem.fact.design-run.fragment-renders-via-resume`
+- `mem.pattern.plan.path-tripwire-commit-scoped-not-range-diff`
 
 ### Open
-- `CON-006` — the residue register; every unenforced clause with its code site.
-  Binds `/plan`: no phase criterion may assume a check `CON-006` says is absent.
-- design §6 holds `Q1`/`Q2`/`Q4`/`Q5`. **Deliberately not minted as `QUE`
-  records.** `Q2` and `Q4` are trial-conclusion decisions and the trial-report
-  chore is their intended owner; that chore is a close criterion (§9.1 item 5),
-  so it does not exist yet. Minting now would create the second owner `RFC-026`
-  `P2` exists to prevent. Mint them onto the chore when `/plan` schedules it.
+- `CON-006` — the residue register. Binds criterion authoring at every stage: no
+  criterion may assume a check it records as absent.
+- design §6's `Q1`/`Q2`/`Q4`/`Q5` remain unminted. `Q2` and `Q4` are now
+  **scheduled**: `PHASE-03` `EX-6` mints them onto the trial chore once that
+  chore exists. `Q1` and `Q5` stay unminted by design.
+- `PHASE-01` `EN-3` — the rendered-turn check needs some slice's design run
+  sitting at stage `reviewing` (`SL-253` at plan time). None available →
+  `/consult`, never a source-file read.
+- the thirteen `DEC` records this slice minted still read `proposed`; discharged
+  for this slice at `PHASE-03` `EX-7`, generalised as `ISS-475`
 - `ISS-320` — re-adopting an edited `design.md` needs a section map nothing
-  emits. Hit again this session; relevant to anyone editing the locked design.
+  emits; relevant to anyone editing the locked design
+- `ISS-472`, `ISS-473` — filed out of the design stage; neither blocks
 
 ---
 
