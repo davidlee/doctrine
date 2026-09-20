@@ -99,3 +99,55 @@ newly binds three standards.
   `doctrine install`; cargo does register `install/` as a build dependency
   (`mem_019e98a783ea7471ac4bfcefdc04ae5e`, re-probed), so the rebuild is not
   manual — but a stale embed is silent, so closure verifies through the render.
+
+## Further review passes — what one would probe, and why we are not running one
+
+Written 2026-09-20, after `RV-371` concluded (`done`, 10 findings, 1 withdrawn,
+9 verified) and after the post-pass critical re-read that repaired its residue.
+Recorded for the `review.passes` runbook step.
+
+**The decision.** No further design-review pass. The user's call, taken with the
+evidence below in hand: the design is text-only, its remaining uncertainty is
+about how the convention behaves in use rather than about whether it is
+internally sound, and behaviour-in-use is exactly what the trial exists to
+measure. Another pass buys re-argument where the next three ledgers buy
+observation.
+
+**What a further pass would probe, if one were run.** These are live and
+unexamined by any adversarial reader; they are the honest cost of stopping here.
+
+1. **The material `RV-371` never saw.** The design grew from 804 to about 1130
+   lines under the pass. §5.1's precedence procedure, §5.2's four inserts as they
+   now stand, and §9.4's collection procedure were all authored *as repairs* and
+   have been read by the responder and by one critical re-read — never by an
+   adversarial reader. `review_pass` says `STALE` for exactly this reason, and
+   that status is accurate, not a bookkeeping artefact.
+2. **Whether the precedence is total in practice, not just on paper.** Steps 2
+   and 3 are now total over the five by construction. What is untested is whether
+   step 1 — *route on the claim whose failure would make the rest moot* —
+   actually discriminates on real findings, or whether responders reach straight
+   for step 3 and let the fixed order do the work. That is a trial observation,
+   not a review one.
+3. **The three inserts as shipped text.** §5.2 carries proposed text. Nobody has
+   attacked it as an agent would *receive* it — with only the fragment in hand and
+   no design.md. The one defect of that shape found so far (the undefined term
+   *instrument route*) came from a re-read, not from the pass.
+4. **§9.4's joins against a real ledger.** The procedure is specified but has
+   only been run for its route-extractor column. Whether the manual joins are
+   executable at acceptable cost is unknown until the first eligible slice.
+
+**Why the pass is nonetheless not the right instrument.** `RV-371`'s own
+synthesis is the argument. Five defects survived the adversarial pass and were
+found afterwards by a fresh critical re-read; `R5` fired three times *inside the
+repair round* and `R4` twice. The lesson is not that another adversarial reader
+would find the next five — it is that a single pass does not converge, and that
+the marginal find came from re-reading under different conditions rather than
+from an additional reader. Stacking a second pass on a design whose remaining
+risk is behavioural would spend the reader on the wrong question.
+
+**What carries the residual instead.** The trial, which is what this slice
+exists to make possible; `CON-006`, which enumerates every unenforced clause with
+its code site; and `R1`/`R3`/`R6`, which name at ledger grain what to watch for
+while the convention operates. If the trial observes routed obligations dropped
+between plan and execute, `Q4`'s code-backing is the named next move and the
+`src/` tripwire is what it costs.

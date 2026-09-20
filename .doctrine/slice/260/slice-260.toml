@@ -13,12 +13,12 @@ after = []                      # slice→work soft sequence: { to, rank }
 [[selector]]
 selector = "install/design-prompts/reviewing.md"
 intent = "design-target"
-note = "The operative rule (DEC-268). Appended to the After the pass material. customization=fixed so no client install can customise it away, which is why the rule lives here rather than in the reference doc."
+note = "The operative rule and the sole normative owner (DEC-268). Two edits: the routing block is appended after the What the machine will reject list, and that list's last entry - the stand-alone rule at lines 63-64 - gains the provisional routed-obligation carve-out (RV-371 F-4). customization=fixed, so no client install can customise it away."
 
 [[selector]]
 selector = "install/review-ledger.md"
 intent = "design-target"
-note = "Section 4 gains the route axis plus the design-review scope line and a pointer to the fragment (DEC-268). customization=customizable, and this doc owns the invariant protocol for every review skill - hence the scope line."
+note = "Section 4 gains a non-asserting route axis: the axis, the recording shape, the design-review scope line, the deferred-terminal-close sentence and a pointer to the fragment (DEC-268, cut back under RV-371 F-7). Placed after the terminal-close block and its caveats, so the general rule is met before its exception. customization=customizable, and this doc owns the invariant protocol for every review skill - hence the scope line."
 
 [[selector]]
 selector = ".doctrine/rfc/026/**"
@@ -28,6 +28,11 @@ intent = "scope-relevant"
 selector = ".doctrine/rfc/026/rfc-026.md"
 intent = "design-target"
 note = "P10's Open clause records where its two items were settled: who states the probe adversary, and what detects at ledger grain that none was stated."
+
+[[selector]]
+selector = "plugins/doctrine/skills/plan/SKILL.md"
+intent = "design-target"
+note = "The transcription pointer, added under RV-371 F-4 (DEC-271 amended). Tells the planner to open the design-review RV and transcribe routed obligations. Owns no normative content, so the rule keeps one owner. Skills are rewritten on every install (copy_skill writes unconditionally, src/install.rs:2036-2038), so it cannot silently diverge."
 
 [[relation]]
 label = "references"
