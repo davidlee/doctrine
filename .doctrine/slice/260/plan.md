@@ -98,6 +98,41 @@ verification time — and routes to `/consult` if none exists, because the
 fallback a hurried agent would reach for (reading `install/` directly) is
 precisely the check §9.2 item 2 forbids.
 
+**The single-owner sweep spans two corpora, not one.** §9.1 item 3 enumerates
+twelve normative clause classes, and ten of them are shipped text — those are
+swept over `install/` and `plugins/` for exactly one hit each. The other two,
+the eligibility rules and the collection procedure, are not shipped at all:
+their owners are the slice scope and `DEC-276`/design §9.4, and the only way
+this slice could give either a second owner is by letting the trial chore
+restate it. A sweep of the shipped tree would return zero for them and read as
+a pass. So they are checked where the risk actually is, against the chore, in
+`PHASE-03`.
+
+**`doctrine install` is read before it is run.** `PHASE-02` needs the installed
+plan skill to verify delivery, but a bare `install` rewrites every skill in the
+primary tree. The criterion runs `--dry-run` first and then narrows to the one
+skill under test. The ledger doc needs no install at all — `library show` reads
+the embedded asset, so `cargo build` is the whole precondition there.
+
+**`PHASE-02` edits the skill that governs this stage.** The transcription
+pointer lands in `plugins/doctrine/skills/plan/SKILL.md`, which is the `/plan`
+skill itself. The edit changes what a *future* planner is told; it does not
+retroactively bind this plan, and `SL-260` is excluded from its own trial by
+construction (scope §5). Worth knowing before the installed skill changes under
+a later session mid-stage.
+
+**One loose end this plan adopts rather than leaves.** The thirteen `DEC`
+records this slice minted still read `proposed` while the design that they shape
+is locked; the corpus's settled decisions read otherwise. No later stage owns
+the transition — `/reconcile` and `/close` do not touch knowledge-record status
+— so `PHASE-03` `EX-7` discharges it instead of letting close find it. It costs
+one command and is not new scope.
+
+**The `VT` keyword floors were checked non-vacuous.** Every keyword named in a
+`VT` mandate returns zero occurrences in its target file today, so each floor
+asserts something the phase must actually add rather than passing on text that
+was already there.
+
 **What this plan does not schedule.** The trial itself, and any judgement about
 its outcome — design §9.3. Closure depends on the convention being in effect and
 mechanically checkable, on nothing that postdates this slice.
