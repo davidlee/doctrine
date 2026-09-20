@@ -278,4 +278,4 @@ real `STD-003` gap. `RV-372` `F-5` holds the verbatim attestation.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-20 · slice at `reconcile`, `RV-372` done (15 findings, all terminal) · dispatch/246 @ 030caf83a
+fresh-as-of: 2026-09-20 · `/reconcile` written — `RV-372`'s brief discharged into `design.md` and `slice-246.md` (eleven edits, zero REVs); the outcome is `RV-372` § *Reconciliation Outcome*, not restated here. Remaining before `/close`: `CHR-073` (gating, `/reviewing-memory`), then land `dispatch/246` by **merge, not squash** — a squash orphans `mem.pattern.platform.never-export-git-dir-to-a-test-run`, recorded on this worktree. · dispatch/246 @ 4a25746c5
