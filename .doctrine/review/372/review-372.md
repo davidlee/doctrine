@@ -295,3 +295,37 @@ the *durable record* of this slice's divergences and are correct as they stand.
 surface. `F-9` (`PHASE-01` `VA-1`'s literal over-claim) is `aligned` for the same
 reason — the qualification lives in this ledger, where the next reader running
 that grep will find it.
+
+---
+
+## Addendum — `F-15`, raised during synthesis
+
+Line of attack 5 (*what the slice broke elsewhere*) was only half-discharged when
+the first fourteen findings were written: the shipped-prose sweep had run, the
+corpus sweep had not. Completing it found a third stale population and it is
+raised as `F-15` rather than folded into the synthesis, because a finding found
+late is still a finding.
+
+`EX-7` priced the `design show` reclaim as four emitted strings, one prose line
+and the test call sites. `CHR-073` added five memories. Neither covers **other
+slices' authored `notes.md`** — committed, agent-read on resume, and now wrong at
+five sites across `SL-247`, `SL-253` and `SL-256`. `SL-233`'s plan and notes cite
+the verb as a symbol in a historical record and are correctly unaffected; shipped
+prose is clean.
+
+The detail worth keeping: `mem_01a0b2a8431371539e7911821e9c8da4` was recorded
+from this slice's own design review (`RV-370` `F-16`) and its thesis is that *a
+design which prices a change must name the population, or a reviewer cannot check
+the figure*. That memory's own example is this migration's count being wrong by
+one population. It is now wrong by two. The lesson was recorded and the count was
+never re-derived — which is the more useful version of the lesson.
+
+Disposed `fix-now` by widening `CHR-073` with the five sites enumerated, rather
+than by editing three other slices' notes from inside this audit. The
+reconciliation brief's landing constraint stands and is now larger: **`CHR-073`
+must be discharged with or before `SL-246` lands.**
+
+### Final gate
+
+`just gate` on `dispatch/246` **with this audit's own changes included**: exit 0,
+**7801 passing, zero failures**, no suite red.

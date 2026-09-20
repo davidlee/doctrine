@@ -41,6 +41,30 @@ shipping and these edits, every agent that retrieves one of the five is told to
 run a command that now does something different. Sequence it into the slice's
 close, not its backlog drift.
 
+## The third population — other slices' authored notes (`SL-246` audit, `RV-372` `F-15`)
+
+`EX-7` priced four emitted strings, one prose line and the test call sites; this
+item added five memories. A corpus sweep at the audit found a **third**
+population that neither covers: other slices' committed `notes.md`, read by an
+agent resuming that slice. Enumerated here so this item can be discharged against
+a list rather than a re-derived grep:
+
+| site | what it says | why it is now wrong |
+|---|---|---|
+| `.doctrine/slice/247/notes.md:93` | *"Live in the design run's inquiry map (`doctrine design show 247`)"* | that verb now renders the design document |
+| `.doctrine/slice/253/notes.md:58` | *"`design show` will not display them, so read `[[review.finding]]` in the runtime `design.toml`"* | describes the envelope's behaviour under the old default |
+| `.doctrine/slice/253/notes.md:345` | *"`doctrine design show SL-253` carries each finding, the section it concerns, and its resolution"* | renders the document, not the findings |
+| `.doctrine/slice/256/notes.md:142` | *"`design show` over all seven runs"* | same |
+| `.doctrine/slice/256/notes.md:369` | *"`doctrine design show 244` prints the terse message today"* | same |
+
+**Not affected**, checked and excluded: `SL-233`'s `plan.toml` / `plan.md` /
+`notes.md` cite the verb as a *symbol* in a historical record of what `PHASE-03`
+landed, and shipped prose is clean — the one live hit,
+`plugins/doctrine/skills/handover/SKILL.md:36`, already spells `--format status`.
+
+The repair is the same per row as for the memories: `--format prompt` where run
+state is meant, leave it where the document is meant.
+
 ## Done when
 
 Each of the five is corrected and re-verified (`doctrine memory verify <key>`),

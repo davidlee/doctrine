@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bc8d-e4af-7853-8b06-e1dd94e28513"
+recorded_at = "2026-09-20T02:03:30.86322321Z"
+kind = "friction"
+summary = "/audit: review-ledger.md's parent-tree caveat overstates the guard, costing a source dive to find the real rule"
+detail = "review-ledger.md section 6 says 'the doctrine review verbs refuse a worktree/fork-resolved root. Run a review from the main tree (or merge the fork first), never from inside an isolated worktree.' Read literally that forbids driving an audit anywhere but the primary tree, which conflicts with the user's instruction to audit off edge and with AGENTS.md's own 'if auditing/closing a feature, land it on a worktree'. The actual guard (resolve_review_root, src/review.rs:2358) refuses only when classify_worktree_role returns 'fork' — i.e. a LINKED worktree whose branch is not dispatch/<NNN>. A coordination-shaped branch is admitted. Cost: reading two source files to find the rule the doc summarises, then renaming a freshly created branch. The doc should say 'refuses a worktree FORK; a dispatch/<NNN> coordination tree is admitted' rather than 'never from inside an isolated worktree'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

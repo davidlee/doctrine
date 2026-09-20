@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bc8d-b693-7531-a559-435e8155db4f"
+recorded_at = "2026-09-20T02:03:19.059617194Z"
+kind = "friction"
+summary = "/audit: capsule hand-back tree is ungatable, costing two cold gate rebuilds and a repo-config incident"
+detail = "SL-246 c17 came home in a worktree where neither git nor cargo works in-jail (host-absolute gitdir pointer; no web/map/dist). Cost: one wasted cold gate run that died in lint on three E0599s from the RustEmbed derive; a second cold run after copying dist, which then failed one test on 'git ls-files failed'; a third cold run on a freshly forked in-jail worktree. Worse, the GIT_DIR export used as a workaround leaked into cargo test and wrote core.worktree into the shared .git/config. The documented repair (mem_019f255e18847da2aa383667826a314d — relativize both gitdir pointers) already existed and was not retrieved before improvising; retrieving it first would have cost one memory read and avoided all of it. Filed ISS-468, ISS-469; recorded mem.pattern.platform.never-export-git-dir-to-a-test-run."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

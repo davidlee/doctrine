@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bc8d-e4b8-78c1-b6d8-84e8558edc36"
+recorded_at = "2026-09-20T02:03:30.872207071Z"
+kind = "friction"
+summary = "/audit: the ledger could not mint until the branch was merged, because RV and backlog ids collide across branches"
+detail = "Opening RV on the unmerged capsule branch would have minted RV-371, which already exists on edge (SL-260's design review). And ISS-462 had ALREADY been minted twice for two different items. So the audit's first act had to be a merge plus a manual renumber — moving a directory, editing id and the title line, re-pointing the slug symlink, and fixing one phase-sheet citation, none of which has a verb (backlog has no renumber; reseat does not cover this path). ISS-279 owns the underlying reservation-reach defect and has now been hit twice. The audit-shaped cost is that 'bring the branch current' is an unstated precondition of 'open the ledger', and nothing in /audit or review-ledger.md says so."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
