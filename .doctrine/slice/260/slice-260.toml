@@ -1,9 +1,9 @@
 id = 260
 slug = "design-review-finding-routing-convention-and-trial"
 title = "Design-review finding routing convention and trial"
-status = "proposed"
+status = "ready"
 created = "2026-09-19"
-updated = "2026-09-19"
+updated = "2026-09-20"
 tags = ["area:design", "area:governance", "area:review", "rfc-026"]
 
 [relationships]
