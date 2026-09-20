@@ -6,7 +6,7 @@ status = "active"
 title = 'Design-run snapshots are long-lived — "runtime state is disposable" does not license a serde break'
 summary = "A design run spans weeks and its snapshot holds every persisted type; changing one's wire form breaks live runs, despite .doctrine/state/ being classed disposable"
 created = "2026-08-04"
-updated = "2026-08-04"
+updated = "2026-09-20"
 
 [scope]
 paths = ["src/design_run/attestation.rs", "src/design_run/snapshot.rs", "src/design_run/change_log.rs"]

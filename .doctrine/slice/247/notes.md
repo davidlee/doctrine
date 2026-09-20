@@ -90,7 +90,8 @@ correct engineering answer, not a compromise.
 
 ### Open questions
 
-Live in the design run's inquiry map (`doctrine design show 247`) — `inq-1`
+Live in the design run's inquiry map
+(`doctrine design show 247 --format prompt`) — `inq-1`
 through `inq-8`. Not restated here; the run is the source of truth.
 
 ## Harvest

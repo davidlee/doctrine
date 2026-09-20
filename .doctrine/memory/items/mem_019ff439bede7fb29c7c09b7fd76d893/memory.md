@@ -1,7 +1,10 @@
 `doctrine design apply` takes a JSON payload whose schema is **not** discoverable
-from `--help` or from `design show`. `design show`'s `declaration_example` shows
-only node creation (`declare` with `subject`/`question`/`parent`/`needs`) and
-`traversal`. The real vocabulary is `ApplyRequest` in
+from `--help` or from the design read. `design show --format json`'s
+`declaration_example` shows only node creation (`declare` with
+`subject`/`question`/`parent`/`needs`) and `traversal` — and since `SL-246`
+(`DEC-261`) that is the *only* rendering carrying the example at all: not
+`--format prompt`, not `--format prompt --full`, and not the bare verb, which now
+renders the design document. The real vocabulary is `ApplyRequest` in
 `src/design_run/submission.rs` — read that struct, not the envelope.
 
 Every payload carries the flattened envelope:

@@ -51,9 +51,11 @@ Two more, cheap to know:
 
 - `git::sha256` is plain hex sha256 of the bytes; the document digest is over
   the whole file, unframed.
-- `design show` **truncates fingerprints to 12 hex chars**. Compute the full
-  digest yourself; never paste the displayed value into `adopt_authored`.
+- `design show --format prompt` **truncates fingerprints to 12 hex chars**.
+  Compute the full digest yourself; never paste the displayed value into
+  `adopt_authored`. (The `--format` is load-bearing since `SL-246`/`DEC-261`: a
+  bare `design show` renders the design document and carries no fingerprints.)
 
 Positive control before trusting any of it: recompute an *unchanged* section's
-digest and check it equals what `design show` displays. If the untouched ones
+digest and check it equals what `design show --format prompt` displays. If the untouched ones
 match and only the edited one differs, the parse is right.

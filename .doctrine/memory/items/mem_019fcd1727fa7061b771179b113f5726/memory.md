@@ -14,12 +14,21 @@ binary that wrote it**, exactly like an authored entity does:
 
 - `RecoveryIntent` — `[[checkpoint.intent]]`. `DEC-125` re-keyed `checkpoint` →
   `subject`; the `#[serde(alias = "checkpoint")]` is what keeps live runs
-  readable. Deleting it made `design show` fail outright on this repo's own
-  `SL-243` (9 rows) and `SL-244` (16 rows) runs.
+  readable. Deleting it made `design show --format prompt` fail outright on this
+  repo's own `SL-243` (9 rows) and `SL-244` (16 rows) runs.
 - `ChangeEvent` — `[[change_log.row]]`. It deserialises **strictly**, so one
   unrecognised `event` fails the whole file, not just that row. `SL-244`
-  PHASE-04 retired `IntegratedReviewRecorded` and broke `design show 244` that
-  way — see `ISS-315`.
+  PHASE-04 retired `IntegratedReviewRecorded` and broke
+  `design show 244 --format prompt` that way — see `ISS-315`.
+
+Both failures land on the **envelope** renderings only. Since `SL-246`
+(`DEC-261`) a bare `doctrine design show <slice>` renders the authored design
+document and never opens the snapshot — verified on this tree: `design show 003`
+succeeds where the runtime state is long gone, while `design show 003 --format
+prompt` errors on the missing `design.toml`. A snapshot-compat break is therefore
+*quieter* than it used to be: the default read stays healthy while the run is
+unreadable underneath it. Probe with `--format prompt|json|status`, not the
+default.
 
 Before changing a field name, an enum member, or a variant's representation on
 anything reachable from `DesignSnapshot`, ask what live runs already hold. Two

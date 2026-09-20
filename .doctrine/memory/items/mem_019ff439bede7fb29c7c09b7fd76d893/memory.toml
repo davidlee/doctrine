@@ -6,7 +6,7 @@ status = "active"
 title = "design apply payload vocabulary is undiscoverable from the tool"
 summary = "design apply's payload vocabulary is wider than design show advertises; unknown keys are absorbed silently"
 created = "2026-08-12"
-updated = "2026-08-12"
+updated = "2026-09-20"
 
 [scope]
 paths = ["src/design_run/submission.rs"]

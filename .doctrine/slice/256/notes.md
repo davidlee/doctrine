@@ -139,7 +139,8 @@ fresh-as-of: 2026-09-09 · audit — `RV-364` done, 10 findings terminal, no blo
   have silently moved that member's stored token. Verified arm by arm at
   `/phase-plan` and pinned member-by-member by `VT-1`.
 - **Verifying a read-path change against the live corpus beats verifying it
-  against fixtures**, and it is one command. `design show` over all seven runs
+  against fixtures**, and it is one command. `design show --format prompt` over
+  all seven runs
   carrying a retired token found `SL-244` unreadable — which the fixture suite
   could not have told us, and which turned out to be `ISS-315` rather than a
   regression (see Open).
@@ -366,7 +367,8 @@ Carried forward, each with an owner outside this slice:
 
 - `IMP-445` — the refusal no longer names the accepted vocabulary. `RV-364`
   `F-5` records that the slice traded this knowingly rather than missed it, and
-  reproduces it live: `doctrine design show 244` prints the terse message today.
+  reproduces it live: `doctrine design show 244 --format prompt` prints the terse
+  message today.
 - `IMP-437` — the emit seam is a convention, not a guarantee; the fix reaches
   `fixture.rs` and `SL-251`'s `tests.rs`, so it needs its own scope.
 - `IMP-282` — conformance's `undeclared` cell counts every slice's own

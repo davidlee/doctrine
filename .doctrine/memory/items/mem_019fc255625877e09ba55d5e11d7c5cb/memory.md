@@ -9,7 +9,7 @@ Concretely, from SL-243's run `dr-019fc13a` at revision 9:
 | read via | cursor |
 |---|---|
 | raw TOML — `[map.cursor]` | `at = "inq-4"`, `authority = "user-pinned"` |
-| `doctrine design show 243` | `cursor unset STALE` |
+| `doctrine design show 243 --format status` | `cursor unset STALE` |
 
 Both describe the same revision. `inq-4` had been disposed, which clears the
 cursor; the TOML block simply survives it. The engine is right and the file is
@@ -27,10 +27,16 @@ The instrument would have manufactured a finding.
 
 ## The rule
 
-Read design-run state with `doctrine design show <slice>` — `--format json` for a
-machine-readable form, `--format status` for a human summary. Snapshot the
-*rendered* output, not the file, whenever the snapshot will be compared against
-anything.
+Read design-run state with `doctrine design show <slice> --format prompt` — the
+turn envelope; `--format json` for a machine-readable form, `--format status` for
+a human summary.
+
+**The format flag is load-bearing.** Since `SL-246` (`DEC-261`) a bare `doctrine
+design show <slice>` renders the authored *design document*, not the run. It does
+not error without one — it answers a different question and looks like it worked.
+
+Snapshot the *rendered* output, not the file, whenever the snapshot will be
+compared against anything.
 
 The file is still the right thing to `grep` for facts the engine does not
 derive — edge counts, receipt history, raw node lifecycles. Know which question

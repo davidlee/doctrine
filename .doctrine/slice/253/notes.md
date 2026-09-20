@@ -55,7 +55,8 @@ raiser has now declined to verify either
   the kernel; `fnd-11` front rendering escapes § 9.1's closed licence; `fnd-12`
   `Table::front_of` has no route to `main.rs`), two nits (`fnd-13` stale `§ 2.4`
   count in `P2`; `fnd-14` two off-by-one cites). **All five dispositioned and
-  integrated at revs 51–57**; `design show` will not display them, so read
+  integrated at revs 51–57**; no `design show` rendering displays them — the
+  turn envelope carries per-section review *counts*, not finding text — so read
   `[[review.finding]]` in the runtime `design.toml`.
 - Design-local rulings `D11` (the payload returns a `FrontCatalog` beside the
   verdict) and `D12` (the kernel takes `ArmJudgement`; diagnostics stay
@@ -66,8 +67,8 @@ raiser has now declined to verify either
   re-cut `DEC-197` and in **Open** below. Not an adversarial review; `RV-354`
   is still empty scaffolding and the external pass is still unspent.
 - Friction observation `019ff550-6459-7002-bb5e-28945ff4c51b` — a raised finding
-  is visible only as a change-log row, so `design show` reports zero outstanding
-  while blocking findings await disposition.
+  is visible only as a change-log row, so `design show --format prompt` reports
+  zero outstanding while blocking findings await disposition.
 - **`RV-354` — the external adversarial pass, now spent.** Codex (GPT-5.5),
   thread `019ff622-0e71-7a81-a449-d705a9ce4fd4`, four rounds: raise, then three
   verification rounds each attacking the repairs rather than accepting them.
@@ -342,9 +343,14 @@ claim re-read in the working tree. Nine findings raised as `fnd-1` … `fnd-9` o
 the design run and all nine dispositioned at revision 45; the integrated design
 materialised at revision 46.
 
-Do not restate them here — they are queryable. `doctrine design show SL-253`
-carries each finding, the section it concerns, and its resolution; `design.md`
-§ 10.1 carries what they changed and § 7.2 `D7`–`D10` the rulings taken. The one
+Do not restate them here — they are queryable. `[[review.finding]]` in the
+runtime `design.toml` carries each finding, the section it concerns, and its
+resolution; `design.md` § 10.1 carries what they changed and § 7.2 `D7`–`D10` the
+rulings taken. *(Corrected 2026-09-20 under `CHR-073`: this line named `doctrine
+design show SL-253` as the carrier. No rendering carries finding text — the turn
+envelope holds per-section review counts only — and since `SL-246` / `DEC-261`
+the bare verb renders the design document. The note at line 58 above already said
+the first half.)* The one
 thing worth repeating out of band, because it binds later work rather than this
 document: **three enumerations of what crosses the seam backwards have each been
 careful, believed complete, and wrong** — two of five, then three of five. Both

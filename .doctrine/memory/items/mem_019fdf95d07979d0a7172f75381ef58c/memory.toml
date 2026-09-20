@@ -6,7 +6,7 @@ status = "active"
 title = "Editing a locked design run: regress, hand-edit, adopt_authored"
 summary = "Correct a locked design's prose via stage regression + adopt_authored, not by re-emitting section bodies through declare"
 created = "2026-08-08"
-updated = "2026-09-18"
+updated = "2026-09-20"
 
 [scope]
 paths = ["src/commands/design.rs", "src/design_run/document.rs", "src/design_run/gate.rs"]

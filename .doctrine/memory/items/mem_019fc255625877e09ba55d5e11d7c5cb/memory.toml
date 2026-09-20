@@ -6,7 +6,7 @@ status = "active"
 title = "Design run state: read via show, not the raw TOML"
 summary = "The design run's runtime TOML retains a disposed cursor that the engine renders as unset STALE; raw reads and show disagree"
 created = "2026-08-02"
-updated = "2026-08-02"
+updated = "2026-09-20"
 
 [scope]
 paths = [".doctrine/state/slice"]

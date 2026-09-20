@@ -1229,7 +1229,8 @@ gate. Re-attesting is therefore not ceremony: it is confirmation over a governin
 set that genuinely changed, and the first one taken over a set that matches §3.1.
 
 One projection caveat for whoever reads this next: `doctrine design resume` and
-`design show` render `governance-confirmed — current` regardless, because that
+`design show --format prompt` render `governance-confirmed — current` regardless,
+because that
 column is computed from the snapshot alone (`render/envelope.rs:902`) and never
 sees the derived edge fingerprint. Only the gate compares them
 (`gate.rs:1402-1408`). Do not read the projection as evidence the act still binds.

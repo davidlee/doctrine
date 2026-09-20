@@ -28,7 +28,9 @@ The loop:
 line, minus the single trailing newline. `unescape_line` only rewrites
 marker-shaped lines carrying ≥2 colons, so on an ordinary document it is the
 identity and the body is the raw file slice. Verify your computation against
-`doctrine design show`'s 12-char fingerprint prefixes **before** relying on it —
+`doctrine design show --format prompt`'s 12-char fingerprint prefixes **before**
+relying on it (`--format` since `SL-246`/`DEC-261`; the bare verb now renders the
+design document) —
 that is a free positive control, and it also proves the whole-file hash against
 the printed watermark.
 
