@@ -90,3 +90,44 @@ as `CHR-075` and added three things worth keeping:
   plausible-looking output for a different question.
 
 Also related: SL-246's `R6` (stale skill path), a reconcile input.
+
+## Discharged 2026-09-20 (`/reviewing-memory`, before `SL-246` lands)
+
+The landing constraint held: this ran on `dispatch/246` ahead of the merge, so no
+window exists in which the code ships against the stale corpus.
+
+**The five memories** — each corrected via `memory edit --body` (so `updated` is
+stamped) and re-attested with `memory verify`; all five now read
+`verification_state: verified`, from `unverified`.
+
+| memory | repair |
+|---|---|
+| `mem.pattern.design-run.read-state-via-show` | the inverted thesis. "The rule" now names `--format prompt\|json\|status`, and says **why the flag is load-bearing**: a bare `design show` does not error, it answers a different question and looks like it worked. The `SL-243` table row takes `--format status` |
+| `mem.pattern.design-run.adoption-is-the-parser-readout` | both fingerprint sites take `--format prompt` |
+| `mem.pattern.design-run.correcting-a-locked-run` | the positive-control read takes `--format prompt` |
+| `mem.fact.design-run.apply-payload-vocabulary` | `declaration_example` is carried by `--format json` **only** — verified against `document` / `prompt` / `prompt --full` / `status` on this tree, not assumed |
+| `mem.fact.design-run.snapshot-outlives-the-binary` | both failure citations take `--format prompt`, **plus a new fact that makes this worse than it was**: the document rendering never opens the snapshot (`design show 003` succeeds where `design show 003 --format prompt` errors), so a snapshot-compat break is now *quieter* — the default read stays healthy over an unreadable run |
+
+**The five `notes.md` sites** from `RV-372` `F-15` — all repaired. Three
+(`SL-247:93`, `SL-256:142`, `SL-256:369`) were mechanical verb corrections. Two
+were not:
+
+- `SL-253:58` — the *claim* survives, the *reason* changed. **No** rendering
+  displays review findings; the turn envelope carries per-section review counts
+  only. Established from `src/design_run/render/envelope.rs` rather than from a
+  bare negative grep, since `SL-246`'s own run has zero outstanding findings and
+  would have produced a false negative.
+- `SL-253:345` — **was already wrong before `SL-246`**, and contradicted `:58` in
+  the same file. Corrected to name the runtime `[[review.finding]]` rows, with the
+  correction marked inline so the next reader sees it was changed and why.
+
+**Two further sites, not in `F-15`'s list** — `SL-253:70` and
+`SL-254/design.md:1232`. Both instruct a future reader about envelope behaviour.
+`F-15`'s sweep filtered to `notes.md` and so could not see the second.
+
+**A fourth population, found here and not discharged here** — seven **open**
+backlog items whose text names `design show` as the envelope read, two of them
+proposing flags on a verb whose default has moved. Raised as **`CHR-076`** with
+the sites enumerated. Not folded in: this item's landing constraint is about the
+agent-injected corpus, and a backlog item is read by whoever picks the work up,
+not injected into every context — so it does not gate the merge.

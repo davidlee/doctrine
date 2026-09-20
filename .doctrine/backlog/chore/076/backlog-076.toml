@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 73
-slug = "re-attest-five-memories-that-document-design-show-as-the-envelope-read"
-title = "Re-attest five memories that document design show as the envelope read"
+id = 76
+slug = "repoint-open-backlog-items-that-name-design-show-as-the-envelope-read"
+title = "Repoint open backlog items that name design show as the envelope read"
 kind = "chore"
-status = "resolved"
-resolution = "done"
-created = "2026-09-18"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-09-20"
 updated = "2026-09-20"
-tags = ["area:cli", "area:memory", "cluster:memory-system"]
+tags = ["area:backlog", "area:cli", "cluster:design-run"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -25,3 +25,7 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "references"
 role = "originates_from"
 target = "SL-246"
+
+[[relation]]
+label = "related"
+target = "CHR-073"
