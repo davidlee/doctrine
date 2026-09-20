@@ -96,7 +96,8 @@ stateDiagram-v2
 ```
 
 Three properties of this machine are load-bearing below. **`verified` is
-terminal**: no verb transitions a finding out of it (`src/review.rs:703-728`), so
+terminal**: the edge table carries no row out of it (`src/review.rs:789-807`) and
+`FindingStatus::is_terminal` names it terminal (`src/review.rs:564-566`), so
 a verified disposition is the immutable audit-time record of what was decided
 then. **There is no amend verb**: once disposed, a finding is `answered`, and
 `dispose` refuses to rewrite it — the only way back is the raiser's `contest`,
@@ -161,7 +162,8 @@ be a content rule rather than a transport change.
 | `plugins/doctrine/skills/plan/SKILL.md` | agent skill | no — overwritten every install | `/plan` runs, i.e. at transcription |
 
 The fragment is emitted **every reviewing turn**; its *body* is elided when the
-caller declares a current `name@digest` receipt (`src/commands/design.rs:2605-2631`).
+caller declares a current `name@digest` receipt (`src/commands/design.rs:2837-2861`
+— *"what a receipt elides is the BODY and only the body"*).
 So an agent either holds the current bytes or is re-sent them, and any edit
 invalidates every held receipt — a stronger guarantee than "re-sent each time".
 
@@ -177,7 +179,7 @@ protocol shared by every review skill** (`/audit`, `/code-review`,
 `/inquisition`). That scope is why §2.5's asymmetry matters and why §5 scopes
 what goes there.
 
-`install/design-prompts/reviewing.toml:8-14` already states in-repo that the
+`install/design-prompts/reviewing.toml:6-11` already states in-repo that the
 attack surfaces belong in the sibling prose fragment and not in a `[[step]]`.
 `DEC-101` (step ids are API) is the authority; this design cites both rather
 than re-arguing the point.
@@ -437,15 +439,21 @@ accept this exposure*. The responder must still emit one token, so the design
 supplies a decision procedure rather than leaving it to judgement:
 
 1. Route on the claim whose failure would make the rest of the finding moot.
-2. If two still fit, prefer the instrument route over `review` — execution
-   narrows an argument that prose would only restate (`P10`).
-3. If two instrument routes still fit, take the first of `owner-fix`, `control`,
-   `probe`, `demonstrate`. `owner-fix` leads because a fact with two
+2. If two still fit, prefer any route other than `review` — a route that ends
+   in an act narrows an argument prose would only restate (`P10`). `owner-fix`
+   counts here: it is not an instrument route, but it is settled by doing rather
+   than by arguing.
+3. If two non-`review` routes still fit, take the first of `owner-fix`,
+   `control`, `probe`, `demonstrate`. `owner-fix` leads because a fact with two
    contradictory owners cannot be probed until one of them is gone.
 4. Where the finding carries a genuinely separable second arm, name it in
    `--response`. Findings are immutable and only the raiser may raise, so the
    second arm becomes a **sibling finding**, not a second route.
 
+Steps 2 and 3 are together **total over the five**: a surviving pair either
+contains `review`, which step 2 resolves, or does not, which step 3 resolves.
+An earlier form of step 2 turned on *instrument route* and so left the
+`review` + `owner-fix` pair — `RV-371` `F-6`'s own second example — unresolved.
 Step 3 is a fixed order rather than a heuristic on purpose: it costs one
 sentence and removes an interpretation, and *the routes need the owner to
 interpret* is one of `P10`'s own would-kill conditions. Step 4 is also the only
@@ -488,8 +496,8 @@ The route and the vocab are different axes: the vocab records what you did, the
 route records what instrument can settle the finding. There is no default.
 
 **When more than one route fits.** Route on the claim whose failure would make
-the rest of the finding moot. If two still fit, prefer the instrument route over
-`review`. If two instrument routes still fit, take the first of `owner-fix`,
+the rest of the finding moot. If two still fit, prefer any route other than
+`review`. If two non-`review` routes still fit, take the first of `owner-fix`,
 `control`, `probe`, `demonstrate`. Where the finding carries a genuinely
 separable second arm, name it in `--response` so the raiser can raise it as a
 sibling — a finding is immutable and cannot be split in place. If you cannot
@@ -497,8 +505,10 @@ tell which question the finding is asking at all, that is the ambiguity the
 anti-escape guardrails already send to `/consult`, not a reason to write
 `review`.
 
-`demonstrate`, `probe` and `control` findings are NOT repaired in prose. In
-`--response` you write, as plain prose — no backticks and no dollar signs:
+`demonstrate`, `probe` and `control` are the **instrument routes**, and they are
+NOT repaired in prose. (`review` and `owner-fix` are settled the way they always
+were.) In `--response` you write, as plain prose — no backticks and no dollar
+signs:
 
 - `probe` — the adversary, as *must hold against X, need not hold against Y*.
 - `control` — the concrete incorrect candidate the check must reject. A control
@@ -626,8 +636,8 @@ for rv in 365 368 370; do doctrine review show RV-$rv --json; done \
 ```
 
 One row per severe finding, with the route prefix as a tested boolean. The
-`// ""` guard is load-bearing: an undisposed finding has a null disposition and
-`split` fails without it.
+two `//` guards are both load-bearing, for different reasons: an undisposed
+finding has a null disposition, and `split` and `test` each fail on null.
 
 This extracts the route and nothing else. `P10` requires several further facts
 per finding and per ledger that nothing in the corpus emits, and their joins are
@@ -906,7 +916,7 @@ raise, and answering them in the ledger costs a round.
   confounds the trial.
 - **A `[[step]]` in `reviewing.toml`.** Rejected under `DEC-101`: step ids are
   API, so a new step is a versioned surface change for something the per-turn
-  prose fragment already delivers. `reviewing.toml:8-14` says so in-repo.
+  prose fragment already delivers. `reviewing.toml:6-11` says so in-repo.
 - **Carving out the stand-alone rule and stopping there** — the minimal answer
   to `RV-371` `F-4`. Rejected on the owner's ruling: it resolves the textual
   contradiction while leaving the design dependent on a delivery moment it

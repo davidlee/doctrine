@@ -49,7 +49,7 @@ and the plan skill where the obligation fires a third time (added under `RV-371`
   run delivers on **every reviewing turn**, i.e. at the moment routing happens.
   Precisely: the fragment is emitted every turn, and its *body* is elided when
   the caller declares a current `name@digest` receipt
-  (`src/commands/design.rs:2605-2631`). So the agent either holds the current
+  (`src/commands/design.rs:2837-2861`). So the agent either holds the current
   bytes or is re-sent them, and an edit invalidates every held receipt. That is
   a stronger guarantee than "re-sent each time", not a weaker one.
 - `install/review-ledger.md` §4 (*Dispose + resolve*), which already publishes
@@ -208,7 +208,7 @@ moves the finding to `contested` and `contested` blocks the design lock. **This
 is the one clause of the convention that fires preventively.**
 
 **Post-`verified`, accumulation cannot reopen the disposition.** No verb
-transitions a finding out of `verified` (`src/review.rs:703-728`), so a verified
+transitions a finding out of `verified` (`src/review.rs:789-807`), so a verified
 disposition is the immutable audit-time record. The remedy is a prose amendment
 on the `RV` `.md` stating what changed and why, with the verified disposition
 standing as the record of what was decided then. One sentence in the convention,

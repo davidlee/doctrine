@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0be9b-19d9-7903-a02a-3fce745cde59"
+recorded_at = "2026-09-20T11:37:10.873577507Z"
+kind = "friction"
+summary = "design apply adopt_authored needs full section fingerprints no command emits"
+detail = "Re-adopting a hand-edited design.md (/design, SL-260) requires an adopt_authored marker map of FULL sha256 per section. Neither 'design show' nor 'design show --format json' emits them — both truncate to 12 hex chars, and the truncated values are refused with the opaque 'marker map is not complete and exact: 0 missing, 0 unknown, 9 mismatched'. Recovering the full values meant reading design_run::document::parse to reverse-engineer the body boundaries (marker line start, region from after the marker's newline to the next marker start, strip one trailing newline, per_line unescape) and reimplementing it to hash each section — about six tool calls and a full source read for what is mechanically a projection doctrine already computes. Two cheap fixes: have the refusal name the observed fingerprints it already holds, or let 'design show --format json' carry untruncated markers."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
