@@ -1,0 +1,86 @@
+id    = 371
+slug  = "design-review-of-sl-260"
+title = "design review of SL-260"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-260"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "major"
+title = "STD-002 is falsely excluded by the shared tripwire"
+detail = "§3.2 says, ‘The first four share one tripwire: they all scope to src/ or to shipped mechanism,’ after listing STD-001 through POL-002. STD-002 does neither: its Scope applies to all authored doctrine entities and every entity reference in prose, so it binds this design.md even with no src/ change. The preceding STD-002 bullet gives a subject-matter argument, but the shared sentence then replaces it with a false scope claim and the slice scope likewise says the text-only delta lands outside every otherwise-binding standard. A reviewer or planner relying on that conclusion can skip the durable-id/reference-form check entirely. Keep STD-002 in the binding set and apply it to the design and proposed prose; reserve the src/-change tripwire for the standards whose actual scopes support it."
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "blocker"
+title = "The claimed transcription tooth does not exist"
+detail = "§5.5 says, ‘A routed finding cannot reach verified without a criterion, and an unverified blocker refuses audit → reconcile,’ and therefore calls transcription an audit-grade mechanical edge. But review verify accepts only the review reference, finding id, and an optional note; it does not read plan.toml or require a criterion. Concrete failure: after a route:probe disposition, the raiser runs review verify before slice phases or after the planner omits the criterion. The finding becomes terminal verified, doc_unresolved_blockers clears, and slice close passes with the obligation evaporated. That directly contradicts §5.1’s two-teeth model, §5.4’s sequence, and §5.5’s admission that the convention is otherwise honour-system. Before lock, either add a real transcription check at verify/close or state accurately that transcription has no mechanical tooth and that the close gate cannot detect this drop; do not spend the existing blocker gate as proof of a predicate it never evaluates."
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "blocker"
+title = "The shipped rule calls measurement enforcement"
+detail = "§5.2 proposes on both shipped surfaces, ‘This convention is enforced only by the trial’s counting pass’ / ‘Enforced only by the trial’s counting pass.’ The pass in §5.2 merely reads ledger JSON after dispositions and emits rows; it cannot reject, block, or repair a nonconforming disposition. Concrete failure: an author omits route:, proceeds through planning and execution, and assumes the stated enforcement will catch the error, but nothing acts until trial analysis—if then. This also violates §4 principle 2 (‘never imply enforcement’) and §9.1 item 4 (‘Nothing in the convention implies an enforcement it does not have’). Replace enforcement with accurate detection/measurement language and state which clauses are honour-system; describe any real preventive or gate checks separately."
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "blocker"
+title = "Ledger-carried obligations violate the existing stand-alone design rule"
+detail = "§5.1 makes the structural choice that ‘the obligation travels with the finding’ and the planner reads the criterion sketch and placement constraint only from the RV response. But the current install/design-prompts/reviewing.md lines 63–64, which §5.2 leaves untouched, says: ‘The current design must stand alone. A history ledger may explain how it changed, but it may not carry context required to understand or implement it.’ Concrete failure: a route:probe finding is deliberately not repaired into design prose; after lock, a planner reading the supposedly stand-alone design cannot know the adversary, criterion sketch, or host constraint without mining review history. The proposed append therefore instructs the author to create exactly the state the surrounding machine-rejection rule forbids. Resolve the ownership conflict before lock: either amend the stand-alone rule with an explicit, governed routed-obligation exception and delivery path, or place the implementation-required obligation in an active non-history owner that planning is required to read."
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "blocker"
+title = "The ledger insertion still orders immediate terminal close"
+detail = "§5.2 places the new Route axis immediately before the current review-ledger.md instruction ‘Then close each finding terminal,’ followed by verify/contest/withdraw. The operative proposal separately says routed verify happens after slice phases and the design pass concludes with those findings answered. Concrete failure: a responder or raiser consulting the canonical §4 sequence reads the new route paragraph and then obeys the untouched next instruction, verifies immediately before any phase or criterion exists, and terminally clears the blocker. A cross-reference to reviewing.md does not resolve two opposite temporal commands on the same disposition path. Amend §4 so its terminal-close instruction explicitly carves out routed findings and states when/against what they are verified, or keep the existing immediate-close rule and choose a different representation."
+
+[[finding]]
+id = "F-6"
+status = "open"
+severity = "blocker"
+title = "The closed routes are not mutually exclusive"
+detail = "§5.1 requires exactly one of five routes but defines them by questions that can coexist. E11 itself says its axes mix: a symlink attack can be both a mechanism prediction and a threat to a costly boundary. Concrete finding: ‘the persisted integrity boundary accepts a symlink escape, and the design has not justified accepting that exposure.’ It asks both probe (‘withstand the adversary’) and review (‘accept this commitment and its consequences’). Likewise, two conflicting normative accounts can require review to choose the owner before owner-fix can remove the duplicate. The no-default /consult rule only escalates the ambiguity; it gives the owner no deterministic basis for the required single token, and the immutable finding cannot be split in place. Define a precedence/tie-break or a split/re-raise rule for compound findings, or reshape the route definitions so exactly one is true for every in-scope finding."
+
+[[finding]]
+id = "F-7"
+status = "open"
+severity = "blocker"
+title = "The convention retypes the normative core that P2 requires once"
+detail = "§3.1 says DEC-103 requires writing the convention on both surfaces, and §9.1 excuses this on the claim that they carry different text. But §5.2 retypes the same normative assertions: both inserts require a severe finding’s route as the first disposition token, both define route versus vocab, and both state the same counting-pass enforcement claim. RFC-026 P2’s sharpened rule—also named as part of this combined trial—is one normative record included by reference, never retyped; E11 identifies the cite-plus-assert posture as P2’s observed kill clause. Concrete failure: a later change adds a sixth route or changes the token shape on the fixed fragment but misses the customizable ledger copy, leaving two authoritative shipped answers. Before lock, adjudicate DEC-103’s repeated delivery against P2’s single-owner rule instead of declaring the duplicate ‘different text’: establish one semantic owner with non-asserting delivery projections, or explicitly exempt this convention and disclose that the trial is not applying P2 to its own rule and inherits that confound."
+
+[[finding]]
+id = "F-8"
+status = "open"
+severity = "blocker"
+title = "The counting deliverable cannot produce the trial measures"
+detail = "§5.2’s documented command emits only RV id, finding id, severity, the first disposition token, and whether it starts route:. §9.4 then calls that command ‘the deliverable.’ RFC-026 P10 requires, per severe finding, whether the instrument produced its promised evidence and whether the repair was later contested or drew a related finding; per ledger it requires artefact-prose and repair-text counts, repeat contests, rounds, design line growth, later audit findings, completion, and a second-rater reclassification. None of those facts is emitted or operationally derived by the command. Concrete failure: the trial-report chore can run the deliverable successfully and still cannot answer two of P10’s three trial questions or reproduce the declared counts without inventing a fresh method after seeing outcomes. Before lock, document the complete repeatable collection/classification procedure, its source joins and second-rater step (still prose-only if desired), and stop presenting the route-prefix extractor as the whole counting method."
+
+[[finding]]
+id = "F-9"
+status = "withdrawn"
+severity = "major"
+title = "The plain-prose rule leaves dollar expansion live"
+detail = "§5.4 identifies shell corruption but narrows it to backticks and claims ‘plain prose with no code spans’ removes the failure at source; §5.2 ships only that content rule. Code-span formatting is not the shell boundary. Concrete control/probe responses often need literals such as /home/david or ; inside the double-quoted CLI style shown by the convention, the shell expands those even when the sentence contains no Markdown code span, storing changed text or executing a substitution. The scope’s own form discussion says ‘no backticks, no $’, but that stronger rule never reaches the proposed text. Also, read-back occurs after immutable disposal, so it detects rather than directly repairs. Carry the actual forbidden shell metacharacters into the operative rule or provide a shell-independent argument transport, and state the contest/re-disposition recovery path when read-back differs."
+
+[[finding]]
+id = "F-10"
+status = "open"
+severity = "major"
+title = "The plain-prose rule leaves dollar expansion live"
+detail = "§5.4 identifies shell corruption but narrows it to backticks and claims “plain prose with no code spans” removes the failure at source; §5.2 ships only that content rule. Code-span formatting is not the shell boundary. Concrete control/probe responses often need literals such as $HOME or $(command); inside the double-quoted CLI style shown by the convention, the shell expands those even when the sentence contains no Markdown code span, storing changed text or executing a substitution. The scope’s own form discussion says “no backticks, no $”, but that stronger rule never reaches the proposed text. Also, read-back occurs after immutable disposal, so it detects rather than directly repairs. Carry the actual forbidden shell metacharacters into the operative rule or provide a shell-independent argument transport, and state the contest/re-disposition recovery path when read-back differs."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
