@@ -278,4 +278,4 @@ real `STD-003` gap. `RV-372` `F-5` holds the verbatim attestation.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-20 · slice at `reconcile`, `RV-372` done (14 findings, all terminal) · dispatch/246
+fresh-as-of: 2026-09-20 · slice at `reconcile`, `RV-372` done (15 findings, all terminal) · dispatch/246 @ 030caf83a
