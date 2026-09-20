@@ -89,3 +89,61 @@ It is the second instance in this ledger of the failure mode `R4` describes —
 the first being `F-9` itself — and both argue the same way: the recording site
 for a review's durable reasoning has no correction path short of a whole round.
 
+
+## Synthesis
+
+**Closure story.** Ten findings raised, one withdrawn for shell damage and
+re-raised, nine disposed. Every one was confirmed against the code or the cited
+file; none was contested on its merits by the responder. The design grew from
+804 to roughly 1130 lines under the pass — the largest single contributor being
+`F-8`, which converted a five-column route extractor presented as *the counting
+method* into §9.4's full collection and classification procedure.
+
+Two findings were **contested by the raiser after disposition** and re-disposed:
+
+- **`F-6`** — the first repair was itself defective. Its four-step precedence
+  turned steps 2 and 3 on *instrument route*, a term this design defines as
+  exactly `demonstrate`, `probe` and `control`, which left the pair
+  `review` + `owner-fix` — `F-6`'s own second worked example — unresolved by all
+  three steps while step 3 nonetheless enumerated `owner-fix` first. Step 2 now
+  reads *prefer any route other than `review`*; steps 2 and 3 are together total
+  over the five. `DEC-275` carries the amendment.
+- **`F-2`** — the substance stood; the completeness claim did not. Its response
+  said the transcription overclaim appeared in four places and all four were
+  fixed. It appeared in five: `DEC-271`'s own `consequences` still named
+  transcription as having teeth at the slice close, and `DEC-271`'s **title**
+  still read *close-gate teeth are audit-grade* — the same withdrawn claim in the
+  one field an append-style amendment cannot reach.
+
+**What this ledger demonstrates about its own subject.** `SL-260` exists to route
+severe findings to instruments because prose repair generates findings against
+repair text. This pass is a live instance of the mechanism it is designing for.
+`R5` — *a repair discharges the arm the finding named and leaves its twin* —
+fired **three times inside the repair round**: on `F-6` (the twin arm of a
+compound finding, in the repair that introduced the twin-arm mitigation), on
+`F-2` (an incomplete class sweep, in a sweep whose clause `owner-fix` exists to
+make explicit), and on `DEC-271`'s title. `R4` — *the adversary clause is
+silently eaten by the shell* — fired twice, on `F-9` and on `F-10`'s own
+response. None of the five was found by the raiser's original pass; all were
+found by a fresh critical re-read afterwards. That is evidence for `P10`'s
+premise and against any reading that a single adversarial pass converges.
+
+**Standing risks.** `R5`'s residual is unchanged and is the one this ledger
+keeps illustrating: the sibling-split rule fires only when somebody notices the
+twin, and in all three instances here nobody did at the time. `R6` is materially
+stronger after `F-4` — the plan-side pointer means the transcription instruction
+now reaches a planner — but the raiser side stays unguarded, which `F-2`
+established is not fixable without a `src/` change.
+
+**Tradeoffs consciously accepted.** The no-`src/` tripwire was held throughout
+and cost real capability: the `--response` quoting hazard takes a content rule
+rather than a transport fix, the counting joins are manual, and the route set
+stays prose rather than a code-backed closed vocabulary. Each is recorded with
+its post-trial reopening path (`Q4`) rather than hidden. `DEC-271`'s slug still
+carries the withdrawn claim; the id is identity and the slug is not
+authoritative (`STD-002`), so it was left rather than renamed.
+
+**Raised out of this pass, not repaired in it.** `ISS-472` (two shipped doc
+comments deny that cargo tracks embedded assets — `R7`'s opposite claim is the
+correct one) and `ISS-473` (`knowledge edit`'s list flags silently sever any item
+containing a comma, which is how `CON-006` acquired three severed rows).
