@@ -1,0 +1,102 @@
+# Implementation plan for SL-260 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-260"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber, so the id
+# sequence goes non-monotonic after a split and that is expected. Criterion ids
+# are local to their phase, bare, and equally immutable (glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance. The prefix is
+# the only mode marker; there is no mode field. Reference a criterion from
+# another phase phase-qualified (PHASE-03/EX-8) — bare EX-8 is ambiguous.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Operative rule"
+objective = "Land the convention's one normative owner in `install/design-prompts/reviewing.md` — the routing section drafted at design §5.2, appended after the `What the machine will reject` list, plus the amendment to that list's last entry (lines 63-64) carving out the routed obligation — and prove a rebuilt binary delivers it in a rendered reviewing turn."
+entrance_criteria = [
+  { id = "EN-1", text = "The design run is locked (revision 79) and this plan is approved." },
+  { id = "EN-2", text = "`install/design-prompts/reviewing.md` still matches what design §2.5 and §5.2 cite: the `What the machine will reject` list ends with the stand-alone rule at lines 63-64." },
+  { id = "EN-3", text = "A design run at stage `reviewing` exists to render a turn against — `SL-253` at plan time; any run in that stage serves. If none does, stop and `/consult` rather than substituting a source-file read for the render." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The routing section is appended after the `What the machine will reject` list, carrying the content design §5.2 drafts: the blocker/major severity boundary; the closed five-route table; the `route:<route> <vocab>` recording shape; the no-default rule; the compound-finding precedence and the sibling-split; the per-route obligations (`probe`'s adversary, `control`'s named fault, `owner-fix`'s sweep, and all three instrument routes' criterion sketch and placement constraint); the plain-prose form rule, the read-back step and the recovery path; the settle-first test; both halves of the accumulation rule; the raiser-side ruling and its deferral past the design lock; and the `CON-006` pointer." },
+  { id = "EX-2", text = "The section is marked provisional and cites `RFC-026` (§9.1 item 1)." },
+  { id = "EX-3", text = "The stand-alone rule at `reviewing.md:63-64` carries the provisional routed-obligation exception drafted at design §5.2, scoped so nothing else may lean on the ledger that way." },
+  { id = "EX-4", text = "Nothing in the new text implies enforcement it does not have: the slice close is described as a forcing moment and never as a check on transcription. No clause assumes a check `CON-006` records as absent (§9.1 item 4)." },
+  { id = "EX-5", text = "`reviewing.md` is the only file this phase edits, and `reviewing.toml` gains no `[[step]]` — step ids are API (`DEC-101`)." },
+]
+verification = [
+  { id = "VT-1", expects = "The fragment source carries both edits: the routing section heading, the provisional `RFC-026` marker, the recording shape, a closed-set token, the `CON-006` pointer, and the carve-out sentence on the stand-alone rule.", test_file = "install/design-prompts/reviewing.md", keywords = ["Routing a severe finding", "RFC-026 P10 trial", "route:<route> <vocab>", "owner-fix", "CON-006", "One provisional exception"], patterns = ['^## Routing a severe finding'], waived = false },
+  { id = "VA-1", expects = "Delivery is proved through rendered output, never through `install/` (§9.2 item 2, `R7`). After `cargo build`, `doctrine design resume <slice whose run is at stage reviewing>` emits the fragment body containing the routing section and the amended stand-alone rule. `design resume` is a pure read (`run_resume`, `src/commands/design.rs:2488`), so this does not mutate another slice's run." },
+  { id = "VT-2", expects = "The `src/` tripwire (§9.1 item 7): `git log --oneline 423c181d1..HEAD --grep='SL-260' -- src/` is empty, where `423c181d1` is the parent of this slice's first commit. Positive control: the same command without the pathspec returns commits, so an empty result is not an empty-search artefact. The commit-scoped form replaces §9.2's `git diff --stat <base>..HEAD -- src/` because `edge` carries concurrent slices' `src/` changes (`SL-246` landed several) and the diff form would false-red on them. Same assertion, correct instrument.", waived = true, waived_reason = "A negative assertion over a path that must stay untouched has no file for keywords to appear in; the check is the git command above, run at phase end and again at close." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Pointer surfaces"
+objective = "Hang the obligation at its other two firing moments with surfaces that assert nothing — the scoped route axis in `install/review-ledger.md` §4 and the transcription pointer in `plugins/doctrine/skills/plan/SKILL.md` — then prove across all three surfaces that every normative clause is stated in exactly one place."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 is complete: the operative rule is in the fragment and renders, so the two pointers have something real to point at and the single-owner sweep has a defined target." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`install/review-ledger.md` §4 carries the route axis block drafted at design §5.2, placed after the terminal-close block and its **Caveats** list and before `### Anti-escape guardrails`, so the general rule is met before its exception." },
+  { id = "EX-2", text = "That block carries all four load-bearing parts: the design-review scope parenthesis (not `/audit`, not `/code-review`); the deferred-terminal-close sentence; the pointer naming `design-prompts/reviewing.md` as the owner; and the `CON-006` pointer." },
+  { id = "EX-3", text = "`plugins/doctrine/skills/plan/SKILL.md` carries the transcription pointer drafted at design §5.2, positioned where a planner reads it before authoring phases. Existing numbered steps are not renumbered." },
+  { id = "EX-4", text = "Neither pointer surface restates a route definition, the form rule, or the severity boundary. Checkable as stated: remove the fragment and neither one still tells you how to route (§9.1 item 3, `RFC-026` `P2`, `RV-371` `F-7`)." },
+  { id = "EX-5", text = "All three surfaces cite `CON-006`, so the fact of non-enforcement is delivered at each point of effect while the enumeration stays pull-tier (§9.1 item 4)." },
+]
+verification = [
+  { id = "VT-1", expects = "The ledger doc carries the route axis, its provisional marker, the design-review scope line, the pointer to the owning fragment, and the `CON-006` pointer.", test_file = "install/review-ledger.md", keywords = ["Route axis", "RFC-026 P10 trial", "design-review ledgers", "CON-006", "reviewing.md"], patterns = ['^\*\*Route axis\*\*'], waived = false },
+  { id = "VT-2", expects = "The plan skill carries the transcription pointer, its provisional marker, the routed dispositions it names, and the inline citation form the criterion must carry.", test_file = "plugins/doctrine/skills/plan/SKILL.md", keywords = ["Routed findings from the design review", "RFC-026 P10 trial", "route:demonstrate", "RV-NNN F-n"], waived = false },
+  { id = "VA-1", expects = "Delivery of both pointers is proved through rendered output, never through `install/` or `plugins/` (§9.2 item 2). After `cargo build` and `doctrine install`: the axis reads back out of `doctrine library show reference/review-ledger.md`, and the pointer reads back out of the installed `.claude/skills/plan/SKILL.md`." },
+  { id = "VA-2", expects = "The single-owner sweep (§9.1 item 3, which has no exception). For each normative clause class the item enumerates — the eligibility rules; the closed route set; the recording shape; the severity boundary and the no-default rule; the compound-finding precedence; the raiser-side ruling and its deferral; the settle-first test; both halves of the accumulation rule and the post-`verified` residue; the per-route obligations; the plain-prose form rule and the recovery path; the placement rule; the collection procedure — grep a distinctive phrase across `install/` and `plugins/` and get exactly one hit. Run a positive control first: grep a phrase known to be in the fragment and confirm the sweep finds it, so a clean result is not an empty-search artefact." },
+  { id = "VA-3", expects = "`doctrine knowledge inspect CON-006` resolves, and no surface describes the slice close as a check on transcription rather than as a forcing moment (§9.1 item 4)." },
+  { id = "VT-3", expects = "The `src/` tripwire, re-run at this phase's end. Same command and positive control as `PHASE-01`/`VT-2`.", waived = true, waived_reason = "Negative assertion over an untouched path; see PHASE-01/VT-2." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Trial apparatus"
+objective = "Stand up what the trial needs and this slice does not run: the backlog chore that owns the trial report, gated `after` `SL-260` and carrying the one obligation only it can see; `RFC-026` `P10`'s *Open* clause recording where its two items were settled; and `Q2` and `Q4` minted onto the chore that owns them."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 and PHASE-02 are complete — the convention is in effect, so the chore gates a trial that can actually run." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A backlog chore exists with an `after` edge to `SL-260` (`doctrine after CHR-NNN SL-260`), owning the obligation to count and write the `RFC-026` evidence entry once the three eligible slices have run (§9.1 item 5; slice scope item 8)." },
+  { id = "EX-2", text = "The chore **cites** `DEC-276` for the collection and classification procedure and cites the eligibility rules where they live; it restates neither, because §9.1 item 3 binds the chore too." },
+  { id = "EX-3", text = "The chore carries in its own right the one obligation that fires on a schedule only it can see: a checklist line to capture `doctrine review status RV-NNN` verbatim at each eligible design pass's conclusion, pointing at `DEC-276` for why — the rounds and contests it records live in the gitignored runtime baton, are unrecoverable if missed, and are then reported as unavailable, never estimated." },
+  { id = "EX-4", text = "The chore carries the `R4` confound guard: check for response truncation before reading a high miss rate as a routing failure (design §8, `DEC-270`)." },
+  { id = "EX-5", text = "`RFC-026` `P10`'s *Open* clause records where its two items were settled, naming `DEC-269` and `DEC-271` and the eligibility rules (§9.1 item 6, §9.2 row 6). The RFC is amended in place; `P10`'s text is not rewritten." },
+  { id = "EX-6", text = "Design §6's `Q2` (should the route axis extend beyond design-review ledgers?) and `Q4` (should the route set become a code-backed closed vocabulary?) are minted as `QUE` records owned by the chore, and not before it exists — minting them earlier would create the second owner `RFC-026` `P2` exists to prevent. `Q1` and `Q5` stay unminted: `Q1` is a deferral the design states, `Q5` is out of scope." },
+]
+verification = [
+  { id = "VT-1", expects = "`RFC-026` records the settlement: `P10`'s *Open* clause names the two decision records and points at `SL-260` for the eligibility rules. None of `DEC-269`, `DEC-271` or `SL-260` appears in the file today, so the keyword floor is not vacuous.", test_file = ".doctrine/rfc/026/rfc-026.md", keywords = ["DEC-269", "DEC-271", "SL-260"], waived = false },
+  { id = "VA-1", expects = "`doctrine backlog inspect CHR-NNN` shows the chore with its `after` edge to `SL-260` resolved; its body cites `DEC-276` and the eligibility rules rather than restating either, and carries the capture checklist line and the `R4` confound guard." },
+  { id = "VA-2", expects = "`doctrine knowledge inspect` resolves the two new `QUE` records, each related to the chore, each citing design §6 rather than restating the question's argument." },
+  { id = "VT-2", expects = "The `src/` tripwire, re-run at this phase's end and again at close. Same command and positive control as `PHASE-01`/`VT-2`.", waived = true, waived_reason = "Negative assertion over an untouched path; see PHASE-01/VT-2." },
+]
+specs        = []
+requirements = []
