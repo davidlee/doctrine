@@ -45,3 +45,24 @@ close, not its backlog drift.
 
 Each of the five is corrected and re-verified (`doctrine memory verify <key>`),
 and none of them instructs a bare `design show` for run state.
+
+## Folded in from `CHR-075` (closed duplicate, SL-246 audit)
+
+The `PHASE-05`/`PHASE-06` capsule orchestrator re-derived this item independently
+as `CHR-075` and added three things worth keeping:
+
+- **The concrete repair, per row.** Correct the verb to `doctrine design show
+  --format prompt` where *run state* is meant; leave it alone where the
+  *document* is meant; then re-attest. The five are not uniformly wrong — one
+  (`mem_019fc255625877e09ba55d5e11d7c5cb`) has its thesis inverted, the rest cite
+  the verb in passing.
+- **It compounds with `ISS-465`** (`memory search` ranking too poor to compete
+  with raw grep). Agents already bypass the sanctioned read path, so a wrong row
+  is less likely to be caught and corrected in passing than the corpus's design
+  assumes.
+- **Wrong is a different severity from stale.** A stale row is read, found
+  unhelpful, and dropped. A wrong row is retrieved *precisely* when the agent does
+  not already know the answer, and sends them to a verb that now returns
+  plausible-looking output for a different question.
+
+Also related: SL-246's `R6` (stale skill path), a reconcile input.

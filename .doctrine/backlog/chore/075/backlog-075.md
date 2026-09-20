@@ -1,5 +1,11 @@
 # CHR-075: Five memories misdescribe `design show` after SL-246 PHASE-05 reclaimed it
 
+> **Closed as a duplicate of `CHR-073`** at the `SL-246` audit. `CHR-073`
+> (*Re-attest five memories that document `design show` as the envelope read*)
+> was minted first, at `RV-370` `F-16`, and names the same five uids. The three
+> things this item added have been folded into `CHR-073`'s body. Act on
+> `CHR-073`; this row is kept only so the id is not reused.
+
 SL-246 PHASE-05 moved `doctrine design show`'s **default** from the design run's
 turn envelope to the **design document**. The envelope survives under
 `--format prompt|json|status`; only the bare verb changed meaning.
