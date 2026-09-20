@@ -1,14 +1,14 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 462
-slug = "reviewpolicy-labels-exceed-16-b-bound"
-title = "ReviewPolicy labels exceed 16 B bound"
+id = 466
+slug = "check-plan-cannot-express-verification-by-unchanged-pre-existing-test"
+title = "check plan cannot express verification by unchanged pre-existing test"
 kind = "issue"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
-created = "2026-09-20"
-updated = "2026-09-20"
+created = "2026-09-19"
+updated = "2026-09-19"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

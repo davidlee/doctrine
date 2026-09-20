@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bc4b-a35e-7333-a926-986e2e55436e"
+recorded_at = "2026-09-20T00:51:08.766377807Z"
+kind = "friction"
+summary = "/design: ReviewPolicy variants adversarial-then-human and human-then-adversarial are undeclarable — 22 B label vs the 16 B admission bound"
+detail = "design apply with review_policy.policy=adversarial-then-human refuses: 'payload label term is 22 bytes, over the 16-byte admission bound'. src/design_run/run.rs:449 admits the policy label via PayloadTerm::label, whose ValueKind::Label bound is bounds.rs DESIGN_STAGE_LABEL_BYTES=16 — derived from the Stage vocabulary (longest 'exploring', 9 B) and const-asserted for Stage (mod.rs:176) and DispositionForm (inquiry.rs:188), but never for ReviewPolicy. Two of the four advertised policies are therefore unreachable via the contract; only human-only (10 B, the default, so it emits no row) and adversarial-only (16 B, exactly at the bound) can be declared. Cost: user chose adversarial-then-human for SL-260 and the run cannot record it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

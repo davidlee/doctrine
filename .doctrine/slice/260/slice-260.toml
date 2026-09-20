@@ -12,15 +12,22 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "install/design-prompts/reviewing.md"
-intent = "scope-relevant"
+intent = "design-target"
+note = "The operative rule (DEC-268). Appended to the After the pass material. customization=fixed so no client install can customise it away, which is why the rule lives here rather than in the reference doc."
 
 [[selector]]
 selector = "install/review-ledger.md"
-intent = "scope-relevant"
+intent = "design-target"
+note = "Section 4 gains the route axis plus the design-review scope line and a pointer to the fragment (DEC-268). customization=customizable, and this doc owns the invariant protocol for every review skill - hence the scope line."
 
 [[selector]]
 selector = ".doctrine/rfc/026/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = ".doctrine/rfc/026/rfc-026.md"
+intent = "design-target"
+note = "P10's Open clause records where its two items were settled: who states the probe adversary, and what detects at ledger grain that none was stated."
 
 [[relation]]
 label = "references"

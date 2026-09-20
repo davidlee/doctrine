@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bc5d-64f3-7812-8651-1b7b06672a0b"
+recorded_at = "2026-09-20T01:10:32.435885317Z"
+kind = "friction"
+summary = "capsule-driver: stale idle-waiters re-wake a discharged orchestrator agent, burning a full turn per drain"
+detail = "Observed on the /capsule-driver seat driving SL-246 PHASE-05..06. The capsule-orchestrator subagent had finished (discharged) but idle-waiter notifications kept re-invoking it; each wake cost a full turn to report 'nothing to report'. Orchestrator context drifted to ~249k tokens largely from this. User had to manually TaskStop the agent. Reported by the user 2026-09-20."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
