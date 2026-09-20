@@ -41,8 +41,9 @@ evidential threshold, so **there is no pass mark**.
 
 ### 1. The convention text, where disposition guidance already lives
 
-Two shipped files already own this surface; the convention rides them rather than
-minting a new normative surface:
+Three shipped files carry the convention — two that already own this surface,
+and the plan skill where the obligation fires a third time (added under `RV-371`
+`F-4`). It rides them rather than minting a new normative owner:
 
 - `install/design-prompts/reviewing.md` — the attack-surface fragment the design
   run delivers on **every reviewing turn**, i.e. at the moment routing happens.
@@ -75,8 +76,8 @@ absorb a delivery confound on top of `E11`'s own. Delivery is therefore held at
 maximum strength so it does not confound the thing under test, and **the
 delivery-channel question is deferred, not answered** (see *Follow-Ups*).
 
-**The two surfaces carry different text, written for different moments**
-(`DEC-268`). `reviewing.md` holds the **operative rule** — it fires exactly where
+**The surfaces carry different text, written for different moments, and only
+one of them asserts anything** (`DEC-268`, sharpened by `RV-371` `F-7`). `reviewing.md` holds the **operative rule** — it fires exactly where
 routing happens and its `customization` is `fixed`, so no client install can
 customise it away. `review-ledger.md` §4 holds the route axis alongside the
 existing disposition vocab, the recording shape, a pointer to the fragment, and
@@ -89,7 +90,12 @@ pass's denominator wrong. The `customization` asymmetry points the same way:
 `reviewing.md` is `fixed`, `review-ledger.md` is `customizable`
 (`publication/manifest.toml:254-261`, `:443-451`), so a client that customised
 the ledger doc keeps the fragment and loses §4 — the rule must live where it
-cannot be lost.
+cannot be lost. `plugins/doctrine/skills/plan/SKILL.md` holds the third delivery:
+a transcription pointer, likewise non-asserting, and likewise unlosable, since
+`copy_skill` rewrites every skill file on each install
+(`src/install.rs:2036-2038`). An earlier draft had §4 restate the closed route
+set; that is the `P2` violation `RV-371` `F-7` caught, and the restatement is
+gone — a sixth route is now a one-file edit.
 
 The text marks itself provisional and cites `RFC-026`. Landing on `edge` is not
 release; whether it ships to client installs is a separate decision the user
@@ -350,16 +356,23 @@ Named deliberately: the corpus's characteristic failure is additive-only
 apparatus — review ledger `RV-353` found one programme's artefact was 61%
 measurement apparatus.
 
-- **No new normative surface.** No new entity kind, no schema change, no new
-  standard. An earlier draft of this scope proposed one and it was dropped: a
+- **No new normative owner.** No new entity kind, no schema change, no new
+  standard. The convention is delivered at three moments and its normative
+  content is owned by exactly one of them — the reviewing fragment; the other
+  two surfaces point at it and assert nothing (`RV-371` `F-7`). An earlier draft of this scope proposed one and it was dropped: a
   standard alongside the shipped files is the two-surface posture `E11` measured
   at 24.5% artefact-prose findings, and `P2`'s own kill clause.
 - **All tooling** — not *minimal* tooling, none. `STD-001` (magic strings),
   `STD-003` (no silent skip) and `POL-002` (platform independence) each scope to
   `src/` or to shipped reader behaviour, so the slice as scoped lands outside
-  every standard that would otherwise bind it. **If this slice acquires a `src/`
-  change, three standards newly bind and the no-tooling claim has failed.** That
-  is a tripwire, not a preference.
+  **those three**. **If this slice acquires a `src/` change, all three newly bind
+  and the no-tooling claim has failed.** That is a tripwire, not a preference.
+  It is not a claim that no standard binds: `STD-002` (short titles, ids not
+  slugs) scopes to *"all authored doctrine entities … [and] every reference to
+  an entity"* with no `src/` precondition, so it binds this slice's prose and
+  records throughout. An earlier form of this bullet swept `STD-002` into the
+  tripwire and read as though the slice were outside every standard; `RV-371`
+  `F-1` corrected it.
 - **Prose repair for three of the five routes**, which is the point. Measurable
   as design line growth during review.
 - **`IMP-324`** (*No durable sink for design-round probe evidence*) shrinks to
@@ -386,12 +399,19 @@ measurement apparatus.
 
 ## Affected surface
 
-- `install/design-prompts/reviewing.md` — the convention clause.
-- `install/review-ledger.md` — §4 route axis alongside the disposition vocab.
+- `install/design-prompts/reviewing.md` — the convention clause (the sole
+  normative owner), and a provisional carve-out on the stand-alone rule at
+  `:63-64` (`RV-371` `F-4`).
+- `install/review-ledger.md` — §4 route axis alongside the disposition vocab,
+  placed after the terminal-close block and deferring it for routed findings
+  (`RV-371` `F-5`); non-asserting (`RV-371` `F-7`).
+- `plugins/doctrine/skills/plan/SKILL.md` — the transcription pointer, added on
+  the owner's ruling against `RV-371` `F-4`. Closes `OQ-3`/design `Q3`.
 - `.doctrine/rfc/026/` — `P10`'s *Open* items resolve to items 4 and 5.
 
-Shipped assets under `install/` are embedded (`src/asset_source.rs`), so the
-convention reaches agents only after `cargo build` then `doctrine install`. That
+Shipped assets under `install/` and `plugins/` are embedded
+(`src/asset_source.rs:21`, `src/install.rs:20`), so the convention reaches agents
+only after `cargo build` then `doctrine install`. That
 step belongs in the landing procedure — a skipped rebuild leaves the convention
 silently not in effect. (`cargo` does register the asset folder as a build
 dependency, so the rebuild is not itself manual; see
@@ -435,15 +455,21 @@ not on trial outcomes, which postdate this slice:
    test; both halves of the accumulation rule and the post-`verified` residue; the
    per-route obligations (`probe` adversary, `control` named fault, `owner-fix`
    sweep, criterion sketch and placement constraint); the plain-prose form rule;
-   the placement rule; and the counting method.
-   Exception, by `DEC-103` corollary 2: the routing convention itself is
-   deliberately delivered on both surfaces of item 1 — that is the rule, not a
-   duplicate. The two surfaces carry *different* text (`DEC-268`), and §4 of the
-   ledger doc carries the design-review scope line.
-4. `CON-006` exists and is cited from both surfaces, so the fact of
+   the placement rule; the compound-finding precedence; and the collection
+   procedure. **No exception.** The obligation is *hung* at three moments, per
+   `DEC-103` corollary 2; its content is *owned* once, per `RFC-026` `P2`. The
+   ledger entry and the plan pointer must each be checkable as non-asserting:
+   remove the fragment and neither still tells you how to route (`RV-371`
+   `F-7`). §4 of the ledger doc carries the design-review scope line.
+4. `CON-006` exists and is cited from all three surfaces, so the fact of
    non-enforcement is delivered at the point of effect and the enumeration is
-   reachable. Nothing in the convention implies an enforcement it does not have.
-5. The trial-report chore exists and is gated `after` this slice.
+   reachable. Nothing in the convention implies an enforcement it does not have —
+   in particular the slice close is described as a *forcing moment* on the verify
+   act and never as a check on transcription (`RV-371` `F-2`, `F-3`).
+5. The trial-report chore exists, is gated `after` this slice, and **cites**
+   `DEC-276` for the collection procedure rather than restating it (item 3 binds
+   that procedure too), carrying in its own right only the checklist line for
+   the at-conclusion capture of `review status` (`RV-371` `F-8`).
 6. `P10`'s *Open* clause in `RFC-026` records where its two items were settled.
 7. No file under `src/` is touched.
 

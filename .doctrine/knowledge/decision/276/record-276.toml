@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 276
+slug = "trial-collection-procedure-is-fixed-before-any-outcome-exists"
+title = "Trial collection procedure is fixed before any outcome exists"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-20"
+updated = "2026-09-20"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "RFC-026 P10 fixes the trial's eligibility rules beforehand - the next three code-changing slices, taken consecutively, not selected - and enumerates what must be collected: per severe finding the route, whether the instrument produced the evidence it promised, and whether the repair was later contested or drew a related finding; per ledger and as counts not shares, artefact-prose findings, findings against repair text, repeat contests, rounds, design line growth during review, later audit findings, and whether the slice completed; plus a second rater re-classifying. The drafted design presented the section 5.2 route extractor as 'the deliverable'. RV-371 F-8 established that the extractor emits five columns, all of them about the route, and produces none of the other facts; the trial-report chore could run it successfully and still be unable to answer two of P10's three questions without inventing a method after seeing outcomes."
+choice = "The complete collection and classification procedure is settled in SL-260, before the first eligible slice opens, and lives in design section 9.4: every required fact listed with its source and how its join is made, the manual joins named as manual, and the second-rater step specified as working from the same ledger JSON and design history without sight of the first rater's labels, with disagreements reported as disagreements rather than reconciled into a point estimate. The route extractor is renamed to what it is - one input, not the method. One rule must execute DURING the trial rather than at its end: rounds and contests live in the review's runtime baton, which is gitignored and documented in code as non-derivable observability lost on baton loss (src/review.rs:2185-2208), so at the moment each eligible design pass concludes the trial owner records doctrine review status RV-NNN verbatim into the chore's notes. A count reconstructed later from git history of the ledger toml is a fallback, not the measure, because it collapses turns that landed in one commit. A missed capture is reported as unavailable, never estimated."
+alternatives = ["Leave the method to the trial-report chore. Rejected: that is precisely a method chosen after the outcomes are visible", " which can be tuned to the result it finds", " consciously or not. The slice's own boundary is that it fixes the trial's rules", " and the method is a rule", "Write a script that collects everything. Foreclosed by the no-tooling tripwire: it puts the slice under src/ and newly binds STD-001", " STD-003 and POL-002", "Drop the measures the corpus cannot emit. Rejected: it silently narrows P10's trial to the one axis that happens to be cheap", " and it would leave the cost of the tripwire hidden rather than stated"]
+rationale = "P10 fixes eligibility beforehand for a reason, and the reason applies with equal force to the method: both are levers that can be moved after the fact to change the answer. Writing the procedure down now also surfaced a fact no one had noticed - that two of the required per-ledger measures are not durable at all - which would otherwise have been discovered at analysis time, when the data was already gone. That discovery is the argument for this decision in miniature."
+consequences = ["Design section 9.4 carries the full procedure", " and section 9.1 item 5 requires the trial-report chore to carry it and its at-conclusion capture step", "The trial owner has an obligation that fires three times during the trial", " at each design pass conclusion", " not once at the end", "Rounds and contests may legitimately be reported as unavailable for a ledger; that is a disclosed gap", " not a defect in the trial", "The manual joins are a stated cost of the no-tooling tripwire", " and Q4's post-trial code-backing option is where that cost would be paid down", "The at-conclusion capture rule is itself unenforced by construction and joins the CON-006 register"]
+decided_by = "owner"
+decided_on = "2026-09-20"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-260"

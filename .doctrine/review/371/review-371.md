@@ -71,3 +71,21 @@ who has only the proposed text, and honest about what it does not solve.
 
 Whether `RFC-026`'s `E11` classification is sound. Take `E11` as given; review
 the design built on it.
+
+## Responder corrections (post-disposition, pre-verify)
+
+A disposition cannot be amended (no amend verb), so a defect found in one after
+the fact is recorded here rather than silently left.
+
+- **F-10's response mis-cites a risk id.** It says the `F-9` worked example is
+  cited "in section 5.4 and in R8". The correct id is **`R4`** — *the adversary
+  clause is silently eaten by the shell*. `R8` is the trial-population risk and
+  is unrelated. The design itself is correct: `design.md` §8 `R4` carries the
+  `F-9` citation and §5.4 carries the worked example. Only the ledger response's
+  pointer is wrong.
+
+Found by the responder's own read-back-and-self-attack pass, not by the raiser.
+It is the second instance in this ledger of the failure mode `R4` describes —
+the first being `F-9` itself — and both argue the same way: the recording site
+for a review's durable reasoning has no correction path short of a whole round.
+
