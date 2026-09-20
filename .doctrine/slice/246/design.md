@@ -65,7 +65,8 @@ explicit level:
 The middle level is the one that earns the feature. On the specimen it costs
 about 30% of `full` — 31.8 KB against 107 KB across the fifteen records — which
 is a real saving but not an order of magnitude, so it has to be *right* about
-which fields it keeps rather than merely smaller.
+which fields it keeps rather than merely smaller. (Re-measured at audit:
+**11.5%**, and rising toward the designed 30% as the corpus fills — §8 `R3`.)
 
 The same composition is available generically, one level up, on `doctrine
 inspect <ID> --knowledge <level>`: any entity that carries knowledge
@@ -459,7 +460,8 @@ the record that could not be read at all.
 the specimen, not the order of magnitude first assumed. A level that saves 70%
 has to be *right* about what it keeps; `DEC-150`'s criterion — what rules, and
 what would change whether the ruling still stands — is doing the work that the
-size argument alone cannot.
+size argument alone cannot. (Re-measured at audit: **11.5%**, and rising toward
+30% as the corpus fills — §8 `R3`.)
 
 **`F4` — generality now versus the closure later.** Every line of traversal
 abstraction written now for `IMP-398` S5 is speculative; every coupling to
@@ -620,7 +622,9 @@ impl KnowledgeLevel {
 ```
 
 `Default` is `Skip`, which is `C1` expressed in the type rather than remembered
-at each call site.
+at each call site. `Facets`' *"Never reads the `.md`"* is `C7`, and it is the one
+clause of this section the slice did not deliver — see the reconciliation note
+under *Rendering* below (`RV-372` `F-3`; carried by `CHR-074`).
 
 #### Selection
 
@@ -739,6 +743,16 @@ reads the `.md` unconditionally and errors when it is absent, so `render_block`
 takes a facet-only path at `Facets` rather than paying for a body it discards.
 That path is the seam `IMP-459` would later ride to stop the corpus scan reading
 a megabyte of prose it throws away.
+
+> **Reconciled 2026-09-20 (`RV-372` `F-3`) — `C7` was not delivered.** No plan
+> criterion bound it, and the shipped code does not meet it: `read_record`
+> (`src/knowledge.rs:1970`) reads the `.md` at `:1980` for *every* level, and
+> `render_record` discards it at `Facets`. The paragraph above states the design's
+> mandate, not the implementation. **`CHR-074` carries it**, and the route stays
+> open rather than blocked: `DEC-149`'s unfilled marker needs the body's *size*,
+> not the body, so `fs::metadata` satisfies the marker and `C7` together — the
+> read the code performs is not forced by this design. `IMP-459`'s seam defers
+> with it.
 
 #### The tiered facet render
 
@@ -905,6 +919,17 @@ unreachable in a black-box golden, so it is verified by construction rather than
 by test — §9.5 states why, and what the alternative would have cost. `STD-003` is satisfied
 across both: every degraded read is disclosed, each on the surface that can
 actually see it.
+
+> **Reconciled 2026-09-20 (`RV-372` `F-6`) — the vocabulary is incomplete.**
+> `DEC-149` / `X5` / `I6` model three ways a facet can be **empty** and no way for
+> a field to be **withheld**. At `Facets` the tier filter drops every
+> Argument-tier field silently, so a reader cannot distinguish a withheld field
+> from an absent one from a kind that has none — three states, one rendering. The
+> claim above holds for the *read*; it does not hold for the *level*, and the gap
+> is a real `STD-003` conformance defect rather than a matter of taste. The fourth
+> marker is **`ISS-467`**. Its route is cheap and does not re-open `C4`: the tier
+> is already a column on the authored `FacetFieldRow` table, so the withheld key
+> set is derivable at the render site without a second per-kind match.
 
 #### Command grammar
 
@@ -1237,7 +1262,7 @@ with no design fails immediately and cheaply, before a corpus scan is paid for.
 
 | path | change |
 |---|---|
-| `src/knowledge.rs` | `KnowledgeLevel`, `SelectedRecord`, the facet-only read path, `facet_fields` + `Tier`/`TierFilter` under `format_facet` **and** `facet_json` — neither gains an empty policy (`D6`) — the three markers, `show_value` split out of `show_json`'s inline map, and the four composed-read producers (`render_record`, `record_value`, `render_block`, `knowledge_value`) |
+| `src/knowledge.rs` | `KnowledgeLevel`, `SelectedRecord`, the facet-only read path (**not delivered** — `RV-372` `F-3`, carried by `CHR-074`), `facet_fields` + `Tier`/`TierFilter` under `format_facet` **and** `facet_json` — neither gains an empty policy (`D6`) — the three markers, `show_value` split out of `show_json`'s inline map, and the four composed-read producers (`render_record`, `record_value`, `render_block`, `knowledge_value`) |
 | `src/relation_graph.rs` | `select_knowledge` — pure, over `InspectView` |
 | `src/kinds/mod.rs` | none expected; `is_record` (`:128`) is consumed as-is |
 | `src/commands/inspect.rs` | `--knowledge` on `InspectArgs`; the `--transitive` refusal; compose relations + block + actionability |
@@ -1584,6 +1609,17 @@ what makes the 70% saving land on the argument fields rather than on anything
 load-bearing. *Residual:* a judgement call, and `DEC-151` routes it to a
 by-agent verification rather than pretending a test can settle it.
 
+> **Measured at audit 2026-09-20 (`RV-372` `F-4`).** `doctrine design show SL-244
+> --knowledge {skip,facets,full}` = 202,243 / 215,116 / 313,761 bytes, so the
+> knowledge block is **12,873 B at `facets` against 111,518 B at `full` — 11.5%,
+> not ~30%**. `full` agrees with `research/research.md`; only `facets` diverges.
+> The cause is not a better encoding but an emptier corpus: **5 of the 16 records
+> surfaced carry no facet at all** (`IMP-403`), so a third of the block is an
+> unfilled marker rather than content. The **direction** is the part that matters
+> — as `IMP-403` is worked and the corpus fills, the saving **regresses toward the
+> designed 30%**. 11.5% is not the steady state and must not be quoted as this
+> feature's cost.
+
 **`R4` — the byte-identical default is a claim, and claims rot.** `C1` is
 structural at `Skip`, but only the goldens prove it stayed structural.
 
@@ -1753,6 +1789,13 @@ accidental default and does not discharge this.
 One question, and it is the one the feature lives or dies on: *reading a design
 this way, do you reach for it again?* `R3` says a 30% saving has to be right
 about what it keeps, and no test can tell you whether it is.
+
+> **Discharged 2026-09-20 (`RV-372` `F-5`).** Answered against the built binary on
+> the real corpus: **"disappointing as a feature, but not obviously incorrect."**
+> That is a negative **product** verdict carrying **no correctness claim** — every
+> `EX` row holds, the gate is green, conformance is 22/0. It is carried forward by
+> `IMP-465` (the default, the flags, the styling) and `ISS-467` (the withheld
+> tier). The saving the question rests on measured **11.5%, not 30%** — §8 `R3`.
 
 ### 9.5 What is deliberately not verified here
 

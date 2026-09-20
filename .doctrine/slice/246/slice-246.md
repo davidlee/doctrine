@@ -9,9 +9,13 @@ together, so the ruling and the argument for it can only be read apart.
 
 `SL-244` is the specimen. Its `design.md` is **3,456 lines** and cites **20
 distinct `DEC` records by id**, quoting fragments of them inline (`DEC-121`
-appears 8+ times as quoted phrases). Fifteen knowledge records point at the slice
-— twelve via `shapes` (ten `DEC`, plus `EVD-012` and `QUE-206`) and three `DEC`
-via `references(concerns)`. `doctrine slice show SL-244` renders **none** of them:
+appears 8+ times as quoted phrases). The knowledge records pointing at the slice
+are whatever `doctrine relation list --target SL-244` returns — a census counted
+at scoping time is a measurement with a date on it, and this one drifted inside
+six weeks (`RV-372` `F-10`: sixteen at audit, not fifteen — eleven via `shapes`
+and five via `references(concerns)`, with `EVD-012` arriving under `concerns`
+rather than the `shapes` it was first attributed to). `doctrine slice show
+SL-244` renders **none** of them:
 it emits outbound relations only, as does every other kind's `show`.
 
 The derivation already exists. `doctrine relation list --target SL-244` returns
@@ -46,7 +50,10 @@ citations are explicitly *not* consulted — see Non-Goals.
 The middle level is the one that earns the feature. Measured on the specimen it
 costs **~30% of `full`** (31.8 KB vs 107 KB across the fifteen records) — a real
 saving, but not the order of magnitude first assumed; see `research/research.md`
-§ *The specimen, re-measured*.
+§ *The specimen, re-measured*. **Re-measured at audit: 11.5%** (12,873 B against
+111,518 B), because 5 of the 16 records surfaced carry no facet at all — a figure
+that regresses toward 30% as `IMP-403` fills the corpus, and so must not be
+quoted as the steady state (`RV-372` `F-4`; design.md § 8 `R3`).
 
 **Not the pointer line.** `DEC-145` leaves discoverability unsolved — an agent
 asks this question at `<kind> show` — and names a one-line pointer there as "the
@@ -325,6 +332,38 @@ inbound record set keeps changing and a golden over it would rot:
   needs a stored baseline of today's output, which *is* the live golden it was
   meant to avoid; the other half holds by construction under `DEC-150`'s single
   field-order table. See `DEC-151`.
+
+### Outcome — `VH-1` discharged 2026-09-20
+
+`VH-1` was answered by the named human against the built binary on the real
+corpus — which is what a `VH` row requires — and came back: **"disappointing as a
+feature, but not obviously incorrect."**
+
+That is a **negative product verdict carrying no correctness claim**, and it is
+recorded as exactly that. Every `EX` row holds, `just gate` is green (7,801
+passing, zero failures), and conformance is 22 conformant / 0 undelivered. The
+slice met objective 1 at the *mechanism* and not at the *outcome*: an entity read
+can carry its records, and a reader does not yet want to use the one it carries.
+
+The complaints have two carriers:
+
+- **`IMP-465`** — the product pass: the default, the flags, the styling (`RV-372`
+  `F-5`, `F-7`, `F-8`). `F-7` and `F-8` are recorded as *correct code whose
+  product choice is disputed*, and routed forward rather than patched: `Default =
+  Skip` is `C1` expressed in the type and is why `I1` holds, and the block's idiom
+  is `knowledge show`'s shared producer, which is what makes `C4` and `STD-001`
+  hold. In both the property that makes the code right is the property the reader
+  disliked, so a fix must break one without losing the other. That constraint is
+  the valuable part.
+- **`ISS-467`** — the withheld tier, which is not taste but a real `STD-003`
+  conformance gap (`RV-372` `F-6`). See design.md § 5.2.
+
+The attestation's most useful product is evidence against a decision the design
+had already taken. `DEC-145` and design.md § 7.2 `D4` both pushed the
+discoverability pointer out of scope as "the separate, cheap answer"; first real
+use says the composed read without that pointer does not get *found*. `IMP-398`
+owns the pointer line, and this is the argument for promoting it from a nicety to
+this feature's other half.
 
 ## Summary
 

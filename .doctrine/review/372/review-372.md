@@ -329,3 +329,105 @@ must be discharged with or before `SL-246` lands.**
 
 `just gate` on `dispatch/246` **with this audit's own changes included**: exit 0,
 **7801 passing, zero failures**, no suite red.
+
+---
+
+## Reconciliation Outcome
+
+Written 2026-09-20 by `/reconcile`. All 15 findings were terminal (`verified`)
+at entry; none were re-dispositioned here — remediation is recorded below, not by
+mutating a finding.
+
+### Direct edits applied
+
+`design.md` (locked; `/reconcile` is its sanctioned writer) and `slice-246.md`.
+Eleven edits against the brief's five items — the two surplus are single-sentence
+pointers, taken with the user's agreement so a superseded figure is not left
+reading as settled anywhere in the two documents.
+
+- **`design.md` § 5.2 *The level*** — `Facets`' *"Never reads the `.md`"* named as
+  `C7` and as the one clause of the section the slice did not deliver, pointing at
+  the note under *Rendering*. The Rust block itself is untouched: the correction
+  belongs where the claim is read, not inside the specification of the type.
+  (`F-3`)
+- **`design.md` § 5.2 *Rendering*** — the *"`C7` discharged"* paragraph is left
+  standing as the design's mandate and followed by the reconciliation: no plan
+  criterion bound `C7`, `read_record` (`src/knowledge.rs:1970`) reads the `.md` at
+  `:1980` for every level, `render_record` discards it at `Facets`. Carrier
+  **`CHR-074`**. The brief's route is recorded with it — `DEC-149`'s unfilled
+  marker needs the body's *size*, so `fs::metadata` satisfies the marker and `C7`
+  together, and the read the code performs is not forced by this design. `IMP-459`
+  defers with it. (`F-3`)
+- **`design.md` § 5.6 Code Impact** — the `src/knowledge.rs` row's *facet-only read
+  path* marked **not delivered**, carried by `CHR-074`. (`F-3`, its § 5.6 half.)
+- **`design.md` § 5.2 *The three empty states*** — the marker vocabulary recorded
+  as incomplete: three **empty** states, no **withheld** state, so at `Facets` a
+  withheld Argument-tier field, an absent one and a kind that has none render
+  identically. The section's standing `STD-003` claim is qualified rather than
+  deleted — it holds for the *read* and not for the *level*. Carrier **`ISS-467`**,
+  with the cheap route (the tier is already a column on the authored
+  `FacetFieldRow` table, so the withheld key set is derivable without a second
+  per-kind match, preserving `C4`). (`F-6`)
+- **`design.md` § 8 `R3`** — the re-derived measurement: 202,243 / 215,116 /
+  313,761 B, block **12,873 B at `facets` against 111,518 B at `full` = 11.5%**,
+  not ~30%. `full` agrees with `research.md`; only `facets` diverges. Cause
+  recorded (5 of 16 records surfaced carry no facet — `IMP-403`) and so is the
+  consequence the brief insisted on: the saving **regresses toward the designed
+  30%** as the corpus fills, and 11.5% must not be quoted as the steady state.
+  (`F-4`)
+- **`design.md` § 1 *Target behaviour*, § 3.3 `F3`** — the two other sites carrying
+  the ~30% claim gain a one-sentence pointer to § 8 `R3` rather than a second copy
+  of the measurement, per the document's own single-copy convention. *(Beyond the
+  brief; agreed with the user.)* (`F-4`)
+- **`design.md` § 9.4 *By human*** — `VH-1` recorded as discharged with its
+  verbatim answer, explicitly as a negative **product** verdict carrying **no
+  correctness claim**, beside the standing evidence (every `EX` row holds, gate
+  green, conformance 22/0). Carriers `IMP-465` and `ISS-467`. (`F-5`)
+- **`slice-246.md` Context** — the fifteen-record census replaced by the query that
+  produces it (`doctrine relation list --target SL-244`), with the audit reading
+  parenthesised (sixteen; eleven `shapes` / five `concerns`; `EVD-012` arrives
+  under `concerns`) and the reason a dated census drifts. (`F-10`)
+- **`slice-246.md` Scope & Objectives** — the scope document's own ~30% figure
+  annotated with the re-measurement and its direction. *(Beyond the brief; same
+  finding, same agreed rationale.)* (`F-4`)
+- **`slice-246.md` Verification / closure intent** — new `### Outcome — VH-1
+  discharged 2026-09-20`: the verdict verbatim, the mechanism-not-outcome reading,
+  the two carriers, `F-7` / `F-8` recorded as *correct code whose product choice is
+  disputed* (the property that makes the code right is the property the reader
+  disliked, so a fix must break one without losing the other), and the
+  discoverability evidence routed to `IMP-398` against `DEC-145` / § 7.2 `D4`.
+  (`F-5`, `F-7`, `F-8`)
+
+### REVs completed
+
+**None**, as the brief directs. Its three declined candidates — `SPEC-019`
+tiering (a display concern under `A2`), `DEC-145` (disputed, not falsified), and
+`ADR-001` (one additive `leaf` row, ratchet untouched at 76) — were not re-opened.
+
+### Not written, and why
+
+- **`plan.toml`.** Its amended `EX-2` / `EX-3` / `EX-4` and appended `VT-3` are the
+  durable record of this slice's divergences. `EN-`/`EX-`/`VT-` ids are
+  immutable-append, so it is not a reconcile surface. Untouched.
+- **`src/`.** `F-3`'s doc-comment half was repaired in-audit and is not re-filed
+  here; `/reconcile` writes `design.md` and `slice-NNN.md`.
+- **Other slices' `notes.md`.** `F-15`'s five stale sites across `SL-247`,
+  `SL-253` and `SL-256` are enumerated in **`CHR-073`** and are discharged there,
+  not from inside this pass.
+
+### Findings not reaching a write surface
+
+`F-1`, `F-2`, `F-11`, `F-12`, `F-13`, `F-14` were dispositioned `fix-now` and
+remediated within the audit; `F-9` is `aligned`, with its qualification held in
+this ledger where the next reader of that grep will find it. None required a
+reconcile write.
+
+### Standing before `/close`
+
+`CHR-073` remains **open and gating**: *must land with or before the code*, now
+covering five memories plus the five `notes.md` sites `F-15` added. It is a
+`/reviewing-memory` pass — its own routed stage, not reconcile's. `CHR-074`,
+`ISS-463`–`ISS-469` and `IMP-465` are open and carried; carried assumptions `A2`
+and `A3` were not disturbed by the audit and stand as written.
+
+Reconcile pass complete — handoff to `/close`.
