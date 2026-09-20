@@ -53,3 +53,13 @@ re-open `C2` (`knowledge show` stays byte-identical, its golden unedited).
 
 Related: `RV-372` `F-5`, `F-6`; `SL-246`; `DEC-149`, `DEC-150`; `STD-003`;
 `IMP-465` (the wider product pass); `IMP-403` (unfilled facets).
+
+## Scheduling (decided at `SL-246`'s reconcile, 2026-09-20)
+
+Not sliced on its own. This goes through with `IMP-465` as one product pass —
+the two want the same design conversation, since the withheld marker is a
+rendering `SL-246`'s design never specified, owed on both arms under `D1`'s
+one-meaning binding and without re-opening `C2`. Recorded here because the
+counter-argument is real and someone may need it later: this is a `STD-003`
+conformance defect and `IMP-465` is largely taste, so binding the defect's
+schedule to taste is a choice, not a given. Edge now linked `related`.
