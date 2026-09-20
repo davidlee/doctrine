@@ -123,49 +123,18 @@
             # pi-dev
           ];
 
-        # API keys reach the jail over a file descriptor, never over argv.
-        #
-        # jail.nix's stock forwarding (`passApiKeysFromEnv`, on by default for
-        # online profiles) expands `--setenv VAR "$VAR"` straight onto the bwrap
-        # command line. `/proc/<pid>/cmdline` is mode 444 and this host mounts
-        # /proc without hidepid, so every local process could read all six keys
-        # in plaintext for as long as a jail ran — including the `nixbld*` uids,
-        # which execute arbitrary upstream build scripts during any `nix build`.
-        # The jailed-agents.nix header calls this "secrets never sit on disk;
-        # they live only in the bwrap process env", which is true and beside the
-        # point: they arrive there *through argv*, and argv is world-readable.
-        #
-        # `bwrap --args FD` parses NUL-separated arguments from a descriptor
-        # instead, so the keys travel down an anonymous pipe — no argv, no disk.
-        # jail.nix already uses this mechanism for its runtime-closure bind args
-        # (fd 10); bwrap accepts more than one `--args`, so the two coexist.
-        #
-        # The fd number is a literal, not `{FD}<`-allocated: bash expands a
-        # command's words *before* performing its redirections, so `--args "$FD"`
-        # written on the same line as `{FD}< <(…)` would expand to empty. 21 sits
-        # clear of bash's auto-allocation floor of 10.
-        #
-        # The upstream default is switched off per jail via
-        # `passApiKeysFromEnv = false` in mkJail below. `useOpEnv` stays on: the
-        # outer `op run` wrapper is what puts the plaintext in this launcher's
-        # own environ (0600, owner-only) for the printf below to read.
-        apiKeyNames = [
-          "DEEPSEEK_API_KEY"
-          "GEMINI_API_KEY"
-          "MISTRAL_API_KEY"
-          "OPENAI_API_KEY"
-          "OPENROUTER_API_KEY"
-          "VOYAGE_API_KEY"
-        ];
-        apiKeyArgsFd = "21";
-        apiKeysViaFd = jailLib.combinators.unsafe-add-raw-args (
-          "--args ${apiKeyArgsFd} ${apiKeyArgsFd}< <(printf '%s\\0'"
-          + lib.concatMapStrings (var: " --setenv ${var} \"\${${var}:-}\"") apiKeyNames
-          + ")"
-        );
-
+        # API-key forwarding is NOT configured here. jailed-agents.nix carries
+        # it (`apiKeyPassThrough`, on by default for online profiles): the outer
+        # `op run` wrapper resolves the op:// refs into the launcher's own
+        # environ, and bwrap's `--args FD` copies them into the jail down an
+        # anonymous pipe — never argv (`/proc/<pid>/cmdline` is world-readable),
+        # never disk. This flake once duplicated that FD mechanism locally to
+        # opt out of an older upstream that forwarded keys as `--setenv VAR
+        # "$VAR"` on the bwrap command line; upstream was fixed the same day
+        # (nix-config 1fea0a9d, 2026-08-11) and the duplicate removed. Don't
+        # re-add one: upstream also guards the empty selection and asserts on
+        # unknown key names, which the local copy did not.
         jailEnvOptions = with jailLib.combinators; [
-          apiKeysViaFd
           (try-fwd-env "DOCTRINE_BIN")
           (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib]}")
           # Claude Code runs Bash-tool commands under `bash` or `zsh` ONLY. Its
@@ -225,14 +194,13 @@
 
         # Every jail in this flake shares the same confinement posture; only
         # the agent and its subagent graph differ. Holding the shared half here
-        # keeps `passApiKeysFromEnv = false` — the argv-leak opt-out that
-        # `apiKeysViaFd` replaces — impossible to forget on a jail added later.
+        # keeps a jail added later from silently missing the project's tools
+        # and env.
         mkJail = maker: args:
           maker ({
               profile = "specDev";
               extraPkgs = projectPkgs;
               extraOptions = jailEnvOptions;
-              passApiKeysFromEnv = false;
             }
             // args);
 
