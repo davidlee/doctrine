@@ -949,7 +949,11 @@ pub(crate) enum KnowledgeLevel {
     #[default]
     Skip,
     /// Per record: the fields that say what rules, and what would change whether
-    /// the ruling still stands (DEC-150). Never reads the `.md` prose body.
+    /// the ruling still stands (DEC-150). Never *renders* the `.md` prose body —
+    /// but it does still READ it, because `read_record` loads the body
+    /// unconditionally. `C7`'s facet-only read path is NOT delivered by SL-246;
+    /// it is deferred to `CHR-074` (RV-372 `F-3`). Do not rely on this level to
+    /// avoid the I/O.
     Facets,
     /// The complete record, prose body included.
     Full,
@@ -2487,7 +2491,9 @@ fn level_reading(level: KnowledgeLevel) -> Option<(TierFilter, bool)> {
 /// The SINGLE read the composed render performs (A-1) — resolve the reference,
 /// then read the record. Both arms and both reading levels route through here, so
 /// a later facet-only read at `Facets` (design §5.6 / C7, which no PHASE-03
-/// criterion mandates) is this one function's change and no caller's.
+/// criterion mandates) is this one function's change and no caller's. Deferred to
+/// `CHR-074` (RV-372 `F-3`); note `DEC-149`'s unfilled marker needs the body's
+/// SIZE, not the body, so `fs::metadata` serves both.
 ///
 /// A `resolve_ref` failure is RETURNED, never `?`-propagated out of a producer:
 /// both callers route it to the same unreadable marker a read failure gets (D-d).

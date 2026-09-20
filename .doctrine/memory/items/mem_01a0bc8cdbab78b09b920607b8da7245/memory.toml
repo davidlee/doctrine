@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0bc8cdbab78b09b920607b8da7245"
+memory_key = "mem.pattern.platform.never-export-git-dir-to-a-test-run"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Never export GIT_DIR/GIT_WORK_TREE around cargo test — a fixture will write your real repo config"
+summary = "Exporting GIT_DIR/GIT_WORK_TREE to work around a broken worktree lets a non-hermetic test fixture write your real repo config"
+created = "2026-09-20"
+updated = "2026-09-20"
+
+[scope]
+paths = ["tests", ".git/config"]
+globs = []
+commands = []
+tags = ["git", "footgun", "testing", "jail", "worktree"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "6d2d94263edb23a1b704ce3f71b2f40b3485b0c8"
+ref_name = "refs/heads/dispatch/246"
+checkout_state_id = "24c81ae1867b8ec51212b65f09315be37ff53c4a64629013f422f3981b5e2f99"
+base_commit = "1843904beee1a5d447169152ae336074718ca6bd"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

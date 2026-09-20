@@ -157,3 +157,32 @@ override plus a manual bump past `325` until the coordination branch lands.
   (extended with the review case and the `reseat` failure).
 - `DOCTRINE_TRUNK_REF` verification and the placeholder-stub rejection: observation
   `019fb11d-d0ba-7cd3-9a29-d21d878a41e5`; applied at **RV-324**.
+
+## Second instance — `ISS-462`, 2026-09-19 (`SL-246` audit, `RV-372` `F-1`)
+
+Same defect, different kind and different tree topology, which widens the item
+rather than merely confirming it.
+
+| | tree | item |
+|---|---|---|
+| `SL-260`'s | `edge` (primary) | `ISS-462` — *ReviewPolicy labels exceed 16 B bound* |
+| `SL-246`'s | `capsule/SL-246/c17` (a **capsule** branch) | `ISS-462` — *check plan cannot express verification by unchanged pre-existing test* |
+
+Two widenings:
+
+- **Not just reviews.** The first instance was `RV-320`, and `ISS-277` scoped the
+  *cure* to reviews (`reseat` cannot renumber one). This instance is a **backlog
+  item**, which `reseat` presumably can renumber — so prevention and cure have
+  different reaches and the item should not be read as review-shaped.
+- **Not just coordination worktrees.** `/capsule-driver` runs in the **main**
+  worktree with no coordination tree at all, and still allocated against a branch
+  corpus that could not see `edge`'s. Any long-lived branch is enough; the
+  dispatch topology was incidental.
+
+Resolved at the `SL-246` audit by renumbering the capsule's item to `ISS-466`
+(`edge`'s was already on the trunk). It surfaced, as before, only as an add/add
+merge conflict — the earliest it can — and only because both sides happened to
+write the same two filenames.
+
+Also minted unwarned on that branch and merely lucky to be free: `ISS-463`,
+`ISS-464`, `ISS-465`, `CHR-074`, `CHR-075`, `DEC-274`.

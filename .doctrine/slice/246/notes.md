@@ -195,135 +195,87 @@ revision — round 5 read 49, so it could not attest 51 either.
 
 **Reviewer.** codex remains out of credits; rounds 2-5 all ran on Opus.
 
+## Execution harvest (2026-09-20, `/audit`) — lifted from the phase sheets
+
+The six runtime phase sheets under `.doctrine/state/slice/246/phases/` are
+4,457 lines and `rm -rf`-able by contract. What follows is what must outlive
+them. Full detail stays in `RV-372`.
+
+### The findings the sheets raised that the plan could not have
+
+- **`PHASE-01` `F-1` → `PHASE-03` `EX-2`.** `design.md` § 5.2 decided the
+  *unfilled* marker by "every surviving field is `Absent`". Facet list rows are
+  bare `Vec<String>`, never `Option`, and every shipped template seeds them
+  empty — so an empty list is `List([])` and can never be `Absent`. Under the
+  authored predicate an unfilled `CON` at **both** levels and an unfilled `DEC`
+  at `full` would name a record and then silently explain nothing on the text
+  arm. Two of seven record kinds, in their default scaffolded state. Caught at
+  *planning*, deliberately not built early (an unused helper is a hard
+  `dead_code` failure under `warnings = "deny"`), and landed as `EX-2`'s
+  blankness amendment with mandatory coverage.
+- **`PHASE-03` `F-a` → `EX-4`.** `render_block(root, selected, level)` could not
+  produce the empty-set line `D3`/`X1` specify, because that line **names the
+  subject** and the authored three-argument signature cannot see it. The
+  criterion as written could not satisfy its own required output. Adapted
+  (arity only) rather than escalated, because the design specifies the line and
+  there is exactly one way to produce it.
+- **`PHASE-03` `F-b` → `CHR-074`, and `RV-372` `F-3`.** `C7` (a facet-only read
+  at `Facets`) is a design mandate with **no** plan criterion —
+  `grep -n C7 plan.toml` returns nothing. Filed rather than built. The audit's
+  addition: the type's doc comment claimed the undelivered property, which is
+  repaired; the mandate itself goes to reconcile.
+- **`PHASE-06`'s traced deletion chain.** `scaffold_design_doc` was not a leaf.
+  `run_deprecated_slice_design` → `scaffold_design_doc` →
+  `entity::materialise(DESIGN_KIND, design_scaffold)` → `render_design`, plus
+  `DESIGN_DEPRECATION_NOTICE`. **None of those four** appears in `EX-1`/`EX-2`
+  or in `VA-1`'s grep list, and three dedicated unit tests exercise only that
+  dead chain. They are not scope creep — under this repo's `unused = deny` they
+  are what `EX-5`'s green gate *requires* once `EX-1` executes, and `cargo test`
+  alone will not reveal them (a `cfg(test)`-referenced item reads as live).
+
+### The reusable lessons
+
+- **A deletion phase needs a call graph, not a grep.** `PHASE-06`'s own planner
+  note says it: the phase was planned by a smaller model on the argument that
+  the compiler enumerates the work once the variant is deleted. That held for
+  execution and failed for *planning* — re-deriving the inventory by hand found
+  a dependency chain the plan and the prior brief both missed. Related:
+  `mem_01a00d11d24d70a1bf531fe6561c426b` (a design's call-site census ages).
+- **A placement mandate justified by a layering argument must be checked against
+  the layering gate before implementation** (`DEC-274`'s own third consequence).
+  Neither design, plan nor phase sheet consulted `layering.toml`, so `EX-2`'s
+  premise — that `relation_graph → knowledge` was a tier-crossing edge — went
+  unfalsified until the end-of-phase gate reported `TangleGrew { 76 → 77 }`.
+  Both modules are tier `command`, and a reverse path already existed.
+- **A `VA` grep row should say what it means, not what is easy to write.**
+  `PHASE-01` `VA-1` claims "exactly ONE per-kind facet field enumeration
+  survives in `src/`". Two do; the second is `#[cfg(test)]` and predates the
+  slice. The row's *intent* — one enumeration on the render path — is met.
+  (`RV-372` `F-9`.)
+- **Filing is the cheapest way to make a gap look handled.** Three of this
+  slice's execution-era artefacts are backlog items standing in for work
+  (`CHR-074` for `C7`, `CHR-075` duplicating `CHR-073`, and the four `ISS` rows).
+  Two of the five turned out to need audit intervention.
+
+### Ids minted during execution
+
+`DEC-274` (accepted) · `CHR-074` (open, carries `C7`) · `CHR-075`
+(**closed/duplicate** of `CHR-073` at audit) · `ISS-463`, `ISS-464`, `ISS-465` ·
+`ISS-466` (**renumbered from `ISS-462`** at audit — collided with `edge`'s;
+`ISS-279` widened with the instance) · three memories
+(`mem.fact.doctrine.entity-key-inbound-order`,
+`mem.pattern.testing.mutation-beat-asserts-application`,
+`mem.pattern.dispatch.verify-worker-gate-claims`).
+
+Minted at audit: `RV-372` · `ISS-467`, `ISS-468`, `ISS-469` · `IMP-465`.
+
+### The human verdict
+
+`VH-1` discharged 2026-09-20: **"disappointing as a feature, but not obviously
+incorrect."** Correctness is not disputed and the gate is green; the product is.
+Carried by `IMP-465`, with the withheld-tier complaint split to `ISS-467` as a
+real `STD-003` gap. `RV-372` `F-5` holds the verbatim attestation.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-18 · design run at `reviewing` (revision 59, materialised) · c93b0f69f
-
-### Produced
-- `RV-370` — the design review ledger, **three rounds**, 22 findings. Round 1
-  (codex): `F-1`..`F-8`. Round 2 (Opus, codex out of credits): seven `verified`,
-  `F-4` contested and upheld, `F-9`..`F-17` raised. Round 3 (Opus, in the primary
-  worktree so it recorded its own friction): nine `verified` with their claims
-  re-derived from the tree, `F-14` contested and upheld, `F-18`/`F-20`/`F-21`/
-  `F-22` raised. All fourteen round-2 and round-3 findings adjudicated correct —
-  no confabulation in any round. Ledger `await=raiser`, rounds 64.
-  `F-19` is a withdrawn row, not a retracted claim: a shell-mangled `--title` at
-  raise, with no edit verb to repair it
-- `DEC-261` — the design read reclaims `design show`; supersedes `DEC-260`,
-  which is now `superseded`
-- `design.md` adopted at run revision 46 and materialised at 47, byte-identical.
-  Round 1 moved eight of nine sections at r38; rounds 2 and 3 each moved the same
-  five — `sec-3`, `sec-5`, `sec-7`, `sec-8`, `sec-9`. `sec-4` has never moved
-- `D6` and `D7`, the round-3 decisions. `D6`: one per-record producer per arm
-  (`render_record` / `record_value`), the block a **map** over it, `show_value`
-  split out of `show_json`, and each marker composed at the layer that holds what
-  it must name. `D7`: the flag partition is stated over **renderings**, not
-  spellings — which retired the round-2 `--json` rule at the user's ruling, and
-  made `--known-revision` decidable without a fourth ruling
-- `slice-246.md` scope reconciled to `DEC-261` — in two passes. The first
-  (`876d86a40`) added the scope-addition prose and objective 5 but left
-  *Affected surface* untouched, where `src/commands/design.rs` still sat under
-  *Dropped by the inquiry*. `review.scope` was recorded here as discharged on
-  that pass; it was not. Rewritten at revision 43 as an orientation map over
-  § 5.6, and discharged then
-- design-target selectors re-pointed off `DEC-260`'s siting at revision 44 —
-  two removed, eleven added, including the four emitted-string sites located
-  in the doing. `selector doctor`: one unmatched, the § 5.6-new golden
-- the `reviewing` runbook is **cleared** — `review.scope`, `review.selectors`,
-  `review.passes` all attested, and it stayed cleared across the round-3 adoption
-- `IMP-457` closed `duplicate` of `IMP-393`, with the boundary written onto it
-- `IDE-054` — audit the CLI for format/content axis coupling (`F-9`'s declined
-  principled split); `originates_from SL-246`
-- `CHR-073` — re-attest the five memories naming `design show` as the envelope
-  read (`F-16`); `originates_from SL-246`. No `needs` gate minted
-- `SL-246 fulfils IMP-393 --degree partial`; `DEC-261 shapes SL-246`
-- four `friction` observations, all committed — codex credit exhaustion, plus
-  three recorded on the round-2 reviewer's behalf (a fork cannot capture its own)
-
-### Learned
-- `mem.fact.doctrine.show-is-not-cheap` — `<kind> show` measures slower than
-  `inspect`; do not cost a design on `show` being a cheap per-entity read
-- `mem.pattern.review.bind-scope-bar-and-never-self-rule` — applied twice, and
-  it paid both rounds: `F-8` was found by the design's author and put to the
-  reviewer rather than self-ruled
-- `mem.pattern.design.counts-state-their-population` — a count asserted as
-  measured must name the population it counted over. From `F-16`, where the
-  figure was both uncheckable and wrong, from one cause
-- `mem.pattern.design-run.correcting-a-locked-run` extended twice —
-  `adopt_authored.sections` takes section DIGESTS not bodies and is mandatory
-  though the contract prints it optional; and the section body is a **raw byte
-  slice**, where a line-splitting implementation drops one newline too few on
-  every section but the last (diagnostic signature: last section matches,
-  earlier ones do not, whole-file hash matches)
-- §3 `F1`'s corpus-scan claim verified independently: every scan reads, parses
-  and validates all knowledge records and keeps only their edges — 362 records,
-  988,841 bytes
-- **reconciling a scope to a decision means walking every section of it.** The
-  `DEC-261` reconciliation rewrote the prose the decision was about and left the
-  *Affected surface* list asserting the opposite — `src/commands/design.rs`
-  *dropped*. A scope's derived-feeling lists (affected surface, selectors) are
-  exactly where a decision goes stale silently, because nothing reads them until
-  planning. Candidate memory
-- **a runbook step is discharged by the machine, not by prose claiming it.**
-  The harvest asserted `review.scope` discharged "for both rounds"; the run had
-  never taken the discharge, and re-facing it is what surfaced the stale list.
-  The two failures are the same failure from opposite ends — the machine was
-  right and the note was wrong. Candidate memory
-- **three findings can share one cause, and integrating them flat rewrites the
-  same block three times.** `F-14` (a guarantee claimed from a return type),
-  `F-18` (a JSON arm with no producer) and `F-20` (an empty-state policy sited
-  where its inputs are unreachable) were one defect: there was no per-record
-  layer. Dependency-ordering the triage before adjudicating is what surfaced it.
-  Candidate memory
-- **the self-attack pass earns its place on diagrams.** Round 3 found nothing
-  wrong with §5.1's flowchart or §5.4's sequence — they were correct when it
-  read them. The repair falsified both (`render_block` no longer reads records)
-  and only the post-integration self-attack caught it. A diagram is a projection
-  of the prose and goes stale silently with it. Candidate memory
-- **a repair round is where the next round's findings come from.** Rounds 3, 4
-  and 5 each found their most structural defect in the *previous* repair, not in
-  the draft: `F-23` was `F-20` displaced one layer up, `F-29` was `F-23`'s own
-  test sited one step too late. Round count is not what converges; severity is.
-  Candidate memory
-- **re-adopting a hand-edited `design.md`**: `adopt_authored.sections` is a map
-  of `sec-N` → the **full-length** sha256 hex of the section body, where the body
-  is everything after the marker line, `rstrip()` plus one trailing newline.
-  `design show` prints those digests truncated to 12 chars, which is the trap —
-  sending the truncation, or sending the section text, both refuse with
-  `0 missing, 0 unknown, 9 mismatched`. `ISS-320` already carries the gap
-  ("a section map nothing emits"); this is the working recipe. Candidate memory
-- **the slice scope has no staleness signal** — `design.md` is
-  section-fingerprinted so a moved section voids its own attestation, and
-  `slice-NNN.md` carries nothing equivalent. Four consecutive rounds repaired the
-  design and left the scope asserting something falsified (`F-22`, `F-26`,
-  `F-28`). Captured as `IMP-461`
-- round 2's own negative result: the reviewer read and found sound §2.6, §3.1's
-  six three-level groups and acyclic claim, `F1`, `FacetValue` sufficiency, the
-  one-table feasibility, `Full`'s field list, the prose-size hint, `R5`, and
-  `F5`'s emitted-string count — at **revision 38**, which is why it cannot
-  attest revision 42
-
-### Open
-- **nothing ever checked a figure in `research/research.md`** — seven rounds
-  verified counts, citations and signatures and pointed none of it at the one
-  artefact whose numbers decide whether the middle level is worth building.
-  `research/` is runtime tier and untracked, so the cited figures cannot be
-  re-read and a re-run produces different ones. `IMP-462`
-- **§4 never moved in seven rounds** — `sec-4` alone carries its original
-  fingerprint. `P1`-`P6` are the tie-breakers §5 reaches for and no reviewer has
-  read them adversarially. The attestor is their first adversarial reader
-- `QUE-223` — should the design read disclose that `design.md` is behind its run
-- `ASM-011` — inbound edges as a sufficient proxy, held with a measured miss
-- **nine section attestations outstanding** — `sections_outstanding_review=9`,
-  `review_pass STALE`, `review_policy = human-only`. The attestation is a user
-  act (`declare` with `attests: sec-N`, `reviewer: human`) and an agent must not
-  author it. The adversarial lane cannot substitute: an attestation binds the
-  revision, and the last adversarial read was revision 49 against a document now
-  at 51. **This is the only thing between the design and its lock** — the ledger
-  needs one adjudication turn, which is running; the nine are the user's
-- `CHR-073` sequencing — must land with or before the code, since a stale memory
-  is injected into agent context. Whether it warrants a hard `needs` gate on
-  this slice is left to close, deliberately
-- `SPEC-013`'s "two-level clap subcommand tree" clause is descriptively false of
-  six three-level groups under numbered entity kinds (`RV-370` `F-1`). `SL-246`
-  conforms so needs no `REV`; the clause still wants one. Not this slice's.
+fresh-as-of: 2026-09-20 · slice at `reconcile`, `RV-372` done (14 findings, all terminal) · dispatch/246
