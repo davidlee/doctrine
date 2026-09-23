@@ -432,6 +432,24 @@ provenance    = "declared"
 customization = "customizable"
 
 [[entry]]
+address       = "reference/authority.md"
+backing       = "authority.md"
+kind          = "reference"
+title         = "Authority section of the boot snapshot"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "reference/authority-model.md"
+backing       = "authority-model.md"
+kind          = "reference"
+title         = "Authority model reference"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
 address       = "reference/model-band.md"
 backing       = "model-band.md"
 kind          = "reference"

@@ -1,0 +1,20 @@
+schema = "doctrine.adr"
+version = 1
+
+id = 23
+slug = "authority-model-for-agent-instruction"
+title = "Authority model for agent instruction"
+status = "proposed"
+created = "2026-09-23"
+updated = "2026-09-23"
+tags = ["agents", "authority", "boot", "governance"]
+
+[relationships]
+# `supersedes` stays typed — author with `doctrine supersede ADR-NNN <previous>`.
+# `related` edges are uniform `[[relation]]` rows — author with `doctrine link ADR-NNN related <target>`.
+supersedes    = []
+superseded_by = []   # set on the old ADR by F1; reverse link is derived
+
+[[relation]]
+label = "related"
+target = "ADR-005"

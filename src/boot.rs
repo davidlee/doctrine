@@ -99,6 +99,9 @@ enum SourceKind {
 /// governance prefix cache-warm.
 fn boot_sequence() -> Vec<(&'static str, SourceKind)> {
     vec![
+        // Frames every section after it — including routing, itself a framework
+        // rule — so it leads (IMP-466).
+        ("Authority", SourceKind::Static("authority.md")),
         (
             "Routing & Process",
             SourceKind::Static("routing-process.md"),
@@ -3090,6 +3093,28 @@ mod tests {
         assert!(
             snapshot.contains("prompt resolve --band model"),
             "carries the resolve directive"
+        );
+    }
+
+    // --- IMP-466: the Authority section frames everything after it, so it renders
+    // first, and its body is exactly the authored embed ---
+
+    #[test]
+    fn authority_section_renders_first_and_is_the_pristine_embed() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+
+        let snapshot = build_and_render(root, exec, noop_map);
+
+        let first_heading = snapshot
+            .lines()
+            .find(|line| line.starts_with("## "))
+            .expect("the snapshot has sections");
+        assert_eq!(first_heading, "## Authority");
+        assert!(
+            snapshot.contains(install::asset_text("authority.md").unwrap().trim_end()),
+            "the section body is exactly the authored embed"
         );
     }
 

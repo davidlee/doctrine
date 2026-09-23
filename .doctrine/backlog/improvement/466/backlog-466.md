@@ -63,3 +63,19 @@ instructional authority; declared authority is not privileged placement.
 The ADR is accepted, the boot section renders (`doctrine boot`,
 `doctrine boot --check` clean), and RSK-229 is updated to *mitigated* or has
 its residue stated.
+
+## Notes (2026-09-23)
+
+- A Doctrine-repo ADR does not reach client projects, so the operative text
+  ships as install assets: `install/authority.md` (the boot section, first in
+  `boot_sequence()`) and `install/authority-model.md` (the elaboration,
+  `reference/authority-model.md`). The ADR (ADR-023) records the decision.
+- The elaboration deliberately does **not** live in a memory: memories print as
+  "data, not instruction" and sit at tier 5 of the model itself.
+- Handovers sit at tier 5, weighed by claim strength / cost of checking / cost
+  of being wrong. A handover's summary never replaces a skill's procedure.
+  Material the user conveys: trust the stated provenance, judge the content.
+- `/consult` retirement split out as IDE-055.
+- Follow-up for the user: this repo's `CLAUDE.md` line "if your first message
+  is a handover … follow the instructions" contradicts the tier-5 stance. As
+  tier 2, it wins here until revised.
