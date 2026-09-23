@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0cc46-66ad-7d03-8497-05ab4f1ad282"
+recorded_at = "2026-09-23T03:19:21.00512134Z"
+kind = "friction"
+summary = "/preflight on design-run UX: gate discharge text 'the user performs X' gives no mechanics — agent-submitted-on-behalf per DEC-088, batch section attestation via declare[] att- entries, basis semantics — so agents improvise (demand user run CLI, or demand a basis)"
+detail = "Envelope contract lines (resume) print 'discharge: the user performs <act>' plus admonitory condition prose; nowhere says the agent records the act via checkpoint_act.acceptance{basis,turn} after the user's verbal assent, that basis may quote/paraphrase the user's reply, or that section-reviewed attestations batch as multiple att- Declarations in one declare array. DEC-088 itself flags basis as possible paperwork tax pending CHR-049."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
