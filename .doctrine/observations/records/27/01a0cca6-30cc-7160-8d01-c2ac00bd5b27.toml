@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0cca6-30cc-7160-8d01-c2ac00bd5b27"
+recorded_at = "2026-09-23T05:03:58.668991497Z"
+kind = "friction"
+summary = "/design (user report): design run minted RV-008 as its pass slot; adversarial passes ran on RV-009/RV-010; agent recommended disposing 'conducted' against the empty RV-008 with an explanatory basis"
+detail = "Second recorded instance of ISS-476 after SL-256's (obs 01a00a7c). The pass RV is not named anywhere the agent reads, so agents mint their own RV for the adversarial pass, and review-disposed then refuses a foreign pass."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
