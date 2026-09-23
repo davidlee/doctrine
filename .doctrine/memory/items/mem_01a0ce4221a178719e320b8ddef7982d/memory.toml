@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0ce4221a178719e320b8ddef7982d"
+memory_key = "mem.pattern.audit.read-shipped-text-against-decisions"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Audit verbatim-transcribed prose against its decision records, not only the design"
+summary = "A design draft transcribed verbatim carries its defects into shipped text; single-owner sweeps and render checks pass on it. Read the shipped clause against the accepted DEC that scopes it."
+created = "2026-09-23"
+updated = "2026-09-23"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["audit", "design"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "9d920aa4915d30c4b3c45ddaea86e85ac76c9750"
+ref_name = "refs/heads/edge"
+checkout_state_id = "3dcc5855207f276f213139ce2d0444b09331228f3927e4ab2ce9381ffe472554"
+base_commit = "3ad0424d3cc2e47c66393ad15310393a81f024bb"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-373"
+

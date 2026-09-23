@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-23 · all three phases complete, slice to audit · e72f8ad5c
+fresh-as-of: 2026-09-23 · audit done (`RV-373`), slice to reconcile · 5b9cdf055
 
 ### Produced
 - plan stage: `plan.toml` + `plan.md` (279175ebd, 0c34a6ee6, fa227ce48)
@@ -21,19 +21,19 @@ fresh-as-of: 2026-09-23 · all three phases complete, slice to audit · e72f8ad5
 - design-stage substrate: `design.md` locked (rev 79), `RV-371` done, `CON-006`
 - minted earlier: `ISS-474`, `ISS-475`; friction observations (plan stage, and
   `01a0cdf6` at execute)
-- no `src/` change: commit-scoped tripwire empty at every phase end
+- no `src/` change: commit-scoped tripwire empty at every phase end and at audit
+- audit: `RV-373` done (4 findings, all verified); `F-1` fix `5b9cdf055` — deferred
+  verify narrowed to instrument routes per `DEC-263` (owner ruling (a))
 
 ### Learned
 - `mem.fact.design-run.fragment-renders-via-resume`
 - `mem.pattern.plan.path-tripwire-commit-scoped-not-range-diff`
 - `mem.fact.design-run.design-prompts-name-is-allowlisted`
+- `mem.pattern.audit.read-shipped-text-against-decisions`
 
 ### Open
-- **`/reconcile` owes (DEC-277):** amend design §5.2's fragment draft (add the
-  post-`verified` residue sentence) and plan-pointer draft (add the `CON-006`
-  clause) to match shipped text — direct edit, the run stays locked.
-- `slice conformance` shows undeclared `tests/e2e_claude_install.rs` and the
-  `DEC-277`/observation records — deliberate, see PHASE-02 notes below.
+- **`/reconcile` owes:** the `RV-373` `## Reconciliation Brief` — `F-1`, `F-3`
+  (the `DEC-277` item), `F-2` selector adds, `F-4` citations. Per-slice only; no REV.
 - `CON-006` — binds criterion authoring; no criterion may assume a check it
   records as absent.
 - design §6 `Q1`, `Q5` stay unminted by design; `Q2`/`Q4` are `QUE-224`/`QUE-225`

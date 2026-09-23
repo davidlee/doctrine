@@ -14,7 +14,7 @@ ref   = "SL-260"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected: the raiser-verify redefinition and the deferred terminal close apply to instrument-routed findings only (DEC-263). Observed: shipped text scopes them to every routed finding, and every severe finding carries a route"
 detail = """
@@ -31,6 +31,8 @@ Only the plan pointer (plan SKILL.md:44-45) names the three routes correctly.
 Consequence during the trial: a raiser who reads the shipped text leaves route:review and route:owner-fix blockers answered through the lock and 'verifies' them after slice phases against a criterion that cannot exist. Either that verify asserts nothing, or the raiser contests. Both corrupt the per-finding counts CHR-077 will take (repeat contests, whether verified carried the transcription claim).
 
 Origin: design §5.2's drafts carry the same wording (design.md:540-544, :584-586), so the locked design and an accepted DEC disagree. That is drift between two binding sources, not a transcription slip."""
+disposition = "fix-now"
+response = "Confirmed. Owner ruling (a): DEC-263 governs. Fixed in 5b9cdf055: reviewing.md now says instrument-routed finding in the stand-alone carve-out and the raiser paragraph, which adds that a finding routed review or owner-fix is verified in the pass as usual. The review-ledger.md section 4 axis defers the terminal close only for an instrument-routed finding. The pointer surfaces still do not restate the route set. Gate green, and delivery re-verified through design resume 253 and library show. Reconciliation brief, per-slice: apply the same narrowing to the design section 5.2 drafts (design.md around lines 540-544 and 584-586) so the locked design matches DEC-263 and the shipped text."
 
 [[finding]]
 id = "F-2"
