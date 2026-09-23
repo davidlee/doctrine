@@ -13,3 +13,9 @@ which is precisely the state this exists to keep visible.
 The failure it prevents is specific and common — a design that passes every
 check while carrying one part no one ever read. Nothing else in the process is
 capable of noticing that, because every other check is satisfied.
+
+**What is enough.** Point the user at the materialised design, list its
+sections, and mark any edited since their last attestation. One reply can
+cover many sections: "Read and accept, all of them or the ones you name." Then
+record every section they accepted in one submission (one `att-` declaration
+each, all in `declare`). Ask again only about sections edited since.

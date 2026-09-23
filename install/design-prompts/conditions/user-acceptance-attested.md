@@ -12,3 +12,9 @@ Which is the whole cost of giving it lightly. Nothing downstream asks the
 question again; the design becomes the thing other work is built against, and
 every later discovery that it was wrong is paid for at implementation prices.
 This is the last point at which *no* is cheap.
+
+**What is enough.** Give a short account of what the design commits to and the
+risks it carries, with the materialised document as the reference. Ask:
+"Accept the design as it stands, or name what's wrong." A plain yes is enough.
+This act, the section attestations and the lock go in one submission (see the
+reviewing fragment).

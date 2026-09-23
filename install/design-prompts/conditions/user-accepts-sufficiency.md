@@ -13,3 +13,8 @@ Given carelessly, it produces the failure that looks most like success: a
 design answering a complete set of the wrong questions, with a clean record
 showing every one of them closed. Nothing later in the process is looking for
 that, because everything later takes this judgement as given.
+
+**What is enough.** Summarise what the inquiry settled, what it deferred and
+why, and the areas nobody asked about, with a sentence on why nothing is at
+stake in each. That last part is the claim being made. Ask: "Say the word if
+anything's missing or wrong; otherwise, 'agreed' or 'proceed to drafting'."

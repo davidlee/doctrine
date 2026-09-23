@@ -13,3 +13,7 @@ work.
 
 Neither door rewards a pass that was run and then quietly set aside. That
 outcome is the one both are shaped to make unavailable.
+
+**What is enough.** Name the pass (which RV, and how its findings were
+dispositioned), or give the reason no pass is worth running. Ask "Conclude
+this pass?" or "Waive it, for that reason?". One reply settles either door.

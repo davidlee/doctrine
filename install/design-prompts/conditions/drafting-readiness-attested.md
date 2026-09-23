@@ -12,3 +12,8 @@ Claimed prematurely, the drafting does not fail. It fills. Wherever a decision
 is missing, plausible text goes in instead, and that is the hardest defect in
 a design to find afterwards, because nothing about the result reads as
 incomplete.
+
+**What is enough.** This is your own check, not a question for the user: can
+you name the decision behind every section you are about to write? If one is
+missing, say which and go back to inquiring. If none is, declare it and carry
+on.

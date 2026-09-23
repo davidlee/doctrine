@@ -47,13 +47,43 @@ them.
   moving on to the implementation plan.
 - If meaningful tradeoffs or uncertainty remain unresolved, stop and `/consult`.
 
+## Recording the lock
+
+Once the user has settled the pass and accepted the design, recording it takes
+two submissions. First the disposition, alone, because a submission holds only
+one checkpoint act:
+
+```json
+{"run_uid": "<uid>", "known_revision": <n>, "submission_id": "dispose",
+ "checkpoint_act": {"act": "review-disposed",
+   "acceptance": {"basis": "user: \"no further pass needed\""},
+   "disposition": {"waived": {"reason": "<the reason they accepted>"}}}}
+```
+
+Then everything else their final reply granted, together:
+
+```json
+{"run_uid": "<uid>", "known_revision": <n+1>, "submission_id": "lock",
+ "checkpoint_act": {"act": "design-accepted",
+   "acceptance": {"basis": "user: \"agreed, lock it\""}},
+ "declare": [{"subject": "att-1", "attests": "sec-1"},
+             {"subject": "att-2", "attests": "sec-2"}],
+ "acceptance": {"basis": "user: \"agreed, lock it\""},
+ "stage": {"to": "locked"}}
+```
+
+A concluded pass names its RV instead: `"disposition": {"conducted":
+{"review": "RV-NNN"}}`.
+
 ## What the machine will reject
 
 - Locking needs current section attestations and an integrated review. A stale
   attestation is not a current one, and re-reading it does not refresh it.
-- An attestation binds the payload fingerprint, the disposition, the node and the
-  revision. Change any of those and it is stale by construction — that is the
-  point of binding it.
+- A section attestation binds that section's content fingerprint and its
+  reviewer lane: edit the section and only its attestation goes stale. A user
+  acceptance binds more: the payload fingerprint, the disposition, the node
+  and the revision. Change any of those and it is stale by construction; that
+  is the point of binding it.
 - Human section review is the v1 default. Configurable reviewer postures are
   deferred; do not invent one.
 - Carry every finding to a disposition. An undispositioned finding blocks the

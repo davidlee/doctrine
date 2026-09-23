@@ -703,6 +703,33 @@ fn lock_admits_with_all_four_present() {
     }
 }
 
+/// IMP-467 — the fewest submissions a lock takes, the shape the design-run
+/// prose publishes as its worked example: the review disposition on its own,
+/// then **one** submission carrying `design-accepted`, every section
+/// attestation, the lock acceptance and the stage move. If this stops
+/// admitting, the published example is wrong.
+#[test]
+fn lock_admits_in_two_submissions() {
+    let fixture = Fixture::reviewing();
+    fixture.apply(&fixture.payload(
+        "dispose",
+        &json!({"checkpoint_act": design_act::review_disposed(
+            "user: \"no further pass needed\"",
+            ReviewDisposition::Waived {
+                reason: WAIVER_REASON.to_owned(),
+            },
+        )}),
+    ));
+
+    let mut lock: Value = serde_json::from_str(&fixture.lock_payload("lock", None)).unwrap();
+    lock.as_object_mut().unwrap().insert(
+        "checkpoint_act".to_owned(),
+        design_act::checkpoint_act(ActKind::DesignAccepted, "user: \"agreed, lock it\""),
+    );
+    fixture.apply(&lock.to_string());
+    assert_eq!(fixture.stage(), Stage::Locked);
+}
+
 // ── SL-244 PHASE-06: the top of the machine delivers no contract ───────────
 
 /// `VT-6` (`EX-6`) — a locked run emits no contract block.

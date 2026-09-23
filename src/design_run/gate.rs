@@ -851,9 +851,10 @@ impl ActRequirement {
     /// thing it buys.
     fn remedy(self) -> String {
         let actor = self.actor.remedy();
+        let recorded = self.actor.recorded_by();
         if self.disposes_review {
             return format!(
-                "{actor} disposes this review pass:\n  \
+                "{actor} disposes this review pass{recorded}:\n  \
                  conducted: name the RV whose pass has concluded; blockers still open or \
                  contested hold the edge\n  \
                  waived:    state a reason; the findings stay on the RV, undisposed"
@@ -862,10 +863,10 @@ impl ActRequirement {
         let act = self.act.as_str();
         match self.confirms {
             Some(declaration) => format!(
-                "{actor} performs `{act}`, naming the current `{}`",
+                "{actor} performs `{act}`{recorded}, naming the current `{}`",
                 ActKind::from(declaration).as_str()
             ),
-            None => format!("{actor} performs `{act}`"),
+            None => format!("{actor} performs `{act}`{recorded}"),
         }
     }
 }
@@ -880,6 +881,18 @@ impl RequiredActor {
             RequiredActor::Fixed(ActorClass::Agent) => "the agent",
             RequiredActor::Fixed(ActorClass::Adversarial) => "an adversarial reviewer",
             RequiredActor::RunPolicy => "every lane the run's review policy requires",
+        }
+    }
+
+    /// Who submits an act the user performs: the agent, on the user's assent in
+    /// conversation (DEC-088, ADR-023). Without it, "the user performs" reads
+    /// as "the user runs the CLI" (IMP-467). Empty where the actor submits for
+    /// itself.
+    const fn recorded_by(self) -> &'static str {
+        match self {
+            RequiredActor::Fixed(ActorClass::User) => " (you record it on their assent)",
+            RequiredActor::RunPolicy => " (you record the human lane's on the user's assent)",
+            RequiredActor::Fixed(ActorClass::Agent | ActorClass::Adversarial) => "",
         }
     }
 }

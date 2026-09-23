@@ -1383,10 +1383,11 @@ fn the_remedy_renders_from_the_rule_including_the_row_with_two_arms() {
         "dispose every blocking inquiry on the map"
     );
 
-    // A one-act row names the actor and the act's own token.
+    // A one-act row names the actor and the act's own token — and, for a user
+    // act, who records it (IMP-467): the user assents, the agent submits.
     assert_eq!(
         remedy(Condition::UserAcceptsSufficiency),
-        "the user performs `sufficiency-accepted`"
+        "the user performs `sufficiency-accepted` (you record it on their assent)"
     );
 
     // Two acts by two actors, still one way through — and the confirmation is
@@ -1399,15 +1400,24 @@ fn the_remedy_renders_from_the_rule_including_the_row_with_two_arms() {
     assert!(concerns.contains("the agent performs `blocking-set-declared`"));
 
     // The lane-resolved row does not pretend to know the lanes.
+    let sections = remedy(Condition::SectionAttestationsCurrent);
+    assert!(sections.starts_with("every lane the run's review policy requires performs"));
     assert!(
-        remedy(Condition::SectionAttestationsCurrent)
-            .starts_with("every lane the run's review policy requires performs")
+        sections.contains("(you record the human lane's on the user's assent)"),
+        "{sections}"
     );
+    // An agent act needs no recording note: the agent is the actor.
+    assert!(!concerns.contains("the agent performs `blocking-set-declared` ("));
 
     // The ninth row: two doors, and the remedy says so.
     let disposition = remedy(Condition::ReviewDispositionAttested);
     assert!(disposition.contains("conducted:"), "{disposition}");
     assert!(disposition.contains("waived:"), "{disposition}");
+    assert!(
+        disposition
+            .starts_with("the user disposes this review pass (you record it on their assent):"),
+        "{disposition}"
+    );
     assert_eq!(
         disposition.lines().count(),
         3,
@@ -1561,6 +1571,11 @@ fn remedy_equals_discharge_for_every_row() {
     assert_eq!(disposition.lines().count(), 3, "{disposition}");
     assert!(disposition.contains("conducted:"), "{disposition}");
     assert!(disposition.contains("waived:"), "{disposition}");
+    assert!(
+        disposition
+            .starts_with("the user disposes this review pass (you record it on their assent):"),
+        "{disposition}"
+    );
 }
 
 /// The receipt covers what the edge judges by, not the edge's own rows alone

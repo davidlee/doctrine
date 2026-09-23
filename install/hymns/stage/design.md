@@ -24,7 +24,15 @@ is. Doctrine owns the procedural state; you own the reasoning.
   surface.
 - A drafted section is not an accepted one. Acceptance is a content-bound
   attestation from the user, bound to the exact bytes Doctrine digested.
-- You propose; the user accepts. A payload cannot declare itself accepted.
+- You propose; the user accepts in conversation; you record it (the boot
+  snapshot's Authority section). Lay out what they are accepting, get a plain
+  reply, then submit the act yourself. Never ask the user to run the CLI.
+- A `basis` is a one-line citation of that reply and the proposition it
+  answered, quoted or paraphrased, e.g. `user: "agreed, proceed to drafting"`.
+  Never ask the user to write one. An act the user did not assent to is never
+  recorded.
+- Batch what one submission allows: many declarations in `declare`, plus at
+  most one `checkpoint_act` and one `agent_declaration`.
 
 ## Say what is missing
 

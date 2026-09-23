@@ -63,17 +63,17 @@ edge that names it, a `cumulative` one by every edge above it as well.
 What each condition requires of you. A refusal names the conditions that failed;
 these are the acts that clear them.
 
-- `governing-context-recorded` — the user performs `governance-confirmed`
-- `initial-concerns-recorded` — the user performs `graph-reviewed`, naming the current `blocking-set-declared`; the agent performs `blocking-set-declared`
+- `governing-context-recorded` — the user performs `governance-confirmed` (you record it on their assent)
+- `initial-concerns-recorded` — the user performs `graph-reviewed` (you record it on their assent), naming the current `blocking-set-declared`; the agent performs `blocking-set-declared`
 - `blocking-inquiries-dispositioned` — dispose every blocking inquiry on the map
-- `user-accepts-sufficiency` — the user performs `sufficiency-accepted`
+- `user-accepts-sufficiency` — the user performs `sufficiency-accepted` (you record it on their assent)
 - `drafting-readiness-attested` — the agent performs `drafting-ready`
 - `materialisation-current` — materialise the design, so every section's stored digest matches the document
-- `section-attestations-current` — every lane the run's review policy requires performs `section-reviewed`
-- `review-disposition-attested` — the user disposes this review pass:
+- `section-attestations-current` — every lane the run's review policy requires performs `section-reviewed` (you record the human lane's on the user's assent)
+- `review-disposition-attested` — the user disposes this review pass (you record it on their assent):
   conducted: name the RV whose pass has concluded; blockers still open or contested hold the edge
   waived:    state a reason; the findings stay on the RV, undisposed
-- `user-acceptance-attested` — the user performs `design-accepted`
+- `user-acceptance-attested` — the user performs `design-accepted` (you record it on their assent)
 
 ## Going back
 

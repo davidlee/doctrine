@@ -66,3 +66,22 @@ review.
 Every user-gate discharge names who records the act and how; a batched lock
 example exists and has been verified against the binary; the generated docs
 are regenerated and their pin tests pass.
+
+## Notes (2026-09-23)
+
+- **Batching result.** A lock takes **two** submissions, not eleven:
+  `review-disposed` alone (`ApplyRequest` holds one `checkpoint_act`), then
+  `design-accepted` + every `att-` declaration + the lock `acceptance` + the
+  `stage` move together. Pinned by `e2e_design_review::lock_admits_in_two_submissions`,
+  which backs the worked example in `reviewing.md`.
+- **Discharge lines.** `RequiredActor::recorded_by` (`gate.rs`) appends "(you
+  record it on their assent)" to user acts, and the human-lane variant to
+  `section-reviewed`. `design-run-stages.md` has been regenerated.
+- **Prose.** `hymns/stage/design.md` covers acting for the user, `basis`
+  semantics and batching. Every user/agent-act condition fragment gains a
+  **What is enough** paragraph (what to lay out and the plain ask).
+  `materialisation-current` and `blocking-inquiries-dispositioned` are
+  engine-derived and unchanged. `reviewing.md` has the lock example and the
+  ISS-287 fix.
+- Not done: the `/design` skill itself needed nothing; it defers to the
+  envelope.

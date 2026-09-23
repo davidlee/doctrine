@@ -14,3 +14,9 @@ Discharged thinly, it fails late and expensively. A design built on the wrong
 governing picture reads perfectly well on its own — there is nothing in it to
 notice. The contradiction surfaces when someone who knows the rule reads the
 design, or, more often, after the work has already landed.
+
+**What is enough.** List what binds this slice (ADRs, policies, standards,
+specs), one line each on how it binds, plus anything you checked and ruled
+out. Then ask: "Anything governing this that I've missed? If not, say
+'confirmed'." A short list the user can check is better than an exhaustive one
+they can't. Offer it again when the governing picture moves.

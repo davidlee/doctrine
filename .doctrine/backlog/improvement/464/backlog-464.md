@@ -96,3 +96,13 @@ That reclassifies the defect. It is not a missing capability, it is:
 - `PRD-019` — managed design workflow, the product this sits in.
 - `RFC-011` — dispatch token efficiency; eleven hand-built payloads is a
   measurable instance.
+
+## Update (2026-09-23, IMP-467)
+
+The eleven-submission count is wrong. Section attestations batch in `declare`,
+and the lock needs **two** submissions (pinned by
+`e2e_design_review::lock_admits_in_two_submissions`; the example is published
+in `reviewing.md`). What remains here: the second submission carries two
+bases for one assent (`checkpoint_act.acceptance` on `design-accepted` and the
+top-level lock `acceptance`), and `review-disposed` can't share that
+submission. Folding those would make the lock one reply and one submission.
