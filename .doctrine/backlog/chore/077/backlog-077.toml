@@ -1,0 +1,51 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 77
+slug = "report-the-rfc-026-p10-routing-trial"
+title = "Report the RFC-026 P10 routing trial"
+kind = "chore"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-09-23"
+updated = "2026-09-23"
+tags = ["area:governance", "area:review", "rfc-026"]
+
+# outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
+# — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
+# uniform `[[relation]]` rows (SL-048 "the cut") — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = []                   # item→item hard prerequisite
+after    = [{ to = "SL-260", rank = 0 }]                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "settled at trial conclusion"
+target = "QUE-224"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "settled at trial conclusion"
+target = "QUE-225"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "SL-260"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "collection and classification procedure"
+target = "DEC-276"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "writes the P10 trial evidence entry"
+target = "RFC-026"

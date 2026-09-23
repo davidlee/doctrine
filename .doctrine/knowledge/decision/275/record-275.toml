@@ -5,9 +5,9 @@ id = 275
 slug = "compound-findings-take-a-deterministic-route-precedence"
 title = "Compound findings take a deterministic route precedence"
 record_kind = "decision"
-status = "proposed"
+status = "accepted"
 created = "2026-09-20"
-updated = "2026-09-20"
+updated = "2026-09-23"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)

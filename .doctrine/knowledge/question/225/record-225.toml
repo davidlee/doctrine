@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 225
+slug = "should-the-route-set-become-a-code-backed-closed-vocabulary"
+title = "Should the route set become a code-backed closed vocabulary?"
+record_kind = "question"
+status = "open"
+created = "2026-09-23"
+updated = "2026-09-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+question = "Should the route set become a code-backed closed vocabulary?"
+why_matters = "Available if the trial validates the convention; foreclosed during SL-260 by its no-src tripwire, and taking it newly binds three standards. Argument: SL-260 design §6 Q4; unenforced clauses it would close: CON-006. Owned and settled by CHR-077."
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "minted from SL-260 design §6"
+target = "SL-260"

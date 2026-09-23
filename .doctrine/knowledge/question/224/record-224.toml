@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 224
+slug = "should-the-route-axis-extend-beyond-design-review-ledgers"
+title = "Should the route axis extend beyond design-review ledgers?"
+record_kind = "question"
+status = "open"
+created = "2026-09-23"
+updated = "2026-09-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+question = "Should the route axis extend beyond design-review ledgers to /audit and /code-review passes?"
+why_matters = "The trial scoped routing to design reviews so its population is defined. Extending it is a decision for trial conclusion, not an automatic consequence of a good result. Argument: SL-260 design §6 Q2. Owned and settled by CHR-077."
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "minted from SL-260 design §6"
+target = "SL-260"

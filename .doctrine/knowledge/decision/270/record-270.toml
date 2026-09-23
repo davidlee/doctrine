@@ -5,9 +5,9 @@ id = 270
 slug = "eaten-and-absent-adversary-clauses-count-the-same"
 title = "Eaten and absent adversary clauses count the same"
 record_kind = "decision"
-status = "proposed"
+status = "accepted"
 created = "2026-09-19"
-updated = "2026-09-19"
+updated = "2026-09-23"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)

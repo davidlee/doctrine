@@ -5,9 +5,9 @@ id = 269
 slug = "adversary-clause-is-plain-prose-read-back-before-moving-on"
 title = "Adversary clause is plain prose, read back before moving on"
 record_kind = "decision"
-status = "proposed"
+status = "accepted"
 created = "2026-09-19"
-updated = "2026-09-19"
+updated = "2026-09-23"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
