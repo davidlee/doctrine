@@ -6,39 +6,43 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-20 · plan authored, slice ready · fa227ce48
+fresh-as-of: 2026-09-23 · all three phases complete, slice to audit · e72f8ad5c
 
 ### Produced
-- plan authored — `plan.toml` (3 phases) + `plan.md`, phase sheets materialised,
-  slice `proposed → ready` (commits 279175ebd, 0c34a6ee6, fa227ce48)
-- standing substrate from the design stage: `design.md` locked at run revision
-  79; `RV-371` concluded and done; `DEC-263`–`DEC-273`, `DEC-275`, `DEC-276`,
-  `CON-006`
-- minted: `ISS-474` — the `slice plan` scaffold and the plan skill ship a
-  multi-line, and therefore invalid, TOML example of the `VT` mandate;
-  `ISS-475` — no lifecycle stage settles a slice's own `DEC` records
-- two friction observations recorded this stage and committed with this sweep
-- no `src/` change; the tripwire's commit-scoped check and its positive control
-  both run clean. `doctrine check gate` not run this stage — no code modified
+- plan stage: `plan.toml` + `plan.md` (279175ebd, 0c34a6ee6, fa227ce48)
+- `PHASE-01` `7c329fde0` — routing section + stand-alone carve-out in
+  `install/design-prompts/reviewing.md`
+- `PHASE-02` `4822916bf`, `768dd1bde` — `install/review-ledger.md` §4 route
+  axis; `/plan` transcription pointer; `DEC-277` deviation; allowlist entry in
+  `tests/e2e_claude_install.rs`
+- `PHASE-03` `e72f8ad5c` — `CHR-077` (trial report, after SL-260), `QUE-224`,
+  `QUE-225`, `RFC-026` `P10` settlement; `DEC-263`–`DEC-273`, `DEC-275`,
+  `DEC-276` → `accepted`; `DEC-277` accepted
+- design-stage substrate: `design.md` locked (rev 79), `RV-371` done, `CON-006`
+- minted earlier: `ISS-474`, `ISS-475`; friction observations (plan stage, and
+  `01a0cdf6` at execute)
+- no `src/` change: commit-scoped tripwire empty at every phase end
 
 ### Learned
 - `mem.fact.design-run.fragment-renders-via-resume`
 - `mem.pattern.plan.path-tripwire-commit-scoped-not-range-diff`
+- `mem.fact.design-run.design-prompts-name-is-allowlisted`
 
 ### Open
-- `CON-006` — the residue register. Binds criterion authoring at every stage: no
-  criterion may assume a check it records as absent.
-- design §6's `Q1`/`Q2`/`Q4`/`Q5` remain unminted. `Q2` and `Q4` are now
-  **scheduled**: `PHASE-03` `EX-6` mints them onto the trial chore once that
-  chore exists. `Q1` and `Q5` stay unminted by design.
-- `PHASE-01` `EN-3` — the rendered-turn check needs some slice's design run
-  sitting at stage `reviewing` (`SL-253` at plan time). None available →
-  `/consult`, never a source-file read.
-- the thirteen `DEC` records this slice minted still read `proposed`; discharged
-  for this slice at `PHASE-03` `EX-7`, generalised as `ISS-475`
-- `ISS-320` — re-adopting an edited `design.md` needs a section map nothing
-  emits; relevant to anyone editing the locked design
-- `ISS-472`, `ISS-473` — filed out of the design stage; neither blocks
+- **`/reconcile` owes (DEC-277):** amend design §5.2's fragment draft (add the
+  post-`verified` residue sentence) and plan-pointer draft (add the `CON-006`
+  clause) to match shipped text — direct edit, the run stays locked.
+- `slice conformance` shows undeclared `tests/e2e_claude_install.rs` and the
+  `DEC-277`/observation records — deliberate, see PHASE-02 notes below.
+- `CON-006` — binds criterion authoring; no criterion may assume a check it
+  records as absent.
+- design §6 `Q1`, `Q5` stay unminted by design; `Q2`/`Q4` are `QUE-224`/`QUE-225`
+  on `CHR-077`.
+- `RFC-026` `P10` settlement cites `DEC-270` beside plan `EX-5`'s `DEC-269` /
+  `DEC-271`: `DEC-270` answers the second *Open* item.
+- `ISS-475` (no stage settles a slice's `DEC`s) remains open generally;
+  discharged here by hand.
+- `ISS-320`, `ISS-472`, `ISS-473` — unchanged; none blocks.
 
 ---
 
