@@ -97,8 +97,8 @@ instead: `"disposition": {"conducted": {"review": "RV-NNN"}}`.
   fill with invented findings.
 - The current design must stand alone. A history ledger may explain how it
   changed, but it may not carry context required to understand or implement it.
-  *One provisional exception, under the RFC-026 P10 trial:* a routed finding's
-  criterion sketch and placement constraint stay on the RV ledger and are not
+  *One provisional exception, under the RFC-026 P10 trial:* an instrument-routed
+  finding's criterion sketch and placement constraint stay on the RV ledger and are not
   repaired into the design, and `/plan` is instructed to read them there.
   Nothing else may lean on the ledger this way.
 
@@ -169,11 +169,13 @@ mechanism, contest rather than verify. Past `verified` there is no reopening:
 no verb moves a finding out of it, so a later change of mind is a prose
 amendment on the RV `.md` stating what changed, why, and where the fix landed.
 
-**Raisers, on a routed finding.** `verify` asserts that the obligation was
-correctly transcribed onto a phase criterion — not that the defect is repaired.
-That is a narrower claim than `verify` usually carries, and the `route:` token is
-what tells a later reader which claim it was. It happens after `slice phases`,
-not during this review: conclude the pass with routed findings `answered`.
+**Raisers, on an instrument-routed finding.** `verify` asserts that the
+obligation was correctly transcribed onto a phase criterion — not that the defect
+is repaired. That is a narrower claim than `verify` usually carries, and the
+`route:` token is what tells a later reader which claim it was. It happens after
+`slice phases`, not during this review: conclude the pass with instrument-routed
+findings `answered`. A finding routed `review` or `owner-fix` is repaired in
+prose, so you verify it in this review as usual.
 
 Nothing validates any of this. The slice close gate will not let a blocker be
 closed over unverified, which forces the verify act to happen — but no gate

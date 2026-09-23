@@ -172,10 +172,10 @@ first token of the disposition — `route:<route> <vocab>`. The vocab above
 records what the responder did; the route records what instrument can settle the
 finding.
 
-Such a finding's terminal close is **deferred**: it is verified after
-`slice phases`, against the criterion its obligation became — not in the pass
-that raised it. The immediate terminal close above is the rule for every other
-finding.
+An instrument-routed finding's terminal close is **deferred**: it is verified
+after `slice phases`, against the criterion its obligation became — not in the
+pass that raised it. The immediate terminal close above is the rule for every
+other finding, routed or not.
 
 The operative rule — the closed route set, what each route owes, and the form
 `--response` must take — is delivered on every reviewing turn by
