@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d099-e9e0-72e0-9eaf-0f4fc0474746"
+recorded_at = "2026-09-23T23:29:02.944809846Z"
+kind = "friction"
+summary = "design (SL-261): Declaration.provenance needs a nested object"
+detail = """contract says 'Provenance tagging: internal(provenance), variant keys sit BESIDE provenance'; the natural reading "provenance":"agent-proposed" is refused by serde; the working form is "provenance":{"provenance":"agent-proposed"}. One round trip."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

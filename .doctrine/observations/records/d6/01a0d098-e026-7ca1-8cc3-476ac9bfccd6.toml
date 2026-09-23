@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d098-e026-7ca1-8cc3-476ac9bfccd6"
+recorded_at = "2026-09-23T23:27:54.918865388Z"
+kind = "friction"
+summary = "design (SL-261): envelope at exploring shows no runbook steps or next obligation"
+detail = "design show --format prompt (and --full) at a fresh exploring run prints no runbook steps and no next obligation; had to read install/design-prompts/exploring.toml by hand to find explore.* steps. SL-262 targets this."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

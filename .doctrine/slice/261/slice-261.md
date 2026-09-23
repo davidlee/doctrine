@@ -50,16 +50,22 @@ Replace the payload protocol with a verb in which **the engine derives and the
 caller confirms**:
 
 ```
-doctrine design adopt SL-N [--expect <fingerprint>] [--dry-run]
+doctrine design adopt SL-N [--expect <fingerprint>] [--dry-run] [--diff]
 ```
 
 1. **New verb `design adopt`.** Reads `design.md`, validates markers (the same
    decomposition `authored_sections` runs today), derives the section map,
    applies `DEC-066` invalidation, re-baselines the watermark. Keeps every
-   engine-side protection of rule 2 and the pre-write re-check.
+   engine-side protection of rule 2 and the pre-write re-check. Supplies its
+   own admission inputs; an already-aligned document is a no-op (`DEC-279`).
+   Rides the one apply pipeline, split at the parse boundary with a crossing
+   mode (`DEC-279`, inq-6). Refuses on a locked run, naming the regression
+   (`DEC-279`, inq-7).
 2. **Report what the crossing did.** Output names each changed / unchanged /
-   added section and every attestation or clearance invalidated. This is the
-   information the current protocol never surfaces.
+   reordered section and every act and review attestation invalidated. (No
+   "added": `document::parse` refuses unknown and missing markers.) This is the
+   information the current protocol never surfaces. `--diff` adds a per-section
+   unified diff for changed sections via the `similar` crate (`DEC-279`).
 3. **`--expect <fingerprint>`** — optional CAS against the bytes the caller
    reviewed; the divergence refusal already prints the value to paste. Absent,
    the fingerprint read at entry is the basis and the existing pre-write
@@ -68,14 +74,13 @@ doctrine design adopt SL-N [--expect <fingerprint>] [--dry-run]
    *parser-readout* testing technique (`mem.pattern.design-run.adoption-is-the-parser-readout`)
    that currently hand-computes digests to probe the parser.
 5. **Retire `adopt_authored` from `ApplyRequest`.** One crossing, not two
-   (no parallel implementation). This is a wire change to the apply payload; the
-   design must settle how it is versioned / refused (the payload's unknown-keys
-   rule refuses a stale key — the refusal should name the verb).
+   (no parallel implementation). Retired via the first retired wire-key roster
+   `(type, key, remedy)`, consulted by `refuse_unknown_keys` (`DEC-278`).
 6. **Refusals name the verb.** The divergence refusal becomes *"run `doctrine
    design adopt SL-N`"*; `AdoptionStale` and `AdoptionMarkersInvalid` are
    re-expressed for the verb, and the markers refusal names the offending ids.
-7. **Governance.** A decision superseding `DEC-100`'s carried-forward rule 2
-   (declaring caller → deriving engine), and a revision to `SPEC-029` (design
+7. **Governance.** `DEC-279` supersedes `DEC-100`'s carried-forward rule 2
+   (declaring caller → deriving engine); `DEC-278` refines `DEC-243`; a revision to `SPEC-029` (design
    run engine) wherever it specifies the payload crossing.
 8. **Guidance.** Hymn (`install/hymns/stage/design.md`), `drafting.md`, the
    regenerated payload contract, and the memories that teach the payload
@@ -92,9 +97,11 @@ doctrine design adopt SL-N [--expect <fingerprint>] [--dry-run]
 - The envelope's abbreviated held-fingerprint rows (A3) stay as they are — they
   correctly report held state; the verb removes the reason anyone would paste
   them.
-- Adoption on a **locked** run. Whether `adopt` implies or requires a stage
-  regression is a design question, but changing the locked-run lifecycle is not
-  in scope.
+- The locked-run lifecycle for any verb but `adopt`. `adopt` refuses at
+  `locked` (`DEC-279`); ordinary `apply` mutations at `locked` are a separate
+  backlog item.
+- A guard refusing a design-run regression once the slice is audited. No loss
+  path needs it (`DEC-279`, inq-7); backlog idea.
 - Strengthening `DEC-100`'s tolerated materialise lost-update window.
 
 ## Affected surface
@@ -104,19 +111,22 @@ doctrine design adopt SL-N [--expect <fingerprint>] [--dry-run]
 - `src/design_run/run.rs` — `adopt_authored` core
 - `src/design_run/submission.rs` — `AdoptAuthored`, `ApplyRequest`
 - `src/design_run/refusal.rs` — adoption refusals
-- `src/design_run/payload_contract.rs`, `install/design-payload-contract.md`
+- `src/design_run/payload_contract.rs`, `install/design-payload-contract.md` — retired wire-key roster
+- `src/design_run/contract_check.rs` — roster consult, retired-key refusal
+- `Cargo.toml` — `similar`
 - `install/hymns/stage/design.md`, `install/design-prompts/drafting.md`
 - `tests/e2e_design_*.rs`
 
 ## Risks, assumptions, open questions
 
-- **Assumption:** the caller-declared section map adds no protection beyond the
-  whole-document fingerprint. To be confirmed in design against `RV-315` /
-  `RV-324`, which shaped rule 2.
-- **Open:** does `adopt` without `--expect` weaken rule 2's "declared exact
-  fingerprint" in any way the pre-write re-check does not cover?
-- **Open:** wire change handling for in-flight runs whose journals carry
-  `adopt_authored` submissions (replay / change-log rendering).
+- **Assumption (held, research ✓):** the caller-declared section map adds no
+  protection beyond the whole-document fingerprint (`run.rs:877-895` only
+  compares; `document::parse` enforces completeness).
+- **Settled:** bare `adopt` adopts what is on disk at entry; the pre-write
+  re-check covers the window; reviewed path is `--dry-run --diff` then
+  `--expect` (`DEC-279`).
+- **Settled:** the key is wire-only. Receipts store a digest and journals store
+  recovery intents; no stored state carries `adopt_authored`.
 - **Risk:** adoption is used in e2e tests as a parser probe; those tests move to
   the verb.
 
@@ -125,6 +135,8 @@ doctrine design adopt SL-N [--expect <fingerprint>] [--dry-run]
 - e2e: hand-edit → any mutating verb refuses naming `design adopt` → `adopt`
   succeeds in one call, reporting changed sections and invalidated evidence.
 - e2e: `--expect` mismatch refuses; `--dry-run` writes nothing.
+- e2e: `adopt` on an aligned document writes nothing; on a locked run refuses
+  naming the regression; `--diff` shows only changed sections.
 - A submitted `adopt_authored` key is refused with a remedy naming the verb.
 - Existing watermark / invalidation suites stay green with only the crossing's
   spelling changed.

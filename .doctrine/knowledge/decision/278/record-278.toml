@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 278
+slug = "retired-wire-keys-refuse-with-a-remedy"
+title = "Retired wire keys refuse with a remedy"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-23"
+updated = "2026-09-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-261 retires the adopt_authored key from the design apply payload in favour of the `doctrine design adopt` verb. DEC-243 makes retiring a wire key a two-part act (remove from the admitted set, add to a readable roster) so stored data carrying a once-known key stays readable. adopt_authored is wire-only: receipts store a digest (snapshot.rs:76-82) and no change event carries it, so the readable half has nothing to read, and silently tolerating a stale submission would make it a no-op. No wire-key roster exists in code; SL-256's roster covers change-event tokens only."
+choice = "Build the first retired wire-key roster: a static table of (type, key, remedy) beside payload_contract::PAYLOAD. contract_check::refuse_unknown_keys consults it before the unknown-key refusal and returns a distinct refusal naming the key as retired and the remedy (for adopt_authored: run `doctrine design adopt SL-N`). This adds a refuse-with-remedy disposition for wire-only retired keys alongside DEC-243's read-tolerance disposition for stored ones."
+alternatives = ["A one-off match on the key name inside refuse_unknown_keys: fewer lines, but the single-case mechanism DEC-243 exists to prevent; the next retirement repeats it.", "The plain unknown-key refusal listing admitted keys: no new mechanism, but fails SL-261 scope item 6 (refusals name the verb)."]
+rationale = "One table, one refusal variant, on the seam DEC-243 anticipated. Keeps the key walk a leaf function of the value (DEC-244) and single-sources the retirement (STD-001)."
+consequences = ["Retiring a wire-only key is: remove its contract row, add a roster row with a remedy.", "A roster row whose key is still admitted is a contradiction; a pin test refuses it.", "The roster is part of the contract inventory and renders in the generated payload contract."]
+decided_by = "user, in the SL-261 design session"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "adds a refuse-with-remedy disposition for retired wire-only keys"
+target = "DEC-243"
+
+[[relation]]
+label = "shapes"
+target = "SL-261"

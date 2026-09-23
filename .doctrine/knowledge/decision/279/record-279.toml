@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 279
+slug = "design-adopt-verb-derives-the-crossing"
+title = "Design adopt verb derives the crossing"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-23"
+updated = "2026-09-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-100 carries DEC-092 rule 2 forward unchanged: to cross an authored-watermark divergence the caller declares the exact current document fingerprint and a complete map of per-section digests via the adopt_authored payload key. The map carries no information beyond the fingerprint (every section digest is a function of the same bytes) and no verb emits it; ISS-320, ISS-348 and IMP-390 report the protocol as close to unusable. run.rs adopt_authored uses the caller's map only to refuse a disagreement; completeness is enforced by document::parse (DEC-072)."
+choice = "Supersede rule 2's caller-facing half. The crossing is the verb `doctrine design adopt SL-N [--expect <fingerprint>] [--dry-run] [--diff]`: the engine reads design.md, derives the section map, applies DEC-066 invalidation with no inherited clearance, and re-baselines the watermark only after the candidate validates. Admission inputs are the verb's own: run_uid and known_revision are read from the snapshot at entry and a fresh submission_id is minted per call. A document already aligned with the watermark is reported as such and nothing is written (no revision, no journal entry). The report names each changed and unchanged section, any change of section order, and every act and review attestation invalidated, read from the change rows the core already emits. Adoption cannot add or remove a section: document::parse refuses unknown and missing markers (DEC-072). --dry-run produces the same report and writes nothing. --diff adds a unified per-section diff (held body vs authored body, small context) for changed sections only, with or without --dry-run; it is opt-in because it can be large. The reviewed path is `adopt --dry-run --diff` then `adopt --expect <fingerprint>`."
+alternatives = ["Keep adopt_authored and emit the section digests from a read verb: fixes discovery but keeps a caller-supplied map that protects nothing.", "A --known-revision flag for a real revision CAS: every other mutation already refuses while the document is diverged, so it adds a lookup and no protection.", "A --submission-id flag for explicit idempotency: the aligned-is-a-no-op rule already makes a retry inert."]
+rationale = "Rule 2's protections are all engine-side: the fingerprint compare, complete marker validation, evidence invalidation, validate-before-rebaseline, and the pre-write re-check against the admitted fingerprint (PreWriteBasis::AdmittedAt). Moving derivation to the engine keeps every one and removes the only part that failed users."
+consequences = ["adopt_authored leaves ApplyRequest and is retired via DEC-278's roster, remedy naming the verb.", "The divergence refusal names `doctrine design adopt SL-N`.", "SPEC-029 REQ-434 and its command family are revised to the verb."]
+decided_by = "user, in the SL-261 design session"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "supersedes the carried-forward DEC-092 rule 2 (caller-declared crossing); DEC-100's rule 3b stands"
+target = "DEC-100"
+
+[[relation]]
+label = "shapes"
+target = "SL-261"
