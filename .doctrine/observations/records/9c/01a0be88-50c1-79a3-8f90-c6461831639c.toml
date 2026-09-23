@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0be88-50c1-79a3-8f90-c6461831639c"
+recorded_at = "2026-09-20T11:16:39.745567914Z"
+kind = "friction"
+summary = "/design: section body round-trip semantics are undiscoverable, cost 3 apply cycles"
+detail = "Integrating RV-371 into SL-260 meant rewriting 9 of 9 design sections. There is no per-section read verb (IMP-430) and 'design show --format json' omits section bodies entirely - it emits id/title/fingerprint/review_outstanding only. So the only way to obtain a section's current body is to split the materialised design.md on the '<!-- doctrine:section sec-N -->' markers and guess the canonical form. Two guesses were wrong: passing the extracted text verbatim changed the fingerprint (ae2a40506ded -> d3bedfcdbb8e) and materialise then emitted one extra blank line; rstrip'ing all trailing newlines was also wrong. The correct form is trailing newlines normalised to exactly one, discovered by binary search across three apply+materialise round trips before any real edit was written. Each cycle bumps the revision, so the change log now carries three no-op calibration revisions (62-65) interleaved with the real work. A per-section read verb, or a body field in the json projection, would have removed all of it. Related: ISS-320 (re-adopting an edited design.md needs a section map nothing emits) names the adjacent gap on the adopt_authored path; this is the same missing projection on the read path."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

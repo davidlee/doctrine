@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0beda-fb93-70a1-a6e0-3b4bf332a17d"
+recorded_at = "2026-09-20T12:46:57.427623551Z"
+kind = "friction"
+summary = "/phase-plan: research drift advisory fires on the slice's own downstream artefacts"
+detail = "`doctrine slice research SL-260` reports the baseline drifted, listing 'added design.md / plan.md / plan.toml' and 'changed slice-260.md'. Those are artefacts research PRODUCED or that were amended by the pre-design fold — no research thread's subject moved. Because design.md and plan.toml are added on every slice after the research round, this advisory fires 100% of the time from /design onward, for every slice. Each consuming stage then pays to re-triage it and write down why it is not refreshing (this phase spent a paragraph on it as assumption A4). Suggests the drift set should exclude the artefacts research is upstream of, or the advisory should name which thread a changed path belongs to."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
