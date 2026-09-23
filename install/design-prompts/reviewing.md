@@ -97,3 +97,83 @@ instead: `"disposition": {"conducted": {"review": "RV-NNN"}}`.
   fill with invented findings.
 - The current design must stand alone. A history ledger may explain how it
   changed, but it may not carry context required to understand or implement it.
+  *One provisional exception, under the RFC-026 P10 trial:* a routed finding's
+  criterion sketch and placement constraint stay on the RV ledger and are not
+  repaired into the design, and `/plan` is instructed to read them there.
+  Nothing else may lean on the ledger this way.
+
+## Routing a severe finding (provisional — RFC-026 P10 trial)
+
+Applies to `blocker` and `major` findings on a design-review ledger. `minor` and
+`nit` dispositions are unchanged.
+
+Every severe finding carries one route, written as the first token of the
+disposition:
+
+    --disposition "route:<route> <vocab>"     e.g.  route:probe fix-now
+
+The closed set is exactly five:
+
+| route | the question behind the finding | what settles it |
+|---|---|---|
+| `review` | should we accept this commitment and its consequences? | design judgement and adversarial review |
+| `demonstrate` | can these parts connect as proposed? | a thin implementation exercising the disputed connection — "it compiles" is not the bar |
+| `probe` | does the mechanism withstand the adversary? | a stated adversary, then a hostile probe |
+| `control` | would the planned check notice failure? | a negative control: name the concrete incorrect candidate the check must reject, and observe it rejected |
+| `owner-fix` | do two accounts of one fact disagree? | remove the duplicate, verify the surviving owner, sweep the affected class |
+
+The route and the vocab are different axes: the vocab records what you did, the
+route records what instrument can settle the finding. There is no default.
+
+**When more than one route fits.** Route on the claim whose failure would make
+the rest of the finding moot. If two still fit, prefer any route other than
+`review`. If two non-`review` routes still fit, take the first of `owner-fix`,
+`control`, `probe`, `demonstrate`. Where the finding carries a genuinely
+separable second arm, name it in `--response` so the raiser can raise it as a
+sibling — a finding is immutable and cannot be split in place. If you cannot
+tell which question the finding is asking at all, that is the ambiguity the
+anti-escape guardrails already send to `/consult`, not a reason to write
+`review`.
+
+`demonstrate`, `probe` and `control` are the **instrument routes**, and they are
+NOT repaired in prose. (`review` and `owner-fix` are settled the way they always
+were.) In `--response` you write, as plain prose — no backticks and no dollar
+signs:
+
+- `probe` — the adversary, as *must hold against X, need not hold against Y*.
+- `control` — the concrete incorrect candidate the check must reject. A control
+  establishes discrimination against a named fault, not completeness.
+- `owner-fix` — which duplicate goes, which owner survives, and the class you
+  will sweep. The sweep is the clause people drop.
+- all three instrument routes — what the criterion must assert, and what the
+  obligation needs of its host phase. You cannot name the phase: phases are
+  devised at planning, after this review. Name the constraint, not the phase.
+
+The form rule is not style. `--response` is one shell argument with no file or
+stdin form, so a backtick span or a dollar sign is expanded away before doctrine
+sees it and the receipt still reads clean. Read your response back with
+`review show <RV> --json` before moving on. There is no amend verb: if what you
+read back is wrong, the only repair is to ask the raiser to `contest` so you can
+re-dispose.
+
+**When a finding may stay open past the gate.** It may not, if the next step
+adds external reliance, durable state, authority or exposure, dependency spread,
+or governing meaning on top of the thing in doubt. Otherwise the bounded next
+step may proceed with the finding named. Measure the cost to regain an accepted
+state, not the cost to regenerate a diff.
+
+**Accumulation.** Do not route a second finding against a mechanism that already
+carries one — that changes the argument and reopens the design decision. Another
+test is not a disposition. Raisers: where several routed findings attack one
+mechanism, contest rather than verify.
+
+**Raisers, on a routed finding.** `verify` asserts that the obligation was
+correctly transcribed onto a phase criterion — not that the defect is repaired.
+That is a narrower claim than `verify` usually carries, and the `route:` token is
+what tells a later reader which claim it was. It happens after `slice phases`,
+not during this review: conclude the pass with routed findings `answered`.
+
+Nothing validates any of this. The slice close gate will not let a blocker be
+closed over unverified, which forces the verify act to happen — but no gate
+reads what you wrote, and none checks that a criterion exists. `CON-006`
+enumerates every unenforced clause with the code site proving it.
