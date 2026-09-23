@@ -178,6 +178,21 @@ while the convention operates. If the trial observes routed obligations dropped
 between plan and execute, `Q4`'s code-backing is the named next move and the
 `src/` tripwire is what it costs.
 
+## PHASE-01 delivery evidence (2026-09-23)
+
+Recorded outcome for `PHASE-01` `VA-1` (phase-sheet `D2`: the render subject is
+another slice's runtime run, so it will not outlive the phase).
+
+- Commit `7c329fde0`; transcription byte-identical to design §5.2's two fences
+  (`HEAD~` minus the stand-alone rule, plus both fences, `diff` empty).
+- After `cargo build`, `./target/debug/doctrine design resume 253` (`SL-253` at
+  stage `reviewing`) renders `## Routing a severe finding (provisional — RFC-026
+  P10 trial)` at output line 127, the carve-out at 122, the route table
+  (`probe` row, 143) and the `CON-006` pointer (200). `SL-253`'s state TOMLs
+  md5-identical before and after.
+- `VT-2` tripwire: `git log --oneline 423c181d1..HEAD --grep='SL-260' -- src/`
+  empty; without the pathspec, 17 commits. `doctrine check commit` exit 0.
+
 ## Interaction with ISS-476 (2026-09-23)
 
 ISS-476 (`f0d7804ae`) edited two of this slice's surfaces ahead of execution —
