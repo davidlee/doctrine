@@ -1,0 +1,73 @@
+id    = 373
+slug  = "sl-260-reconciliation-shipped-routing-convention-vs-design-dec-records-and-plan"
+title = "SL-260 reconciliation — shipped routing convention vs design, DEC records and plan"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-260"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "major"
+title = "Expected: the raiser-verify redefinition and the deferred terminal close apply to instrument-routed findings only (DEC-263). Observed: shipped text scopes them to every routed finding, and every severe finding carries a route"
+detail = """
+DEC-263 (accepted) scopes the redefinition exactly: 'For a finding whose disposition carries a route: prefix naming demonstrate, probe or control, the raiser's verify asserts that the obligation was correctly transcribed onto a phase criterion', and the verify is deferred past the design lock.
+
+The shipped text loses that qualifier. The same fragment requires a route on every severe finding (DEC-265: no default), so 'routed finding' now means every blocker and major, including route:review and route:owner-fix.
+
+- install/review-ledger.md §4 (:176-179): 'Such a finding's terminal close is deferred: it is verified after slice phases, against the criterion its obligation became.' 'Such a finding' refers back to 'Severe findings on a design-review ledger', i.e. all of them. A route:review or route:owner-fix finding is repaired in prose and has no criterion to become.
+- install/design-prompts/reviewing.md:172-176: 'Raisers, on a routed finding. verify asserts ... transcribed onto a phase criterion ... conclude the pass with routed findings answered.' Same over-reach, on the operative surface.
+- reviewing.md:100 (the stand-alone carve-out): 'a routed finding's criterion sketch and placement constraint'. Only instrument routes owe a sketch, so this is harmless in effect but uses the same loose term.
+
+Only the plan pointer (plan SKILL.md:44-45) names the three routes correctly.
+
+Consequence during the trial: a raiser who reads the shipped text leaves route:review and route:owner-fix blockers answered through the lock and 'verifies' them after slice phases against a criterion that cannot exist. Either that verify asserts nothing, or the raiser contests. Both corrupt the per-finding counts CHR-077 will take (repeat contests, whether verified carried the transcription claim).
+
+Origin: design §5.2's drafts carry the same wording (design.md:540-544, :584-586), so the locked design and an accepted DEC disagree. That is drift between two binding sources, not a transcription slip."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Expected: the design-target selectors cover every path the slice touched. Observed: 27 undeclared paths (a test allowlist edit and the PHASE-03 records)"
+detail = """
+slice conformance 260: 4 conformant, 0 undelivered, 27 undeclared. The 27 fall into three groups:
+
+1. tests/e2e_claude_install.rs (768dd1bde). An allowlist entry in design_prompts_have_no_consumer_outside_the_design_run, needed because the §4 route axis names design-prompts/reviewing.md by address. 4822916bf was committed without the gate and left edge red until 768dd1bde. The user ruled to allowlist it as a reader pointer, and the name@digest wire allowlist is unchanged. This is a tests/ edit, not src/, so the src/ tripwire holds. It is still a touch the design did not declare.
+2. The PHASE-03 authored records: CHR-077 (3 paths), QUE-224 and QUE-225 (6), DEC-277 (3), and 13 DEC status transitions (record-263..276 toml). Every one is required by plan PHASE-03 EX-1, EX-6 and EX-7, or by the DEC-277 deviation. They are deliverables the design never mirrored into selectors.
+3. One friction observation record (a9/01a0cdf6...). An instrumentation byproduct, not slice scope.
+
+No undelivered selectors, so no work was dropped."""
+disposition = "verified"
+response = "Confirmed. All three groups are deliberate. The test allowlist was the user's ruling at PHASE-02, the records are PHASE-03 deliverables and the DEC-277 deviation, and the observation is instrumentation. None is scope creep. The registry is what conformance reads, so the fix goes there, not in prose. Reconciliation brief, per-slice: slice selector add 260 with intent design-target for tests/e2e_claude_install.rs, .doctrine/backlog/chore/077/**, .doctrine/knowledge/decision/2{63,64,65,66,67,68,69,70,71,72,73,75,76,77}/** (or an equivalent glob per record), and .doctrine/knowledge/question/22{4,5}/**. Mirror them in design §6. Leave the observation record undeclared: it is instrumentation under RFC-011, not slice work."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Expected: design §5.2's drafts match the shipped text (the design says the text is transcribed verbatim). Observed: the shipped text carries two clauses the drafts lack (DEC-277)"
+detail = """
+The PHASE-02 single-owner sweep found two required clauses shipped nowhere. First, DEC-264's post-verified residue: no verb moves a finding out of verified, so a later change of mind is a prose amendment on the RV .md. Second, the plan pointer's CON-006 citation (PHASE-02 EX-5). Both were added in 768dd1bde under DEC-277, with user assent 'A'.
+
+design.md §5.2 still carries the pre-fix drafts: the accumulation paragraph ends at 'contest rather than verify' (:537), and the plan-pointer draft ends at 'refuses the slice close'. A reader of the locked design now gets text that differs from what ships, on exactly the two clauses §9.1 item 3 requires. notes.md Harvest/Open already names this as owed to /reconcile."""
+disposition = "verified"
+response = "Confirmed, and already recorded as owed in notes.md. Reconciliation brief, per-slice: amend design §5.2's fragment draft to add the post-verified residue sentence exactly as shipped, and the plan-pointer draft to add the CON-006 clause, citing DEC-277. This is a direct edit, and the run stays locked."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "Expected: line citations into the shipped files resolve. Observed: reviewing.md:63-64 and review-ledger.md:164-166 have drifted"
+detail = "ISS-476 (f0d7804ae) and this slice's own edits moved both targets. The stand-alone rule cited as reviewing.md:63-64 is now at :98-99 (design.md :552, :818, :888; slice-260.md scope Affected-surface). The /consult guardrail cited as review-ledger.md:164-166 is now at :191-192 after the §4 axis landed (slice-260.md scope §2). Plan PHASE-01 EN-2 and EX-3 carry :63-64 too, but plan criteria are immutable and not a reconcile surface. notes.md already warns readers to locate by quoted text. Fix the two per-slice artefacts only."
+disposition = "verified"
+response = "Confirmed. Reconciliation brief, per-slice: in design.md and slice-260.md, re-cite the stand-alone rule as reviewing.md:98-99 and the guardrail as review-ledger.md:191-192, or better, cite by quoted heading so the citations stop drifting. Plan criteria stay as authored, because they are immutable."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
