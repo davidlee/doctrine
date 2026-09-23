@@ -33,6 +33,9 @@ software engineering with LLM agents.
 - Windows support (for now)
 - Integrated TUI (for now)
 
+![graph terminal output using kitty graphics protocol](./assets/graph-crush.png)
+
+
 ## Installation
 
 TL'DR:
@@ -278,6 +281,7 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [SPEC-028 — Observation ledger](.doctrine/spec/tech/028/spec-028.md) — `active`
 - [SPEC-029 — Design run engine](.doctrine/spec/tech/029/spec-029.md) — `active`
 - [SPEC-030 — Dispatch execution capsules](.doctrine/spec/tech/030/spec-030.md) — `active`
+- [SPEC-031 — Phase plan surface](.doctrine/spec/tech/031/spec-031.md) — `active`
 
 ### Request for Comments
 
@@ -309,6 +313,9 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [RFC-026 — Design review response effectiveness](.doctrine/rfc/026/rfc-026.md) — `open`
 - [RFC-027 — Progressive discovery and proof-bearing plans](.doctrine/rfc/027/rfc-027.md) — `open`
 - [RFC-028 — Blockchain but for AI (verifiable human authorization)](.doctrine/rfc/028/rfc-028.md) — `open`
+- [RFC-029 — Proof binding and the plan surface](.doctrine/rfc/029/rfc-029.md) — `open`
+- [RFC-030 — Inquiry map as a general interview substrate](.doctrine/rfc/030/rfc-030.md) — `open`
+- [RFC-031 — Design run fitness](.doctrine/rfc/031/rfc-031.md) — `open`
 
 ### Architecture Decision Records
 
@@ -332,3 +339,5 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [ADR-018 — Finish Axis B: neutral originates_from provenance, fulfils label with completion degree, value-burndown](.doctrine/adr/018/adr-018.md) — `accepted`
 - [ADR-019 — Embedding, publication, and projection are independent asset policies](.doctrine/adr/019/adr-019.md) — `accepted`
 - [ADR-020 — Adopt execution capsules as the dispatch authority boundary](.doctrine/adr/020/adr-020.md) — `accepted`
+- [ADR-021 — Unsafe code deny with a two-site budget](.doctrine/adr/021/adr-021.md) — `proposed`
+- [ADR-022 — Evidence ownership between peer corpora](.doctrine/adr/022/adr-022.md) — `proposed`
