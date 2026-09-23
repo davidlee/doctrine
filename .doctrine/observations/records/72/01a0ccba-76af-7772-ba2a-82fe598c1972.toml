@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ccba-76af-7772-ba2a-82fe598c1972"
+recorded_at = "2026-09-23T05:26:07.279117014Z"
+kind = "friction"
+summary = "[backlog light-path; ISS-476] doctrine install projects skills from the GitHub source, not the local tree"
+detail = "After editing plugins/doctrine/skills/inquisition/SKILL.md, 'doctrine install -y' re-projected .agents/skills from davidlee/doctrine on GitHub, so the local edit did not appear, and skills-lock.json was rewritten with unrelated remote hash drift (capsule-driver etc.), which I reverted. AGENTS.md's 'doctrine install to refresh installed skills' reads as if it refreshes from local source."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
