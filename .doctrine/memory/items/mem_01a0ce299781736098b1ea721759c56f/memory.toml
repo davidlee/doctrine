@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0ce299781736098b1ea721759c56f"
+memory_key = "mem.fact.design-run.design-prompts-name-is-allowlisted"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Naming design-prompts in any shipped file trips an allowlist test"
+summary = "tests/e2e_claude_install.rs design_prompts_have_no_consumer_outside_the_design_run fails if the string design-prompts appears in a file outside its allowlist — prose pointers included"
+created = "2026-09-23"
+updated = "2026-09-23"
+
+[scope]
+paths = ["install", "plugins/doctrine/skills", "tests/e2e_claude_install.rs"]
+globs = []
+commands = []
+tags = ["area:design-run", "footgun", "area:install"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "720bf2e63a555a45f0a640eb27e34ac644592e4c"
+tree = "2fa4fe100971f6a89a07cf6a3566181a3342ae37"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "720bf2e63a555a45f0a640eb27e34ac644592e4c"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "commit"
+ref = "768dd1bde"
+
