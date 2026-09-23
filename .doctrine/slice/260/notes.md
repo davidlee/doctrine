@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-23 · audit done (`RV-373`), slice to reconcile · 5b9cdf055
+fresh-as-of: 2026-09-23 · closed; `RV-373` reconciled, brief applied
 
 ### Produced
 - plan stage: `plan.toml` + `plan.md` (279175ebd, 0c34a6ee6, fa227ce48)

@@ -475,7 +475,20 @@ not on trial outcomes, which postdate this slice:
 
 ## Summary
 
-<!-- Written at close. -->
+Closed 2026-09-23. The `RFC-026` `P10` routing convention is in effect on `edge`
+as provisional text. It has one normative owner (`reviewing.md`, *Routing a
+severe finding*), two non-asserting pointers (`review-ledger.md` §4, the `/plan`
+transcription pointer), and a `CON-006` citation on all three surfaces. Delivery
+was verified through rendered output. No `src/` change.
+
+Two deviations from the locked design, both reconciled into §5.2:
+- `DEC-277` shipped two clauses the drafts had dropped.
+- `RV-373` `F-1` narrowed the deferred verify to instrument routes, per
+  `DEC-263` (owner ruling).
+
+The trial itself is `CHR-077`'s, gated `after` this slice; `QUE-224` and
+`QUE-225` ride on it. Release to client installs remains a tag-time decision
+(*Follow-Ups*).
 
 ## Follow-Ups
 
