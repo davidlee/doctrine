@@ -516,6 +516,9 @@ fn design_prompts_have_no_consumer_outside_the_design_run() {
         // filter's *value* is derived from `prompt::contract_store()`, so this
         // is a prose mention and not a second source (STD-001).
         "src/commands/design.rs",
+        // SL-260 PHASE-02: the §4 route axis names the fragment that owns the
+        // routing rule by address, as a reader pointer. It consumes nothing.
+        "install/review-ledger.md",
     ]
     .into_iter()
     .map(str::to_owned)

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0cdf6-18d1-7273-8433-85bf80fc3da9"
+recorded_at = "2026-09-23T11:10:52.625564989Z"
+kind = "friction"
+summary = "[execute; SL-260] locked design drafts drifted from their own DECs and plan criteria; caught only by PHASE-02's single-owner sweep"
+detail = "Design §5.2's drafted fragment omits DEC-264's post-verified residue sentence, and its plan-skill pointer omits CON-006, which plan EX-5 and design §9.1 item 4 require. The phase-01 sheet asserted A1 'drafted text complete against EX-1' clause by clause, but completeness against the DEC consequences and cross-phase EX-5 was never checked. Surfaced at execute, after the design lock, forcing a consult."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

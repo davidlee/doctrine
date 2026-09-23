@@ -1,0 +1,45 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 277
+slug = "complete-the-drafted-convention-text-against-its-own-close-conditions"
+title = "Complete the drafted convention text against its own close conditions"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-23"
+updated = "2026-09-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-260 PHASE-02's single-owner sweep found the locked design §5.2 drafts short of two binding requirements. The drafted reviewing.md fragment omits the post-verified residue sentence that DEC-264 records the owner choosing to ship and that design §9.1 item 3 enumerates (0 shipped owners instead of 1). The drafted plan-skill pointer omits the CON-006 citation that plan PHASE-02 EX-5 and design §9.1 item 4 require on all three surfaces (2 citations instead of 3)."
+choice = "Ship the two missing clauses at execute rather than relax the requirements: one residue sentence closing the reviewing.md Accumulation paragraph (worded from DEC-264 and design §5.4) and one CON-006 clause closing the plan-skill pointer. The locked design is not edited now; /reconcile brings design §5.2's drafts into line by direct edit."
+alternatives = ["Relax the requirements: drop the residue from §9.1 item 3 and narrow EX-5 to two surfaces. Rejected: it overrides an owner choice DEC-264 records.", "Leave the gaps and backlog them. Rejected: the slice would ship a convention failing its own close conditions."]
+rationale = "The close conditions and DEC-264 are the binding statements; the §5.2 drafts were their intended realisation and fell short. Both additions are transcriptions of already-settled content rather than new composition. Editing the locked run mid-execution would regress it for no governing benefit; reconcile is the stage that writes design truth."
+consequences = ["reviewing.md carries three accumulation sentences as DEC-264 states.", "All three surfaces cite CON-006.", "/reconcile must amend design §5.2's fragment and pointer drafts to match the shipped text."]
+decided_by = "owner (user reply: A.)"
+decided_on = "2026-09-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "ships DEC-264's post-verified residue sentence"
+target = "DEC-264"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "adds the third CON-006 citation"
+target = "CON-006"
+
+[[relation]]
+label = "shapes"
+target = "SL-260"

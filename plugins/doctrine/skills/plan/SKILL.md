@@ -48,7 +48,8 @@ Inputs:
     sketch into an entry or exit criterion citing `RV-NNN F-n` inline in the
     criterion text, on the earliest phase that satisfies the constraint. An
     untranscribed routed blocker cannot honestly be verified, and an unverified
-    blocker refuses the slice close.
+    blocker refuses the slice close. Nothing validates the transcription; see
+    `CON-006`.
 
 4.  Author `plan.toml` — one `[[phase]]` per ordered phase:
     - `id` is `PHASE-NN` (zero-padded), **immutable** and never reused — edits

@@ -165,7 +165,9 @@ state, not the cost to regenerate a diff.
 **Accumulation.** Do not route a second finding against a mechanism that already
 carries one — that changes the argument and reopens the design decision. Another
 test is not a disposition. Raisers: where several routed findings attack one
-mechanism, contest rather than verify.
+mechanism, contest rather than verify. Past `verified` there is no reopening:
+no verb moves a finding out of it, so a later change of mind is a prose
+amendment on the RV `.md` stating what changed, why, and where the fix landed.
 
 **Raisers, on a routed finding.** `verify` asserts that the obligation was
 correctly transcribed onto a phase criterion — not that the defect is repaired.
