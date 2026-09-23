@@ -75,6 +75,13 @@ expressed.
 
 ### Open
 
+A slice design under a managed design run already has its ledger: the run
+opened it on entering `reviewing`, and `doctrine design show <slice> --format
+prompt` names it as `review_pass RV-NNN`. Prime and raise on that one; a second
+RV cannot be disposed as the run's pass.
+
+Otherwise:
+
 ```
 doctrine review new --facet <F> --target <REF> [--phase <P>] [--raiser <L>]
 ```

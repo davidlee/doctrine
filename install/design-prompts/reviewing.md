@@ -24,7 +24,12 @@ architectural or workflow choices. Apply the constraints you loaded to the
 choices the draft actually made — the same lens as drafting, aimed at a finished
 artefact rather than a forming one.
 
-Record findings and dispositions on the design's RV ledger. Do not copy review
+Entering `reviewing` already opened this pass's RV ledger: `doctrine design
+show <slice> --format prompt` names it as `review_pass RV-NNN`. Raise the pass's
+findings there, whoever conducts it, and do not `review new` another:
+`review-disposed` accepts only that RV.
+
+Record findings and dispositions on that ledger. Do not copy review
 chronology or finding-by-finding responses into `design.md` or slice notes. The
 design holds current governing meaning; the ledger holds the review history;
 durable rulings are promoted to the knowledge or governance record that owns
@@ -72,8 +77,8 @@ Then everything else their final reply granted, together:
  "stage": {"to": "locked"}}
 ```
 
-A concluded pass names its RV instead: `"disposition": {"conducted":
-{"review": "RV-NNN"}}`.
+A concluded pass names the run's own pass RV (the envelope's `review_pass`)
+instead: `"disposition": {"conducted": {"review": "RV-NNN"}}`.
 
 ## What the machine will reject
 

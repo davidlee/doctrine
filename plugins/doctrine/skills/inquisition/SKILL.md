@@ -71,7 +71,8 @@ single tribunal.
    the hand-curated `domain_map` was retired in SL-147) — and inscribe the
    **lines of interrogation** into the ledger's `## Brief`: the
    questions this Inquisition presses and the doctrine it holds the accused to.
-   (Verbs and flags: `review-ledger.md` §1–§2.)
+   (Verbs and flags: `review-ledger.md` §1–§2.) A design under a managed design
+   run already holds its ledger — try it there, never on a second RV (§2, *Open*).
 
 3. Perform the **interrogation** (adversarial review).
    - Compare the target against doctrine and list deviations.

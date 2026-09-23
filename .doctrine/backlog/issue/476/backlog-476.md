@@ -46,3 +46,23 @@ It recurs on nearly every design run with an adversarial pass.
    loosening `ForeignPass` ad hoc.
 
 Recommend 1 + 2 first; they may make 3 unnecessary.
+
+## Resolution (2026-09-23)
+
+Directions 1 and 2 landed, light-process (no slice), user-approved sketch:
+
+- **Engine.** `TurnEnvelope.review_pass` carries the run's pass `RV` once one
+  exists (JSON additive at version 1, `null` before `reviewing`). The prompt
+  line is `review_pass RV-NNN` with ` STALE` appended when stale — replacing
+  the stale-only `review_pass STALE` lamp; status renders the same. This
+  deliberately reverses the "a current pass renders nothing" property: the
+  passive cost is one short line, starting at `reviewing`.
+- **Prose.** `reviewing.md` names the ledger and forbids a second `review new`;
+  the lock example now says "the run's own pass RV". `review-ledger.md` §2
+  *Open* carries the rule once for every reviewing skill; `/inquisition` step 2
+  points at it.
+- **Not done.** `design resume` does not carry the line — its seven-field shape
+  is pinned (SL-233 scope §4); the prose points at `design show --format
+  prompt` instead. Direction 3 (a run accepting or adopting a foreign RV as its
+  pass) stays with ISS-322 and IMP-392. ISS-452 (pass opening emits no change
+  row) is a sibling visibility gap, left separate.

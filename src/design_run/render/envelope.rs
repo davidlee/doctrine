@@ -60,6 +60,8 @@ use super::{
 const TURN_ENVELOPE_SCHEMA: &str = "doctrine.design-turn";
 /// The turn envelope's wire version.
 const TURN_ENVELOPE_VERSION: u32 = 1;
+/// The label the pass line carries in both line renderings (STD-001).
+const REVIEW_PASS_LABEL: &str = "review_pass";
 
 /// The worked next-mutation example — the contract in one line a caller can copy.
 ///
@@ -349,6 +351,16 @@ pub(crate) struct TurnEnvelope {
     pub(crate) acts: Vec<ActRow>,
     pub(crate) durable_records: Vec<DurableRef>,
     pub(crate) changes: ChangeDelta,
+    /// The `RV` the run minted as its pass on entering `reviewing` (ISS-476).
+    ///
+    /// Named on every turn once it exists, because nothing else the caller reads
+    /// names it: an agent that cannot see the run's ledger opens a second one,
+    /// and `review-disposed` accepts only this one (`ForeignPass`). The passive
+    /// cost is one short line, and it starts at `reviewing` — a run that never
+    /// opened a pass renders nothing.
+    ///
+    /// Additive at [`TURN_ENVELOPE_VERSION`] `= 1`, on `SL-244`'s precedent.
+    pub(crate) review_pass: Option<String>,
     /// The run's review pass no longer covers current content (SL-244 `sec-3`,
     /// `DEC-126`).
     ///
@@ -358,11 +370,10 @@ pub(crate) struct TurnEnvelope {
     /// Review terminates when the user declines another round, so staleness must
     /// inform that decision rather than bar it.
     ///
-    /// A scalar following [`RunLine::cursor_stale`], and for its three reasons:
-    /// nothing renders while the pass is current (no passive cost), the eviction
-    /// ladder holds lists and never scalars (so a warning cannot be dropped in
-    /// favour of the material it warns about), and there is therefore no rung to
-    /// choose.
+    /// A scalar following [`RunLine::cursor_stale`]: the eviction ladder holds
+    /// lists and never scalars, so a warning cannot be dropped in favour of the
+    /// material it warns about and there is no rung to choose. It renders as a
+    /// suffix on [`Self::review_pass`]'s line.
     ///
     /// `false` when the run holds no pass at all: *nobody has reviewed this* and
     /// *the review has gone stale* are different facts, and only the second is
@@ -579,6 +590,11 @@ fn assemble(
         acts: acts(run),
         durable_records,
         changes,
+        review_pass: run
+            .review
+            .pass
+            .as_ref()
+            .map(|pass| pass.review.as_str().to_owned()),
         // Derived through `review_standing`, so the lamp and the gate's own
         // reading of the pass cannot disagree — one comparison, two readers. The
         // `is_some` guard is what keeps *no pass* out of *stale pass*:
@@ -1201,11 +1217,11 @@ pub(crate) fn prompt(envelope: &TurnEnvelope) -> Vec<String> {
         ),
         totals_line(&envelope.totals),
     ];
-    // Inline only when it says something: a current pass renders nothing, which
-    // is the no-passive-cost property that made this a lamp rather than a
-    // section of its own.
-    if envelope.pass_stale {
-        lines.push("review_pass STALE".to_owned());
+    // The pass's ledger, named once it exists (ISS-476); the currency lamp
+    // rides it as a suffix rather than a line of its own.
+    if let Some(review) = &envelope.review_pass {
+        let lamp = if envelope.pass_stale { " STALE" } else { "" };
+        lines.push(format!("{REVIEW_PASS_LABEL} {review}{lamp}"));
     }
     // The sibling lamp, and the same rule: all four counts or no line at all.
     // Rendering `blocker=0 major=0 minor=0 nit=0` on every turn of every run that
@@ -1313,8 +1329,13 @@ pub(crate) fn status(envelope: &TurnEnvelope) -> Vec<String> {
     // (`RFC-026` E3), and this is the human's surface. Rendering a lamp to the
     // agent and withholding it from the reader who acts on it would be DEC-064's
     // divergence with extra steps.
-    if envelope.pass_stale {
-        lines.push("  review_pass  STALE — it no longer covers current content".to_owned());
+    if let Some(review) = &envelope.review_pass {
+        let lamp = if envelope.pass_stale {
+            " STALE — it no longer covers current content"
+        } else {
+            ""
+        };
+        lines.push(format!("  {REVIEW_PASS_LABEL}  {review}{lamp}"));
     }
     if !is_empty(&envelope.outstanding) {
         let counts = &envelope.outstanding;
@@ -1665,11 +1686,14 @@ mod tests {
             !current.pass_stale,
             "the fixture's pass covers current content"
         );
+        let current_lines = prompt(&current);
         assert!(
-            !prompt(&current)
-                .iter()
-                .any(|line| line.contains("review_pass")),
-            "a current pass renders nothing at all — the no-passive-cost property"
+            current_lines.contains(&format!("review_pass {PASS}")),
+            "a current pass names its ledger, unlit (ISS-476): {current_lines:?}"
+        );
+        assert!(
+            !current_lines.iter().any(|line| line.contains("STALE")),
+            "and says nothing about staleness: {current_lines:?}"
         );
 
         // Same run, same acts, same attestations. Only the pass's coverage moves.
@@ -1688,21 +1712,26 @@ mod tests {
             .expect("a stale pass still projects");
         assert!(stale.pass_stale, "the lamp lights");
         assert!(
-            prompt(&stale)
-                .iter()
-                .any(|line| line.contains("review_pass STALE")),
-            "and it renders inline, following `cursor_stale`"
+            prompt(&stale).contains(&format!("review_pass {PASS} STALE")),
+            "and it renders inline on the named pass, following `cursor_stale`"
         );
 
         // *Nobody has reviewed this* is not *the review has gone stale*, and
         // `integrated_current` is `false` for both — so the guard that separates
         // them is asserted rather than commented.
         let unreviewed = run_holding(&[(SECTION_A, "sha256:a")]);
+        let unreviewed = project(&unreviewed, 0, Detail::Normal, NOTHING_OUTSTANDING)
+            .expect("a run with no pass projects");
         assert!(
-            !project(&unreviewed, 0, Detail::Normal, NOTHING_OUTSTANDING)
-                .expect("a run with no pass projects")
-                .pass_stale,
+            !unreviewed.pass_stale,
             "a run that never opened a pass has no stale one"
+        );
+        assert!(
+            !prompt(&unreviewed)
+                .iter()
+                .chain(status(&unreviewed).iter())
+                .any(|line| line.contains("review_pass")),
+            "and no pass line at all — the passive cost starts at `reviewing`"
         );
 
         // The whole point of the phase: it warns, and the crossing still happens.
@@ -1835,6 +1864,10 @@ mod tests {
             assert!(
                 joined.contains("STALE") || joined.contains("stale"),
                 "{rendering} carries the currency lamp: {joined}"
+            );
+            assert!(
+                joined.contains(PASS),
+                "{rendering} names the pass's ledger (ISS-476): {joined}"
             );
             assert!(
                 joined.contains("blocker"),

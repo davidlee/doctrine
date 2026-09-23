@@ -143,6 +143,7 @@ const PRIOR_JSON: &str = r#"{
     "floor": 1,
     "known_revision": 0
   },
+  "review_pass": null,
   "pass_stale": false,
   "outstanding": {
     "blocker": 0,

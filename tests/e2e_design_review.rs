@@ -907,6 +907,18 @@ fn mints_a_review_pass_on_entry_to_reviewing() {
     )
     .expect("the minted RV carries its ledger");
     assert!(ledger.contains(SLICE), "the RV reviews the slice: {ledger}");
+
+    // ISS-476: the turn names the pass, or a caller mints a second ledger.
+    for format in ["prompt", "status"] {
+        let turn = run(
+            &fixture.root,
+            &["design", "show", SLICE, "-p", ".", "--format", format],
+        );
+        assert!(
+            turn.contains("review_pass") && turn.contains("RV-001"),
+            "`--format {format}` names the run's pass: {turn}"
+        );
+    }
 }
 
 /// `VT-1` (b) / `EX-4`: a later entry **replaces** the pass and never reopens the
