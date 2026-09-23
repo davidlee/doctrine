@@ -35,10 +35,9 @@ Use doctrine memory (the mcp tool). DON'T use claude built-in memory.
 - the old `codex` MCP server entry is **dead** — codex-cli 0.154.0 removed the
   `mcp-server` subcommand, so it fails `CONNECTION_CLOSED` on every reconnect.
   Nothing to repoint it at; use codex-cli. (Verified 2026-09-14.)
-- **always pass `model`** — default to `gpt-5.6-sol`. The wrapper's own default
+- **always pass `model`** — default to `gpt-6-sol`, medium or high effort. The wrapper's own default
   (`gpt-5.3-codex`) 400s on a ChatGPT account, and its model enum is stale; ask
-  `codex debug models` for what the account actually serves (5.5, 5.6-sol/luna/terra,
-  gpt-6-astra).
+  `codex debug models` for what the account actually serves.
 - **never `reasoningEffort: "minimal"`** — codex attaches `web_search`
   unconditionally and the API rejects that pairing. `low`+ works; use `high` for
   adversarial review.
@@ -49,6 +48,8 @@ Use doctrine memory (the mcp tool). DON'T use claude built-in memory.
 
 ## Research
 - DON'T use subagents 
-- do use `./scripts/pi-scout` (quicker, cheaper) or `./scripts/pi-research` (smarter)
-  usage: takes a prompt via stdin or arg; returns results on stdout.
+- do use `./scripts/pi-scout` (quicker, cheaper) or `./scripts/pi-research`
+  (smarter) usage: takes a prompt via stdin or arg; returns results on stdout.
+- note: outside the jail (i.e pwd is not in `/workspace/doctrine`) these agents
+  have no API keys in the environment; pass prompts to the user to run for you.
 
