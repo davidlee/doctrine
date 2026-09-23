@@ -58,9 +58,11 @@ Directions 1 and 2 landed, light-process (no slice), user-approved sketch:
   deliberately reverses the "a current pass renders nothing" property: the
   passive cost is one short line, starting at `reviewing`.
 - **Prose.** `reviewing.md` names the ledger and forbids a second `review new`;
-  the lock example now says "the run's own pass RV". `review-ledger.md` §2
-  *Open* carries the rule once for every reviewing skill; `/inquisition` step 2
-  points at it.
+  the lock example now says "the run's own pass RV". Per DEC-103 the rule is
+  hung at every moment a skill mints a ledger, not stated once: `review-ledger.md`
+  §2 *Open*, `/inquisition` step 2, and `/code-review`'s subject step. The skill
+  copies matter because `review-ledger.md` is client-customisable and the skills
+  are rewritten on every install.
 - **Not done.** `design resume` does not carry the line — its seven-field shape
   is pinned (SL-233 scope §4); the prose points at `design show --format
   prompt` instead. Direction 3 (a run accepting or adopting a foreign RV as its

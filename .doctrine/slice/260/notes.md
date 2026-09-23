@@ -177,3 +177,19 @@ its code site; and `R1`/`R3`/`R6`, which name at ledger grain what to watch for
 while the convention operates. If the trial observes routed obligations dropped
 between plan and execute, `Q4`'s code-backing is the named next move and the
 `src/` tripwire is what it costs.
+
+## Interaction with ISS-476 (2026-09-23)
+
+ISS-476 (`f0d7804ae`) edited two of this slice's surfaces ahead of execution —
+`reviewing.md` (pass-ledger paragraph, lock example) and `review-ledger.md` §2 —
+and touched `src/`. No overlap with the §4 route axis or the routing rule.
+
+- **Base.** Design §9.2 row 7 (`git diff --stat <base>..HEAD -- src/` empty)
+  false-reds on a base older than `f0d7804ae`. Fork from `edge` at or after it.
+- **Line citations drifted** (IMP-467, then ISS-476): the stand-alone rule cited
+  as `reviewing.md:63-64` (plan `EX-3`, design §5.2) is now `:98-99`; the
+  `/consult` guardrail cited as `review-ledger.md:164-166` (scope §2) is now
+  `:172-173`. Locate by the quoted text, not the numbers.
+- **Trial effect.** The envelope now names the run's pass RV, which should stop
+  split passes (an empty run RV beside the real one, SL-256's RV-359/RV-360)
+  from muddying the trial's per-slice ledger count.

@@ -109,10 +109,13 @@ single thing; the closer the subject sits to a real entity, the more your
 findings can be queried, gated, and handed off:
 
 - An existing **slice / phase / design / plan** under review → open the RV against
-  it. A **backlog item** (`issue` / `improvement` / `chore` / `risk` / `idea`) is
-  the typed home for a durable diff with no slice yet — and if no proximate subject
-  exists but the review is durable, **mint one** (`backlog new <kind>`) and target
-  that. Do not skip to prose to dodge the mint.
+  it — except a design under a managed design run, which already holds its pass
+  RV (`doctrine design show <slice> --format prompt` names it as `review_pass`):
+  raise there, never on a second RV (`review-ledger.md` §2, *Open*). A **backlog
+  item** (`issue` / `improvement` / `chore` / `risk` / `idea`) is the typed home
+  for a durable diff with no slice yet — and if no proximate subject exists but
+  the review is durable, **mint one** (`backlog new <kind>`) and target that. Do
+  not skip to prose to dodge the mint.
 - **Prose is the last resort** — reserved for an explicitly throwaway one-shot with
   no durable subject, no lifecycle gate, no handoff, and no finding worth keeping.
   If you are reviewing code that matters, it has a home on the ledger; the cost
