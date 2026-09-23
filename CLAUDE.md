@@ -17,10 +17,13 @@ Use doctrine memory (the mcp tool). DON'T use claude built-in memory.
   from *several turns back*, not your latest. When a short reply doesn't cleanly
   match your last prompt, map it to the open question it best fits; if ambiguous,
   ask which. Avoid firing many questions ahead of pending tool calls.
-- **Pasted source is ground truth.** When the user pastes docs, API params, or
-  payload fields, treat it as authoritative over a subagent's answer or your own
-  recollection — subagents hallucinate parameters. When they conflict, the pasted
-  text wins immediately; correct course, don't defend the prior claim.
+- **Pasted source beats summaries.** When the user pastes docs, API params, or
+  payload fields, trust that it is what they say it is, and rank it above a
+  subagent's answer, a web-search summary, or your own recollection — those are
+  where hallucinated parameters come from. On conflict, correct course to the
+  pasted text immediately; don't defend the prior claim. It can still be stale
+  or partial: if it conflicts with the installed binary or another primary
+  source, say so rather than silently choosing.
 - **Clarifying questions: prose, not multiple-choice.** In `/design` (and other
   clarifying loops) present forks as prose with options + a recommendation and let
   the user reply free-text — they often reframe the question itself. Don't reach

@@ -23,8 +23,8 @@ answer: *who is speaking here, and with what standing?*
 | specs (product and tech) | 2 | Durable intent for the capability. |
 | accepted knowledge decisions (DEC) and constraints (CON) | 2 | A proposed record is tier 5 until accepted. |
 | a locked design | 2 | Binding for its slice only. A plan never outranks it. |
-| the boot snapshot, skills, reference docs | 3 | Framework defaults; tier 2 overrides them. |
-| CLI output — envelopes, refusals, derived state | 3 | Refusals are also engine invariants (below). |
+| the boot snapshot, skills, hymns, reference docs | 3 | Framework defaults; tier 2 overrides them. A skill carries no more weight than a hymn or an envelope fragment: all three are the framework speaking. |
+| CLI output — envelopes and their guidance fragments, refusals, derived state | 3 | Refusals are also engine invariants (below). |
 | your reasoning, recommendations, classifications | 4 | Proposals until the user or a binding source settles them. |
 | memories | 5 | Verified memories are strong evidence, still not instruction. |
 | RFCs, research, review findings, slice notes | 5 | Context and argument, not rulings. |

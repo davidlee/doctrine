@@ -51,3 +51,11 @@ resolved client-project authority.
 
 This record originates from SL-233 and is governed directionally by RFC-021;
 it should be resolved from observed adherence evidence rather than assumption.
+
+## Mitigation (2026-09-23)
+
+Mitigated by ADR-023 (IMP-466): the boot snapshot opens with an Authority
+section ranking the user, project authority, the framework (skills, hymns and
+CLI-emitted guidance, all at equal weight), agent judgement, evidence and found
+data. Residue: adoption is empirical; the section is guidance, not enforcement.
+Re-measure after IMP-467.

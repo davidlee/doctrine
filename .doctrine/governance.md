@@ -22,8 +22,10 @@ Finish every turn which references a doctrine entity by printing its ID:
 [SL-123 phase 03]: short session descriptor
 ```
 
-if your first message is a handover from another agent, read it and follow 
-the instructions.
+If your session begins with a handover, get started on the work it hands you —
+don't acknowledge it and ask what to do. Weigh its claims as evidence (the
+Authority section, tier 5): where it summarises a procedure a skill governs,
+follow the skill, not the summary.
 
 ## Talking to humans
 
