@@ -1,0 +1,70 @@
+id = 262
+slug = "envelope-names-the-next-move"
+title = "Envelope names the next move"
+status = "design"
+created = "2026-09-23"
+updated = "2026-09-23"
+tags = []
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/design_run/snapshot.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/design_run/render/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/design_run/gate.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/design.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/hymns/stage/design.md"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/design-prompts/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_design_*.rs"
+intent = "scope-relevant"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-390"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "next_obligation disposition"
+target = "IMP-367"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "envelope wire change"
+target = "DEC-064"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "envelope and gate specified here"
+target = "SPEC-029"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
