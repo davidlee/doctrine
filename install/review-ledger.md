@@ -164,6 +164,25 @@ Then close each finding **terminal**:
 - Loose conversation notes are **insufficient** for closure-grade work — findings
   live in the ledger, not the conversation.
 
+**Route axis** (provisional — applies to design-review ledgers under the
+RFC-026 P10 trial; not to `/audit` or `/code-review` passes):
+
+Severe findings on a design-review ledger additionally carry a route as the
+first token of the disposition — `route:<route> <vocab>`. The vocab above
+records what the responder did; the route records what instrument can settle the
+finding.
+
+Such a finding's terminal close is **deferred**: it is verified after
+`slice phases`, against the criterion its obligation became — not in the pass
+that raised it. The immediate terminal close above is the rule for every other
+finding.
+
+The operative rule — the closed route set, what each route owes, and the form
+`--response` must take — is delivered on every reviewing turn by
+`design-prompts/reviewing.md`, which owns it. This entry exists so the axis is
+discoverable beside the vocab, not to restate it. Nothing validates it; see
+`CON-006`.
+
 ### Anti-escape guardrails
 
 - Do **not** pick **follow-up** because the fix feels large.

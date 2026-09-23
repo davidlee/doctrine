@@ -39,6 +39,17 @@ Inputs:
 3.  Scaffold the plan: `doctrine slice plan <ID>` writes `plan.toml` + `plan.md`
     (refuses to clobber existing files). The tool reads these but never rewrites
     them — hand-edit freely.
+
+    **Routed findings from the design review (provisional — RFC-026 P10 trial).**
+    Before authoring phases, open the slice's design-review RV and read every
+    finding whose disposition begins `route:demonstrate`, `route:probe` or
+    `route:control`. Each is an obligation deliberately not repaired in prose. Its
+    response carries a criterion sketch and a placement constraint: transcribe the
+    sketch into an entry or exit criterion citing `RV-NNN F-n` inline in the
+    criterion text, on the earliest phase that satisfies the constraint. An
+    untranscribed routed blocker cannot honestly be verified, and an unverified
+    blocker refuses the slice close.
+
 4.  Author `plan.toml` — one `[[phase]]` per ordered phase:
     - `id` is `PHASE-NN` (zero-padded), **immutable** and never reused — edits
       append, they never renumber.
