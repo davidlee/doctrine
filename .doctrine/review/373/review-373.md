@@ -106,3 +106,32 @@ records did.
 ### Governance/spec (REV)
 - None. `DEC-263` stands as written, and `F-1` brought the text into line
   with it.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- design.md §5.2 fragment, carve-out and axis drafts: narrowed to *instrument-routed*
+  per `DEC-263`, matching `5b9cdf055` (`F-1`). Checked mechanically: every draft
+  block is a substring of the shipped file.
+- design.md §5.2 fragment draft gains the post-`verified` residue sentence; the
+  plan-pointer draft gains the `CON-006` clause; one line under the §5.2 heading
+  records why the drafts differ from what `RV-371` reviewed (`F-3`, `DEC-277`).
+- design.md :552, :818, :888 and slice-260.md (Affected surface; scope §2):
+  citations re-pointed to `reviewing.md:98-99` and `review-ledger.md:191-192`
+  (`F-4`). Plan criteria left as authored, because they are immutable.
+
+### Selector registry (`F-2`)
+- `slice selector add 260 --intent design-target`: `tests/e2e_claude_install.rs`;
+  `.doctrine/backlog/chore/077/**` and `077-*`; `decision/{263..273,275,276,277}/**`;
+  `decision/277-*`; `question/{224,225}/**` and `-*`. Each carries a note citing
+  `F-2`. Unchanged slug symlinks of pre-existing decisions are not selectors (no
+  delta).
+- `slice conformance 260`: 30 conformant, 0 undelivered, 1 undeclared (the
+  friction observation, left undeclared by design). `selector doctor` flags one
+  pre-existing redundancy (`rfc-026.md` under `rfc/026/**`), which is advisory
+  and out of brief.
+
+### REVs completed
+- None: the brief carried no governance/spec items.
+
+Reconcile pass complete — handoff to /close.

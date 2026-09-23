@@ -34,6 +34,116 @@ selector = "plugins/doctrine/skills/plan/SKILL.md"
 intent = "design-target"
 note = "The transcription pointer, added under RV-371 F-4 (DEC-271 amended). Tells the planner to open the design-review RV and transcribe routed obligations. Owns no normative content, so the rule keeps one owner. Skills are rewritten on every install (copy_skill writes unconditionally, src/install.rs:2036-2038), so it cannot silently diverge."
 
+[[selector]]
+selector = "tests/e2e_claude_install.rs"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-02 allowlist ruling - the section 4 route axis names design-prompts/reviewing.md by address; SL-244's consumer allowlist test lists it as a reader pointer."
+
+[[selector]]
+selector = ".doctrine/backlog/chore/077/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/backlog/chore/077-*"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/question/224/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/question/224-*"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/question/225/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/question/225-*"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/263/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/264/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/265/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/266/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/267/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/268/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/269/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/270/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/271/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/272/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/273/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/275/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/276/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/277/**"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
+[[selector]]
+selector = ".doctrine/knowledge/decision/277-*"
+intent = "design-target"
+note = "RV-373 F-2: PHASE-03 / DEC-277 deliverables (records)"
+
 [[relation]]
 label = "references"
 role = "concerns"

@@ -464,6 +464,8 @@ structural answer this design offers to `R5` — see §8.
 Four edits across three files. The fragment carries the rule; the other two
 point at it (§4 principle 1).
 
+*Drafts amended at reconcile to match shipped text (`DEC-277`, `RV-373` `F-1`).*
+
 #### The operative rule — `install/design-prompts/reviewing.md`
 
 Appended after the existing **What the machine will reject** list, whose last
@@ -535,13 +537,17 @@ state, not the cost to regenerate a diff.
 **Accumulation.** Do not route a second finding against a mechanism that already
 carries one — that changes the argument and reopens the design decision. Another
 test is not a disposition. Raisers: where several routed findings attack one
-mechanism, contest rather than verify.
+mechanism, contest rather than verify. Past `verified` there is no reopening:
+no verb moves a finding out of it, so a later change of mind is a prose
+amendment on the RV `.md` stating what changed, why, and where the fix landed.
 
-**Raisers, on a routed finding.** `verify` asserts that the obligation was
-correctly transcribed onto a phase criterion — not that the defect is repaired.
-That is a narrower claim than `verify` usually carries, and the `route:` token is
-what tells a later reader which claim it was. It happens after `slice phases`,
-not during this review: conclude the pass with routed findings `answered`.
+**Raisers, on an instrument-routed finding.** `verify` asserts that the
+obligation was correctly transcribed onto a phase criterion — not that the defect
+is repaired. That is a narrower claim than `verify` usually carries, and the
+`route:` token is what tells a later reader which claim it was. It happens after
+`slice phases`, not during this review: conclude the pass with instrument-routed
+findings `answered`. A finding routed `review` or `owner-fix` is repaired in
+prose, so you verify it in this review as usual.
 
 Nothing validates any of this. The slice close gate will not let a blocker be
 closed over unverified, which forces the verify act to happen — but no gate
@@ -549,7 +555,7 @@ reads what you wrote, and none checks that a criterion exists. `CON-006`
 enumerates every unenforced clause with the code site proving it.
 ```
 
-#### The stand-alone carve-out — `install/design-prompts/reviewing.md:63-64`
+#### The stand-alone carve-out — `install/design-prompts/reviewing.md:98-99`
 
 The same file's closing rule currently reads *"The current design must stand
 alone. A history ledger may explain how it changed, but it may not carry context
@@ -561,8 +567,8 @@ contradicted:
 ```markdown
 - The current design must stand alone. A history ledger may explain how it
   changed, but it may not carry context required to understand or implement it.
-  *One provisional exception, under the RFC-026 P10 trial:* a routed finding's
-  criterion sketch and placement constraint stay on the RV ledger and are not
+  *One provisional exception, under the RFC-026 P10 trial:* an instrument-routed
+  finding's criterion sketch and placement constraint stay on the RV ledger and are not
   repaired into the design, and `/plan` is instructed to read them there.
   Nothing else may lean on the ledger this way.
 ```
@@ -581,10 +587,10 @@ first token of the disposition — `route:<route> <vocab>`. The vocab above
 records what the responder did; the route records what instrument can settle the
 finding.
 
-Such a finding's terminal close is **deferred**: it is verified after
-`slice phases`, against the criterion its obligation became — not in the pass
-that raised it. The immediate terminal close above is the rule for every other
-finding.
+An instrument-routed finding's terminal close is **deferred**: it is verified
+after `slice phases`, against the criterion its obligation became — not in the
+pass that raised it. The immediate terminal close above is the rule for every
+other finding, routed or not.
 
 The operative rule — the closed route set, what each route owes, and the form
 `--response` must take — is delivered on every reviewing turn by
@@ -614,7 +620,8 @@ response carries a criterion sketch and a placement constraint: transcribe the
 sketch into an entry or exit criterion citing `RV-NNN F-n` inline in the
 criterion text, on the earliest phase that satisfies the constraint. An
 untranscribed routed blocker cannot honestly be verified, and an unverified
-blocker refuses the slice close.
+blocker refuses the slice close. Nothing validates the transcription; see
+`CON-006`.
 ```
 
 This is a pointer, not a second owner: it restates no route definition, no form
@@ -815,7 +822,7 @@ genuinely open, and none of them blocks implementation.
 **`Q3` is closed.** It asked whether the promotion obligation needs a
 `/plan`-side delivery moment. An earlier draft declined on surface cost and
 relied on the obligation travelling with the finding. `RV-371` `F-4` showed the
-cost of declining: `reviewing.md:63-64` forbids a history ledger carrying
+cost of declining: `reviewing.md:98-99` forbids a history ledger carrying
 context required to implement the design, so a ledger-only obligation
 contradicted the file the convention was being appended to, and no shipped text
 told a planner to open a ledger in any case. `DEC-271` is amended accordingly
@@ -885,7 +892,7 @@ criterion that is vacuous or false. How late placement may go is bounded by
 plan moment.** `P10` says routed findings *"become entry or exit criteria"* and
 does not say who is told to make that happen. An earlier draft of this design
 followed it, on the reasoning that the planner must open the ledger to
-transcribe at all. `RV-371` `F-4` defeated that: `reviewing.md:63-64` forbids a
+transcribe at all. `RV-371` `F-4` defeated that: `reviewing.md:98-99` forbids a
 history ledger carrying context required to implement the design, so the
 ledger-only posture contradicted the very file the convention appends to — and
 nothing shipped told a planner to open a ledger in the first place (§2.6). The

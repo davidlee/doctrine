@@ -123,7 +123,7 @@ would mix populations.
 **Every severe finding carries an explicit route; there is no default**
 (`DEC-265`). `review` is a legitimate explicit choice, not a fallback. Where the
 responder genuinely cannot classify a finding, the convention adds no new escape
-— it cites the guardrail that already ships at `install/review-ledger.md:164-166`
+— it cites the guardrail that already ships at `install/review-ledger.md:191-192`
 (*"Unresolved ambiguity after reading the design and governance → stop and
 `/consult`. Do not improvise a disposition."*). A default to `review` would be
 worse than a gap: `review` is the status quo prose loop, so a free default
@@ -401,7 +401,7 @@ measurement apparatus.
 
 - `install/design-prompts/reviewing.md` — the convention clause (the sole
   normative owner), and a provisional carve-out on the stand-alone rule at
-  `:63-64` (`RV-371` `F-4`).
+  `:98-99` (`RV-371` `F-4`).
 - `install/review-ledger.md` — §4 route axis alongside the disposition vocab,
   placed after the terminal-close block and deferring it for routed findings
   (`RV-371` `F-5`); non-asserting (`RV-371` `F-7`).
