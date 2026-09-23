@@ -54,7 +54,7 @@ Make the envelope carry the turn, not only the state:
 - `src/design_run/snapshot.rs` — `next_obligation`
 - `src/design_run/render/envelope.rs` — projection and render
 - `src/design_run/gate.rs` — condition evaluation for the forward edge
-- `src/commands/design.rs` — `show` / `resume` envelope assembly
+- `src/commands/design.rs` — envelope assembly for `show --format prompt` (`DEC-261`) and `resume`
 - `install/hymns/stage/design.md`, `install/design-prompts/**`
 - `tests/e2e_design_*.rs`
 
