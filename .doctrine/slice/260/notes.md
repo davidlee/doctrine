@@ -193,6 +193,29 @@ another slice's runtime run, so it will not outlive the phase).
 - `VT-2` tripwire: `git log --oneline 423c181d1..HEAD --grep='SL-260' -- src/`
   empty; without the pathspec, 17 commits. `doctrine check commit` exit 0.
 
+## PHASE-02 evidence and deviations (2026-09-23)
+
+- Pointers `4822916bf` (verbatim from design §5.2); fix `768dd1bde`.
+- `VA-1`: axis reads back from `library show reference/review-ledger.md`
+  (:167); pointer from installed `.claude/skills/plan/SKILL.md` (:43). Installed
+  with `install -a claude -s plan -y` — the unscoped agent set runs `npx` legs
+  that can rewrite tracked `skills-lock.json`.
+- `VA-2` sweep (positive control: fragment line 3): every shipped class has one
+  owner, `reviewing.md`; zero leakage into the pointers — **after** `DEC-277`.
+- **Deviation, `DEC-277` (user: "A").** The §5.2 drafts dropped two required
+  clauses: `DEC-264`'s post-`verified` residue sentence (0 owners) and the plan
+  pointer's `CON-006` citation (`EX-5`). Both shipped in `768dd1bde`.
+  **`/reconcile` owes:** amend design §5.2's fragment and pointer drafts to
+  match the shipped text (direct edit; the run stays locked).
+- **Gate slip.** `4822916bf` was committed ungated and left `edge` red: SL-244's
+  `design_prompts_have_no_consumer_outside_the_design_run`
+  (`tests/e2e_claude_install.rs`) allowlists every file naming `design-prompts`,
+  and the §4 axis names its owner by that address. User chose to allowlist it as
+  a pointer (the `name@digest` allowlist untouched). This is a `tests/` change,
+  not `src/`; the tripwire still holds (`VT-3`: empty, 20-commit control).
+  The PHASE-01 sheet's `A2` ("no test pins the fragment") grepped for the path,
+  not for the store name, and missed it.
+
 ## Interaction with ISS-476 (2026-09-23)
 
 ISS-476 (`f0d7804ae`) edited two of this slice's surfaces ahead of execution —
