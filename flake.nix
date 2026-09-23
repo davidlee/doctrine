@@ -6,19 +6,19 @@
     flake-parts.url = "github:hercules-ci/flake-parts";
     devshell.url = "github:numtide/devshell";
     pub.url = "github:davidlee/nix-config?dir=flakes/pub";
-    llm-agents.url = "github:numtide/llm-agents.nix";
     rust-overlay.url = "github:oxalica/rust-overlay";
     crane.url = "github:ipetkov/crane";
   };
 
-  outputs = inputs @ {
-    flake-parts,
-    rust-overlay,
-    crane,
-    nixpkgs,
-    ...
-  }:
-    flake-parts.lib.mkFlake {inherit inputs;} {
+  outputs =
+    inputs@{
+      flake-parts,
+      rust-overlay,
+      crane,
+      nixpkgs,
+      ...
+    }:
+    flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         inputs.devshell.flakeModule
       ];
@@ -33,335 +33,357 @@
         homeManagerModules.satan-attrd = import ./nix/module.nix;
       };
 
-      perSystem = {system, ...}: let
-        pkgs = import nixpkgs {
-          inherit system;
-          overlays = [rust-overlay.overlays.default];
-        };
+      perSystem =
+        { system, ... }:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            overlays = [ rust-overlay.overlays.default ];
+          };
 
-        inherit (pkgs) lib;
+          inherit (pkgs) lib;
 
-        # THE toolchain. Every consumer takes this one binding: the devshell,
-        # `just lint`/`gate`, and the crane build below. Beta, not nightly — and
-        # release.yml's `dtolnay/rust-toolchain@beta` is a fourth consumer that
-        # must track this channel by hand (see its comment; a channel split broke
-        # v0.11.0..v0.17.1). Extensions are devshell conveniences and do not
-        # affect codegen, so crane sharing this derivation is free.
-        rust = pkgs.rust-bin.beta.latest.default.override {
-          extensions = ["rust-src" "rust-analyzer" "rust-docs"];
-        };
+          # THE toolchain. Every consumer takes this one binding: the devshell,
+          # `just lint`/`gate`, and the crane build below. Beta, not nightly — and
+          # release.yml's `dtolnay/rust-toolchain@beta` is a fourth consumer that
+          # must track this channel by hand (see its comment; a channel split broke
+          # v0.11.0..v0.17.1). Extensions are devshell conveniences and do not
+          # affect codegen, so crane sharing this derivation is free.
+          rust = pkgs.rust-bin.beta.latest.default.override {
+            extensions = [
+              "rust-src"
+              "rust-analyzer"
+              "rust-docs"
+            ];
+          };
 
-        # NOT stdenvAdapters.useMoldLinker: it injects -fuse-ld=mold through
-        # mkDerivationFromStdenv, i.e. only into derivations built with it — here
-        # just webModules/webDist (bun/vite, nothing native to link). It never
-        # reaches crane (craneLib is built over plain pkgs) nor a devshell
-        # `cargo build`. mold arrives via CARGO_BUILD_RUSTFLAGS in .envrc instead.
-        # It also throws outright on darwin ("Mold can't be used to emit Mach-O"),
-        # and this stdenv is forced on every darwin eval path.
-        inherit (pkgs) stdenv;
-        isLinux = stdenv.hostPlatform.isLinux;
+          # NOT stdenvAdapters.useMoldLinker: it injects -fuse-ld=mold through
+          # mkDerivationFromStdenv, i.e. only into derivations built with it — here
+          # just webModules/webDist (bun/vite, nothing native to link). It never
+          # reaches crane (craneLib is built over plain pkgs) nor a devshell
+          # `cargo build`. mold arrives via CARGO_BUILD_RUSTFLAGS in .envrc instead.
+          # It also throws outright on darwin ("Mold can't be used to emit Mach-O"),
+          # and this stdenv is forced on every darwin eval path.
+          inherit (pkgs) stdenv;
+          isLinux = stdenv.hostPlatform.isLinux;
 
-        jailLib =
-          if isLinux
-          then inputs.pub.lib.${system}.mkJailedAgents {inherit (inputs) llm-agents;}
-          else {};
+          jailLib =
+            if isLinux then inputs.pub.lib.${system}.mkJailedAgents {} else { };
 
-        # pi-dev = jailLib.agentsByName.pi;
-        claude = jailLib.agentsByName.claude;
-        codex = jailLib.agentsByName.codex;
+          # pi-dev = jailLib.agentsByName.pi;
+          claude = jailLib.agentsByName.claude;
+          codex = jailLib.agentsByName.codex;
 
-        # The tool set minus the jailed agents: what a doctrine working
-        # environment needs, independent of how it is confined. Exported as
-        # `packages.dev-tools` for consumers that jail differently — the
-        # microvm capsule runs the agent inside a VM, where a bwrap wrapper
-        # binding *host* paths is meaningless.
-        devToolPkgs = with pkgs; [
-          jujutsu
-          jjui
-          just
-          rust # the single toolchain, incl. rust-analyzer
-          mold # must be on PATH for .envrc's -C link-arg=-fuse-ld=mold
-          helix
-          cargo-edit # `cargo set-version` for the release recipe
-          # tokei
+          # The tool set minus the jailed agents: what a doctrine working
+          # environment needs, independent of how it is confined. Exported as
+          # `packages.dev-tools` for consumers that jail differently — the
+          # microvm capsule runs the agent inside a VM, where a bwrap wrapper
+          # binding *host* paths is meaningless.
+          devToolPkgs = with pkgs; [
+            jujutsu
+            jjui
+            just
+            rust # the single toolchain, incl. rust-analyzer
+            mold # must be on PATH for .envrc's -C link-arg=-fuse-ld=mold
+            helix
+            cargo-edit # `cargo set-version` for the release recipe
+            # tokei
 
-          bashInteractive # jailed agents' Bash-tool shell (see CLAUDE_CODE_SHELL below)
+            bashInteractive # jailed agents' Bash-tool shell (see CLAUDE_CODE_SHELL below)
 
-          stdenv.cc # cc/ld on PATH (linker for cargo build)
-          stdenv.cc.cc.lib
+            stdenv.cc # cc/ld on PATH (linker for cargo build)
+            stdenv.cc.cc.lib
 
-          nodejs_latest
-          eslint
-          bun
-          typescript
-          typescript-language-server
-          sccache
+            nodejs_latest
+            eslint
+            bun
+            typescript
+            typescript-language-server
+            sccache
 
-          graphviz
-          d2
-          mermaid-cli
+            graphviz
+            d2
+            mermaid-cli
 
-          doctrine
+            doctrine
 
-          shellcheck
-          procps # pgrep
-          # Conformance-suite payload dependencies, declared rather than
-          # inherited: an absent binary makes a row's escape silently fail to
-          # launch, and the arm then reads as a hold. That is `EVD-013`'s
-          # false-negative-through-absent-binary, and row 7 was sitting in it.
-          util-linux # setsid — row 7's session escape
-          socat # row 5 — present transitively before this, undeclared
-          tinyproxy
-          iproute2
-        ];
+            shellcheck
+            procps # pgrep
+            # Conformance-suite payload dependencies, declared rather than
+            # inherited: an absent binary makes a row's escape silently fail to
+            # launch, and the arm then reads as a hold. That is `EVD-013`'s
+            # false-negative-through-absent-binary, and row 7 was sitting in it.
+            util-linux # setsid — row 7's session escape
+            socat # row 5 — present transitively before this, undeclared
+            tinyproxy
+            iproute2
+          ];
 
-        projectPkgs =
-          devToolPkgs
-          ++ [
-            codex
+          projectPkgs = devToolPkgs ++ [
+            (jailLib.unjailed.codex or codex)
             claude
             # pi-dev
           ];
 
-        # API-key forwarding is NOT configured here. jailed-agents.nix carries
-        # it (`apiKeyPassThrough`, on by default for online profiles): the outer
-        # `op run` wrapper resolves the op:// refs into the launcher's own
-        # environ, and bwrap's `--args FD` copies them into the jail down an
-        # anonymous pipe — never argv (`/proc/<pid>/cmdline` is world-readable),
-        # never disk. This flake once duplicated that FD mechanism locally to
-        # opt out of an older upstream that forwarded keys as `--setenv VAR
-        # "$VAR"` on the bwrap command line; upstream was fixed the same day
-        # (nix-config 1fea0a9d, 2026-08-11) and the duplicate removed. Don't
-        # re-add one: upstream also guards the empty selection and asserts on
-        # unknown key names, which the local copy did not.
-        jailEnvOptions = with jailLib.combinators; [
-          (try-fwd-env "DOCTRINE_BIN")
-          (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib]}")
-          # Claude Code runs Bash-tool commands under `bash` or `zsh` ONLY. Its
-          # auto-detection reads $SHELL, and falls back to "first working zsh,
-          # then bash on PATH" when $SHELL is neither — so a jailed agent lands
-          # on zsh (jail login shell) and the host lands on nushell→zsh. Both
-          # give the agent non-bash semantics it does not expect (zsh globbing
-          # is the usual bite: `grep --include=*.md` dies with `no matches
-          # found`). Pin the store path — bash is already in the closure, but
-          # `/run/current-system` and `/bin/bash` are not jail-visible, so a
-          # host-stable path would be silently ignored here. A bad value is
-          # ignored (falls back to auto-detection), so this can't hard-break.
-          # Host side sets the same var in ~/.claude/settings.json `env`.
-          (set-env "CLAUDE_CODE_SHELL" "${pkgs.bashInteractive}/bin/bash")
-          # No CARGO_TARGET_DIR redirect: each worktree builds into its own
-          # in-tree, gitignored `target/` (cargo's default). Per-worktree build
-          # isolation is then correct by construction — both dispatch arms, `just`
-          # and raw `cargo`, with no shared target to thrash and no env channel
-          # required (SL-156; ADR-008 D-B1/D-B5 via REV-011). The original
-          # cross-mount concern (a jail-built test binary bakes CARGO_BIN_EXE at
-          # the jail mount path and spawn-fails on the host, and vice versa) is
-          # satisfied *by* in-tree targets: jail `/workspace/doctrine/target` and
-          # host `/home/.../doctrine/target` are distinct physical dirs, so no
-          # binary is shared across mounts. Persistent trees (main/edge) keep a
-          # warm cache in their bound `target/`; ephemeral forks cold-build (the
-          # deliberate trade — sccache is the warm-fork lever, ADR-008 D-B4). Host
-          # was always on default `target/` and is unchanged. Do not re-add a
-          # shared redirect: it reintroduces the cross-worktree fingerprint thrash
-          # this removal fixes.
-          # Share the crane-built doctrine into the jail at the cargo path.
-          # persist-home mounts an isolated, writable ~/.cargo; this ro-binds the
-          # IMMUTABLE nix store output over ~/.cargo/bin/doctrine (extraOptions
-          # applies after persist-home, so it wins). src != dst: the dst is the
-          # path every PATH + absolute-path caller already resolves; the src is a
-          # content-addressed store path that `cargo install`'s atomic-rename can
-          # never invalidate. Converts the mid-session stale-bind HARD BREAK
-          # (rename → unlinked inode → hooks/MCP ENOENT) into benign staleness —
-          # the bound store path stays valid for the jail's whole life; a rebuild
-          # produces a NEW store path, picked up only on the next jail cycle. See
-          # IMP-249. dst tilde expands in the host launcher shell (noescape emits
-          # it raw/unquoted, so the launcher bash expands ~ → $HOME; portable
-          # across homes, unlike a hardcoded /home/david). Dev-iteration binary is
-          # ./target/debug/doctrine, never bound — unaffected. (ISS-230: the stray
-          # repo-root ~ was NEVER this line — it was a literal-~ CARGO_HOME in the
-          # host shell; this bind's ~ expands correctly.)
-          (ro-bind "${doctrine}/bin/doctrine" (noescape "~/.cargo/bin/doctrine"))
-          # Put cargo-bin on the jail PATH so the SessionStart hook's bare
-          # `doctrine boot` resolves to the shared binary above.
-          #(ro-bind "${pkgs.coreutils}/bin/env" "/usr/bin/env")
-          #(add-pkg-deps [pkgs.coreutils])
-          (add-path "/home/david/.cargo/bin")
-        ];
+          # API-key forwarding is NOT configured here. jailed-agents.nix carries
+          # it (`apiKeyPassThrough`, on by default for online profiles): the outer
+          # `op run` wrapper resolves the op:// refs into the launcher's own
+          # environ, and bwrap's `--args FD` copies them into the jail down an
+          # anonymous pipe — never argv (`/proc/<pid>/cmdline` is world-readable),
+          # never disk. This flake once duplicated that FD mechanism locally to
+          # opt out of an older upstream that forwarded keys as `--setenv VAR
+          # "$VAR"` on the bwrap command line; upstream was fixed the same day
+          # (nix-config 1fea0a9d, 2026-08-11) and the duplicate removed. Don't
+          # re-add one: upstream also guards the empty selection and asserts on
+          # unknown key names, which the local copy did not.
+          jailEnvOptions = with jailLib.combinators; [
+            (try-fwd-env "DOCTRINE_BIN")
+            (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}")
+            # Claude Code runs Bash-tool commands under `bash` or `zsh` ONLY. Its
+            # auto-detection reads $SHELL, and falls back to "first working zsh,
+            # then bash on PATH" when $SHELL is neither — so a jailed agent lands
+            # on zsh (jail login shell) and the host lands on nushell→zsh. Both
+            # give the agent non-bash semantics it does not expect (zsh globbing
+            # is the usual bite: `grep --include=*.md` dies with `no matches
+            # found`). Pin the store path — bash is already in the closure, but
+            # `/run/current-system` and `/bin/bash` are not jail-visible, so a
+            # host-stable path would be silently ignored here. A bad value is
+            # ignored (falls back to auto-detection), so this can't hard-break.
+            # Host side sets the same var in ~/.claude/settings.json `env`.
+            (set-env "CLAUDE_CODE_SHELL" "${pkgs.bashInteractive}/bin/bash")
+            # No CARGO_TARGET_DIR redirect: each worktree builds into its own
+            # in-tree, gitignored `target/` (cargo's default). Per-worktree build
+            # isolation is then correct by construction — both dispatch arms, `just`
+            # and raw `cargo`, with no shared target to thrash and no env channel
+            # required (SL-156; ADR-008 D-B1/D-B5 via REV-011). The original
+            # cross-mount concern (a jail-built test binary bakes CARGO_BIN_EXE at
+            # the jail mount path and spawn-fails on the host, and vice versa) is
+            # satisfied *by* in-tree targets: jail `/workspace/doctrine/target` and
+            # host `/home/.../doctrine/target` are distinct physical dirs, so no
+            # binary is shared across mounts. Persistent trees (main/edge) keep a
+            # warm cache in their bound `target/`; ephemeral forks cold-build (the
+            # deliberate trade — sccache is the warm-fork lever, ADR-008 D-B4). Host
+            # was always on default `target/` and is unchanged. Do not re-add a
+            # shared redirect: it reintroduces the cross-worktree fingerprint thrash
+            # this removal fixes.
+            # Share the crane-built doctrine into the jail at the cargo path.
+            # persist-home mounts an isolated, writable ~/.cargo; this ro-binds the
+            # IMMUTABLE nix store output over ~/.cargo/bin/doctrine (extraOptions
+            # applies after persist-home, so it wins). src != dst: the dst is the
+            # path every PATH + absolute-path caller already resolves; the src is a
+            # content-addressed store path that `cargo install`'s atomic-rename can
+            # never invalidate. Converts the mid-session stale-bind HARD BREAK
+            # (rename → unlinked inode → hooks/MCP ENOENT) into benign staleness —
+            # the bound store path stays valid for the jail's whole life; a rebuild
+            # produces a NEW store path, picked up only on the next jail cycle. See
+            # IMP-249. dst tilde expands in the host launcher shell (noescape emits
+            # it raw/unquoted, so the launcher bash expands ~ → $HOME; portable
+            # across homes, unlike a hardcoded /home/david). Dev-iteration binary is
+            # ./target/debug/doctrine, never bound — unaffected. (ISS-230: the stray
+            # repo-root ~ was NEVER this line — it was a literal-~ CARGO_HOME in the
+            # host shell; this bind's ~ expands correctly.)
+            (ro-bind "${doctrine}/bin/doctrine" (noescape "~/.cargo/bin/doctrine"))
+            # Put cargo-bin on the jail PATH so the SessionStart hook's bare
+            # `doctrine boot` resolves to the shared binary above.
+            #(ro-bind "${pkgs.coreutils}/bin/env" "/usr/bin/env")
+            #(add-pkg-deps [pkgs.coreutils])
+            (add-path "/home/david/.cargo/bin")
+          ];
 
-        # workspaceDeps now sourced from the JAIL_WORKSPACE_DEPS env var
-        # (set in the gitignored .envrc; requires `use flake --impure`).
-        # makeJailedAgent reads + merges it, so nothing portable lives here.
+          # workspaceDeps now sourced from the JAIL_WORKSPACE_DEPS env var
+          # (set in the gitignored .envrc; requires `use flake --impure`).
+          # makeJailedAgent reads + merges it, so nothing portable lives here.
 
-        # Every jail in this flake shares the same confinement posture; only
-        # the agent and its subagent graph differ. Holding the shared half here
-        # keeps a jail added later from silently missing the project's tools
-        # and env.
-        mkJail = maker: args:
-          maker ({
-              profile = "specDev";
-              extraPkgs = projectPkgs;
-              extraOptions = jailEnvOptions;
-            }
-            // args);
+          # Every jail in this flake shares the same confinement posture; only
+          # the agent and its subagent graph differ. Holding the shared half here
+          # keeps a jail added later from silently missing the project's tools
+          # and env.
+          mkJail =
+            maker: args:
+            maker (
+              {
+                profile = "specDev";
+                extraPkgs = projectPkgs;
+                extraOptions = jailEnvOptions;
+              }
+              // args
+            );
 
-        jailPkgs = lib.optionalAttrs isLinux {
-          jailed-pi = mkJail jailLib.makeJailedPi {
-            # exposePostgres = true;
-            allowSelfAsSubagent = true;
-            maxSubagentDepth = 2;
+          jailPkgs = lib.optionalAttrs isLinux {
+            jailed-pi = mkJail jailLib.makeJailedPi {
+              allowSelfAsSubagent = true;
+              maxSubagentDepth = 2;
+            };
+            # jailed-pi-research = mkJail jailLib.makeJailedPi {
+            #   name = "pi-research";
+            #   profile = "research";
+            #   inherit workspaceDeps;
+            # };
+            jailed-claude = mkJail jailLib.makeJailedClaude {
+              allowSelfAsSubagent = true;
+              # claude can spawn pi/dirge inside its own jail (no re-jail).
+              subagents = [
+                "pi"
+                "dirge"
+              ];
+              maxSubagentDepth = 2;
+            };
+            jailed-codex = mkJail jailLib.makeJailedCodex {
+              subagents = [
+                "claude"
+                "pi"
+                "codex"
+              ];
+            };
+            jailed-dirge = mkJail jailLib.makeJailedDirge {
+              # exposePostgres = true;
+              allowSelfAsSubagent = true;
+              # maxSubagentDepth = 2;
+            };
+
+            jailed-shell = mkJail jailLib.makeJailedAgent {
+              name = "shell";
+              agent = pkgs.zsh;
+              subagents = [
+                "pi"
+                "dirge"
+                "claude"
+              ];
+            };
+
+            bubblewrap = pkgs.bubblewrap;
           };
-          # jailed-pi-research = mkJail jailLib.makeJailedPi {
-          #   name = "pi-research";
-          #   profile = "research";
-          #   inherit workspaceDeps;
-          # };
-          jailed-claude = mkJail jailLib.makeJailedClaude {
-            allowSelfAsSubagent = true;
-            # claude can spawn pi/dirge inside its own jail (no re-jail).
-            subagents = ["pi" "dirge"];
-            maxSubagentDepth = 2;
-          };
-          jailed-codex = mkJail jailLib.makeJailedCodex {
-            subagents = ["claude" "pi" "codex"];
-          };
-          jailed-dirge = mkJail jailLib.makeJailedDirge {
-            # exposePostgres = true;
-            allowSelfAsSubagent = true;
-            # maxSubagentDepth = 2;
+
+          # Frontend: hermetic bun build → web/map/dist, embedded into the binary
+          # via rust-embed (release profile reads web/map/dist/, debug reads
+          # web/map/). dist is gitignored, so crane's git-based cleanCargoSource
+          # drops it; we build it here and graft it into the rust source tree.
+          #
+          # Source for the bun build, sans the local node_modules/dist (a plain
+          # nix path import copies everything — gitignore is not consulted).
+          webSrc = lib.cleanSourceWith {
+            src = ./web/map;
+            filter =
+              path: _type:
+              let
+                b = baseNameOf path;
+              in
+              b != "node_modules" && b != "dist";
           };
 
-          jailed-shell = mkJail jailLib.makeJailedAgent {
-            name = "shell";
-            agent = pkgs.zsh;
-            subagents = ["pi" "dirge" "claude"];
+          # node_modules via a fixed-output derivation keyed on bun.lock.
+          # REGENERATE webModules.outputHash whenever web/map/bun.lock changes —
+          # `nix build` prints the correct `got: sha256-…` on mismatch.
+          webModules = stdenv.mkDerivation {
+            name = "doctrine-web-node-modules";
+            src = webSrc;
+            nativeBuildInputs = [
+              pkgs.bun
+              pkgs.cacert
+            ];
+            dontConfigure = true;
+            buildPhase = ''
+              export HOME=$TMPDIR
+              # Nix gives fixed-output builds host network but binds NO CA bundle
+              # into the sandbox — a derivation must bring its own. Without it
+              # bun's registry TLS never completes and it retries with backoff,
+              # which presents as a HANG (version banner printed, then nothing —
+              # no package lines, no error). Diagnosed by the same build passing
+              # under `--option sandbox false`, which exposes the host /etc.
+              export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+              export NIX_SSL_CERT_FILE=$SSL_CERT_FILE
+              bun install --frozen-lockfile --no-progress
+            '';
+            installPhase = ''
+              mkdir -p $out
+              cp -R node_modules $out/node_modules
+            '';
+            dontFixup = true;
+            outputHashMode = "recursive";
+            outputHashAlgo = "sha256";
+            outputHash = "sha256-Fn1c5nzfclWXvney5hCVNUviKz3oeyYkl45Ry0M/w8c=";
           };
 
-          bubblewrap = pkgs.bubblewrap;
-        };
+          webDist = stdenv.mkDerivation {
+            name = "doctrine-web-dist";
+            src = webSrc;
+            nativeBuildInputs = [
+              pkgs.bun
+              pkgs.nodejs_latest
+            ];
+            configurePhase = ''
+              export HOME=$TMPDIR
+              cp -R ${webModules}/node_modules ./node_modules
+              chmod -R u+w ./node_modules
+            '';
+            buildPhase = ''
+              node node_modules/vite/bin/vite.js build
+            '';
+            installPhase = ''
+              mkdir -p $out
+              cp -R dist/. $out/
+            '';
+          };
 
-        # Frontend: hermetic bun build → web/map/dist, embedded into the binary
-        # via rust-embed (release profile reads web/map/dist/, debug reads
-        # web/map/). dist is gitignored, so crane's git-based cleanCargoSource
-        # drops it; we build it here and graft it into the rust source tree.
-        #
-        # Source for the bun build, sans the local node_modules/dist (a plain
-        # nix path import copies everything — gitignore is not consulted).
-        webSrc = lib.cleanSourceWith {
-          src = ./web/map;
-          filter = path: _type: let
-            b = baseNameOf path;
-          in
-            b != "node_modules" && b != "dist";
-        };
-
-        # node_modules via a fixed-output derivation keyed on bun.lock.
-        # REGENERATE webModules.outputHash whenever web/map/bun.lock changes —
-        # `nix build` prints the correct `got: sha256-…` on mismatch.
-        webModules = stdenv.mkDerivation {
-          name = "doctrine-web-node-modules";
-          src = webSrc;
-          nativeBuildInputs = [pkgs.bun pkgs.cacert];
-          dontConfigure = true;
-          buildPhase = ''
-            export HOME=$TMPDIR
-            # Nix gives fixed-output builds host network but binds NO CA bundle
-            # into the sandbox — a derivation must bring its own. Without it
-            # bun's registry TLS never completes and it retries with backoff,
-            # which presents as a HANG (version banner printed, then nothing —
-            # no package lines, no error). Diagnosed by the same build passing
-            # under `--option sandbox false`, which exposes the host /etc.
-            export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
-            export NIX_SSL_CERT_FILE=$SSL_CERT_FILE
-            bun install --frozen-lockfile --no-progress
+          # Rust binary — crane for workspace-aware builds.
+          # cleanCargoSource uses git ls-files + Cargo.toml exclude list, so
+          # plugins/ and install/ (git-tracked, embedded via rust-embed) and
+          # crates/cordage (workspace member) are included automatically. The
+          # built web dist is grafted on top (it is gitignored, hence absent).
+          # Build with the SAME toolchain the devshell + `just lint` use — the
+          # `rust` binding above, not a second spelling of it. Crane defaults to
+          # nixpkgs-stable rustc, and the version skew flips lint verdicts (e.g.
+          # unfulfilled_lint_expectations on consts referenced only by a dead fn →
+          # spurious -D warnings failure).
+          craneLib = (crane.mkLib pkgs).overrideToolchain rust;
+          # cleanCargoSource keeps ONLY .rs/.toml/.lock, silently stripping every
+          # non-rust embedded asset (RustEmbed folders + include_str! targets) —
+          # the folders survive via their .toml siblings so it still compiles, but
+          # the binary ships asset-incomplete. Graft the complete git-tracked
+          # asset roots back so the embed matches what `cargo install` sees on
+          # disk; web/map/dist is the freshly built frontend (gitignored, absent
+          # even from a full tree).
+          cleanedSrc = craneLib.cleanCargoSource ./.;
+          srcWithDist = pkgs.runCommandLocal "doctrine-src" { } ''
+            cp -R ${cleanedSrc} $out
+            chmod -R u+w $out
+            rm -rf $out/plugins $out/install $out/memory $out/templates $out/publication
+            mkdir -p $out/plugins $out/install $out/memory $out/web/map/dist $out/templates $out/publication
+            cp -R ${./plugins}/.     $out/plugins/
+            cp -R ${./install}/.     $out/install/
+            cp -R ${./memory}/.      $out/memory/
+            cp -R ${./templates}/.   $out/templates/
+            cp -R ${./publication}/. $out/publication/
+            cp -R ${webDist}/. $out/web/map/dist/
+            chmod -R u+w $out
           '';
-          installPhase = ''
-            mkdir -p $out
-            cp -R node_modules $out/node_modules
-          '';
-          dontFixup = true;
-          outputHashMode = "recursive";
-          outputHashAlgo = "sha256";
-          outputHash = "sha256-Fn1c5nzfclWXvney5hCVNUviKz3oeyYkl45Ry0M/w8c=";
-        };
-
-        webDist = stdenv.mkDerivation {
-          name = "doctrine-web-dist";
-          src = webSrc;
-          nativeBuildInputs = [pkgs.bun pkgs.nodejs_latest];
-          configurePhase = ''
-            export HOME=$TMPDIR
-            cp -R ${webModules}/node_modules ./node_modules
-            chmod -R u+w ./node_modules
-          '';
-          buildPhase = ''
-            node node_modules/vite/bin/vite.js build
-          '';
-          installPhase = ''
-            mkdir -p $out
-            cp -R dist/. $out/
-          '';
-        };
-
-        # Rust binary — crane for workspace-aware builds.
-        # cleanCargoSource uses git ls-files + Cargo.toml exclude list, so
-        # plugins/ and install/ (git-tracked, embedded via rust-embed) and
-        # crates/cordage (workspace member) are included automatically. The
-        # built web dist is grafted on top (it is gitignored, hence absent).
-        # Build with the SAME toolchain the devshell + `just lint` use — the
-        # `rust` binding above, not a second spelling of it. Crane defaults to
-        # nixpkgs-stable rustc, and the version skew flips lint verdicts (e.g.
-        # unfulfilled_lint_expectations on consts referenced only by a dead fn →
-        # spurious -D warnings failure).
-        craneLib = (crane.mkLib pkgs).overrideToolchain rust;
-        # cleanCargoSource keeps ONLY .rs/.toml/.lock, silently stripping every
-        # non-rust embedded asset (RustEmbed folders + include_str! targets) —
-        # the folders survive via their .toml siblings so it still compiles, but
-        # the binary ships asset-incomplete. Graft the complete git-tracked
-        # asset roots back so the embed matches what `cargo install` sees on
-        # disk; web/map/dist is the freshly built frontend (gitignored, absent
-        # even from a full tree).
-        cleanedSrc = craneLib.cleanCargoSource ./.;
-        srcWithDist = pkgs.runCommandLocal "doctrine-src" {} ''
-          cp -R ${cleanedSrc} $out
-          chmod -R u+w $out
-          rm -rf $out/plugins $out/install $out/memory $out/templates $out/publication
-          mkdir -p $out/plugins $out/install $out/memory $out/web/map/dist $out/templates $out/publication
-          cp -R ${./plugins}/.     $out/plugins/
-          cp -R ${./install}/.     $out/install/
-          cp -R ${./memory}/.      $out/memory/
-          cp -R ${./templates}/.   $out/templates/
-          cp -R ${./publication}/. $out/publication/
-          cp -R ${webDist}/. $out/web/map/dist/
-          chmod -R u+w $out
-        '';
-        doctrine = craneLib.buildPackage {
-          pname = "doctrine";
-          version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
-          src = srcWithDist;
-          # Deps layer never needs the assets — keep it on the lean source.
-          cargoArtifacts = craneLib.buildDepsOnly {
-            pname = "doctrine-deps";
-            src = cleanedSrc;
+          doctrine = craneLib.buildPackage {
+            pname = "doctrine";
+            version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
+            src = srcWithDist;
+            # Deps layer never needs the assets — keep it on the lean source.
+            cargoArtifacts = craneLib.buildDepsOnly {
+              pname = "doctrine-deps";
+              src = cleanedSrc;
+              cargoExtraArgs = "--workspace";
+            };
             cargoExtraArgs = "--workspace";
+            doCheck = false; # tests need a live Postgres
+            meta = {
+              mainProgram = "doctrine";
+              description = "Project governance and task-management CLI";
+            };
           };
-          cargoExtraArgs = "--workspace";
-          doCheck = false; # tests need a live Postgres
-          meta = {
-            mainProgram = "doctrine";
-            description = "Project governance and task-management CLI";
-          };
-        };
-      in {
-        # The SAME instance the let block above uses — not a second
-        # `import nixpkgs`. Two instantiations per system double the eval and
-        # hand the devshell module a different pkgs than `packages` is built
-        # from, which forks drvs and rebuilds from scratch (see the `dirge`
-        # note below for that failure mode).
-        _module.args.pkgs = pkgs;
+        in
+        {
+          # The SAME instance the let block above uses — not a second
+          # `import nixpkgs`. Two instantiations per system double the eval and
+          # hand the devshell module a different pkgs than `packages` is built
+          # from, which forks drvs and rebuilds from scratch (see the `dirge`
+          # note below for that failure mode).
+          _module.args.pkgs = pkgs;
 
-        packages =
-          jailPkgs
-          // {
+          packages = jailPkgs // {
             inherit doctrine;
             # Unjailed dirge pulled straight from the pub flake — same pkgs +
             # callPackage as the jailed-dirge wrapper bundles, so it's the
@@ -389,76 +411,83 @@
             default = doctrine;
           };
 
-        devshells.default = {
-          packages =
-            projectPkgs
-            # Bare (unjailed) agents on the host PATH, mirroring the jailed
-            # set. From pub's eval (jailLib.unjailed) so they're the identical
-            # drvs the jails bundle — dirge here == packages.dirge below.
-            ++ lib.optionals isLinux (with jailLib.unjailed; [pi dirge claude])
-            ++ lib.optionals isLinux (lib.attrValues jailPkgs);
+          devshells.default = {
+            packages =
+              projectPkgs
+              # Bare (unjailed) agents on the host PATH, mirroring the jailed
+              # set. From pub's eval (jailLib.unjailed) so they're the identical
+              # drvs the jails bundle — dirge here == packages.dirge below.
+              ++ lib.optionals isLinux (
+                with jailLib.unjailed;
+                [
+                  pi
+                  dirge
+                  claude
+                ]
+              )
+              ++ lib.optionals isLinux (lib.attrValues jailPkgs);
 
-          # darwin + nix: rustc's link line emits `-liconv` with `-nodefaultlibs`,
-          # which strips the Nix clang wrapper's auto-injected NIX_LDFLAGS — so
-          # libiconv is never on the search path and the link dies with
-          # `library not found for -liconv`. Hand rustc an explicit `-L`, the one
-          # flag it passes through `-nodefaultlibs`. Append so a caller's own
-          # RUSTFLAGS survive. No-op off darwin (glibc provides iconv) and off
-          # nix (Apple's /usr/bin/cc finds the SDK's libiconv.tbd natively).
-          devshell.startup.iconv-rustflags.text = lib.optionalString stdenv.hostPlatform.isDarwin ''
-            export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-L ${pkgs.libiconv}/lib"
-          '';
+            # darwin + nix: rustc's link line emits `-liconv` with `-nodefaultlibs`,
+            # which strips the Nix clang wrapper's auto-injected NIX_LDFLAGS — so
+            # libiconv is never on the search path and the link dies with
+            # `library not found for -liconv`. Hand rustc an explicit `-L`, the one
+            # flag it passes through `-nodefaultlibs`. Append so a caller's own
+            # RUSTFLAGS survive. No-op off darwin (glibc provides iconv) and off
+            # nix (Apple's /usr/bin/cc finds the SDK's libiconv.tbd natively).
+            devshell.startup.iconv-rustflags.text = lib.optionalString stdenv.hostPlatform.isDarwin ''
+              export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-L ${pkgs.libiconv}/lib"
+            '';
 
-          env = [
-            {
-              name = "LD_LIBRARY_PATH";
-              value = lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib];
-            }
-          ];
+            env = [
+              {
+                name = "LD_LIBRARY_PATH";
+                value = lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ];
+              }
+            ];
 
-          commands = [
-            {
-              name = "d";
-              help = "short for doctrine";
-              command = "doctrine $@";
-            }
-            {
-              name = "jd";
-              help = "just doctrine";
-              command = "just doctrine $@";
-            }
-            {
-              name = "drn";
-              help = "short for doctrine";
-              command = "doctrine $@";
-            }
-            {
-              name = "jdi";
-              help = "jailed-dirge --yolo";
-              command = "jailed-dirge $@";
-            }
-            {
-              name = "jpi";
-              help = "jailed-pi";
-              command = "jailed-pi $@";
-            }
-            {
-              name = "jcx";
-              help = "jailed-codex";
-              command = "jailed-codex $@";
-            }
-            {
-              name = "jcl";
-              help = "jailed-claude --dangerously-skip-permissions";
-              command = "jailed-claude --dangerously-skip-permissions $@";
-            }
-            {
-              name = "jail-zsh";
-              help = "jailed shell (zsh) in pi's context";
-              command = "jailed-shell $@";
-            }
-          ];
+            commands = [
+              {
+                name = "d";
+                help = "short for doctrine";
+                command = "doctrine $@";
+              }
+              {
+                name = "jd";
+                help = "just doctrine";
+                command = "just doctrine $@";
+              }
+              {
+                name = "drn";
+                help = "short for doctrine";
+                command = "doctrine $@";
+              }
+              {
+                name = "jdi";
+                help = "jailed-dirge --yolo";
+                command = "jailed-dirge $@";
+              }
+              {
+                name = "jpi";
+                help = "jailed-pi";
+                command = "jailed-pi $@";
+              }
+              {
+                name = "jcx";
+                help = "jailed-codex";
+                command = "jailed-codex $@";
+              }
+              {
+                name = "jcl";
+                help = "jailed-claude --dangerously-skip-permissions";
+                command = "jailed-claude --dangerously-skip-permissions $@";
+              }
+              {
+                name = "jail-zsh";
+                help = "jailed shell (zsh) in pi's context";
+                command = "jailed-shell $@";
+              }
+            ];
+          };
         };
-      };
     };
 }
