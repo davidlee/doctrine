@@ -14,10 +14,12 @@
 //! different function twenty lines away, and nothing could see the disagreement.
 //!
 //! Nothing here reads a clock, a disk, a digest or a snapshot — it is a function
-//! from ids and bodies to bytes, and back. Its out-degree is [`super::ids`] and
-//! [`super::refusal`], the two siblings every admission path already names, and
-//! it is a SIBLING of `render`, so the privacy precondition in this tree's
-//! module doc is untouched. [`super::section`]'s home was argued the same way.
+//! from ids and bodies to bytes, and back, plus the watermark classifier that
+//! reads a snapshot's authored state. Its out-degree is [`super::ids`],
+//! [`super::refusal`] and [`super::snapshot`] — the three siblings every
+//! admission path already names, and it is a SIBLING of `render`, so the privacy
+//! precondition in this tree's module doc is untouched. [`super::section`]'s home
+//! was argued the same way.
 //!
 //! # The rule
 //!
@@ -41,8 +43,74 @@
 
 use std::collections::BTreeSet;
 
-use super::ids::{DesignId, IdKind};
+use super::ids::{DesignId, Fingerprint, IdKind};
 use super::refusal::Refusal;
+use super::snapshot::DesignSnapshot;
+
+// ── The authored watermark (DEC-092 rule 1) ───────────────────────────────
+
+/// What the authored tier looks like, relative to the watermark.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AuthoredState {
+    /// No `design.md`, and Doctrine has never written one. **Cold, not
+    /// divergent** — there is nothing for the snapshot to have described.
+    Cold,
+    /// `design.md` is exactly as Doctrine last left it.
+    Aligned,
+    /// The bytes moved, or vanished after a materialisation.
+    Diverged {
+        expected: Option<String>,
+        observed: Option<String>,
+    },
+}
+
+/// Compare the authored tier against the watermark (DEC-092 rule 1).
+///
+/// The `materialised` flag is what makes "absent" answerable: without it, an
+/// absent document before Doctrine ever wrote one and an absent document after
+/// it did are the same observation, and one of those is cold while the other is
+/// a deletion the run must not build on.
+///
+/// **In the leaf, not the shell** (DEC-292): the classification is pure, and a
+/// read model must be able to ask whether `design.md` diverged — the shell is
+/// the one layer a read cannot reach. `refuse_authored_divergence` wraps the
+/// sentence below on the same inputs, so the refusal and the forward row cannot
+/// disagree.
+pub(crate) fn observe_watermark(
+    run: &DesignSnapshot,
+    observed: Option<&Fingerprint>,
+) -> AuthoredState {
+    let expected = run.authored.watermark.as_ref();
+    match (expected, observed) {
+        (None, None) if !run.authored.materialised => AuthoredState::Cold,
+        (Some(expected), Some(observed)) if expected == observed => AuthoredState::Aligned,
+        (expected, observed) => AuthoredState::Diverged {
+            expected: expected.map(|f| f.as_str().to_owned()),
+            observed: observed.map(|f| f.as_str().to_owned()),
+        },
+    }
+}
+
+/// The rule-1 refusal sentence, over the `Diverged` arm and the slice's
+/// canonical id — `None` for the arms that are no divergence at all.
+///
+/// One source for the refusal every ordinary verb gives and, from `SL-262`, the
+/// envelope's `diverged` row. `slice_ref` is rendered by the shell because this
+/// leaf cannot name `crate::listing` (ADR-001); `design.md` is prose, as it is
+/// in [`super::refusal`], not a token STD-001 governs.
+pub(crate) fn divergence_refusal(state: &AuthoredState, slice_ref: &str) -> Option<String> {
+    let AuthoredState::Diverged { expected, observed } = state else {
+        return None;
+    };
+    Some(format!(
+        "design.md has been edited outside this run — the watermark says `{}` and \
+         Doctrine reads `{}`. Ordinary mutation is refused against prose the snapshot \
+         no longer describes; review with `doctrine design adopt {slice_ref} --dry-run --diff`, \
+         then adopt it.",
+        expected.as_deref().unwrap_or("absent"),
+        observed.as_deref().unwrap_or("absent"),
+    ))
+}
 
 // ── The grammar's bytes (STD-001) ─────────────────────────────────────────
 
@@ -679,5 +747,68 @@ mod tests {
         );
         assert_eq!(dropped_head(""), None, "no marker line at all");
         assert_eq!(dropped_head("prose with no marker\n"), None);
+    }
+
+    /// `VT-2` — the watermark classifier and the one sentence it feeds
+    /// (DEC-292).
+    ///
+    /// Three arms: cold (never materialised, nothing to compare), aligned, and
+    /// diverged. The sentence is the refusal's own text, so it must name the
+    /// slice reference and both fingerprints — and the non-diverged arms have
+    /// none.
+    #[test]
+    fn observe_watermark_classifies_divergence() {
+        use super::super::fixture::run_holding;
+
+        let written = Fingerprint::new("sha256:written");
+        let edited = Fingerprint::new("sha256:edited");
+        let mut run = run_holding(&[]);
+
+        assert_eq!(
+            observe_watermark(&run, None),
+            AuthoredState::Cold,
+            "never materialised and no document is cold, not diverged"
+        );
+        assert_eq!(
+            observe_watermark(&run, Some(&written)),
+            AuthoredState::Diverged {
+                expected: None,
+                observed: Some("sha256:written".to_owned()),
+            },
+            "a document where Doctrine never wrote one is a divergence"
+        );
+
+        run.authored.materialised = true;
+        run.authored.watermark = Some(written.clone());
+        assert_eq!(
+            observe_watermark(&run, Some(&written)),
+            AuthoredState::Aligned
+        );
+        assert_eq!(
+            observe_watermark(&run, None),
+            AuthoredState::Diverged {
+                expected: Some("sha256:written".to_owned()),
+                observed: None,
+            },
+            "a deletion after a materialisation is not cold"
+        );
+
+        let state = observe_watermark(&run, Some(&edited));
+        assert_eq!(
+            state,
+            AuthoredState::Diverged {
+                expected: Some("sha256:written".to_owned()),
+                observed: Some("sha256:edited".to_owned()),
+            }
+        );
+        let sentence = divergence_refusal(&state, "SL-262").expect("diverged has a sentence");
+        assert!(
+            sentence.contains("SL-262"),
+            "names the verb's argument: {sentence}"
+        );
+        assert!(sentence.contains("sha256:written"), "{sentence}");
+        assert!(sentence.contains("sha256:edited"), "{sentence}");
+        assert_eq!(divergence_refusal(&AuthoredState::Aligned, "SL-262"), None);
+        assert_eq!(divergence_refusal(&AuthoredState::Cold, "SL-262"), None);
     }
 }

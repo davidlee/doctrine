@@ -86,15 +86,15 @@ pub(crate) struct AuthoredSection {
     pub(crate) fingerprint: Fingerprint,
 }
 
-/// The mechanically derived facts [`apply`] needs and cannot compute (AGENTS.md
-/// pure/imperative split).
+/// The facts the shell observes this invocation and the gate reads (DEC-292).
+///
+/// Split out of [`DerivedInput`] so a *read* can evaluate a condition: built by
+/// one shell function for `apply` and for every read, so a refusal and a forward
+/// row cannot be looking at different facts. The name says who consumes it —
+/// `Observed` would stutter against [`gate::ObservedFacts`](super::gate::ObservedFacts),
+/// which is one field here.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct DerivedInput {
-    /// The digest of each declared section body, computed by the shell.
-    pub(crate) section_digests: BTreeMap<DesignId, Fingerprint>,
-    /// Each marker-addressed section Doctrine reads out of `design.md`, for a
-    /// re-adoption. Empty on every other path: nothing but adoption reads it.
-    pub(crate) authored_sections: BTreeMap<DesignId, AuthoredSection>,
+pub(crate) struct GateFacts {
     /// The fingerprint of `design.md` as Doctrine reads it now.
     pub(crate) authored_fingerprint: Option<Fingerprint>,
     /// The runbook guarding the run's current outbound edge, if that edge has
@@ -107,21 +107,6 @@ pub(crate) struct DerivedInput {
     /// through is gone, so a fact about what an asset says is one Doctrine
     /// derives and not one it could take on a caller's word even by mistake.
     pub(crate) runbook: Option<RunbookFacts>,
-    /// What executing a step's `verify` returned, for every check the shell ran
-    /// this invocation.
-    ///
-    /// Derived, for the same reason the asset data above is: whether a check
-    /// passed is a fact Doctrine establishes, never one it takes on a caller's
-    /// word (`EX-10`). It arrives here rather than on `ApplyRequest` so there is
-    /// no wire shape to claim it with — the caller's vocabulary tops out at
-    /// `attested`, and `verified` is this input's to grant.
-    ///
-    /// A collection, not one result, because two seams read it: the step a
-    /// payload discharges (`EX-10`), and every already-verified required step
-    /// re-checked before a stage act crosses the edge (`EX-11`). One payload can
-    /// carry both acts, so both sets of results ride one field and each seam
-    /// takes the results that name its steps.
-    pub(crate) verifications: Vec<StepVerification>,
     /// The `RV` this invocation must resolve, because an act names one (SL-244
     /// `sec-3`).
     ///
@@ -143,6 +128,35 @@ pub(crate) struct DerivedInput {
     /// *now*. A fact the shell could not observe is absent here, and absence reads
     /// as changed.
     pub(crate) observed_facts: ObservedFacts,
+}
+
+/// The mechanically derived facts [`apply`] needs and cannot compute (AGENTS.md
+/// pure/imperative split).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct DerivedInput {
+    /// Every fact the gate reads, observed this invocation (DEC-292).
+    pub(crate) gate: GateFacts,
+    /// The digest of each declared section body, computed by the shell.
+    pub(crate) section_digests: BTreeMap<DesignId, Fingerprint>,
+    /// Each marker-addressed section Doctrine reads out of `design.md`, for a
+    /// re-adoption. Empty on every other path: nothing but adoption reads it.
+    pub(crate) authored_sections: BTreeMap<DesignId, AuthoredSection>,
+    /// What executing a step's `verify` returned, for every check the shell ran
+    /// this invocation.
+    ///
+    /// Derived, for the same reason the asset data in [`GateFacts`] is: whether
+    /// a check
+    /// passed is a fact Doctrine establishes, never one it takes on a caller's
+    /// word (`EX-10`). It arrives here rather than on `ApplyRequest` so there is
+    /// no wire shape to claim it with — the caller's vocabulary tops out at
+    /// `attested`, and `verified` is this input's to grant.
+    ///
+    /// A collection, not one result, because two seams read it: the step a
+    /// payload discharges (`EX-10`), and every already-verified required step
+    /// re-checked before a stage act crosses the edge (`EX-11`). One payload can
+    /// carry both acts, so both sets of results ride one field and each seam
+    /// takes the results that name its steps.
+    pub(crate) verifications: Vec<StepVerification>,
     /// The digest of the agent declaration this batch carries, over the claim
     /// encoding the declaration's own act owns
     /// ([`AgentAct::claim_material`](super::attestation::AgentAct::claim_material)).
@@ -483,7 +497,7 @@ pub(crate) fn apply(
         pending.push(discharge_step(
             &mut next,
             declared,
-            derived.runbook.as_ref(),
+            derived.gate.runbook.as_ref(),
             &derived.verifications,
         )?);
     }
@@ -784,7 +798,7 @@ fn admit_and_record(
         admit_act(
             record.admission_view(),
             rule,
-            derived.observed_review.as_ref(),
+            derived.gate.observed_review.as_ref(),
         )?;
     }
     let id = record.id().clone();
@@ -844,6 +858,7 @@ fn observed_in(
         .iter()
         .filter_map(|fact| {
             derived
+                .gate
                 .observed_facts
                 .facts
                 .get(fact)
@@ -900,7 +915,7 @@ fn adopt(
     // The locked backstop (`SL-261` `EX-3`): adoption is not a route out of
     // `locked`, whatever else is wrong with the document.
     refuse_adoption_at(next.run.stage)?;
-    let observed = derived.authored_fingerprint.as_ref();
+    let observed = derived.gate.authored_fingerprint.as_ref();
     if observed.is_none() || expect.is_some_and(|expected| Some(expected) != observed) {
         return Err(Refusal::AdoptionStale {
             expected: expect.map(|expected| expected.as_str().to_owned()),
@@ -1805,6 +1820,7 @@ fn stage_move(
         // facts loaded for a different edge answers a different question, so it
         // is discarded rather than trusted.
         let runbook = derived
+            .gate
             .runbook
             .as_ref()
             .filter(|facts| {
@@ -1819,7 +1835,7 @@ fn stage_move(
             });
         // The shared borrow is resolved into a local before the mutable write:
         // the gate now reads the whole snapshot, and `next` is `&mut` here.
-        let cleared = gate::advance(from, to, next, derived, runbook.as_ref())?;
+        let cleared = gate::advance(from, to, next, &derived.gate, runbook.as_ref())?;
         next.run.stage = cleared;
         if let Some(reason) = reason {
             terms.push(PayloadTerm::prose(PayloadKey::Reason, reason));
@@ -2382,11 +2398,14 @@ mod tests {
         );
 
         let derived = DerivedInput {
-            observed_facts: ObservedFacts {
-                facts: BTreeMap::from([(
-                    ObservedFact::GovernanceEdges,
-                    Fingerprint::new("sha256:edges"),
-                )]),
+            gate: GateFacts {
+                observed_facts: ObservedFacts {
+                    facts: BTreeMap::from([(
+                        ObservedFact::GovernanceEdges,
+                        Fingerprint::new("sha256:edges"),
+                    )]),
+                },
+                ..GateFacts::default()
             },
             ..DerivedInput::default()
         };

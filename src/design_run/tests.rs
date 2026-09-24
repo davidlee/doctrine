@@ -33,7 +33,7 @@ use super::gate::{
     ActRequirement, ActRule, Advance, AttestationRule, Binding, CONTRACTS, Cause, Condition,
     ConditionKind, Contract, Coverage, DerivationRule, EngineSource, ObservedFact, Reach,
     RequiredActor, Unmet, advance, boundary_conditions, boundary_runbook, cumulative_conditions,
-    regress, requirement_for, satisfied,
+    forward_unmet, regress, requirement_for, satisfied,
 };
 use super::ids::{DesignId, Fingerprint, IdKind, SubjectState};
 use super::inquiry::{
@@ -49,8 +49,8 @@ use super::payload_contract::{
 use super::prompt::contract_block;
 use super::refusal::{ActFault, Refusal};
 use super::run::{
-    Applied, AuthoredSection, Crossing, DerivedInput, ObservedReview, Resolution, apply, declare,
-    live_reviews, subject_state,
+    Applied, AuthoredSection, Crossing, DerivedInput, GateFacts, ObservedReview, Resolution, apply,
+    declare, live_reviews, subject_state,
 };
 use super::runbook::{RunbookKey, RunbookStanding};
 use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup, DesignSnapshot, Finding};
@@ -82,7 +82,7 @@ fn stage_gate_table_admits_only_legal_forward_moves() {
     // in the run holds, so legality is not something clearance can buy.
     let (run, derived) = cleared();
     assert_eq!(
-        advance(Stage::Exploring, Stage::Drafting, &run, &derived, None),
+        advance(Stage::Exploring, Stage::Drafting, &run, &derived.gate, None),
         Err(Refusal::IllegalStageMove {
             from: Stage::Exploring,
             to: Stage::Drafting,
@@ -97,7 +97,7 @@ fn stage_gate_table_admits_only_legal_forward_moves() {
             Stage::Exploring,
             Stage::Inquiring,
             &run,
-            &derived,
+            &derived.gate,
             Some(&RunbookStanding::default())
         ),
         Ok(Stage::Inquiring)
@@ -299,7 +299,7 @@ fn direct_regression_requires_a_recorded_reason() {
             Stage::Inquiring,
             Stage::Drafting,
             &partial,
-            &derived,
+            &derived.gate,
             Some(&discharged)
         ),
         Err(Refusal::GateNotCleared {
@@ -2365,13 +2365,13 @@ fn a_basis_cannot_be_read_as_the_blocking_set_beside_it() {
 
 /// The causes `condition` fails with here, or a failure saying it held.
 fn causes_of(condition: Condition, run: &DesignSnapshot, derived: &DerivedInput) -> Vec<Cause> {
-    satisfied(condition, run, derived).expect_err("the condition must not hold here")
+    satisfied(condition, run, &derived.gate).expect_err("the condition must not hold here")
 }
 
 /// `condition` holds against this state.
 fn assert_holds(condition: Condition, run: &DesignSnapshot, derived: &DerivedInput) {
     assert_eq!(
-        satisfied(condition, run, derived),
+        satisfied(condition, run, &derived.gate),
         Ok(()),
         "`{}` must hold here",
         condition.as_str()
@@ -2620,7 +2620,7 @@ fn bottom_edge_enforces_two_conditions() {
         Stage::Exploring,
         Stage::Inquiring,
         &run,
-        &derived,
+        &derived.gate,
         Some(&RunbookStanding::default()),
     )
     .expect_err("neither act is recorded");
@@ -2638,6 +2638,53 @@ fn bottom_edge_enforces_two_conditions() {
         ],
         "both, never the first"
     );
+}
+
+/// `VT-1` — the forward look and the gate are one evaluation (DEC-292).
+///
+/// For every forward edge, `forward_unmet` is exactly the `unmet` inside
+/// `advance`'s `GateNotCleared`, and empty precisely when `advance` passes its
+/// condition leg. The runbook standing is cleared so the only leg under test is
+/// the conditions — the leg the two share.
+///
+/// Two runs: one holding everything, and the same run stripped of the two acts
+/// the bottom edge asks for, so the comparison covers a met and an unmet set
+/// rather than one repeated four times.
+#[test]
+fn forward_unmet_agrees_with_advance() {
+    let (full, derived) = cleared();
+    let mut partial = full.clone();
+    partial.acts.acts.retain(|held| {
+        !matches!(
+            held.act,
+            ActKind::GovernanceConfirmed | ActKind::GraphReviewed
+        )
+    });
+    let standing = RunbookStanding::default();
+    assert!(standing.cleared(), "no outstanding required steps");
+
+    for (run, label) in [
+        (&full, "every condition holds"),
+        (&partial, "two conditions are unmet"),
+    ] {
+        for from in Stage::ALL {
+            let Some(edge) = Advance::from_stage(from) else {
+                continue;
+            };
+            let looked_ahead = forward_unmet(edge.to(), run, &derived.gate);
+            match advance(from, edge.to(), run, &derived.gate, Some(&standing)) {
+                Ok(_) => assert!(
+                    looked_ahead.is_empty(),
+                    "{edge:?} ({label}): advance passed, so nothing may block the look"
+                ),
+                Err(Refusal::GateNotCleared { unmet, .. }) => assert_eq!(
+                    looked_ahead, unmet,
+                    "{edge:?} ({label}): the look and the refusal are one evaluation"
+                ),
+                Err(other) => panic!("{edge:?} ({label}): unexpected refusal {other:?}"),
+            }
+        }
+    }
 }
 
 /// `VT-7` — a backward move clears nothing and breaks nothing.
@@ -2662,7 +2709,7 @@ fn backward_move_clears_nothing() {
             Stage::Drafting,
             Stage::Reviewing,
             &run,
-            &derived,
+            &derived.gate,
             Some(&RunbookStanding::default())
         ),
         Ok(Stage::Reviewing),
@@ -2687,7 +2734,7 @@ fn excursion_re_earns_only_what_moved() {
             Stage::Drafting,
             Stage::Reviewing,
             &run,
-            &derived,
+            &derived.gate,
             Some(&RunbookStanding::default())
         ),
         Ok(Stage::Reviewing),
@@ -2714,7 +2761,7 @@ fn excursion_re_earns_only_what_moved() {
 fn waiver_clears_over_live_findings_and_dismisses_none() {
     let (run, mut derived) = cleared();
     let findings = vec!["F-1".to_owned(), "F-4".to_owned()];
-    derived.observed_review = Some(ObservedReview {
+    derived.gate.observed_review = Some(ObservedReview {
         reference: ReviewRef::new(PASS),
         concluded: false,
         undisposed_blockers: findings.clone(),
@@ -2780,7 +2827,7 @@ fn a_re_disposed_blocker_clears_the_edge_again() {
         })
     };
 
-    derived.observed_review = observing(vec!["F-2".to_owned()]);
+    derived.gate.observed_review = observing(vec!["F-2".to_owned()]);
     assert_eq!(
         causes_of(Condition::ReviewDispositionAttested, &run, &derived),
         vec![Cause::BlockersUndisposed {
@@ -2792,7 +2839,7 @@ fn a_re_disposed_blocker_clears_the_edge_again() {
     // The responder disposes it. Nothing on the run moved — the same stored act,
     // the same pass — so a row that cleared here on anything but the ledger
     // would be reading its own history.
-    derived.observed_review = observing(Vec::new());
+    derived.gate.observed_review = observing(Vec::new());
     assert_holds(Condition::ReviewDispositionAttested, &run, &derived);
 }
 
@@ -2832,7 +2879,7 @@ fn a_disposition_expires_with_the_pass_it_answered() {
             review: ReviewRef::new(PASS),
         },
     });
-    derived.observed_review = None;
+    derived.gate.observed_review = None;
 
     assert_eq!(
         causes_of(Condition::ReviewDispositionAttested, &run, &derived),
@@ -4651,7 +4698,10 @@ fn adoption_inputs() -> (DesignSnapshot, ApplyRequest, DerivedInput) {
             },
         )]
         .into(),
-        authored_fingerprint: Some(Fingerprint::new("sha256:document")),
+        gate: GateFacts {
+            authored_fingerprint: Some(Fingerprint::new("sha256:document")),
+            ..GateFacts::default()
+        },
         ..DerivedInput::default()
     };
     (prior, request, derived)
@@ -4762,7 +4812,10 @@ fn adoption_case(
                 )
             })
             .collect(),
-        authored_fingerprint: Some(Fingerprint::new(DOCUMENT_FINGERPRINT)),
+        gate: GateFacts {
+            authored_fingerprint: Some(Fingerprint::new(DOCUMENT_FINGERPRINT)),
+            ..GateFacts::default()
+        },
         ..DerivedInput::default()
     };
     (prior, request, derived)
@@ -4861,7 +4914,7 @@ fn adopt_with_absent_document_is_stale() {
         &[("sec-1", "## sec-1\n\nedited\n", "sha256:edited")],
     );
     derived.authored_sections.clear();
-    derived.authored_fingerprint = None;
+    derived.gate.authored_fingerprint = None;
 
     for expect in [None, Some("sha256:reviewed")] {
         assert_eq!(

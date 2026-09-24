@@ -1740,7 +1740,7 @@ mod tests {
                 Stage::Reviewing,
                 Stage::Locked,
                 &run,
-                &derived,
+                &derived.gate,
                 Some(&RunbookStanding::default()),
             ),
             Ok(Stage::Locked),

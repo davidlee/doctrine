@@ -85,6 +85,7 @@ use crate::design_run::attestation::{
     ReviewRef,
 };
 use crate::design_run::delegation::Delegation;
+use crate::design_run::document::{AuthoredState, divergence_refusal, observe_watermark};
 use crate::design_run::gate::ObservedFact;
 use crate::design_run::ids::{DesignId, Fingerprint, IdKind};
 use crate::design_run::payload_contract::{
@@ -638,39 +639,12 @@ fn emit(lines: &[String]) -> Result<()> {
 }
 
 // ── the authored watermark ────────────────────────────────────────────────
-
-/// What the authored tier looks like, relative to the watermark.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum AuthoredState {
-    /// No `design.md`, and Doctrine has never written one. **Cold, not
-    /// divergent** — there is nothing for the snapshot to have described.
-    Cold,
-    /// `design.md` is exactly as Doctrine last left it.
-    Aligned,
-    /// The bytes moved, or vanished after a materialisation.
-    Diverged {
-        expected: Option<String>,
-        observed: Option<String>,
-    },
-}
-
-/// Compare the authored tier against the watermark (DEC-092 rule 1).
-///
-/// The `materialised` flag is what makes "absent" answerable: without it, an
-/// absent document before Doctrine ever wrote one and an absent document after
-/// it did are the same observation, and one of those is cold while the other is
-/// a deletion the run must not build on.
-fn observe_watermark(run: &DesignSnapshot, observed: Option<&Fingerprint>) -> AuthoredState {
-    let expected = run.authored.watermark.as_ref();
-    match (expected, observed) {
-        (None, None) if !run.authored.materialised => AuthoredState::Cold,
-        (Some(expected), Some(observed)) if expected == observed => AuthoredState::Aligned,
-        (expected, observed) => AuthoredState::Diverged {
-            expected: expected.map(|f| f.as_str().to_owned()),
-            observed: observed.map(|f| f.as_str().to_owned()),
-        },
-    }
-}
+//
+// `AuthoredState`, `observe_watermark` and the refusal sentence live in
+// `design_run::document` beside the renderer the watermark guards (DEC-292): a
+// read model must be able to ask whether `design.md` diverged, and the leaf is
+// the only layer every read can reach. `refuse_authored_divergence` below keeps
+// this module's call sites and wraps the core's sentence.
 
 /// The rule-1 entry check every ordinary mutating verb runs.
 ///
@@ -681,18 +655,12 @@ fn refuse_authored_divergence(
     observed: Option<&Fingerprint>,
     slice: u32,
 ) -> Result<()> {
-    match observe_watermark(run, observed) {
-        AuthoredState::Cold | AuthoredState::Aligned => Ok(()),
-        AuthoredState::Diverged { expected, observed } => anyhow::bail!(
-            "{DESIGN_DOC} has been edited outside this run — the watermark says `{}` and \
-             Doctrine reads `{}`. Ordinary mutation is refused against prose the snapshot \
-             no longer describes; review with `doctrine design adopt {} --dry-run --diff`, \
-             then adopt it.",
-            expected.as_deref().unwrap_or("absent"),
-            observed.as_deref().unwrap_or("absent"),
-            crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice),
-        ),
+    let state = observe_watermark(run, observed);
+    let slice_ref = crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice);
+    if let Some(sentence) = divergence_refusal(&state, &slice_ref) {
+        anyhow::bail!("{sentence}");
     }
+    Ok(())
 }
 
 /// What the pre-write re-check compares against (DEC-092 rule 3, RV-315 F-20).
@@ -2087,8 +2055,17 @@ fn apply_pipeline(
         Some(text) => authored_sections(&text, &prior.sections.ids())?,
         None => std::collections::BTreeMap::new(),
     };
-    let runbook = runbook_facts(prior.run.stage)?;
+    // Every fact the gate reads, observed once this invocation (DEC-292). Built
+    // before `DerivedInput` so the verifications below read the same runbook the
+    // gate will, without a second asset read or a second digest.
+    let declared_review = request
+        .checkpoint_act
+        .as_ref()
+        .and_then(|act| act.disposition.as_ref());
+    let gate = gate_facts(root, slice, prior, observed.clone(), declared_review)?;
+    let verifications = verifications(root, slice, prior, request, gate.runbook.as_ref());
     let derived = DerivedInput {
+        gate,
         // An `accept` contributes the delegate's stored declarations to this
         // batch, so their bodies need digesting too — the pure core never hashes,
         // and a proposed section whose digest nobody computed would be refused as
@@ -2100,11 +2077,7 @@ fn apply_pipeline(
                 .chain(accepted_declarations(prior, request)),
         ),
         authored_sections: authored,
-        authored_fingerprint: observed.clone(),
-        verifications: verifications(root, slice, prior, request, runbook.as_ref()),
-        runbook,
-        observed_review: observed_review(prior, request, root),
-        observed_facts: observed_facts(root, slice),
+        verifications,
         // The claim digest, over the encoding the act itself owns. Computed here
         // because the pure layer never hashes, and computed unconditionally
         // whenever the payload carries a declaration, because a record with no
@@ -2883,6 +2856,30 @@ fn runbook_section(run: &DesignSnapshot) -> Result<Vec<String>> {
 /// A stage whose outbound edge carries no runbook yields `None`, which is a real
 /// answer rather than a missing case — the shape [`design_run::prompt::Fragment::for_stage`]
 /// already uses for a locked run.
+/// Every fact the gate reads, observed this invocation (DEC-292).
+///
+/// The **only** constructor of [`GateFacts`] outside tests: `apply` builds one
+/// for the crossing, and every read builds one to evaluate the forward edge, so
+/// the two cannot be looking at different facts. `authored_fingerprint` is
+/// passed in rather than read here because `apply` already holds the document
+/// bytes (`read.fingerprint`) and must not read `design.md` twice; a read passes
+/// [`read_authored_fingerprint`]'s answer. `declared` is the payload's review
+/// disposition on `apply` and `None` on a read.
+fn gate_facts(
+    root: &Path,
+    slice: u32,
+    run: &DesignSnapshot,
+    authored_fingerprint: Option<Fingerprint>,
+    declared: Option<&ReviewDisposition>,
+) -> Result<design_run::run::GateFacts> {
+    Ok(design_run::run::GateFacts {
+        authored_fingerprint,
+        runbook: runbook_facts(run.run.stage)?,
+        observed_review: observed_review(run, declared, root),
+        observed_facts: observed_facts(root, slice),
+    })
+}
+
 /// The `RV` this invocation must resolve, because an act names one (SL-244
 /// `sec-3`) — read off the ledger, never taken on the caller's word.
 ///
@@ -2902,13 +2899,9 @@ fn runbook_section(run: &DesignSnapshot) -> Result<Vec<String>> {
 /// check — which is why the two are not distinguished here.
 fn observed_review(
     prior: &DesignSnapshot,
-    request: &ApplyRequest,
+    declared: Option<&ReviewDisposition>,
     root: &Path,
 ) -> Option<ObservedReview> {
-    let declared = request
-        .checkpoint_act
-        .as_ref()
-        .and_then(|act| act.disposition.as_ref());
     let stored = prior
         .acts
         .acts

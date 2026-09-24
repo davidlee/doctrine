@@ -18,7 +18,7 @@ use super::attestation::{
 use super::gate::{ObservedFact, ObservedFacts};
 use super::ids::{DesignId, Fingerprint};
 use super::inquiry::{Disposition, InquiryNode, Provenance};
-use super::run::DerivedInput;
+use super::run::{DerivedInput, GateFacts};
 use super::snapshot::{DesignSnapshot, Section};
 use super::submission::Declaration;
 
@@ -253,11 +253,14 @@ pub(super) fn cleared() -> (DesignSnapshot, DerivedInput) {
     }
 
     let derived = DerivedInput {
-        authored_fingerprint: Some(Fingerprint::new(AUTHORED)),
-        observed_facts: ObservedFacts {
-            facts: [(ObservedFact::GovernanceEdges, Fingerprint::new(EDGES))]
-                .into_iter()
-                .collect(),
+        gate: GateFacts {
+            authored_fingerprint: Some(Fingerprint::new(AUTHORED)),
+            observed_facts: ObservedFacts {
+                facts: [(ObservedFact::GovernanceEdges, Fingerprint::new(EDGES))]
+                    .into_iter()
+                    .collect(),
+            },
+            ..GateFacts::default()
         },
         ..DerivedInput::default()
     };

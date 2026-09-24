@@ -26,7 +26,7 @@ use super::bounds::DESIGN_ID_BYTES;
 use super::ids::{DesignId, Fingerprint};
 use super::inquiry::InquiryLifecycle;
 use super::refusal::Refusal;
-use super::run::DerivedInput;
+use super::run::GateFacts;
 use super::runbook::{RunbookKey, RunbookStanding};
 use super::snapshot::DesignSnapshot;
 
@@ -1368,7 +1368,7 @@ pub(crate) fn materialisation_stale(
 pub(crate) fn satisfied(
     condition: Condition,
     run: &DesignSnapshot,
-    derived: &DerivedInput,
+    facts: &GateFacts,
 ) -> Result<(), Vec<Cause>> {
     let mut causes = Vec::new();
     match condition.contract().derivation {
@@ -1379,7 +1379,7 @@ pub(crate) fn satisfied(
             }
         }
         DerivationRule::Engine(EngineSource::Materialisation) => {
-            if materialisation_stale(run, derived.authored_fingerprint.as_ref()) {
+            if materialisation_stale(run, facts.authored_fingerprint.as_ref()) {
                 causes.push(Cause::MaterialisationStale);
             }
         }
@@ -1398,7 +1398,7 @@ pub(crate) fn satisfied(
         }
         DerivationRule::Attested(rule) => {
             for required in rule.acts {
-                act_causes(*required, rule.binding, run, derived, &mut causes);
+                act_causes(*required, rule.binding, run, facts, &mut causes);
             }
         }
     }
@@ -1418,7 +1418,7 @@ fn act_causes(
     required: ActRequirement,
     binding: Binding,
     run: &DesignSnapshot,
-    derived: &DerivedInput,
+    facts: &GateFacts,
     causes: &mut Vec<Cause>,
 ) {
     let act = required.act;
@@ -1439,7 +1439,7 @@ fn act_causes(
         // names, and a fact the shell could not observe this invocation, both
         // read as CHANGED. Absence is never agreement.
         let given = record.observed().get(fact);
-        let seen = derived.observed_facts.facts.get(fact);
+        let seen = facts.observed_facts.facts.get(fact);
         if !matches!((given, seen), (Some(given), Some(seen)) if given == seen) {
             causes.push(Cause::ObservedStale { act, fact: *fact });
         }
@@ -1460,7 +1460,7 @@ fn act_causes(
         }
     }
     if let Some(disposed) = record.disposition() {
-        disposition_causes(disposed, run, derived, causes);
+        disposition_causes(disposed, run, facts, causes);
     }
 }
 
@@ -1580,7 +1580,7 @@ fn coverage_moved(
 fn disposition_causes(
     disposed: &DisposedPass,
     run: &DesignSnapshot,
-    derived: &DerivedInput,
+    facts: &GateFacts,
     causes: &mut Vec<Cause>,
 ) {
     // A pass is minted on entry to `reviewing` and replaced, never cleared, and a
@@ -1605,7 +1605,7 @@ fn disposition_causes(
     // The observation must be OF this review: one taken over another ledger
     // answers a question nobody asked, and reading it as this one's would be
     // worse than reading nothing.
-    let Some(seen) = derived
+    let Some(seen) = facts
         .observed_review
         .as_ref()
         .filter(|seen| seen.reference == *review)
@@ -1633,7 +1633,7 @@ pub(crate) fn advance(
     from: Stage,
     to: Stage,
     run: &DesignSnapshot,
-    derived: &DerivedInput,
+    facts: &GateFacts,
     runbook: Option<&RunbookStanding>,
 ) -> Result<Stage, Refusal> {
     // Legality is [`Advance::between`] and nothing else — the forward graph has
@@ -1675,19 +1675,28 @@ pub(crate) fn advance(
     // Every unmet condition with every way it is unmet, never the first of
     // either: an agent that fixes one and retries should not have to discover the
     // rest one round-trip at a time.
-    let unmet: Vec<Unmet> = cumulative_conditions(to)
-        .into_iter()
-        .filter_map(|condition| {
-            satisfied(condition, run, derived)
-                .err()
-                .map(|causes| Unmet { condition, causes })
-        })
-        .collect();
+    let unmet = forward_unmet(to, run, facts);
     if unmet.is_empty() {
         Ok(to)
     } else {
         Err(Refusal::GateNotCleared { from, to, unmet })
     }
+}
+
+/// Every unmet condition of `to`'s cumulative set, every cause (DEC-067).
+///
+/// The one evaluation [`advance`] and the envelope's forward look share, so a
+/// refusal and a forward row cannot disagree. The former `filter_map` inside
+/// [`advance`], moved rather than rewritten (DEC-292).
+pub(crate) fn forward_unmet(to: Stage, run: &DesignSnapshot, facts: &GateFacts) -> Vec<Unmet> {
+    cumulative_conditions(to)
+        .into_iter()
+        .filter_map(|condition| {
+            satisfied(condition, run, facts)
+                .err()
+                .map(|causes| Unmet { condition, causes })
+        })
+        .collect()
 }
 
 /// A recorded direct regression (DEC-067).
