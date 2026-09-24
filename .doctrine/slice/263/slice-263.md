@@ -48,7 +48,8 @@ N — arity, not a new query, admission rule, ranking or tuning knob.
 - **`memory surface` output form.** Add `--format <claude|plain>`, default
   `claude` (back-compat for the shipped Claude/`.claude/settings.json` entries).
   `plain` emits the bare block text (or nothing). The input envelope, admission
-  gate, caps, dedup and tuning log are unchanged. Codex requires the envelope
+  gate, caps and dedup are unchanged; the tuning log gains a `wire` field.
+  Codex requires the envelope
   (it ignores plain `stdout` on `PreToolUse`); pi needs the bare block.
 - **`memory surface` input wire.** Add `--input <claude|codex|neutral>`, default
   `claude`, selecting the codec that normalises stdin into the doctrine-owned
@@ -130,7 +131,8 @@ N — arity, not a new query, admission rule, ranking or tuning knob.
   the retrieval logic is `SL-205`'s, unchanged. Only the probe's path arity
   widens (one path → a path set).
 - **Not** a `memory surface` MCP operation (the zero-subprocess alternative for
-  pi). Evaluated and deferred — see Open Questions.
+  pi). Evaluated and deferred; `DEC-289` chooses the per-call spawn, with the
+  already-live MCP child as R-1's named fallback (§6/§7).
 - **Not** Cursor (`IMP-245`) or any other harness.
 - **Not** promoting pi to a first-class `Harness` variant, even though the
   installer's current hosting of pi's extensions on the codex arm is a wart this
@@ -179,15 +181,18 @@ N — arity, not a new query, admission rule, ranking or tuning knob.
   trusted it is skipped, silently. The install's manual-steps notice already
   names this — extend it, do not let the new spec look installed.
 - **R-3** pi's `tool_result` injection is *post*-execution, where Claude's and
-  codex's `PreToolUse` are *pre*-. For the read→edit workflow the nudge still
+  codex's `PreToolUse` are *pre*-. For pi's read→edit workflow the nudge still
   lands before the model composes the edit (it follows the `read`); for a bare
-  `edit`/`write` it is retrospective. State this as a capability delta, not a
-  defect.
-- **R-4** codex's `additionalContextLimit` defaults to ~2500 tokens and its
-  handler `timeout` to a value we did not choose. Both are set explicitly, on the
-  **handler** where codex reads them.
-- **R-5** codex trusts a hook by its command, and doctrine's baked absolute exec
-  path changes on every upgrade — so the new groups go inert until re-trusted.
+  `edit`/`write` it is retrospective. Codex has **no read surface at all** (reads
+  are shell calls), and its only path trigger, `apply_patch`, fires after the
+  patch is written — so its every path nudge is retrospective. State both as
+  capability deltas, not defects.
+- **R-4** codex's `additionalContextLimit` default (reported as ~2500 tokens; the
+  field's unit is not established) and its handler `timeout` are values we did
+  not choose. Both are set explicitly, on the **handler** where codex reads them.
+- **R-5** codex trusts a hook by a hash of its handler definition, and doctrine's
+  baked absolute exec path changes on every upgrade — so the new groups go inert
+  until re-trusted.
   The install discloses the manual step; the runtime skip is a documented delta.
 - **R-6** the codex wire shape (string vs argv `command`, wrapped commands,
   `apply_patch` through the shell) is documented rather than observed. Retired by
@@ -222,7 +227,8 @@ N — arity, not a new query, admission rule, ranking or tuning knob.
   format) unit-tested with synthetic inputs — the `SL-205` helper test shape.
 - Captured codex `PreToolUse` fixtures (shell, `apply_patch`-as-tool,
   `apply_patch`-via-shell) drive the codec VTs; a phase-1 gate captures them and
-  checks them in.
+  checks them in — an orchestrator/human (`VH`) step before the codec phase, not
+  confined-worker work.
 - `memory surface` exercised for every input wire and output form: `claude`,
   `codex` and `neutral` each decode to the same request; `plain` emits the bare
   block, `claude` the envelope, empty stays empty, exit 0 on every path. A bare

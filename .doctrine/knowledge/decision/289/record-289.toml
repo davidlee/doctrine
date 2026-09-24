@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 289
+slug = "sl-263-pi-transport-per-call-memory-surface-spawn"
+title = "SL-263 pi transport: a per-call memory surface spawn on the neutral wire"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "pi adapter could reach doctrine two ways. templates/mcp.ts already holds a long-lived doctrine serve --mcp child for the whole pi session and lives in the same extension index.ts loads, so surfacing could ride it and remove R-1 per-call spawn entirely along with the cold-start and timeout exposure. The slice Non-Goals deferred a memory surface MCP operation. The per-call alternative is a spawn per main-thread read/edit/write/bash."
+choice = "A per-call memory surface --input neutral --format plain spawn from the generated surface.ts — asynchronous, bounded by an explicit timeout plus ctx.signal, fail-open. The already-live MCP child is named as R-1 named fallback if the spawn cost measures badly."
+alternatives = ["Route surfacing through the already-live doctrine serve --mcp child — removes the per-call spawn and the cold-start but makes surfacing depend on the MCP bridge being installed healthy and un-skipped and adds a second transport interface beside the binary", "Defer the pi adapter until pi exposes a pre-execution context channel — costs the port"]
+rationale = "The per-call spawn is one uniform binary interface across all three harnesses and does not depend on the MCP bridge. It assumes less, and the MCP route stays available as a measured fallback rather than an open question."
+consequences = ["The tuning log gains a wire field so the R-1 spawn cost is attributable", "RefreshReport gains a third extension leg", "The MCP route is R-1 named fallback not an open question"]
+decided_by = "agent, in the SL-263 design session"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-263"

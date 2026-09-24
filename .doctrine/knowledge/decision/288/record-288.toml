@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 288
+slug = "sl-263-path-resolution-wire-paths-resolve-against-reported-cwd"
+title = "SL-263 path resolution: a wire's paths resolve against its reported cwd before the root strip"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "relativize_probe_path (src/memory.rs:10586) passed a relative path through unchanged and treated it as root-relative. That was safe for Claude, which always sends an absolute file_path. Both new wires break the assumption: codex apply_patch headers are relative to the codex session cwd, and pi read/edit/write path is resolved against pi cwd and is usually relative. When the harness starts in a subdirectory of the doctrine root (a monorepo package, or cd src && codex), src/x.rs in a patch became the probe src/x.rs against the root — the wrong file, matching nothing or the wrong memory. This is the ISS-232 defect class recurring on the new wires. discover_surface_root canonicalises the stdin cwd before walking up (src/memory.rs:10605-10609), so root is canonical and a raw reported cwd would make strip_prefix(root) miss on any symlinked path."
+choice = "Resolve every wire path against its reported cwd before stripping the root. probe_for(request, cwd, root) joins a relative value onto the CANONICALISED anchor root discovery already computed, normalises it lexically (never canonicalising a path that may not exist yet), then strips root. An out-of-root path still fails open to no probe. When cwd is absent, relative values resolve against the env anchor discovery fell back to, and with neither present there is no probe."
+alternatives = ["Trust relative paths to be root-relative — smallest diff but wrong from any subdirectory cwd", "Canonicalise the file path before stripping — correct for existing files but a Write to a new file fails to canonicalise"]
+rationale = "The root is canonical; the harness anchor may be raw. Joining onto a raw anchor makes strip_prefix(root) miss on any symlinked checkout, macOS /tmp, or bind-mounted jail path. A lexical join-and-normalise is the only form both correct from a subdirectory and safe for a not-yet-existent file."
+consequences = ["probe_for takes cwd and root and the neutral wire value is absolute or cwd-relative", "paths_from_patch returns paths as written and resolving them is probe_for job", "A subdirectory-cwd VT checks the relative and absolute forms resolve to the same probe"]
+decided_by = "agent, in the SL-263 design session"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-263"

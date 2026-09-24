@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 287
+slug = "sl-263-engine-probe-arity-scopeprobe-path-arm-a-path-set"
+title = "SL-263 engine probe arity: ScopeProbe's path arm carries a path set"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-205 left the retrieve engine untouched: one ScopeProbe path became one QueryContext path. The draft first carried that position forward, so a multi-file codex apply_patch fanned out to one retrieve_rows call per path above the engine. Each retrieve_rows call runs load_query and so collect_all(root) (the whole memory corpus) plus freeze(root) (crate::git::capture, a git subprocess) (src/retrieve.rs:810-839, 531) — one corpus load and one git capture per file in a patch, on the codex edit hot path. But QueryContext.paths is already a Vec and match_scope admits on any of them with one ranking (src/retrieve.rs:1072, 153-156), so the engine already knows how to answer a multi-path question."
+choice = "Widen ScopeProbe path arm to a path set, so a multi-file patch is ONE retrieve_rows call. The adapter merge, the cross-probe dedup and the second ranking rule are deleted. No query, admission rule, ranking or tuning knob changes — an arity change only. A single-path request is the one-element case."
+alternatives = ["Loop retrieve_rows per path above the engine and merge/dedup/rank in the adapter — keeps the engine untouched but re-implements the engine multi-path merge above it and awards the cap of three to patch order rather than rank", "Surface only the first header path — cheapest but silently drops the rest of a patch"]
+rationale = "The engine already answers a multi-path question; the per-probe loop was a parallel implementation of that merge. Widening the probe is one variant against a merge, a dedup and a second ranking rule re-implemented above it. The user was asked and confirmed the reopen of the scope engine-untouched commitment on 2026-09-24 (recorded in the RV-377 F-7 disposition) before the design moved."
+consequences = ["ScopeProbe path arm carries a path set and src/retrieve.rs becomes an SL-263 design-target", "The scope engine-untouched position is replaced by one arity change and no logic change", "A single-path request behaves exactly as before"]
+decided_by = "user, in the SL-263 design session (scope reopen confirmed 2026-09-24)"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-263"

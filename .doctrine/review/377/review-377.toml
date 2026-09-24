@@ -213,7 +213,7 @@ response = """Accepted. The scope deferred a `memory surface` MCP operation but 
 
 [[finding]]
 id = "F-16"
-status = "open"
+status = "answered"
 severity = "major"
 title = "pi sketch: async execFile ignores `input`, so doctrine gets empty stdin and the adapter silently never surfaces"
 detail = """
@@ -224,20 +224,24 @@ node -e 'require("child_process").execFile("cat",[],{input:"HELLO"},(e,o)=>conso
 So doctrine reads empty stdin, the decode folds to Default, and the fire emits nothing. Every pi fire succeeds and surfaces nothing, and the fail-open contract hides it completely. This dates from the original sketch (it predates F-2's async switch), but the repair round kept it.
 
 Fix: spawn with stdin piped and write the envelope with `child.stdin.end(json)`, keeping `timeout` and `signal`. Add a behavioural VT, not just the source-contains check in §9: run the generated `surface.ts` handler under node against a fixture root, or at minimum a node smoke test that the spawn delivers stdin to `doctrine memory surface --input neutral --format plain` and gets a block back. As written, §9's installer test ("the source contains the timeout and signal arguments") would pass on the broken sketch."""
+disposition = "fix-now"
+response = """Accepted. Verified in this environment: Node's asynchronous `execFile`/`spawn` accept no `input` option (only the `*Sync` variants do), and the option is silently ignored without an error — a child driven with `{input: "HELLO"}` never receives it and blocks on the unclosed pipe until the timeout. On the sketch's `{ input: json, ... }` every pi fire would therefore have timed out and emitted nothing, with fail-open hiding it completely. §5.7's sketch now spawns an async child and writes the envelope itself with `child.stdin.end(json)`, and a new contractual bullet ("The envelope is written to stdin") states why. §9's installer check is no longer the source-contains grep the broken sketch would pass: it drives the emitted `surface.ts` handler under node against a fixture root and asserts the envelope reaches doctrine's stdin and a non-empty block comes back."""
 
 [[finding]]
 id = "F-17"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "R-3 now contradicts §5.7: codex reads surface nothing, so there is no read → edit nudge on codex"
 detail = """
 The F-8 repair made §5.7 correct: codex has no read tool, reads surface nothing, and `apply_patch`'s nudge is retrospective. But R-3's mitigation was extended to "the read → edit nudge still precedes the composed edit on both", meaning pi and codex, and "only a bare edit/write is retrospective". For codex that is false on both counts. There is no read nudge, and every edit nudge is retrospective.
 
 Fix: split R-3. pi: post-execution, where the read → edit nudge still precedes the edit. codex: no read surface, and edit nudges are always retrospective. The follow-up is the shell path-operand heuristic in §6."""
+disposition = "fix-now"
+response = """Accepted. §5.7's F-8 repair made codex's read surface explicit, but R-3's mitigation still claimed the read → edit nudge precedes the composed edit "on both". That is false for codex on both counts: it has no read surface at all, and every edit nudge is retrospective. R-3 is split — pi: post-execution, where the read → edit nudge still precedes the composed edit, bare `edit`/`write` retrospective; codex: no read surface and every path nudge retrospective — with the §6 shell path-operand heuristic named as the follow-up. The scope's R-3 is reconciled to the same wording."""
 
 [[finding]]
 id = "F-18"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "probe_for's cwd: canonical or raw, and what happens when cwd is absent"
 detail = """
@@ -246,30 +250,36 @@ The F-6 repair joins relative paths onto `cwd` and strips `root`. Two things are
 1. `discover_surface_root` canonicalises the cwd before walking up (src/memory.rs:10605-10609), so `root` is canonical. If `probe_for` joins onto the *raw* reported cwd, then whenever the harness reports a path through a symlink (a symlinked checkout, macOS `/tmp` → `/private/tmp`, a bind-mounted jail path), `strip_prefix(root)` fails and every path probe folds to None. Absolute paths have the same exposure. That part predates this slice, but the new join makes it the common case for pi and codex. Specify that `probe_for` receives the canonicalised anchor that root discovery already computed, and that absolute values are compared on a normalised form.
 
 2. `cwd` is optional on every wire (`SurfaceInput.cwd: Option`, and the neutral envelope comment says "optional; root discovery falls back to the env anchor"), but `probe_for` takes `cwd: &Path`. State what a relative value resolves against when cwd is absent: the env anchor, or no probe. Add a VT for it."""
+disposition = "fix-now"
+response = "Accepted. Verified: `discover_surface_root` canonicalises the stdin `cwd` before walking up (src/memory.rs:10605-10609), so `root` is canonical, and the F-6 join onto the envelope's raw cwd would make `strip_prefix(root)` miss on any symlinked anchor — making the newly-common relative path the one that silently folds to `None`. §5.1 now states that `probe_for` receives the **canonicalised** anchor root discovery already computed, that `root` and absolute values are compared on the same lexically-normalised form (never canonicalising a path that may not exist yet), and what an absent `cwd` resolves against: the env anchor discovery fell back to, or no probe when neither is present. §9 adds a symlinked-anchor case and an absent-cwd case."
 
 [[finding]]
 id = "F-19"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Delivery-gated recording no longer means delivered once an external timeout can discard the output"
 detail = """
 INV-6, carried from SL-205, says the seen-set is recorded only when a block was delivered. Inside `run_surface_to`, "delivered" means "written to stdout". With the new timeouts (pi `SURFACE_TIMEOUT_MS` plus `ctx.signal`, and the codex handler `timeout`), the harness can discard doctrine's output after doctrine has written it and appended the seen-set. That happens when the timer or abort fires between the write and the harness reading the result. The memory is then marked seen but never reached the model, and session dedup suppresses it for the rest of the session.
 
 It is an edge case, and the fix need not be mechanical. Either state it as an accepted weakening of INV-6 under external timeouts, or note that the timeouts are chosen well above doctrine's p99 so the window is negligible, which ties it to R-1's measurement. As written, the design claims the record behaviour is "exactly as today", and that is no longer quite true."""
+disposition = "fix-now"
+response = """Accepted. `emit_surface` returns true once a non-empty block is written to stdout, and the seen-set/log record follows that write — so a harness-side timeout (pi `SURFACE_TIMEOUT_MS` + `ctx.signal`, the codex handler `timeout`) that fires between the write and the harness's read can mark a memory seen that never reached the model. The design's claim that the record behaviour is "exactly as today" is no longer quite true. §5.4 now states it as an accepted, bounded weakening of `INV-6`: the failure is a suppressed repeat of an already-admitted memory, never a wrong or empty block, and the timeout value is chosen against R-1's measured cold-start cost."""
 
 [[finding]]
 id = "F-20"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Three new decisions have no DEC records, and the phase-1 capture gate needs a step a confined worker cannot run"
 detail = """
 §7 adds three rows recorded as "this design": engine probe arity, path resolution, and pi transport. All the other rows have durable DEC records. The /design routing sends a locked choice to /knowledge as a DEC. Engine probe arity in particular reopens a scope commitment the user ratified ("engine untouched"). The author reports the user confirmed the reopening, but that consent currently lives only in a review response. Record DECs for the three rows, citing the user's reply for the arity one.
 
 Separately, §9's phase-1 gate ("a throwaway codex hook tees PreToolUse stdin", three captured payloads) needs a live, authenticated codex session and trusted hooks. A confined dispatch worker has no API keys or network, and cannot run it. The plan should mark it as a human (VH) or orchestrator step before the codec phase, not as ordinary worker work. Also, §9 says "--input claude with the captured Claude payload", but the gate captures no Claude payload. Either add one, or say that the existing SL-205 fixture serves."""
+disposition = "fix-now"
+response = """Accepted, all three parts. (a) The three §7 rows now carry durable records: `DEC-287` (engine probe arity, `decided_by` the user — the scope reopen they confirmed on 2026-09-24 — with the confirmation cited in the record), `DEC-288` (path resolution), `DEC-289` (pi transport); §7's record column cites them and the arity row's reopening note cites `DEC-287`. (b) §9's phase-1 capture gate is now an orchestrator/human (`VH`) step before the codec phase, named as a plan-phase-1 exit criterion, because it needs a live authenticated codex session with trusted hooks; §6's `A-1` says the same. (c) §9's Claude-wire VT now names the existing `SL-205` fixture rather than a "captured Claude payload" the gate does not capture."""
 
 [[finding]]
 id = "F-21"
-status = "open"
+status = "answered"
 severity = "nit"
 title = "Stale or unsupported prose left by the repair round"
 detail = """
@@ -278,6 +288,8 @@ detail = """
 - §5.4: "the log keeps one ... key". The key of a multi-path `Paths` probe is undefined. Keep the old ` | `-joined, truncated form, and say so.
 - §5.6: "a limit written at the group level is ignored — codex warns as much". The binary's warning is about handler-level limits on events that cannot emit context. It is not evidence about group-level placement, and a group-level key might equally be rejected at parse time. Drop the clause; the handler-placement argument does not need it.
 - §3: "trust is keyed to the handler's command". The binary shows a per-hook `trusted_hash`, but not what it hashes; it plausibly covers the whole handler, including the new limit and timeout. The conclusion holds either way, so soften this to "keyed to a hash of the handler definition"."""
+disposition = "fix-now"
+response = "Accepted, all five. §1 now says `SL-263` adds one arity change and no logic change — the engine does change; §5.4 defines a path-set probe's log key as its resolved paths joined with ` | ` and truncated by `KEY_LOG_MAX`, so the one-record claim holds; §5.6 drops the group-level-ignored clause, which was evidence about handler-level limits on non-emitting events rather than about group-level placement; §3 softens trust to a hash of the handler definition (the binary exposes `trusted_hash` but not what it digests); and the scope's `--format` bullet records that the tuning log gains `wire`."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

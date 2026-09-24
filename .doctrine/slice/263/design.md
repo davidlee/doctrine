@@ -22,11 +22,13 @@ harnesses expose different seams:
 
 The design is therefore about one thing: keeping the harness-specific decode out
 of the neutral core. `SL-205`'s core is a retrieve query, a severity/staleness
-admission gate, session dedup, a cap and a recorder. `SL-263` does not touch any
-of it. What it adds is a **neutral surface request** — a doctrine-owned
-`(class, value)` pair — and one small per-harness codec that normalises each
-harness's wire *into* that request. The core is then composed once, unchanged,
-and never learns a harness tool name.
+admission gate, session dedup, a cap and a recorder. `SL-263` adds **one arity
+change** to that core — a path probe that may carry a set rather than a single
+path — and no logic change: no query, no admission rule, no ranking and no
+tuning knob moves. What else it adds is a **neutral surface request** — a
+doctrine-owned `(class, value)` pair — and one small per-harness codec that
+normalises each harness's wire *into* that request. The core is then composed
+once, with no new logic, and never learns a harness tool name.
 
 Four user-visible changes follow:
 
@@ -153,9 +155,10 @@ the pi extension API.
   handler fields**, beside `command` inside `hooks: […]`, not matcher-group
   fields. Codex's tool coverage has no read tool: file reads go through the shell
   and match `Bash`, so `apply_patch` is the **only** path trigger. Non-managed
-  hooks must be reviewed and trusted before they run, and trust is keyed to the
-  handler's command — so a rewritten command, which a baked absolute exec path is
-  on every upgrade, re-arms the trust review. `PreToolUse` carries **no**
+  hooks must be reviewed and trusted before they run, and trust is keyed to a
+  hash of the handler definition — the binary exposes a per-hook `trusted_hash`
+  but not what it digests — so a rewritten handler, which a baked absolute exec
+  path makes on every upgrade, re-arms the trust review. `PreToolUse` carries **no**
   `agent_id` (only `SubagentStart`/`SubagentStop` do), and subagent hooks report
   the **parent** session id.
 - **pi** — the extension API exposes `tool_result` (post-execution) and no
@@ -226,9 +229,11 @@ pub(crate) enum SurfaceRequest {
 One function turns a request into the probe the engine consumes:
 
 ```rust
-/// Resolve a neutral request into the engine probe it denotes. Relative paths
-/// are joined onto `cwd` and stripped against `root`; a request that resolves
-/// to nothing — an empty value, or a path outside `root` — yields `None`
+/// Resolve a neutral request into the engine probe it denotes. A relative path
+/// is joined onto `cwd`, normalised lexically (`.` / `..`, never canonicalised —
+/// the file may not exist yet), then stripped against `root`; an absolute value
+/// is normalised the same way before the strip. A request that resolves to
+/// nothing — an empty value, or a path outside `root` — yields `None`
 /// (fail-open).
 fn probe_for(request: SurfaceRequest, cwd: &Path, root: &Path)
     -> Option<(Surface, ScopeProbe)>
@@ -238,6 +243,17 @@ fn probe_for(request: SurfaceRequest, cwd: &Path, root: &Path)
 - `Command(cmd)` → `(Surface::Command, ScopeProbe::Command(cmd))`.
 - `Patch(text)` → `(Surface::Path, ScopeProbe::Paths(paths))`, one entry per
   resolved header path, or `None` when the patch names no resolvable path.
+
+`cwd` is the **canonicalised** anchor root discovery already computed, not the
+raw value the harness reported: `discover_surface_root` canonicalises the stdin
+`cwd` before walking up, so a raw anchor makes `strip_prefix(root)` miss whenever
+the harness reports a path through a symlink (a symlinked checkout, macOS `/tmp`
+→ `/private/tmp`, a bind-mounted jail path). `root` is canonical too, and the two
+are always compared on the same normalised form. When the wire carries no `cwd`
+(every wire's is optional), a relative value resolves against the env anchor root
+discovery fell back to; with neither present there is no probe and the fire emits
+nothing. `probe_for` therefore takes the anchor discovery resolved, not the
+envelope's raw field.
 
 `ScopeProbe`'s path arm becomes a **set**. `QueryContext.paths` is already a
 `Vec` and `match_scope` admits a memory on any of them with one ranking, so the
@@ -362,7 +378,14 @@ format. The decode step becomes:
 4. `admits` → `dedup_diff` (session seen-set) → `cap_for(surface)` →
    `format_block`, exactly once.
 5. `emit_surface(writer, block, format)`; record seen-set and log only on a
-   delivered non-empty block, exactly as today.
+   delivered non-empty block, exactly as today — where *delivered* still means
+   doctrine wrote non-empty output. Under the new harness-side timeouts (§5.7,
+   R-9) an abort landing between that write and the harness's read discards
+   output doctrine has already recorded: the memory is marked seen, never reaches
+   the model, and session dedup suppresses it thereafter. That is an accepted,
+   bounded weakening of `INV-6` — the failure is a suppressed repeat of an
+   already-admitted memory, never a wrong or empty block — and the timeout value
+   is chosen against R-1's measured cold-start cost.
 
 This is the design's second correction of its own first draft. Looping
 `retrieve_rows` per path would have re-implemented the engine's multi-path merge
@@ -375,8 +398,10 @@ The tuning log gains the wire it came from (`"wire": "claude"|"codex"|"neutral"`
 so that once three harnesses write one `mem-surface.log`, tuning data stays
 attributable — R-1's spawn cost, the `SURFACE_CONTEXT_LIMIT_CODEX` revisit and
 the `isError` question all need exactly that split. With one probe per fire the
-log keeps one `fetched`, one `admitted` and one `key`; the only change to a
-single-probe fire's line is the added field.
+log keeps one `fetched`, one `admitted` and one `key`; a path-set probe's key is
+its resolved paths joined with `" | "`, truncated as today by `KEY_LOG_MAX`, so
+the line stays one record. The only change to a single-probe fire's line is the
+added `wire` field.
 
 The subagent gate, root discovery, the always-`Ok(())` contract and the
 delivery-gated record write are unchanged. The gate is keyed on `agent_id`, which
@@ -423,11 +448,10 @@ fields; the Claude specs leave them `None` and their rendered entries are
 unchanged.
 
 **Both fields belong on the handler, not the matcher group.** codex's schema puts
-`additionalContextLimit` and `timeout` beside `command` inside `hooks: […]`, and
-a limit written at the group level is ignored — codex warns as much for events
-that cannot emit context. Writing it in the wrong place would leave R-4's
-mitigation doing nothing while a test that only checked the key's presence
-passed.
+`additionalContextLimit` and `timeout` beside `command` inside `hooks: […]`; a
+group-level key is at best inert and at worst rejected at parse time. Writing it
+in the wrong place would leave R-4's mitigation doing nothing while a test that
+only checked the key's presence passed.
 
 That makes canonicality a field-level question. `entry_is_canonical`
 (`src/boot.rs:1221`) today compares only the entry's `matcher` and its handler's
@@ -468,21 +492,29 @@ The module's whole job is the mapping and the invocation:
 pi.on("tool_result", async (event, ctx) => {
   // map pi tool → neutral class/value; unmapped tool → return undefined
   // build { session_id, cwd: ctx.cwd, probe }
-  // await an async spawn (not a synchronous one — see below), bounded:
-  //   execFile(bin, ["memory", "surface", "--input", "neutral",
-  //                  "--format", "plain"],
-  //            { input: json, timeout: SURFACE_TIMEOUT_MS, signal: ctx.signal })
+  // one async child (not a synchronous spawn — see below), bounded, with the
+  // envelope WRITTEN to its stdin:
+  //   const child = execFile(
+  //     bin, ["memory", "surface", "--input", "neutral", "--format", "plain"],
+  //     { timeout: SURFACE_TIMEOUT_MS, signal: ctx.signal },
+  //     (err, stdout) => resolve(err ? "" : stdout));
+  //   child.stdin.end(json);  // the async form has no `input` option; an
+  //                           // unwritten stdin blocks doctrine to the timeout
   // non-empty stdout → return { content: [...event.content, { type: "text", text: block }] }
   // any failure or timeout → undefined
 });
 ```
 
-Five properties are contractual:
+Six properties are contractual:
 
 - **Fail-open.** Any rejection — spawn failure, non-zero exit, timeout,
   unparseable output — resolves to `undefined`, leaving the tool result exactly
   as the tool produced it. The extension can never block a tool, change its
   result, or fail a turn.
+- **The envelope is written to stdin.** The asynchronous `execFile`/`spawn` API
+  has no `input` option — only the `*Sync` variants do — and an `input` key is
+  silently ignored, so the child reads nothing and blocks until the timeout. The
+  adapter writes the envelope itself with `child.stdin.end(json)`.
 - **Bounded.** The spawn carries an explicit short timeout (`SURFACE_TIMEOUT_MS`)
   and `ctx.signal`. Without one, a doctrine process that hangs — in
   `crate::git::capture`, on a slow filesystem, on a lock — holds an awaited
@@ -563,7 +595,7 @@ change, so the published plugin and the merge-core writer agree.
 
 | path | intended change |
 |---|---|
-| `src/memory.rs` | `SurfaceRequest`; `claude_request` / `codex_request` / `neutral_request`; `probe_for(SurfaceRequest, cwd, root)` with cwd-relative resolution; `paths_from_patch`; `--input` / `--format` plumbed through `MemoryCommand::Surface` → `run_surface` → `run_surface_to` → `emit_surface`; the tolerant `command` reader; the `wire` field on the tuning log. Tests extend `mod ambient_surface_tests` |
+| `src/memory.rs` | `SurfaceRequest`; `claude_request` / `codex_request` / `neutral_request`; `probe_for(SurfaceRequest, cwd, root)` resolving against the canonical anchor; `paths_from_patch`; `--input` / `--format` plumbed through `MemoryCommand::Surface` → `run_surface` → `run_surface_to` → `emit_surface`; the tolerant `command` reader; the `wire` field on the tuning log. Tests extend `mod ambient_surface_tests` |
 | `src/retrieve.rs` | `ScopeProbe`'s path arm carries a path set, mapped to the `QueryContext.paths` the engine already ranks across. No query, admission rule, ranking or tuning change |
 | `src/boot.rs` | `codex_hook_specs` and its matcher constants; `HookSpec::memory_surface_codex` plus the optional handler `additional_context_limit` / `timeout`; the canonical Claude args and the two-form Claude ownership predicate; `entry_is_canonical` extended to handler fields; `generate_` / `plan_` / `install_surface_extension`; `generate_pi_extension`'s import of `./surface.ts`; `RefreshReport.surface_extension` and the report leg; the Codex arm's registry loop and third installer call. Inline tests |
 | `templates/surface.ts` | **new** — the generated pi adapter, `include_str!`, `SURFACE_BIN_PATH_MARKER` |
@@ -591,7 +623,10 @@ the pure/imperative split are respected: the codecs, `probe_for` and
   surface never fires on that form. The retirement is a phase-1 gate: run a
   throwaway codex hook that tees stdin, capture one payload for each of shell,
   apply_patch-as-tool and apply_patch-via-shell, check them in as fixtures, and
-  drive the codec VTs from those.
+  drive the codec VTs from those. The capture is an orchestrator/human (`VH`)
+  step, not confined-worker work — it needs a live, authenticated codex session
+  with trusted hooks — and a plan-phase-1 exit criterion before the codec
+  phase.
 - **`SURFACE_CONTEXT_LIMIT_CODEX`.** `1_200` is a reasoned constant, not a
   measured one, and the field's unit (tokens or characters) is unverified. It
   wants revisiting if real blocks ever approach it.
@@ -625,9 +660,9 @@ the design's reading of it. The records are authoritative.
 | codex wiring | a `codex_hook_specs` registry with an explicit handler limit and timeout | a second inline `install_codex_hook` call; inheriting codex's defaults | `DEC-283` |
 | pi adapter | generated `surface.ts`, neutral wire, plain output, bounded and fail-open, subagent delta accepted | a `PI_SUBAGENT_CHILD` check; deferring the adapter | `DEC-286` |
 | Governance sequencing | `POL-003`, a `PRD-004` REV and a `SPEC-011` REV drafted after lock, applied at reconcile | authoring governance ahead of the design; deferring it entirely | `DEC-284` |
-| Engine probe arity | widen `ScopeProbe`'s path arm to a set, so a multi-file patch is one query | looping `retrieve_rows` per path above the engine's own multi-path merge | this design |
-| Path resolution | resolve every wire's paths against its reported cwd before stripping the root | trusting a relative path to be root-relative | this design |
-| pi transport | a per-call `memory surface` spawn on the neutral wire | routing surfacing through the already-live `doctrine serve --mcp` child | this design |
+| Engine probe arity | widen `ScopeProbe`'s path arm to a set, so a multi-file patch is one query | looping `retrieve_rows` per path above the engine's own multi-path merge | `DEC-287` |
+| Path resolution | resolve every wire's paths against its reported cwd before stripping the root | trusting a relative path to be root-relative | `DEC-288` |
+| pi transport | a per-call `memory surface` spawn on the neutral wire | routing surfacing through the already-live `doctrine serve --mcp` child | `DEC-289` |
 
 The through-line is `IDE-034`: every harness-shaped thing is an opt-in supplement
 whose correctness rests on a doctrine-owned contract. The three places where that
@@ -636,13 +671,14 @@ delta instead of a partial marker check, and a per-call spawn instead of the MCP
 child — are exactly the places where the cheaper option would have made a harness
 seam load-bearing.
 
-Two rows correct the draft's own first position rather than a settled decision's.
-Widening the engine probe replaces an "engine untouched" commitment that forced a
-worse implementation: looping the engine per path would have re-derived its
-multi-path merge above it. And the per-call spawn is preferred over the MCP route
-because it is one uniform binary interface across all three harnesses and does
-not depend on the MCP bridge being installed, healthy or un-skipped — while the
-MCP route stays available as R-1's fallback if the spawn cost measures badly.
+Two rows correct the draft's own first position. Widening the engine probe
+reopens the scope's "engine untouched" commitment — the user confirmed the reopen
+on 2026-09-24 before the design moved (`DEC-287`) — because looping the engine per
+path would have re-derived its multi-path merge above it. And the per-call spawn
+is preferred over the MCP route because it is one uniform binary interface across
+all three harnesses and does not depend on the MCP bridge being installed,
+healthy or un-skipped — while the MCP route stays available as R-1's fallback if
+the spawn cost measures badly.
 
 <!-- doctrine:section sec-8 -->
 ## 8. Risks & Mitigations
@@ -651,7 +687,7 @@ MCP route stays available as R-1's fallback if the spawn cost measures badly.
 |---|---|---|
 | R-1 | pi pays one process spawn per main-thread `read`/`edit`/`write`/`bash` | measured via the tuning log's new `wire` field; the silent-when-no-hit property keeps the common case cheap and the spawn is bounded by `SURFACE_TIMEOUT_MS`. If it measures badly, the fallback is the already-live MCP child |
 | R-2 | codex requires `/hooks` trust for the new groups, and untrusted groups are skipped silently | the manual-steps notice names all three codex hooks on every `Wired`/`Refreshed` outcome; the runtime skip itself is a delta doctrine cannot observe |
-| R-3 | pi's injection is post-execution, and codex's path nudge is too | stated as capability deltas: the read → edit nudge still precedes the composed edit on both; only a bare `edit`/`write` is retrospective |
+| R-3 | pi's injection is post-execution; codex has no read surface at all, and its only path trigger fires after the patch is written | stated as capability deltas: on pi the read → edit nudge still precedes the composed edit, and only a bare `edit`/`write` is retrospective; on codex every path nudge is retrospective and reads surface nothing. The follow-up is the shell path-operand heuristic in §6 |
 | R-4 | codex's `additionalContextLimit` default is not ours to choose | set explicitly on the **handler** via `SURFACE_CONTEXT_LIMIT_CODEX`, with canonicality extended so the value actually reaches existing installs |
 | R-5 | a stale bare Claude entry could double-fire after the canonical-form change | the ownership predicate matches both forms, so the entry is refreshed rather than duplicated; a golden covers it |
 | R-6 | codex subagent hooks share the parent session id, so dedup crosses the parent/subagent boundary | documented as a behaviour, not a defect: it changes *when* a memory repeats, never whether it is admitted |
@@ -663,13 +699,16 @@ MCP route stays available as R-1's fallback if the spawn cost measures badly.
 <!-- doctrine:section sec-9 -->
 ## 9. Quality Engineering & Validation
 
-### Captured wire fixtures (phase-1 gate)
+### Captured wire fixtures (phase-1 gate, orchestrator/human)
 
 Before the codec is written, a throwaway codex hook tees `PreToolUse` stdin for
 three cases — a shell command, an `apply_patch` tool call, and an `apply_patch`
 invoked through the shell — and the payloads are checked in. These are the
 fixtures the codec VTs run on; synthetic bodies the design authored itself would
-prove only that the codec matches the design's assumption.
+prove only that the codec matches the design's assumption. The capture needs a
+live, authenticated codex session with trusted hooks, so it is an orchestrator or
+human (`VH`) step before the codec phase — not confined-worker work — and a
+phase-1 exit criterion in the plan.
 
 ### Pure helpers (unit)
 
@@ -679,7 +718,9 @@ prove only that the codec matches the design's assumption.
   including unregistered tools, missing keys and empty values → no request; and
   the tolerant `command` reader against a string and an argv vector.
 - `probe_for`: absolute paths, cwd-relative paths, `..` normalisation, an
-  out-of-root absolute path, and a multi-file patch fanning out into one probe.
+  out-of-root absolute path, a multi-file patch fanning out into one probe, a
+  symlinked cwd anchor that still strips against the canonical root, and an
+  absent `cwd` resolving against the env anchor (or yielding no probe).
 - `admits` / `dedup_diff` / `cap` / `format_block`: unchanged suites stay green —
   the behaviour-preservation gate.
 - `retrieve.rs`: the multi-path probe admits a memory anchored on any one of its
@@ -687,7 +728,9 @@ prove only that the codec matches the design's assumption.
 
 ### The command (integration, via `run_surface_to`)
 
-- `--input claude` with the captured Claude payload emits the envelope.
+- `--input claude` with the existing `SL-205` Claude-wire fixture emits the
+  envelope — that wire is already shipped and exercised, so the phase-1 capture
+  covers only the never-observed codex wire.
 - `--input codex` with each captured codex fixture behaves as the codec says —
   including whichever of the two `apply_patch` forms reports `Bash`.
 - `--input neutral` with the doctrine envelope behaves as the codecs do.
@@ -711,8 +754,14 @@ prove only that the codec matches the design's assumption.
 - A legacy bare `memory surface` entry in a Claude settings file is refreshed to
   `memory surface --input claude` and not duplicated.
 - The generated `surface.ts` is ownership-marked, regenerates on change and is
-  foreign-skipped; a missing directory generates; the source contains the timeout
-  and signal arguments.
+  foreign-skipped; a missing directory generates.
+- The generated handler is driven **behaviourally**, not by a source-contains
+  check a broken sketch would pass: run the emitted `surface.ts` handler under
+  node against a fixture root and assert the envelope reaches doctrine's stdin
+  and a non-empty block comes back — the minimal smoke that spawns `memory
+  surface --input neutral --format plain`, writes a fixture envelope to its
+  stdin, and reads a block. The timeout and signal arguments are asserted as
+  part of that run, not by grep.
 
 ### Behaviour preservation
 
