@@ -2837,22 +2837,6 @@ fn run_resume(args: ResumeArgs) -> Result<()> {
     emit(&lines)
 }
 
-/// The runbook guarding `stage`'s outbound edge, read and digested — the shell
-/// half of `EX-18`'s split (SL-233 PHASE-16).
-///
-/// Doctrine hashes; the pure core compares. [`design_run::runbook::Step::material`]
-/// is the canonical, version-tagged encoding and lives in the leaf; the
-/// `sha256` over it is here, because a leaf may not reach the impure `git` seam
-/// without losing the out-degree-zero property `tests/e2e_design_*.rs` compile
-/// against.
-///
-/// Resolved from the **embed**, through the same path the process fragments use.
-/// Per the owner's 2026-07-31 ruling (b) the project-override seam is identified
-/// and deferred (IMP-372), so there is deliberately no project-path lookup here.
-///
-/// A stage whose outbound edge carries no runbook yields `None`, which is a real
-/// answer rather than a missing case — the shape [`design_run::prompt::Fragment::for_stage`]
-/// already uses for a locked run.
 /// Every fact the gate reads, observed this invocation (DEC-292).
 ///
 /// The **only** constructor of [`GateFacts`] outside tests: `apply` builds one
@@ -2997,6 +2981,22 @@ fn governance_edge_material(edges: &[RelationEdge]) -> String {
         .collect()
 }
 
+/// The runbook guarding `stage`'s outbound edge, read and digested — the shell
+/// half of `EX-18`'s split (SL-233 PHASE-16).
+///
+/// Doctrine hashes; the pure core compares. [`design_run::runbook::Step::material`]
+/// is the canonical, version-tagged encoding and lives in the leaf; the
+/// `sha256` over it is here, because a leaf may not reach the impure `git` seam
+/// without losing the out-degree-zero property `tests/e2e_design_*.rs` compile
+/// against.
+///
+/// Resolved from the **embed**, through the same path the process fragments use.
+/// Per the owner's 2026-07-31 ruling (b) the project-override seam is identified
+/// and deferred (IMP-372), so there is deliberately no project-path lookup here.
+///
+/// A stage whose outbound edge carries no runbook yields `None`, which is a real
+/// answer rather than a missing case — the shape [`design_run::prompt::Fragment::for_stage`]
+/// already uses for a locked run.
 fn runbook_facts(stage: Stage) -> Result<Option<design_run::run::RunbookFacts>> {
     let Some(key) = forward_runbook(stage) else {
         return Ok(None);
