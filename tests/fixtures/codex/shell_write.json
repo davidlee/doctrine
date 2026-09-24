@@ -1,0 +1,14 @@
+{
+  "session_id": "01a0d1db-67dc-7c42-aa84-eadb6c84b290",
+  "turn_id": "01a0d1db-6802-7462-839b-efb5ea47a8a5",
+  "transcript_path": "/home/david/.codex/sessions/2026/09/24/rollout-2026-09-24T15-20-12-01a0d1db-67dc-7c42-aa84-eadb6c84b290.jsonl",
+  "cwd": "/tmp/codex-capture",
+  "hook_event_name": "PreToolUse",
+  "model": "gpt-6-luna",
+  "permission_mode": "bypassPermissions",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "printf 'hello' > note.txt"
+  },
+  "tool_use_id": "exec-71884a92-dca3-4754-a7c2-90c9a251c8d7"
+}

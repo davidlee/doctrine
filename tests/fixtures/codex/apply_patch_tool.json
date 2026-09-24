@@ -1,0 +1,14 @@
+{
+  "session_id": "01a0d1dc-02cc-7693-bf34-3df2021e6efe",
+  "turn_id": "01a0d1dc-02eb-7da0-a94b-18fed906976c",
+  "transcript_path": "/home/david/.codex/sessions/2026/09/24/rollout-2026-09-24T15-20-51-01a0d1dc-02cc-7693-bf34-3df2021e6efe.jsonl",
+  "cwd": "/tmp/codex-capture",
+  "hook_event_name": "PreToolUse",
+  "model": "gpt-6-luna",
+  "permission_mode": "bypassPermissions",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "command": "*** Begin Patch\n*** Add File: /tmp/codex-capture/patched.txt\n+hello patch\n*** End Patch"
+  },
+  "tool_use_id": "exec-3de285fd-8c22-43dd-a197-5e4475c62b26"
+}
