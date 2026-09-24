@@ -81,6 +81,7 @@ exit_criteria = [
   { id = "EX-4", text = "entry_is_canonical compares the handler fields doctrine owns, so an owned entry missing the limit or carrying a stale one is not canonical and is healed." },
   { id = "EX-5", text = "The Claude canonical args become `memory surface --input claude`; the Claude ownership predicate owns canonical-claude and legacy-bare, the codex predicate canonical-codex only; every Wired/Refreshed outcome discloses the manual /hooks step naming all three codex hooks." },
   { id = "EX-6", text = "plugins/doctrine/hooks/hooks.json carries `memory surface --input claude` in both PreToolUse matcher groups." },
+  { id = "EX-7", text = "Behaviour preservation: the existing boot suites stay green; only assertions that spell the Claude surface command literally are updated to the explicit form (or read the constant), and no merge-core behaviour assertion changes." },
 ]
 verification = [
   { id = "VT-1", expects = "merge core: codex_hook_specs round-trips both groups (wired / idempotent / foreign-preserving / malformed-fallback / stale-exec-refresh) and a golden pins the handler shape with both keys present inside the handler", test_file = "src/boot.rs", keywords = ["codex_hook_specs", "SURFACE_CONTEXT_LIMIT_CODEX", "additional_context_limit"], waived = false },
@@ -106,6 +107,7 @@ exit_criteria = [
   { id = "EX-4", text = "session_id comes from ctx.sessionManager.getSessionId() and cwd from ctx.cwd; the adapter consults no PI_SUBAGENT_CHILD marker." },
   { id = "EX-5", text = "RefreshReport gains surface_extension: ExtOutcome; the Claude arm carries NotApplicable, the Codex arm calls the third installer, and a foreign skip or dry run is visible (STD-003)." },
   { id = "EX-6", text = "No flake.nix change is needed: templates/ is already an embed root in srcWithDist and surface.ts lands inside it." },
+  { id = "EX-7", text = "Behaviour preservation: the existing boot suites stay green; only report-shape assertions gain the third extension leg." },
 ]
 verification = [
   { id = "VT-1", expects = "installer: the generated surface.ts is ownership-marked, regenerates on change, is foreign-skipped, and a missing directory generates", test_file = "src/boot.rs", keywords = ["generate_surface_extension", "install_surface_extension", "surface_extension"], waived = false },
