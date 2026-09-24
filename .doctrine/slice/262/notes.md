@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · plan + PHASE-01..PHASE-04 + audit (RV-383)
+fresh-as-of: 2026-09-24 · plan + PHASE-01..PHASE-04 + audit (RV-383) + reconcile + close
 
 ### Produced
 - design locked (run rev 38): sec-1..9 in design.md (commits d1f5edd03, f8a13cd41); no code yet
@@ -32,9 +32,10 @@ fresh-as-of: 2026-09-24 · plan + PHASE-01..PHASE-04 + audit (RV-383)
 - clippy `shadow_unrelated` is denied for the bin: a new `let declared` in `apply` collided with the pre-existing `|declared|` closure in `declaration_fingerprint`.
 
 - **Measured forward bound (VT-6):** worst-case `forward` over the embedded runbooks renders ≤ 6.4 KB; beside a hand-saturated envelope (12.3 KB) the total is ≤ 18.2 KB against the 24,576 B ceiling. The first attempt put every `Cause` variant on every row and measured 26.4 KB — unreachable, since a row is exactly one derivation arm; `fixture::widest_causes` follows `satisfied`'s arms instead. PHASE-03 `EX-4` should compare this against the growing-run measurement.
+- mem_01a0d39141d87722bdce37d8865751fc — a fresh-binary install rewrites the Claude hook ahead of the PATH binary
 
 ### Open
-- next: `/reconcile` against RV-383's Reconciliation Brief.
+- closed 2026-09-24: REV-061 done; IMP-390 resolved; IMP-367 and IMP-372 noted.
 
 ## Design surface triage (2026-09-24, design run exploring)
 

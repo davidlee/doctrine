@@ -55,3 +55,9 @@ Not the flag — the resolution behind it:
   first time something does.
 - Scope check before starting: does any *other* record already read the flag as
   live? DEC-102 did and is corrected; worth a sweep for others.
+- **Admission bound owed (SL-262, DEC-293).** The envelope's `forward` edge is
+  in the no-drop set, and it is bounded only because the embedded runbooks
+  are. An override seam must bring an admission bound on step count and step
+  text. Otherwise an override could push the no-drop set past the envelope
+  ceiling, and `project` would refuse with `EnvelopeIrreducible` (SL-262 design
+  sec-5).

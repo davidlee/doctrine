@@ -31,3 +31,10 @@ with no test to notice the loss, is a change whose blast radius nobody sized. Th
 expects it added name this item.
 
 Originates from SL-233 PHASE-10 (sheet finding F-4).
+
+## SL-262 (2026-09-24)
+
+`next_obligation`'s disposition was owned and settled by SL-262. The field is
+deleted from `RunHeader` and `TurnEnvelope`, and replaced by the derived
+`forward` edge (DEC-290; envelope version 2 under DEC-291). The other
+reader-less accessors this item names are untouched.

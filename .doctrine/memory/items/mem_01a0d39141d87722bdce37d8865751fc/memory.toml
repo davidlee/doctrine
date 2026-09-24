@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0d39141d87722bdce37d8865751fc"
+memory_key = "mem.pattern.install.hook-shape-outruns-path-binary"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A fresh-binary doctrine install rewrites the Claude hook to the new CLI shape, which the PATH binary may reject"
+summary = "doctrine install from ./target/debug rewrites .claude/settings.json hooks to ${DOCTRINE_BIN:-doctrine} <new flags>; with DOCTRINE_BIN unset an older PATH doctrine rejects them and every tool call fails"
+created = "2026-09-24"
+updated = "2026-09-24"
+
+[scope]
+paths = [".claude/settings.json"]
+globs = []
+commands = ["doctrine install"]
+tags = ["install", "hooks", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "0301c2e0ff2ca25af4d91c3385e075bc9d66fd23"
+tree = "e12833b7b64ec71ad5ab264387b42336e14c5cfc"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "0301c2e0ff2ca25af4d91c3385e075bc9d66fd23"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-262"
+
