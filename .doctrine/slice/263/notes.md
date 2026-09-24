@@ -285,7 +285,7 @@ The four governance drafts remain unapproved. This review was landed onto
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · PHASE-05 · f23132575
+fresh-as-of: 2026-09-24 · PHASE-05 governance review · 9ec0536f0
 
 ### Produced
 
