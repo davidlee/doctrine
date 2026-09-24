@@ -92,7 +92,9 @@ use crate::design_run::payload_contract::{
     SelectedKeys, SelectorTable, TokenSource, UnknownKeys, WireType,
 };
 use crate::design_run::render::envelope::{self, Detail, OutstandingBySeverity};
-use crate::design_run::run::{Admission, DerivedInput, ObservedReview, Resolution};
+use crate::design_run::run::{
+    Admission, Applied, Crossing, DerivedInput, ObservedReview, Resolution,
+};
 use crate::design_run::snapshot::{self, CheckpointGroup, DesignSnapshot};
 use crate::design_run::submission::{
     ApplyRequest, CreateRecord, Declaration, DelegationAct, DischargeClaim, Dispose, WireFacetValue,
@@ -399,9 +401,7 @@ fn read_design_doc(root: &Path, slice: u32) -> Result<Option<String>> {
 
 /// The fingerprint of the authored document as Doctrine reads it *now*.
 fn read_authored_fingerprint(root: &Path, slice: u32) -> Result<Option<Fingerprint>> {
-    Ok(read_design_doc(root, slice)?
-        .as_deref()
-        .map(authored_fingerprint))
+    Ok(read_authored(root, slice)?.fingerprint)
 }
 
 /// The watermark derivation, single-sourced: the paths that read-then-hash and
@@ -1591,8 +1591,10 @@ fn start(root: &Path, slice: u32, from_design: bool, pre_write: PreWriteHook<'_>
     // Read the bytes ONCE. Import fingerprints and decomposes the same string,
     // so a second read could see a different document than the watermark
     // certifies — the divergence DEC-092 exists to make impossible.
-    let document = read_design_doc(root, slice)?;
-    let observed = document.as_deref().map(authored_fingerprint);
+    let AuthoredRead {
+        text: document,
+        fingerprint: observed,
+    } = read_authored(root, slice)?;
     if observed.is_some() && !from_design {
         anyhow::bail!(
             "slice {slice:03} already has a {DESIGN_DOC} — start the run with \
@@ -1773,6 +1775,129 @@ fn read_payload(input: &str) -> Result<String> {
     std::fs::read_to_string(input).with_context(|| format!("read payload from {input}"))
 }
 
+/// The wire shell: one `design apply` payload, parsed and run through
+/// [`apply_pipeline`] under the crossing it declares.
+///
+/// The snapshot is read before the payload is parsed, so a slice with no run is
+/// refused as such whatever the payload says.
+fn apply(
+    root: &Path,
+    slice: u32,
+    payload: &str,
+    pre_write: PreWriteHook<'_>,
+    fault: FaultHook<'_>,
+) -> Result<()> {
+    let prior = read_snapshot(root, slice)?;
+    let request = parse_payload(payload)?;
+    let digest = crate::git::sha256(payload.as_bytes());
+    // Transitional (`SL-261` `EX-6`): the wire key still crosses, as the verb
+    // does, expecting the fingerprint it declares. `PHASE-05` retires it.
+    let crossing = match request.adopt_authored.as_ref() {
+        Some(adopt) => Crossing::Adopt {
+            expect: Some(Fingerprint::new(adopt.fingerprint.clone())),
+        },
+        None => Crossing::Ordinary,
+    };
+    let input = PipelineInput {
+        prior: &prior,
+        request: &request,
+        digest: &digest,
+        crossing,
+        read: read_authored(root, slice)?,
+    };
+    match apply_pipeline(root, slice, input, Stop::Write, pre_write, fault)? {
+        PipelineOutcome::Resumed { revision } => emit(&[format!(
+            "resumed submission {} — already applied at revision {revision}; \
+             the run does not advance",
+            request.envelope.submission_id
+        )]),
+        PipelineOutcome::Candidate(applied) | PipelineOutcome::Written(applied) => {
+            emit(&applied_lines(&prior, &request, &applied))
+        }
+    }
+}
+
+/// Parse one wire payload into its typed request.
+///
+/// The remedy rides the point of failure (SL-251 sec-6, DEC-225): serde's own
+/// message verbatim — no paraphrase, no classifier — then the contract's
+/// ADDRESS on an indented continuation, matching `Refusal::GateNotCleared`'s
+/// form. `.context()` would hide serde's text in the error's source rather
+/// than its `Display`, which is what a caller actually reads.
+fn parse_payload(payload: &str) -> Result<ApplyRequest> {
+    let parse_error = |error: &dyn std::fmt::Display| {
+        anyhow::anyhow!("parse the apply payload as JSON: {error}\n  {PAYLOAD_CONTRACT_POINTER}")
+    };
+    // Parsed to a `Value` first so the contract can be read against it BEFORE
+    // deserialisation (SL-259 DEC-244). Serde cannot do this itself at the two
+    // levels that matter — `ApplyRequest` carries `#[serde(flatten)]`, which
+    // forbids `deny_unknown_fields`, and the internally tagged enums buffer
+    // their content — so a misspelt key used to be absorbed in silence
+    // (ISS-333, ISS-328). The remedy rides both complaints identically: serde's
+    // own words or the contract's, then the contract's ADDRESS on an indented
+    // continuation.
+    let document: serde_json::Value =
+        serde_json::from_str(payload).map_err(|error| parse_error(&error))?;
+    design_run::contract_check::refuse_unknown_keys(&document)
+        .map_err(|refused| anyhow::anyhow!("{refused}\n  {PAYLOAD_CONTRACT_POINTER}"))?;
+    // Deserialised from the ORIGINAL string rather than from `document`: serde
+    // carries line and column only when it parses from text, so `from_value`
+    // would keep serde's words and silently drop its position (RV-367 `F-2`) —
+    // on a hand-authored payload that can run to hundreds of lines, and for the
+    // whole class of shape faults this walk deliberately hands back to it. The
+    // cost is one extra parse of a bounded payload.
+    serde_json::from_str(payload).map_err(|error| parse_error(&error))
+}
+
+/// `design.md` as one read: its bytes and the fingerprint of **those** bytes.
+///
+/// Held together so nothing downstream can pair one read's fingerprint with
+/// another read's sections (`RV-374` `F-1`): an edit landing between two reads
+/// would otherwise seat the second document's bodies under the first's
+/// watermark.
+struct AuthoredRead {
+    text: Option<String>,
+    fingerprint: Option<Fingerprint>,
+}
+
+/// Read `design.md` once.
+fn read_authored(root: &Path, slice: u32) -> Result<AuthoredRead> {
+    let text = read_design_doc(root, slice)?;
+    let fingerprint = text.as_deref().map(authored_fingerprint);
+    Ok(AuthoredRead { text, fingerprint })
+}
+
+/// Where [`apply_pipeline`] returns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Stop {
+    /// After pass 1: the candidate is validated and nothing is written. Taken by
+    /// `design adopt --dry-run` (`SL-261` `PHASE-03`); the wire never stops here.
+    AfterCandidate,
+    /// Through to the snapshot.
+    Write,
+}
+
+/// What [`apply_pipeline`] produced.
+enum PipelineOutcome {
+    /// The submission was already applied; the run does not advance.
+    Resumed { revision: u64 },
+    /// Pass 1's candidate, under [`Stop::AfterCandidate`]. Nothing written.
+    Candidate(Applied),
+    /// The stored candidate, under [`Stop::Write`].
+    Written(Applied),
+}
+
+/// One typed submission, ready for the pipeline.
+struct PipelineInput<'a> {
+    prior: &'a DesignSnapshot,
+    request: &'a ApplyRequest,
+    /// The digest a receipt records.
+    digest: &'a str,
+    crossing: Crossing,
+    /// The one read of `design.md` this invocation stands on.
+    read: AuthoredRead,
+}
+
 /// Validate and apply one sparse idempotent mutation.
 ///
 /// The ordering is the contract, and it is DEC-083/DEC-086's: admit, validate
@@ -1789,71 +1914,44 @@ fn read_payload(input: &str) -> Result<String> {
 /// snapshot is stored — runs against the ids actually claimed. The pure core is
 /// a function of its inputs, so running it twice costs a clone and buys the
 /// guarantee that a refusable batch never leaves an orphaned record behind.
-fn apply(
+fn apply_pipeline(
     root: &Path,
     slice: u32,
-    payload: &str,
+    input: PipelineInput<'_>,
+    stop: Stop,
     pre_write: PreWriteHook<'_>,
     fault: FaultHook<'_>,
-) -> Result<()> {
-    let prior = read_snapshot(root, slice)?;
-    // The remedy rides the point of failure (SL-251 sec-6, DEC-225): serde's own
-    // message verbatim — no paraphrase, no classifier — then the contract's
-    // ADDRESS on an indented continuation, matching `Refusal::GateNotCleared`'s
-    // form. `.context()` would hide serde's text in the error's source rather
-    // than its `Display`, which is what a caller actually reads.
-    // Parsed to a `Value` first so the contract can be read against it BEFORE
-    // deserialisation (SL-259 DEC-244). Serde cannot do this itself at the two
-    // levels that matter — `ApplyRequest` carries `#[serde(flatten)]`, which
-    // forbids `deny_unknown_fields`, and the internally tagged enums buffer
-    // their content — so a misspelt key used to be absorbed in silence
-    // (ISS-333, ISS-328). The remedy rides both complaints identically: serde's
-    // own words or the contract's, then the contract's ADDRESS on an indented
-    // continuation.
-    let parse_error = |error: &dyn std::fmt::Display| {
-        anyhow::anyhow!("parse the apply payload as JSON: {error}\n  {PAYLOAD_CONTRACT_POINTER}")
-    };
-    let document: serde_json::Value =
-        serde_json::from_str(payload).map_err(|error| parse_error(&error))?;
-    design_run::contract_check::refuse_unknown_keys(&document)
-        .map_err(|refused| anyhow::anyhow!("{refused}\n  {PAYLOAD_CONTRACT_POINTER}"))?;
-    // Deserialised from the ORIGINAL string rather than from `document`: serde
-    // carries line and column only when it parses from text, so `from_value`
-    // would keep serde's words and silently drop its position (RV-367 `F-2`) —
-    // on a hand-authored payload that can run to hundreds of lines, and for the
-    // whole class of shape faults this walk deliberately hands back to it. The
-    // cost is one extra parse of a bounded payload.
-    let request: ApplyRequest =
-        serde_json::from_str(payload).map_err(|error| parse_error(&error))?;
-    let digest = crate::git::sha256(payload.as_bytes());
+) -> Result<PipelineOutcome> {
+    let PipelineInput {
+        prior,
+        request,
+        digest,
+        crossing,
+        read,
+    } = input;
 
-    match design_run::run::admit(&prior, &request.envelope, &digest)
+    match design_run::run::admit(prior, &request.envelope, digest)
         .map_err(|refused| refusal(&refused))?
     {
-        Admission::Resumed { revision } => {
-            return emit(&[format!(
-                "resumed submission {} — already applied at revision {revision}; \
-                 the run does not advance",
-                request.envelope.submission_id
-            )]);
-        }
+        Admission::Resumed { revision } => return Ok(PipelineOutcome::Resumed { revision }),
         Admission::Fresh => {}
     }
 
-    let observed = read_authored_fingerprint(root, slice)?;
-    let readopting = request.adopt_authored.is_some();
+    let observed = read.fingerprint;
+    let readopting = matches!(crossing, Crossing::Adopt { .. });
     if !readopting {
-        refuse_authored_divergence(&prior, observed.as_ref())?;
+        refuse_authored_divergence(prior, observed.as_ref())?;
     }
 
-    // The authored read is the ADOPTION path's alone. Nothing else consumes it,
-    // and reading it unconditionally would apply the §5.5 document checks to a
-    // run whose document is not being adopted (a `--from-design` baseline that
-    // predates the markers is the obvious casualty). An ABSENT document is left
-    // to the pure layer too: §5.5 classifies how a document departs from the
-    // run, and `AdoptionStale` — "design.md is absent" — is the accurate answer
-    // where there is no document to classify.
-    let authored = match read_design_doc(root, slice)?.filter(|_| readopting) {
+    // The authored sections are the ADOPTION path's alone, parsed from the same
+    // bytes `observed` fingerprints. Nothing else consumes them, and parsing
+    // unconditionally would apply the §5.5 document checks to a run whose
+    // document is not being adopted (a `--from-design` baseline that predates
+    // the markers is the obvious casualty). An ABSENT document is left to the
+    // pure layer too: §5.5 classifies how a document departs from the run, and
+    // `AdoptionStale` — "design.md is absent" — is the accurate answer where
+    // there is no document to classify.
+    let authored = match read.text.filter(|_| readopting) {
         Some(text) => authored_sections(&text, &prior.sections.ids())?,
         None => std::collections::BTreeMap::new(),
     };
@@ -1867,13 +1965,13 @@ fn apply(
             request
                 .declare
                 .iter()
-                .chain(accepted_declarations(&prior, &request)),
+                .chain(accepted_declarations(prior, request)),
         ),
         authored_sections: authored,
         authored_fingerprint: observed.clone(),
-        verifications: verifications(root, slice, &prior, &request, runbook.as_ref()),
+        verifications: verifications(root, slice, prior, request, runbook.as_ref()),
         runbook,
-        observed_review: observed_review(&prior, &request, root),
+        observed_review: observed_review(prior, request, root),
         observed_facts: observed_facts(root, slice),
         // The claim digest, over the encoding the act itself owns. Computed here
         // because the pure layer never hashes, and computed unconditionally
@@ -1894,7 +1992,7 @@ fn apply(
     // would not are closed rather than observed: `resolution_of` builds both
     // passes' key sets, and `widest_canonical_id` proves the claimed id fits the
     // one bound that reads it.
-    let plans = plan_checkpoints(root, &prior, &request)?;
+    let plans = plan_checkpoints(root, prior, request)?;
     // Built unconditionally, because whether a pass is OWED is pass 1's own
     // output and cannot be read before it runs. Pass 1 therefore validates
     // against an `RV` stand-in either way, and the plan is discarded below if the
@@ -1906,8 +2004,12 @@ fn apply(
             .chain(std::iter::once(&review_plan))
             .map(|plan| (plan, plan.provisional_record())),
     );
-    let candidate = design_run::run::apply(&prior, &request, &derived, &digest, &provisional)
-        .map_err(|refused| refusal(&refused))?;
+    let candidate =
+        design_run::run::apply(prior, request, &crossing, &derived, digest, &provisional)
+            .map_err(|refused| refusal(&refused))?;
+    if stop == Stop::AfterCandidate {
+        return Ok(PipelineOutcome::Candidate(candidate));
+    }
 
     // D1: whether a pass is owed is read off pass 1's own candidate, whose value
     // was discarded until now. The provisional candidate is thrown away — only
@@ -1936,8 +2038,9 @@ fn apply(
     }
     let resolved = resolution_of(minted);
 
-    let mut applied = design_run::run::apply(&prior, &request, &derived, &digest, &resolved)
-        .map_err(|refused| refusal(&refused))?;
+    let mut applied =
+        design_run::run::apply(prior, request, &crossing, &derived, digest, &resolved)
+            .map_err(|refused| refusal(&refused))?;
 
     // Rule 2: the watermark re-baselines only after the candidate validates in
     // full, and only on the adoption path.
@@ -1954,7 +2057,7 @@ fn apply(
     let basis = match (readopting, observed) {
         (true, Some(fingerprint)) => PreWriteBasis::AdmittedAt(fingerprint),
         (true, None) => PreWriteBasis::Watermark(None),
-        (false, _) => PreWriteBasis::Watermark(prior.authored.watermark),
+        (false, _) => PreWriteBasis::Watermark(prior.authored.watermark.clone()),
     };
     recheck_watermark_before_write(root, slice, &basis)?;
     // Step 6.
@@ -1962,6 +2065,13 @@ fn apply(
     write_snapshot(root, slice, &applied.snapshot)?;
     complete_journal(root, slice, &request.envelope.submission_id)?;
 
+    Ok(PipelineOutcome::Written(applied))
+}
+
+/// The report a wire submission prints: the revision and stage it reached, the
+/// lock disclosure when it took the lock, the delegation's assignments, then
+/// its change rows.
+fn applied_lines(prior: &DesignSnapshot, request: &ApplyRequest, applied: &Applied) -> Vec<String> {
     let mut lines = vec![format!(
         "revision {} stage {}",
         applied.snapshot.run.revision,
@@ -1980,7 +2090,7 @@ fn apply(
         request.delegation.as_ref(),
     ));
     lines.extend(applied.rows.iter().map(design_run::render::render_row));
-    emit(&lines)
+    lines
 }
 
 /// The digest of every declared section body — the shell's job, because the pure

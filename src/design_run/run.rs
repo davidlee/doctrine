@@ -298,10 +298,24 @@ pub(crate) struct Resolution {
     pub(crate) review_pass: Option<ReviewRef>,
 }
 
+/// How a submission crosses the authored tier (`SL-261` `sec-3`).
+///
+/// The switch adoption reads, carried beside the request rather than inside it,
+/// so adoption can leave the wire without the pipeline losing its switch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Crossing {
+    /// Every wire submission. Refused on a diverged watermark by the shell.
+    Ordinary,
+    /// A re-adoption of `design.md` (DEC-092 rule 2). `expect` is the
+    /// fingerprint the caller says it reviewed, if it says one.
+    Adopt { expect: Option<Fingerprint> },
+}
+
 /// Build the whole candidate, or refuse and leave `prior` untouched.
 pub(crate) fn apply(
     prior: &DesignSnapshot,
     request: &ApplyRequest,
+    crossing: &Crossing,
     derived: &DerivedInput,
     payload_digest: &str,
     resolved: &Resolution,
@@ -329,8 +343,13 @@ pub(crate) fn apply(
 
     let mut pending: Vec<Pending> = Vec::new();
 
-    if let Some(adopt) = request.adopt_authored.as_ref() {
-        pending.extend(adopt_authored(&mut next, adopt, derived)?);
+    if let Crossing::Adopt { expect } = crossing {
+        pending.extend(adopt_authored(
+            &mut next,
+            expect.as_ref(),
+            request.adopt_authored.as_ref(),
+            derived,
+        )?);
     }
 
     // The delegation act runs BEFORE the declaration loop, because an `accept`
@@ -853,49 +872,32 @@ fn confirmation(next: &DesignSnapshot, confirms: Option<AgentActKind>) -> Option
         .map(|held| held.fingerprint.clone())
 }
 
-/// DEC-092 rule 2: the sole lawful crossing of a divergence, as a protocol.
+/// DEC-092 rule 2: the sole lawful crossing of a divergence.
 ///
-/// The declared fingerprint must be what Doctrine reads, and the stable-marker
-/// map must be **complete and exact** — every section the run holds, no unknown
-/// one, and every digest matching what Doctrine read. Affected evidence is
+/// An `expect`ed fingerprint must be what Doctrine reads. Where the wire's
+/// `markers` ride along, the stable-marker map must be **complete and exact** —
+/// every section the run holds, no unknown one, and every digest matching what
+/// Doctrine read (transitional: `SL-261` `PHASE-05` deletes it with the key,
+/// because a map the engine derives cannot disagree with itself). Affected evidence is
 /// invalidated by the DEC-066 rule that already governs it (the section's
 /// fingerprint moves, so evidence bound to the old one stops being live); no
 /// clearance is inherited across the crossing, because clearance is derived and
 /// never stored.
 fn adopt_authored(
     next: &mut DesignSnapshot,
-    adopt: &super::submission::AdoptAuthored,
+    expect: Option<&Fingerprint>,
+    markers: Option<&super::submission::AdoptAuthored>,
     derived: &DerivedInput,
 ) -> Result<Vec<Pending>, Refusal> {
     let observed = derived.authored_fingerprint.as_ref();
-    if observed.map(Fingerprint::as_str) != Some(adopt.fingerprint.as_str()) {
+    if observed.is_none() || expect.is_some_and(|expected| Some(expected) != observed) {
         return Err(Refusal::AdoptionStale {
-            declared: adopt.fingerprint.clone(),
+            expected: expect.map(|expected| expected.as_str().to_owned()),
             observed: observed.map(|f| f.as_str().to_owned()),
         });
     }
-    let held: BTreeSet<DesignId> = next.sections.ids();
-    let declared: BTreeSet<DesignId> = adopt.sections.keys().cloned().collect();
-    let missing: Vec<DesignId> = held.difference(&declared).cloned().collect();
-    let unknown: Vec<DesignId> = declared.difference(&held).cloned().collect();
-    let mismatched: Vec<DesignId> = adopt
-        .sections
-        .iter()
-        .filter(|(id, digest)| {
-            derived
-                .authored_sections
-                .get(*id)
-                .map(|authored| authored.fingerprint.as_str())
-                != Some(digest.as_str())
-        })
-        .map(|(id, _)| id.clone())
-        .collect();
-    if !missing.is_empty() || !unknown.is_empty() || !mismatched.is_empty() {
-        return Err(Refusal::AdoptionMarkersInvalid {
-            missing,
-            unknown,
-            mismatched,
-        });
+    if let Some(adopt) = markers {
+        refuse_invalid_markers(next, adopt, derived)?;
     }
 
     // DOCUMENT ORDER IS AUTHORITATIVE (EX-7). Adoption walks the marker
@@ -934,6 +936,38 @@ fn adopt_authored(
         )?);
     }
     Ok(rows)
+}
+
+/// The wire's caller-declared marker map against what Doctrine read.
+fn refuse_invalid_markers(
+    next: &DesignSnapshot,
+    adopt: &super::submission::AdoptAuthored,
+    derived: &DerivedInput,
+) -> Result<(), Refusal> {
+    let held: BTreeSet<DesignId> = next.sections.ids();
+    let declared: BTreeSet<DesignId> = adopt.sections.keys().cloned().collect();
+    let missing: Vec<DesignId> = held.difference(&declared).cloned().collect();
+    let unknown: Vec<DesignId> = declared.difference(&held).cloned().collect();
+    let mismatched: Vec<DesignId> = adopt
+        .sections
+        .iter()
+        .filter(|(id, digest)| {
+            derived
+                .authored_sections
+                .get(*id)
+                .map(|authored| authored.fingerprint.as_str())
+                != Some(digest.as_str())
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    if missing.is_empty() && unknown.is_empty() && mismatched.is_empty() {
+        return Ok(());
+    }
+    Err(Refusal::AdoptionMarkersInvalid {
+        missing,
+        unknown,
+        mismatched,
+    })
 }
 
 /// Seat a section: derive its title from its own body, then store it.
@@ -2234,6 +2268,7 @@ mod tests {
         let applied = apply(
             &prior,
             &request,
+            &Crossing::Ordinary,
             &derived_claiming("sha256:claim"),
             "sha256:pay",
             &Resolution::default(),
@@ -2271,6 +2306,7 @@ mod tests {
             let applied = apply(
                 &prior,
                 &request,
+                &Crossing::Ordinary,
                 &DerivedInput::default(),
                 "sha256:pay",
                 &Resolution::default(),
@@ -2327,6 +2363,7 @@ mod tests {
         let applied = apply(
             &prior,
             &request,
+            &Crossing::Ordinary,
             &DerivedInput::default(),
             "sha256:pay",
             &Resolution::default(),
@@ -2365,6 +2402,7 @@ mod tests {
             apply(
                 &prior,
                 &request,
+                &Crossing::Ordinary,
                 &DerivedInput::default(),
                 "sha256:pay",
                 &Resolution::default()
@@ -2391,6 +2429,7 @@ mod tests {
         let applied = apply(
             &prior,
             &request,
+            &Crossing::Ordinary,
             &derived,
             "sha256:pay",
             &Resolution::default(),
@@ -2426,6 +2465,7 @@ mod tests {
             apply(
                 &prior,
                 &request,
+                &Crossing::Ordinary,
                 &DerivedInput::default(),
                 "sha256:pay",
                 &Resolution::default()
@@ -2441,6 +2481,7 @@ mod tests {
         let applied = apply(
             &prior,
             &request,
+            &Crossing::Ordinary,
             &DerivedInput::default(),
             "sha256:pay",
             &Resolution::default(),
@@ -2478,6 +2519,7 @@ mod tests {
             apply(
                 &prior,
                 &request,
+                &Crossing::Ordinary,
                 &DerivedInput::default(),
                 "sha256:pay",
                 &Resolution::default()
@@ -2503,6 +2545,7 @@ mod tests {
         let once = apply(
             &prior,
             &request,
+            &Crossing::Ordinary,
             &DerivedInput::default(),
             "sha256:pay",
             &Resolution::default(),
@@ -2514,6 +2557,7 @@ mod tests {
         let twice = apply(
             &once.snapshot,
             &again,
+            &Crossing::Ordinary,
             &DerivedInput::default(),
             "sha256:pay2",
             &Resolution::default(),
@@ -2553,6 +2597,7 @@ mod tests {
                 ],
                 ..payload(&prior)
             },
+            &Crossing::Ordinary,
             &DerivedInput::default(),
             "sha256:pay",
             &Resolution::default(),
@@ -2586,6 +2631,7 @@ mod tests {
         let updated = apply(
             &created.snapshot,
             &control,
+            &Crossing::Ordinary,
             &DerivedInput::default(),
             "sha256:pay2",
             &Resolution::default(),
@@ -2619,6 +2665,7 @@ mod tests {
                 )],
                 ..payload(&prior)
             },
+            &Crossing::Ordinary,
             &DerivedInput::default(),
             "sha256:pay",
             &Resolution::default(),
@@ -2672,6 +2719,7 @@ mod tests {
                 )],
                 ..payload(&prior)
             },
+            &Crossing::Ordinary,
             &DerivedInput::default(),
             "sha256:pay",
             &Resolution::default(),
@@ -2725,6 +2773,7 @@ mod tests {
         let once = apply(
             &prior,
             &request,
+            &Crossing::Ordinary,
             &DerivedInput::default(),
             "sha256:pay",
             &Resolution::default(),
@@ -2742,6 +2791,7 @@ mod tests {
         let twice = apply(
             &once.snapshot,
             &again,
+            &Crossing::Ordinary,
             &DerivedInput::default(),
             "sha256:pay2",
             &Resolution::default(),
@@ -2790,6 +2840,7 @@ mod tests {
         let once = apply(
             &prior,
             &request,
+            &Crossing::Ordinary,
             &derived_claiming("sha256:claim"),
             "sha256:pay",
             &Resolution::default(),
@@ -2807,6 +2858,7 @@ mod tests {
         let twice = apply(
             &once.snapshot,
             &again,
+            &Crossing::Ordinary,
             &derived_claiming("sha256:claim2"),
             "sha256:pay2",
             &Resolution::default(),

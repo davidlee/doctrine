@@ -49,7 +49,10 @@ use super::payload_contract::{
 };
 use super::prompt::contract_block;
 use super::refusal::{ActFault, Refusal};
-use super::run::{DerivedInput, ObservedReview, declare, live_reviews, subject_state};
+use super::run::{
+    AuthoredSection, Crossing, DerivedInput, ObservedReview, Resolution, apply, declare,
+    live_reviews, subject_state,
+};
 use super::runbook::{RunbookKey, RunbookStanding};
 use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup, DesignSnapshot, Finding};
 use super::submission::{
@@ -4647,4 +4650,74 @@ fn retired_key_remedies_are_non_empty() {
         },
     ];
     assert_eq!(empty_remedies(BAD), ["blank"]);
+}
+
+// ---------------------------------------------------------------------------
+// SL-261 VT-2 — the crossing, not the request, decides whether a run adopts.
+// ---------------------------------------------------------------------------
+
+/// A run holding `sec-1`, a document that re-words it, and a request that even
+/// carries a well-formed `adopt_authored` for that document — every input an
+/// adoption would read, so only the crossing can tell the two legs apart.
+fn adoption_inputs() -> (DesignSnapshot, ApplyRequest, DerivedInput) {
+    let prior = run_holding(&[("sec-1", "sha256:held")]);
+    let request: ApplyRequest = serde_json::from_value(serde_json::json!({
+        "run_uid": prior.run.uid,
+        "known_revision": prior.run.revision,
+        "submission_id": "s1",
+        "adopt_authored": {
+            "fingerprint": "sha256:document",
+            "sections": { "sec-1": "sha256:edited" },
+        },
+    }))
+    .expect("the fixture is a well-formed request");
+    let derived = DerivedInput {
+        authored_sections: [(
+            id("sec-1"),
+            AuthoredSection {
+                position: 0,
+                body: "## sec-1\n\nedited by hand\n".to_owned(),
+                fingerprint: Fingerprint::new("sha256:edited"),
+            },
+        )]
+        .into(),
+        authored_fingerprint: Some(Fingerprint::new("sha256:document")),
+        ..DerivedInput::default()
+    };
+    (prior, request, derived)
+}
+
+#[test]
+fn ordinary_crossing_never_reads_authored_sections() {
+    let (prior, request, derived) = adoption_inputs();
+    let held = |crossing: &Crossing| {
+        let applied = apply(
+            &prior,
+            &request,
+            crossing,
+            &derived,
+            "sha256:pay",
+            &Resolution::default(),
+        )
+        .expect("the submission applies");
+        let moved = applied
+            .rows
+            .iter()
+            .any(|row| row.event == ChangeEvent::SectionFingerprintChanged);
+        let section = applied.snapshot.sections.find(&id("sec-1")).cloned();
+        (section.map(|section| section.fingerprint), moved)
+    };
+
+    assert_eq!(
+        held(&Crossing::Ordinary),
+        (Some(Fingerprint::new("sha256:held")), false),
+        "an ordinary crossing leaves the held section alone, adopt_authored or not"
+    );
+    assert_eq!(
+        held(&Crossing::Adopt {
+            expect: Some(Fingerprint::new("sha256:document")),
+        }),
+        (Some(Fingerprint::new("sha256:edited")), true),
+        "the control: the same inputs adopt under Crossing::Adopt"
+    );
 }

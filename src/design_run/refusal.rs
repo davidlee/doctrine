@@ -247,9 +247,11 @@ pub(crate) enum Refusal {
     /// A used submission id arrived carrying different bytes — a different
     /// submission wearing a used name, not a retry.
     SubmissionReplayed { submission: String },
-    /// A re-adoption declared a fingerprint that is not what Doctrine reads.
+    /// A re-adoption expected a fingerprint that is not what Doctrine reads, or
+    /// there is no document to adopt. `expected` is `None` when the caller named
+    /// none.
     AdoptionStale {
-        declared: String,
+        expected: Option<String>,
         observed: Option<String>,
     },
     /// A re-adoption's stable-marker map is not complete and exact.
@@ -738,16 +740,19 @@ impl fmt::Display for Refusal {
                 "submission id `{submission}` was already applied with different bytes — \
                  a retry must carry the same payload"
             ),
-            Refusal::AdoptionStale { declared, observed } => match observed {
-                Some(observed) => write!(
+            Refusal::AdoptionStale { expected, observed } => match (expected, observed) {
+                (Some(declared), Some(observed)) => write!(
                     f,
                     "adopt_authored declares fingerprint `{declared}` but design.md reads \
                      `{observed}` — re-read the document and declare what it says now"
                 ),
-                None => write!(
+                (Some(declared), None) => write!(
                     f,
                     "adopt_authored declares fingerprint `{declared}` but design.md is absent"
                 ),
+                // Reachable only once the verb sends no fingerprint (`SL-261`
+                // `PHASE-03`, which rewords all three).
+                (None, _) => write!(f, "design.md is absent — there is nothing to adopt"),
             },
             Refusal::AdoptionMarkersInvalid {
                 missing,
