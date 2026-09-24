@@ -303,7 +303,8 @@ fn install_wires_five_hook_entries_across_three_events() {
     assert_eq!(count(dir), expected.to_vec(), "re-install is idempotent");
 
     // The surviving `PreToolUse` spec is `memory surface`, across its two
-    // matchers. (Unrelated to the confinement wall SL-254 PHASE-04 deleted.)
+    // matchers, in its explicit canonical form (SL-263 §5.9). (Unrelated to the
+    // confinement wall SL-254 PHASE-04 deleted.)
     let pretooluse: Vec<String> = event_entries(&settings, "PreToolUse")
         .iter()
         .map(|e| e["hooks"][0]["command"].as_str().expect("command").into())
@@ -311,7 +312,7 @@ fn install_wires_five_hook_entries_across_three_events() {
     assert_eq!(
         pretooluse
             .iter()
-            .filter(|c| c.ends_with("memory surface"))
+            .filter(|c| c.ends_with("memory surface --input claude"))
             .count(),
         2,
         "two memory-surface entries: {pretooluse:?}"

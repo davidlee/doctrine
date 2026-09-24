@@ -640,6 +640,36 @@ const WORKTREE_CREATE_MATCHERS: &[&str] = &[WORKTREE_CREATE_MATCHER];
 /// shared it (DEC-206); the ordered-set shape is unchanged.
 const PRETOOLUSE_MATCHERS_SURFACE: &[&str] = &["Read|Edit|Write", "Bash"];
 
+/// The Codex `PreToolUse` matcher tokens, in emission order (SL-263 §5.6).
+/// `Bash` covers every shell call — reads included, since codex has no read
+/// tool; `apply_patch` is its only path-shaped tool. codex accepts the aliases
+/// `Edit`/`Write` for a patch matcher, but its payload still reports
+/// `tool_name: "apply_patch"` (`tests/fixtures/codex/README.md`), so the
+/// canonical matcher is the tool's own name.
+const MATCHER_CODEX_BASH: &str = "Bash";
+const MATCHER_CODEX_APPLY_PATCH: &str = "apply_patch";
+const PRETOOLUSE_MATCHERS_CODEX: &[&str] = &[MATCHER_CODEX_BASH, MATCHER_CODEX_APPLY_PATCH];
+
+/// The Codex handler fields doctrine sets, rendered inside `hooks: […]` BESIDE
+/// `command` — NOT on the matcher group. codex ignores (at best) a group-level
+/// key, which would leave the mitigation inert while a presence-only test passed
+/// (SL-263 §5.6). Named rather than inline (STD-001): a typo in a wire key yields
+/// a silently-inert field.
+const ADDITIONAL_CONTEXT_LIMIT_KEY: &str = "additionalContextLimit";
+const TIMEOUT_KEY: &str = "timeout";
+
+/// codex's `additionalContextLimit` for the surface hook — an order of magnitude
+/// above the largest block this feature produces (a header plus at most three
+/// one-line path entries, or two command entries) and far below codex's default.
+/// Its unit is not established by the published contract (tokens or characters
+/// are both plausible); the headroom holds under either reading (SL-263 §5.6).
+const SURFACE_CONTEXT_LIMIT_CODEX: u32 = 1_200;
+
+/// codex's per-hook `timeout` (seconds) — deliberately small: a hook that
+/// outlives it has missed its moment, and codex's default is a timeout nobody
+/// here chose (SL-263 §5.6).
+const SURFACE_TIMEOUT_SEC_CODEX: u32 = 5;
+
 // ---------------------------------------------------------------------------
 // The harness seam (R2) — enum + match, one local id per wired harness.
 // ---------------------------------------------------------------------------
@@ -978,10 +1008,27 @@ fn desired_entries(spec: &HookSpec, form: CommandForm) -> Vec<Value> {
         .map(|matcher| {
             serde_json::json!({
                 "matcher": matcher,
-                "hooks": [ { "type": "command", "command": command } ],
+                "hooks": [ handler_entry(spec, &command) ],
             })
         })
         .collect()
+}
+
+/// One handler object for `spec`'s rendered `command`: the always-present `type`
+/// and `command`, plus the codex handler fields when the spec sets them. Built as
+/// a map so an unset field is OMITTED, never `null` — codex reads presence, and a
+/// `null` limit is not the same statement as no limit (SL-263 §5.6).
+fn handler_entry(spec: &HookSpec, command: &str) -> Value {
+    let mut handler = Map::new();
+    handler.insert("type".to_string(), Value::String("command".to_string()));
+    handler.insert("command".to_string(), Value::String(command.to_string()));
+    if let Some(limit) = spec.additional_context_limit {
+        handler.insert(ADDITIONAL_CONTEXT_LIMIT_KEY.to_string(), Value::from(limit));
+    }
+    if let Some(timeout) = spec.timeout {
+        handler.insert(TIMEOUT_KEY.to_string(), Value::from(timeout));
+    }
+    Value::Object(handler)
 }
 
 /// Whether `cmd` is doctrine's own `boot` hook — robust to spaces in the exec
@@ -1030,7 +1077,21 @@ const CREATE_FORK_ARGS: &str = "worktree create-fork";
 /// both the command's argument suffix and its ownership key. Taken verbatim from
 /// `plugins/doctrine/hooks/hooks.json`, which stays the published plugin's
 /// payload.
-const MEMORY_SURFACE_ARGS: &str = "memory surface";
+///
+/// The Claude canonical form is explicit (`--input claude`, SL-263 §5.9).
+const MEMORY_SURFACE_ARGS: &str = "memory surface --input claude";
+
+/// The legacy bare `memory surface`, still owned on the Claude wire so a
+/// pre-upgrade entry is recognised and refreshed in place rather than abandoned
+/// beside a fresh duplicate — the same multi-form self-heal
+/// `is_doctrine_emit_command` uses. The bare form keeps PARSING regardless
+/// (`--input` defaults to `claude`), so this is continuity, not a compatibility
+/// risk (SL-263 §5.9).
+const LEGACY_MEMORY_SURFACE_ARGS: &str = "memory surface";
+
+/// The Codex canonical form. The two ownership predicates are disjoint by their
+/// `--input` value, so neither can claim the other's entry even in one file.
+const MEMORY_SURFACE_ARGS_CODEX: &str = "memory surface --input codex";
 
 /// Whether `cmd` is `<doctrine> <args>` — the shared suffix-strip ownership
 /// shape. The program half may bear spaces, so the fixed `args` suffix and its
@@ -1070,11 +1131,22 @@ fn is_doctrine_create_fork_command(cmd: &str) -> bool {
     is_doctrine_command(cmd, CREATE_FORK_ARGS)
 }
 
-/// Whether `cmd` is doctrine's own `memory surface` hook — the `PreToolUse`
-/// spec, one command across TWO matchers, which is the shape command-only
-/// ownership (`DEC-161`) exists to express.
+/// Whether `cmd` is doctrine's own `memory surface` hook on the Claude wire —
+/// the `PreToolUse` spec, one command across TWO matchers, which is the shape
+/// command-only ownership (`DEC-161`) exists to express. Owns the canonical
+/// explicit form AND the legacy bare form, so an un-upgraded entry is refreshed
+/// in place, never duplicated (SL-263 §5.9).
 fn is_doctrine_memory_surface_command(cmd: &str) -> bool {
-    is_doctrine_command(cmd, MEMORY_SURFACE_ARGS)
+    [MEMORY_SURFACE_ARGS, LEGACY_MEMORY_SURFACE_ARGS]
+        .iter()
+        .any(|args| is_doctrine_command(cmd, args))
+}
+
+/// Whether `cmd` is doctrine's own `memory surface` hook on the codex wire.
+/// Owns the canonical codex form ONLY — it must not claim a Claude entry (nor
+/// the legacy bare form, which is Claude's).
+fn is_doctrine_memory_surface_codex_command(cmd: &str) -> bool {
+    is_doctrine_command(cmd, MEMORY_SURFACE_ARGS_CODEX)
 }
 
 /// A hook doctrine owns: how to render its command, the predicate that
@@ -1095,6 +1167,12 @@ pub(crate) struct HookSpec {
     /// The matcher tokens this spec's entries carry, in emission order.
     /// One-element for every spec that shipped before SL-250.
     matchers: &'static [&'static str],
+    /// The codex handler field `additionalContextLimit`, rendered inside
+    /// `hooks: […]` beside `command` (SL-263 §5.6). `None` emits no key — every
+    /// Claude spec, whose rendered entries are byte-unchanged.
+    additional_context_limit: Option<u32>,
+    /// The codex handler field `timeout`, same placement and same `None` rule.
+    timeout: Option<u32>,
 }
 
 impl HookSpec {
@@ -1113,6 +1191,8 @@ impl HookSpec {
             is_ours: is_doctrine_boot_command,
             event: EVENT_SESSION_START,
             matchers: SESSION_MATCHERS,
+            additional_context_limit: None,
+            timeout: None,
         }
     }
 
@@ -1132,6 +1212,8 @@ impl HookSpec {
             is_ours: is_doctrine_emit_command,
             event: EVENT_SESSION_START,
             matchers,
+            additional_context_limit: None,
+            timeout: None,
         }
     }
 
@@ -1143,6 +1225,8 @@ impl HookSpec {
             is_ours: is_doctrine_sync_command,
             event: EVENT_SESSION_START,
             matchers: SESSION_MATCHERS,
+            additional_context_limit: None,
+            timeout: None,
         }
     }
 
@@ -1157,11 +1241,13 @@ impl HookSpec {
             is_ours: is_doctrine_create_fork_command,
             event: EVENT_WORKTREE_CREATE,
             matchers: WORKTREE_CREATE_MATCHERS,
+            additional_context_limit: None,
+            timeout: None,
         }
     }
 
-    /// The `<exec> memory surface` hook — TWO `PreToolUse` entries surfacing
-    /// scope-relevant memories.
+    /// The `<exec> memory surface --input claude` hook — TWO `PreToolUse` entries
+    /// surfacing scope-relevant memories.
     fn memory_surface(exec: &Path) -> Self {
         Self {
             exec: exec.to_path_buf(),
@@ -1169,6 +1255,23 @@ impl HookSpec {
             is_ours: is_doctrine_memory_surface_command,
             event: EVENT_PRE_TOOL_USE,
             matchers: PRETOOLUSE_MATCHERS_SURFACE,
+            additional_context_limit: None,
+            timeout: None,
+        }
+    }
+
+    /// The `<exec> memory surface --input codex` hook — TWO `PreToolUse` entries
+    /// (codex's `Bash` and `apply_patch`). The handler fields are codex's own:
+    /// both render inside `hooks: […]` beside `command` (SL-263 §5.6).
+    fn memory_surface_codex(exec: &Path) -> Self {
+        Self {
+            exec: exec.to_path_buf(),
+            args: MEMORY_SURFACE_ARGS_CODEX,
+            is_ours: is_doctrine_memory_surface_codex_command,
+            event: EVENT_PRE_TOOL_USE,
+            matchers: PRETOOLUSE_MATCHERS_CODEX,
+            additional_context_limit: Some(SURFACE_CONTEXT_LIMIT_CODEX),
+            timeout: Some(SURFACE_TIMEOUT_SEC_CODEX),
         }
     }
 }
@@ -1187,6 +1290,21 @@ fn claude_hook_specs(exec: &Path) -> Vec<HookSpec> {
         HookSpec::sync(exec),
         HookSpec::create_fork(exec),
         HookSpec::memory_surface(exec),
+    ]
+}
+
+/// The Codex hook registry — the single enumeration of what doctrine activates
+/// for codex, mirroring `claude_hook_specs`. Order is emission order, both in
+/// `.codex/hooks.json` and in the installer's output.
+///
+/// Two specs, THREE entries: `boot_emit` carries one `SessionStart` matcher and
+/// `memory_surface_codex` carries two `PreToolUse` matchers. Built as a function
+/// rather than two scattered calls for the same reason `claude_hook_specs` is:
+/// a later manifest-vs-registry conformance check stays cheap.
+fn codex_hook_specs(exec: &Path) -> Vec<HookSpec> {
+    vec![
+        HookSpec::boot_emit(exec, SESSION_MATCHERS_CODEX),
+        HookSpec::memory_surface_codex(exec),
     ]
 }
 
@@ -1213,24 +1331,53 @@ fn owned_positions(arr: &[Value], is_ours: fn(&str) -> bool) -> Vec<(usize, usiz
     out
 }
 
-/// The owned hook at `(ei, hi)` is canonical iff its entry's `matcher` and its
-/// `command` equal the expected ones — the no-write short-circuit's
-/// precondition. Takes the command and the matcher rather than the whole spec,
-/// because the matcher is now POSITIONAL within the spec's ordered set and the
-/// command is form-dependent.
-fn entry_is_canonical(arr: &[Value], ei: usize, hi: usize, command: &str, matcher: &str) -> bool {
+/// The owned hook at `(ei, hi)` is canonical iff its entry's `matcher`, its
+/// `command`, and the handler fields doctrine owns all equal what
+/// [`desired_entries`] would write — the no-write short-circuit's precondition.
+/// Takes the spec for the handler fields, and the computed `command`/`matcher`
+/// because the matcher is POSITIONAL within the spec's ordered set and the command
+/// is form-dependent.
+///
+/// Comparing only `command` would judge an owned entry whose `additionalContextLimit`
+/// is missing or stale at the old value canonical, so the merge core would never
+/// heal it (SL-263 §5.6).
+fn entry_is_canonical(
+    arr: &[Value],
+    ei: usize,
+    hi: usize,
+    spec: &HookSpec,
+    command: &str,
+    matcher: &str,
+) -> bool {
     let Some(entry) = arr.get(ei) else {
         return false;
     };
     let matcher_ok = entry.get("matcher").and_then(Value::as_str) == Some(matcher);
-    let command_ok = entry
+    let Some(handler) = entry
         .get("hooks")
         .and_then(Value::as_array)
         .and_then(|h| h.get(hi))
-        .and_then(|h| h.get("command"))
-        .and_then(Value::as_str)
-        == Some(command);
-    matcher_ok && command_ok
+    else {
+        return false;
+    };
+    let command_ok = handler.get("command").and_then(Value::as_str) == Some(command);
+    let limit_ok = handler_field_matches(
+        handler,
+        ADDITIONAL_CONTEXT_LIMIT_KEY,
+        spec.additional_context_limit,
+    );
+    let timeout_ok = handler_field_matches(handler, TIMEOUT_KEY, spec.timeout);
+    matcher_ok && command_ok && limit_ok && timeout_ok
+}
+
+/// Whether `handler`'s `key` matches `expected`, where `None` means the key must
+/// be ABSENT — mirroring [`handler_entry`], which omits an unset field rather than
+/// writing `null`.
+fn handler_field_matches(handler: &Value, key: &str, expected: Option<u32>) -> bool {
+    match expected {
+        Some(n) => handler.get(key).and_then(Value::as_u64) == Some(u64::from(n)),
+        None => handler.get(key).is_none(),
+    }
 }
 
 /// The entry at `ei` carries exactly one hook — so it has no foreign sibling and
@@ -1332,7 +1479,7 @@ fn plan_hook(existing_json: Option<&str>, spec: &HookSpec, form: CommandForm) ->
     let owned = owned_positions(arr, spec.is_ours);
     let canonical_set = owned.len() == spec.matchers.len()
         && owned.iter().zip(spec.matchers).all(|(&(ei, hi), matcher)| {
-            entry_is_canonical(arr, ei, hi, &command, matcher) && hook_is_sole(arr, ei)
+            entry_is_canonical(arr, ei, hi, spec, &command, matcher) && hook_is_sole(arr, ei)
         });
     if canonical_set {
         return HookPlan {
@@ -1519,11 +1666,13 @@ fn install_refresh(
 ) -> anyhow::Result<RefreshReport> {
     match h {
         Harness::Codex => {
-            let hook = install_codex_hook(
-                root,
-                &HookSpec::boot_emit(exec, SESSION_MATCHERS_CODEX),
-                dry_run,
-            )?;
+            // The arm loops the codex registry, mirroring the Claude arm: two
+            // specs, three entries (SL-263 §5.8).
+            let specs = codex_hook_specs(exec);
+            let mut hooks = Vec::with_capacity(specs.len());
+            for spec in &specs {
+                hooks.push(install_codex_hook(root, spec, dry_run)?);
+            }
             let spike_warning = if dry_run {
                 false
             } else {
@@ -1533,7 +1682,7 @@ fn install_refresh(
             let extension = install_pi_extension(root, exec, dry_run)?;
             let mcp_extension = install_mcp_extension(root, exec, dry_run)?;
             Ok(RefreshReport {
-                hooks: vec![hook],
+                hooks,
                 claude_scope: None,
                 baseref: BaseRefWrite {
                     outcome: BaseRefOutcome::NotApplicable,
@@ -1610,9 +1759,10 @@ fn install_refresh(
 /// The combined Claude refresh outcome: the `SessionStart` hook merge plus the
 /// `worktree.baseRef` set (SL-064 §8). Pi carries `None`/`NotApplicable`.
 struct RefreshReport {
-    /// One outcome per spec merged, in emission order. The Codex arm carries
-    /// exactly one; the Claude arm carries the whole `claude_hook_specs`
-    /// registry — four specs, five entries (SL-250 PHASE-04; SL-254 PHASE-04).
+    /// One outcome per spec merged, in emission order. The Codex arm carries the
+    /// whole `codex_hook_specs` registry — two specs, three entries; the Claude
+    /// arm carries `claude_hook_specs` — four specs, five entries (SL-263 §5.8;
+    /// SL-250 PHASE-04; SL-254 PHASE-04).
     hooks: Vec<RefreshOutcome>,
     /// The scope written and what the sweep of its sibling found, folded across
     /// specs. `None` on the Codex arm, which has exactly one settings file and
@@ -2471,15 +2621,9 @@ fn write_hook_outcome(
     match outcome {
         RefreshOutcome::Wired(cmd) => {
             writeln!(stdout, "  {tag}{}: wired hook: {cmd}", harness_label(h))?;
-            if matches!(h, Harness::Codex) {
-                write_codex_activation(stdout, h, tag)?;
-            }
         }
         RefreshOutcome::Refreshed(cmd) => {
             writeln!(stdout, "  {tag}{}: refreshed hook: {cmd}", harness_label(h))?;
-            if matches!(h, Harness::Codex) {
-                write_codex_activation(stdout, h, tag)?;
-            }
         }
         RefreshOutcome::PrintedFallback { hook_file, snippet } => {
             writeln!(
@@ -2495,7 +2639,11 @@ fn write_hook_outcome(
 }
 
 /// The three manual steps a freshly-written `.codex/hooks.json` needs before it
-/// fires. Identical text under `Wired` and `Refreshed`; one copy, not two.
+/// fires. One copy, not two, and one per ARM rather than per hook: it names all
+/// three codex hooks (the `SessionStart` hook and both `PreToolUse` groups), so
+/// the operator reasonably trusts the whole set in one `/hooks` pass (SL-263
+/// §5.6; the installer cannot read codex's trust state, so disclosure is what it
+/// can guarantee).
 fn write_codex_activation(
     stdout: &mut impl io::Write,
     h: &Harness,
@@ -2516,7 +2664,11 @@ fn write_codex_activation(
     )?;
     writeln!(
         stdout,
-        "    3. Run /hooks in codex to trust the doctrine hook."
+        "    3. Run /hooks in codex to trust all three doctrine hooks — the"
+    )?;
+    writeln!(
+        stdout,
+        "       SessionStart hook and both PreToolUse groups (Bash, apply_patch)."
     )?;
     Ok(())
 }
@@ -2559,10 +2711,21 @@ pub(crate) fn wire(
                     write_scope_report(&mut stdout, tag, *scope, swept)?;
                 }
                 // One line per spec merged (SL-250): the Claude arm merges a
-                // SET of specs, the Codex arm exactly one, and an empty vec is
+                // SET of specs, the Codex arm its registry, and an empty vec is
                 // silent — which is what the single `None` outcome used to be.
+                let mut codex_hook_written = false;
                 for outcome in report.hooks {
+                    codex_hook_written |= matches!(
+                        outcome,
+                        RefreshOutcome::Wired(_) | RefreshOutcome::Refreshed(_)
+                    );
                     write_hook_outcome(&mut stdout, h, tag, outcome)?;
+                }
+                // One activation notice per codex ARM, not per hook: it names all
+                // three codex hooks, so a per-spec repeat would say the same thing
+                // twice and still describe only one hook (SL-263 §5.6/§5.8).
+                if codex_hook_written && matches!(h, Harness::Codex) {
+                    write_codex_activation(&mut stdout, h, tag)?;
                 }
                 if report.spike_warning {
                     writeln!(
@@ -4489,8 +4652,20 @@ mod tests {
     // by a since-replaced binary is still healed rather than duplicated.
     #[test]
     fn is_doctrine_command_recognises_each_new_spec() {
-        let cases: &[(&str, fn(&str) -> bool)] =
-            &[(MEMORY_SURFACE_ARGS, is_doctrine_memory_surface_command)];
+        // Both Claude forms are owned (SL-263 §5.9): the explicit canonical and
+        // the legacy bare, so an un-upgraded entry heals in place rather than
+        // being abandoned beside a duplicate.
+        let cases: &[(&str, fn(&str) -> bool)] = &[
+            (MEMORY_SURFACE_ARGS, is_doctrine_memory_surface_command),
+            (
+                LEGACY_MEMORY_SURFACE_ARGS,
+                is_doctrine_memory_surface_command,
+            ),
+            (
+                MEMORY_SURFACE_ARGS_CODEX,
+                is_doctrine_memory_surface_codex_command,
+            ),
+        ];
         for (args, is_ours) in cases {
             assert!(is_ours(&format!("/x/doctrine {args}")), "abspath: {args}");
             assert!(
@@ -4601,6 +4776,8 @@ mod tests {
             is_ours: is_test_multi_matcher_command,
             event: TEST_MULTI_MATCHER_EVENT,
             matchers: TEST_MULTI_MATCHER_MATCHERS,
+            additional_context_limit: None,
+            timeout: None,
         }
     }
 
@@ -4937,11 +5114,15 @@ mod tests {
         let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
         assert!(matches!(out.mcp, RefreshOutcome::None));
 
-        // Codex arm: hook is wired into .codex/hooks.json, no Claude settings/MCP.
+        // Codex arm: BOTH registry specs are wired into .codex/hooks.json (no
+        // Claude settings/MCP) — SL-263 §5.8 makes the report two entries.
         let out = install_refresh(&Harness::Codex, root, exec, false).unwrap();
         assert!(matches!(
             out.hooks.as_slice(),
-            [RefreshOutcome::Wired(_) | RefreshOutcome::None]
+            [
+                RefreshOutcome::Wired(_) | RefreshOutcome::None,
+                RefreshOutcome::Wired(_) | RefreshOutcome::None
+            ]
         ));
         assert!(matches!(out.baseref.outcome, BaseRefOutcome::NotApplicable));
         assert!(matches!(out.mcp, RefreshOutcome::None));
@@ -7289,5 +7470,354 @@ weight = 0
         assert!(matches!(out.written, RefreshOutcome::Wired(_)));
         let raw = std::fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap();
         assert!(raw.contains(&format!("{PORTABLE_EXEC} {BOOT_ARGS}")));
+    }
+
+    // =======================================================================
+    // SL-263 PHASE-03 — codex PreToolUse wiring + canonical hook forms
+    // =======================================================================
+
+    fn codex_surface_spec() -> HookSpec {
+        HookSpec::memory_surface_codex(Path::new("/abs/doctrine"))
+    }
+
+    fn read_pretooluse(root: &Path) -> Vec<Value> {
+        let raw = std::fs::read_to_string(root.join(CODE_HOOKS_REL)).unwrap();
+        let val: Value = serde_json::from_str(&raw).unwrap();
+        val["hooks"][EVENT_PRE_TOOL_USE].as_array().unwrap().clone()
+    }
+
+    /// One `PreToolUse` entry, handler fields optional — the seed shape the
+    /// canonicality tests vary a field at a time.
+    fn surface_entry(
+        command: &str,
+        matcher: &str,
+        limit: Option<u32>,
+        timeout: Option<u32>,
+    ) -> Value {
+        let mut handler = serde_json::json!({ "type": "command", "command": command });
+        if let Some(n) = limit {
+            handler[ADDITIONAL_CONTEXT_LIMIT_KEY] = Value::from(n);
+        }
+        if let Some(n) = timeout {
+            handler[TIMEOUT_KEY] = Value::from(n);
+        }
+        serde_json::json!({ "matcher": matcher, "hooks": [handler] })
+    }
+
+    /// A canonical-set seed: both codex matchers, same command, same optional
+    /// handler fields.
+    fn codex_surface_seed(command: &str, limit: Option<u32>, timeout: Option<u32>) -> String {
+        serde_json::to_string_pretty(&serde_json::json!({
+            "hooks": { EVENT_PRE_TOOL_USE: [
+                surface_entry(command, MATCHER_CODEX_BASH, limit, timeout),
+                surface_entry(command, MATCHER_CODEX_APPLY_PATCH, limit, timeout),
+            ]}
+        }))
+        .unwrap()
+    }
+
+    fn install_codex_surface_on(root: &Path, seed: Option<&str>) -> (RefreshOutcome, Vec<Value>) {
+        if let Some(seed) = seed {
+            std::fs::create_dir_all(root.join(".codex")).unwrap();
+            std::fs::write(root.join(CODE_HOOKS_REL), seed).unwrap();
+        }
+        let outcome = install_codex_hook(root, &codex_surface_spec(), false).unwrap();
+        (outcome, read_pretooluse(root))
+    }
+
+    /// VT-1: the codex registry wires both groups, is idempotent, and preserves a
+    /// foreign entry — plus the malformed-fallback and stale-exec-refresh arcs.
+    #[test]
+    fn codex_hook_specs_round_trip_both_groups() {
+        let exec = Path::new("/abs/doctrine");
+
+        // Wired: two specs, THREE entries across two events.
+        let tmp = tempfile::tempdir().unwrap();
+        for spec in codex_hook_specs(exec) {
+            assert!(matches!(
+                install_codex_hook(tmp.path(), &spec, false).unwrap(),
+                RefreshOutcome::Wired(_)
+            ));
+        }
+        let raw = std::fs::read_to_string(tmp.path().join(CODE_HOOKS_REL)).unwrap();
+        let val: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(
+            val["hooks"][EVENT_SESSION_START].as_array().unwrap().len(),
+            1
+        );
+        assert_eq!(
+            val["hooks"][EVENT_PRE_TOOL_USE].as_array().unwrap().len(),
+            2
+        );
+
+        // Idempotent: a second pass is a no-op for both specs.
+        for spec in codex_hook_specs(exec) {
+            assert!(matches!(
+                install_codex_hook(tmp.path(), &spec, false).unwrap(),
+                RefreshOutcome::None
+            ));
+        }
+
+        // Foreign-preserving: an unrelated PreToolUse entry survives the merge.
+        let foreign = serde_json::to_string_pretty(&serde_json::json!({
+            "hooks": { EVENT_PRE_TOOL_USE: [
+                surface_entry("/usr/bin/notify", "Read", None, None)
+            ] }
+        }))
+        .unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let (outcome, entries) = install_codex_surface_on(tmp.path(), Some(&foreign));
+        assert!(matches!(outcome, RefreshOutcome::Wired(_)));
+        assert_eq!(entries.len(), 3, "foreign + two owned: {entries:?}");
+        assert!(entries.iter().any(|e| e["matcher"] == "Read"));
+
+        // Malformed fallback: never clobbered, snippet printed.
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join(".codex")).unwrap();
+        std::fs::write(tmp.path().join(CODE_HOOKS_REL), "not json").unwrap();
+        assert!(matches!(
+            install_codex_hook(tmp.path(), &codex_surface_spec(), false).unwrap(),
+            RefreshOutcome::PrintedFallback { .. }
+        ));
+
+        // Stale exec path: recognised as ours (command-only ownership) and healed.
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join(".codex")).unwrap();
+        install_codex_hook(
+            tmp.path(),
+            &HookSpec::memory_surface_codex(Path::new("/old/doctrine")),
+            false,
+        )
+        .unwrap();
+        assert!(matches!(
+            install_codex_hook(
+                tmp.path(),
+                &HookSpec::memory_surface_codex(Path::new("/new/doctrine")),
+                false
+            )
+            .unwrap(),
+            RefreshOutcome::Refreshed(_)
+        ));
+    }
+
+    /// VT-1: the golden pins the handler shape — BOTH codex handler fields sit
+    /// INSIDE `hooks: […]` beside `command`, never on the matcher group. A keyed
+    /// assertion cannot see the wrong nesting level; a whole-file literal can.
+    #[test]
+    fn codex_surface_golden_pins_handler_fields() {
+        let tmp = tempfile::tempdir().unwrap();
+        install_codex_hook(tmp.path(), &codex_surface_spec(), false).unwrap();
+        let raw = std::fs::read_to_string(tmp.path().join(CODE_HOOKS_REL)).unwrap();
+        assert_eq!(
+            raw,
+            r#"{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "additionalContextLimit": 1200,
+            "command": "/abs/doctrine memory surface --input codex",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "additionalContextLimit": 1200,
+            "command": "/abs/doctrine memory surface --input codex",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "apply_patch"
+      }
+    ]
+  }
+}"#
+        );
+    }
+
+    /// VT-2: an owned codex entry missing the limit (or a stale limit/timeout) is
+    /// NOT canonical and is healed; the fully-canonical set is a no-op. The
+    /// comparator must track the value `desired_entries` writes, not just `command`.
+    #[test]
+    fn codex_surface_limit_and_timeout_are_healed() {
+        let command = "/abs/doctrine memory surface --input codex";
+
+        let tmp = tempfile::tempdir().unwrap();
+        let (outcome, _) = install_codex_surface_on(
+            tmp.path(),
+            Some(&codex_surface_seed(
+                command,
+                Some(SURFACE_CONTEXT_LIMIT_CODEX),
+                Some(SURFACE_TIMEOUT_SEC_CODEX),
+            )),
+        );
+        assert!(
+            matches!(outcome, RefreshOutcome::None),
+            "a fully-canonical set is a no-op"
+        );
+
+        // Missing limit → healed.
+        let tmp = tempfile::tempdir().unwrap();
+        let (outcome, entries) = install_codex_surface_on(
+            tmp.path(),
+            Some(&codex_surface_seed(
+                command,
+                None,
+                Some(SURFACE_TIMEOUT_SEC_CODEX),
+            )),
+        );
+        assert!(
+            matches!(outcome, RefreshOutcome::Refreshed(_)),
+            "a missing limit must not read canonical"
+        );
+        assert!(
+            entries
+                .iter()
+                .all(|e| e["hooks"][0][ADDITIONAL_CONTEXT_LIMIT_KEY]
+                    == Value::from(SURFACE_CONTEXT_LIMIT_CODEX))
+        );
+
+        // Stale limit → healed to the constant.
+        let tmp = tempfile::tempdir().unwrap();
+        let (outcome, entries) = install_codex_surface_on(
+            tmp.path(),
+            Some(&codex_surface_seed(
+                command,
+                Some(999),
+                Some(SURFACE_TIMEOUT_SEC_CODEX),
+            )),
+        );
+        assert!(
+            matches!(outcome, RefreshOutcome::Refreshed(_)),
+            "a stale limit must not read canonical"
+        );
+        assert!(
+            entries
+                .iter()
+                .all(|e| e["hooks"][0][ADDITIONAL_CONTEXT_LIMIT_KEY]
+                    == Value::from(SURFACE_CONTEXT_LIMIT_CODEX))
+        );
+
+        // Stale timeout → healed to the constant.
+        let tmp = tempfile::tempdir().unwrap();
+        let (outcome, entries) = install_codex_surface_on(
+            tmp.path(),
+            Some(&codex_surface_seed(
+                command,
+                Some(SURFACE_CONTEXT_LIMIT_CODEX),
+                Some(2),
+            )),
+        );
+        assert!(matches!(outcome, RefreshOutcome::Refreshed(_)));
+        assert!(
+            entries
+                .iter()
+                .all(|e| e["hooks"][0][TIMEOUT_KEY] == Value::from(SURFACE_TIMEOUT_SEC_CODEX))
+        );
+    }
+
+    /// VT-3: a pre-upgrade bare `memory surface` Claude entry is refreshed IN
+    /// PLACE to the explicit form — never abandoned beside a duplicate. The
+    /// half of §5.9 that keeps one hook firing, not two.
+    #[test]
+    fn legacy_bare_claude_surface_refreshes_in_place() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join(".doctrine")).unwrap();
+        std::fs::create_dir_all(root.join(".claude")).unwrap();
+        let exec = Path::new("/abs/doctrine");
+        // Seed ONLY the legacy bare form, on a matcher the Claude spec owns.
+        let seed = serde_json::to_string_pretty(&serde_json::json!({
+            "hooks": { EVENT_PRE_TOOL_USE: [
+                surface_entry("/abs/doctrine memory surface", "Read|Edit|Write", None, None)
+            ] }
+        }))
+        .unwrap();
+        std::fs::write(root.join(SETTINGS_PROJECT_REL), seed).unwrap();
+
+        let out = install_claude_hook(root, &HookSpec::memory_surface(exec), false).unwrap();
+        assert!(
+            matches!(out.written, RefreshOutcome::Refreshed(_)),
+            "the bare form is OURS, so it refreshes rather than wiring a duplicate"
+        );
+        let raw = std::fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap();
+        let val: Value = serde_json::from_str(&raw).unwrap();
+        let entries = val["hooks"][EVENT_PRE_TOOL_USE].as_array().unwrap();
+        assert_eq!(entries.len(), 2, "exactly the canonical set: {entries:?}");
+        let commands: Vec<&str> = entries
+            .iter()
+            .map(|e| e["hooks"][0]["command"].as_str().unwrap())
+            .collect();
+        assert!(
+            commands.iter().all(|c| c.ends_with(MEMORY_SURFACE_ARGS)),
+            "every entry is explicit: {commands:?}"
+        );
+    }
+
+    /// VT-3 (disjointness half): the two wired predicates never claim each
+    /// other's command, so co-locating them cannot silently drop an entry.
+    #[test]
+    fn surface_wires_own_disjoint_commands() {
+        assert!(is_doctrine_memory_surface_command(
+            "/abs/doctrine memory surface --input claude"
+        ));
+        assert!(is_doctrine_memory_surface_command(
+            "/abs/doctrine memory surface"
+        ));
+        assert!(!is_doctrine_memory_surface_command(
+            "/abs/doctrine memory surface --input codex"
+        ));
+        assert!(is_doctrine_memory_surface_codex_command(
+            "/abs/doctrine memory surface --input codex"
+        ));
+        assert!(!is_doctrine_memory_surface_codex_command(
+            "/abs/doctrine memory surface --input claude"
+        ));
+        assert!(!is_doctrine_memory_surface_codex_command(
+            "/abs/doctrine memory surface"
+        ));
+    }
+
+    /// VT-4: the published plugin carries the explicit Claude command in BOTH
+    /// `PreToolUse` groups, so the shipped plugin and the merge-core writer agree.
+    #[test]
+    fn published_plugin_carries_explicit_claude_surface_command() {
+        let path = crate::test_support::repo_root().join("plugins/doctrine/hooks/hooks.json");
+        let raw = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let val: Value = serde_json::from_str(&raw).unwrap();
+        let groups = val["hooks"][EVENT_PRE_TOOL_USE].as_array().unwrap();
+        assert_eq!(groups.len(), 2);
+        for group in groups {
+            let cmd = group["hooks"][0]["command"].as_str().unwrap();
+            assert!(
+                cmd.ends_with(MEMORY_SURFACE_ARGS),
+                "published group must carry the explicit form: {cmd}"
+            );
+        }
+    }
+
+    /// VA-1: the codex activation notice names all THREE codex hooks — the
+    /// `SessionStart` hook and both `PreToolUse` groups — so one `/hooks` pass
+    /// trusts the whole set. The installer cannot read codex's trust state;
+    /// disclosure is what it can guarantee.
+    #[test]
+    fn codex_activation_notice_names_all_three_hooks() {
+        let mut buf = Vec::new();
+        write_codex_activation(&mut buf, &Harness::Codex, "").unwrap();
+        let text = String::from_utf8(buf).unwrap();
+        assert!(text.contains("SessionStart"), "{text}");
+        assert!(text.contains("Bash"), "{text}");
+        assert!(text.contains("apply_patch"), "{text}");
+        assert!(
+            !text.contains("trust the doctrine hook."),
+            "the singular form is gone: {text}"
+        );
     }
 }
