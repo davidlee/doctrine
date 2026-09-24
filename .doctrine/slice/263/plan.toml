@@ -1,0 +1,138 @@
+# Implementation plan for SL-263 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-263"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber.
+[[phase]]
+id        = "PHASE-01"
+name      = "Captured codex wire fixtures"
+objective = "Retire design A-1: capture one real codex PreToolUse payload for each of shell, apply_patch-as-tool and apply_patch-via-shell with a throwaway teeing hook, check them in as the codec VTs' fixtures, and answer the three unknowns (string vs argv `command`; model command vs wrapper; whether apply_patch through the shell reports `Bash`). Orchestrator/human work — a confined worker has no authenticated codex session."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (rev 41); a live codex 0.155.1 session with hooks enabled and the project trusted is available to the orchestrator/human." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Three fixtures checked in under tests/fixtures/codex/ — shell.json, apply_patch_tool.json, apply_patch_via_shell.json — each the raw PreToolUse stdin body." },
+  { id = "EX-2", text = "tests/fixtures/codex/README.md records, per fixture, the reported tool_name, whether tool_input.command is a string or an argv array, and whether a string command is the model's own command or a wrapper." },
+  { id = "EX-3", text = "The three design A-1 unknowns are answered from the fixtures, not assumed." },
+]
+verification = [
+  { id = "VH-1", text = "The orchestrator/human runs the capture in a real codex session and attests the three fixtures are genuine payloads, not hand-authored." },
+  { id = "VA-1", text = "tests/fixtures/codex/ holds the three fixtures plus the README, and the README answers each unknown with the fixture it came from." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Neutral surface command and engine arity"
+objective = "The port's core: widen ScopeProbe's path arm to a path set (arity only), and rebuild `memory surface` on a neutral SurfaceRequest — three codecs, SurfaceAnchor resolution, the codex apply_patch reader, a tolerant command decode — with `--input claude|codex|neutral`, `--format claude|plain`, and the wire field on the tuning log. The admit/dedup/cap/format pipeline is composed once."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — the captured codex fixtures exist to drive the codec VTs." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/retrieve.rs: ScopeProbe's path arm carries a Vec<PathBuf> mapped to QueryContext.paths; no query, admission rule, ranking or tuning knob changes." },
+  { id = "EX-2", text = "src/memory.rs: SurfaceRequest { Path, Command, Patch } and SurfaceAnchor { raw, canonical }; claude_request / codex_request / neutral_request; probe_for(request, anchor, root) — a relative value joins the canonical anchor, an absolute value under the raw reported cwd is rebased onto it, all lexical (never canonicalised) and fail-open out-of-root; paths_from_patch over codex's apply_patch grammar including `*** Move to:`." },
+  { id = "EX-3", text = "MemoryCommand::Surface gains --input (default claude) and --format (default claude), plumbed run_surface → run_surface_to → emit_surface; a bare `memory surface` decodes as claude; --input codex selects codex_request; --input neutral selects neutral_request." },
+  { id = "EX-4", text = "The shared SurfaceInput ignores unknown fields (no deny_unknown_fields) and reads tool_input as an open map; `command` decodes from a string or an argv vector (joined with single spaces), and a value that is neither yields no request rather than failing the payload." },
+  { id = "EX-5", text = "The agent_id main-thread gate stays keyed on the Claude wire only, so it is inert on codex and neutral." },
+  { id = "EX-6", text = "The tuning-log line gains \"wire\": \"claude\"|\"codex\"|\"neutral\"; a path-set probe's key is its resolved paths joined with \" | \", truncated by KEY_LOG_MAX." },
+  { id = "EX-7", text = "Every wire name, class name, tool name, matcher and timeout is a named constant (STD-001); src/commands/guard.rs's MemoryCommand match stays exhaustive with no change." },
+  { id = "EX-8", text = "Behaviour-preservation: the existing memory and retrieve suites are green unchanged, except the ScopeProbe tests, extended for the widened variant with their single-path assertions kept." },
+]
+verification = [
+  { id = "VT-1", expects = "unit: each codec maps its vocabulary, unregistered tools / missing keys / empty values yield no request, the tolerant command reader covers a string and an argv vector, and paths_from_patch covers update/add/delete/move-to/multiple/duplicate/malformed", test_file = "src/memory.rs", keywords = ["claude_request", "codex_request", "neutral_request", "paths_from_patch"], waived = false },
+  { id = "VT-2", expects = "unit: probe_for resolves absolute, cwd-relative, `..`-normalised, out-of-root, an absolute value under a symlinked raw cwd, and an absent cwd; a multi-file patch fans out into one probe", test_file = "src/memory.rs", keywords = ["SurfaceAnchor", "SurfaceRequest"], waived = false },
+  { id = "VT-3", expects = "engine: the multi-path probe admits a memory anchored on any one of its paths and its ranking is unchanged against the single-path case", test_file = "src/retrieve.rs", keywords = ["ScopeProbe::Paths"], waived = false },
+  { id = "VT-4", expects = "integration via run_surface_to: each input wire and both output forms; a bare invocation decodes as claude; a subdirectory cwd resolves a relative path to the same probe as the absolute form; empty stays empty and every path exits 0; the tuning-log line carries the wire", test_file = "src/memory.rs", keywords = ["WIRE_CODEX", "WIRE_NEUTRAL"], waived = false },
+  { id = "VA-1", text = "Behaviour-preservation gate: the memory and retrieve suites are green with only the ScopeProbe single-path tests' variant name edited; no assertion changes elsewhere." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "codex PreToolUse wiring and canonical hook forms"
+objective = "Add a codex_hook_specs registry (Bash + apply_patch matcher groups) with handler-level additionalContextLimit and timeout, extend canonicality to the handler fields doctrine owns, move the Claude command to `memory surface --input claude` behind a two-form ownership predicate, and update the published hooks.json."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — `memory surface --input codex` exists to wire." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "codex_hook_specs(exec) mirrors claude_hook_specs; the codex arm loops it instead of the inline install_codex_hook call, so RefreshReport.hooks carries both codex entries." },
+  { id = "EX-2", text = "HookSpec gains optional additional_context_limit and timeout; HookSpec::memory_surface_codex sets SURFACE_CONTEXT_LIMIT_CODEX and SURFACE_TIMEOUT_SEC_CODEX; the Claude specs leave both None and their rendered entries unchanged." },
+  { id = "EX-3", text = "The limit and timeout render on the handler object inside hooks: […], beside command, not on the matcher group; a golden pins the exact handler shape with both keys where codex reads them." },
+  { id = "EX-4", text = "entry_is_canonical compares the handler fields doctrine owns, so an owned entry missing the limit or carrying a stale one is not canonical and is healed." },
+  { id = "EX-5", text = "The Claude canonical args become `memory surface --input claude`; the Claude ownership predicate owns canonical-claude and legacy-bare, the codex predicate canonical-codex only; every Wired/Refreshed outcome discloses the manual /hooks step naming all three codex hooks." },
+  { id = "EX-6", text = "plugins/doctrine/hooks/hooks.json carries `memory surface --input claude` in both PreToolUse matcher groups." },
+]
+verification = [
+  { id = "VT-1", expects = "merge core: codex_hook_specs round-trips both groups (wired / idempotent / foreign-preserving / malformed-fallback / stale-exec-refresh) and a golden pins the handler shape with both keys present inside the handler", test_file = "src/boot.rs", keywords = ["codex_hook_specs", "SURFACE_CONTEXT_LIMIT_CODEX", "additional_context_limit"], waived = false },
+  { id = "VT-2", expects = "an owned codex entry missing the limit, or carrying a stale one, is not canonical and is refreshed", test_file = "src/boot.rs", keywords = ["entry_is_canonical", "additionalContextLimit"], waived = false },
+  { id = "VT-3", expects = "a legacy bare `memory surface` Claude entry is refreshed to the explicit form rather than duplicated, and the codex predicate does not claim it", test_file = "src/boot.rs", keywords = ["memory surface --input claude", "MEMORY_SURFACE_ARGS"], waived = false },
+  { id = "VT-4", expects = "the published plugin carries the explicit Claude command in both groups", test_file = "plugins/doctrine/hooks/hooks.json", keywords = ["memory surface --input claude"], waived = false },
+  { id = "VA-1", text = "The manual-steps notice names all three codex hooks (the SessionStart hook and both PreToolUse groups) on every Wired/Refreshed outcome; a foreign skip or dry run is visible in the report." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Generated pi surface extension"
+objective = "Generate templates/surface.ts — the neutral-wire adapter that writes the envelope to doctrine's stdin on an async, bounded, fail-open child — plan and install it through a triad mirroring install_mcp_extension, import it from index.ts, and report it as a third RefreshReport leg."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete — PHASE-04 edits the same RefreshReport struct and Codex-arm installer block, so the two are sequential, not parallel." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "templates/surface.ts exists, ownership-marked (PI_EXT_HEADER), embedded with include_str! and a SURFACE_BIN_PATH_MARKER substitution exactly as mcp.ts bakes its binary path." },
+  { id = "EX-2", text = "generate_surface_extension / plan_surface_extension (four-way ExtAction, foreign-skip, regenerate-on-change) / install_surface_extension exist; generate_pi_extension imports ./surface.ts beside ./mcp.ts." },
+  { id = "EX-3", text = "The handler maps pi's read|write|edit (path) and bash (command) to the neutral envelope; spawns asynchronously; attaches a no-op stdin 'error' listener and writes the envelope with child.stdin.end(json); bounds the child with SURFACE_TIMEOUT_MS and ctx.signal; appends a non-empty block to event.content; folds any failure or timeout to undefined." },
+  { id = "EX-4", text = "session_id comes from ctx.sessionManager.getSessionId() and cwd from ctx.cwd; the adapter consults no PI_SUBAGENT_CHILD marker." },
+  { id = "EX-5", text = "RefreshReport gains surface_extension: ExtOutcome; the Claude arm carries NotApplicable, the Codex arm calls the third installer, and a foreign skip or dry run is visible (STD-003)." },
+  { id = "EX-6", text = "No flake.nix change is needed: templates/ is already an embed root in srcWithDist and surface.ts lands inside it." },
+]
+verification = [
+  { id = "VT-1", expects = "installer: the generated surface.ts is ownership-marked, regenerates on change, is foreign-skipped, and a missing directory generates", test_file = "src/boot.rs", keywords = ["generate_surface_extension", "install_surface_extension", "surface_extension"], waived = false },
+  { id = "VT-2", expects = "behavioural node run: the emitted handler, with a stubbed pi host, delivers a fixture envelope to `doctrine memory surface --input neutral --format plain` and appends the returned block", test_file = "src/boot.rs", keywords = ["surface_extension_delivers_to_doctrine"], waived = false },
+  { id = "VT-3", expects = "behavioural: pointed at a stub binary that exits without reading stdin, the handler leaves the host alive and returns undefined (the EPIPE path)", test_file = "src/boot.rs", keywords = ["surface_extension_survives_early_exit"], waived = false },
+  { id = "VA-1", text = "node is available on the gate host (this repo's dev env carries it); the behavioural tests run rather than skip, and the bin test suite is green." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Governance leg: POL-003 and the revisions"
+objective = "Author POL-003 from IDE-034 (harness-specific behaviour ships as an opt-in supplement whose correctness rests only on doctrine-owned contracts), draft the PRD-004 §2/§8 revision reconciling the proactive-surfacing out-scope with the shipped tool-call-keyed mechanism, draft a SPEC-011 revision extending its responsibilities to the codex hook registry and the generated pi extensions, and re-ground SL-263's governed_by. Approval and application are the user's act at reconcile."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete; the design is locked, so the governance text is drafted against a fixed design (DEC-284)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine policy new` allocates POL-003 carrying IDE-034's rule: harness-specific behaviour ships as an opt-in supplement whose correctness rests only on doctrine-owned contracts, never baked into the neutral core nor load-bearing on a host harness's incidental seams." },
+  { id = "EX-2", text = "A SPEC-011 revision (a REV of SPEC-011, not a new spec) is drafted, extending its responsibilities and members to the codex hook registry and the generated pi extensions." },
+  { id = "EX-3", text = "A PRD-004 revision is drafted reconciling §2 and §8 with the shipped mechanism on the reading that a tool-call-keyed surface delivers concise pointers at the moment of demand, not memory payload ahead of demand; the reading is stated." },
+  { id = "EX-4", text = "`doctrine link SL-263 governed_by POL-003` is recorded once POL-003 exists." },
+  { id = "EX-5", text = "The revisions are `proposed` and unapproved, and `doctrine check` is clean; approval and application await reconcile." },
+]
+verification = [
+  { id = "VA-1", text = "`doctrine policy show POL-003` carries the opt-in-supplement rule; `doctrine revision show` lists the PRD-004 and SPEC-011 revisions with their change rows; `doctrine slice show SL-263` carries `governed_by POL-003`." },
+  { id = "VH-1", text = "The user approves the revisions and they are applied at reconcile — the user's act, not recorded in this phase." },
+]
+specs        = []
+requirements = []
