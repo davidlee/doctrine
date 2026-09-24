@@ -3097,3 +3097,80 @@ fn adopt_discloses_a_whitespace_head() {
         "materialise reproduces the document without the head it never held"
     );
 }
+
+// ── SL-261 PHASE-04 — `design adopt --diff` (VT-1) ─────────────────────────
+//
+// The diff's contract is design `sec-2` *Report*: a `--- sec-N (run)` /
+// `+++ sec-N (design.md)` unified diff per CHANGED section, three lines of
+// context, appended after every other report line, on both the `--dry-run` and
+// the write path. The two sides are the held body and the document's body, read
+// off the snapshots the adoption already has — never a second read.
+
+/// Everything from the first `--- ` line on — the diff blocks alone, with the
+/// header and change rows dropped. Comparing two reports through this is how
+/// `--dry-run` and the write path are shown to render the SAME hunks.
+fn diff_tail(report: &str) -> String {
+    report
+        .lines()
+        .skip_while(|line| !line.starts_with("--- "))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// `VT-1` — `--dry-run --diff` shows a hunk for each changed section and none
+/// for an unchanged one, and writes nothing; `--diff` without `--dry-run`
+/// adopts and prints the same hunks.
+#[test]
+fn adopt_diff_shows_changed_sections_only() {
+    let fixture = Fixture::start();
+    let sections = [
+        ("sec-1", "## One\n\nfirst prose\n"),
+        ("sec-2", "## Two\n\nsecond prose\n"),
+    ];
+    let declarations: Vec<Value> = sections
+        .iter()
+        .map(|(id, body)| json!({ "subject": id, "body": body }))
+        .collect();
+    fixture.apply(&fixture.payload("seed", &json!({ "declare": declarations })));
+    run(&fixture.root, &["design", "materialise", SLICE, "-p", "."]);
+
+    // A hand-edit of `sec-2` ALONE: `sec-1`'s block is byte-identical, so it is
+    // the control that proves the diff is per-changed-section rather than a
+    // whole-document dump.
+    std::fs::write(
+        fixture.doc(),
+        framed(&[
+            ("sec-1", "## One\n\nfirst prose\n"),
+            ("sec-2", "## Two\n\nsecond prose, revised\n"),
+        ]),
+    )
+    .unwrap();
+
+    let before = fixture.bytes();
+    let dry = fixture.adopt(&["--dry-run", "--diff"]);
+    assert!(
+        dry.contains("--- sec-2 (run)") && dry.contains("+++ sec-2 (design.md)"),
+        "the changed section carries the design's diff header: {dry}"
+    );
+    assert!(dry.contains("@@ "), "and a hunk: {dry}");
+    assert!(
+        dry.contains("-second prose") && dry.contains("+second prose, revised"),
+        "with the edited line on both sides: {dry}"
+    );
+    assert!(
+        !dry.contains("--- sec-1"),
+        "an unchanged section prints nothing: {dry}"
+    );
+    assert_eq!(fixture.bytes(), before, "a dry run writes nothing");
+
+    let written = fixture.adopt(&["--diff"]);
+    assert!(
+        written.starts_with("adopted design.md "),
+        "the write path still leads with the adoption header: {written}"
+    );
+    assert_eq!(
+        diff_tail(&written),
+        diff_tail(&dry),
+        "the write path prints the same hunks the reviewed dry run did"
+    );
+}

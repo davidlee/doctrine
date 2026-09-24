@@ -306,15 +306,46 @@ impl SectionGroup {
         let mut unchanged: Vec<DesignId> = self
             .sections
             .iter()
-            .filter(|section| {
-                prior
-                    .find(&section.id)
-                    .is_some_and(|held| held.fingerprint == section.fingerprint)
-            })
+            .filter(|section| Self::matches_prior(prior, section))
             .map(|section| section.id.clone())
             .collect();
         unchanged.sort();
         unchanged
+    }
+
+    /// Whether `now`'s fingerprint is the one `prior` holds for the same id.
+    ///
+    /// The ONE fingerprint comparison behind both halves of an adoption report
+    /// (`SL-261` PHASE-04 `A4`), so "unchanged" and "changed" cannot come to
+    /// disagree about a section. `prior.find` is `Some` for every section an
+    /// adoption walks — a parse refuses a document that adds or drops one. A
+    /// section with no prior is not unchanged, so this is `false`; having no
+    /// held body to diff against, [`SectionGroup::changed_since`] omits it.
+    fn matches_prior(prior: &SectionGroup, now: &Section) -> bool {
+        prior
+            .find(&now.id)
+            .is_some_and(|held| held.fingerprint == now.fingerprint)
+    }
+
+    /// Each section this group holds whose fingerprint DIFFERS from `prior`'s —
+    /// the "changed" half of an adoption report (`SL-261` PHASE-04 `EX-2`),
+    /// paired `(held, now)` so the shell can diff the two bodies.
+    ///
+    /// The complement of [`SectionGroup::unchanged_since`] over the same
+    /// predicate, sorted by id for the same reason: a report that reordered
+    /// itself with storage order would be asserting the wrong thing.
+    pub(crate) fn changed_since<'p, 'n>(
+        &'n self,
+        prior: &'p SectionGroup,
+    ) -> Vec<(&'p Section, &'n Section)> {
+        let mut changed: Vec<(&Section, &Section)> = self
+            .sections
+            .iter()
+            .filter(|now| !Self::matches_prior(prior, now))
+            .filter_map(|now| prior.find(&now.id).map(|held| (held, now)))
+            .collect();
+        changed.sort_by(|(a, _), (b, _)| a.id.cmp(&b.id));
+        changed
     }
 
     /// Each adjacent pair of this group's DOCUMENT order whose relative order is
@@ -1179,5 +1210,69 @@ mod tests {
             vec![id("sec-1"), id("sec-2"), id("sec-3")]
         );
         assert!(prior.reordered_since(&prior).is_empty());
+    }
+
+    /// `SL-261` PHASE-04 `T1` — `changed_since` is `unchanged_since` asked from
+    /// the other side: the re-worded section is returned with BOTH of its
+    /// bodies, a section that only moved is not a change, and every section is
+    /// unchanged since itself.
+    #[test]
+    fn section_set_difference_reports_only_what_changed() {
+        let prior = SectionGroup {
+            sections: vec![
+                Section {
+                    seq: 0,
+                    ..section("sec-1", "sha256:a")
+                },
+                Section {
+                    seq: 1,
+                    ..section("sec-2", "sha256:b")
+                },
+                Section {
+                    seq: 2,
+                    ..section("sec-3", "sha256:c")
+                },
+            ],
+        };
+        // Stored out of id order on purpose: `changed_since` sorts, so the
+        // assertion below is about the derivation and not about the vector.
+        let applied = SectionGroup {
+            sections: vec![
+                Section {
+                    seq: 0,
+                    ..section("sec-3", "sha256:c-edited")
+                },
+                Section {
+                    seq: 1,
+                    ..section("sec-1", "sha256:a-edited")
+                },
+                Section {
+                    seq: 2,
+                    ..section("sec-2", "sha256:b")
+                },
+            ],
+        };
+
+        let changed = applied.changed_since(&prior);
+        assert_eq!(
+            changed
+                .iter()
+                .map(|(held, _)| held.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["sec-1", "sec-3"],
+            "id-ordered, and only the two whose fingerprint moved"
+        );
+        assert_eq!(
+            (
+                changed[0].0.fingerprint.as_str(),
+                changed[0].1.fingerprint.as_str()
+            ),
+            ("sha256:a", "sha256:a-edited"),
+            "(held, now) — the two sides a diff is taken between"
+        );
+        assert!(
+            prior.changed_since(&prior).is_empty(),
+            "every section is unchanged since itself"
+        );
     }
 }

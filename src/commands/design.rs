@@ -154,6 +154,11 @@ const ASSIGNMENT_CONTRACT: &str = "propose back with a `delegation` act of `prop
 /// comment but not from an explicit `about`, so the period would be a visible
 /// one-character change to `doctrine design --help`'s Commands row.
 const APPLY_ABOUT: &str = "Validate and apply one sparse idempotent mutation";
+/// The context a `design adopt --diff` hunk carries either side of a change
+/// (`SL-261` PHASE-04 `EX-2`, design `sec-2` *Report*): the conventional
+/// unified-diff radius of three lines. Named because the number is a rendering
+/// decision, not a detail buried in a call chain (STD-001).
+const DIFF_CONTEXT_LINES: usize = 3;
 
 // ── CLI surface ───────────────────────────────────────────────────────────
 
@@ -344,9 +349,9 @@ pub(crate) struct ApplyArgs {
 
 /// Arguments for `design adopt`.
 ///
-/// `MaterialiseArgs` plus three flags, one of which `PHASE-04` adds: `--expect`
-/// names the fingerprint the caller reviewed, `--dry-run` computes the report
-/// and writes nothing, and `--diff` (later) appends a hunk per changed section.
+/// `MaterialiseArgs` plus three flags: `--expect` names the fingerprint the
+/// caller reviewed, `--dry-run` computes the report and writes nothing, and
+/// `--diff` appends a hunk per changed section.
 #[derive(clap::Args, Debug)]
 pub(crate) struct AdoptArgs {
     /// The slice, e.g. `SL-233`.
@@ -359,6 +364,9 @@ pub(crate) struct AdoptArgs {
     /// Compute and print the report; write nothing.
     #[arg(long)]
     dry_run: bool,
+    /// Append a unified diff per changed section.
+    #[arg(long)]
+    diff: bool,
     /// Explicit project root (default: auto-detect).
     #[arg(short = 'p', long)]
     path: Option<PathBuf>,
@@ -1931,9 +1939,13 @@ fn run_adopt(args: AdoptArgs) -> Result<()> {
             "submission {} was already applied at revision {revision}; the run does not advance",
             request.envelope.submission_id
         )]),
-        PipelineOutcome::Candidate(applied) | PipelineOutcome::Written(applied) => emit(
-            &adoption_lines(&prior, &applied, adopted.as_ref(), head, args.dry_run),
-        ),
+        PipelineOutcome::Candidate(applied) | PipelineOutcome::Written(applied) => {
+            let mut lines = adoption_lines(&prior, &applied, adopted.as_ref(), head, args.dry_run);
+            if args.diff {
+                lines.extend(section_diff_lines(&prior, &applied.snapshot));
+            }
+            emit(&lines)
+        }
     }
 }
 
@@ -2217,6 +2229,7 @@ fn applied_lines(prior: &DesignSnapshot, request: &ApplyRequest, applied: &Appli
 ///
 /// One header line, then the change rows the core already emits, then the two
 /// set-difference lines — unchanged, reordered — then the head disclosure.
+/// (The `--diff` blocks are appended by the caller, after every one of these.)
 /// Every derived piece is computed by the pure layer (the core's rows; the two
 /// `design_run::snapshot` set differences; `document::dropped_head`); this only
 /// formats them, so no second reading of the document is possible here.
@@ -2267,6 +2280,35 @@ fn adoption_lines(
         ));
     }
     lines
+}
+
+/// A unified diff per changed section (`SL-261` PHASE-04 `EX-2`, `sec-2`
+/// *Report*).
+///
+/// Both sides come off snapshots the adoption already read — the held body from
+/// `prior`, the adopted body from the candidate — so this cannot read the
+/// document a second time even by accident. `similar` is confined to this
+/// function: diffing is presentation, and the pure layer never learns the crate
+/// exists.
+fn section_diff_lines(prior: &DesignSnapshot, candidate: &DesignSnapshot) -> Vec<String> {
+    candidate
+        .sections
+        .changed_since(&prior.sections)
+        .into_iter()
+        .flat_map(|(held, now)| {
+            similar::TextDiff::from_lines(held.body.as_str(), now.body.as_str())
+                .unified_diff()
+                .context_radius(DIFF_CONTEXT_LINES)
+                .header(
+                    &format!("{} (run)", held.id),
+                    &format!("{} ({DESIGN_DOC})", now.id),
+                )
+                .to_string()
+                .lines()
+                .map(str::to_owned)
+                .collect::<Vec<String>>()
+        })
+        .collect()
 }
 
 /// The digest of every declared section body — the shell's job, because the pure

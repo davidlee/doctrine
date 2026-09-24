@@ -92,6 +92,7 @@ rustix = { version = "1", default-features = false, features = ["fs", "termios"]
 walkdir.workspace = true
 webbrowser = "1"
 ignore = "0.4.26"
+similar = "3.2.0"
 
 [dev-dependencies]
 tower = { workspace = true }
