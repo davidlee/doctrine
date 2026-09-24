@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d223-cb9b-7ad0-8fd0-c75146c869f3"
+recorded_at = "2026-09-24T06:39:16.37976036Z"
+kind = "friction"
+summary = "SL-261 PHASE-06 (orchestrator): memory verify refuses a dirty tree, and each verify dirties it"
+detail = "Verifying N edited memories takes N verify+commit cycles: verify rewrites memory.toml, so the next verify refuses. Also blocked while a parallel agent (SL-263) had uncommitted files, even though they were unrelated to the memories' scope."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
