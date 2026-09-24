@@ -16,7 +16,6 @@ payload ApplyRequest  unknown-keys: refused   (a misspelt key is refused)
   run_uid            text                      required
   known_revision     integer                   required
   submission_id      text                      required
-  adopt_authored     AdoptAuthored             optional
   traversal          TraversalDeclaration      optional
   stage              StageDeclaration          optional
   acceptance         AcceptanceDeclaration     optional
@@ -26,10 +25,7 @@ payload ApplyRequest  unknown-keys: refused   (a misspelt key is refused)
   review_policy      ReviewPolicyDeclaration   optional
   checkpoint_act     CheckpointActDeclaration  optional
   agent_declaration  AgentActDeclaration       optional
-
-type AdoptAuthored  unknown-keys: refused   (a misspelt key is refused)
-  fingerprint  text              required
-  sections     {id(sec-): text}  optional
+  retired adopt_authored → run `doctrine design adopt <slice>` (review first with --dry-run --diff)
 
 type TraversalDeclaration  unknown-keys: refused   (a misspelt key is refused)
   pin        id(inq-)   sparse   (omit persists · null clears)

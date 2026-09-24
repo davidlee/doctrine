@@ -60,8 +60,9 @@ pub(crate) fn refuse_unknown_keys(payload: &Value) -> Result<(), Refusal> {
     refuse_unknown_keys_against(payload, RETIRED_KEYS)
 }
 
-/// [`refuse_unknown_keys`] against a given retired-key roster — the one seam a
-/// test reaches with a roster of its own while [`RETIRED_KEYS`] is empty.
+/// [`refuse_unknown_keys`] against a given retired-key roster — the seam a test
+/// reaches with a roster of its own. [`RETIRED_KEYS`]'s single row retires from
+/// the root, so the non-root-owner and never-known cases need one the test owns.
 fn refuse_unknown_keys_against(payload: &Value, retired: &[RetiredKey]) -> Result<(), Refusal> {
     walk_type(payload, &PAYLOAD, retired, "")
 }
@@ -445,7 +446,8 @@ mod tests {
     }
 
     /// A roster that retires `titel` from `CreateRecord` — a test-local stand-in
-    /// for [`RETIRED_KEYS`], which retires nothing until `PHASE-05`.
+    /// for [`RETIRED_KEYS`], which cannot prove the owner-identity rule on a
+    /// non-root owner: its own row retires from the root.
     static ROSTER: &[RetiredKey] = &[RetiredKey {
         owner: &CREATE_RECORD,
         key: "titel",

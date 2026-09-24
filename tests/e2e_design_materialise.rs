@@ -4,7 +4,7 @@
 //! deprecated `slice design` shim.
 //!
 //! Every behaviour here is end-to-end against `design materialise` and
-//! `adopt_authored`, because the property under test is
+//! `design adopt`, because the property under test is
 //! `parse(materialise(S)) == S` and only the shell owns both halves.
 //!
 //! The fixture below is this binary's own. Integration tests are separate
@@ -149,15 +149,6 @@ impl Fixture {
         );
     }
 
-    /// Apply a payload, expecting refusal; returns stderr.
-    fn refuse(&self, submission: &str, body: &Value) -> String {
-        let payload = self.payload(submission, body);
-        fail(
-            &self.root,
-            &["design", "apply", SLICE, "-p", ".", "--input", &payload],
-        )
-    }
-
     fn materialise(&self) {
         run(&self.root, &["design", "materialise", SLICE, "-p", "."]);
     }
@@ -166,19 +157,41 @@ impl Fixture {
     fn write_doc(&self, text: &str) {
         std::fs::write(self.doc(), text).unwrap();
     }
-}
 
-/// A re-adoption declaration for `document`, naming the digest of each id's
-/// authored region — the §5.5 admission contract, spelled once for this suite.
-fn readoption(document: &str, sections: &[(&str, &str)]) -> Value {
-    let declared: serde_json::Map<String, Value> = sections
-        .iter()
-        .map(|(id, body)| ((*id).to_owned(), json!(common::sha256(body.as_bytes()))))
-        .collect();
-    json!({ "adopt_authored": {
-        "fingerprint": common::sha256(document.as_bytes()),
-        "sections": Value::Object(declared),
-    }})
+    /// `design adopt`, expecting success; returns stdout.
+    fn adopt(&self, extra: &[&str]) -> String {
+        let mut args = vec!["design", "adopt", SLICE, "-p", "."];
+        args.extend_from_slice(extra);
+        run(&self.root, &args)
+    }
+
+    /// `design adopt`, expecting refusal; returns stderr.
+    fn refuse_adopt(&self, extra: &[&str]) -> String {
+        let mut args = vec!["design", "adopt", SLICE, "-p", "."];
+        args.extend_from_slice(extra);
+        fail(&self.root, &args)
+    }
+
+    /// Force a divergence that moves no section body and read the parser's own
+    /// section decomposition out of `adopt --dry-run` (`SL-261` `PHASE-05`).
+    ///
+    /// After `materialise` the document is aligned, so `adopt` short-circuits to
+    /// the no-op before parsing. One blank line prepended is a **whitespace-only
+    /// head**: the parser accepts it and `materialise` drops it, so the report
+    /// has no `section_fingerprint_changed` row and its `unchanged` line lists
+    /// every section the run holds. Held fingerprints are the digests of the
+    /// declared bodies, so `unchanged` means every body parsed back byte for
+    /// byte.
+    fn parser_readout(&self) -> String {
+        let document = self.document();
+        self.write_doc(&format!("\n{document}"));
+        let report = self.adopt(&["--dry-run"]);
+        assert!(
+            report.contains("head: "),
+            "the probe forced a whitespace head: {report}"
+        );
+        report
+    }
 }
 
 /// The uniform block affix `materialise` emits — the ONE place this suite
@@ -268,9 +281,11 @@ fn hazard_corpus() -> Vec<String> {
 /// EX-7 — for every generated hazardous body, materialise-then-parse recovers
 /// the identical section map.
 ///
-/// The oracle is `adopt_authored`, declared with digests of the ORIGINAL bodies:
-/// it validates only if every marker resolved to its own region and every body
-/// came back byte for byte. Byte equality, never equality modulo whitespace.
+/// The oracle is the `adopt --dry-run` report: its `unchanged` line carries
+/// every declared id, which holds only if every marker resolved to its own
+/// region and every body came back byte for byte (the held fingerprints ARE the
+/// declared bodies' digests). Byte equality, never equality modulo whitespace —
+/// a body that came back with whitespace moved reports a changed fingerprint.
 #[test]
 fn marker_round_trip_survives_lookalike_and_adversarial_bodies() {
     let corpus = hazard_corpus();
@@ -295,16 +310,17 @@ fn marker_round_trip_survives_lookalike_and_adversarial_bodies() {
     fixture.materialise();
 
     let document = fixture.document();
-    let sections: serde_json::Map<String, Value> = declared
-        .iter()
-        .map(|(id, body)| (id.clone(), json!(common::sha256(body.as_bytes()))))
-        .collect();
-    fixture.apply(
-        "round-trip",
-        &json!({ "adopt_authored": {
-            "fingerprint": common::sha256(document.as_bytes()),
-            "sections": Value::Object(sections),
-        }}),
+    let report = fixture.parser_readout();
+    assert!(
+        !report.contains("section_fingerprint_changed"),
+        "no body moved: {report}"
+    );
+    let expected: std::collections::BTreeSet<&str> =
+        declared.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(
+        common::unchanged_ids(&report),
+        expected,
+        "every declared body parsed back exactly: {report}"
     );
 
     // The document holds exactly the declared markers and no lookalike was
@@ -350,10 +366,11 @@ fn materialise_emits_document_order_not_id_order() {
 /// inquiry map, the cursor and the submission receipts all survive the crossing
 /// (design.md:290), and the adopted PROSE reaches the snapshot.
 ///
-/// The prose assertion is the one that reds at head: `adopt_authored` updates
-/// `fingerprint` alone, so the run keeps describing bytes the document no longer
-/// holds — the same defect `readopted_hand_edit_survives_a_subsequent_materialise`
-/// sees from the authored side.
+/// The prose assertion is the one that reds at head: the crossing must seat the
+/// document's parsed bodies, not merely record a digest for bytes the snapshot
+/// does not hold — the same defect
+/// `readopted_hand_edit_survives_a_subsequent_materialise` sees from the authored
+/// side.
 ///
 /// Fragment (prompt) receipts have no `apply` wire form in v1, so the receipt
 /// ledger asserted here is the submission one plus the fragment group's own
@@ -379,7 +396,7 @@ fn hand_edit_then_readopt_preserves_run_map_cursor_receipts() {
     let document = framed(&[("sec-1", edited_body)]);
     fixture.write_doc(&document);
 
-    fixture.apply("readopt", &readoption(&document, &[("sec-1", edited_body)]));
+    fixture.adopt(&["--expect", &common::sha256(document.as_bytes())]);
 
     let after = fixture.read();
     assert_eq!(after.run.uid, before.run.uid, "the run uid is the same run");
@@ -431,7 +448,7 @@ fn readopt_refuses_missing_duplicate_unknown_markers() {
     let merged = "## One\n\none's prose\n## Two\n\ntwo's prose\n";
     let document = framed(&[("sec-1", merged)]);
     fixture.write_doc(&document);
-    let error = fixture.refuse("missing", &readoption(&document, &[("sec-1", merged)]));
+    let error = fixture.refuse_adopt(&["--expect", &common::sha256(document.as_bytes())]);
     assert!(
         error.contains("sec-2 has no marker in the document"),
         "the missing marker is named by its own refusal: {error}"
@@ -445,24 +462,15 @@ fn readopt_refuses_missing_duplicate_unknown_markers() {
         ("sec-1", "## One again\n\npasted\n"),
     ]);
     fixture.write_doc(&document);
-    let error = fixture.refuse(
-        "duplicate",
-        &readoption(
-            &document,
-            &[
-                ("sec-1", "## One again\n\npasted\n"),
-                ("sec-2", "## Two\n\ntwo's prose\n"),
-            ],
-        ),
-    );
+    let error = fixture.refuse_adopt(&["--expect", &common::sha256(document.as_bytes())]);
     assert!(
         error.contains("sec-1 is marked twice"),
         "the duplicated id is named by its own refusal: {error}"
     );
 
-    // (c) UNKNOWN — a legal marker naming a section the run does not hold. At
-    // head this is silently ignored: the completeness check compares the
-    // CALLER's declared map against the run, never the DOCUMENT's marker set.
+    // (c) UNKNOWN — a legal marker naming a section the run does not hold. The
+    // document's marker set is compared against the run, so an invented marker
+    // is refused rather than silently ignored.
     let fixture = two_section_run(&held);
     let document = framed(&[
         ("sec-1", "## One\n\none's prose\n"),
@@ -470,7 +478,7 @@ fn readopt_refuses_missing_duplicate_unknown_markers() {
         ("sec-9", "## Nine\n\ninvented in prose\n"),
     ]);
     fixture.write_doc(&document);
-    let error = fixture.refuse("unknown", &readoption(&document, &held));
+    let error = fixture.refuse_adopt(&["--expect", &common::sha256(document.as_bytes())]);
     assert!(
         error.contains("sec-9, which this run does not hold"),
         "the unknown marker is named by its own refusal: {error}"
@@ -495,7 +503,7 @@ fn readopt_refuses_marker_free_addition_and_structural_deletion() {
     let fixture = two_section_run(&held);
     let document = format!("A preamble nobody declared.\n\n{}", framed(&held));
     fixture.write_doc(&document);
-    let error = fixture.refuse("addition", &readoption(&document, &held));
+    let error = fixture.refuse_adopt(&["--expect", &common::sha256(document.as_bytes())]);
     assert!(
         error.contains("before its first section marker"),
         "the addition is refused as an addition: {error}"
@@ -506,7 +514,7 @@ fn readopt_refuses_marker_free_addition_and_structural_deletion() {
     let fixture = two_section_run(&held);
     let document = format!("  \n\n{}", framed(&held));
     fixture.write_doc(&document);
-    fixture.apply("formatted", &readoption(&document, &held));
+    fixture.adopt(&["--expect", &common::sha256(document.as_bytes())]);
 
     // (b) STRUCTURAL DELETION — a marker kept, its prose emptied.
     let fixture = two_section_run(&held);
@@ -516,13 +524,7 @@ fn readopt_refuses_marker_free_addition_and_structural_deletion() {
         framed(&[("sec-2", "## Two\n\ntwo's prose\n")])
     );
     fixture.write_doc(&document);
-    let error = fixture.refuse(
-        "deletion",
-        &readoption(
-            &document,
-            &[("sec-1", ""), ("sec-2", "## Two\n\ntwo's prose\n")],
-        ),
-    );
+    let error = fixture.refuse_adopt(&["--expect", &common::sha256(document.as_bytes())]);
     assert!(
         error.contains("region is empty"),
         "the emptied section is refused as a deletion, not as a bad map: {error}"
@@ -556,10 +558,7 @@ fn readopt_takes_document_order_as_authoritative() {
     // The human swaps the two blocks and nothing else.
     let reordered = framed(&[("sec-11", eleven), ("sec-2", two)]);
     fixture.write_doc(&reordered);
-    fixture.apply(
-        "reorder",
-        &readoption(&reordered, &[("sec-2", two), ("sec-11", eleven)]),
-    );
+    fixture.adopt(&["--expect", &common::sha256(reordered.as_bytes())]);
 
     // The run adopted the order, so re-rendering reproduces it rather than
     // reverting to the order the run happened to be declared in.

@@ -178,3 +178,17 @@ pub(crate) fn linked_fork(src: &std::path::Path, dest: &std::path::Path, branch:
     );
     assert_linked_fork(dest);
 }
+
+/// The ids a `design adopt` report's `unchanged` line lists, as a set — the
+/// parser having read every one of them back (`SL-261` PHASE-05 `A2`).
+///
+/// Shared by the suites whose parser-readout probe forces a whitespace head and
+/// reads the decomposition out of `adopt --dry-run`, on the same reasoning as
+/// [`sha256`] above: one copy, not one per suite.
+pub(crate) fn unchanged_ids(report: &str) -> std::collections::BTreeSet<&str> {
+    report
+        .lines()
+        .find_map(|line| line.strip_prefix("unchanged "))
+        .map(|ids| ids.split_whitespace().collect())
+        .unwrap_or_default()
+}

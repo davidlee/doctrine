@@ -263,6 +263,27 @@ impl Fixture {
         fail(&self.root, &args)
     }
 
+    /// Force a divergence that moves no section body and read the parser's own
+    /// section decomposition out of `adopt --dry-run` (`SL-261` `PHASE-05`).
+    ///
+    /// After `materialise` the document is aligned, so `adopt` short-circuits to
+    /// the no-op before parsing. One blank line prepended is a **whitespace-only
+    /// head**: the parser accepts it and `materialise` drops it, so the report
+    /// has no `section_fingerprint_changed` row and its `unchanged` line lists
+    /// every section the run holds. Held fingerprints are the digests of the
+    /// declared bodies, so `unchanged` means every body parsed back byte for
+    /// byte.
+    fn parser_readout(&self) -> String {
+        let document = std::fs::read_to_string(self.doc()).unwrap();
+        std::fs::write(self.doc(), format!("\n{document}")).unwrap();
+        let report = self.adopt(&["--dry-run"]);
+        assert!(
+            report.contains("head: "),
+            "the probe forced a whitespace head: {report}"
+        );
+        report
+    }
+
     /// `design show` at the `prompt` rendering — the turn envelope, budgeted.
     ///
     /// SL-246 `EX-7`: explicit since `DEC-261` moved the bare default to the design
@@ -439,7 +460,7 @@ fn a_foreign_write_after_materialises_rename_is_not_certified() {
     assert!(next.contains("edited outside this run"), "{next}");
 }
 
-/// §9.2 — a valid `adopt_authored` crosses divergence where an ordinary `apply`
+/// §9.2 — the `design adopt` verb crosses divergence where an ordinary `apply`
 /// is refused, and it alone re-baselines the watermark.
 ///
 /// The hand-written body opens with its own heading because since PHASE-14 EX-6
@@ -447,7 +468,7 @@ fn a_foreign_write_after_materialises_rename_is_not_certified() {
 /// this door exactly as it always was at declare, so a fixture without one would
 /// be asserting the watermark crossing against prose the door no longer admits.
 #[test]
-fn adopt_authored_crosses_divergence_and_rebaselines_alone() {
+fn adopt_crosses_divergence_and_rebaselines_alone() {
     let fixture = materialised("first draft");
     let hand_written = "## First draft\n\nhand written prose";
     let foreign = authored_document("sec-1", hand_written);
@@ -462,12 +483,8 @@ fn adopt_authored_crosses_divergence_and_rebaselines_alone() {
     ));
     assert!(error.contains("edited outside this run"), "{error}");
 
-    // The re-adoption crosses it — and alone re-baselines.
-    fixture.apply(&format!(
-        "{{{},\"adopt_authored\":{{\"fingerprint\":\"{doc_digest}\",\
-         \"sections\":{{\"sec-1\":\"{section_digest}\"}}}}}}",
-        fixture.envelope("adopt")
-    ));
+    // The verb crosses it — and alone re-baselines.
+    fixture.adopt(&["--expect", &doc_digest]);
     let after = fixture.read();
     assert_eq!(
         after.authored.watermark.as_ref().map(|f| f.as_str()),
@@ -486,40 +503,24 @@ fn adopt_authored_crosses_divergence_and_rebaselines_alone() {
     );
 }
 
-/// §9.2 / VA-5 — an `adopt_authored` with a stale declared fingerprint, or one
-/// failing marker validation, changes NEITHER runtime clearance NOR the
-/// watermark. Asserted by comparing to the pre-call values, not merely by the
-/// call erroring: F-20 was raised precisely because a guard can be present and
-/// still self-refuse.
+/// §9.2 / VA-5 — an `adopt --expect` naming a fingerprint the document does not
+/// have changes NEITHER runtime clearance NOR the watermark. Asserted by
+/// comparing to the pre-call values, not merely by the call erroring: F-20 was
+/// raised precisely because a guard can be present and still self-refuse.
 #[test]
-fn stale_or_invalid_adoption_changes_neither_clearance_nor_watermark() {
+fn stale_adoption_changes_neither_clearance_nor_watermark() {
     let fixture = materialised("first draft");
     let foreign = authored_document("sec-1", "hand written prose");
     std::fs::write(fixture.doc(), &foreign).unwrap();
-    let doc_digest = common::sha256(foreign.as_bytes());
-    let section_digest = common::sha256(b"hand written prose");
 
     let before = fixture.read();
     let watermark_before = before.authored.watermark.clone();
 
-    // (a) stale declared fingerprint.
-    let stale = fixture.refuse(&format!(
-        "{{{},\"adopt_authored\":{{\"fingerprint\":\"0000\",\
-         \"sections\":{{\"sec-1\":\"{section_digest}\"}}}}}}",
-        fixture.envelope("stale")
-    ));
+    let stale = fixture.refuse_adopt(&["--expect", "0000"]);
     assert!(
         stale.contains("--expect `0000` but design.md reads"),
         "{stale}"
     );
-
-    // (b) a marker map that is not complete and exact.
-    let invalid = fixture.refuse(&format!(
-        "{{{},\"adopt_authored\":{{\"fingerprint\":\"{doc_digest}\",\
-         \"sections\":{{\"sec-9\":\"{section_digest}\"}}}}}}",
-        fixture.envelope("invalid")
-    ));
-    assert!(invalid.contains("marker map"), "{invalid}");
 
     let after = fixture.read();
     assert_eq!(
@@ -531,6 +532,48 @@ fn stale_or_invalid_adoption_changes_neither_clearance_nor_watermark() {
     // than the one field it replaces: a refusal must leave `prior` untouched
     // entire, not merely leave one group untouched.
     assert_eq!(after, before, "and the refusal moved nothing at all");
+}
+
+/// `SL-261` `VT-1` (`DEC-278`, design `sec-4`) — a payload carrying the once-known
+/// `adopt_authored` is refused as **retired**, naming the verb that replaced it,
+/// and nothing is written.
+///
+/// Red before `PHASE-05`: the key was still admitted, so the payload crossed.
+#[test]
+fn adopt_authored_is_refused_as_retired() {
+    let fixture = materialised("first draft");
+    let before = fixture.bytes();
+
+    let error = fixture.refuse(&format!(
+        "{{{},\"adopt_authored\":{{\"fingerprint\":\"0000\",\"sections\":{{}}}}}}",
+        fixture.envelope("retired")
+    ));
+
+    assert!(error.contains("retired"), "{error}");
+    assert!(error.contains("doctrine design adopt"), "{error}");
+    assert_eq!(fixture.bytes(), before, "the run did not advance");
+}
+
+/// `SL-261` `VT-2` (`EX-3`) — the rule-1 divergence refusal names the verb and the
+/// reviewed path, and no longer the retired key.
+#[test]
+fn divergence_refusal_names_design_adopt() {
+    let fixture = materialised("first draft");
+    std::fs::write(
+        fixture.doc(),
+        authored_document("sec-1", "## Hand written\n\nprose\n"),
+    )
+    .unwrap();
+
+    let error = fixture.refuse(&format!(
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+        fixture.envelope("ordinary")
+    ));
+
+    assert!(
+        error.contains("doctrine design adopt SL-233 --dry-run --diff"),
+        "the remedy names the verb and the reviewed path: {error}"
+    );
 }
 
 /// §9.2 — an absent `design.md` before first materialisation is COLD rather than
@@ -2418,21 +2461,24 @@ fn section_body_round_trips_byte_exactly_including_terminal_whitespace() {
         );
     }
 
-    // (b) The READ side, proved with digests of the ORIGINAL declared bytes: a
-    // re-adoption validates only if parse recovered every body exactly.
+    // (b) The READ side: a forced no-body divergence reads back every declared
+    // body unchanged, so parse recovered each one byte for byte. `unchanged`
+    // carrying every id IS the byte-exactness — the held fingerprints are the
+    // digests of the declared bodies.
     for (fixture, declared) in &runs {
-        let document = std::fs::read(fixture.doc()).unwrap();
-        let sections: serde_json::Map<String, Value> = declared
-            .iter()
-            .map(|(id, body)| ((*id).to_owned(), json!(common::sha256(body.as_bytes()))))
-            .collect();
-        fixture.apply(&fixture.payload(
-            "round-trip",
-            &json!({ "adopt_authored": {
-                "fingerprint": common::sha256(&document),
-                "sections": Value::Object(sections),
-            }}),
-        ));
+        let report = fixture.parser_readout();
+        assert!(
+            !report.contains("section_fingerprint_changed"),
+            "{} section(s): no body moved: {report}",
+            declared.len()
+        );
+        let expected: BTreeSet<&str> = declared.iter().map(|(id, _)| *id).collect();
+        assert_eq!(
+            common::unchanged_ids(&report),
+            expected,
+            "{} section(s): every declared body parsed back exactly: {report}",
+            declared.len()
+        );
     }
 }
 
@@ -2535,21 +2581,15 @@ fn sections_sharing_a_long_common_prefix_resolve_distinctly() {
     }
     run(&fixture.root, &["design", "materialise", SLICE, "-p", "."]);
 
-    let document = std::fs::read(fixture.doc()).unwrap();
-    let sections: serde_json::Map<String, Value> = corpus
-        .iter()
-        .map(|(id, body)| ((*id).to_owned(), json!(common::sha256(body.as_bytes()))))
-        .collect();
-    fixture.apply(&fixture.payload(
-        "resolve",
-        &json!({ "adopt_authored": {
-            "fingerprint": common::sha256(&document),
-            "sections": Value::Object(sections),
-        }}),
-    ));
+    // The `--dry-run` readout: every id resolved to its OWN region and every
+    // body parsed back unchanged.
+    let report = fixture.parser_readout();
+    assert!(!report.contains("section_fingerprint_changed"), "{report}");
+    let expected: BTreeSet<&str> = corpus.iter().map(|(id, _)| *id).collect();
+    assert_eq!(common::unchanged_ids(&report), expected, "{report}");
 
-    // Byte equality on the whole id is what resolves them; a prefix match would
-    // have handed one region's prose to two ids.
+    // And the real crossing seats them.
+    fixture.adopt(&[]);
     let after = fixture.read();
     for (id, body) in corpus {
         assert_eq!(
@@ -2570,9 +2610,11 @@ fn sections_sharing_a_long_common_prefix_resolve_distinctly() {
 /// The oracle is the BYTES of `design.md` after the second materialise, and it
 /// is deliberately neither the exit code nor the fingerprint (VA-6). The
 /// fingerprint matching is PRECISELY the condition that holds while the body is
-/// reverted — `adopt_authored` records the digest of bytes the snapshot does not
-/// hold — so a fingerprint assertion passes against the very defect this test
-/// exists to close, and the watermark then certifies the reverted prose.
+/// reverted — an adoption in the old payload shape recorded the digest of bytes
+/// the snapshot did not hold — so a fingerprint assertion passes
+/// against the very defect this test exists to close, and the watermark then
+/// certifies the reverted prose. The verb seats the parsed body, which is what
+/// the bytes assertion checks.
 #[test]
 fn readopted_hand_edit_survives_a_subsequent_materialise() {
     let fixture = materialised("first draft");
@@ -2581,13 +2623,7 @@ fn readopted_hand_edit_survives_a_subsequent_materialise() {
     let document = authored_document("sec-1", edited);
     std::fs::write(fixture.doc(), &document).unwrap();
 
-    fixture.apply(&format!(
-        "{{{},\"adopt_authored\":{{\"fingerprint\":\"{}\",\
-         \"sections\":{{\"sec-1\":\"{}\"}}}}}}",
-        fixture.envelope("adopt"),
-        common::sha256(document.as_bytes()),
-        common::sha256(edited.as_bytes()),
-    ));
+    fixture.adopt(&["--expect", &common::sha256(document.as_bytes())]);
 
     run(&fixture.root, &["design", "materialise", SLICE, "-p", "."]);
 
@@ -2623,13 +2659,7 @@ fn adoption_derives_the_title_by_the_same_procedure_as_declare() {
         "declare-headless",
         &json!({ "declare": [{ "subject": "sec-2", "body": headless }] }),
     ));
-    let adopted = fixture.refuse(&format!(
-        "{{{},\"adopt_authored\":{{\"fingerprint\":\"{}\",\
-         \"sections\":{{\"sec-1\":\"{}\"}}}}}}",
-        fixture.envelope("adopt-headless"),
-        common::sha256(document.as_bytes()),
-        common::sha256(headless.as_bytes()),
-    ));
+    let adopted = fixture.refuse_adopt(&["--expect", &common::sha256(document.as_bytes())]);
     for (door, error) in [("declare", &declared), ("adopt", &adopted)] {
         assert!(
             error.contains("does not begin with an ATX heading"),
@@ -2642,13 +2672,7 @@ fn adoption_derives_the_title_by_the_same_procedure_as_declare() {
     let body = "## Retitled by hand ###\n\nprose\n";
     let document = authored_document("sec-1", body);
     std::fs::write(fixture.doc(), &document).unwrap();
-    fixture.apply(&format!(
-        "{{{},\"adopt_authored\":{{\"fingerprint\":\"{}\",\
-         \"sections\":{{\"sec-1\":\"{}\"}}}}}}",
-        fixture.envelope("adopt-titled"),
-        common::sha256(document.as_bytes()),
-        common::sha256(body.as_bytes()),
-    ));
+    fixture.adopt(&["--expect", &common::sha256(document.as_bytes())]);
 
     declaring.apply(&declaring.payload(
         "declare-titled",

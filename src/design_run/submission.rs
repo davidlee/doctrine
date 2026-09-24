@@ -924,39 +924,6 @@ impl SubmissionEnvelope {
     }
 }
 
-/// The sole lawful crossing of an authored-watermark divergence (DEC-092 rule 2)
-/// — a protocol, not a bypass.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct AdoptAuthored {
-    /// The exact current fingerprint of `design.md`, as the caller reads it. It
-    /// must match what Doctrine reads.
-    pub(crate) fingerprint: String,
-    /// The complete stable-marker map: every section Doctrine knows, and no
-    /// other, each naming the fingerprint the caller read for it.
-    #[serde(default)]
-    pub(crate) sections: BTreeMap<DesignId, String>,
-}
-
-impl AdoptAuthored {
-    /// An `AdoptAuthored` carrying **every** wire key, for `sec-8` pin 1.
-    ///
-    /// An exhaustive struct literal with no `..` update syntax, deliberately:
-    /// that is what makes a newly added field a compile error *here*, before it
-    /// can be a silently missing row in `payload_contract::ADOPT_AUTHORED`. No
-    /// value may be one its own `skip_serializing_if` would drop, or the key
-    /// leaves the wire and the key-set equality passes on a smaller set.
-    #[cfg(test)]
-    pub(super) fn fully_populated() -> AdoptAuthored {
-        AdoptAuthored {
-            fingerprint: "sha256:design".to_owned(),
-            sections: BTreeMap::from([(
-                DesignId::parse("sec-0").expect("a literal id"),
-                "sha256:sec-0".to_owned(),
-            )]),
-        }
-    }
-}
-
 /// A declared stage move. A backward move carries its reason (DEC-067); the type
 /// keeps the reason optional only because a *forward* move has none.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1067,21 +1034,20 @@ impl TraversalDeclaration {
 /// refusal has to name the key that is actually there.
 const WRITER_ACT_STAGE: &str = "stage";
 const WRITER_ACT_ACCEPTANCE: &str = "acceptance";
-const WRITER_ACT_ADOPT_AUTHORED: &str = "adopt_authored";
 const WRITER_ACT_DECLARE: &str = "declare";
 const WRITER_ACT_TRAVERSAL: &str = "traversal";
-/// The seventh act (SL-233 PHASE-16). `discharge` rather than `attest`: the
+/// The discharge act (SL-233 PHASE-16). `discharge` rather than `attest`: the
 /// latter reads closer to the semantics but collides twice with bindings that
 /// are content-bound — [`Declaration::attests`] (a section attestation,
 /// DEC-073) and [`AcceptanceDeclaration`] (DEC-088). A runbook discharge binds
 /// an asset *definition*, not run content, so borrowing either word would give
 /// two different bindings one name.
 const WRITER_ACT_DISCHARGE: &str = "discharge";
-/// The eighth act (SL-244 PHASE-03, DEC-073). Changing which reviewer lanes a
+/// The review-policy act (SL-244 PHASE-03, DEC-073). Changing which reviewer lanes a
 /// run requires is a user judgement, not housekeeping, so it is its own act
 /// rather than a field an agent can move in passing.
 const WRITER_ACT_REVIEW_POLICY: &str = "review_policy";
-/// The ninth and tenth acts (SL-244 PHASE-05, DEC-121). A recorded act is the
+/// The checkpoint and agent-declaration acts (SL-244 PHASE-05, DEC-121). A recorded act is the
 /// only thing an attested condition reads, so a payload carrying one changes what
 /// the gate will say — which is precisely what makes it a writer act.
 const WRITER_ACT_CHECKPOINT_ACT: &str = "checkpoint_act";
@@ -1291,8 +1257,6 @@ impl DelegationAct {
 pub(crate) struct ApplyRequest {
     #[serde(flatten)]
     pub(crate) envelope: SubmissionEnvelope,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) adopt_authored: Option<AdoptAuthored>,
     #[serde(default, skip_serializing_if = "TraversalDeclaration::is_empty")]
     pub(crate) traversal: TraversalDeclaration,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1350,7 +1314,6 @@ impl ApplyRequest {
     pub(crate) fn bare(envelope: SubmissionEnvelope) -> ApplyRequest {
         ApplyRequest {
             envelope,
-            adopt_authored: None,
             traversal: TraversalDeclaration::default(),
             stage: None,
             acceptance: None,
@@ -1378,14 +1341,11 @@ impl ApplyRequest {
     /// A bare list of keys beside a hand-written branch chain would let a seventh
     /// branch widen the class silently, which is the shape `RV-324` F-6 found in
     /// the e2e table.
-    pub(crate) const WRITER_ACTS: [WriterAct; 9] = [
+    pub(crate) const WRITER_ACTS: [WriterAct; 8] = [
         (WRITER_ACT_STAGE, |request| request.stage.is_some()),
         (WRITER_ACT_DECLARE, |request| !request.declare.is_empty()),
         (WRITER_ACT_ACCEPTANCE, |request| {
             request.acceptance.is_some()
-        }),
-        (WRITER_ACT_ADOPT_AUTHORED, |request| {
-            request.adopt_authored.is_some()
         }),
         (WRITER_ACT_TRAVERSAL, |request| {
             !request.traversal.is_empty()
@@ -1428,7 +1388,6 @@ impl ApplyRequest {
     pub(super) fn fully_populated() -> ApplyRequest {
         ApplyRequest {
             envelope: SubmissionEnvelope::fully_populated(),
-            adopt_authored: Some(AdoptAuthored::fully_populated()),
             traversal: TraversalDeclaration::fully_populated(),
             stage: Some(StageDeclaration::fully_populated()),
             acceptance: Some(AcceptanceDeclaration::fully_populated()),

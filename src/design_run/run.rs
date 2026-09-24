@@ -344,12 +344,7 @@ pub(crate) fn apply(
     let mut pending: Vec<Pending> = Vec::new();
 
     if let Crossing::Adopt { expect } = crossing {
-        pending.extend(adopt_authored(
-            &mut next,
-            expect.as_ref(),
-            request.adopt_authored.as_ref(),
-            derived,
-        )?);
+        pending.extend(adopt(&mut next, expect.as_ref(), derived)?);
     }
 
     // The delegation act runs BEFORE the declaration loop, because an `accept`
@@ -878,7 +873,7 @@ fn confirmation(next: &DesignSnapshot, confirms: Option<AgentActKind>) -> Option
 /// **One predicate, two callers.** The verb's shell asks this before it parses
 /// anything, so a locked run whose document is also malformed gets the locked
 /// answer rather than a marker error whose remedy is not available to it; and
-/// [`adopt_authored`] asks it first as its own backstop, so the two sites cannot
+/// [`adopt`] asks it first as its own backstop, so the two sites cannot
 /// disagree about which runs may adopt.
 pub(crate) fn refuse_adoption_at(stage: Stage) -> Result<(), Refusal> {
     if stage == Stage::Locked {
@@ -887,21 +882,19 @@ pub(crate) fn refuse_adoption_at(stage: Stage) -> Result<(), Refusal> {
     Ok(())
 }
 
-/// DEC-092 rule 2: the sole lawful crossing of a divergence.
+/// DEC-092 rule 2: the sole lawful crossing of a divergence, now reached only
+/// through the `design adopt` verb (`SL-261` `DEC-279`).
 ///
-/// An `expect`ed fingerprint must be what Doctrine reads. Where the wire's
-/// `markers` ride along, the stable-marker map must be **complete and exact** —
-/// every section the run holds, no unknown one, and every digest matching what
-/// Doctrine read (transitional: `SL-261` `PHASE-05` deletes it with the key,
-/// because a map the engine derives cannot disagree with itself). Affected evidence is
+/// An `expect`ed fingerprint must be what Doctrine reads. The section map is
+/// **derived** from the document, so there is no caller map to be complete or
+/// exact — a map the engine derives cannot disagree with itself. Affected evidence is
 /// invalidated by the DEC-066 rule that already governs it (the section's
 /// fingerprint moves, so evidence bound to the old one stops being live); no
 /// clearance is inherited across the crossing, because clearance is derived and
 /// never stored.
-fn adopt_authored(
+fn adopt(
     next: &mut DesignSnapshot,
     expect: Option<&Fingerprint>,
-    markers: Option<&super::submission::AdoptAuthored>,
     derived: &DerivedInput,
 ) -> Result<Vec<Pending>, Refusal> {
     // The locked backstop (`SL-261` `EX-3`): adoption is not a route out of
@@ -913,9 +906,6 @@ fn adopt_authored(
             expected: expect.map(|expected| expected.as_str().to_owned()),
             observed: observed.map(|f| f.as_str().to_owned()),
         });
-    }
-    if let Some(adopt) = markers {
-        refuse_invalid_markers(next, adopt, derived)?;
     }
 
     // DOCUMENT ORDER IS AUTHORITATIVE (EX-7). Adoption walks the marker
@@ -954,38 +944,6 @@ fn adopt_authored(
         )?);
     }
     Ok(rows)
-}
-
-/// The wire's caller-declared marker map against what Doctrine read.
-fn refuse_invalid_markers(
-    next: &DesignSnapshot,
-    adopt: &super::submission::AdoptAuthored,
-    derived: &DerivedInput,
-) -> Result<(), Refusal> {
-    let held: BTreeSet<DesignId> = next.sections.ids();
-    let declared: BTreeSet<DesignId> = adopt.sections.keys().cloned().collect();
-    let missing: Vec<DesignId> = held.difference(&declared).cloned().collect();
-    let unknown: Vec<DesignId> = declared.difference(&held).cloned().collect();
-    let mismatched: Vec<DesignId> = adopt
-        .sections
-        .iter()
-        .filter(|(id, digest)| {
-            derived
-                .authored_sections
-                .get(*id)
-                .map(|authored| authored.fingerprint.as_str())
-                != Some(digest.as_str())
-        })
-        .map(|(id, _)| id.clone())
-        .collect();
-    if missing.is_empty() && unknown.is_empty() && mismatched.is_empty() {
-        return Ok(());
-    }
-    Err(Refusal::AdoptionMarkersInvalid {
-        missing,
-        unknown,
-        mismatched,
-    })
 }
 
 /// Seat a section: derive its title from its own body, then store it.

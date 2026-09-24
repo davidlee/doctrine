@@ -40,12 +40,11 @@ use super::inquiry::{
     Disposition, InquiryLifecycle, InquiryMap, InquiryNode, NodeMaterial, Provenance,
 };
 use super::payload_contract::{
-    ACCEPTANCE_DECLARATION, ADOPT_AUTHORED, AGENT_ACT_DECLARATION, CHECKPOINT_ACT_DECLARATION,
-    CREATE_RECORD, DECLARATION, DISCHARGE_DECLARATION, Fields, KeyContract, MapKey, PAYLOAD,
-    Placement, Presence, RETIRED_KEYS, REVIEW_POLICY_DECLARATION, RetiredKey, STAGE,
-    STAGE_DECLARATION, TRAVERSAL_DECLARATION, Tagging, TokenSource, TypeContract, TypeForm,
-    UnknownKeys, VariantContract, VariantPayload, WireType, claims, closure_types, place,
-    required_keys,
+    ACCEPTANCE_DECLARATION, AGENT_ACT_DECLARATION, CHECKPOINT_ACT_DECLARATION, CREATE_RECORD,
+    DECLARATION, DISCHARGE_DECLARATION, Fields, KeyContract, MapKey, PAYLOAD, Placement, Presence,
+    RETIRED_KEYS, REVIEW_POLICY_DECLARATION, RetiredKey, STAGE, STAGE_DECLARATION,
+    TRAVERSAL_DECLARATION, Tagging, TokenSource, TypeContract, TypeForm, UnknownKeys,
+    VariantContract, VariantPayload, WireType, claims, closure_types, place, required_keys,
 };
 use super::prompt::contract_block;
 use super::refusal::{ActFault, Refusal};
@@ -56,9 +55,9 @@ use super::run::{
 use super::runbook::{RunbookKey, RunbookStanding};
 use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup, DesignSnapshot, Finding};
 use super::submission::{
-    AcceptanceDeclaration, AdoptAuthored, AgentActDeclaration, ApplyRequest, Batch,
-    CheckpointActDeclaration, CreateRecord, Declaration, DischargeDeclaration, KeyHome, KeyWhen,
-    ReviewPolicyDeclaration, Sparse, StageDeclaration, SubmissionEnvelope, TraversalDeclaration,
+    AcceptanceDeclaration, AgentActDeclaration, ApplyRequest, Batch, CheckpointActDeclaration,
+    CreateRecord, Declaration, DischargeDeclaration, KeyHome, KeyWhen, ReviewPolicyDeclaration,
+    Sparse, StageDeclaration, SubmissionEnvelope, TraversalDeclaration,
 };
 
 #[test]
@@ -3522,14 +3521,13 @@ fn assert_keys_described<T: Serialize>(value: &T, contract: &TypeContract) {
 /// keys serde writes for it, and each contract names the Rust type a refusal
 /// cites.
 ///
-/// **Eleven call sites, and the closure holds twelve struct types.** The twelfth
+/// **Ten call sites, and the closure holds eleven struct types.** The eleventh
 /// is `SubmissionEnvelope`, which has no `TypeContract` to pass: `#[serde(flatten)]`
 /// renders its three keys at the root, so it participates through `PAYLOAD`'s
 /// composition and its pin is the disjoint union below.
 #[test]
-fn the_payload_table_describes_every_wire_key_of_the_eleven_contract_bearing_structs() {
+fn the_payload_table_describes_every_wire_key_of_the_ten_contract_bearing_structs() {
     assert_keys_described(&ApplyRequest::fully_populated(), &PAYLOAD);
-    assert_keys_described(&AdoptAuthored::fully_populated(), &ADOPT_AUTHORED);
     assert_keys_described(
         &TraversalDeclaration::fully_populated(),
         &TRAVERSAL_DECLARATION,
@@ -3563,22 +3561,22 @@ fn the_payload_table_describes_every_wire_key_of_the_eleven_contract_bearing_str
 const ENVELOPE_KEYS: usize = 3;
 /// The act fields `ApplyRequest` declares in its own right.
 ///
-/// **Ten, not the nine of `ApplyRequest::WRITER_ACTS`**: that list correctly
+/// **Nine, not the eight of `ApplyRequest::WRITER_ACTS`**: that list correctly
 /// omits `delegation`, whose acts are not all writes, and counting the payload's
 /// keys off it would reproduce the omission the contract exists to close.
-const ACT_KEYS: usize = 10;
+const ACT_KEYS: usize = 9;
 
-/// `sec-8` pin 1's twelfth member — `SubmissionEnvelope`, pinned through the
+/// `sec-8` pin 1's eleventh member — `SubmissionEnvelope`, pinned through the
 /// root's composition rather than through a contract of its own.
 ///
 /// A **disjoint** union, and the disjointness is the point rather than a
 /// formality: the flatten and the act fields share one key namespace, so an act
-/// field named `run_uid` would not be a thirteenth key, it would silently
+/// field named `run_uid` would not be a twelfth key, it would silently
 /// replace the envelope's. Asserting the two sides are disjoint and that their
 /// sizes still sum to `PAYLOAD`'s row count is what makes that collision a
 /// failure here instead of a table quietly one row longer than the wire.
 #[test]
-fn the_roots_thirteen_rows_are_the_envelopes_keys_disjointly_united_with_the_ten_acts() {
+fn the_roots_twelve_rows_are_the_envelopes_keys_disjointly_united_with_the_nine_acts() {
     let envelope = serde_json::to_value(SubmissionEnvelope::fully_populated())
         .expect("an envelope serialises");
     let envelope_keys: BTreeSet<&str> = envelope
@@ -3648,8 +3646,6 @@ const SITE_SHAPE: &str = "#shape";
 const DECLARE_KEY: &str = "declare";
 /// The row whose admissible kinds are the engine's declarable set.
 const SUBJECT_KEY: &str = "subject";
-/// The row whose map keys admit section ids alone.
-const SECTIONS_KEY: &str = "sections";
 
 /// One key's site, rooted at whatever owns it — a `TypeContract::name` for a
 /// struct's row, a variant's site for a variant's row (`PHASE-03/D2`).
@@ -4079,7 +4075,7 @@ fn wire<T: Serialize>(value: &T) -> Value {
 
 /// Every value pin 2 walks, each paired with the contract that describes it.
 ///
-/// The eleven contract-bearing fixtures — `SubmissionEnvelope` has no contract,
+/// The ten contract-bearing fixtures — `SubmissionEnvelope` has no contract,
 /// its three keys being `PAYLOAD`'s rows through the flatten — plus, for each
 /// closure enum, every one of pin 4's per-variant samples paired with that
 /// enum's **real** contract. The samples are not optional: eight enums' variants
@@ -4091,7 +4087,6 @@ fn wire<T: Serialize>(value: &T) -> Value {
 fn coverage_union(request: &ApplyRequest) -> Vec<(Value, TypeContract)> {
     let mut roots = vec![
         (wire(request), PAYLOAD),
-        (wire(&AdoptAuthored::fully_populated()), ADOPT_AUTHORED),
         (
             wire(&TraversalDeclaration::fully_populated()),
             TRAVERSAL_DECLARATION,
@@ -4181,26 +4176,6 @@ fn the_declared_id_kinds_are_the_engines_declarable_set() {
         declared.iter().copied().collect::<BTreeSet<IdKind>>(),
         engine,
         "`subject` admits exactly the kinds a declaration may address"
-    );
-
-    let TypeForm::Struct { keys, .. } = ADOPT_AUTHORED.form else {
-        panic!("an adopt-authored crossing is a struct");
-    };
-    let sections = keys
-        .iter()
-        .find(|key| key.key == SECTIONS_KEY)
-        .expect("the crossing carries a section map");
-    let WireType::Map {
-        key: MapKey::Of(inner),
-        ..
-    } = sections.ty
-    else {
-        panic!("the section map's keys are described");
-    };
-    assert_eq!(
-        *inner,
-        WireType::Id(&[IdKind::Section]),
-        "the section map admits section ids alone"
     );
 }
 
@@ -4328,12 +4303,11 @@ fn sparse_keys_are_exactly_the_keys_that_serialise_to_null() {
     );
 }
 
-/// `sec-8` pin 3's second half — the read-path removal probe over the eleven
+/// `sec-8` pin 3's second half — the read-path removal probe over the ten
 /// contract-bearing fixtures.
 #[test]
 fn the_removal_probe_refuses_exactly_the_required_rows() {
     assert_removal_refuses_required(&ApplyRequest::fully_populated(), &PAYLOAD);
-    assert_removal_refuses_required(&AdoptAuthored::fully_populated(), &ADOPT_AUTHORED);
     assert_removal_refuses_required(
         &TraversalDeclaration::fully_populated(),
         &TRAVERSAL_DECLARATION,
@@ -4656,19 +4630,15 @@ fn retired_key_remedies_are_non_empty() {
 // SL-261 VT-2 — the crossing, not the request, decides whether a run adopts.
 // ---------------------------------------------------------------------------
 
-/// A run holding `sec-1`, a document that re-words it, and a request that even
-/// carries a well-formed `adopt_authored` for that document — every input an
-/// adoption would read, so only the crossing can tell the two legs apart.
+/// A run holding `sec-1`, a document that re-words it, and a request carrying
+/// nothing but the envelope — every input an adoption would read, so only the
+/// crossing can tell the two legs apart.
 fn adoption_inputs() -> (DesignSnapshot, ApplyRequest, DerivedInput) {
     let prior = run_holding(&[("sec-1", "sha256:held")]);
     let request: ApplyRequest = serde_json::from_value(serde_json::json!({
         "run_uid": prior.run.uid,
         "known_revision": prior.run.revision,
         "submission_id": "s1",
-        "adopt_authored": {
-            "fingerprint": "sha256:document",
-            "sections": { "sec-1": "sha256:edited" },
-        },
     }))
     .expect("the fixture is a well-formed request");
     let derived = DerivedInput {
@@ -4711,7 +4681,7 @@ fn ordinary_crossing_never_reads_authored_sections() {
     assert_eq!(
         held(&Crossing::Ordinary),
         (Some(Fingerprint::new("sha256:held")), false),
-        "an ordinary crossing leaves the held section alone, adopt_authored or not"
+        "an ordinary crossing leaves the held section alone"
     );
     assert_eq!(
         held(&Crossing::Adopt {
@@ -4810,11 +4780,6 @@ fn adopt_derives_sections_without_a_caller_map() {
             ("sec-2", "## sec-2\n", "sha256:held-2"),
         ],
     );
-    assert_eq!(
-        request.adopt_authored, None,
-        "the verb's request carries no declared map at all"
-    );
-
     let applied = adopt(&prior, &request, &adopting(None), &derived)
         .expect("a bare crossing adopts what the document reads");
 

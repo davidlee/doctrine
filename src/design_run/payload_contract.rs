@@ -361,7 +361,7 @@ pub(crate) enum WireType {
     Boolean,
     /// A run-local id, and **which kinds this key admits** — a bare `id` is the
     /// same omission this slice exists to remove. `declare` admits five of the
-    /// eight, `AdoptAuthored.sections` admits `sec-` alone.
+    /// eight, `Declaration.attests` admits `sec-` alone.
     Id(&'static [IdKind]),
     /// The closure edge: another described type.
     Named(&'static TypeContract),
@@ -395,8 +395,8 @@ pub(crate) enum TokenSource {
 /// What a map's keys may be.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MapKey {
-    /// Keys are values of this wire type — `AdoptAuthored.sections` is keyed by
-    /// section id, and "map of text" would have lost that.
+    /// Keys are values of this wire type — the key is a described wire type like
+    /// any other, and "map of text" would have lost which one.
     Of(&'static WireType),
     /// Keys are supplied by a region this tier cannot import, and *which* keys
     /// are legal is chosen by the value of a sibling field named here.
@@ -611,10 +611,10 @@ impl ExternContracts {
 // The closure, described (sec-3)
 // ---------------------------------------------------------------------------
 //
-// `sec-3` bounds the closure at **twelve struct types** and fourteen enums, and
-// every one of the twelve structs is declared in [`super::submission`].
+// `sec-3` bounds the closure at **eleven struct types** and fourteen enums, and
+// every one of the eleven structs is declared in [`super::submission`].
 //
-// Eleven of the twelve carry a [`TypeContract`] of their own below —
+// Ten of the eleven carry a [`TypeContract`] of their own below —
 // [`PAYLOAD`] itself being `ApplyRequest`'s. `SubmissionEnvelope` carries none,
 // and that is not an omission: `#[serde(flatten)]` renders its three keys at the
 // root, so it participates through `PAYLOAD`'s composition and has no key
@@ -624,10 +624,10 @@ impl ExternContracts {
 // Every contract below now says `Refused`, and the serde attribute is no longer
 // what the row is reporting. Three closure structs carry `deny_unknown_fields`
 // (`Declaration`, `CheckpointActDeclaration`, `AgentActDeclaration`); the other
-// nine cannot or do not, and `SubmissionEnvelope` — the ninth — has no contract
+// eight cannot or do not, and `SubmissionEnvelope` — the eighth — has no contract
 // to state it on and inherits the root's. What made the rows agree is
 // [`super::contract_check`], which reads THIS table against the payload before
-// deserialisation, so the disclosure the eight used to carry became a rule
+// deserialisation, so the disclosure those rows used to carry became a rule
 // (`SL-259` `PHASE-03`, `EX-3`).
 //
 // **Every row below is a claim about the wire, and the claims are pinned rather
@@ -1085,7 +1085,7 @@ pub(crate) static WIRE_FACET_VALUE: TypeContract = TypeContract {
     },
 };
 
-// --- The structs (sec-3): eleven contracts, leaves first. --------------------
+// --- The structs (sec-3): ten contracts, leaves first. --------------------
 
 /// `AcceptanceDeclaration` — the user-acceptance half a caller may supply.
 pub(crate) static ACCEPTANCE_DECLARATION: TypeContract = TypeContract {
@@ -1150,34 +1150,6 @@ pub(crate) static DISCHARGE_DECLARATION: TypeContract = TypeContract {
             KeyContract {
                 key: "reason",
                 ty: WireType::Text,
-                presence: Presence::Optional,
-            },
-        ],
-    },
-};
-
-/// `AdoptAuthored` — the sole lawful crossing of an authored-watermark
-/// divergence.
-///
-/// `sections` is `EX-4`'s second row: a map keyed by **section id alone**, which
-/// "map of text" would have lost. It is `#[serde(default)]` and so omissible
-/// (`PHASE-02/EX-11`).
-pub(crate) static ADOPT_AUTHORED: TypeContract = TypeContract {
-    name: "AdoptAuthored",
-    form: TypeForm::Struct {
-        unknown_keys: UnknownKeys::Refused,
-        keys: &[
-            KeyContract {
-                key: "fingerprint",
-                ty: WireType::Text,
-                presence: Presence::Required,
-            },
-            KeyContract {
-                key: "sections",
-                ty: WireType::Map {
-                    key: MapKey::Of(&WireType::Id(&[IdKind::Section])),
-                    value: &WireType::Text,
-                },
                 presence: Presence::Optional,
             },
         ],
@@ -1449,9 +1421,9 @@ pub(crate) static DECLARATION: TypeContract = TypeContract {
 
 /// The root: one `apply` payload, at one level (`EX-1`).
 ///
-/// **Thirteen keys.** Three are `SubmissionEnvelope`'s, flattened here — which is
-/// the whole of how that twelfth closure struct participates — and ten are the
-/// act fields, in the order `ApplyRequest` declares them. Ten, not the nine of
+/// **Twelve keys.** Three are `SubmissionEnvelope`'s, flattened here — which is
+/// the whole of how that eleventh closure struct participates — and nine are the
+/// act fields, in the order `ApplyRequest` declares them. Nine, not the eight of
 /// [`super::submission::ApplyRequest::WRITER_ACTS`]: that list correctly omits
 /// `delegation`, whose acts are not all writes, and reading the payload's key
 /// count off it would reproduce the omission this contract exists to close.
@@ -1481,11 +1453,6 @@ pub(crate) static PAYLOAD: TypeContract = TypeContract {
                 key: "submission_id",
                 ty: WireType::Text,
                 presence: Presence::Required,
-            },
-            KeyContract {
-                key: "adopt_authored",
-                ty: WireType::Named(&ADOPT_AUTHORED),
-                presence: Presence::Optional,
             },
             KeyContract {
                 key: "traversal",
@@ -1555,7 +1522,11 @@ pub(crate) struct RetiredKey {
 /// [`KeyContract`] row, add its row here with a remedy. The pins in
 /// [`super::tests`] refuse a row whose key is still live, whose owner the
 /// closure cannot reach, or whose remedy is empty.
-pub(crate) static RETIRED_KEYS: &[RetiredKey] = &[];
+pub(crate) static RETIRED_KEYS: &[RetiredKey] = &[RetiredKey {
+    owner: &PAYLOAD,
+    key: "adopt_authored",
+    remedy: "run `doctrine design adopt <slice>` (review first with --dry-run --diff)",
+}];
 
 /// `roster`'s rows retired from `owner`, in roster order.
 ///
@@ -3618,7 +3589,7 @@ mod tests {
     /// The count and the multi-parent assertion are not decoration. "Every edge
     /// resolves" is vacuously true over an empty table and "no type is inlined"
     /// is vacuously true over a closure that never meets one type twice, so the
-    /// verdict is asserted beside its evidence: twenty-five types, and
+    /// verdict is asserted beside its evidence: twenty-four types, and
     /// `AcceptanceDeclaration` reached from more than one parent.
     #[test]
     fn the_json_is_a_flat_table_every_edge_lands_in() {
@@ -3640,14 +3611,14 @@ mod tests {
         );
         assert_eq!(PAYLOAD.name, "ApplyRequest");
 
-        // 2. The evidence count — eleven struct contracts and fourteen enums.
+        // 2. The evidence count — ten struct contracts and fourteen enums.
         //    `SubmissionEnvelope` is in the closure and has no contract: its
         //    three keys are flattened into the root (`fnd-16`).
         let types = types_of(&document);
         assert_eq!(
             types.len(),
-            25,
-            "the closure is twenty-five described types"
+            24,
+            "the closure is twenty-four described types"
         );
 
         // 3. Every name in a type position is a key of `types` — the half that

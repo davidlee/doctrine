@@ -100,16 +100,12 @@ const REFUSAL_REASON: &str = "the obligation was deferred; re-export it if it re
 ///
 /// The bodies need only be well-formed enough to deserialize: the guard fires on a
 /// field's *presence*, ahead of anything that would validate it.
-const WRITER_ACTS: [(&str, fn() -> Value); 9] = [
+const WRITER_ACTS: [(&str, fn() -> Value); 8] = [
     ("stage", || json!({"to": Stage::Drafting.as_str()})),
     ("acceptance", || json!({"basis": "the delegate says so"})),
     (
         "declare",
         || json!([{"subject": PROPOSED_NODE, "question": "declared, not proposed"}]),
-    ),
-    (
-        "adopt_authored",
-        || json!({"fingerprint": "0000", "sections": {}}),
     ),
     ("traversal", || json!({"posture": Posture::Depth})),
     (
@@ -437,11 +433,11 @@ fn stale_proposal_is_refused_and_left_inspectable() {
 // ── EX-2: the coordinator keeps global transition authority ────────────────
 
 /// The table below claims to cover the *class* of writer act, so the claim is
-/// asserted rather than trusted (`RV-324` F-6): it covered four of the six keys
-/// `writer_act` checks, and the two it missed — `adopt_authored` and `traversal` —
-/// were unrefused in test while the comment read as though they were not.
+/// asserted rather than trusted (`RV-324` F-6): it once covered four of the six
+/// keys `writer_act` then checked, and the missing rows were unrefused in test
+/// while the comment read as though they were not.
 ///
-/// Tied to [`ApplyRequest::WRITER_ACTS`], which is the guard itself, so a seventh
+/// Tied to [`ApplyRequest::WRITER_ACTS`], which is the guard itself, so a new
 /// act fails here instead of quietly widening the class.
 #[test]
 fn the_writer_act_table_covers_every_key_writer_act_checks() {

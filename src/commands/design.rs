@@ -445,21 +445,19 @@ fn authored_fingerprint(text: &str) -> Fingerprint {
     Fingerprint::new(crate::git::sha256(text.as_bytes()))
 }
 
-/// Every marker-addressed section Doctrine reads out of `design.md` — the map a
-/// re-adoption's declaration must match exactly, with the bodies it adopts.
+/// Every marker-addressed section Doctrine reads out of `design.md` — the section
+/// map a re-adoption **derives** from the document, with the bodies it adopts.
 ///
 /// The decomposition itself lives in [`design_run::document`], beside the
 /// renderer it inverts, and so does the FIXED ORDER of the seven §5.5 checks:
 /// this seam surfaces the refusal it returns rather than deciding anything. It
 /// used to swallow it (`unwrap_or_default`), so a document the grammar could not
-/// decompose yielded no digests and the adoption refused with the generic
-/// `AdoptionMarkersInvalid` — the right outcome by the wrong name, and a name a
-/// user cannot act on.
+/// decompose yielded no digests and the adoption refused with a generic refusal
+/// — the right outcome by the wrong name, and a name a user cannot act on.
 ///
 /// `held` makes the run-aware rows decidable: the document's marker set is
-/// compared against the run's sections here, which is a DIFFERENT comparison
-/// from the completeness check inside `adopt_authored` (that one reads the
-/// caller's declared map, and a legal-but-unheld marker is invisible to it).
+/// compared against the run's sections here, so a legal-but-unheld marker is
+/// refused rather than silently adopted.
 fn authored_sections(
     text: &str,
     held: &std::collections::BTreeSet<DesignId>,
@@ -675,16 +673,24 @@ fn observe_watermark(run: &DesignSnapshot, observed: Option<&Fingerprint>) -> Au
 }
 
 /// The rule-1 entry check every ordinary mutating verb runs.
-fn refuse_authored_divergence(run: &DesignSnapshot, observed: Option<&Fingerprint>) -> Result<()> {
+///
+/// `slice` is the run's own id, so the remedy names the verb's real argument
+/// rather than a placeholder (`SL-261` `EX-3`).
+fn refuse_authored_divergence(
+    run: &DesignSnapshot,
+    observed: Option<&Fingerprint>,
+    slice: u32,
+) -> Result<()> {
     match observe_watermark(run, observed) {
         AuthoredState::Cold | AuthoredState::Aligned => Ok(()),
         AuthoredState::Diverged { expected, observed } => anyhow::bail!(
             "{DESIGN_DOC} has been edited outside this run — the watermark says `{}` and \
              Doctrine reads `{}`. Ordinary mutation is refused against prose the snapshot \
-             no longer describes; re-adopt the document with an `adopt_authored` \
-             declaration naming its exact current fingerprint.",
+             no longer describes; review with `doctrine design adopt {} --dry-run --diff`, \
+             then adopt it.",
             expected.as_deref().unwrap_or("absent"),
             observed.as_deref().unwrap_or("absent"),
+            crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice),
         ),
     }
 }
@@ -738,7 +744,7 @@ fn recheck_watermark_before_write(root: &Path, slice: u32, basis: &PreWriteBasis
 
 /// Re-baseline the watermark to the bytes the run now stands on. The only
 /// routes here are a materialisation (Doctrine wrote them) and a validated
-/// re-adoption (the caller proved it read them).
+/// re-adoption (the document's bodies were parsed and seated).
 fn rebaseline_watermark(candidate: &mut DesignSnapshot, fingerprint: Option<Fingerprint>) {
     candidate.authored.watermark = fingerprint;
 }
@@ -1825,19 +1831,13 @@ fn apply(
     let prior = read_snapshot(root, slice)?;
     let request = parse_payload(payload)?;
     let digest = crate::git::sha256(payload.as_bytes());
-    // Transitional (`SL-261` `EX-6`): the wire key still crosses, as the verb
-    // does, expecting the fingerprint it declares. `PHASE-05` retires it.
-    let crossing = match request.adopt_authored.as_ref() {
-        Some(adopt) => Crossing::Adopt {
-            expect: Some(Fingerprint::new(adopt.fingerprint.clone())),
-        },
-        None => Crossing::Ordinary,
-    };
+    // Every wire submission is ordinary since `SL-261` `PHASE-05`: the only
+    // re-adoption is the `design adopt` verb.
     let input = PipelineInput {
         prior: &prior,
         request: &request,
         digest: &digest,
-        crossing,
+        crossing: Crossing::Ordinary,
         read: read_authored(root, slice)?,
     };
     match apply_pipeline(root, slice, input, Stop::Write, pre_write, fault)? {
@@ -2072,7 +2072,7 @@ fn apply_pipeline(
     let observed = read.fingerprint;
     let readopting = matches!(crossing, Crossing::Adopt { .. });
     if !readopting {
-        refuse_authored_divergence(prior, observed.as_ref())?;
+        refuse_authored_divergence(prior, observed.as_ref(), slice)?;
     }
 
     // The authored sections are the ADOPTION path's alone, parsed from the same
@@ -2398,7 +2398,7 @@ fn materialise(root: &Path, slice: u32, pre_write: PreWriteHook<'_>) -> Result<(
     let foreign_edit = injected_authored_edit();
     let prior = read_snapshot(root, slice)?;
     let observed = read_authored_fingerprint(root, slice)?;
-    refuse_authored_divergence(&prior, observed.as_ref())?;
+    refuse_authored_divergence(&prior, observed.as_ref(), slice)?;
 
     let body = render_document(&prior);
     let path = design_doc_path(root, slice);
@@ -2449,10 +2449,10 @@ fn materialise(root: &Path, slice: u32, pre_write: PreWriteHook<'_>) -> Result<(
              NOT advanced: its watermark still describes the previous revision, so \
              nothing has certified prose this run did not write. The document now \
              holds the other writer's bytes; re-run `design materialise` once it is \
-             settled, or re-adopt it with an `adopt_authored` declaration naming its \
-             exact current fingerprint.",
+             settled, or adopt it with `doctrine design adopt {}`.",
             rendered.as_str(),
             settled.as_ref().map_or("absent", Fingerprint::as_str),
+            crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice),
         );
     }
 

@@ -258,12 +258,6 @@ pub(crate) enum Refusal {
     /// design the user accepted is the one the run locked, so prose that moved
     /// after the lock is not the run's to take on here.
     AdoptionLocked,
-    /// A re-adoption's stable-marker map is not complete and exact.
-    AdoptionMarkersInvalid {
-        missing: Vec<DesignId>,
-        unknown: Vec<DesignId>,
-        mismatched: Vec<DesignId>,
-    },
     /// A `\r` byte reached the authored document's boundary — at declaration
     /// admission or in the document itself. ONE refusal on both doors: a `\r`
     /// accepted at declare and refused only at parse would let a body reach
@@ -760,18 +754,6 @@ impl fmt::Display for Refusal {
                 "run is locked; adopt refuses. To correct a run still governing execution, \
                  regress to reviewing first; at reconcile, edit design.md directly and do not \
                  adopt",
-            ),
-            Refusal::AdoptionMarkersInvalid {
-                missing,
-                unknown,
-                mismatched,
-            } => write!(
-                f,
-                "adopt_authored's marker map is not complete and exact: {} missing, \
-                 {} unknown, {} mismatched",
-                missing.len(),
-                unknown.len(),
-                mismatched.len()
             ),
             Refusal::CarriageReturnInDocument => f.write_str(
                 "a carriage return (`\\r`) reached the authored document boundary — \
