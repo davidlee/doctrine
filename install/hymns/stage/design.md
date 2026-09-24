@@ -40,8 +40,9 @@ is. Doctrine owns the procedural state; you own the reasoning.
   not advance is information, not an obstacle to work around.
 - Prefer a refusal you understand to a mutation that guesses. When the run
   refuses, read it — the refusal names the key it objected to.
-- Never edit authored design bytes behind the run's back — `adopt_authored` is
-  the only lawful crossing. Nothing enforces this for you: the watermark refuses
-  the next verb once it sees a divergence, but an edit landing while Doctrine is
+- Never edit authored design bytes behind the run's back —
+  `doctrine design adopt` is the only lawful crossing; review first with
+  `--dry-run --diff`. Nothing enforces this for you: the watermark refuses the
+  next verb once it sees a divergence, but an edit landing while Doctrine is
   writing the document is destroyed unreported. The prohibition is the
   protection, not the guard.

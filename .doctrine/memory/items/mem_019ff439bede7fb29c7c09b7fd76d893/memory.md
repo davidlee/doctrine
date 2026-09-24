@@ -12,8 +12,9 @@ Every payload carries the flattened envelope:
     {"run_uid":"dr-…","known_revision":<current>,"submission_id":"<unique>", …}
 
 Run-level keys beside it: `declare`, `traversal`, `stage`, `acceptance`,
-`adopt_authored`, `delegation`, `discharge`, `review_policy`, `checkpoint_act`,
-`agent_declaration`.
+`delegation`, `discharge`, `review_policy`, `checkpoint_act`,
+`agent_declaration`. (`adopt_authored` was retired by `SL-261` — adoption is the
+`doctrine design adopt` verb, and a payload carrying the key is refused.)
 
 ## Disposing an inquiry node
 

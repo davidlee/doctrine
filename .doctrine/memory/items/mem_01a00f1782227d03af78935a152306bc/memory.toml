@@ -6,7 +6,7 @@ status = "active"
 title = "Reconcile edits design.md out of band — do not regress the locked run"
 summary = "At /reconcile the design run is spent: edit design.md directly and let section fingerprints diverge. The regress/adopt/re-lock protocol is for a run still in flight."
 created = "2026-08-17"
-updated = "2026-08-17"
+updated = "2026-09-24"
 
 [scope]
 paths = [".doctrine/slice"]

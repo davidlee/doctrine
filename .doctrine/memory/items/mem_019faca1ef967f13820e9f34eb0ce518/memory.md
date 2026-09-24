@@ -14,7 +14,8 @@ re-baselines the watermark to the reverted bytes.
 
 The landed test over that exact path,
 `adopt_authored_crosses_divergence_and_rebaselines_alone`
-(`tests/e2e_design_state.rs:281`), hand-writes new prose over the document,
+(`tests/e2e_design_state.rs:281`; renamed
+`adopt_crosses_divergence_and_rebaselines_alone` when `SL-261` retired the key), hand-writes new prose over the document,
 adopts it, and asserts **two** things: the watermark re-baselined, and the
 section's fingerprint moved. Both hold *while the prose is silently reverted*.
 The test is well-written, well-named, and structurally incapable of catching the

@@ -5,10 +5,15 @@ and the run's section fingerprints diverge from the file. **That divergence is
 the surface working as designed, not corruption** — do not treat it as damage
 and do not repair it.
 
+Since `SL-261` the direct edit is the **only** path here: `doctrine design
+adopt` refuses a diverged document on a locked run (`AdoptionLocked`, before it
+parses anything), and a later `design materialise` refuses rather than
+overwrite the edited bytes.
+
 ## Do not run the correcting-a-locked-run loop here
 
 [[mem.pattern.design-run.correcting-a-locked-run]] gives a regress → hand-edit →
-`adopt_authored` → re-lock cycle, at high trust, tagged `locked` and `design`.
+`design adopt` → re-lock cycle, at high trust, tagged `locked` and `design`.
 It is correct **for a run still in flight** — one that will be re-locked and go
 on to govern execution. Its final beat is the re-locking cost: a fresh
 attestation per changed section in the lane `review_policy` names, plus **two
@@ -21,7 +26,7 @@ pure ceremony — and the acts are ones an agent must not author on its own
 initiative anyway.
 
 **The discriminator is the stage, not the lock.** Locked + still governing →
-adopt. Locked + at reconcile → direct edit, divergence expected.
+regress, then adopt. Locked + at reconcile → direct edit, divergence expected.
 
 ## Why the divergence is the point
 

@@ -6,7 +6,7 @@ status = "active"
 title = "Assert bytes, not digests, when the defect is that content failed to move"
 summary = "A fingerprint assertion passes against a content-reversion defect — the digest matches precisely while the body is stale"
 created = "2026-07-29"
-updated = "2026-07-29"
+updated = "2026-09-24"
 
 [scope]
 paths = []

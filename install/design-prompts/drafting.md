@@ -82,6 +82,7 @@ beats hand-wavy prose.
 - One subject per declaration in a batch. A duplicate subject is refused, and
   that includes declarations merged in from an accepted proposal.
 - Keep the authored design and the run in step. If they have diverged, stop:
-  ordinary mutation is refused by the authored watermark and `adopt_authored` is
-  the only lawful crossing.
+  ordinary mutation is refused by the authored watermark, and
+  `doctrine design adopt` is the only lawful crossing; review first with
+  `--dry-run --diff`.
 - Write the design, not a summary of the process that produced it.

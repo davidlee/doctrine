@@ -3,13 +3,13 @@ memory_key = "mem.pattern.design-run.correcting-a-locked-run"
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "Editing a locked design run: regress, hand-edit, adopt_authored"
+title = "Editing a locked design run: regress, hand-edit, design adopt"
 summary = "Correct a locked design's prose via stage regression + adopt_authored, not by re-emitting section bodies through declare"
 created = "2026-08-08"
-updated = "2026-09-20"
+updated = "2026-09-24"
 
 [scope]
-paths = ["src/commands/design.rs", "src/design_run/document.rs", "src/design_run/gate.rs"]
+paths = ["src/commands/design.rs", "src/design_run/run.rs", "src/design_run/gate.rs"]
 globs = []
 commands = []
 tags = ["design-run", "design", "locked", "adoption"]
@@ -25,12 +25,12 @@ tree = "6ab84b76864f815279ae924db9625c24f4af6d1e"
 ref_name = "refs/heads/edge"
 checkout_state_id = "92af4026a7dac04e226021d4c582fed1e4e3aff23caee0fe6fee21cc6bcd4e80"
 base_commit = "a4e587263054ada3eac91eb261c3ba261fae7a18"
-verified_sha = "7774677c82818c988926bc2d1cea40bd16da9d46"
+verified_sha = ""
 normalizer = "forget.checkout.v1"
 
 [review]
-verification_state = "verified"
-reviewed = "2026-09-20"
+verification_state = "unverified"
+reviewed = ""
 review_by = ""
 
 [trust]
