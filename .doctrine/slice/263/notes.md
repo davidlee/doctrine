@@ -285,7 +285,7 @@ The four governance drafts remain unapproved. This review was landed onto
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · audit RV-381 · 007a0ec87
+fresh-as-of: 2026-09-24 · close · ff4cd1a69
 
 ### Produced
 
@@ -305,9 +305,10 @@ fresh-as-of: 2026-09-24 · audit RV-381 · 007a0ec87
 - RV-380 review fixes — `F-1` (canonicality compares only fields a spec sets),
   `F-2` (a real neutral-wire round-trip integration test), `F-3` (one
   `BIN_PATH_MARKER`), `F-4` (`discover_surface_anchor` returns a `SurfaceAnchor`).
-- POL-003; REV-058 / REV-059 / REV-060 — reviewed governance drafts, unapproved.
+- POL-003 (required); REV-058 / REV-059 / REV-060 — approved and applied at reconcile.
 - ISS-479 / ISS-480 — known pi-selection and pointer-rendering follow-ups.
-- RV-381 — reconciliation audit; synthesis + reconciliation brief.
+- RV-381 — reconciliation audit; synthesis + reconciliation brief + outcome.
+- REQ-479 / REQ-480 (SPEC-011), REQ-481 (SPEC-007).
 - scope reconciled; design-target selectors: `src/memory.rs`, `src/boot.rs`,
   `src/retrieve.rs`, `templates/surface.ts`,
   `plugins/doctrine/hooks/hooks.json`.
@@ -347,10 +348,9 @@ fresh-as-of: 2026-09-24 · audit RV-381 · 007a0ec87
 
 ### Open
 
-- Audit done (RV-381, 6 findings terminal); slice at `reconcile`. The brief in
-  RV-381 carries: REV-058 / REV-059 / REV-060 approve + apply, POL-003
-  `draft → required` + `doctrine boot` (user's act, VH-1); `slice-263.md` scope
-  names REV-060 (F-4). `ISS-480` stays open — REV approval does not certify the
-  formatter (F-6).
-- PHASE-01's recorded span narrowed to 817b4a179 (RV-381 F-1).
+- Closed. RV-381 reconciled at ff4cd1a69: REV-058 / REV-059 / REV-060 done
+  (REQ-479, REQ-480, REQ-481 introduced); POL-003 `required` and in the boot
+  snapshot; IDE-034 resolved as promoted.
+- `ISS-480` open — the pointer formatter vs REQ-018, now stated in SPEC-007.
+- `ISS-479` open — pi surface selection.
 - OQ-4 follow-up: pi as a first-class boot `Harness` variant.
