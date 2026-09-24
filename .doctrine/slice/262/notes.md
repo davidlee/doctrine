@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · plan · f8a13cd41
+fresh-as-of: 2026-09-24 · plan + PHASE-01 · 25c23a2d0
 
 ### Produced
 - design locked (run rev 38): sec-1..9 in design.md (commits d1f5edd03, f8a13cd41); no code yet
@@ -14,13 +14,17 @@ fresh-as-of: 2026-09-24 · plan · f8a13cd41
 - DEC-290..DEC-294 — forward edge, DEC-124 narrowing + envelope compat rule, GateFacts, placement/bounds, skipped-check disclosure
 - close-time bookkeeping owed (design sec-6): IMP-390 close, IMP-367 disposition note, IMP-372 override-bound note
 - reconcile-time REV owed (design sec-6): PRD-019 REQ-414, SPEC-029 REQ-437 + responsibilities
+- PHASE-01 refactor (25c23a2d0): `GateFacts` + `commands::design::gate_facts` (the only constructor); `gate::forward_unmet` extracted from `advance`; `AuthoredState`/`observe_watermark`/`divergence_refusal` moved to `design_run::document`. No envelope change; all suites green with no edits under `tests/`.
 
 ### Learned
 - mem_01a0d305ce2b76c1b18f04abd572cbb8 — inquiry disposal goes through a cp- checkpoint
 - observations: research baseline drifts on its own scope delta; inert-key discovery for inquiry disposal
+- **`&derived` → `&derived.gate` churn is in `design_run` tests' `advance(...)` calls (8), not the `DerivedInput` literals (5).** `#[derive(Default)]` on `GateFacts` absorbs every `..DerivedInput::default()` site; keeping `causes_of`/`assert_holds` on `&DerivedInput` and passing `&derived.gate` inside spared ~18 call sites.
+- clippy `shadow_unrelated` is denied for the bin: a new `let declared` in `apply` collided with the pre-existing `|declared|` closure in `declaration_fingerprint`.
 
 ### Open
-- none — every inquiry dispositioned; residual audit probes named in "Further review passes" below
+- PHASE-02 next: derive `Forward` from snapshot + `GateFacts`, render on JSON/prompt/status/resume, delete `next_obligation`, envelope → v2, regenerate the show golden. `envelope::project`/`assemble` gain `&GateFacts` + `slice_ref`; `envelope_turn`/`run_resume` build facts via `gate_facts(…, None)`.
+- residual audit probes named in "Further review passes" below still stand
 
 ## Design surface triage (2026-09-24, design run exploring)
 
