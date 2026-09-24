@@ -56,6 +56,10 @@ label = "governed_by"
 target = "POL-002"
 
 [[relation]]
+label = "governed_by"
+target = "POL-003"
+
+[[relation]]
 label = "references"
 role = "originates_from"
 target = "SL-205"
