@@ -524,6 +524,10 @@ fn design_prompts_have_no_consumer_outside_the_design_run() {
         // each embedded runbook, read test-only by `include_str!` — the leaf
         // cannot reach the shell's embed. It renders nothing from the store.
         "src/design_run/render/envelope.rs",
+        // SL-262 PHASE-03: the e2e suite names the cursor step's TEXT by reading
+        // the embedded `exploring` asset, so the assertion cannot drift from the
+        // runbook it pins. Test-only `include_str!`; nothing is rendered.
+        "tests/e2e_design_forward.rs",
     ]
     .into_iter()
     .map(str::to_owned)

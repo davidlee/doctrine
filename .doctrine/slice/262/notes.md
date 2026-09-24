@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · plan + PHASE-01 + PHASE-02
+fresh-as-of: 2026-09-24 · plan + PHASE-01 + PHASE-02 + PHASE-03
 
 ### Produced
 - design locked (run rev 38): sec-1..9 in design.md (commits d1f5edd03, f8a13cd41); no code yet
@@ -17,6 +17,8 @@ fresh-as-of: 2026-09-24 · plan + PHASE-01 + PHASE-02
 - PHASE-01 refactor (25c23a2d0): `GateFacts` + `commands::design::gate_facts` (the only constructor); `gate::forward_unmet` extracted from `advance`; `AuthoredState`/`observe_watermark`/`divergence_refusal` moved to `design_run::document`. No envelope change; all suites green with no edits under `tests/`.
 - PHASE-02: `forward` replaces `next_obligation` on the envelope (version 2); `Forward`/`UnmetRow`/`RunbookAhead`/`CursorStep`/`Divergence` in `render/envelope.rs`; `CappedCause`/`Cause::capped`/`gate::unmet_line` (the one formatter for refusal and row); `ENVELOPE_FORWARD_UNMET`/`ENVELOPE_CAUSE_MEMBERS`; `Runbook::section` and `runbook_section` retired; show golden regenerated (VA-1 eyed: only forward/version/next_obligation lines moved).
 - PHASE-02 departures from design text, each small: `Divergence` carries the rendered refusal sentence beside `expected`/`observed` (the leaf cannot render `SL-NNN`, and JSON must carry the prompt's text); `ready` is built as `ApplyRequest { stage, ..ApplyRequest::bare(..) }` — `bare` is the exhaustive literal, so a new payload key still fails to compile there; old-snapshot test (VT-5) is absent-key + string only, TOML has no `null`.
+- PHASE-03: `tests/e2e_design_forward.rs` — 12 tests over the real binary: fresh-step, JSON (`version` 2, no `next_obligation`, `unmet[].remedy`), resume, discharged runbook vs the refusal's condition set, `explore.research` `unchecked`, ready-as-printed + idempotent re-apply, squatted id, diverged document, unobservable fact, the growing run, and the batched-submission boundary. One allowlist row added to `tests/e2e_claude_install.rs` (the fragment-store consumer gate). No production code changed.
+- **PHASE-03 findings** (durable): `unobservable_fact_renders_unmet` IS reachable through the binary (remove the slice record after `governance-confirmed`); a squatted minted id is NOT reachable by the binary alone (any same-id submission at that revision advances it), so the fixture seeds the receipt through `snapshot::to_toml`; a stage move batched with the acts that satisfy it IS admitted — forward describes the stored state, so that is out of its scope, pinned by `batched_acts_and_the_move_are_admitted`; `ENVELOPE_CAUSE_MEMBERS`' derivation survives measurement (widest capped row < the ceiling's per-row share), so its provenance comment is unchanged.
 - **DEC-293 supersedes the envelope half of SL-233 `EX-15`** (user-confirmed, option B, 2026-09-24): discharge-outcome rows left `resume`. `tests/e2e_design_runbook.rs::an_attested_step_is_never_rendered_as_verified` keeps its record half; the envelope half now asserts no line calls `explore.scope` verified and `explore.research` renders as `unchecked` (plan PHASE-02 `EX-9`). No spec text carries EX-15 (PRD-019, SPEC-029 checked), so no REV — reconcile notes it.
 - Other sanctioned test edits: `e2e_claude_install` design-prompts allowlist gains `render/envelope.rs` (VT-6 reads each embedded runbook test-only via `include_str!`); `design_run::tests` coverage-equality control now loses the `declare` key site as well as its element (the `skip_serializing_if` EX-3 asks for).
 
@@ -29,7 +31,7 @@ fresh-as-of: 2026-09-24 · plan + PHASE-01 + PHASE-02
 - **Measured forward bound (VT-6):** worst-case `forward` over the embedded runbooks renders ≤ 6.4 KB; beside a hand-saturated envelope (12.3 KB) the total is ≤ 18.2 KB against the 24,576 B ceiling. The first attempt put every `Cause` variant on every row and measured 26.4 KB — unreachable, since a row is exactly one derivation arm; `fixture::widest_causes` follows `satisfied`'s arms instead. PHASE-03 `EX-4` should compare this against the growing-run measurement.
 
 ### Open
-- PHASE-03 next: `tests/e2e_design_forward.rs` (end-to-end forward cases + growing-run fixture).
+- PHASE-04 next: guidance — `install/hymns/stage/design.md` bullet + `plugins/doctrine/skills/design/SKILL.md` activation step 2 (independent of PHASE-03).
 - `forward` is rendered in `project()` (shell), so every `design show`/`resume` now reads `design.md` and the relation record (design sec-9 read-cost risk) — unmeasured.
 - residual audit probes named in "Further review passes" below still stand
 
