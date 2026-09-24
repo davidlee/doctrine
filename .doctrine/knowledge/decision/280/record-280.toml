@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 280
+slug = "sl-263-porting-architecture-neutral-surface-request-per-harness-codec"
+title = "SL-263 porting architecture: neutral surface request, per-harness codec"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-205 shipped ambient memory surfacing Claude-only. probe_for (src/memory.rs) discriminates Claude tool names (Read|Edit|Write + file_path; Bash + command) and is the coupling boundary. The naive pi/codex port adds arms to that match -- codex's apply_patch, and pi's lowercase names if the mapping moves to Rust -- baking harness seams into the neutral core. ADR-011's per-harness-capability-altitude theme is self-declared falsified by SL-254; the surviving theme is mechanism-in-binary-is-identical. The rule that actually governs adapter placement is IDE-034 (fourth instance, hence policy-shaped): harness-specific behaviour ships as an opt-in supplement whose correctness rests only on doctrine-owned contracts."
+choice = "Introduce a doctrine-owned, harness-neutral surface request. Each harness adapter normalises its wire INTO it; probe_for becomes probes_for(request, root) and never learns a harness tool name or input key. The neutral pipeline -- retrieve_rows + admits + dedup_diff + cap + format_block -- is composed once, unchanged. Harness seams live in per-harness codec units selected by an explicit --input selector."
+alternatives = ["Add arms to probe_for for codex's apply_patch (and pi's lowercase names): smallest diff, but bakes harness tool names into the shared decoder -- the exact coupling research F2 flags and IDE-034 forbids.", "One decoder over a doctrine-owned tool-vocabulary table (data, no selector): no installer change, but harness tool names still live in the neutral module's data."]
+rationale = "It is the concrete reading of IDE-034. Codex's only genuinely new vocabulary versus Claude is apply_patch; in this shape it lands in a codex unit, not the shared decode path, so the change is a port rather than a fork."
+consequences = ["probe_for is replaced by probes_for(SurfaceRequest, root); the neutral core names no harness.", "A multi-file codex patch fans out to multiple path probes, merged before a single admit/dedup/cap/format pass -- new versus SL-205's single-probe fire.", "SL-263's governed_by should be re-grounded on POL-003 (authored from IDE-034), not inherited ADR-011."]
+decided_by = "user, in the SL-263 design session"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-263"

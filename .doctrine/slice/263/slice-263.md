@@ -41,41 +41,57 @@ axis.
 
 Deliver the pi and codex ports on the SAME neutral core `SL-205` established
 (the `retrieve` query + severity/staleness admission + session dedup + cap +
-format + seen-set/log IO). No new retrieval logic.
+format + seen-set/log IO). No new retrieval logic. The engine's `ScopeProbe`
+path arm widens to a path *set* so a multi-file patch is one query rather than
+N — arity, not a new query, admission rule, ranking or tuning knob.
 
 - **`memory surface` output form.** Add `--format <claude|plain>`, default
   `claude` (back-compat for the shipped Claude/`.claude/settings.json` entries).
   `plain` emits the bare block text (or nothing). The input envelope, admission
   gate, caps, dedup and tuning log are unchanged. Codex requires the envelope
   (it ignores plain `stdout` on `PreToolUse`); pi needs the bare block.
-- **codex command surface.** Add a `memory surface` `PreToolUse` spec to the
-  codex hook registry (`.codex/hooks.json`) with a codex matcher. Codex reports
-  shell tools as `tool_name: "Bash"` with `tool_input.command`, which the
-  existing handler already discriminates — so this leg is config + registry
-  only.
+- **`memory surface` input wire.** Add `--input <claude|codex|neutral>`, default
+  `claude`, selecting the codec that normalises stdin into the doctrine-owned
+  neutral surface request. Canonical hook commands become explicit
+  (`memory surface --input claude` / `--input codex`); a bare `memory surface`
+  stays a parse-time alias for `claude` **and stays owned**, so the Claude
+  install refreshes an un-upgraded entry rather than double-wiring it
+  (`DEC-281`).
+- **codex command surface.** Add a `memory surface --input codex` `PreToolUse`
+  spec to the codex hook registry (`.codex/hooks.json`). Codex's hook layer
+  canonicalises shell calls to `tool_name: "Bash"` with `tool_input.command`; the
+  codex codec maps that to a command request, so the neutral decoder is
+  untouched.
 - **codex path surface.** Codex file edits arrive as the single `apply_patch`
   tool with the patch body in `tool_input.command` (no `file_path`). Add a pure
-  patch-path extractor (the `*** Update File: <path>` / `*** Add File:` /
-  `*** Delete File:` headers) producing one or more path probes, so the path
-  surface fires on codex the way it fires on Claude's `Read|Edit|Write`.
+  patch-path extractor over codex's `apply_patch` envelope grammar (the
+  `*** Update File:` / `*** Add File:` / `*** Delete File:` / `*** Move to:`
+  headers) producing a path probe, so codex edits reach the path surface — with
+  the delta that codex has no read tool (reads are shell calls) and that
+  `apply_patch` fires after the patch is written.
 - **pi surface adapter.** Generate a `.pi/extensions/doctrine/surface.ts`
   module (sibling to the existing `mcp.ts` bridge, imported by `index.ts`). On
-  `tool_result`, map pi's lowercase tool names (`read`/`edit`/`write`/`bash`)
-  and input keys (`path` / `command`) onto the surface envelope, invoke
-  `memory surface --format plain`, and append the returned block to
-  `event.content`. Strictly fail-open: any failure returns `undefined`.
-- **Installer wiring.** The codex arm grows the surface spec in its registry
-  (with the `/hooks` trust notice already printed); the pi extension install
-  grows the `surface.ts` module (generate / regenerate / foreign-skip, mirroring
-  `install_mcp_extension`). Both report their outcomes.
-- **Neutral surface envelope (design input, research `F2`).** The naive port adds
-  codex's `apply_patch` (and, if mapping moves to Rust, pi's lowercase names) as
-  arms on `probe_for` (`src/memory.rs:10533`), baking harness seams into the
-  neutral core — exactly what `IDE-034` forbids. The design should instead
-  introduce a doctrine-owned, harness-neutral surface envelope (a tool *class* +
-  value) that each adapter normalises *into*, so `probe_for` never learns a
-  harness name and the pipeline is called once, unchanged. The `apply_patch`
-  reader's contract is then neutral: *patch text → root-relative paths*.
+  `tool_result`, map pi's tool names (`read`/`edit`/`write` → `path`;
+  `bash` → `command`) into the neutral envelope, invoke
+  `memory surface --input neutral --format plain`, and append the returned block
+  to `event.content`, passing `session_id` from `ctx.sessionManager`. Strictly
+  fail-open: any failure returns `undefined`. Subagent suppression is accepted
+  as a v1 delta — no harness-native signal exists (`DEC-286`).
+- **Installer wiring.** The codex arm grows a `codex_hook_specs` registry (two
+  `PreToolUse` matcher groups, `Bash` and `apply_patch`, each with an explicit
+  `additionalContextLimit`), replacing the single inline call, with the `/hooks`
+  trust notice extended; `HookSpec` gains an optional limit field (`DEC-283`).
+  The Claude canonical command becomes `memory surface --input claude`, and
+  `plugins/doctrine/hooks/hooks.json` moves with it. The pi install grows the
+  `surface.ts` module (generate / regenerate / foreign-skip, mirroring
+  `install_mcp_extension`). All outcomes are reported (STD-003).
+- **Neutral surface envelope (settled; `DEC-280`/`DEC-281`).** A doctrine-owned
+  `SurfaceRequest { Path, Command, Patch }` in `src/memory.rs`; `claude_request`,
+  `codex_request` and `neutral_request` normalise each wire into it, and
+  `probe_for` becomes `probes_for(request, root)` — so the neutral pipeline
+  (`retrieve_rows` + `admits`/`dedup_diff`/`cap`/`format_block`) is composed
+  once, unchanged, and never learns a harness tool name. `apply_patch`'s reader
+  is a neutral pure function: *patch text → root-relative paths* (`DEC-285`).
 - **Governance leg (in scope; drafted after design locks, applied at reconcile).**
   This slice also closes the governance gaps research `F1`/`F4` surfaced —
   deliberately *after* the port's design locks, so the governance text is drafted
@@ -101,16 +117,18 @@ format + seen-set/log IO). No new retrieval logic.
     requirement-dark (research `F4`). The revision (a REV of SPEC-011, not a new
     spec) adds the codex hook registry and the generated pi extensions to the
     installer's governed surface. User ruling (2026-09-24): dealt with at
-    reconcile with the other two.`
+    reconcile with the other two.
 
 ## Non-Goals
 
 - **Not** subagent surfacing on pi or codex. `SL-205`'s `INV-3` (main-thread
   only) rides Claude's `agent_id`; neither pi's `tool_result` nor codex's
-  `PreToolUse` supplies an equivalent here. Documented as a delta; widening is a
-  follow-up.
+  `PreToolUse` supplies an equivalent here. On codex the delta is compounded:
+  subagent hooks report the **parent** session id, so the seen-set is shared
+  across that boundary. Documented as a delta; widening is a follow-up.
 - **Not** a new `retrieve` query, a new admission rule, or new tuning knobs —
-  the neutral core is `SL-205`'s, untouched.
+  the retrieval logic is `SL-205`'s, unchanged. Only the probe's path arity
+  widens (one path → a path set).
 - **Not** a `memory surface` MCP operation (the zero-subprocess alternative for
   pi). Evaluated and deferred — see Open Questions.
 - **Not** Cursor (`IMP-245`) or any other harness.
@@ -120,15 +138,24 @@ format + seen-set/log IO). No new retrieval logic.
 
 ## Affected surface
 
-- `src/memory.rs` — `--format` plumbing `MemoryCommand::Surface` →
+- `src/memory.rs` — `--format` and `--input` plumbing `MemoryCommand::Surface` →
   `run_surface` → `run_surface_to` → `emit_surface` (envelope vs bare); the
-  neutral surface envelope and the adapter mapping into it (replacing the naive
-  `probe_for` arm); new pure patch-path extractor beside the existing pure
-  helpers.
-- `src/boot.rs` — codex hook registry (a `memory_surface`-equivalent spec and
-  its matcher constant); the generated pi surface module's `generate_/plan_/
-  install_` triad beside `plan_mcp_extension`/`install_mcp_extension`; the
-  `RefreshReport` third field + report leg; the codex-arm call site.
+  `SurfaceRequest` neutral core and the `claude`/`codex`/`neutral` codecs
+  (replacing `probe_for`); the pure `paths_from_patch` extractor beside the
+  existing pure helpers.
+- `src/retrieve.rs` — `ScopeProbe`'s path arm carries a path set, mapped to the
+  `QueryContext.paths` the engine already ranks across. No query, admission rule,
+  ranking or tuning change.
+- `src/boot.rs` — the `codex_hook_specs` registry and its matcher constants;
+  `HookSpec`'s optional **handler** `additional_context_limit` / `timeout` and the
+  extended canonicality comparison; the canonical Claude args
+  (`memory surface --input claude`) and the ownership predicate that still owns
+  the legacy bare form (mirroring `is_doctrine_emit_command`); the generated pi
+  surface module's `generate_/plan_/install_` triad beside
+  `plan_mcp_extension`/`install_mcp_extension`; the `RefreshReport` third field +
+  report leg; the codex-arm registry loop and third installer call.
+- `plugins/doctrine/hooks/hooks.json` — the published Claude hook commands move
+  to `memory surface --input claude`.
 - `templates/**` or a `format!` literal — the pi surface module's source, per the
   `mcp.ts`-template vs `index.ts`-literal precedent (design decides).
 - `src/commands/guard.rs` — no new command, but confirm the `MemoryCommand`
@@ -146,7 +173,7 @@ format + seen-set/log IO). No new retrieval logic.
 ## Risks / Assumptions
 
 - **R-1** pi pays one binary spawn per main-thread `read`/`edit`/`write`/`bash`
-  (`execSync`). Claude pays the same per hook. Measure; the silent-when-no-hit
+  (a process spawn). Claude pays the same per hook. Measure; the silent-when-no-hit
   property keeps it cheap.
 - **R-2** codex requires `/hooks` trust review for a new non-managed hook; until
   trusted it is skipped, silently. The install's manual-steps notice already
@@ -156,9 +183,15 @@ format + seen-set/log IO). No new retrieval logic.
   lands before the model composes the edit (it follows the `read`); for a bare
   `edit`/`write` it is retrospective. State this as a capability delta, not a
   defect.
-- **R-4** codex's `additionalContextLimit` defaults to ~2500 tokens. Our blocks
-  are small (path cap 3, command cap 2), but set it explicitly rather than
-  inheriting a threshold whose semantics we did not choose.
+- **R-4** codex's `additionalContextLimit` defaults to ~2500 tokens and its
+  handler `timeout` to a value we did not choose. Both are set explicitly, on the
+  **handler** where codex reads them.
+- **R-5** codex trusts a hook by its command, and doctrine's baked absolute exec
+  path changes on every upgrade — so the new groups go inert until re-trusted.
+  The install discloses the manual step; the runtime skip is a documented delta.
+- **R-6** the codex wire shape (string vs argv `command`, wrapped commands,
+  `apply_patch` through the shell) is documented rather than observed. Retired by
+  a phase-1 payload-capture gate with checked-in fixtures.
 - **A-1** Assumes the codex `PreToolUse` wire shape and `apply_patch`
   `tool_input.command` field are stable enough to depend on (same class of
   assumption `SL-205` `A-1` made for Claude).
@@ -169,12 +202,12 @@ format + seen-set/log IO). No new retrieval logic.
   here. A slice that ships codex surfacing with only the command surface is a
   half-port, and the extractor is the only genuinely new *logic* in the slice —
   everything else is glue.
-- **OQ-2** pi `--format plain`: emit bare text (one output form per consumer) or
-  have the TS adapter parse the shared Claude envelope (zero Rust)? Codex
-  confirms the envelope is a de-facto cross-harness contract, which weakens the
-  coupling argument for a second form.
-- **OQ-3** pi subagent suppression: accept surfacing inside pi subagent sessions
-  for v1 (documented), or find a signal (env marker / session metadata)?
+- **OQ-2 → RESOLVED (`DEC-282`).** `--format plain` emits the bare block as a
+  doctrine-owned output form; the generated TS adapter is a dumb consumer and
+  does not parse the envelope.
+- **OQ-3 → RESOLVED (`DEC-286`).** Accept the `INV-3` parity delta for v1 — pi
+  surfaces inside subagent sessions too. No harness-native signal exists;
+  `PI_SUBAGENT_CHILD` is a pi-subagents package marker, not a pi seam.
 - **OQ-4 → RESOLVED (follow-up).** Left as a follow-up; the modelling is
   functionally sufficient. `doctrine install --agent pi` accepts `pi` and wires
   its boot legs through the **codex** arm — the dry run reports *"boot … session
@@ -187,12 +220,22 @@ format + seen-set/log IO). No new retrieval logic.
 
 - Pure helpers (the new patch-path extractor; existing admission/dedup/cap/
   format) unit-tested with synthetic inputs — the `SL-205` helper test shape.
-- `memory surface` exercised for both formats with synthetic stdin: `claude`
-  emits the envelope, `plain` emits the bare block, empty stays empty, exit 0 on
-  every path.
-- Installer goldens: the codex `PreToolUse` spec round-trips through the merge
-  core (wired / idempotent / foreign-preserving / staleness-refreshed, mirroring
-  the existing codex `SessionStart` tests); the generated `surface.ts` is
+- Captured codex `PreToolUse` fixtures (shell, `apply_patch`-as-tool,
+  `apply_patch`-via-shell) drive the codec VTs; a phase-1 gate captures them and
+  checks them in.
+- `memory surface` exercised for every input wire and output form: `claude`,
+  `codex` and `neutral` each decode to the same request; `plain` emits the bare
+  block, `claude` the envelope, empty stays empty, exit 0 on every path. A bare
+  `memory surface` decodes as `claude`; a run from a subdirectory cwd resolves
+  cwd-relative paths correctly.
+- `paths_from_patch` unit-tested with synthetic patches (update / add / delete /
+  move-to headers, malformed input); the widened `ScopeProbe` admits a memory
+  anchored on any of its paths.
+- Installer goldens: the two codex `PreToolUse` specs round-trip through the
+  merge core (wired / idempotent / foreign-preserving / staleness-refreshed,
+  mirroring the existing codex `SessionStart` tests), including the
+  `additionalContextLimit`; a legacy bare Claude entry is refreshed to the
+  explicit form rather than double-wired; the generated `surface.ts` is
   ownership-marked, regenerate-on-change, foreign-skipped.
 - Behaviour-preservation: existing memory, retrieve and boot suites green
   unchanged.

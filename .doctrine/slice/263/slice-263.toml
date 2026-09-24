@@ -12,11 +12,13 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/memory.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "Paths the SL-263 design commits to changing (design §5.10)"
 
 [[selector]]
 selector = "src/boot.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "Paths the SL-263 design commits to changing (design §5.10)"
 
 [[selector]]
 selector = "src/commands/guard.rs"
@@ -24,7 +26,8 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/retrieve.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "Paths the SL-263 design commits to changing (design §5.10)"
 
 [[selector]]
 selector = "templates/**"
@@ -33,6 +36,16 @@ intent = "scope-relevant"
 [[selector]]
 selector = "tests/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "templates/surface.ts"
+intent = "design-target"
+note = "Paths the SL-263 design commits to changing (design §5.10)"
+
+[[selector]]
+selector = "plugins/doctrine/hooks/hooks.json"
+intent = "design-target"
+note = "Paths the SL-263 design commits to changing (design §5.10)"
 
 [[relation]]
 label = "governed_by"

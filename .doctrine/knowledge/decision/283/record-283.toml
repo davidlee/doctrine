@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 283
+slug = "sl-263-codex-pretooluse-wiring-codex-hook-specs-registry"
+title = "SL-263 codex PreToolUse wiring: codex_hook_specs registry"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Codex's hook layer canonicalises `tool_name` to `Bash` (shell) and `apply_patch` (patch text in `tool_input.command`); `matcher` filters tool name; `additionalContextLimit` is a matcher-group field defaulting to roughly 2500 tokens; non-managed hooks must be reviewed and trusted before they run (R-2). The Codex arm in `install_refresh` (src/boot.rs) currently makes one inline `install_codex_hook` call, where Claude has a `claude_hook_specs` registry whose stated purpose is to make a later manifest-vs-registry conformance check cheap."
+choice = "Introduce `codex_hook_specs(exec) -> Vec<HookSpec>`, mirroring `claude_hook_specs`, and have the Codex arm loop over it. Two specs: a `Bash` matcher group (command surface) and an `apply_patch` matcher group (path surface), both `memory surface --input codex`. `HookSpec` gains `additional_context_limit: Option<u32>` (Claude leaves it `None`) so the codex limit is set declaratively rather than inherited. The install's manual-steps notice extends its `/hooks` trust text, and install outcomes are disclosed per STD-003."
+alternatives = ["A second inline `install_codex_hook` call: smaller diff, but no single enumeration, and every future codex spec is another inline call.", "Registry with a codex-side limit renderer beside the merge core: avoids the field, at the cost of a second renderer."]
+rationale = "The registry is the existing seam, and the codex arm is at the moment it becomes plural. Matcher, limit and trust obligations become declarative; the `Option` field avoids a parallel renderer without contorting the Claude specs."
+consequences = ["`RefreshReport.hooks` carries two codex entries.", "An untrusted codex hook is skipped by codex; the report must read as not-installed, never as installed."]
+decided_by = "user, in the SL-263 design session"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-263"

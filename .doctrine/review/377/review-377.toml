@@ -1,0 +1,215 @@
+id    = 377
+slug  = "design-review-of-sl-263"
+title = "design review of SL-263"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+concluded = true
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-263"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "codex's PreToolUse carries no agent identity, and its subagent hooks share the parent session id"
+detail = """The design documents SL-205's INV-3 (main-thread-only) parity gap only for pi (§5.7). But codex's published PreToolUse input has no `agent_id` — only `SubagentStart`/`SubagentStop` carry one — so the shared `SurfaceInput.agent_id` gate is inert on the codex wire and codex surfaces inside subagent sessions too. Worse, the same doc states "Subagent hooks use the parent session id", so on codex a subagent's tool call writes into, and reads from, the *parent's* seen-set: a memory surfaced in a subagent is silently suppressed for the main thread afterwards, and vice versa. That cross-boundary dedup interaction is unmentioned in §5.4 and §5.7, and it is not the same behaviour as Claude's. The design must state both: no suppression on codex either, and codex dedup is parent-scoped (which is a behavioural difference, not merely an absence)."""
+disposition = "fix-now"
+response = "Accepted; the draft was silent on codex. §5.4 will note that the `agent_id` gate is Claude-only (every other wire leaves it absent, so it is inert), and §5.7 is renamed in substance to cover both adapters: codex's `PreToolUse` carries no `agent_id` either, so neither port reproduces INV-3, and codex additionally reports the PARENT session id for subagent hooks, so its seen-set is shared across the parent/subagent boundary — a behavioural difference from Claude, not just an absence. A risk row records the parent-scoped dedup. Registering this as a documented capability delta on both ports, widening deferred."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "pi adapter sketch spawns synchronously on the event loop"
+detail = "§5.7's sketch uses `execFileSync` inside an async `tool_result` handler. pi states that tool calls from one assistant message can run in parallel, and a synchronous spawn blocks pi's event loop for the whole cold-start of the doctrine binary on every main-thread read/edit/write/bash — precisely the frequency R-1 is about, but as a latency spike rather than a throughput cost. The handler is already async, so an async spawn (promisified `execFile`/`spawn`) costs nothing and removes the stall. The sketch should use the async form, and §5.7 should say why."
+disposition = "fix-now"
+response = "Accepted. The handler is async and pi may run tool calls in parallel, so a synchronous spawn blocks the event loop per tool call; the sketch moves to a promisified async spawn and §5.7 states that the adapter must not block. Fail-open is unchanged — an async rejection folds to `undefined` exactly as a throw did."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "additionalContextLimit's unit is asserted, not verified"
+detail = """§5.6 justifies SURFACE_CONTEXT_LIMIT_CODEX = 1_200 by comparing it to codex's "~2 500-token default", but the published contract does not state whether the field counts tokens or characters. The chosen headroom happens to hold under either reading (our largest block is a header plus three short lines), so the constant is not wrong — but the design asserts a unit it has not established. State the assumption explicitly and verify it at implementation, or pick the value from the unit once known."""
+disposition = "fix-now"
+response = "Accepted. §5.6 will state that the field's unit (tokens vs characters) is not established by the published contract, that the chosen constant holds under either reading because our largest block is a header plus three short lines, and that the unit is verified at implementation."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Shared SurfaceInput tolerates codex's extra fields only implicitly"
+detail = """§5.2 says Claude and codex "both decode SurfaceInput ... and differ only in their tool-name vocabulary". Codex's payload carries fields the struct does not name — `turn_id`, `tool_use_id`, `model`, `hook_event_name`, `permission_mode`, `transcript_path` — as well as a `tool_input` whose shape varies by tool (MCP tools send all arguments). The design should state that the struct ignores unknown fields deliberately (serde's default, no `deny_unknown_fields`) and that `tool_input` is read as an open map, so a future codex field cannot make the decode fail closed."""
+disposition = "fix-now"
+response = "Accepted. §5.2 will state explicitly that the shared struct relies on serde's default unknown-field tolerance (no `deny_unknown_fields`) so codex's extra fields (`turn_id`, `tool_use_id`, `model`, `hook_event_name`, `permission_mode`, `transcript_path`) cannot make the decode fail, and that `tool_input` is read as an open map because its shape varies by tool."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "major"
+title = "additionalContextLimit belongs on the codex hook handler, not the matcher group; and the merge core cannot detect it"
+detail = """
+Design §3 and §5.6 place `additionalContextLimit` on each matcher group, and say the merge core "writes the field onto each matcher group it owns". Codex 0.155.1's config schema says otherwise. The binary's serde field lists read `MatcherGroup { matcher, hooks }` and `HookHandlerConfig { command, timeout, async, statusMessage, additionalContextLimit }` (an internally tagged enum; see `strings` on libexec/codex/bin/codex). So the limit is a per-handler field that sits beside `command` inside `hooks: [...]`. It also carries its own warning: "ignoring additionalContextLimit for <event> hook in <path>: this event cannot emit additionalContext".
+
+Written at the group level, the field is at best ignored. R-4's mitigation then does nothing, and no test catches it, because §9's test only asserts that the key is present where the design put it.
+
+Separately, `entry_is_canonical` (src/boot.rs:1221) compares only `matcher` and `hooks[hi].command`. So an owned entry that is missing the limit, or carries a stale one, is judged canonical and never healed. This covers a pre-limit codex entry and a hand-deleted limit alike. Changing `SURFACE_CONTEXT_LIMIT_CODEX` later would never reach an existing install.
+
+Fix: render the limit on the handler object in `desired_entries`, extend canonicality to compare it, and add a golden test for the exact codex handler shape. Consider setting `timeout` on the handler too (see the timeout finding)."""
+disposition = "fix-now"
+response = "Accepted. Verified against the published example (the limit sits beside `command` inside `hooks: [...]`) and against `entry_is_canonical` (src/boot.rs:1221), which compares only `matcher` and the handler's `command`. §5.6 now states both `additionalContextLimit` and `timeout` are **handler** fields, `HookSpec` gains both as optional fields, the canonicality comparison extends to the handler fields doctrine owns, and §9's golden pins the exact handler shape with both keys present where codex reads them. A pre-limit or hand-edited entry is now healed rather than judged canonical."
+
+[[finding]]
+id = "F-6"
+status = "answered"
+severity = "major"
+title = "Relative patch and pi paths are cwd-relative, but probes_for treats them as root-relative"
+detail = """
+`relativize_probe_path` (src/memory.rs:10586) passes a relative path through unchanged and treats it as root-relative. That was safe for Claude, which always sends an absolute `file_path`. Both new wires break that assumption:
+- codex `apply_patch` headers carry paths relative to the codex session cwd; the tool's own example is `*** Update File: path/to/file.py`.
+- pi's `read`/`edit`/`write` `path` is resolved against pi's cwd and is usually relative.
+
+When the harness is started in a subdirectory of the doctrine root (a monorepo package, or `cd src && codex`), `src/x.rs` in a patch becomes the probe `src/x.rs` against the root. That is the wrong file: it matches nothing, or it matches the wrong memory. This is the ISS-232 defect class again, on the new wires.
+
+§5.3 is also internally inconsistent. It says `paths_from_patch` returns "root-relative paths", but its signature `(patch: &str)` has no root or cwd, so it can only return the paths as the patch wrote them.
+
+Fix: `probes_for` takes both cwd and root, joins relative paths onto cwd, lexically normalises `..`, then strips root; out-of-root paths still fail open. The neutral wire should state that `value` is absolute or cwd-relative, and the pi template should absolutise against `ctx.cwd`. Add a VT that runs from a subdirectory cwd."""
+disposition = "fix-now"
+response = "Accepted. `relativize_probe_path` (src/memory.rs:10586) does return a relative path unchanged, and both new wires are cwd-relative, so this was the ISS-232 class again on new wires. Resolution: `probe_for(request, cwd, root)` joins a relative path onto the reported cwd, lexically normalises `..`, then strips the root, still failing open out-of-root. §5.2 states the neutral wire's `value` is absolute or cwd-relative and that the pi adapter passes pi's value through with `cwd: ctx.cwd`; §5.3 now says `paths_from_patch` returns paths *as written* and that resolving them is `probe_for`'s job (the internal inconsistency is gone). §9 adds a subdirectory-cwd VT that checks the relative and absolute forms resolve to the same probe."
+
+[[finding]]
+id = "F-7"
+status = "answered"
+severity = "major"
+title = "Multi-probe fan-out re-implements the engine's own multi-path query, at N full corpus loads plus N git captures per fire"
+detail = """
+§5.4 loops `retrieve_rows` once per probe, concatenates the rows in probe order, dedups by uid, and caps. Each `retrieve_rows` call runs `load_query`, and so `collect_all(&root)` (the whole memory corpus) and `freeze(&root)` (`crate::git::capture`, a git subprocess) (src/retrieve.rs:810-839, 531). A patch touching 10 files pays 10 corpus loads and 10 git captures inside a codex `PreToolUse` hook, on the edit hot path.
+
+The engine already does the right thing natively. `QueryContext.paths` is a Vec, and `match_scope` admits on any path (src/retrieve.rs:153-156), with one ranking across all paths. The design's concatenate-then-dedup step is therefore a parallel implementation of that merge, and a worse one. Concatenating in probe order makes the cap of 3 go to whichever file comes first in the patch, not to the best-ranked memories.
+
+The constraint that `retrieve.rs` stays untouched is self-imposed. A `ScopeProbe::Paths(Vec<PathBuf>)` arm, or `retrieve_rows` taking a probe slice, keeps the engine harness-neutral. It removes the cross-probe dedup code, restores a single ranking, and makes the cost one load per fire. It also simplifies the tuning-log changes: one `fetched`, one `admitted`."""
+disposition = "fix-now"
+response = """Accepted, and this reopened a settled scope commitment. Verified that `ScopeProbe` already maps to the `Vec` in `QueryContext.paths` (src/retrieve.rs:1072) and that `match_scope` admits on any of them with one ranking (src/retrieve.rs:153). The per-probe loop was re-implementing that merge above the engine, at N corpus loads and N git captures per codex edit, and awarding the cap of 3 to patch order rather than rank. The user was asked and confirmed the reopen: `ScopeProbe`'s path arm now carries a path set, the fire makes **one** `retrieve_rows` call, and the cross-probe dedup, the merge and the second ranking rule are deleted. Consequences integrated: §3/§5.1/§5.4/§5.10 rewritten, `src/retrieve.rs` added as a design-target selector, the scope's "engine untouched" line replaced by the arity-not-logic framing, and an engine test added for the multi-path probe."""
+
+[[finding]]
+id = "F-8"
+status = "answered"
+severity = "major"
+title = "codex has no Read tool; the path surface never fires on codex reads, and an apply_patch nudge arrives after the edit is composed"
+detail = """
+§1 and §5.3 claim the path surface "fires on codex the way it fires on Claude's Read|Edit|Write". It does not. Codex reads files through the shell (`cat`, `sed -n`, `rg`), so those calls reach the codex codec as `Bash` and become the severity-gated command surface. There, `command_admits` compares whole tokens against the scope's commands (src/retrieve.rs:141-145), so a path-scoped memory can never match a `cat src/x.rs`.
+
+On Claude, the Read leg is where the nudge is most useful: it lands before the model composes an edit. That is exactly the argument §5.7 makes to excuse pi's post-execution delta. On codex, the only path trigger is `apply_patch`. Its `PreToolUse` fires after the model has already written the patch, so the nudge is retrospective in the same way §5.7 and R-3 describe for pi's bare `edit`.
+
+The design documents pi's timing delta carefully but presents codex as full parity. It should record the codex delta: no path surface on reads, and retrospective timing on edits. It should also decide deliberately whether to accept that, or to consider a later option such as path-operand extraction from read-shaped shell commands. That would be a heuristic, and likely a follow-up, but the choice should be made rather than left invisible."""
+disposition = "fix-now"
+response = """Accepted. Verified against codex's Tool coverage table: shell and unified exec both match `Bash`, there is no read tool, and `command_admits` (src/retrieve.rs:141) is token-prefix over the command dimension, so a path-scoped memory cannot match `cat src/x.rs`. The scope's claim that the path surface "fires on codex the way it fires on Claude's Read|Edit|Write" was false. §5.7 now records the codex delta explicitly — no path surface on reads, and `apply_patch`'s nudge is retrospective in the way pi's is — and R-3 is extended to both. The scope's path-surface bullet is corrected. The choice is made deliberately rather than left invisible: shell path-operand extraction is recorded in §6 as a follow-up, not adopted, because it would be a heuristic over a command string we do not control."""
+
+[[finding]]
+id = "F-9"
+status = "answered"
+severity = "major"
+title = "Fail-open runtime has no timeout; an awaited pi tool_result, or a codex hook, can stall on a hung doctrine process"
+detail = """
+§5.7 says the pi extension "can never block a tool", and Principle 3 says the runtime "can never block". But pi awaits `tool_result` handlers (they compose, each seeing prior changes, per pi 0.87.1 docs/extensions.md), and the sketched `execFile` sets no `timeout` and ignores `ctx.signal`. A doctrine process that hangs holds the tool result, and so the turn, indefinitely. It could hang in `crate::git::capture`, on a slow filesystem, or on a lock. This is an asynchronous block, not a synchronous one, but a block all the same.
+
+The sibling generated code already bounds its subprocess: `generate_pi_extension` uses `timeout: 5_000`. On codex, the handler schema has a `timeout` field that the design never sets, so doctrine inherits a default it did not choose. That is the same argument §5.6 makes against inheriting codex's default `additionalContextLimit`.
+
+Fix: give the pi spawn an explicit short timeout plus `signal: ctx.signal`, with expiry folding to `undefined`. Set an explicit `timeout` on the codex handler. Make both named constants (STD-001) and add them to §5.7 and §5.6."""
+disposition = "fix-now"
+response = """Accepted. pi awaits `tool_result` handlers, and the sketch had neither a timeout nor `ctx.signal`; the codex handler's `timeout` was unset. §5.7's sketch now passes `timeout: SURFACE_TIMEOUT_MS` and `signal: ctx.signal` to the async spawn, with a "Bounded" contract bullet naming the hang paths (`crate::git::capture`, slow filesystem, a lock) and citing the sibling `generate_pi_extension`'s existing `timeout: 5_000`. §5.6 sets `SURFACE_TIMEOUT_SEC_CODEX` on the codex handler with the same rationale the design already used for the context limit — inheriting a default we did not choose. Both are named constants (STD-001), recorded in §5.2's constant list, and covered by §9."""
+
+[[finding]]
+id = "F-10"
+status = "answered"
+severity = "major"
+title = "paths_from_patch is not 'unified-diff-shaped' or harness-neutral; it parses codex's apply_patch envelope grammar"
+detail = """
+§5.1 and §5.3 (and DEC-285) justify placing the reader in the binary on the claim that it is a neutral function over a "unified-diff-shaped patch" that "would serve any harness that delivers a unified-diff-shaped patch". The recognised headers (`*** Begin Patch`, `*** Update File:`, `*** Add File:`, `*** Delete File:`) are not unified diff. Unified diff uses `--- a/` and `+++ b/`. These headers are codex's own apply_patch grammar, as embedded in the codex binary: `update_hunk: "*** Update File: " filename LF change_move? change?`.
+
+The grammar also has a fourth header the design omits: `change_move: "*** Move to: " filename`. A rename-plus-edit writes the destination path, which should be probed too.
+
+So the IDE-034 argument for DEC-285 rests on a false premise. The reader is a harness-grammar parser under a neutral name. That does not necessarily change where it should live, since only `codex_request` produces `Patch` today. But the design should state honestly what it is: a parser for one named grammar, the codex apply_patch envelope, pinned by version. It should also say whether the neutral wire should expose `class: patch` at all, given that no neutral producer uses it (YAGNI). And `*** Move to:` needs adding to the recognised headers and to the VT list."""
+disposition = "fix-now"
+response = "Accepted. Verified in codex 0.155.1's binary: `*** Move to:` exists, and the headers are `apply_patch`'s envelope grammar rather than unified diff. §5.3 now names it plainly as codex's `apply_patch` grammar, pinned to 0.155.1, rather than dressing it as neutral; `*** Move to:` is added to the recognition set and to the §9 VT list. The neutral wire's `class: patch` is dropped — the pi adapter is its only producer and speaks only paths and commands, so the class was a contract nobody exercised; `SurfaceRequest::Patch` remains, produced by `codex_request`. §7's patch-reader row and §5.1's `Patch` resolution are updated to match."
+
+[[finding]]
+id = "F-11"
+status = "answered"
+severity = "major"
+title = "The codex Bash and apply_patch wire shapes rest on assertion; every VT runs on self-authored synthetic payloads"
+detail = """
+A-1 says the codex `PreToolUse` shape is "verified against codex 0.155.1's published hook contract and binary". But the research (research.md, raw threads) contains no captured payload, and §9's integration VTs all feed payloads the design authors wrote themselves. So the tests prove the codec against the design's own assumption.
+
+Two concrete unknowns determine whether the codex command surface works at all:
+1. Is `tool_input.command` a string or an argv array? Codex's shell tool takes `command` as an array; its embedded prompt shows `{"command":["apply_patch", ...]}`. `SurfaceToolInput.command` is `Option<String>`, so an array fails the whole serde parse. Every codex `Bash` fire would then emit nothing, silently.
+2. If it is a string, is it the model's command (`cargo test`) or a wrapper (`bash -lc 'cargo test'`)? `command_admits` matches leading tokens, so a wrapper defeats every command-scoped memory.
+
+A third case also needs stating. When the model invokes `apply_patch` through the shell tool (the form codex's own prompt shows), does the hook report `tool_name: "apply_patch"` or `Bash`? If `Bash`, the patch goes to the command surface and the path surface never fires.
+
+Fix: capture one real codex `PreToolUse` payload for each of shell, apply_patch-as-tool and apply_patch-via-shell, using a throwaway hook that tees stdin. Check them in as test fixtures and drive the codec VTs from them. This is cheap, and it is the only thing that retires A-1."""
+disposition = "fix-now"
+response = "Accepted. The design had no captured payload; the VTs would have proven only that the codec matches the design's own assumption. §6's `A-1` now states the three open questions concretely (string vs argv `command`; model command vs wrapper; `apply_patch` through the shell reporting `Bash`), §9 opens with a phase-1 gate that captures one real payload per case with a stdin-teeing hook and checks them in as the VTs' fixtures, and the scope's verification list records the same gate. As a design-level mitigation that does not depend on the fixture outcome, `SurfaceToolInput.command` is read **tolerantly** (§5.2): a vector of argv strings is joined with single spaces, and a value that decodes as neither yields no request instead of failing the whole payload — closing the silent-nothing path for the one field whose shape is genuinely uncertain."
+
+[[finding]]
+id = "F-12"
+status = "answered"
+severity = "minor"
+title = "R-2 and §5.6 promise that untrusted codex groups do not read as installed; nothing can implement that, and every upgrade silently un-trusts them"
+detail = """
+§5.6 says "per STD-003 — neither reads as installed until trusted", and R-2 says "the install must not read as complete until they are trusted". The installer cannot observe codex trust. Trust is codex state (`hooks.state."<key>".trusted_hash`), and `install_codex_hook` returns `Wired` or `Refreshed` plus the manual-steps notice (src/boot.rs:2497-2521), which today names "the doctrine hook", singular.
+
+Because codex hooks use the `Baked` command form (an absolute exec path), every doctrine upgrade that moves the binary path rewrites the entries. On NixOS that is every nix upgrade, since the store path changes. Rewriting changes the trust hash, so both surface groups go silently inert until the user re-runs `/hooks`. Codex skips untrusted hooks without saying so, and doctrine cannot disclose a skip it cannot see.
+
+Fix: restate the guarantee as what is achievable. The install discloses the manual step on every `Wired`/`Refreshed` outcome, and names all three codex hooks. Either accept the runtime skip as a documented delta, or add a read of codex's trust state as a follow-up."""
+disposition = "fix-now"
+response = """Accepted. The installer cannot observe codex trust, so the promise was unkeepable. §5.6 now states the achievable guarantee: disclose the manual `/hooks` step on every `Wired`/`Refreshed` outcome and name all three codex hooks instead of "the doctrine hook" singular; an untrusted group's runtime skip is a documented delta, not a promise. §5.8 and the scope's R-5 carry the same wording, and R-7 records the NixOS consequence explicitly — the baked absolute exec path moves on every upgrade, so the trust review re-arms every upgrade rather than in an edge case. Reading codex's trust state is named as a follow-up."""
+
+[[finding]]
+id = "F-13"
+status = "answered"
+severity = "minor"
+title = "PRD-007 §2's out-scope is named as a conflict but has no reconciliation path"
+detail = """
+§3 notes that `PRD-007` §2 out-scopes per-turn governance injection. It then says "the governance leg reconciles the first", meaning `PRD-004` only, and "the design does not treat either as satisfied meanwhile". `DEC-284`'s governance leg carries `POL-003` and the `PRD-004` and `SPEC-011` revisions. It carries nothing for `PRD-007`.
+
+So the slice widens a behaviour to two more harnesses while a binding tier-2 spec out-scopes something adjacent to it, and nothing is planned to settle the question. The design should do one of two things:
+(a) argue that ambient memory pointers are not "governance injection" in `PRD-007`'s sense, in which case the conflict dissolves and the sentence should say so; or
+(b) add a `PRD-007` revision to the reconcile-time leg.
+
+Leaving it as "not treated as satisfied" is an unresolved conflict between binding sources, which boot.md's Authority section says to surface rather than carry."""
+disposition = "fix-now"
+response = "Accepted, resolved by option (a) rather than by widening the governance leg. PRD-007 §2 out-scopes *per-turn injection of governance content* and *any mechanism that re-pays orientation cost mid-session*; the surface injects memories — a footgun, a scope-relevant pointer — never governance text, orientation content, or a re-run of the boot snapshot. §3 now states that reading as the resolution and says plainly that no PRD-007 revision is owed, so the conflict is dissolved rather than carried as a binding-source contradiction with no path."
+
+[[finding]]
+id = "F-14"
+status = "answered"
+severity = "minor"
+title = "Tuning log cannot tell which harness fired"
+detail = """
+`surface_log_line` (src/memory.rs:10652) records session, surface, key, counts and uids, but not the wire. Once three harnesses write one `mem-surface.log`, tuning data is conflated: codex's differently-shaped command strings, and pi's post-execution fires, pool with Claude's. Several questions this design explicitly leaves to "measure" would need exactly this split: R-1 (pi spawn cost), the `SURFACE_CONTEXT_LIMIT_CODEX` revisit, and the `isError` question.
+
+Adding `"wire": "claude"|"codex"|"neutral"` is one field, which the codec selector already knows. The byte-for-byte promise for single-probe fires would then need restating as "plus the wire field"."""
+disposition = "fix-now"
+response = 'Accepted. `surface_log_line` (src/memory.rs:10652) has no wire field, and R-1, the `SURFACE_CONTEXT_LIMIT_CODEX` revisit and the `isError` question all need the split. §5.4 adds `"wire": "claude"|"codex"|"neutral"` — known at the decode step and carried down — and restates the single-probe promise as "the only change is the added field" rather than byte-for-byte. §9 asserts the field is present on the emitted line.'
+
+[[finding]]
+id = "F-15"
+status = "answered"
+severity = "minor"
+title = "The rejected pi MCP route is not recorded in the design, though a doctrine MCP process is already live in the same pi extension"
+detail = """
+The slice's Non-Goals defer a `memory surface` MCP operation "see Open Questions". Neither design.md §6 nor the §7 alternatives table carries it; DEC-286's rejected alternatives are only the `PI_SUBAGENT_CHILD` check and deferring the adapter.
+
+This alternative is materially stronger than it looks. `templates/mcp.ts` already holds a long-lived `doctrine serve --mcp` child for the whole pi session, in the same extension that `index.ts` loads. Routing surfacing through it would remove R-1's per-call spawn entirely, and also the cold-start and timeout exposure. The design should state why a per-call spawn is preferred, or name the MCP route as R-1's fallback mitigation, so that "measure" has a defined next step."""
+disposition = "fix-now"
+response = """Accepted. The scope deferred a `memory surface` MCP operation but the design never recorded it; and the observation sharpens it — a long-lived `doctrine serve --mcp` child already exists in the same extension, so the route would remove R-1's per-call spawn entirely. §6 now records the route with that reasoning and §7 carries it as a decision row, choosing the per-call spawn because it is one uniform binary interface across all three harnesses and does not depend on the MCP bridge being installed, healthy or un-skipped. R-1 names the MCP child as its fallback, so "measure" has a defined next step rather than an open question."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

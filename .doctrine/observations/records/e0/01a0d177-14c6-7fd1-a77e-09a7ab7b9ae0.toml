@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d177-14c6-7fd1-a77e-09a7ab7b9ae0"
+recorded_at = "2026-09-24T03:30:37.382763737Z"
+kind = "friction"
+summary = "design (reviewing): review pass RV-377 shows STALE+concluded; unclear whether a second hostile pass should raise on it or open a new RV"
+detail = "design show names review_pass RV-377 STALE; obligation text says raise on that RV and never review new, but does not say what STALE+concluded means for a follow-up pass. Raised F-5..F-15 onto the concluded ledger; it accepted them."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

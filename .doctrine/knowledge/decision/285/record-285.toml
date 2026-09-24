@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 285
+slug = "sl-263-apply-patch-reader-a-neutral-patch-text-to-paths-function"
+title = "SL-263 apply_patch reader: a neutral patch-text-to-paths function"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Codex delivers file edits as a single `apply_patch` tool with the patch body in `tool_input.command` and no `file_path`. Claude's path surface fires on `Read|Edit|Write`; codex's must fire on `apply_patch`. The grammar is codex's, but the input (a unified-diff-shaped patch) and the output (root-relative paths) are not. Slice OQ-1 is resolved in: ship the extractor here rather than with the command surface only."
+choice = "A pure `paths_from_patch(patch: &str) -> Vec<PathBuf>` in `src/memory.rs`, beside the other pure helpers. Contract: patch text in, root-relative paths out, in header order, deduped; recognises the `*** Update File:`, `*** Add File:` and `*** Delete File:` headers; ignores non-header lines; an unknown or malformed patch yields no paths (fail-open). Codex's `apply_patch` dispatch is a thin call onto it, and the function is named for its contract, never for a harness tool."
+alternatives = ["An `apply_patch` arm inside the shared decoder: bakes a codex tool name into the neutral core.", "A codex-named reader module: names the seam rather than the contract, and ADR-001 keeps this in the command tier anyway."]
+rationale = "The extractor is neutral iff its decode target is neutral. Patch text to paths meets that; keeping it a pure function beside the existing helpers preserves ADR-001 layering and makes it unit-testable with synthetic patches."
+consequences = ["The Path surface (and its ungated admission class and header) applies to codex file edits.", "A multi-file patch yields one path probe per header, merged before a single admit/dedup/cap/format pass."]
+decided_by = "user, in the SL-263 design session"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-263"

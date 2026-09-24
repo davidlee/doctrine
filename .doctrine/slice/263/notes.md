@@ -69,6 +69,35 @@ Recorded at the `exploring` runbook step `explore.triage`. Full detail in
 - `mem.pattern.build.jail-binary-for-skill-install` (stale) — run `install`/`boot`
   from the freshly built in-tree binary, not PATH.
 
+## Review
+
+RV-377 (design pass, `human-only`). One hostile pass conducted in-session; the
+four findings raised were all fixed in the design before lock:
+
+- **F-1 (major)** — codex's `PreToolUse` carries no `agent_id` (only
+  `SubagentStart`/`SubagentStop` do) and its subagent hooks report the *parent*
+  session id, so the seen-set is shared across that boundary. The draft
+  documented the `INV-3` parity gap only for pi. Fixed in §3, §5.4, §5.7; `R-6`
+  added; scope Non-Goals amended.
+- **F-2 (major)** — the pi adapter sketch spawned synchronously on pi's event
+  loop, where tool calls may run in parallel. Fixed: async spawn plus a
+  "never block the event loop" contract bullet.
+- **F-3 (minor)** — codex's `additionalContextLimit` unit is asserted, not
+  verified. Fixed: the design states the assumption; the unit is confirmed at
+  implementation.
+- **F-4 (minor)** — the shared `SurfaceInput` tolerates codex's extra fields only
+  implicitly. Fixed: §5.2 states the unknown-field tolerance and the open
+  `tool_input` map.
+
+**What a further pass would probe**, were one commissioned: whether the
+multi-probe merge in §5.4 orders `admits` and cross-probe dedup correctly
+against the cap (a cap applied after the union is the only thing stopping a wide
+patch from crowding out a better-scoring hit); whether the codex
+`additionalContextLimit` value holds under a real block once its unit is known;
+and whether the Claude two-form ownership predicate (canonical + legacy-bare)
+has a third ancestor form the refresh should also own. None is load-bearing for
+the design's shape, and none is a reason to hold the lock.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>

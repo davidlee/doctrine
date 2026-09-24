@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 286
+slug = "sl-263-pi-adapter-generated-surfacets-on-the-neutral-wire-subagent-delta-accepted"
+title = "SL-263 pi adapter: generated surface.ts on the neutral wire, subagent delta accepted"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "pi's extension API exposes `tool_result` (post-execution), whose result may replace `content`; there is no pre-execution context channel (`tool_call` can only block or mutate input). Tool inputs: `read`/`write`/`edit` carry `path`, `bash` carries `command`. `ToolResultEvent` carries `toolName`/`input`/`content`/`isError` but no agent or session identity; `ExtensionContext.sessionManager.getSessionId()` supplies a session id. The only subagent marker, `PI_SUBAGENT_CHILD=1`, is set by the pi-subagents package, not by pi. The existing pi install is a per-module triad (`generate_`/`plan_`/`install_`) with an ownership header and foreign-skip, hosting `index.ts` and `mcp.ts`. This is the slice's OQ-3."
+choice = "Generate `.pi/extensions/doctrine/surface.ts` (ownership-marked with `PI_EXT_HEADER`, regenerate-on-change, foreign-skip), mirroring the `mcp.ts` triad and imported by `index.ts`. On `tool_result`, map `read|edit|write` (`input.path`) and `bash` (`input.command`) into the neutral envelope, invoke `memory surface --input neutral --format plain`, and append the returned block to `event.content`, passing `session_id = ctx.sessionManager.getSessionId()`. Strictly fail-open: any failure returns `undefined` unchanged. Subagent suppression: accept the INV-3 parity delta for v1 -- no suppression on pi -- and document it; do not depend on the pi-subagents marker."
+alternatives = ["""Check `process.env.PI_SUBAGENT_CHILD === "1"`: suppresses the pi-subagents case only, coupling the generated adapter to a package's seam -- the failure mode IDE-034 names.""", "Defer the pi adapter until pi exposes a harness-native subagent signal: costs the port."]
+rationale = "The adapter then rests only on doctrine-owned contracts (the neutral envelope, the plain output form) plus pi's own extension API. The subagent gap becomes a documented capability delta rather than a partial mechanism that reads as INV-3 parity."
+consequences = ["Post-execution timing is a capability delta (R-3): for a read->edit workflow the nudge still lands before the composed edit; for a bare edit/write it is retrospective.", "One binary spawn per main-thread read/edit/write/bash (R-1).", "`RefreshReport` gains a third extension field and report leg."]
+decided_by = "user, in the SL-263 design session"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-263"

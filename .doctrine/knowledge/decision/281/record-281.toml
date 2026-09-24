@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 281
+slug = "sl-263-neutral-surface-request-input-selector-and-canonical-hook-forms"
+title = "SL-263 neutral surface request, input selector, and canonical hook forms"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Three inputs must reach one binary. Claude pipes its PreToolUse JSON with Claude tool vocabulary (`Read|Edit|Write` + `tool_input.file_path`; `Bash` + `tool_input.command`). Codex pipes its PreToolUse JSON, whose hook layer canonicalises `tool_name` to `Bash` (shell) and `apply_patch` (patch text in `tool_input.command`). pi is a generated TS extension that cannot use either harness wire without becoming load-bearing on that harness's vocabulary. Today `probe_for` (src/memory.rs) is the Claude-shaped decoder and is the coupling boundary research F2 identifies. ADR-001 layering: `memory` and `boot` are command tier; no new module."
+choice = 'A doctrine-owned `SurfaceRequest { Path(raw), Command(raw), Patch(patch_text) }` in `src/memory.rs`, beside the existing pure helpers. Three codecs normalise into it: `claude_request` (`Read|Edit|Write` + `file_path` -> Path; `Bash` + `command` -> Command), `codex_request` (`Bash` + `command` -> Command; `apply_patch` + `command` -> Patch), and `neutral_request` (a doctrine-owned JSON envelope). Selected by a new `--input <claude|codex|neutral>` flag, default `claude`. The neutral wire is `{"session_id"?, "cwd"?, "probe": {"class": "path"|"command"|"patch", "value": ...}}`. Canonical hook commands become explicit: `memory surface --input claude` for the Claude writer and `plugins/doctrine/hooks/hooks.json`, `memory surface --input codex` for the codex registry. A bare `memory surface` stays a parse-time alias for `claude` and stays owned, so the merge core refreshes an un-upgraded entry rather than adding a second one (the `is_doctrine_emit_command` multi-form self-heal pattern).'
+alternatives = ["Neutral argv (`--path`/`--command`/`--session`), no third codec: simpler TS, but a second spelling of the same request and no single definition of the envelope.", """pi emits the Claude wire (`tool_name: "Read"`, `tool_input.file_path`): zero new wire, but couples pi's correctness to a Claude-shaped vocabulary.""", "Required `--input`: self-describing, but every un-upgraded install fails open to emitting nothing."]
+rationale = "One input mechanism (stdin + `--input`) rather than two, so the envelope is a declared, inspectable, unit-testable doctrine contract. Explicit canonical forms make every hook site self-describing; the alias keeps un-upgraded installs correct between refreshes; and doctrine's own settings files are upgraded by the merge core's existing owned-entry refresh."
+consequences = ["`probe_for` is replaced by `probes_for(request, root)`; the neutral core names no harness tool or input key.", "`session_id` and `cwd` travel in the envelope, so session dedup and root discovery are uniform across the three wires.", "Ownership predicates must match both the canonical and the legacy-bare form (suffix-strip, mirroring `is_doctrine_emit_command`), or the refresh would double-wire.", "`plugins/doctrine/hooks/hooks.json` moves to the explicit form."]
+decided_by = "user, in the SL-263 design session"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-263"

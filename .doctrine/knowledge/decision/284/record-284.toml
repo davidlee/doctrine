@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 284
+slug = "sl-263-governance-sequencing-pol-003-prd-004-rev-spec-011-rev-at-reconcile"
+title = "SL-263 governance sequencing: POL-003, PRD-004 REV, SPEC-011 REV at reconcile"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "The feature is spec-dark. PRD-004 §2 out-scopes 'proactive, unsolicited injection of memories into a context ahead of demand' and §8's Open Question blocks pre-emptive surfacing and the trust bar it would require; PRD-007 §2 out-scopes per-turn governance injection. SPEC-011's responsibilities stop at doctrine's owned Claude hook SET, so `install_codex_hook` and the pi extension generators are requirement-dark. ADR-011's per-harness-altitude theme is self-declared falsified by SL-254; IDE-034 is the rule that governs adapter placement, at its fourth instance (policy-shaped by its own threshold). User ruling 2026-09-24: the design locks first, then governance is drafted, then applied at reconcile."
+choice = "On lock, mint a REV placeholder. Draft three governance changes against the locked design: (a) POL-003 authored from IDE-034 — harness-specific behaviour ships as an opt-in supplement whose correctness rests only on doctrine-owned contracts, never baked into the neutral core nor load-bearing on a host harness's incidental seams; (b) a PRD-004 revision reconciling §2 and §8 with the shipped mechanism, on the reading that a tool-call-keyed surface delivers concise pointers at the moment of demand rather than memory payload ahead of demand; (c) a SPEC-011 revision (a REV of SPEC-011, not a new spec) extending its responsibilities and members to the codex hook registry and the generated pi extensions. Apply all three at reconcile; re-ground SL-263's `governed_by` on POL-003 and record `SL-263 governed_by POL-003`."
+alternatives = ["Author the governance ahead of the design: contradicts the user's sequencing ruling and drafts rules against a design that may still move.", "Defer all governance to a follow-up slice: leaves the fourth instance of the principle shipping ungoverned and the slice un-auditable for spec conformance."]
+rationale = "Drafting governance against a locked design keeps the rule downstream of what it governs; applying at reconcile honours ADR-013's route for governing text through a REV."
+consequences = ["Until reconcile, SL-263 cannot cite a requirement it fulfils and could be invalidated retroactively by a PRD-004 scope revision; the audit must not read the out-of-scope line as satisfied.", "POL-003 governs this slice once authored; the design argues against it directly rather than presenting the falsified altitude."]
+decided_by = "user, in the SL-263 design session"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-263"

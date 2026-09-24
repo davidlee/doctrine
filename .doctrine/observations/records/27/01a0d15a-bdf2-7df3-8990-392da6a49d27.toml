@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d15a-bdf2-7df3-8990-392da6a49d27"
+recorded_at = "2026-09-24T02:59:40.14643229Z"
+kind = "friction"
+summary = "SL-263 research: codex tool_name assumption unverified"
+detail = "The SL-263 scope and research assert codex reports shell tools as tool_name Bash with tool_input.command, making the codex command surface config-only. A strings scan of codex 0.155.1 shows no quoted Bash tool name (Bash appears only in bash-grammar parser strings); codex internal names are shell/unified_exec/exec_command/apply_patch. If the hook payload passes codex's own tool names, the codex command leg needs a codex tool-name codec, not config only. Design triage is checking the live docs."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

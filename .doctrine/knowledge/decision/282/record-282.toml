@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 282
+slug = "sl-263-output-form-format-claudeplain"
+title = "SL-263 output form: --format claude|plain"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "pi's extension appends the returned text to `event.content`; Claude and codex consume the `hookSpecificOutput.additionalContext` envelope (codex ignores plain stdout on PreToolUse). SL-205 emitted only the envelope. This is the slice's OQ-2."
+choice = "Add `--format <claude|plain>` to `memory surface`, default `claude`. `plain` emits the bare block text, or nothing. The input envelope, admission gate, caps, dedup and tuning log are unchanged."
+alternatives = ["The pi TS adapter parses the shared envelope (`JSON.parse(stdout).hookSpecificOutput.additionalContext`): zero Rust, but pi's correctness rests on the envelope's key shape rather than a doctrine-owned contract."]
+rationale = "Doctrine owns both output forms; the bare emitter is small, and it keeps the generated adapter a dumb consumer of a contract doctrine controls. The default preserves back-compat with shipped `.claude/settings*.json` entries."
+consequences = ["`emit_surface` takes the form; tests cover envelope, plain, and empty for both."]
+decided_by = "user, in the SL-263 design session"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-263"
