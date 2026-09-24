@@ -1336,7 +1336,7 @@ fn owned_positions(arr: &[Value], is_ours: fn(&str) -> bool) -> Vec<(usize, usiz
 }
 
 /// The owned hook at `(ei, hi)` is canonical iff its entry's `matcher`, its
-/// `command`, and the handler fields doctrine owns all equal what
+/// `command`, and the handler fields **this spec sets** all equal what
 /// [`desired_entries`] would write — the no-write short-circuit's precondition.
 /// Takes the spec for the handler fields, and the computed `command`/`matcher`
 /// because the matcher is POSITIONAL within the spec's ordered set and the command
@@ -1344,7 +1344,8 @@ fn owned_positions(arr: &[Value], is_ours: fn(&str) -> bool) -> Vec<(usize, usiz
 ///
 /// Comparing only `command` would judge an owned entry whose `additionalContextLimit`
 /// is missing or stale at the old value canonical, so the merge core would never
-/// heal it (SL-263 §5.6).
+/// heal it (SL-263 §5.6). A field the spec does NOT set is left uncompared, so an
+/// operator's hand-set value on a doctrine-owned hook is not reverted (RV-380 F-1).
 fn entry_is_canonical(
     arr: &[Value],
     ei: usize,
@@ -1365,6 +1366,9 @@ fn entry_is_canonical(
         return false;
     };
     let command_ok = handler.get("command").and_then(Value::as_str) == Some(command);
+    // Compare ONLY the handler fields this spec sets (SL-263 §5.6, RV-380 F-1):
+    // a field doctrine does not configure on the spec is legitimate operator
+    // config and must survive the merge.
     let limit_ok = handler_field_matches(
         handler,
         ADDITIONAL_CONTEXT_LIMIT_KEY,
@@ -1374,13 +1378,15 @@ fn entry_is_canonical(
     matcher_ok && command_ok && limit_ok && timeout_ok
 }
 
-/// Whether `handler`'s `key` matches `expected`, where `None` means the key must
-/// be ABSENT — mirroring [`handler_entry`], which omits an unset field rather than
-/// writing `null`.
+/// Whether `handler`'s `key` is acceptable for a spec whose expected value is
+/// `expected`. `Some(n)` asserts the field equals `n` — healing a codex entry
+/// whose owned limit or timeout is missing or stale. `None` means the spec does
+/// NOT configure the field, so it is **not compared**: an operator's hand-set
+/// `timeout` on a spec doctrine does not own survives the merge (RV-380 F-1).
 fn handler_field_matches(handler: &Value, key: &str, expected: Option<u32>) -> bool {
     match expected {
         Some(n) => handler.get(key).and_then(Value::as_u64) == Some(u64::from(n)),
-        None => handler.get(key).is_none(),
+        None => true,
     }
 }
 
@@ -2481,15 +2487,12 @@ struct PiExtension {
 /// The PHASE-01 MCP extension template — embedded at compile time.
 const MCP_EXT_TEMPLATE: &str = include_str!("../templates/mcp.ts");
 
-/// The marker line in the MCP template that gets replaced with the baked exec path.
-const MCP_BIN_PATH_MARKER: &str = "declare const BIN_PATH: string;";
+/// The marker line every template carries, replaced with the baked exec path.
+/// One literal, one name (STD-001): the MCP and surface templates share it.
+const BIN_PATH_MARKER: &str = "declare const BIN_PATH: string;";
 
 /// The SL-263 neutral-surface extension template — embedded at compile time.
 const SURFACE_EXT_TEMPLATE: &str = include_str!("../templates/surface.ts");
-
-/// The marker line in the surface template that gets replaced with the baked
-/// exec path (the same marker shape `mcp.ts` uses).
-const SURFACE_BIN_PATH_MARKER: &str = "declare const BIN_PATH: string;";
 
 const PI_EXT_INDEX: PiExtension = PiExtension {
     file_name: "index.ts",
@@ -2506,13 +2509,13 @@ const PI_EXT_SURFACE: PiExtension = PiExtension {
 
 /// Generate the candidate MCP extension file content with the baked exec path.
 fn generate_mcp_extension(exec: &Path) -> String {
-    generate_from_template(MCP_EXT_TEMPLATE, MCP_BIN_PATH_MARKER, exec)
+    generate_from_template(MCP_EXT_TEMPLATE, BIN_PATH_MARKER, exec)
 }
 
 /// Generate the candidate neutral-surface extension file content with the baked
 /// exec path.
 fn generate_surface_extension(exec: &Path) -> String {
-    generate_from_template(SURFACE_EXT_TEMPLATE, SURFACE_BIN_PATH_MARKER, exec)
+    generate_from_template(SURFACE_EXT_TEMPLATE, BIN_PATH_MARKER, exec)
 }
 
 /// Stamp the ownership header and bake `exec` over `marker` in `template` — the
@@ -8166,6 +8169,104 @@ process.stdout.write("RESULT:" + JSON.stringify(result ?? null));
         assert!(
             !stub.with_extension("stdin").exists(),
             "no child was spawned for an unmapped tool"
+        );
+    }
+
+    // =======================================================================
+    // RV-380 F-1 — canonicality compares only the fields a spec SETS
+    // =======================================================================
+
+    /// A hand-set handler field on a spec doctrine does not configure is
+    /// legitimate operator config (Claude Code's per-hook `timeout`), so it must
+    /// survive the merge rather than be reverted by the drop-and-reinsert.
+    #[test]
+    fn a_handler_field_on_an_unconfigured_spec_survives() {
+        // Claude `memory surface` sets neither `additionalContextLimit` nor
+        // `timeout`; an operator-set `timeout` must leave the entry canonical.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join(".doctrine")).unwrap();
+        std::fs::create_dir_all(root.join(".claude")).unwrap();
+        let command = format!("{PORTABLE_EXEC} {MEMORY_SURFACE_ARGS}");
+        let seed = serde_json::to_string_pretty(&serde_json::json!({
+            "hooks": { EVENT_PRE_TOOL_USE: [
+                surface_entry(&command, "Read|Edit|Write", None, Some(60)),
+                surface_entry(&command, "Bash", None, Some(60)),
+            ] }
+        }))
+        .unwrap();
+        std::fs::write(root.join(SETTINGS_PROJECT_REL), seed).unwrap();
+        let out = install_claude_hook(
+            root,
+            &HookSpec::memory_surface(Path::new("/abs/doctrine")),
+            false,
+        )
+        .unwrap();
+        assert!(
+            matches!(out.written, RefreshOutcome::None),
+            "an operator's field must not make the entry non-canonical"
+        );
+        let val: Value =
+            serde_json::from_str(&fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap())
+                .unwrap();
+        for entry in val["hooks"][EVENT_PRE_TOOL_USE].as_array().unwrap() {
+            assert_eq!(
+                entry["hooks"][0][TIMEOUT_KEY],
+                Value::from(60),
+                "the hand-set timeout survives: {entry}"
+            );
+        }
+
+        // codex `boot_emit` sets neither field either.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join(".codex")).unwrap();
+        let command = "/abs/doctrine prompt resolve --role orchestrator";
+        let seed = serde_json::to_string_pretty(&serde_json::json!({
+            "hooks": { EVENT_SESSION_START: [
+                surface_entry(command, SESSION_MATCHER_CODEX, None, Some(60)),
+            ] }
+        }))
+        .unwrap();
+        std::fs::write(root.join(CODE_HOOKS_REL), seed).unwrap();
+        let out = install_codex_hook(
+            root,
+            &HookSpec::boot_emit(Path::new("/abs/doctrine"), SESSION_MATCHERS_CODEX),
+            false,
+        )
+        .unwrap();
+        assert!(matches!(out, RefreshOutcome::None));
+        let val: Value =
+            serde_json::from_str(&fs::read_to_string(root.join(CODE_HOOKS_REL)).unwrap()).unwrap();
+        assert_eq!(
+            val["hooks"][EVENT_SESSION_START][0]["hooks"][0][TIMEOUT_KEY],
+            Value::from(60)
+        );
+    }
+
+    /// The complement: a field the spec DOES set is still healed when missing or
+    /// stale — the PHASE-03 purpose survives the F-1 narrowing.
+    #[test]
+    fn a_field_the_spec_sets_is_still_healed() {
+        let command = "/abs/doctrine memory surface --input codex";
+        let tmp = tempfile::tempdir().unwrap();
+        let (outcome, entries) = install_codex_surface_on(
+            tmp.path(),
+            Some(&codex_surface_seed(
+                command,
+                None,
+                Some(SURFACE_TIMEOUT_SEC_CODEX),
+            )),
+        );
+        assert!(
+            matches!(outcome, RefreshOutcome::Refreshed(_)),
+            "a missing owned limit must still heal"
+        );
+        assert!(
+            entries
+                .iter()
+                .all(|e| e["hooks"][0][ADDITIONAL_CONTEXT_LIMIT_KEY]
+                    == Value::from(SURFACE_CONTEXT_LIMIT_CODEX))
         );
     }
 }

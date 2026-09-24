@@ -10905,8 +10905,9 @@ fn probe_key(probe: &crate::retrieve::ScopeProbe) -> String {
 /// Resolve the doctrine root by walking up from the stdin `cwd` (canonicalized),
 /// falling back to the `CLAUDE_PROJECT_DIR` anchor — the standard cwd-based
 /// discovery, keyed on the hook's reported cwd rather than the process cwd
-/// (design §5.4). `None` ⇒ no discoverable root ⇒ the caller emits nothing
-/// (INV-2 fail-open).
+/// (design §5.4). Returns the [`SurfaceAnchor`] (the RAW reported cwd plus the
+/// canonical anchor resolution) and the root. `None` ⇒ no discoverable root ⇒
+/// the caller emits nothing (INV-2 fail-open).
 ///
 /// `env_project_dir` is the `CLAUDE_PROJECT_DIR` value, passed in rather than
 /// read here (ISS-220): reading process env inside this resolution made the
@@ -10916,11 +10917,15 @@ fn probe_key(probe: &crate::retrieve::ScopeProbe) -> String {
 fn discover_surface_anchor(
     cwd: Option<&str>,
     env_project_dir: Option<&OsStr>,
-) -> Option<(PathBuf, PathBuf)> {
-    let anchor = cwd
+) -> Option<(SurfaceAnchor, PathBuf)> {
+    let canonical = cwd
         .and_then(|c| fs::canonicalize(c).ok())
         .or_else(|| env_project_dir.and_then(|v| fs::canonicalize(PathBuf::from(v)).ok()))?;
-    let root = crate::root::find_from(&anchor, &crate::root::default_markers())?;
+    let root = crate::root::find_from(&canonical, &crate::root::default_markers())?;
+    let anchor = SurfaceAnchor {
+        raw: cwd.map(PathBuf::from),
+        canonical,
+    };
     Some((anchor, root))
 }
 
@@ -11054,20 +11059,16 @@ fn run_surface_to(
     if decoded.agent_id.is_some() {
         return Ok(());
     }
-    // Root discovery from the reported `cwd`, plus the canonical anchor it
-    // resolved; no discoverable root ⇒ nothing (INV-2). Both are needed before
-    // the probe: a relative value joins the anchor, and an absolute value under
-    // the raw reported cwd is rebased onto it (design §5.1).
-    let Some((canonical, root)) = discover_surface_anchor(decoded.cwd.as_deref(), env_project_dir)
+    // Root discovery from the reported `cwd` — the anchor (raw + canonical) no
+    // discoverable root ⇒ nothing (INV-2). Both forms are needed before the
+    // probe: a relative value joins the canonical anchor, and an absolute value
+    // under the raw reported cwd is rebased onto it (design §5.1).
+    let Some((anchor, root)) = discover_surface_anchor(decoded.cwd.as_deref(), env_project_dir)
     else {
         return Ok(());
     };
     let Some(request) = decoded.request else {
         return Ok(());
-    };
-    let anchor = SurfaceAnchor {
-        raw: decoded.cwd.as_deref().map(PathBuf::from),
-        canonical,
     };
     // Resolve the request; an unresolvable or out-of-root request ⇒ nothing.
     let Some((surface, probe)) = probe_for(request, &anchor, &root) else {
