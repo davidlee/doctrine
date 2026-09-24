@@ -60,7 +60,8 @@ doctrine design adopt SL-N [--expect <fingerprint>] [--dry-run] [--diff]
    own admission inputs; an already-aligned document is a no-op (`DEC-279`).
    Rides the one apply pipeline, split at the parse boundary with a crossing
    mode (`DEC-279`, inq-6). Refuses on a locked run, naming the regression
-   (`DEC-279`, inq-7).
+   (`DEC-279`, inq-7). Reads `design.md` once; fingerprint and sections come
+   from the same bytes (`RV-374` `F-1`).
 2. **Report what the crossing did.** Output names each changed / unchanged /
    reordered section and every act and review attestation invalidated. (No
    "added": `document::parse` refuses unknown and missing markers.) This is the

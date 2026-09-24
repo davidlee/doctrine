@@ -8,13 +8,14 @@ title = "design review of SL-261"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+concluded = true
 
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-261"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Bind adopted sections to the fingerprint from the same read"
 detail = "SL-261 sec-3 lines 191-200 and 230-232 retain the current apply pipeline, where src/commands/design.rs:1843 reads and hashes design.md and lines 1856-1857 read it again for authored_sections. If the file changes from A to B between reads, dry-run can report sections from B with the printed fingerprint of A. If it returns to A before the pre-write check at line 1959, the write succeeds with B section bodies and an A watermark, so later entry checks see a false alignment. src/commands/design.rs:1591-1595 explicitly uses one read for start to avoid this defect. Carry one document read through alignment, expect validation, section parsing, report, rebaseline, and PreWriteBasis, and test a change between the reads."
@@ -23,7 +24,7 @@ response = 'Verified: design.rs:1843 fingerprints and :1856 re-reads for section
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Account for accepted bytes outside section bodies"
 detail = "SL-261 sec-2 lines 102-129 promises that materialise reproduces adopted design.md byte-identically and that the section diff represents the materialise delta. src/design_run/document.rs:295-300 accepts a whitespace-only head, and tests/e2e_design_materialise.rs:504-509 confirms such a document is adopted. The parser returns only sections at document.rs:340-345, while src/commands/design.rs:2155-2161 renders only those sections; materialise therefore drops the head. A head-only edit yields no changed-section row or diff, so the report says sections are unchanged while the next materialise rewrites the file. Either preserve these accepted bytes in run state or disclose the canonicalisation in the report and narrow the byte-identical promise; add a head-only e2e case."
@@ -32,7 +33,7 @@ response = "Verified: document.rs:295-300 accepts a whitespace-only head; render
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Check locked state before marker parsing"
 detail = "SL-261 sec-2 lines 89-93 promises the locked-run refusal and its regression remedy, but sec-3 lines 220-255 places the only proposed AdoptionLocked check in run::apply. The retained shell path in src/commands/design.rs:1856-1857 calls authored_sections and returns any document::parse refusal before run::apply at line 1909. A locked run with a divergent document containing an unknown or missing marker therefore reports a marker error instead of AdoptionLocked. After the aligned no-op decision, check the locked stage before parsing the document in the shell, while keeping the pure guard as a backstop; add a locked malformed-document case."
@@ -41,7 +42,7 @@ response = "Verified: authored_sections parses in the shell before run::apply. s
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Qualify the locked-run acceptance criterion"
 detail = "SL-261 sec-2 lines 85-93 explicitly returns success with no write for an aligned locked run, while sec-5 lines 381-385 proposes a new REQ-434 criterion saying adopt refuses on a locked run without qualification. Both cannot be true, so the normative criterion would reject the intended no-op and make verification ambiguous. State that a divergent adoption on a locked run refuses after the aligned check, or choose a strict locked-first rule and update the outcome and tests consistently."
@@ -50,12 +51,21 @@ response = "Agreed. sec-5 REQ-434 criterion now reads: on a locked run an aligne
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Make the type-name uniqueness pin non-vacuous"
 detail = "SL-261 sec-4 lines 339-356 relies on owner.name for retired-key lookup and proposes a pin that type names are unique across the contract closure. The existing closure_types traversal in src/design_run/payload_contract.rs:1610-1625 deduplicates by contract.name before returning contracts. A uniqueness assertion over closure_types can never detect two distinct TypeContract nodes with the same name; the second is already discarded, and JSON rendering also overwrites by name at payload_contract.rs:1912-1915. Specify a pin that traverses raw named edges using node identity before name deduplication, including nested and inlined types, and injects a duplicate-name fixture that the pin rejects."
 disposition = "fixed"
-response = "Observation verified (closure_types dedups by name). Different repair: match the owner by node identity (std::ptr::eq on the static TypeContract) instead of by name, so no uniqueness pin is needed. walk_keys takes the owning &TypeContract (its three call sites hold it). sec-4 updated, uniqueness pin dropped; sec-7 adds retired_key_matches_its_owner_only."
+response = "Contest accepted: PAYLOAD is the one const contract (payload_contract.rs:1465) and walk_type takes TypeContract by value. sec-4 now makes PAYLOAD a static (and the test NAMED const at contract_check.rs:440), and walk_type/walk_enum/walk_keys take &static TypeContract; WireType::Named already carries one, so every edge supplies an address. sec-6 updated."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "State diagram reverses journal and pre-write check"
+detail = "SL-261 sec-2 state diagram lines 78-80 branches Candidate to RefusedMoved on the pre-write re-check, or to Adopted labeled journal and snapshot written. This depicts the journal as happening only after a successful re-check. Sec-3 lines 245 and 248-250 instead require journal before re-check before snapshot, matching commands/design.rs:1951-1962. A moved document can leave a journal even though the snapshot does not advance. Make the sec-2 diagram show journal before the moved refusal and snapshot after the re-check, so the outcome agrees with the pipeline and its recoverable-effect ordering."
+disposition = "fixed"
+response = "Verified against design.rs: journal is written before the pre-write re-check. sec-2 diagram now goes Candidate -> Journalled -> (RefusedMoved, journal stays recoverable | Adopted, snapshot written)."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

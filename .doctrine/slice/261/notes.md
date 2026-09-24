@@ -46,6 +46,15 @@ Governance: new DEC superseding `DEC-100`'s carried rule 2; REV on `SPEC-029`
 (`REQ-434`, command family). `DEC-243` (Q1), `DEC-244` (unknown-key refusal),
 `STD-001`, `STD-003`, `ADR-001`.
 
+## Review passes
+
+`RV-374` (codex, gpt-6-sol high; concluded 2026-09-24) — six findings, all
+fixed and verified. A further pass would probe the implementation, not the
+design: whether `apply_pipeline`'s split keeps `DEC-250` mint hoisting intact
+in code, and whether the injection-seam test for the one-read rule actually
+reaches between the reads. Those belong to the phase VTs and the
+implementation code review, so no further design pass is needed.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>

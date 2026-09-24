@@ -76,8 +76,9 @@ stateDiagram-v2
   Parse --> RefusedMarkers: unknown / missing / malformed marker
   Parse --> Candidate: derive sections, invalidate, rebaseline
   Candidate --> Reported: --dry-run
-  Candidate --> RefusedMoved: pre-write re-check fails
-  Candidate --> Adopted: journal, snapshot written
+  Candidate --> Journalled: journal written
+  Journalled --> RefusedMoved: pre-write re-check fails\n(journal stays, recoverable)
+  Journalled --> Adopted: snapshot written
   Aligned --> [*]
   Reported --> [*]
   Adopted --> [*]
@@ -380,13 +381,23 @@ if !keys.iter().any(|row| row.key == name) {
 ```
 
 `retired_key` matches the owner by **node identity**, `std::ptr::eq(owner,
-contract)`, not by name. Every `TypeContract` is a `static`, so its address is
-its identity; matching on `name` would need a uniqueness guarantee the contract
-closure cannot supply (`closure_types` deduplicates by name before anything
-could compare). To make that possible, `walk_keys` takes the owning
-`&'static TypeContract` instead of its `type_name`; its three call sites
-(`contract_check.rs:67, 166, 171`) already hold the contract. The refusal still
-prints `contract.name`. The walk stays a
+contract)`, not by name. Matching on `name` would need a uniqueness guarantee
+the contract closure cannot supply (`closure_types` deduplicates by name before
+anything could compare). Identity needs two changes, because today it is not
+available:
+
+- **`PAYLOAD` becomes a `static`**, like the other 24 contracts
+  (`payload_contract.rs:1465` is the one `const`). A `const` has no single
+  address; each use may materialise a fresh one. The test-only
+  `const NAMED: WireType = WireType::Named(&PAYLOAD)` (`contract_check.rs:440`)
+  becomes a `static` too.
+- **The walk carries references, not copies.** `walk_type`, `walk_enum` and
+  `walk_keys` take `&'static TypeContract` (today `walk_type` takes
+  `TypeContract` by value and `walk_keys` only its `name`).
+  `WireType::Named` already holds `&'static TypeContract`, so every edge the
+  walk follows supplies one.
+
+The refusal still prints `owner.name`. The walk stays a
 leaf function of the value (`DEC-244`); nothing is injected.
 
 Refusal text:
@@ -470,8 +481,8 @@ recorded discharge goes stale.
 | `src/design_run/run.rs` | `Crossing` enum; `refuse_adoption_at(stage)`; `apply` takes `&Crossing`; `adopt_authored(next, expect, derived)` without the map comparison, with the locked backstop |
 | `src/design_run/submission.rs` | delete `AdoptAuthored`, `ApplyRequest.adopt_authored`, `WRITER_ACT_ADOPT_AUTHORED` and its `WRITER_ACTS` row; add `ApplyRequest::bare(envelope)` |
 | `src/design_run/refusal.rs` | `AdoptionStale { expected: Option<_>, observed }` re-worded for `--expect`; add `AdoptionLocked`, `RetiredPayloadKey`; delete `AdoptionMarkersInvalid` |
-| `src/design_run/payload_contract.rs` | delete `ADOPT_AUTHORED` and its `PAYLOAD` row; add `RetiredKey`, `RETIRED_KEYS`; the three renderers list retired rows |
-| `src/design_run/contract_check.rs` | `walk_keys` takes the owning `&'static TypeContract`; roster consult by node identity before `UnknownPayloadKey` |
+| `src/design_run/payload_contract.rs` | `PAYLOAD` `const` → `static`; delete `ADOPT_AUTHORED` and its `PAYLOAD` row; add `RetiredKey`, `RETIRED_KEYS`; the three renderers list retired rows |
+| `src/design_run/contract_check.rs` | `walk_type`/`walk_enum`/`walk_keys` take `&'static TypeContract`; test `NAMED` const → static; roster consult by node identity before `UnknownPayloadKey` |
 | `src/design_run/tests.rs` | pins follow the deletions; roster pins |
 | `install/design-payload-contract.md` | regenerated (`cargo test --bin doctrine regen_payload_contract -- --ignored`) |
 | `install/hymns/stage/design.md`, `install/design-prompts/drafting.md` | wording |
