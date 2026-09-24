@@ -2,7 +2,7 @@
 name: researcher
 description: Judgement-led repo researcher — weighs governance applicability and tradeoffs, not just structure
 tools: read, write, grep, find, ls, bash
-model: deepseek/deepseek-v4-pro
+model: deepseek/deepseek-flash
 defaultProgress: true
 ---
 

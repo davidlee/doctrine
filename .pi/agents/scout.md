@@ -2,7 +2,7 @@
 name: scout
 description: Evidence-based repo analyst — reads code and structure to inform design decisions
 tools: read, write, grep, find, ls, bash
-model: deepseek/deepseek-v4-flash
+model: deepseek/deepseek-flash
 defaultProgress: true
 ---
 
