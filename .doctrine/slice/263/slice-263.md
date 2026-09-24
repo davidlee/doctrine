@@ -28,6 +28,15 @@ The port is therefore asymmetric. **Codex is mostly configuration** — a new
 verbatim for the command surface. **pi needs a generated TypeScript adapter**
 plus a way to obtain the bare block rather than the Claude JSON envelope.
 
+**Authority note (research `F1`).** `ADR-011` governs this change by its
+**surviving first theme only** — *mechanism moved into the binary is identical
+under every harness by construction*; its second theme (per-harness capability
+altitude) is self-declared falsified by `SL-254` and must not be leaned on. The
+rule that actually governs adapter placement is `IDE-034` / candidate `POL-003`,
+which this slice authors (governance leg below). `POL-002` constrains the neutral
+core against host-*project* coupling but does **not** reach the host-*harness*
+axis.
+
 ## Scope & Objectives
 
 Deliver the pi and codex ports on the SAME neutral core `SL-205` established
@@ -59,6 +68,32 @@ format + seen-set/log IO). No new retrieval logic.
   (with the `/hooks` trust notice already printed); the pi extension install
   grows the `surface.ts` module (generate / regenerate / foreign-skip, mirroring
   `install_mcp_extension`). Both report their outcomes.
+- **Neutral surface envelope (design input, research `F2`).** The naive port adds
+  codex's `apply_patch` (and, if mapping moves to Rust, pi's lowercase names) as
+  arms on `probe_for` (`src/memory.rs:10533`), baking harness seams into the
+  neutral core — exactly what `IDE-034` forbids. The design should instead
+  introduce a doctrine-owned, harness-neutral surface envelope (a tool *class* +
+  value) that each adapter normalises *into*, so `probe_for` never learns a
+  harness name and the pipeline is called once, unchanged. The `apply_patch`
+  reader's contract is then neutral: *patch text → root-relative paths*.
+- **Governance leg (in scope; drafted after design locks, applied at reconcile).**
+  This slice also closes the two governance gaps research `F1`/`F4` surfaced —
+  deliberately *after* the port's design locks, so the governance text is drafted
+  against a locked design rather than ahead of it. Sequencing (user ruling,
+  2026-09-24): `/design` locks → mint a REV placeholder → draft any time → apply
+  at `/reconcile`.
+  - **POL-003, authored from `IDE-034`** — *harness-specific behaviour ships as an
+    opt-in supplement whose correctness rests only on doctrine-owned contracts,
+    never baked into the neutral core, never load-bearing on a host harness's
+    incidental seams.* `IDE-034`'s own threshold makes this slice its fourth
+    instance, i.e. policy-shaped; once authored it is the load-bearing authority
+    for adapter placement.
+  - **A `PRD-004` revision** reconciling §2's *"Proactive, unsolicited injection
+    of memories into a context ahead of demand"* and §8's blocking Open Question
+    with the shipped mechanism. The reading to argue: the surface injects
+    **concise pointers** (`[triage] title — uid`), never memory bodies, delivered
+    at the moment of demand (a tool call keyed on the path or command) rather
+    than carrying memory payload *ahead of* demand.
 
 ## Non-Goals
 
@@ -77,16 +112,22 @@ format + seen-set/log IO). No new retrieval logic.
 
 ## Affected surface
 
-- `src/memory.rs` — `--format` plumbing through `SurfaceCommand` →
-  `run_surface` → `emit_surface` (emit bare vs envelope); `apply_patch` probe
-  arm in `probe_for`; new pure patch-path extractor beside the existing pure
+- `src/memory.rs` — `--format` plumbing `MemoryCommand::Surface` →
+  `run_surface` → `run_surface_to` → `emit_surface` (envelope vs bare); the
+  neutral surface envelope and the adapter mapping into it (replacing the naive
+  `probe_for` arm); new pure patch-path extractor beside the existing pure
   helpers.
 - `src/boot.rs` — codex hook registry (a `memory_surface`-equivalent spec and
-  its matcher constant); `generate_pi_surface_extension` + `plan_/install_`
-  beside `plan_mcp_extension`/`install_mcp_extension`; `ext_refresh` and the
-  codex-arm `RefreshReport` construction/reporting.
+  its matcher constant); the generated pi surface module's `generate_/plan_/
+  install_` triad beside `plan_mcp_extension`/`install_mcp_extension`; the
+  `RefreshReport` third field + report leg; the codex-arm call site.
+- `templates/**` or a `format!` literal — the pi surface module's source, per the
+  `mcp.ts`-template vs `index.ts`-literal precedent (design decides).
 - `src/commands/guard.rs` — no new command, but confirm the `MemoryCommand`
   match stays exhaustive.
+- `.doctrine/policy/` — **POL-003** (authored from `IDE-034`), after design locks.
+- `.doctrine/spec/product/004/` + a REV — the **PRD-004** reconciliation, applied
+  at reconcile.
 - `tests/**` — hook envelope emission per format; installer goldens.
 - Behaviour-preservation gate: the existing memory + retrieve + boot suites stay
   green unchanged.
@@ -144,6 +185,9 @@ format + seen-set/log IO). No new retrieval logic.
   ownership-marked, regenerate-on-change, foreign-skipped.
 - Behaviour-preservation: existing memory, retrieve and boot suites green
   unchanged.
+- Governance leg: POL-003 authored and `doctrine check` clean; the PRD-004 REV
+  applied at reconcile; `doctrine link SL-263 governed_by POL-003` once POL-003
+  exists.
 
 ## Follow-Ups
 
@@ -153,4 +197,9 @@ format + seen-set/log IO). No new retrieval logic.
   the modelling is orthogonal to this port.
 - **Subagent surfacing on pi/codex** — the `INV-3` parity gap left open by
   OQ-3, if tightening proves worthwhile.
+- **A requirement covering the codex hook registry and the generated pi
+  extensions.** SPEC-011's members (REQ-185/186/476/477) stop at the Claude
+  settings merge; `install_codex_hook` and the pi extension generators have no
+  requirement (research `F4`). Lighter than the two governance gaps this slice
+  closes; candidate REV of SPEC-011 rather than a new spec.
 - **Cursor** (`IMP-245`).
