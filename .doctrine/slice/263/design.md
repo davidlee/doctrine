@@ -229,13 +229,21 @@ pub(crate) enum SurfaceRequest {
 One function turns a request into the probe the engine consumes:
 
 ```rust
-/// Resolve a neutral request into the engine probe it denotes. A relative path
-/// is joined onto `cwd`, normalised lexically (`.` / `..`, never canonicalised —
-/// the file may not exist yet), then stripped against `root`; an absolute value
-/// is normalised the same way before the strip. A request that resolves to
-/// nothing — an empty value, or a path outside `root` — yields `None`
-/// (fail-open).
-fn probe_for(request: SurfaceRequest, cwd: &Path, root: &Path)
+/// The working directory a wire reported, in the two forms resolution needs:
+/// the raw value (its prefix may be symlinked) and the canonical anchor root
+/// discovery computed.
+struct SurfaceAnchor {
+    raw: Option<PathBuf>,
+    canonical: PathBuf,
+}
+
+/// Resolve a neutral request into the engine probe it denotes. A relative value
+/// joins `anchor.canonical`; an absolute value under `anchor.raw` is rebased
+/// onto `anchor.canonical`; both are normalised lexically (`.` / `..`, never
+/// canonicalised — the file may not exist yet) before the strip against `root`.
+/// A request that resolves to nothing — an empty value, or a path outside
+/// `root` — yields `None` (fail-open).
+fn probe_for(request: SurfaceRequest, anchor: &SurfaceAnchor, root: &Path)
     -> Option<(Surface, ScopeProbe)>
 ```
 
@@ -244,16 +252,27 @@ fn probe_for(request: SurfaceRequest, cwd: &Path, root: &Path)
 - `Patch(text)` → `(Surface::Path, ScopeProbe::Paths(paths))`, one entry per
   resolved header path, or `None` when the patch names no resolvable path.
 
-`cwd` is the **canonicalised** anchor root discovery already computed, not the
-raw value the harness reported: `discover_surface_root` canonicalises the stdin
-`cwd` before walking up, so a raw anchor makes `strip_prefix(root)` miss whenever
-the harness reports a path through a symlink (a symlinked checkout, macOS `/tmp`
-→ `/private/tmp`, a bind-mounted jail path). `root` is canonical too, and the two
-are always compared on the same normalised form. When the wire carries no `cwd`
-(every wire's is optional), a relative value resolves against the env anchor root
-discovery fell back to; with neither present there is no probe and the fire emits
-nothing. `probe_for` therefore takes the anchor discovery resolved, not the
-envelope's raw field.
+The anchor is a **two-form** value on purpose. `discover_surface_root`
+canonicalises the stdin `cwd` before walking up, so `root` and the anchor are
+canonical, while the value a harness reports may not be (a symlinked checkout,
+macOS `/tmp` → `/private/tmp`, a bind-mounted jail path). Carrying only the raw
+value makes `strip_prefix(root)` miss on every symlinked path; carrying only the
+canonical anchor fixes relative values but leaves an **absolute** value — which
+Claude always sends, and pi and codex may — failing the strip through a
+symlinked prefix. So both are carried:
+
+- a **relative** value joins the canonical anchor, then is normalised lexically;
+- an **absolute** value that lies under the raw reported cwd is **rebased** — its
+  raw prefix swapped for the canonical anchor — then normalised. Both values are
+  already in hand, so this stays pure and never touches the filesystem;
+- an absolute value under neither prefix is taken as already canonical.
+
+The result is stripped against `root`; an out-of-root path fails open. This
+resolves the **reported prefix**, not an arbitrary symlink on the path: an
+absolute path routed through a symlink that is neither the reported cwd nor the
+root still fails open rather than matching wrongly — a residual limitation of a
+pure resolver, stated rather than hidden. When the wire carries no `cwd`,
+relative values join the env anchor root discovery fell back to.
 
 `ScopeProbe`'s path arm becomes a **set**. `QueryContext.paths` is already a
 `Vec` and `match_scope` admits a memory on any of them with one ranking, so the
@@ -351,7 +370,7 @@ in the design that knows a harness grammar — correctly isolated, because only
 flowchart LR
   A["apply_patch<br/>envelope body"] --> B["paths_from_patch<br/>(pure)"]
   B --> C["SurfaceRequest::Patch"]
-  C --> D["probe_for<br/>(neutral, cwd+root)"]
+  C --> D["probe_for<br/>(neutral, anchor+root)"]
   E["codex Bash<br/>command"] --> F["SurfaceRequest::Command"]
   F --> D
   G["Claude Read|Edit|Write<br/>file_path"] --> H["SurfaceRequest::Path"]
@@ -371,7 +390,7 @@ fired it.
 format. The decode step becomes:
 
 1. Decode the envelope and resolve the request via the selected codec.
-2. `probe_for(request, cwd, root)` → the fire's `(Surface, ScopeProbe)`.
+2. `probe_for(request, anchor, root)` → the fire's `(Surface, ScopeProbe)`.
 3. **One** `retrieve_rows(Some(root), probe, FETCH_LIMIT)` call, whatever the
    request's arity. A multi-file patch rides `ScopeProbe::Paths`, so the engine
    does one corpus load, one git capture and one ranking across every path.
@@ -498,6 +517,7 @@ pi.on("tool_result", async (event, ctx) => {
   //     bin, ["memory", "surface", "--input", "neutral", "--format", "plain"],
   //     { timeout: SURFACE_TIMEOUT_MS, signal: ctx.signal },
   //     (err, stdout) => resolve(err ? "" : stdout));
+  //   child.stdin.on("error", () => {});  // EPIPE if the child exits early
   //   child.stdin.end(json);  // the async form has no `input` option; an
   //                           // unwritten stdin blocks doctrine to the timeout
   // non-empty stdout → return { content: [...event.content, { type: "text", text: block }] }
@@ -511,10 +531,15 @@ Six properties are contractual:
   unparseable output — resolves to `undefined`, leaving the tool result exactly
   as the tool produced it. The extension can never block a tool, change its
   result, or fail a turn.
-- **The envelope is written to stdin.** The asynchronous `execFile`/`spawn` API
-  has no `input` option — only the `*Sync` variants do — and an `input` key is
-  silently ignored, so the child reads nothing and blocks until the timeout. The
-  adapter writes the envelope itself with `child.stdin.end(json)`.
+- **The envelope is written to stdin, on a stream that cannot throw.** The
+  asynchronous `execFile`/`spawn` API has no `input` option — only the `*Sync`
+  variants do — and an `input` key is silently ignored, so the child reads
+  nothing and blocks until the timeout. The adapter writes the envelope itself
+  with `child.stdin.end(json)`, and attaches a no-op `'error'` listener first: a
+  child that exits before it drains stdin (a clap rejection, the timeout kill, a
+  startup panic, a `BIN_PATH` that resolves to something else) makes the write
+  fail with EPIPE, which Node raises as an unhandled `'error'` event and would
+  otherwise crash the pi process — the outcome this section forbids.
 - **Bounded.** The spawn carries an explicit short timeout (`SURFACE_TIMEOUT_MS`)
   and `ctx.signal`. Without one, a doctrine process that hangs — in
   `crate::git::capture`, on a slow filesystem, on a lock — holds an awaited
@@ -595,7 +620,7 @@ change, so the published plugin and the merge-core writer agree.
 
 | path | intended change |
 |---|---|
-| `src/memory.rs` | `SurfaceRequest`; `claude_request` / `codex_request` / `neutral_request`; `probe_for(SurfaceRequest, cwd, root)` resolving against the canonical anchor; `paths_from_patch`; `--input` / `--format` plumbed through `MemoryCommand::Surface` → `run_surface` → `run_surface_to` → `emit_surface`; the tolerant `command` reader; the `wire` field on the tuning log. Tests extend `mod ambient_surface_tests` |
+| `src/memory.rs` | `SurfaceRequest`; `SurfaceAnchor` (raw + canonical cwd); `claude_request` / `codex_request` / `neutral_request`; `probe_for(SurfaceRequest, anchor, root)`; `paths_from_patch`; `--input` / `--format` plumbed through `MemoryCommand::Surface` → `run_surface` → `run_surface_to` → `emit_surface`; the tolerant `command` reader; the `wire` field on the tuning log. Tests extend `mod ambient_surface_tests` |
 | `src/retrieve.rs` | `ScopeProbe`'s path arm carries a path set, mapped to the `QueryContext.paths` the engine already ranks across. No query, admission rule, ranking or tuning change |
 | `src/boot.rs` | `codex_hook_specs` and its matcher constants; `HookSpec::memory_surface_codex` plus the optional handler `additional_context_limit` / `timeout`; the canonical Claude args and the two-form Claude ownership predicate; `entry_is_canonical` extended to handler fields; `generate_` / `plan_` / `install_surface_extension`; `generate_pi_extension`'s import of `./surface.ts`; `RefreshReport.surface_extension` and the report leg; the Codex arm's registry loop and third installer call. Inline tests |
 | `templates/surface.ts` | **new** — the generated pi adapter, `include_str!`, `SURFACE_BIN_PATH_MARKER` |
@@ -719,8 +744,9 @@ phase-1 exit criterion in the plan.
   the tolerant `command` reader against a string and an argv vector.
 - `probe_for`: absolute paths, cwd-relative paths, `..` normalisation, an
   out-of-root absolute path, a multi-file patch fanning out into one probe, a
-  symlinked cwd anchor that still strips against the canonical root, and an
-  absent `cwd` resolving against the env anchor (or yielding no probe).
+  symlinked cwd anchor whose **relative and absolute** values both strip against
+  the canonical root, an absolute value under an unrelated symlink (fails open),
+  and an absent `cwd` resolving against the env anchor (or yielding no probe).
 - `admits` / `dedup_diff` / `cap` / `format_block`: unchanged suites stay green —
   the behaviour-preservation gate.
 - `retrieve.rs`: the multi-path probe admits a memory anchored on any one of its
@@ -762,6 +788,10 @@ phase-1 exit criterion in the plan.
   surface --input neutral --format plain`, writes a fixture envelope to its
   stdin, and reads a block. The timeout and signal arguments are asserted as
   part of that run, not by grep.
+- A second behavioural case points the handler at a stub binary that exits
+  without reading stdin and asserts the host process survives and returns
+  `undefined` — the EPIPE path, which a missing stdin `'error'` listener turns
+  into a thrown unhandled event.
 
 ### Behaviour preservation
 

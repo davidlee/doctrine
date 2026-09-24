@@ -213,7 +213,7 @@ response = """Accepted. The scope deferred a `memory surface` MCP operation but 
 
 [[finding]]
 id = "F-16"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "pi sketch: async execFile ignores `input`, so doctrine gets empty stdin and the adapter silently never surfaces"
 detail = """
@@ -229,7 +229,7 @@ response = """Accepted. Verified in this environment: Node's asynchronous `execF
 
 [[finding]]
 id = "F-17"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "R-3 now contradicts §5.7: codex reads surface nothing, so there is no read → edit nudge on codex"
 detail = """
@@ -241,7 +241,7 @@ response = """Accepted. §5.7's F-8 repair made codex's read surface explicit, b
 
 [[finding]]
 id = "F-18"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "probe_for's cwd: canonical or raw, and what happens when cwd is absent"
 detail = """
@@ -255,7 +255,7 @@ response = "Accepted. Verified: `discover_surface_root` canonicalises the stdin 
 
 [[finding]]
 id = "F-19"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Delivery-gated recording no longer means delivered once an external timeout can discard the output"
 detail = """
@@ -267,7 +267,7 @@ response = """Accepted. `emit_surface` returns true once a non-empty block is wr
 
 [[finding]]
 id = "F-20"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Three new decisions have no DEC records, and the phase-1 capture gate needs a step a confined worker cannot run"
 detail = """
@@ -279,7 +279,7 @@ response = """Accepted, all three parts. (a) The three §7 rows now carry durabl
 
 [[finding]]
 id = "F-21"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Stale or unsupported prose left by the repair round"
 detail = """
@@ -290,6 +290,43 @@ detail = """
 - §3: "trust is keyed to the handler's command". The binary shows a per-hook `trusted_hash`, but not what it hashes; it plausibly covers the whole handler, including the new limit and timeout. The conclusion holds either way, so soften this to "keyed to a hash of the handler definition"."""
 disposition = "fix-now"
 response = "Accepted, all five. §1 now says `SL-263` adds one arity change and no logic change — the engine does change; §5.4 defines a path-set probe's log key as its resolved paths joined with ` | ` and truncated by `KEY_LOG_MAX`, so the one-record claim holds; §5.6 drops the group-level-ignored clause, which was evidence about handler-level limits on non-emitting events rather than about group-level placement; §3 softens trust to a hash of the handler definition (the binary exposes `trusted_hash` but not what it digests); and the scope's `--format` bullet records that the tuning log gains `wire`."
+
+[[finding]]
+id = "F-22"
+status = "answered"
+severity = "major"
+title = "pi sketch: child.stdin has no 'error' listener, so an early-exiting child throws an unhandled EPIPE and can crash the pi process"
+detail = """
+The F-16 repair writes the request with `child.stdin.end(json)`, but attaches no `error` handler to `child.stdin`. If the child exits before it drains its stdin, the write fails with EPIPE. Node emits that as an `'error'` event on the stdin stream. With no listener it is thrown as an uncaught exception, which escapes the `execFile` callback and any promise wrapper around it. Several things can make the child exit early:
+- doctrine rejects its argv (a clap error, exit 2, before `run_surface` reads stdin);
+- it is killed by `SURFACE_TIMEOUT_MS` or `ctx.signal`;
+- it panics at startup;
+- a baked `BIN_PATH` resolves to some other binary.
+
+Reproduced here:
+
+node -e 'const c=require("child_process").execFile("true",[],()=>{}); c.stdin.end("y".repeat(5e6))'
+  ->  node:events ... throw er; // Unhandled 'error' event ... Error: write EPIPE
+
+(A missing binary, ENOENT, is handled: the callback receives it and the process survives. The early-exit case is the one that throws.) For small envelopes it is a race, because the write usually lands in the pipe buffer first. But the consequence is the host harness process dying, which directly contradicts §5.7's contract: "can never block a tool, change its result, or fail a turn".
+
+Fix: `child.stdin.on("error", () => {})` before `end()`, folding into the same `undefined`. Add it to the "envelope is written to stdin" bullet, and add a §9 behavioural case that drives the handler against a stub binary that exits immediately without reading stdin and asserts the host survives with `undefined`."""
+disposition = "fix-now"
+response = """Accepted. Reproduced in this environment: `execFile("true", [], () => {}); child.stdin.end("y".repeat(5e6))` throws `Error: write EPIPE` as an unhandled `'error'` event on the stdin stream and kills the process; the same call with `child.stdin.on("error", () => {})` survives. The F-16 repair attached no listener, so an early-exiting child (a clap rejection, the timeout kill, a startup panic, a wrong `BIN_PATH`) would crash the host harness process — the outcome §5.7 forbids. §5.7's sketch now attaches a no-op `'error'` listener before `end()`, the contract bullet states the EPIPE hazard and names the early-exit causes, and §9 adds a behavioural case against a stub binary that exits without reading stdin, asserting the host survives and returns `undefined`."""
+
+[[finding]]
+id = "F-23"
+status = "answered"
+severity = "minor"
+title = "Lexical normalisation does not make an absolute path through a symlinked prefix comparable to the canonical root"
+detail = """
+§5.1 now says `cwd` is the canonicalised anchor, and that "an absolute value is normalised the same way before the strip... the two are always compared on the same normalised form". That holds for relative values, which are joined onto the canonical cwd. It does not hold for absolute ones.
+
+Lexical normalisation only folds `.` and `..`; it never resolves symlinks. So a harness reporting `/home/u/link/src/x.rs`, where `link` is a symlink and root is canonically `/data/repo`, still fails `strip_prefix(root)` and folds to None. The same happens for macOS `/tmp/...` against `/private/tmp`. Claude always sends absolute paths, and pi and codex may too, so this is the Claude exposure SL-205 already had, now claimed as fixed.
+
+Fix: either state it as a remaining known limitation, or rebase before stripping. When an absolute value starts with the raw reported cwd, swap that prefix for the canonical anchor, then strip root. That is pure (both values are already in hand) and never canonicalises a path that may not exist. The §9 symlinked-anchor case should include an absolute value, not only a relative one."""
+disposition = "fix-now"
+response = "Accepted — the observation is right; the prescription is adopted with its residue stated. Lexical normalisation folds `.`/`..` but never resolves symlinks, so an absolute value through a symlinked prefix fails `strip_prefix(root)`; the F-18 wording claimed the two were always compared on the same normalised form, which was false for absolutes. §5.1 now carries the anchor in both forms — the raw reported `cwd` and the canonical anchor — and rebases an absolute value under the raw prefix onto the canonical anchor before stripping (both values are already in hand, so it stays pure and never touches the filesystem). The section states the residual plainly: a path routed through a symlink that is neither the reported cwd nor the root still fails open rather than matching wrongly. §9's symlinked-anchor case now covers an absolute value as well as a relative one, plus the unrelated-symlink fail-open case."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
