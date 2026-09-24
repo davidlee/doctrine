@@ -1,0 +1,47 @@
+id    = 375
+slug  = "code-review-of-sl-261-phase-01-retired-wire-key-roster"
+title = "code review of SL-261 PHASE-01 (retired wire-key roster)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "code-reviewer"
+responder = "implementer"
+concluded = true
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-261"
+phase = "PHASE-01"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "RetiredKey's doc comment swallowed PAYLOAD's opening line, leaving both docs as fragments"
+detail = """
+Expected: `RetiredKey`'s rustdoc is design sec-4's shape note; `PAYLOAD`'s rustdoc keeps its complete "Thirteen keys / `unknown_keys` is `Refused`…" rationale, whose second paragraph ("`#[serde(flatten)]` and `deny_unknown_fields` are mutually exclusive, so no attribute can reach **this type's keys**") depends on the first.
+
+Observed: the `RetiredKey` struct was inserted between two halves of `PAYLOAD`'s existing doc comment (src/design_run/payload_contract.rs:1459-1497). Because `///` binds to the *next* item, line 1459 ("`unknown_keys` is `Refused`, and *serde* is not what refuses it:") now terminates `RetiredKey`'s doc — which therefore opens with an unrelated sentence fragment about a different type — and `PAYLOAD`'s doc (line 1495) now starts mid-thought at "`#[serde(flatten)]`…", losing the antecedent that makes "this type's keys" refer to anything.
+
+Fix is a pure move, no behaviour change: place the `RetiredKey`/`RETIRED_KEYS`/`retired_from` block (lines 1460-1493) either wholly before `PAYLOAD`'s doc block or wholly after the `PAYLOAD` static literal, so each doc comment is contiguous with its item. `RETIRED_KEYS` may safely precede `PAYLOAD` — a static may reference a later static (PHASE-05's `owner: &PAYLOAD` row)."""
+disposition = "fix-now"
+response = """Fixed while the phase is still hot. `RetiredKey`/`RETIRED_KEYS`/`retired_from` moved from between `PAYLOAD`'s doc comment and `PAYLOAD` to immediately after the `PAYLOAD` static literal (src/design_run/payload_contract.rs), so both doc comments are contiguous with their items: `PAYLOAD` regains its "`unknown_keys` is `Refused`, and *serde* is not what refuses it:" opening and `RetiredKey` opens with the retirement note. Pure move, no behaviour change; `cargo fmt` + `cargo clippy --bin doctrine` clean, `design_run` suite 207 passed, `retired_key` pins 5 passed, `the_published_payload_contract_matches_the_renderer` green (published contract byte-unchanged)."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "The never-live pin encodes a struct-only rule as if it were the never-live invariant, and justifies it with a false premise about enums"
+detail = """
+Expected: design sec-4 pins the invariant "a retired key is never also a live key of its owner", and `DEC-278`'s roster is a table of `(type, key, remedy)` over the contract closure, with no struct restriction.
+
+Observed: `live_retirements` (src/design_run/tests.rs:4535-4545) answers `TypeForm::Enum { .. } => true`, i.e. it reports *every* enum owner as a violation, and documents that as "whose owner has no key rows at all, so the retirement names a surface that cannot have held it" — a false premise, repeated in the injected-bad-row fixture's remedy text ("an enum has no key rows", tests.rs:4588). An enum's key surface lives on its variants: `contract_check::walk_payload` passes `VariantPayload::Keys` to `walk_keys` with *the enum contract* as `owner` (src/design_run/contract_check.rs:194-198), so the mechanism does support refusing `RetiredPayloadKey` for an enum-variant key.
+
+Consequence: the roster's checked domain (struct owners only) is silently narrower than the domain the walk supports. The first legitimate enum-variant retirement trips `retired_keys_are_never_live` with a misleading reason, and the pin's name overstates what it proves — it substitutes a struct-only restriction for the never-live invariant.
+
+The decision was recorded in phase-01.md ("Enum owners are a pin fault"), so this is a real design question rather than a slip: either make the pin walk variant key surfaces recursively (checking the invariant it names), or split the struct-only restriction into its own named pin whose failure message says "this pin checks struct key rows only", so a future retirement is not misdiagnosed. Not load-bearing for this slice — the only row PHASE-05 adds is on the `ApplyRequest` struct."""
+disposition = "follow-up"
+response = 'Owned future work, not a large-fix dodge: minted ISS-478 ("Retired-key never-live pin conflates struct-only with the never-live invariant"), related to SL-261 via `references --role originates_from`. ISS-478 records the false premise, the mechanism/guard divergence (`walk_payload` does support enum owners), and the two candidate repairs. Not load-bearing for this slice — the only planned row targets the `ApplyRequest` struct.'
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

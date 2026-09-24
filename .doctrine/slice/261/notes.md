@@ -57,14 +57,15 @@ implementation code review, so no further design pass is needed.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · started (PHASE-01 complete; PHASE-02 next)
+fresh-as-of: 2026-09-24 · PHASE-01 implemented and code-reviewed (PHASE-02 next)
 
 ### Produced
 
 - DEC-278, DEC-279 (settled; shape SL-261). DEC-279 references DEC-100; DEC-278 references DEC-243.
 - RV-374 (design review, concluded; F-1..F-6 verified; RFC-026 routes amended in prose).
 - design.md locked (run dr-01a0d098, revision 37); plan.toml PHASE-01..06.
-- ISS-477, IDE-056 (deferred; originate from SL-261).
+- ISS-477, IDE-056, ISS-478 (deferred; originate from SL-261).
+- RV-375 (code review of PHASE-01, concluded; F-1 fixed in place, F-2 → ISS-478).
 - PHASE-01: `RetiredKey`/`RETIRED_KEYS` (empty) + `retired_from` identity match in payload_contract; `Refusal::RetiredPayloadKey`; roster threaded through the contract_check walk via a private `refuse_unknown_keys_against`; `render_prompt_against`/`render_json_against` list retired rows after live rows (JSON member only when non-empty, so the published contract is byte-unchanged); VT-2 pins in design_run/tests.rs.
 
 ### Learned
@@ -72,7 +73,8 @@ fresh-as-of: 2026-09-24 · started (PHASE-01 complete; PHASE-02 next)
 - Adoption today reads design.md twice (RV-374 F-1); the verb must read once.
 - Parser keeps no copy of a whitespace-only head; materialise drops it (RV-374 F-2).
 - payload_contract::PAYLOAD is the one const contract; identity match needs it static (RV-374 F-5).
-- PHASE-01: a roster row's owner must be a struct — the never-live pin treats an enum owner as a fault (no key rows to have held the key), which keeps struct-only rendering sound.
+- PHASE-01: a roster row's owner must be a struct **today** — the never-live pin treats an enum owner as a fault while `walk_keys` does support enum owners, so the checked domain is narrower than the supported one (RV-375 F-2; ISS-478).
+- A Rust `///` block binds to the *next* item, so inserting an item between a doc comment and its type silently steals the type's opening lines (RV-375 F-1: `RetiredKey` landed inside `PAYLOAD`'s doc). Place new items wholly before or after an existing doc block.
 - Design-run friction captured as observations (envelope lacks runbook; provenance nesting; cp- disposal shape; route token placement).
 
 ### Open
