@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · plan + PHASE-01 + PHASE-02 + PHASE-03
+fresh-as-of: 2026-09-24 · plan + PHASE-01..PHASE-04
 
 ### Produced
 - design locked (run rev 38): sec-1..9 in design.md (commits d1f5edd03, f8a13cd41); no code yet
@@ -22,6 +22,8 @@ fresh-as-of: 2026-09-24 · plan + PHASE-01 + PHASE-02 + PHASE-03
 - **DEC-293 supersedes the envelope half of SL-233 `EX-15`** (user-confirmed, option B, 2026-09-24): discharge-outcome rows left `resume`. `tests/e2e_design_runbook.rs::an_attested_step_is_never_rendered_as_verified` keeps its record half; the envelope half now asserts no line calls `explore.scope` verified and `explore.research` renders as `unchecked` (plan PHASE-02 `EX-9`). No spec text carries EX-15 (PRD-019, SPEC-029 checked), so no REV — reconcile notes it.
 - Other sanctioned test edits: `e2e_claude_install` design-prompts allowlist gains `render/envelope.rs` (VT-6 reads each embedded runbook test-only via `include_str!`); `design_run::tests` coverage-equality control now loses the `declare` key site as well as its element (the `skip_serializing_if` EX-3 asks for).
 
+- PHASE-04 (e6207d20f): hymn `install/hymns/stage/design.md` gains the design sec-6 `forward` bullet; design skill Activation step 2 names `forward`. Hymn line 3's "whatever the next obligation" kept — plain English about the turn, not the field. `.agents/` untouched (fetched from the published repo).
+
 ### Learned
 - mem_01a0d305ce2b76c1b18f04abd572cbb8 — inquiry disposal goes through a cp- checkpoint
 - observations: research baseline drifts on its own scope delta; inert-key discovery for inquiry disposal
@@ -31,7 +33,7 @@ fresh-as-of: 2026-09-24 · plan + PHASE-01 + PHASE-02 + PHASE-03
 - **Measured forward bound (VT-6):** worst-case `forward` over the embedded runbooks renders ≤ 6.4 KB; beside a hand-saturated envelope (12.3 KB) the total is ≤ 18.2 KB against the 24,576 B ceiling. The first attempt put every `Cause` variant on every row and measured 26.4 KB — unreachable, since a row is exactly one derivation arm; `fixture::widest_causes` follows `satisfied`'s arms instead. PHASE-03 `EX-4` should compare this against the growing-run measurement.
 
 ### Open
-- PHASE-04 next: guidance — `install/hymns/stage/design.md` bullet + `plugins/doctrine/skills/design/SKILL.md` activation step 2 (independent of PHASE-03).
+- next: `/audit`.
 - `forward` is rendered in `project()` (shell), so every `design show`/`resume` now reads `design.md` and the relation record (design sec-9 read-cost risk) — unmeasured.
 - residual audit probes named in "Further review passes" below still stand
 
