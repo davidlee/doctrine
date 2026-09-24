@@ -167,9 +167,32 @@ again for F-22/F-23 (rev 39). `pass_stale` stays true by construction after any
 revision; the lock edge's `BlockersUndisposed` cause reads only blocker-severity
 *open/contested* findings, and none is one.
 
+## Execution
+
+### PHASE-01 — captured codex wire fixtures
+
+Live capture (codex 0.155.1, `gpt-6-luna`, a throwaway `PreToolUse` tee hook,
+`codex exec --dangerously-bypass-hook-trust`). Fixtures in
+`tests/fixtures/codex/{shell,shell_write,apply_patch_tool}.json` + `README.md`.
+
+- `tool_input.command` is a **string** on both wires, and it is the **model's own
+  command** (`echo hi`) — the `bash -lc '…'` wrapper appears only at exec time,
+  after the hook, so a token-prefix command match is not defeated.
+- `apply_patch` is a **distinct tool** (`tool_name: "apply_patch"`, patch body in
+  `tool_input.command`); a shell file write reports `Bash` and reaches the
+  command surface. No `apply_patch` executable on PATH, so the via-shell patch
+  form is **not reachable** — `apply_patch_via_shell.json` is deliberately absent
+  and the README carries the evidence.
+- `apply_patch` header paths can be **absolute** (`*** Add File: /abs/path`);
+  `probe_for` already anticipates both forms.
+- No `agent_id` in the payload; `permission_mode: "bypassPermissions"`.
+- `A-1` retired. `EX-1` named three fixtures; the third is unobtainable and is
+  recorded as an absence rather than fabricated.
+- Model spend: 3 runs, ~3.7k / 7.8k / 7.2k tokens.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · design/locked · b9bce77ee
+fresh-as-of: 2026-09-24 · started · 817b4a179
 
 ### Produced
 
@@ -177,20 +200,22 @@ fresh-as-of: 2026-09-24 · design/locked · b9bce77ee
   resolutions the fresh pass recorded (engine probe arity, path resolution, pi
   transport).
 - `.doctrine/slice/263/design.md` — 9 sections, materialised at run rev 39.
+- `.doctrine/slice/263/plan.toml` + `plan.md` — 5 phases, VT mandates intact.
+- `tests/fixtures/codex/` — the PHASE-01 captured wire fixtures + README.
 - scope reconciled; design-target selectors: `src/memory.rs`, `src/boot.rs`,
   `src/retrieve.rs`, `templates/surface.ts`,
   `plugins/doctrine/hooks/hooks.json`.
 - RV-377 — 23 findings; F-1..F-21 verified, F-22..F-23 answered fix-now.
   Disposed `conducted RV-377`; nine section attestations and `design-accepted`
-  recorded; run locked at rev 41 on the user's assent. Slice advanced to plan.
+  recorded; run locked at rev 41 on the user's assent.
 - commits ddccae191, e270e886b, 1950d37d6, 0a0a35b38, ee6a0649f, 97c0a0a52,
-  b9bce77ee.
+  b9bce77ee, b37a7ce4d, a898b3cd1, 3dd5e8de4, 817b4a179.
 
 ### Learned
 
-- mem_01a0d17f6b5a795081e684ec41a96d89 — codex hook contract (handler-level
-  limit/timeout, canonical tool names, no `agent_id`, parent session id, no read
-  tool).
+- mem_01a0d17f6b5a795081e684ec41a96d89 — codex hook contract; **updated** with
+  the live wire facts (string `command`, the model's own command, `apply_patch`
+  as a distinct tool, the unreachable via-shell form, absolute patch headers).
 - mem_01a0d17f6b2577818ec693b77ba8e3d9 — pi `tool_result` context (no agent
   identity; `ctx.sessionManager`/`ctx.cwd`; `PI_SUBAGENT_CHILD` is
   package-owned).
@@ -204,9 +229,9 @@ fresh-as-of: 2026-09-24 · design/locked · b9bce77ee
 
 ### Open
 
-- `/plan` the phases. F-11/F-20's fixture-capture gate (design §6's three codex
-  unknowns) is phase-1 and marked `VH` (orchestrator/human).
-- Governance leg, now the design is locked: draft POL-003 (from IDE-034) and the
-  PRD-004 §2/§8 and SPEC-011 REVs; apply all three at reconcile, then re-ground
-  `SL-263 governed_by POL-003`.
+- PHASE-01 done (fixtures captured) → PHASE-02 next: the neutral surface command
+  and the `ScopeProbe` arity change.
+- Governance leg (PHASE-05): draft POL-003 (from IDE-034) and the PRD-004 §2/§8
+  and SPEC-011 REVs; apply all three at reconcile, then re-ground `SL-263
+  governed_by POL-003`.
 - OQ-4 follow-up: pi as a first-class boot `Harness` variant.
