@@ -32,3 +32,8 @@ The four existing criteria stand. Appended:
 > without it the entry read is the basis. On a locked run, a document aligned
 > with the watermark is a no-op and a diverged one is refused before it is
 > parsed.
+
+## Approval
+
+Approved by the user in session, 2026-09-24 ("REV-057 approved."), recorded by
+the SL-261 orchestrator.

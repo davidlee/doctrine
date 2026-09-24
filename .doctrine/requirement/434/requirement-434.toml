@@ -14,4 +14,5 @@ acceptance_criteria = [
   "Every mutating verb re-fingerprints immediately before the write and abandons it if the bytes moved.",
   "A re-adoption compares against the fingerprint it was admitted on, never against the superseded watermark.",
   "The abandoned-write guarantee is that the run does not advance; journalled effects remain and stay recoverable.",
+  "The crossing is `design adopt`: the engine derives the section map from the document; the caller may confirm the document fingerprint with `--expect`; without it the entry read is the basis. On a locked run, a document aligned with the watermark is a no-op and a diverged one is refused before it is parsed.",
 ]

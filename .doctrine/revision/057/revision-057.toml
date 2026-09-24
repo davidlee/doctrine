@@ -1,8 +1,8 @@
 id      = 57
 slug    = "spec-029-names-design-adopt-as-the-watermark-crossing"
 title   = "SPEC-029 names design adopt as the watermark crossing"
-status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
-approval = "none"      # SEPARATE axis, orthogonal to status: none | requested | approved | rejected
+status = "done"
+approval = "approved"
 updated = "2026-09-24"
 tags    = []
 
