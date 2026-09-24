@@ -148,27 +148,41 @@ contested.
 - **F-21 (nit)** — stale prose left by the F-5..F-15 round. Fixed in §1, §3,
   §5.4, §5.6 and the scope's `--format` bullet.
 
-Sections revised: 1, 3, 5, 6, 7, 8, 9 (materialised at run rev 37). `pass_stale`
-stays true by construction after any revision; the lock edge's `BlockersUndisposed`
-cause reads only blocker-severity *open/contested* findings, and none of the six
-is one.
+The raiser verified F-16..F-21 and raised two more on the re-read:
+
+- **F-22 (major)** — the F-16 stdin write had no `'error'` listener, so an
+  early-exiting child turns the write into an unhandled EPIPE that can kill the
+  pi process. Reproduced (`execFile("true", …).stdin.end(<5 MB>)` throws; the
+  same with a no-op listener survives). Fixed: the sketch and bullet attach the
+  listener; §9 gains a stub-binary behavioural case.
+- **F-23 (minor)** — lexical normalisation never resolves symlinks, so an
+  absolute value through a symlinked prefix still failed the root strip, while
+  §5.1 claimed the two forms were always compared equal. Fixed: the anchor
+  carries both forms and an absolute value under the raw prefix is rebased onto
+  the canonical anchor, with the residual (an unrelated symlink fails open)
+  stated; §9's case covers an absolute value.
+
+Sections revised: 1, 3, 5, 6, 7, 8, 9 in the first round (rev 37), then 5 and 9
+again for F-22/F-23 (rev 39). `pass_stale` stays true by construction after any
+revision; the lock edge's `BlockersUndisposed` cause reads only blocker-severity
+*open/contested* findings, and none is one.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · design/reviewing · 1950d37d6
+fresh-as-of: 2026-09-24 · design/reviewing · ee6a0649f
 
 ### Produced
 
 - DEC-280..DEC-289 — the seven settled inquiry decisions plus the three design
   resolutions the fresh pass recorded (engine probe arity, path resolution, pi
   transport).
-- `.doctrine/slice/263/design.md` — 9 sections, materialised at run rev 37.
+- `.doctrine/slice/263/design.md` — 9 sections, materialised at run rev 39.
 - scope reconciled; design-target selectors: `src/memory.rs`, `src/boot.rs`,
   `src/retrieve.rs`, `templates/surface.ts`,
   `plugins/doctrine/hooks/hooks.json`.
-- RV-377 — 21 findings; F-1..F-15 verified, F-16..F-21 answered, awaiting raiser
+- RV-377 — 23 findings; F-1..F-21 verified, F-22..F-23 answered, awaiting raiser
   verification.
-- commits ddccae191, e270e886b, 1950d37d6.
+- commits ddccae191, e270e886b, 1950d37d6, 0a0a35b38, ee6a0649f.
 
 ### Learned
 
@@ -188,7 +202,7 @@ fresh-as-of: 2026-09-24 · design/reviewing · 1950d37d6
 
 ### Open
 
-- RV-377 F-16..F-21 raiser verification → pass disposition (conducted) → 9
+- RV-377 F-22..F-23 raiser verification → pass disposition (conducted) → 9
   section attestations → `design-accepted` → lock. Design is not binding until
   locked.
 - F-11/F-20's fixture-capture gate (design §6's three codex unknowns) must become
