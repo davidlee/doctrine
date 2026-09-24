@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d18b-ce53-72a1-8e4a-40e7e4923c72"
+recorded_at = "2026-09-24T03:53:15.603084874Z"
+kind = "friction"
+summary = "SL-261 design sec-3's adopt_authored snippet does not typecheck against the frozen AdoptionStale fields"
+detail = "design sec-3 shows 'expected: expect.cloned()' with expect: Option<&Fingerprint>, but phase A5/plan EX-4 freeze AdoptionStale.expected as Option<String>. Following the snippet literally would either retype the field (forbidden) or fail to compile; the worker must reconcile the snippet against the frozen type by hand."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

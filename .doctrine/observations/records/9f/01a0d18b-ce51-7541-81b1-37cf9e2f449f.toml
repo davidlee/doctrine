@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d18b-ce51-7541-81b1-37cf9e2f449f"
+recorded_at = "2026-09-24T03:53:15.601848735Z"
+kind = "friction"
+summary = "SL-261 PHASE-03 worker brief's file allow-list omits src/commands/guard.rs, which the compiler forces"
+detail = "Adding DesignCommand::Adopt breaks guard.rs::write_class's exhaustive match on DesignCommand (E0004). The phase sheet's 'Files you may edit' list does not permit guard.rs, but the phase cannot build without a one-line arm there. A design-verb phase must either pre-declare guard.rs or the brief should say 'plus any exhaustive match the new variant breaks'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
