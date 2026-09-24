@@ -1,0 +1,8 @@
+Verified against codex 0.155.1's published hook contract and its binary.
+
+- `hooks.<Event>[].hooks[]` is the **handler**; `additionalContextLimit` and `timeout` are handler fields, beside `command`. Written on the matcher group they are ignored (codex warns: "ignoring additionalContextLimit for <event> hook ... this event cannot emit additionalContext"). A canonicality check that compares only `command` therefore misses a missing or stale limit and never heals it.
+- Canonical hook `tool_name` values: `Bash` (shell AND unified exec are both canonicalised to `Bash`) and `apply_patch`. Matcher aliases `Edit`/`Write` are accepted for apply_patch, but input still reports `tool_name: "apply_patch"`.
+- `tool_input.command` carries both the shell command and the patch body. Its type is not documented as string-only — the shell tool takes an argv list, so a strict `Option<String>` deserialiser can fail the whole payload and silently emit nothing.
+- There is **no read tool**: file reads go through the shell and match `Bash`, so a path-scoped memory cannot match `cat src/x.rs` (`command_admits` is token-prefix over the command dimension). `apply_patch` is the only path trigger, and it fires after the patch is composed.
+- `PreToolUse` carries **no** `agent_id` — only `SubagentStart`/`SubagentStop` do. Subagent hooks report the **parent** session id, so a seen-set keyed on session_id is shared across the parent/subagent boundary.
+- Trust: non-managed hooks must be reviewed/trusted before they run, and trust is keyed to the handler's command. A baked absolute exec path changes on every upgrade, re-arming the review; codex then skips the hook silently.

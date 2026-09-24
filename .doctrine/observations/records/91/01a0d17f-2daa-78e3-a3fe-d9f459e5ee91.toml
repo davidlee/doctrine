@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d17f-2daa-78e3-a3fe-d9f459e5ee91"
+recorded_at = "2026-09-24T03:39:28.042195454Z"
+kind = "friction"
+summary = "review raise: a --detail value beginning with '- ' (a markdown list) is parsed as a flag and refused"
+detail = "clap treats a leading '- ' as an option; had to use --detail=<value>. Bulleted finding details are common."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

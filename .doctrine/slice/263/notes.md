@@ -89,21 +89,74 @@ four findings raised were all fixed in the design before lock:
   implicitly. Fixed: §5.2 states the unknown-field tolerance and the open
   `tool_input` map.
 
-**What a further pass would probe**, were one commissioned: whether the
-multi-probe merge in §5.4 orders `admits` and cross-probe dedup correctly
-against the cap (a cap applied after the union is the only thing stopping a wide
-patch from crowding out a better-scoring hit); whether the codex
-`additionalContextLimit` value holds under a real block once its unit is known;
-and whether the Claude two-form ownership predicate (canonical + legacy-bare)
-has a third ancestor form the refresh should also own. None is load-bearing for
-the design's shape, and none is a reason to hold the lock.
+## Independent pass
+
+A second, independent adversarial pass (Opus, on the run's own RV-377) raised
+F-5..F-15 — 7 major, 4 minor, none blocking. Each was verified against the
+source or codex 0.155.1 before disposition; all are answered `fix-now` and none
+was contested. It changed more than prose:
+
+- **F-5** moved `additionalContextLimit`/`timeout` to the codex **handler** and
+  extended `entry_is_canonical` to handler fields.
+- **F-6** resolves every wire's paths against its reported cwd (`probe_for`
+  takes `cwd` and `root`; the old "root-relative" claim was wrong).
+- **F-7** widened `ScopeProbe`'s path arm to a set so a multi-file patch is one
+  query, deleting the per-probe loop, the cross-probe dedup and a second ranking
+  rule. This **reopened the "engine untouched" scope commitment** (user
+  confirmed); `src/retrieve.rs` is now a design-target selector.
+- **F-10** named the reader honestly as codex's `apply_patch` grammar, added
+  `*** Move to:`, and dropped the producerless `class: patch` from the neutral
+  wire.
+- **F-11** added a phase-1 fixture-capture gate and a tolerant string-or-argv
+  `command` reader.
+
+Sections revised: 3, 5, 6, 7, 8, 9. The run's `pass_stale` lamp is true by
+construction after any such revision (mem_01a0d17f827772b096e836f95a2887c4) and
+is not a gate.
+
+**What a further pass would probe**: whether the widened probe's single cap
+across many paths is the right shape (a patch touching ten files competes for
+three slots); whether the tolerant `command` reader's space-join is the right
+normalisation for an argv vector; whether the codex `additionalContextLimit`
+unit and value hold under a real block; and whether the Claude two-form
+ownership predicate has a third ancestor form the refresh should also own. None
+is load-bearing for the design's shape.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-24 · design/reviewing · ddccae191
 
 ### Produced
 
+- DEC-280..DEC-286 — the seven settled inquiry decisions.
+- `.doctrine/slice/263/design.md` — 9 sections, materialised at run rev 35.
+- scope reconciled; design-target selectors: `src/memory.rs`, `src/boot.rs`,
+  `src/retrieve.rs`, `templates/surface.ts`,
+  `plugins/doctrine/hooks/hooks.json`.
+- RV-377 — 15 findings; F-1..F-4 verified, F-5..F-15 answered, awaiting raiser
+  verification.
+- commit ddccae191.
+
 ### Learned
 
+- mem_01a0d17f6b5a795081e684ec41a96d89 — codex hook contract (handler-level
+  limit/timeout, canonical tool names, no `agent_id`, parent session id, no read
+  tool).
+- mem_01a0d17f6b2577818ec693b77ba8e3d9 — pi `tool_result` context (no agent
+  identity; `ctx.sessionManager`/`ctx.cwd`; `PI_SUBAGENT_CHILD` is
+  package-owned).
+- mem_01a0d17f82ab73128b4791ef705eb8a9 — `ScopeProbe` → `QueryContext.paths`;
+  multi-path is native.
+- mem_01a0d17f827772b096e836f95a2887c4 — design-review `pass_stale` is a lamp,
+  not a gate.
+
 ### Open
+
+- RV-377 F-5..F-15 raiser verification → pass disposition (conducted) → 9
+  section attestations → `design-accepted` → lock. Design is not binding until
+  locked.
+- F-11's fixture-capture gate (design §6's three codex unknowns) must become a
+  `/plan` phase-1 exit criterion.
+- Governance leg at reconcile: POL-003 (from IDE-034), the PRD-004 §2/§8 REV,
+  the SPEC-011 REV; re-ground SL-263 `governed_by` on POL-003.
+- OQ-4 follow-up: pi as a first-class boot `Harness` variant.

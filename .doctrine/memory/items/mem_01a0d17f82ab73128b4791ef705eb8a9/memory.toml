@@ -1,0 +1,41 @@
+memory_uid = "mem_01a0d17f82ab73128b4791ef705eb8a9"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "ScopeProbe maps to QueryContext.paths, which the engine already ranks across"
+summary = "ScopeProbe::Path expands to a one-element Vec in QueryContext.paths, and match_scope admits a memory on ANY path with one ranking — so a multi-path probe is native, never loop retrieve_rows per path."
+created = "2026-09-24"
+updated = "2026-09-24"
+
+[scope]
+paths = ["src/retrieve.rs", "src/memory.rs"]
+globs = []
+commands = []
+tags = ["retrieve", "scope", "engine"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "12702034191cc2357cc236c34d5c9e57c0d507f5"
+ref_name = "refs/heads/edge"
+checkout_state_id = "951f7ad27404abce4a0eded73b866fd1036f0f266abb95475acebff704601f64"
+base_commit = "ddccae191167c2f022d58f0988029d10ae0f3a2d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+

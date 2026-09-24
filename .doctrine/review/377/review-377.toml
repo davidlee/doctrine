@@ -51,7 +51,7 @@ response = "Accepted. §5.2 will state explicitly that the shared struct relies 
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "additionalContextLimit belongs on the codex hook handler, not the matcher group; and the merge core cannot detect it"
 detail = """
@@ -67,7 +67,7 @@ response = "Accepted. Verified against the published example (the limit sits bes
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Relative patch and pi paths are cwd-relative, but probes_for treats them as root-relative"
 detail = """
@@ -85,7 +85,7 @@ response = "Accepted. `relativize_probe_path` (src/memory.rs:10586) does return 
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Multi-probe fan-out re-implements the engine's own multi-path query, at N full corpus loads plus N git captures per fire"
 detail = """
@@ -99,7 +99,7 @@ response = """Accepted, and this reopened a settled scope commitment. Verified t
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "codex has no Read tool; the path surface never fires on codex reads, and an apply_patch nudge arrives after the edit is composed"
 detail = """
@@ -113,7 +113,7 @@ response = """Accepted. Verified against codex's Tool coverage table: shell and 
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Fail-open runtime has no timeout; an awaited pi tool_result, or a codex hook, can stall on a hung doctrine process"
 detail = """
@@ -127,7 +127,7 @@ response = """Accepted. pi awaits `tool_result` handlers, and the sketch had nei
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "paths_from_patch is not 'unified-diff-shaped' or harness-neutral; it parses codex's apply_patch envelope grammar"
 detail = """
@@ -141,7 +141,7 @@ response = "Accepted. Verified in codex 0.155.1's binary: `*** Move to:` exists,
 
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The codex Bash and apply_patch wire shapes rest on assertion; every VT runs on self-authored synthetic payloads"
 detail = """
@@ -159,7 +159,7 @@ response = "Accepted. The design had no captured payload; the VTs would have pro
 
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "R-2 and §5.6 promise that untrusted codex groups do not read as installed; nothing can implement that, and every upgrade silently un-trusts them"
 detail = """
@@ -173,7 +173,7 @@ response = """Accepted. The installer cannot observe codex trust, so the promise
 
 [[finding]]
 id = "F-13"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "PRD-007 §2's out-scope is named as a conflict but has no reconciliation path"
 detail = """
@@ -189,7 +189,7 @@ response = "Accepted, resolved by option (a) rather than by widening the governa
 
 [[finding]]
 id = "F-14"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Tuning log cannot tell which harness fired"
 detail = """
@@ -201,7 +201,7 @@ response = 'Accepted. `surface_log_line` (src/memory.rs:10652) has no wire field
 
 [[finding]]
 id = "F-15"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The rejected pi MCP route is not recorded in the design, though a doctrine MCP process is already live in the same pi extension"
 detail = """
@@ -210,6 +210,74 @@ The slice's Non-Goals defer a `memory surface` MCP operation "see Open Questions
 This alternative is materially stronger than it looks. `templates/mcp.ts` already holds a long-lived `doctrine serve --mcp` child for the whole pi session, in the same extension that `index.ts` loads. Routing surfacing through it would remove R-1's per-call spawn entirely, and also the cold-start and timeout exposure. The design should state why a per-call spawn is preferred, or name the MCP route as R-1's fallback mitigation, so that "measure" has a defined next step."""
 disposition = "fix-now"
 response = """Accepted. The scope deferred a `memory surface` MCP operation but the design never recorded it; and the observation sharpens it — a long-lived `doctrine serve --mcp` child already exists in the same extension, so the route would remove R-1's per-call spawn entirely. §6 now records the route with that reasoning and §7 carries it as a decision row, choosing the per-call spawn because it is one uniform binary interface across all three harnesses and does not depend on the MCP bridge being installed, healthy or un-skipped. R-1 names the MCP child as its fallback, so "measure" has a defined next step rather than an open question."""
+
+[[finding]]
+id = "F-16"
+status = "open"
+severity = "major"
+title = "pi sketch: async execFile ignores `input`, so doctrine gets empty stdin and the adapter silently never surfaces"
+detail = """
+§5.7's sketch passes the envelope as `execFile(bin, args, { input: json, timeout, signal })`. Node's asynchronous `execFile` and `spawn` accept no `input` option; only the `*Sync` variants do. The option is ignored without an error. Verified in this repo's environment:
+
+node -e 'require("child_process").execFile("cat",[],{input:"HELLO"},(e,o)=>console.log("["+o+"]",e))'  prints  [] null
+
+So doctrine reads empty stdin, the decode folds to Default, and the fire emits nothing. Every pi fire succeeds and surfaces nothing, and the fail-open contract hides it completely. This dates from the original sketch (it predates F-2's async switch), but the repair round kept it.
+
+Fix: spawn with stdin piped and write the envelope with `child.stdin.end(json)`, keeping `timeout` and `signal`. Add a behavioural VT, not just the source-contains check in §9: run the generated `surface.ts` handler under node against a fixture root, or at minimum a node smoke test that the spawn delivers stdin to `doctrine memory surface --input neutral --format plain` and gets a block back. As written, §9's installer test ("the source contains the timeout and signal arguments") would pass on the broken sketch."""
+
+[[finding]]
+id = "F-17"
+status = "open"
+severity = "minor"
+title = "R-3 now contradicts §5.7: codex reads surface nothing, so there is no read → edit nudge on codex"
+detail = """
+The F-8 repair made §5.7 correct: codex has no read tool, reads surface nothing, and `apply_patch`'s nudge is retrospective. But R-3's mitigation was extended to "the read → edit nudge still precedes the composed edit on both", meaning pi and codex, and "only a bare edit/write is retrospective". For codex that is false on both counts. There is no read nudge, and every edit nudge is retrospective.
+
+Fix: split R-3. pi: post-execution, where the read → edit nudge still precedes the edit. codex: no read surface, and edit nudges are always retrospective. The follow-up is the shell path-operand heuristic in §6."""
+
+[[finding]]
+id = "F-18"
+status = "open"
+severity = "minor"
+title = "probe_for's cwd: canonical or raw, and what happens when cwd is absent"
+detail = """
+The F-6 repair joins relative paths onto `cwd` and strips `root`. Two things are left unspecified, and both cause silent misses.
+
+1. `discover_surface_root` canonicalises the cwd before walking up (src/memory.rs:10605-10609), so `root` is canonical. If `probe_for` joins onto the *raw* reported cwd, then whenever the harness reports a path through a symlink (a symlinked checkout, macOS `/tmp` → `/private/tmp`, a bind-mounted jail path), `strip_prefix(root)` fails and every path probe folds to None. Absolute paths have the same exposure. That part predates this slice, but the new join makes it the common case for pi and codex. Specify that `probe_for` receives the canonicalised anchor that root discovery already computed, and that absolute values are compared on a normalised form.
+
+2. `cwd` is optional on every wire (`SurfaceInput.cwd: Option`, and the neutral envelope comment says "optional; root discovery falls back to the env anchor"), but `probe_for` takes `cwd: &Path`. State what a relative value resolves against when cwd is absent: the env anchor, or no probe. Add a VT for it."""
+
+[[finding]]
+id = "F-19"
+status = "open"
+severity = "minor"
+title = "Delivery-gated recording no longer means delivered once an external timeout can discard the output"
+detail = """
+INV-6, carried from SL-205, says the seen-set is recorded only when a block was delivered. Inside `run_surface_to`, "delivered" means "written to stdout". With the new timeouts (pi `SURFACE_TIMEOUT_MS` plus `ctx.signal`, and the codex handler `timeout`), the harness can discard doctrine's output after doctrine has written it and appended the seen-set. That happens when the timer or abort fires between the write and the harness reading the result. The memory is then marked seen but never reached the model, and session dedup suppresses it for the rest of the session.
+
+It is an edge case, and the fix need not be mechanical. Either state it as an accepted weakening of INV-6 under external timeouts, or note that the timeouts are chosen well above doctrine's p99 so the window is negligible, which ties it to R-1's measurement. As written, the design claims the record behaviour is "exactly as today", and that is no longer quite true."""
+
+[[finding]]
+id = "F-20"
+status = "open"
+severity = "minor"
+title = "Three new decisions have no DEC records, and the phase-1 capture gate needs a step a confined worker cannot run"
+detail = """
+§7 adds three rows recorded as "this design": engine probe arity, path resolution, and pi transport. All the other rows have durable DEC records. The /design routing sends a locked choice to /knowledge as a DEC. Engine probe arity in particular reopens a scope commitment the user ratified ("engine untouched"). The author reports the user confirmed the reopening, but that consent currently lives only in a review response. Record DECs for the three rows, citing the user's reply for the arity one.
+
+Separately, §9's phase-1 gate ("a throwaway codex hook tees PreToolUse stdin", three captured payloads) needs a live, authenticated codex session and trusted hooks. A confined dispatch worker has no API keys or network, and cannot run it. The plan should mark it as a human (VH) or orchestrator step before the codec phase, not as ordinary worker work. Also, §9 says "--input claude with the captured Claude payload", but the gate captures no Claude payload. Either add one, or say that the existing SL-205 fixture serves."""
+
+[[finding]]
+id = "F-21"
+status = "open"
+severity = "nit"
+title = "Stale or unsupported prose left by the repair round"
+detail = """
+- §1: "SL-263 does not touch any of it" and "composed once, unchanged". The engine now changes (`ScopeProbe` arity). Say "adds one arity change, no logic change".
+- slice-263.md, `--format` bullet: "the tuning log [is] unchanged". It now gains `wire`.
+- §5.4: "the log keeps one ... key". The key of a multi-path `Paths` probe is undefined. Keep the old ` | `-joined, truncated form, and say so.
+- §5.6: "a limit written at the group level is ignored — codex warns as much". The binary's warning is about handler-level limits on events that cannot emit context. It is not evidence about group-level placement, and a group-level key might equally be rejected at parse time. Drop the clause; the handler-placement argument does not need it.
+- §3: "trust is keyed to the handler's command". The binary shows a per-hook `trusted_hash`, but not what it hashes; it plausibly covers the whole handler, including the new limit and timeout. The conclusion holds either way, so soften this to "keyed to a hash of the handler definition"."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
