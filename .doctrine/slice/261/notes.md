@@ -57,10 +57,23 @@ implementation code review, so no further design pass is needed.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-24 · ready (design locked, planned; PHASE-01 next) · bb42f1ddb
 
 ### Produced
 
+- DEC-278, DEC-279 (settled; shape SL-261). DEC-279 references DEC-100; DEC-278 references DEC-243.
+- RV-374 (design review, concluded; F-1..F-6 verified; RFC-026 routes amended in prose).
+- design.md locked (run dr-01a0d098, revision 37); plan.toml PHASE-01..06.
+- ISS-477, IDE-056 (deferred; originate from SL-261).
+
 ### Learned
 
+- Adoption today reads design.md twice (RV-374 F-1); the verb must read once.
+- Parser keeps no copy of a whitespace-only head; materialise drops it (RV-374 F-2).
+- payload_contract::PAYLOAD is the one const contract; identity match needs it static (RV-374 F-5).
+- Design-run friction captured as observations (envelope lacks runbook; provenance nesting; cp- disposal shape; route token placement).
+
 ### Open
+
+- SPEC-029 revision (PHASE-06; user approval owed).
+- Memory edits mem_019fdf95, mem_019facc2, mem_01a00f17 (PHASE-06).
