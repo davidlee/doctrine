@@ -169,7 +169,7 @@ revision; the lock edge's `BlockersUndisposed` cause reads only blocker-severity
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · design/reviewing · ee6a0649f
+fresh-as-of: 2026-09-24 · design/locked · b9bce77ee
 
 ### Produced
 
@@ -180,9 +180,11 @@ fresh-as-of: 2026-09-24 · design/reviewing · ee6a0649f
 - scope reconciled; design-target selectors: `src/memory.rs`, `src/boot.rs`,
   `src/retrieve.rs`, `templates/surface.ts`,
   `plugins/doctrine/hooks/hooks.json`.
-- RV-377 — 23 findings; F-1..F-21 verified, F-22..F-23 answered, awaiting raiser
-  verification.
-- commits ddccae191, e270e886b, 1950d37d6, 0a0a35b38, ee6a0649f.
+- RV-377 — 23 findings; F-1..F-21 verified, F-22..F-23 answered fix-now.
+  Disposed `conducted RV-377`; nine section attestations and `design-accepted`
+  recorded; run locked at rev 41 on the user's assent. Slice advanced to plan.
+- commits ddccae191, e270e886b, 1950d37d6, 0a0a35b38, ee6a0649f, 97c0a0a52,
+  b9bce77ee.
 
 ### Learned
 
@@ -202,11 +204,9 @@ fresh-as-of: 2026-09-24 · design/reviewing · ee6a0649f
 
 ### Open
 
-- RV-377 F-22..F-23 raiser verification → pass disposition (conducted) → 9
-  section attestations → `design-accepted` → lock. Design is not binding until
-  locked.
-- F-11/F-20's fixture-capture gate (design §6's three codex unknowns) must become
-  a `/plan` phase-1 exit criterion, marked `VH` (orchestrator/human).
-- Governance leg at reconcile: POL-003 (from IDE-034), the PRD-004 §2/§8 REV,
-  the SPEC-011 REV; re-ground SL-263 `governed_by` on POL-003.
+- `/plan` the phases. F-11/F-20's fixture-capture gate (design §6's three codex
+  unknowns) is phase-1 and marked `VH` (orchestrator/human).
+- Governance leg, now the design is locked: draft POL-003 (from IDE-034) and the
+  PRD-004 §2/§8 and SPEC-011 REVs; apply all three at reconcile, then re-ground
+  `SL-263 governed_by POL-003`.
 - OQ-4 follow-up: pi as a first-class boot `Harness` variant.
