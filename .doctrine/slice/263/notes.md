@@ -239,9 +239,35 @@ registry and `RefreshReport.hooks` carries both outcomes.
   (`record-delta --start <own>^ --end <own>`) so the foreign commit is not
   attributed here.
 
+### PHASE-04 — generated pi surface extension
+
+`templates/surface.ts` + the installer triad (commit aa6e4e5ac):
+
+- The template maps pi's `read`/`edit`/`write` (path) and `bash` (command) to
+  doctrine's neutral envelope and writes it to `memory surface --input neutral
+  --format plain` on an async, bounded, fail-open child; the returned block is
+  appended to `event.content`.
+- The envelope is written with `child.stdin.end(json)` behind a no-op
+  `'error'` listener (async `execFile` has no `input` option; an early-exiting
+  child would otherwise raise an unhandled EPIPE).
+- The per-file install triplication collapsed into one `PiExtension` descriptor
+  + `plan_extension`/`install_extension`; `plan_pi_extension` /
+  `plan_mcp_extension` / `plan_surface_extension` remain as `#[cfg(test)]`
+  seams. `generate_from_template` single-sources the header + `BIN_PATH` bake.
+- `generate_pi_extension` imports `./surface.ts` beside `./mcp.ts`; the
+  `RefreshReport.surface_extension` leg is installed by the Codex arm and
+  `NotApplicable` on Claude; the three extension report legs share one
+  `write_ext_outcome` helper.
+- Gate green. `VA-1` attested live: `boot install --agent codex` generated all
+  three extensions and printed `generated extension
+  .pi/extensions/doctrine/surface.ts`. `EX-6` holds — `flake.nix` already
+  copies `templates/`.
+- Behavioural VTs run the generated `.ts` under `node` (`package.json`
+  `{"type":"module"}` for ESM); delivered-to-stdin and EPIPE-survival both pass.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · PHASE-03 · 34a53191d
+fresh-as-of: 2026-09-24 · PHASE-04 · aa6e4e5ac
 
 ### Produced
 
@@ -256,6 +282,8 @@ fresh-as-of: 2026-09-24 · PHASE-03 · 34a53191d
 - PHASE-03 — codex `PreToolUse` wiring + canonical hook forms (`src/boot.rs`,
   `plugins/doctrine/hooks/hooks.json`, `tests/e2e_claude_install.rs`; commit
   1560f1f08).
+- PHASE-04 — the generated pi surface extension (`templates/surface.ts`,
+  `src/boot.rs`; commit aa6e4e5ac).
 - scope reconciled; design-target selectors: `src/memory.rs`, `src/boot.rs`,
   `src/retrieve.rs`, `templates/surface.ts`,
   `plugins/doctrine/hooks/hooks.json`.
@@ -264,7 +292,7 @@ fresh-as-of: 2026-09-24 · PHASE-03 · 34a53191d
   recorded; run locked at rev 41 on the user's assent.
 - commits ddccae191, e270e886b, 1950d37d6, 0a0a35b38, ee6a0649f, 97c0a0a52,
   b9bce77ee, b37a7ce4d, a898b3cd1, 3dd5e8de4, 817b4a179, c7efe9f37,
-  3c7b140f6, 14d7b3ebb, 48c082392, 553f6dec8, 1560f1f08.
+  3c7b140f6, 14d7b3ebb, 48c082392, 553f6dec8, 1560f1f08, aa6e4e5ac.
 
 ### Learned
 
@@ -285,12 +313,13 @@ fresh-as-of: 2026-09-24 · PHASE-03 · 34a53191d
 - mem_01a0d2174ba779a3a121431fe0ed5674 — a shared primary tree lets foreign
   commits land inside a phase's stamped span; name your own span with
   `record-delta --start/--end` rather than spanning or forcing.
+- mem_01a0d22ca59c7d71997a028f3ccb7a10 — driving a generated `.ts` pi extension
+  behaviourally under node (ESM `package.json`, type-only import, `/bin/sh`
+  stub child; an early-exit stub for the EPIPE path).
 
 ### Open
 
-- PHASE-01 (fixtures), PHASE-02 (neutral surface command + arity) and PHASE-03
-  (codex wiring + canonical forms) done → PHASE-04 next: the generated pi surface
-  extension (`templates/surface.ts`).
-- PHASE-05: draft POL-003 (from IDE-034) and the PRD-004 §2/§8 and SPEC-011 REVs;
-  apply all three at reconcile, then re-ground `SL-263 governed_by POL-003`.
+- PHASE-01..PHASE-04 done → PHASE-05 next: draft POL-003 (from IDE-034), the
+  PRD-004 §2/§8 and SPEC-011 REVs, and re-ground `SL-263 governed_by POL-003`;
+  apply the revisions at reconcile.
 - OQ-4 follow-up: pi as a first-class boot `Harness` variant.

@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0d22ca59c7d71997a028f3ccb7a10"
+memory_key = "mem.pattern.testing.generated-ts-under-node"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Driving a generated pi .ts extension behaviourally under node"
+summary = 'Behaviourally test a generated .ts pi extension by running it under node: needs a nearest package.json {"type":"module"} for ESM, a type-only pi import (erased), and an executable /bin/sh stub child (capture stdin; a second stub early-exits for the EPIPE path).'
+created = "2026-09-24"
+updated = "2026-09-24"
+
+[scope]
+paths = ["src/boot.rs", "templates"]
+globs = []
+commands = []
+tags = ["pi", "extensions", "testing", "node", "typescript"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "aa6e4e5aca452c21e4aeed94b04579f50fae85cc"
+tree = "d7c3915527d0f62a5a8d640ffe32872ceea00943"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "aa6e4e5aca452c21e4aeed94b04579f50fae85cc"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
