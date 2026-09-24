@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d14a-4576-77a0-a289-847b3be5640f"
+recorded_at = "2026-09-24T02:41:40.726303534Z"
+kind = "friction"
+summary = "design-run: amending an inquiry question after the stage gate silently invalidates the gate's checkpoint acts"
+detail = "Driving SL-263: after exploring to inquiring had passed (on a user governance-confirmed plus a user graph-reviewed plus an agent blocking-set-declared), a later declare that only reworded inq-7's question invalidated BOTH checkpoint acts (revision 12, act_invalidated x2). Nothing in the envelope or the declare contract warns that a question-text edit re-digests the graph and staleness-marks prior acts; the cost is a latent re-confirmation round-trip at the next gate that checks initial-concerns-recorded."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

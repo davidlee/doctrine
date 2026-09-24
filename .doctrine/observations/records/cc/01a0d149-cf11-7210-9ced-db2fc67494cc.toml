@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d149-cf11-7210-9ced-db2fc67494cc"
+recorded_at = "2026-09-24T02:41:10.417234168Z"
+kind = "friction"
+summary = "design-run: exploring→inquiring gate's required acts are not surfaced until a failed stage move"
+detail = "Driving SL-263's design run: the exploring runbook's 5 steps each required a separate  (discharge takes one step per apply, not an array — the contract renders it as a single DischargeDeclaration), then the stage move failed twice before revealing the gate needed two checkpoint acts (user governance-confirmed + user graph-reviewed) plus an agent blocking-set-declared. Four failed/subsequent applies and two user round-trips to learn a gate the envelope never listed.  showed no runbook or gate section; the obligations only appeared in the refusal text. Cost: several applies and an extra user question."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

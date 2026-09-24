@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d12b-ac7d-76a1-8a4d-734ae530f9c9"
+recorded_at = "2026-09-24T02:08:15.485681308Z"
+kind = "friction"
+summary = "slice: pi extensions are installed on the Harness::Codex arm, so a claude-only repo gets none"
+detail = "Recon for SL-263: resolve_harnesses only knows Claude and Codex; install_refresh's Harness::Codex arm is where install_pi_extension/install_mcp_extension are called. A repo with .claude/ but no .codex/ or separate AGENTS.md would resolve to Claude only and silently receive no pi extensions at all. Cost me several reads to establish that pi is not a first-class harness and that its install path is hosted on an unrelated arm."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
