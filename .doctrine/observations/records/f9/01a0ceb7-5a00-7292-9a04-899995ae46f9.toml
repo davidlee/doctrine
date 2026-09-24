@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ceb7-5a00-7292-9a04-899995ae46f9"
+recorded_at = "2026-09-23T14:41:57.760968858Z"
+kind = "friction"
+summary = "slice; SL-261: adopt_authored reported a third time (client repo, ~8 attempts) while ISS-320/ISS-348 sat open 6 weeks"
+detail = "Payload demands per-section sha256 digests no verb emits; contract types them as text; markers refusal gives counts only. Two prior issues had value scores but were never picked up."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
