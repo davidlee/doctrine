@@ -345,6 +345,26 @@ pub(crate) fn parse(
     Ok(sections)
 }
 
+/// The whitespace-only head `materialise` holds no copy of, and the marker it
+/// stands before: how many lines it carries, and what that marker names.
+///
+/// `materialise` renders sections only, so an adopted document with a non-empty
+/// head is reproduced byte-for-byte EXCEPT for that head. The report discloses
+/// the difference rather than leaving it for the next materialise to spring
+/// (`SL-261` `EX-5`, `RV-374` F-2). `None` when there is nothing to drop: no
+/// marker line at all, or an empty head.
+///
+/// Reads the SAME decomposition [`parse`] does rather than re-deciding where the
+/// head ends — the rule has one owner, and `parse`'s row 2 is where it refuses a
+/// head that is more than whitespace.
+pub(crate) fn dropped_head(text: &str) -> Option<(usize, DesignId)> {
+    let (start, _, id) = marker_lines(text).into_iter().next()?;
+    // A marker line begins at column 0, so a non-empty head always ends in a
+    // newline and its line count is its newline count.
+    let lines = text.get(..start)?.matches('\n').count();
+    (lines > 0).then_some((lines, id))
+}
+
 /// Every marker line: where it starts, where its region starts, and what it
 /// names.
 fn marker_lines(text: &str) -> Vec<(usize, usize, DesignId)> {
@@ -639,5 +659,25 @@ mod tests {
                 id: section("sec-1")
             })
         );
+    }
+
+    /// `SL-261` `VT-5` — the head `materialise` drops is disclosed with its line
+    /// count and the marker it precedes, and an empty head is no difference at
+    /// all.
+    #[test]
+    fn dropped_head_counts_the_whitespace_before_the_first_marker() {
+        let body = block("sec-1", "one\n");
+        assert_eq!(dropped_head(&body), None, "no head, nothing to disclose");
+        assert_eq!(
+            dropped_head(&format!("\n{body}")),
+            Some((1, section("sec-1")))
+        );
+        assert_eq!(
+            dropped_head(&format!("  \n\n{body}")),
+            Some((2, section("sec-1"))),
+            "whitespace-only lines count; the sections' own bodies are not head"
+        );
+        assert_eq!(dropped_head(""), None, "no marker line at all");
+        assert_eq!(dropped_head("prose with no marker\n"), None);
     }
 }

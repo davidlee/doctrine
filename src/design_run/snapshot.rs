@@ -290,6 +290,56 @@ impl SectionGroup {
             .map(|section| (section.id.clone(), section.fingerprint.clone()))
             .collect()
     }
+
+    /// The held sections whose fingerprint is the SAME here as in `prior` — the
+    /// "unchanged" half of an adoption report (`SL-261` `EX-5`).
+    ///
+    /// Derived from the two snapshots alone. Asking the document again would be a
+    /// second observation of bytes the run already read, and the report and the
+    /// adoption it describes could then disagree.
+    ///
+    /// Sorted by id rather than read off storage order: [`SectionGroup::upsert`]
+    /// keeps the vector id-ordered, but a group read back from TOML holds
+    /// whatever order the file carried, and a report that reordered itself with
+    /// it would be asserting the wrong thing.
+    pub(crate) fn unchanged_since(&self, prior: &SectionGroup) -> Vec<DesignId> {
+        let mut unchanged: Vec<DesignId> = self
+            .sections
+            .iter()
+            .filter(|section| {
+                prior
+                    .find(&section.id)
+                    .is_some_and(|held| held.fingerprint == section.fingerprint)
+            })
+            .map(|section| section.id.clone())
+            .collect();
+        unchanged.sort();
+        unchanged
+    }
+
+    /// Each adjacent pair of this group's DOCUMENT order whose relative order is
+    /// reversed in `prior` — the "reordered" half of an adoption report
+    /// (`SL-261` `EX-5`).
+    ///
+    /// [`SectionGroup::document_order`] is the single owner of what "order"
+    /// means, so an adoption that re-claimed `seq` from a hand-edited document
+    /// shows up as the inversion it is rather than as a sequence re-derived here.
+    pub(crate) fn reordered_since(&self, prior: &SectionGroup) -> Vec<(DesignId, DesignId)> {
+        let was: Vec<DesignId> = prior
+            .document_order()
+            .iter()
+            .map(|section| section.id.clone())
+            .collect();
+        let rank = |id: &DesignId| was.iter().position(|held| held == id);
+        self.document_order()
+            .windows(2)
+            .filter_map(|pair| {
+                let [before, after] = pair else { return None };
+                (rank(&after.id)? < rank(&before.id)?)
+                    .then(|| (before.id.clone(), after.id.clone()))
+            })
+            .collect()
+    }
 }
 
 /// One runtime review finding (design §5.3). Thin by intent: the review *record*
@@ -1074,5 +1124,60 @@ mod tests {
         widened.review.pass = Some(pass);
         widened.sections.upsert(section("sec-c", "sha256:c"));
         assert!(!widened.review_standing().integrated_current);
+    }
+
+    /// `SL-261` `EX-5` — the two halves of an adoption report, derived from the
+    /// prior and applied snapshots alone.
+    #[test]
+    fn section_set_difference_reports_only_what_moved() {
+        let prior = SectionGroup {
+            sections: vec![
+                Section {
+                    seq: 0,
+                    ..section("sec-1", "sha256:a")
+                },
+                Section {
+                    seq: 1,
+                    ..section("sec-2", "sha256:b")
+                },
+                Section {
+                    seq: 2,
+                    ..section("sec-3", "sha256:c")
+                },
+            ],
+        };
+        // `sec-1` re-worded, `sec-3` moved ahead of `sec-2`, `sec-2` untouched.
+        let applied = SectionGroup {
+            sections: vec![
+                Section {
+                    seq: 0,
+                    ..section("sec-1", "sha256:a-edited")
+                },
+                Section {
+                    seq: 1,
+                    ..section("sec-3", "sha256:c")
+                },
+                Section {
+                    seq: 2,
+                    ..section("sec-2", "sha256:b")
+                },
+            ],
+        };
+
+        assert_eq!(
+            applied.unchanged_since(&prior),
+            vec![id("sec-2"), id("sec-3")],
+            "unchanged is a question about FINGERPRINTS: a section that moved              without its bytes moving is not a change"
+        );
+        assert_eq!(
+            applied.reordered_since(&prior),
+            vec![(id("sec-3"), id("sec-2"))],
+            "the one adjacent pair whose relative order flipped"
+        );
+        assert_eq!(
+            prior.unchanged_since(&prior),
+            vec![id("sec-1"), id("sec-2"), id("sec-3")]
+        );
+        assert!(prior.reordered_since(&prior).is_empty());
     }
 }

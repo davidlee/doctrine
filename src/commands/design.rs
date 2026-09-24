@@ -97,7 +97,8 @@ use crate::design_run::run::{
 };
 use crate::design_run::snapshot::{self, CheckpointGroup, DesignSnapshot};
 use crate::design_run::submission::{
-    ApplyRequest, CreateRecord, Declaration, DelegationAct, DischargeClaim, Dispose, WireFacetValue,
+    ApplyRequest, CreateRecord, Declaration, DelegationAct, DischargeClaim, Dispose,
+    SubmissionEnvelope, WireFacetValue,
 };
 use crate::relation::{RelationEdge, RelationLabel, Role};
 
@@ -181,6 +182,9 @@ pub(crate) enum DesignCommand {
     Apply(ApplyArgs),
     /// Re-enter a run with the compact projection a fresh context needs.
     Resume(ResumeArgs),
+    /// Adopt `design.md` as the run's baseline — the sole lawful crossing of a
+    /// document edited outside this run (`DEC-279`).
+    Adopt(AdoptArgs),
     /// Render runtime sections into authored prose.
     Materialise(MaterialiseArgs),
     /// Print the payload contract `design apply` parses with.
@@ -338,6 +342,28 @@ pub(crate) struct ApplyArgs {
     path: Option<PathBuf>,
 }
 
+/// Arguments for `design adopt`.
+///
+/// `MaterialiseArgs` plus three flags, one of which `PHASE-04` adds: `--expect`
+/// names the fingerprint the caller reviewed, `--dry-run` computes the report
+/// and writes nothing, and `--diff` (later) appends a hunk per changed section.
+#[derive(clap::Args, Debug)]
+pub(crate) struct AdoptArgs {
+    /// The slice, e.g. `SL-233`.
+    slice: String,
+    /// Assert the whole-document fingerprint you reviewed. Without it the basis
+    /// is the fingerprint read at entry, so a bare `adopt` takes what is on disk
+    /// at that moment.
+    #[arg(long)]
+    expect: Option<String>,
+    /// Compute and print the report; write nothing.
+    #[arg(long)]
+    dry_run: bool,
+    /// Explicit project root (default: auto-detect).
+    #[arg(short = 'p', long)]
+    path: Option<PathBuf>,
+}
+
 /// Arguments for `design materialise`.
 #[derive(clap::Args, Debug)]
 pub(crate) struct MaterialiseArgs {
@@ -371,6 +397,7 @@ pub(crate) fn dispatch(command: DesignCommand) -> Result<()> {
         DesignCommand::Start(args) => run_start(args),
         DesignCommand::Show(args) => run_show(args),
         DesignCommand::Apply(args) => run_apply(args),
+        DesignCommand::Adopt(args) => run_adopt(args),
         DesignCommand::Resume(args) => run_resume(args),
         DesignCommand::Materialise(args) => run_materialise(args),
         DesignCommand::Contract(args) => run_contract(args),
@@ -1817,6 +1844,99 @@ fn apply(
     }
 }
 
+/// `design adopt` — the sole lawful crossing of an authored divergence
+/// (`SL-261` `sec-2`, `DEC-279`).
+///
+/// The order is the contract (`sec-3` *Order in `run_adopt`*): snapshot, ONE
+/// read of the document, the aligned no-op, the locked refusal, then the
+/// pipeline. The aligned test runs **before admission**, which is what makes a
+/// document already on the watermark write nothing — not even a receipt; a retry
+/// after a successful adopt lands there. The locked refusal runs before any
+/// parsing, so a locked run whose document is also malformed gets the locked
+/// answer rather than a marker error whose remedy is not available to it.
+fn run_adopt(args: AdoptArgs) -> Result<()> {
+    let root = resolve_root(args.path)?;
+    let slice = slice_id(&args.slice)?;
+    let fault = injected_fault();
+    let prior = read_snapshot(&root, slice)?;
+
+    // ONE read (`EX-2`/`VT-4`, RV-374 F-1): the fingerprint and the sections
+    // both come from these bytes, so an edit landing between two reads cannot
+    // seat one document's bodies under another's fingerprint. The pipeline's
+    // pre-write re-check is the one sanctioned second observation.
+    let read = read_authored(&root, slice)?;
+    // The injected-editor point (`A6`): immediately after the entry read, the
+    // window an in-process second read would close and a real editor does not.
+    // The bytes on disk stop being the bytes the run went on to check, which the
+    // pre-write re-check then catches.
+    injected_authored_edit()(&design_doc_path(&root, slice))?;
+
+    let expect = args.expect.map(Fingerprint::new);
+    // Aligned: there is nothing to adopt. `--expect` absent, or naming the
+    // fingerprint just read, agrees with the watermark and lands here too.
+    if observe_watermark(&prior, read.fingerprint.as_ref()) == AuthoredState::Aligned
+        && expect
+            .as_ref()
+            .is_none_or(|declared| Some(declared) == read.fingerprint.as_ref())
+    {
+        return emit(&[format!(
+            "{DESIGN_DOC} matches the watermark {} — nothing to adopt",
+            read.fingerprint
+                .as_ref()
+                .map_or("absent", Fingerprint::as_str)
+        )]);
+    }
+
+    // Before any parse: a locked run is never adopted, whatever else the
+    // document is wrong about (`EX-3`).
+    design_run::run::refuse_adoption_at(prior.run.stage).map_err(|refused| refusal(&refused))?;
+
+    let request = ApplyRequest::bare(SubmissionEnvelope {
+        run_uid: prior.run.uid.clone(),
+        known_revision: prior.run.revision,
+        submission_id: format!("adopt-{}", uuid::Uuid::now_v7()),
+    });
+    // The receipt's digest is the request's OWN serialisation (`A3`), so a
+    // receipt keeps one shape whichever crossing wrote it.
+    let digest = crate::git::sha256(
+        serde_json::to_string(&request)
+            .context("serialise the adopt request")?
+            .as_bytes(),
+    );
+    // Read off the entry read, not the snapshot: on `--dry-run` nothing is
+    // re-baselined, and this is the value `--expect` takes either way.
+    let adopted = read.fingerprint.clone();
+    let head = read
+        .text
+        .as_deref()
+        .and_then(design_run::document::dropped_head);
+    let input = PipelineInput {
+        prior: &prior,
+        request: &request,
+        digest: &digest,
+        crossing: Crossing::Adopt { expect },
+        read,
+    };
+    let stop = if args.dry_run {
+        Stop::AfterCandidate
+    } else {
+        Stop::Write
+    };
+    match apply_pipeline(&root, slice, input, stop, &|| {}, &fault)? {
+        // Unreachable by construction — a fresh `adopt-<uuidv7>` id cannot
+        // already be a receipt. Handled rather than panicked because it is the
+        // pure layer's answer, and a crash where a line of prose is owed is not
+        // an improvement on prose.
+        PipelineOutcome::Resumed { revision } => emit(&[format!(
+            "submission {} was already applied at revision {revision}; the run does not advance",
+            request.envelope.submission_id
+        )]),
+        PipelineOutcome::Candidate(applied) | PipelineOutcome::Written(applied) => emit(
+            &adoption_lines(&prior, &applied, adopted.as_ref(), head, args.dry_run),
+        ),
+    }
+}
+
 /// Parse one wire payload into its typed request.
 ///
 /// The remedy rides the point of failure (SL-251 sec-6, DEC-225): serde's own
@@ -2090,6 +2210,62 @@ fn applied_lines(prior: &DesignSnapshot, request: &ApplyRequest, applied: &Appli
         request.delegation.as_ref(),
     ));
     lines.extend(applied.rows.iter().map(design_run::render::render_row));
+    lines
+}
+
+/// The adopt verb's report (`SL-261` `EX-5`, `sec-2` *Report*).
+///
+/// One header line, then the change rows the core already emits, then the two
+/// set-difference lines — unchanged, reordered — then the head disclosure.
+/// Every derived piece is computed by the pure layer (the core's rows; the two
+/// `design_run::snapshot` set differences; `document::dropped_head`); this only
+/// formats them, so no second reading of the document is possible here.
+///
+/// The header carries the **full** fingerprint, because it is the value
+/// `--expect` takes.
+fn adoption_lines(
+    prior: &DesignSnapshot,
+    applied: &Applied,
+    adopted: Option<&Fingerprint>,
+    head: Option<(usize, DesignId)>,
+    dry_run: bool,
+) -> Vec<String> {
+    let adopted = adopted.map_or("absent", Fingerprint::as_str);
+    let mut lines = vec![if dry_run {
+        format!("dry run — would adopt {adopted}; nothing written")
+    } else {
+        format!(
+            "adopted {DESIGN_DOC} {adopted} at revision {}",
+            applied.snapshot.run.revision
+        )
+    }];
+    lines.extend(applied.rows.iter().map(design_run::render::render_row));
+
+    let unchanged = applied.snapshot.sections.unchanged_since(&prior.sections);
+    if !unchanged.is_empty() {
+        lines.push(format!(
+            "unchanged {}",
+            unchanged
+                .iter()
+                .map(DesignId::as_str)
+                .collect::<Vec<_>>()
+                .join(" ")
+        ));
+    }
+    lines.extend(
+        applied
+            .snapshot
+            .sections
+            .reordered_since(&prior.sections)
+            .into_iter()
+            .map(|(before, after)| format!("reordered {before} before {after}")),
+    );
+    if let Some((count, id)) = head {
+        lines.push(format!(
+            "head: {count} whitespace-only lines before {id} are not held; materialise drops \
+             them"
+        ));
+    }
     lines
 }
 

@@ -1339,6 +1339,30 @@ pub(crate) struct ApplyRequest {
 type WriterAct = (&'static str, fn(&ApplyRequest) -> bool);
 
 impl ApplyRequest {
+    /// An **instruction-free** request: the envelope, and every act field empty
+    /// (`SL-261` `EX-2`).
+    ///
+    /// The adopt verb's shape. Its act is the *crossing*, which is carried
+    /// beside the request rather than inside it ([`super::run::Crossing`]), so
+    /// the payload it submits names the run and nothing else — and the digest a
+    /// receipt records is the digest of *this* serialisation, which keeps
+    /// receipts one shape across both crossings.
+    pub(crate) fn bare(envelope: SubmissionEnvelope) -> ApplyRequest {
+        ApplyRequest {
+            envelope,
+            adopt_authored: None,
+            traversal: TraversalDeclaration::default(),
+            stage: None,
+            acceptance: None,
+            declare: Vec::new(),
+            delegation: None,
+            discharge: None,
+            review_policy: None,
+            checkpoint_act: None,
+            agent_declaration: None,
+        }
+    }
+
     /// Every writer act, each paired with the test for its presence — the closed
     /// vocabulary, single-sourced in [`Condition::ALL`](super::gate::Condition::ALL)'s shape (STD-001).
     ///

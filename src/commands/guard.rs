@@ -438,6 +438,7 @@ ConceptMapCommand::New { .. } => Write("concept-map new"),
         Command::Design { command } => match command {
             crate::commands::design::DesignCommand::Start(_) => Write("design start"),
             crate::commands::design::DesignCommand::Apply(_) => Write("design apply"),
+            crate::commands::design::DesignCommand::Adopt(_) => Write("design adopt"),
             crate::commands::design::DesignCommand::Materialise(_) => Write("design materialise"),
             crate::commands::design::DesignCommand::Show(_)
             | crate::commands::design::DesignCommand::Resume(_)

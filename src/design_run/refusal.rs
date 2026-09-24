@@ -254,6 +254,10 @@ pub(crate) enum Refusal {
         expected: Option<String>,
         observed: Option<String>,
     },
+    /// A **locked** run is never re-adopted (`SL-261` `EX-3`, DEC-279): the
+    /// design the user accepted is the one the run locked, so prose that moved
+    /// after the lock is not the run's to take on here.
+    AdoptionLocked,
     /// A re-adoption's stable-marker map is not complete and exact.
     AdoptionMarkersInvalid {
         missing: Vec<DesignId>,
@@ -740,20 +744,23 @@ impl fmt::Display for Refusal {
                 "submission id `{submission}` was already applied with different bytes — \
                  a retry must carry the same payload"
             ),
+            // Reworded for the verb (`SL-261` `EX-4`): the basis is `--expect`, not
+            // a declared marker map, and the remedy is the reviewed path
+            // (`--dry-run --diff`, then adopt the fingerprint it printed).
             Refusal::AdoptionStale { expected, observed } => match (expected, observed) {
                 (Some(declared), Some(observed)) => write!(
                     f,
-                    "adopt_authored declares fingerprint `{declared}` but design.md reads \
-                     `{observed}` — re-read the document and declare what it says now"
+                    "adopt --expect `{declared}` but design.md reads `{observed}` — review the \
+                     document with `doctrine design adopt <slice> --dry-run --diff`, then adopt \
+                     the fingerprint the dry run printed"
                 ),
-                (Some(declared), None) => write!(
-                    f,
-                    "adopt_authored declares fingerprint `{declared}` but design.md is absent"
-                ),
-                // Reachable only once the verb sends no fingerprint (`SL-261`
-                // `PHASE-03`, which rewords all three).
-                (None, _) => write!(f, "design.md is absent — there is nothing to adopt"),
+                _ => write!(f, "design.md is absent — there is nothing to adopt"),
             },
+            Refusal::AdoptionLocked => f.write_str(
+                "run is locked; adopt refuses. To correct a run still governing execution, \
+                 regress to reviewing first; at reconcile, edit design.md directly and do not \
+                 adopt",
+            ),
             Refusal::AdoptionMarkersInvalid {
                 missing,
                 unknown,

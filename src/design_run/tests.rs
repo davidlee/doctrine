@@ -50,7 +50,7 @@ use super::payload_contract::{
 use super::prompt::contract_block;
 use super::refusal::{ActFault, Refusal};
 use super::run::{
-    AuthoredSection, Crossing, DerivedInput, ObservedReview, Resolution, apply, declare,
+    Applied, AuthoredSection, Crossing, DerivedInput, ObservedReview, Resolution, apply, declare,
     live_reviews, subject_state,
 };
 use super::runbook::{RunbookKey, RunbookStanding};
@@ -4719,5 +4719,252 @@ fn ordinary_crossing_never_reads_authored_sections() {
         }),
         (Some(Fingerprint::new("sha256:edited")), true),
         "the control: the same inputs adopt under Crossing::Adopt"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// SL-261 VT-1 — the adopt verb's pure core (`SL-261` `sec-3`).
+// ---------------------------------------------------------------------------
+
+/// The fingerprint of the document every case below reads.
+const DOCUMENT_FINGERPRINT: &str = "sha256:document";
+
+/// The crossing a caller's `--expect` produces.
+fn adopting(expect: Option<&str>) -> Crossing {
+    Crossing::Adopt {
+        expect: expect.map(Fingerprint::new),
+    }
+}
+
+/// Run one adoption through the pure core.
+fn adopt(
+    prior: &DesignSnapshot,
+    request: &ApplyRequest,
+    crossing: &Crossing,
+    derived: &DerivedInput,
+) -> Result<Applied, Refusal> {
+    apply(
+        prior,
+        request,
+        crossing,
+        derived,
+        "sha256:pay",
+        &Resolution::default(),
+    )
+}
+
+/// Every row subject of one event, in row order.
+fn subjects(applied: &Applied, event: ChangeEvent) -> Vec<DesignId> {
+    applied
+        .rows
+        .iter()
+        .filter(|row| row.event == event)
+        .filter_map(|row| row.subject.clone())
+        .collect()
+}
+
+/// A prior holding `held`, and the derived facts of a document whose sections are
+/// `document` — `(id, body, fingerprint)` in **document** order. The request is
+/// the verb's own: [`ApplyRequest::bare`], so only the crossing can decide whether
+/// the run adopts.
+fn adoption_case(
+    held: &[(&str, &str)],
+    document: &[(&str, &str, &str)],
+) -> (DesignSnapshot, ApplyRequest, DerivedInput) {
+    let prior = run_holding(held);
+    let request = ApplyRequest::bare(SubmissionEnvelope {
+        run_uid: prior.run.uid.clone(),
+        known_revision: prior.run.revision,
+        submission_id: "s1".to_owned(),
+    });
+    let derived = DerivedInput {
+        authored_sections: document
+            .iter()
+            .enumerate()
+            .map(|(position, (raw, body, digest))| {
+                (
+                    id(raw),
+                    AuthoredSection {
+                        position,
+                        body: (*body).to_owned(),
+                        fingerprint: Fingerprint::new(*digest),
+                    },
+                )
+            })
+            .collect(),
+        authored_fingerprint: Some(Fingerprint::new(DOCUMENT_FINGERPRINT)),
+        ..DerivedInput::default()
+    };
+    (prior, request, derived)
+}
+
+/// `VT-1` — the engine derives the section map from the document, so the verb's
+/// request carries no caller map to be complete or exact. A changed body seats and
+/// emits `SectionFingerprintChanged`; an unchanged one emits nothing.
+#[test]
+fn adopt_derives_sections_without_a_caller_map() {
+    let (prior, request, derived) = adoption_case(
+        &[("sec-1", "sha256:held-1"), ("sec-2", "sha256:held-2")],
+        &[
+            ("sec-1", "## sec-1\n\nedited by hand\n", "sha256:edited-1"),
+            ("sec-2", "## sec-2\n", "sha256:held-2"),
+        ],
+    );
+    assert_eq!(
+        request.adopt_authored, None,
+        "the verb's request carries no declared map at all"
+    );
+
+    let applied = adopt(&prior, &request, &adopting(None), &derived)
+        .expect("a bare crossing adopts what the document reads");
+
+    assert_eq!(
+        subjects(&applied, ChangeEvent::SectionFingerprintChanged),
+        vec![id("sec-1")],
+        "only the section whose bytes moved is reported"
+    );
+    assert_eq!(
+        applied
+            .snapshot
+            .sections
+            .find(&id("sec-2"))
+            .expect("sec-2 survives")
+            .fingerprint
+            .as_str(),
+        "sha256:held-2",
+        "the unchanged section keeps the fingerprint the run held"
+    );
+}
+
+/// `EX-3` — the pure backstop. A locked run never adopts, whatever else is true
+/// of the document; the same inputs adopt at any other stage.
+#[test]
+fn adopt_refuses_on_a_locked_run() {
+    let (prior, request, derived) = adoption_case(
+        &[("sec-1", "sha256:held")],
+        &[("sec-1", "## sec-1\n\nedited\n", "sha256:edited")],
+    );
+    let mut locked = prior.clone();
+    locked.run.stage = Stage::Locked;
+
+    assert_eq!(
+        adopt(&locked, &request, &adopting(None), &derived),
+        Err(Refusal::AdoptionLocked),
+        "the backstop refuses before the document is even classified"
+    );
+    assert_eq!(
+        adopt(&prior, &request, &adopting(None), &derived)
+            .expect("the control: the same inputs adopt at an unlocked stage")
+            .snapshot
+            .sections
+            .find(&id("sec-1"))
+            .expect("sec-1 survives")
+            .fingerprint
+            .as_str(),
+        "sha256:edited"
+    );
+}
+
+/// `EX-4` — an `--expect` naming a fingerprint the document does not have is
+/// stale, and the refusal carries both values so the caller can name what moved.
+#[test]
+fn adopt_with_mismatched_expect_is_stale() {
+    let (prior, request, derived) = adoption_case(
+        &[("sec-1", "sha256:held")],
+        &[("sec-1", "## sec-1\n\nedited\n", "sha256:edited")],
+    );
+
+    assert_eq!(
+        adopt(
+            &prior,
+            &request,
+            &adopting(Some("sha256:reviewed")),
+            &derived
+        ),
+        Err(Refusal::AdoptionStale {
+            expected: Some("sha256:reviewed".to_owned()),
+            observed: Some(DOCUMENT_FINGERPRINT.to_owned()),
+        })
+    );
+}
+
+/// `EX-4` — an absent document has nothing to adopt, with or without `--expect`.
+#[test]
+fn adopt_with_absent_document_is_stale() {
+    let (prior, request, mut derived) = adoption_case(
+        &[("sec-1", "sha256:held")],
+        &[("sec-1", "## sec-1\n\nedited\n", "sha256:edited")],
+    );
+    derived.authored_sections.clear();
+    derived.authored_fingerprint = None;
+
+    for expect in [None, Some("sha256:reviewed")] {
+        assert_eq!(
+            adopt(&prior, &request, &adopting(expect), &derived),
+            Err(Refusal::AdoptionStale {
+                expected: expect.map(str::to_owned),
+                observed: None,
+            }),
+            "an absent document is stale however the caller named its basis"
+        );
+    }
+}
+
+/// `EX-4` — without `--expect` the basis is the fingerprint read at entry, and
+/// naming that same fingerprint explicitly is admitted identically.
+#[test]
+fn adopt_without_expect_takes_the_observed_fingerprint() {
+    let (prior, request, derived) = adoption_case(
+        &[("sec-1", "sha256:held")],
+        &[("sec-1", "## sec-1\n\nedited\n", "sha256:edited")],
+    );
+
+    for crossing in [adopting(None), adopting(Some(DOCUMENT_FINGERPRINT))] {
+        assert_eq!(
+            adopt(&prior, &request, &crossing, &derived)
+                .expect("the observed fingerprint is the admitted basis")
+                .snapshot
+                .sections
+                .find(&id("sec-1"))
+                .expect("sec-1 survives")
+                .fingerprint
+                .as_str(),
+            "sha256:edited"
+        );
+    }
+}
+
+/// `DEC-066` — invalidation is coverage-driven, so evidence bound to the changed
+/// section dies and evidence bound to an unchanged one outlives the adoption.
+#[test]
+fn adopt_invalidates_evidence_on_changed_sections_only() {
+    let (mut prior, request, derived) = adoption_case(
+        &[("sec-1", "sha256:held-1"), ("sec-2", "sha256:held-2")],
+        &[
+            ("sec-1", "## sec-1\n\nedited\n", "sha256:edited-1"),
+            ("sec-2", "## sec-2\n", "sha256:held-2"),
+        ],
+    );
+    // One act covering BOTH sections, and one attestation per section. The act's
+    // coverage moved with sec-1, so it dies; `att-2` covered content that did not.
+    let mut act = checkpoint_act("cpa-1", ActKind::SectionReviewed, "both sections were read");
+    act.covered = Some(CoveredSet::Sections(ContentCoverage::of(
+        prior.sections.fingerprints(),
+    )));
+    prior.acts.record(act);
+    attest(&mut prior, "att-1", "sec-1", Reviewer::Adversarial);
+    attest(&mut prior, "att-2", "sec-2", Reviewer::Adversarial);
+
+    let applied = adopt(&prior, &request, &adopting(None), &derived).expect("the document adopts");
+
+    assert_eq!(
+        subjects(&applied, ChangeEvent::ActInvalidated),
+        vec![id("cpa-1")],
+        "the act's covered map moved"
+    );
+    assert_eq!(
+        subjects(&applied, ChangeEvent::ReviewInvalidated),
+        vec![id("att-1")],
+        "sec-2's attestation is bound to content that did not move, so it lives"
     );
 }

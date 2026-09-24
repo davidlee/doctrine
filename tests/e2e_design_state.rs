@@ -75,6 +75,11 @@ const SLICE_NUMBER: &str = "233";
 /// The authored design document's file name.
 const DESIGN_DOC: &str = "design.md";
 
+/// The checkpoint journal's file name — the same floor [`DESIGN_DOC`] states:
+/// the name is private to `src/state.rs` in a **binary-only** crate, so an
+/// integration test cannot name it and one copy is the floor the layout imposes.
+const DESIGN_JOURNAL: &str = "design-journal.toml";
+
 /// The stable-section marker `materialise` writes and re-adoption addresses —
 /// the single place this suite spells that grammar.
 fn section_marker(section: &str) -> String {
@@ -219,6 +224,43 @@ impl Fixture {
         let mut args = vec!["design", "resume", SLICE, "-p", "."];
         args.extend_from_slice(extra);
         run(&self.root, &args)
+    }
+
+    /// The checkpoint journal beside the snapshot.
+    fn journal(&self) -> PathBuf {
+        self.snapshot.with_file_name(DESIGN_JOURNAL)
+    }
+
+    /// The journal's bytes, or `None` while nothing has journalled yet.
+    fn journal_bytes(&self) -> Option<Vec<u8>> {
+        std::fs::read(self.journal()).ok()
+    }
+
+    /// Put the run at `stage`, rewriting the snapshot through the same pure model
+    /// the binary reads it with — so no test spells the snapshot format.
+    ///
+    /// The ladder that *earns* `locked` belongs to `e2e_design_review.rs`. This
+    /// suite's subject is what a verb does at a stage, so it sets the runtime
+    /// state the binary reads rather than driving forty submissions to arrive at
+    /// it.
+    fn set_stage(&self, stage: design_run::Stage) {
+        let mut run = self.read();
+        run.run.stage = stage;
+        std::fs::write(&self.snapshot, snapshot::to_toml(&run).unwrap()).unwrap();
+    }
+
+    /// `design adopt`, expecting success; returns stdout.
+    fn adopt(&self, extra: &[&str]) -> String {
+        let mut args = vec!["design", "adopt", SLICE, "-p", "."];
+        args.extend_from_slice(extra);
+        run(&self.root, &args)
+    }
+
+    /// `design adopt`, expecting refusal; returns stderr.
+    fn refuse_adopt(&self, extra: &[&str]) -> String {
+        let mut args = vec!["design", "adopt", SLICE, "-p", "."];
+        args.extend_from_slice(extra);
+        fail(&self.root, &args)
     }
 
     /// `design show` at the `prompt` rendering — the turn envelope, budgeted.
@@ -466,7 +508,10 @@ fn stale_or_invalid_adoption_changes_neither_clearance_nor_watermark() {
          \"sections\":{{\"sec-1\":\"{section_digest}\"}}}}}}",
         fixture.envelope("stale")
     ));
-    assert!(stale.contains("declares fingerprint"), "{stale}");
+    assert!(
+        stale.contains("--expect `0000` but design.md reads"),
+        "{stale}"
+    );
 
     // (b) a marker map that is not complete and exact.
     let invalid = fixture.refuse(&format!(
@@ -2798,5 +2843,257 @@ fn a_refusal_renders_every_remedy_and_reads_no_asset() {
     assert!(
         !error.contains("discharge:") && !error.contains(&format!("contracts {COLD_EDGE}")),
         "the refusal is not a receipt: {error}"
+    );
+}
+
+// ── SL-261 PHASE-03 — the `design adopt` verb (VT-2 .. VT-5) ───────────────
+//
+// The verb's contract is design `sec-2`/`sec-3`: ONE read of the document, the
+// aligned no-op, the locked refusal, `--expect`, `--dry-run`, and the report.
+// Every test below drives the built binary; nothing here reaches into the pure
+// model except the two `Fixture` helpers that set a stage and read the snapshot.
+
+/// `VT-2` — one hand-edit crossed in ONE call, the report naming what moved, and
+/// a following `materialise` byte-identical to the adopted bytes.
+#[test]
+fn adopt_verb_crosses_a_hand_edit_in_one_call() {
+    let fixture = materialised("first draft");
+    // Evidence bound to the section, so the crossing has invalidation to report:
+    // a review attestation, and the run-level acceptance that covers every
+    // section.
+    fixture.apply(&fixture.payload(
+        "attest",
+        &json!({ "declare": [{ "subject": "att-1", "attests": "sec-1" }] }),
+    ));
+    fixture.apply(&fixture.payload(
+        "accept",
+        &json!({ "acceptance": { "basis": "the user accepted it" } }),
+    ));
+
+    let hand_written = authored_document("sec-1", "## First draft\n\nhand written prose");
+    std::fs::write(fixture.doc(), &hand_written).unwrap();
+
+    let report = fixture.adopt(&[]);
+    assert!(
+        report.contains("section_fingerprint_changed sec-1"),
+        "the report names the changed section: {report}"
+    );
+    assert!(
+        report.contains("act_invalidated") && report.contains("act=design-accepted"),
+        "and the act whose coverage moved: {report}"
+    );
+    assert!(
+        report.contains("review_invalidated att-1 section=sec-1"),
+        "and the attestation bound to the changed section: {report}"
+    );
+
+    run(&fixture.root, &["design", "materialise", SLICE, "-p", "."]);
+    assert_eq!(
+        std::fs::read_to_string(fixture.doc()).unwrap(),
+        hand_written,
+        "materialise re-emits the ADOPTED bytes, not the pre-edit body"
+    );
+}
+
+/// `VT-3`/`EX-6` — `--dry-run` prints the same report and writes nothing: the
+/// snapshot, the journal and the authored document are byte-identical after it.
+#[test]
+fn adopt_dry_run_writes_nothing() {
+    let fixture = materialised("first draft");
+    std::fs::write(
+        fixture.doc(),
+        authored_document("sec-1", "## First draft\n\nhand written prose"),
+    )
+    .unwrap();
+
+    let snapshot_before = fixture.bytes();
+    let journal_before = fixture.journal_bytes();
+    let document_before = std::fs::read(fixture.doc()).unwrap();
+
+    let report = fixture.adopt(&["--dry-run"]);
+    assert!(
+        report.starts_with("dry run — would adopt "),
+        "the header says nothing was written: {report}"
+    );
+    assert!(
+        report.contains("section_fingerprint_changed sec-1"),
+        "and carries the same change rows: {report}"
+    );
+
+    assert_eq!(
+        fixture.bytes(),
+        snapshot_before,
+        "the snapshot did not move"
+    );
+    assert_eq!(fixture.journal_bytes(), journal_before, "nor the journal");
+    assert_eq!(
+        std::fs::read(fixture.doc()).unwrap(),
+        document_before,
+        "nor the document"
+    );
+}
+
+/// `VT-3` — `--expect` names a fingerprint the document does not have and is
+/// refused; the value the dry run prints is the value that succeeds.
+#[test]
+fn adopt_expect_mismatch_refuses() {
+    let fixture = materialised("first draft");
+    let adopted = "## First draft\n\nhand written prose";
+    std::fs::write(fixture.doc(), authored_document("sec-1", adopted)).unwrap();
+    let before = fixture.bytes();
+
+    let error = fixture.refuse_adopt(&["--expect", "deadbeef"]);
+    assert!(error.contains("--expect `deadbeef`"), "{error}");
+    assert!(error.contains("design.md reads"), "{error}");
+    assert!(
+        error.contains("--dry-run"),
+        "the remedy names the reviewed path: {error}"
+    );
+    assert_eq!(fixture.bytes(), before, "a stale adoption moves nothing");
+
+    let printed = fixture
+        .adopt(&["--dry-run"])
+        .lines()
+        .next()
+        .and_then(|line| line.strip_prefix("dry run — would adopt "))
+        .and_then(|rest| rest.split(';').next())
+        .expect("the dry run prints the fingerprint it would adopt")
+        .to_owned();
+    let report = fixture.adopt(&["--expect", &printed]);
+    assert!(report.starts_with("adopted design.md "), "{report}");
+    assert_eq!(
+        fixture
+            .read()
+            .sections
+            .find(&id("sec-1"))
+            .unwrap()
+            .fingerprint
+            .as_str(),
+        common::sha256(adopted.as_bytes()),
+        "the section moved to the bytes that were adopted"
+    );
+}
+
+/// `VT-3` — a document already on the watermark is nothing to adopt: the no-op
+/// line, exit 0, revision unchanged and no receipt.
+#[test]
+fn adopt_on_an_aligned_document_is_a_no_op() {
+    let fixture = materialised("first draft");
+    let before = fixture.bytes();
+    let receipts = fixture.read().receipts.receipts.len();
+
+    let report = fixture.adopt(&[]);
+    assert!(
+        report.contains("matches the watermark") && report.contains("nothing to adopt"),
+        "{report}"
+    );
+    assert_eq!(fixture.bytes(), before, "the no-op writes nothing at all");
+    assert_eq!(
+        fixture.read().receipts.receipts.len(),
+        receipts,
+        "not even a receipt"
+    );
+}
+
+/// `VT-3`/`EX-3` — a locked run refuses BEFORE the document is parsed, so a
+/// locked run whose document also carries an unknown marker gets the locked
+/// answer rather than a marker error whose remedy it cannot use. An ALIGNED
+/// locked run is the no-op, because the aligned test runs first.
+#[test]
+fn adopt_on_a_locked_run_refuses_before_parsing() {
+    let fixture = materialised("first draft");
+    fixture.set_stage(design_run::Stage::Locked);
+    std::fs::write(
+        fixture.doc(),
+        framed(&[("sec-1", "## First draft\n"), ("sec-9", "invented\n")]),
+    )
+    .unwrap();
+    let before = fixture.bytes();
+
+    let error = fixture.refuse_adopt(&[]);
+    assert!(error.contains("run is locked"), "{error}");
+    assert!(
+        error.contains("regress to reviewing"),
+        "the remedy names the regression: {error}"
+    );
+    assert!(
+        !error.contains("sec-9"),
+        "the locked answer outranks the marker error: {error}"
+    );
+    assert_eq!(fixture.bytes(), before, "and nothing moved");
+
+    let aligned = materialised("first draft");
+    aligned.set_stage(design_run::Stage::Locked);
+    let report = aligned.adopt(&[]);
+    assert!(
+        report.contains("nothing to adopt"),
+        "an aligned locked run has nothing to adopt: {report}"
+    );
+}
+
+/// `VT-4`/`EX-2`/`A6` — ONE read. An edit landing immediately after the entry
+/// read is caught by the pre-write re-check, so B's sections are never seated
+/// under A's fingerprint and the run does not advance.
+#[test]
+fn adopt_reads_the_document_once() {
+    let fixture = materialised("first draft");
+    // A — the document the verb reads.
+    let first = authored_document("sec-1", "## First draft\n\nwritten by A");
+    std::fs::write(fixture.doc(), &first).unwrap();
+    // B — what a non-cooperating writer puts there immediately after that read.
+    let second = authored_document("sec-1", "## First draft\n\nwritten by B");
+    let foreign = fixture.root.join("foreign.md");
+    std::fs::write(&foreign, &second).unwrap();
+    let before = fixture.bytes();
+
+    let error = fail_with_env(
+        &fixture.root,
+        &["design", "adopt", SLICE, "-p", "."],
+        "DOCTRINE_DESIGN_EDIT",
+        foreign.as_os_str(),
+    );
+    assert!(
+        error.contains("changed underneath this invocation"),
+        "the pre-write re-check catches the edit: {error}"
+    );
+    assert_eq!(
+        fixture.bytes(),
+        before,
+        "the run does not advance, so B's sections are never seated under the \
+         fingerprint A was read at"
+    );
+    assert_eq!(
+        std::fs::read(fixture.doc()).unwrap(),
+        second.as_bytes().to_vec(),
+        "the other writer's bytes stand — this path overwrites nothing"
+    );
+}
+
+/// `VT-5` — a whitespace-only head is disclosed, moves no section, and is
+/// dropped by the next materialise.
+#[test]
+fn adopt_discloses_a_whitespace_head() {
+    let fixture = materialised("first draft");
+    let bare = std::fs::read_to_string(fixture.doc()).unwrap();
+
+    // A head-only edit: a formatter's leading blank lines, no section moved.
+    std::fs::write(fixture.doc(), format!("\n\n{bare}")).unwrap();
+
+    let report = fixture.adopt(&[]);
+    assert!(
+        report.contains("head: 2 whitespace-only lines before sec-1 are not held"),
+        "{report}"
+    );
+    assert!(report.contains("unchanged sec-1"), "{report}");
+    assert!(
+        !report.contains("section_fingerprint_changed"),
+        "a head-only edit moves no section: {report}"
+    );
+
+    run(&fixture.root, &["design", "materialise", SLICE, "-p", "."]);
+    assert_eq!(
+        std::fs::read_to_string(fixture.doc()).unwrap(),
+        bare,
+        "materialise reproduces the document without the head it never held"
     );
 }

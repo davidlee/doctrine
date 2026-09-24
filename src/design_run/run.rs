@@ -872,6 +872,21 @@ fn confirmation(next: &DesignSnapshot, confirms: Option<AgentActKind>) -> Option
         .map(|held| held.fingerprint.clone())
 }
 
+/// Whether a run at `stage` may adopt `design.md` at all (`SL-261` `EX-3`,
+/// `DEC-279`).
+///
+/// **One predicate, two callers.** The verb's shell asks this before it parses
+/// anything, so a locked run whose document is also malformed gets the locked
+/// answer rather than a marker error whose remedy is not available to it; and
+/// [`adopt_authored`] asks it first as its own backstop, so the two sites cannot
+/// disagree about which runs may adopt.
+pub(crate) fn refuse_adoption_at(stage: Stage) -> Result<(), Refusal> {
+    if stage == Stage::Locked {
+        return Err(Refusal::AdoptionLocked);
+    }
+    Ok(())
+}
+
 /// DEC-092 rule 2: the sole lawful crossing of a divergence.
 ///
 /// An `expect`ed fingerprint must be what Doctrine reads. Where the wire's
@@ -889,6 +904,9 @@ fn adopt_authored(
     markers: Option<&super::submission::AdoptAuthored>,
     derived: &DerivedInput,
 ) -> Result<Vec<Pending>, Refusal> {
+    // The locked backstop (`SL-261` `EX-3`): adoption is not a route out of
+    // `locked`, whatever else is wrong with the document.
+    refuse_adoption_at(next.run.stage)?;
     let observed = derived.authored_fingerprint.as_ref();
     if observed.is_none() || expect.is_some_and(|expected| Some(expected) != observed) {
         return Err(Refusal::AdoptionStale {
@@ -2170,23 +2188,11 @@ mod tests {
     /// An empty payload against `prior` — the base each test below narrows to the
     /// one act it is about, so a field joining [`ApplyRequest`] is spelled once.
     fn payload(prior: &DesignSnapshot) -> ApplyRequest {
-        ApplyRequest {
-            envelope: SubmissionEnvelope {
-                run_uid: prior.run.uid.clone(),
-                known_revision: prior.run.revision,
-                submission_id: "s1".to_owned(),
-            },
-            adopt_authored: None,
-            traversal: TraversalDeclaration::default(),
-            stage: None,
-            acceptance: None,
-            declare: Vec::new(),
-            delegation: None,
-            discharge: None,
-            review_policy: None,
-            checkpoint_act: None,
-            agent_declaration: None,
-        }
+        ApplyRequest::bare(SubmissionEnvelope {
+            run_uid: prior.run.uid.clone(),
+            known_revision: prior.run.revision,
+            submission_id: "s1".to_owned(),
+        })
     }
 
     /// Every row `snapshot`'s log holds for `event`, in log order.
