@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d23b-afa2-7511-bfba-5b9e592472ad"
+recorded_at = "2026-09-24T07:05:22.082945912Z"
+kind = "friction"
+summary = "code-review RV-380: a stored phase boundary can silently span another slice's commits, and neither the boundary record nor the review verb signals it"
+detail = "Reviewing SL-263 PHASE-01..04, the task had to warn me by hand that SL-261 had committed into the shared edge tree between the spans. Nothing in the data surfaces it: `dispatch record-delta` stamps (start,end) and `doctrine dispatch phase-receipt` reports the pair, but no verb reports that the range contains commits whose `(SL-NNN)` scope differs from the phase's slice. I had to `git log <start>..<end>` for each of the four spans and then exclude foreign files (SL-261's design.rs/snapshot.rs/e2e_design_state.rs/Cargo.*) by eye before reading the diff. Cost: four extra log+diff reads and a real risk of reviewing (or raising onto) another slice's code. A `record-delta`/receipt field naming foreign-scoped commits in the range, or a review-verb check, would remove it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

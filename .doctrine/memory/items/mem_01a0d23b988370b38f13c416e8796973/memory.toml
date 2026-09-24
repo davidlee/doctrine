@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0d23b988370b38f13c416e8796973"
+memory_key = "mem.pattern.rust.idempotency-comparator-scope"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Idempotency comparators must compare exactly what the writer emits — never assert absence of unowned fields"
+summary = 'A canonicality/idempotency comparator that treats an unset field as "must be absent" silently strips operator config from entries the writer merely refreshes.'
+created = "2026-09-24"
+updated = "2026-09-24"
+
+[scope]
+paths = ["src/boot.rs"]
+globs = []
+commands = ["boot"]
+tags = ["idempotency", "config-merge", "footgun", "rust"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e3f0c4d3bcc6c0dc9382727bd8a4420721a85e9a"
+ref_name = "refs/heads/edge"
+checkout_state_id = "a3b88e9c27a781f54a7fa3aeea9972e69d6bfdfa32aa16962f731418fd619754"
+base_commit = "8c2799cca2a023f5e81ea7b7bef1dba51871e987"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+

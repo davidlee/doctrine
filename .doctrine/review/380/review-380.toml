@@ -1,0 +1,76 @@
+id    = 380
+slug  = "code-review-sl-263-implementation-delta-phase-01phase-04"
+title = "Code review: SL-263 implementation delta PHASE-01..PHASE-04"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "code-review"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-263"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = '`entry_is_canonical` reads an unset handler field as "must be absent", so a hand-set `timeout` on any doctrine-owned hook is silently reverted on the next install (expected: only fields a spec sets are compared)'
+detail = """
+EXPECTED: design §5.6 extends canonicality "to the handler fields doctrine owns" — i.e. the fields a given spec sets. A field doctrine does not configure on a spec (all four Claude specs and codex `boot_emit` set `additional_context_limit: None, timeout: None`) must not make the entry non-canonical.
+
+OBSERVED: `handler_field_matches` (src/boot.rs:1380) maps `None` to `handler.get(key).is_none()`, so a handler carrying either key is judged non-canonical for EVERY spec that does not set it. `plan_hook` (src/boot.rs:1469) then drops all owned hooks and re-inserts `desired_entries`, which omits the key — silently deleting it. `entry_is_canonical` is src/boot.rs:1348.
+
+REPRODUCED (main tree, `./target/debug/doctrine`): seeded `.claude/settings.json` with `"/usr/local/bin/doctrine memory surface --input claude"` plus `"timeout": 60` on BOTH PreToolUse matchers (matcher+command otherwise exactly canonical). `doctrine boot install --agent claude -y -p <dir>` printed `claude: refreshed hook: ${DOCTRINE_BIN:-doctrine} memory surface --input claude` and the resulting settings file has no `timeout` key on either handler. `timeout` is a documented Claude Code per-hook field (seconds; default 600 for `command` hooks, code.claude.com/docs/en/hooks), so this is legitimate operator configuration, not garbage. Pre-SL-263 `entry_is_canonical` compared only `matcher` + `command`, so this entry was a no-op (`RefreshOutcome::None`) and the field survived — the regression is introduced by this slice.
+
+Untested: no test seeds a handler field for a spec that sets none (the PHASE-03 VT-2 tests vary limit/timeout only for the codex spec, which sets both Some).
+
+Fix shape: compare a field only when the spec sets it (`Some(n)` ⇒ must equal n; `None` ⇒ don't care), which keeps the codex stale-limit healing while leaving operator fields alone. Affects both harnesses: codex's `SessionStart`/`PreToolUse` hook schema also has `timeout`, and the codex `boot_emit` spec sets neither field."""
+disposition = "fix-now"
+response = """Accepted. The implementation over-reaches the design's "fields doctrine owns": `None` must mean "do not compare" (operator's field is left alone), and only `Some(n)` asserts a value. That still heals a codex entry missing a stale limit/timeout — the PHASE-03 purpose — while stopping the silent deletion of a hand-set `timeout` on the four Claude specs and the codex `boot_emit` spec. Reconciled in this unit of work (the slice is pre-close): change `handler_field_matches` to return true for `None`, and add a regression test seeding a handler field on a spec that sets none (both a Claude spec and codex `boot_emit`) asserting `RefreshOutcome::None` and the field's survival. The PHASE-03 runtime-sheet Decision ("`None` means the key must be ABSENT") is runtime scratch and is superseded by this finding; no authored plan/design change is needed — the design already says "the handler fields doctrine owns"."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "The TS↔Rust neutral wire is never round-tripped: PHASE-04 VT-2 drives a shell stub that ignores its argv, so the plan/design's real-`memory surface --input neutral` smoke is unmet and the cross-language contract has no drift detector"
+detail = '''
+EXPECTED: design §9 ("the minimal smoke that spawns `memory surface --input neutral --format plain`, writes a fixture envelope to its stdin, and reads a block — not by a source-contains check a broken sketch would pass") and plan PHASE-04 VT-2 name a behavioural run against the real decoder, so a wrong envelope key or a wrong child argv is caught.
+
+OBSERVED: `surface_extension_delivers_to_doctrine` (src/boot.rs:8090) sets the baked `BIN_PATH` to a stub `#!/bin/sh\ncat > "$0.stdin"\nprintf 'SURFACE BLOCK'\n`. The stub IGNORES its arguments, so the test proves only that some child read stdin — it cannot observe the argv. The command vector is then asserted only by `generate_surface_extension_bakes_exec_path` (src/boot.rs:7938) via `content.contains("--input")` / `content.contains("child.stdin")` — precisely the source-substring check §9 forbids for this seam. `grep -rn "\-\-input neutral" tests/ src/` finds the string only inside `templates/surface.ts`; no test invokes the binary's neutral decoder.
+
+CONSEQUENCE: the cross-language contract is unverified end-to-end. TS emits `{session_id, cwd, probe:{class, value}}` with `class ∈ {'path','command'}` (templates/surface.ts); Rust consumes `NeutralInput`/`NeutralProbe` with `CLASS_PATH`/`CLASS_COMMAND` (src/memory.rs:10520-10521, 10622, 10632). Each side is asserted against a hand-written literal, so a one-sided rename (e.g. `class`→`kind`, or `probe`→`selector`) passes every suite in the repo while silently no-opping pi surfacing — fail-open then hides it. This was the stated purpose of the VT.
+
+Fix shape: an integration test (`tests/`) that bakes `env!("CARGO_BIN_EXE_doctrine")` as the exec, runs the emitted `surface.ts` under node, and asserts a real block is returned — the round trip the design asked for.'''
+disposition = "fix-now"
+response = """Accepted. The VT was authored to protect the sole cross-language seam and was implemented with a stub that cannot observe the argv, so the plan's VT-2 as written ("delivers a fixture envelope to `doctrine memory surface --input neutral --format plain`") is not met. Reconciled in this unit of work: add an integration test under `tests/` that bakes `env!("CARGO_BIN_EXE_doctrine")` into the generated extension, drives the emitted `surface.ts` under node with a fixture pi `tool_result`, and asserts a real doctrine-rendered block comes back — a genuine round trip through `NeutralInput`/`NeutralProbe`. Keep the existing stub-based tests for the transport/EPIPE behaviour; they are not theatre, just not sufficient. Also promote the child argv from a source-substring check to an assertion of the observed spawn (the round-trip test does this implicitly). `slice verify-vt 263` for PHASE-04 VT-2 must be re-run after the fix."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "`MCP_BIN_PATH_MARKER` and `SURFACE_BIN_PATH_MARKER` are two named constants for one identical literal (STD-001)"
+detail = """
+OBSERVED: `const MCP_BIN_PATH_MARKER: &str = "declare const BIN_PATH: string;";` (src/boot.rs:2485) and `const SURFACE_BIN_PATH_MARKER: &str = "declare const BIN_PATH: string;";` (src/boot.rs:2492) are byte-identical and both consumed (`generate_mcp_extension`, `generate_surface_extension` via `generate_from_template`).
+
+EXPECTED: STD-001 names a meaningful literal once. The marker is one value with one meaning ("the template line replaced by the baked exec path"); two homes give it two points of change, which is exactly the drift STD-001 exists to prevent. The project's precedent for same-string/separate-const (`FORMAT_CLAUDE` vs `WIRE_CLAUDE`, PHASE-02 Decisions) does not apply — those are distinct vocabularies; these two constants mean the same thing.
+
+Fix shape: one shared `BIN_PATH_MARKER`."""
+disposition = "fix-now"
+response = "Accepted. One literal, one name: collapse `MCP_BIN_PATH_MARKER` and `SURFACE_BIN_PATH_MARKER` into a single `BIN_PATH_MARKER` used by both `generate_*_extension` paths. Trivial and in scope for this unit of work."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "`discover_surface_anchor` is named for a `SurfaceAnchor` it never returns; an unlabelled `(PathBuf, PathBuf)` invites transposition"
+detail = """
+OBSERVED: `fn discover_surface_anchor(cwd, env_project_dir) -> Option<(PathBuf, PathBuf)>` (src/memory.rs:10916) yields `(canonical_anchor, root)`. The caller (`run_surface_to`) destructures it as `(canonical, root)` and then assembles `SurfaceAnchor { raw: decoded.cwd…, canonical }` itself.
+
+EXPECTED: the name promises a `SurfaceAnchor`; the `SurfaceAnchor` type exists precisely to disambiguate the raw vs canonical cwd forms. Returning two identically-typed positional values discards that distinction at the function boundary and puts the anchor's construction in two places; a swapped pair is a silent (test-only-caught) error rather than a type error. Returning `(SurfaceAnchor, PathBuf)` (raw + canonical + root) would cohere the naming and construction. A `nit`: no observed defect — the one test that would catch a swap (`subdirectory_cwd_resolves_a_relative_path_like_the_absolute_form`) passes today."""
+disposition = "fix-now"
+response = "Accepted as a nit. Have `discover_surface_anchor` return the `SurfaceAnchor` (with `raw`) plus the root, so the function's name matches its return and the anchor is constructed in one place. Low risk, done alongside F-1/F-3 which touch the same region."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

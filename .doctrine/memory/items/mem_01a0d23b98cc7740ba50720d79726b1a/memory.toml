@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0d23b98cc7740ba50720d79726b1a"
+memory_key = "mem.fact.pi.extension-handler-rejection-caught"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "pi extension handler rejections are caught by the host; unhandled stream 'error' events are not"
+summary = "pi's ExtensionRunner wraps every event handler in try/catch (emitError), so a thrown/rejected handler is fail-open; a stream 'error' event it does not catch can still kill the process."
+created = "2026-09-24"
+updated = "2026-09-24"
+
+[scope]
+paths = ["templates/"]
+globs = []
+commands = []
+tags = ["pi", "extension", "fail-open", "epipe"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e3f0c4d3bcc6c0dc9382727bd8a4420721a85e9a"
+ref_name = "refs/heads/edge"
+checkout_state_id = "ee544d95880a5408741c578526fa8c2e661e2a6f97f02d5ad3d46c62a8355da6"
+base_commit = "8c2799cca2a023f5e81ea7b7bef1dba51871e987"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
