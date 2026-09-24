@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d0dc-c991-7190-8d8b-91e8ce956570"
+recorded_at = "2026-09-24T00:42:05.585292099Z"
+kind = "friction"
+summary = "design (SL-261): severe findings disposed without the RFC-026 route token"
+detail = "The route:<route> rule for blocker/major dispositions lives only in reviewing.md's tail, below 'Recording the lock'; the agent disposed F-1/F-2 before reading that far, and no verb checks the form. Repair was a prose amendment on RV-374.md since verified findings cannot be re-disposed."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
