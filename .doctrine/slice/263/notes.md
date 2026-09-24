@@ -241,7 +241,7 @@ registry and `RefreshReport.hooks` carries both outcomes.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · PHASE-03 · 1560f1f08
+fresh-as-of: 2026-09-24 · PHASE-03 · 34a53191d
 
 ### Produced
 
