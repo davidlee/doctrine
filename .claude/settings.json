@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "${DOCTRINE_BIN:-doctrine} memory surface",
+            "command": "${DOCTRINE_BIN:-doctrine} memory surface --input claude",
             "type": "command"
           }
         ],
@@ -13,7 +13,7 @@
       {
         "hooks": [
           {
-            "command": "${DOCTRINE_BIN:-doctrine} memory surface",
+            "command": "${DOCTRINE_BIN:-doctrine} memory surface --input claude",
             "type": "command"
           }
         ],
