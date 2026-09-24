@@ -1,0 +1,70 @@
+id    = 381
+slug  = "reconciliation-review-of-sl-263"
+title = "reconciliation review of SL-263"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-263"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "PHASE-01 recorded span should hold only SL-263 work; it includes SL-261's 58a4c57f3"
+detail = "boundaries.toml PHASE-01 = 3dd5e8de4..c7efe9f37. That range contains 817b4a179 (SL-263 fixtures), 58a4c57f3 (feat(SL-261) design adopt --diff) and c7efe9f37 (harvest). The foreign commit is the sole source of five undeclared conformance paths: Cargo.toml, Cargo.lock, src/commands/design.rs, src/design_run/snapshot.rs, tests/e2e_design_state.rs. PHASE-03's span was already narrowed for the same reason; PHASE-01 was not. PHASE-05's 7-commit span (8a1abb36e..007a0ec87) is all SL-263 — checked, clean."
+disposition = "fix-now"
+response = "Re-recorded: slice record-delta 263 PHASE-01 --commit 817b4a179 --force (PHASE-01's only code commit; c7efe9f37 is its harvest). Conformance undeclared drops 51 → 45; the five SL-261 paths are gone. Registry is runtime state (.doctrine/state/slice/263/boundaries.toml)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "PHASE-01 EX-1 names apply_patch_via_shell.json; the fixture is absent"
+detail = "plan.toml PHASE-01 EX-1 lists shell.json, apply_patch_tool.json, apply_patch_via_shell.json. tests/fixtures/codex/ holds shell.json, shell_write.json, apply_patch_tool.json. README.md unknown #3 records that codex 0.155.1 has no apply_patch executable on PATH, so the via-shell form is unreachable; shell_write.json shows a shell write reports Bash. EX-3 (unknowns answered from fixtures) is met."
+disposition = "tolerated"
+response = "The third fixture is unobtainable on codex 0.155.1, and the README records why with evidence (shell_write.json) rather than fabricating a payload. EX-1 is an immutable plan criterion, so the deviation is recorded here, not edited. The purpose behind it (A-1 retired, EX-3 unknowns answered from fixtures) is met."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Remaining undeclared conformance paths should be process artefacts or scope-relevant tests"
+detail = "After excluding F-1's five paths, undeclared holds: .doctrine backlog (ISS-479/480), memories, observations, RV-380, POL-003, REV-058/059/060, slice notes/toml; tests/e2e_claude_install.rs, tests/e2e_surface_neutral_roundtrip.rs (RV-380 F-2), tests/fixtures/codex/* (PHASE-01) — all under the scope-relevant tests/** selector; src/commands/guard.rs — scope-relevant selector, plan PHASE-02 EX-7. undelivered = 0; five design-target selectors all conformant."
+disposition = "aligned"
+response = "Every remaining undeclared path is an authored process artefact (backlog, memory, observation, review, policy, revision, slice notes) or sits under a scope-relevant selector (tests/**, src/commands/guard.rs). No design-target gap, no scope creep in source."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Slice scope should name every spec the governance leg revises; REV-060 (SPEC-007) is not named"
+detail = "slice-263.md Scope/Affected surface name POL-003, a PRD-004 REV and a SPEC-011 REV. The governance review (notes.md 'Governance draft review') added REV-060 against SPEC-007, which owns src/memory.rs and src/retrieve.rs and describes only find/retrieve. The addition is sound (SPEC-007 is the owning spec of the changed code) but the scope document does not record it."
+disposition = "verified"
+response = "Spec/scope item → reconciliation brief (per-slice direct edit): slice-263.md Scope governance leg + Affected surface name REV-060 against SPEC-007."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Governance should describe the shipped surface; PRD-004, SPEC-011, SPEC-007 do not, and POL-003 is draft"
+detail = "Shipped: codex PreToolUse registry + generated pi surface.ts (src/boot.rs), neutral SurfaceRequest codecs (src/memory.rs). PRD-004 §2 still out-scopes proactive injection and §8 holds the blocking open question; SPEC-011 calls codex import-only and names only the Claude hook set; SPEC-007 has no pointer-surface contract. REV-058/059/060 are status=proposed approval=none. POL-003 (the adapter-placement rule SL-263 is governed_by) is draft, so it is absent from the boot snapshot. PHASE-05 VH-1 defers approval to reconcile."
+disposition = "verified"
+response = "Spec/governance item → reconciliation brief: approve + apply REV-058 (PRD-004), REV-059 (SPEC-011), REV-060 (SPEC-007); POL-003 draft → required, then doctrine boot. The user's act (PHASE-05 VH-1)."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Pointer rendering should meet REQ-018 (quoted, attributed data); format_block does not (ISS-480)"
+detail = "REQ-018 requires recalled knowledge to be presented as quoted, attributed data with identity, trust standing and context; the owner confirmed it applies to pointer titles. format_block renders an unquoted title + uid; the command surface shows severity, not trust. SL-263 did not change format_block, admits, dedup_diff or cap (git diff 3dd5e8de4..HEAD shows no change to those fns); the behaviour is SL-205's. SL-263 widens its reach to two more harnesses. REV-058 and REV-060 restate the REQ-018 contract for pointers, so applying them leaves the formatter nonconformant against approved text."
+disposition = "tolerated"
+response = "Pre-existing SL-205 formatter, untouched by SL-263; SL-263's non-goals forbid changing retrieval/admission/format, so fixing it here would be scope departure. ISS-480 owns the fix. Consciously accepted: SL-263 extends a known REQ-018 gap to codex and pi. Guard for reconcile (in brief): approving REV-058/060 must not be read as certifying the formatter; ISS-480 stays open."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

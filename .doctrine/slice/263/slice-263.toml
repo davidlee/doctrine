@@ -1,7 +1,7 @@
 id = 263
 slug = "ambient-memory-pi-codex"
 title = "Ambient memory surfacing for pi and codex"
-status = "started"
+status = "reconcile"
 created = "2026-09-24"
 updated = "2026-09-24"
 tags = []
