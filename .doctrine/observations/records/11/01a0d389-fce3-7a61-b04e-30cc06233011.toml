@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d389-fce3-7a61-b04e-30cc06233011"
+recorded_at = "2026-09-24T13:10:30.883643417Z"
+kind = "friction"
+summary = "[audit; SL-262] slice conformance reports an exact design-target selector undelivered when a glob selector also matches the edited path"
+detail = "SL-262 carries tests/e2e_design_*.rs plus exact tests/e2e_design_show_golden.rs and tests/e2e_design_projection.rs. Both files were edited (dd1de364a); conformance credits them to the glob and lists the exact selectors as undelivered — a false lead the auditor must disprove by git log. Either credit every matching selector or flag the exact one as redundant (selector doctor) rather than undelivered."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

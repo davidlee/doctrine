@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · plan + PHASE-01..PHASE-04
+fresh-as-of: 2026-09-24 · plan + PHASE-01..PHASE-04 + audit (RV-383)
 
 ### Produced
 - design locked (run rev 38): sec-1..9 in design.md (commits d1f5edd03, f8a13cd41); no code yet
@@ -23,6 +23,7 @@ fresh-as-of: 2026-09-24 · plan + PHASE-01..PHASE-04
 - Other sanctioned test edits: `e2e_claude_install` design-prompts allowlist gains `render/envelope.rs` (VT-6 reads each embedded runbook test-only via `include_str!`); `design_run::tests` coverage-equality control now loses the `declare` key site as well as its element (the `skip_serializing_if` EX-3 asks for).
 
 - PHASE-04 (e6207d20f): hymn `install/hymns/stage/design.md` gains the design sec-6 `forward` bullet; design skill Activation step 2 names `forward`. Hymn line 3's "whatever the next obligation" kept — plain English about the turn, not the field. `.agents/` untouched (fetched from the published repo).
+- Audit RV-383 (done): F-1 fixed (e8b15c18e, runbook_facts doc restored); F-2 selectors, F-3 design prose, F-4 spec REVs delegated to /reconcile via the review's Reconciliation Brief; F-5 read cost measured 0.00 s on four live runs — aligned.
 
 ### Learned
 - mem_01a0d305ce2b76c1b18f04abd572cbb8 — inquiry disposal goes through a cp- checkpoint
@@ -33,9 +34,7 @@ fresh-as-of: 2026-09-24 · plan + PHASE-01..PHASE-04
 - **Measured forward bound (VT-6):** worst-case `forward` over the embedded runbooks renders ≤ 6.4 KB; beside a hand-saturated envelope (12.3 KB) the total is ≤ 18.2 KB against the 24,576 B ceiling. The first attempt put every `Cause` variant on every row and measured 26.4 KB — unreachable, since a row is exactly one derivation arm; `fixture::widest_causes` follows `satisfied`'s arms instead. PHASE-03 `EX-4` should compare this against the growing-run measurement.
 
 ### Open
-- next: `/audit`.
-- `forward` is rendered in `project()` (shell), so every `design show`/`resume` now reads `design.md` and the relation record (design sec-9 read-cost risk) — unmeasured.
-- residual audit probes named in "Further review passes" below still stand
+- next: `/reconcile` against RV-383's Reconciliation Brief.
 
 ## Design surface triage (2026-09-24, design run exploring)
 
