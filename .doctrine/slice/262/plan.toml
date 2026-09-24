@@ -1,0 +1,115 @@
+# Implementation plan for SL-262 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-262"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber.
+[[phase]]
+id        = "PHASE-01"
+name      = "One gate-facts builder"
+objective = "Behaviour-preserving refactor (DEC-292, design sec-3): GateFacts split out of DerivedInput and built by one shell function; gate::forward_unmet extracted from advance; the authored-watermark check and its refusal sentence move into the design-run core. No envelope change."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (DEC-290..DEC-294, RV-382 concluded); design sec-3 and sec-7 premises re-grepped against the tree at plan time." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "design_run::run::GateFacts { authored_fingerprint, observed_facts, observed_review, runbook } exists; DerivedInput embeds it as `gate` and keeps only its apply-only fields beside it." },
+  { id = "EX-2", text = "gate::satisfied takes &GateFacts. gate::forward_unmet(to, run, facts) -> Vec<Unmet> is the former filter_map in advance, moved not rewritten; advance calls it and wraps a non-empty result in GateNotCleared." },
+  { id = "EX-3", text = "commands::design::gate_facts(root, slice, run, authored_fingerprint, declared: Option<&ReviewDisposition>) is the only constructor of GateFacts outside tests; apply composes DerivedInput from it. observed_review takes Option<&ReviewDisposition> instead of &ApplyRequest: payload wins where present, stored act otherwise." },
+  { id = "EX-4", text = "AuthoredState, observe_watermark and the divergence sentence (a pure fn over the Diverged arm and a slice_ref: &str) live in design_run/document.rs; refuse_authored_divergence keeps its call sites and wraps them. The leaf names no crate::listing (ADR-001)." },
+  { id = "EX-5", text = "Behaviour-preservation gate: refusal text unchanged; every existing e2e_design_* suite passes with no edits; design_run unit test edits are limited to moving DerivedInput gate fields under `gate` and the &GateFacts argument." },
+]
+verification = [
+  { id = "VT-1", expects = "for each Advance on a snapshot with a known unmet set, forward_unmet equals the unmet inside advance's GateNotCleared; empty iff advance passes its condition leg", test_file = "src/design_run/tests.rs", keywords = ["forward_unmet_agrees_with_advance", "forward_unmet"], waived = false },
+  { id = "VT-2", expects = "the moved watermark classifier: aligned, absent watermark, and diverged cases; the divergence sentence names the slice ref and both fingerprints", test_file = "src/design_run/document.rs", keywords = ["fn observe_watermark", "AuthoredState::Diverged", "observe_watermark_classifies_divergence"], waived = false },
+  { id = "VT-3", expects = "one builder: gate_facts exists and apply composes DerivedInput through it", test_file = "src/commands/design.rs", keywords = ["fn gate_facts", "gate: gate_facts("], waived = false },
+  { id = "VA-1", text = "git diff of the PHASE-01 commit touches no file under tests/; src/design_run/tests.rs hunks are mechanical (field moves, &GateFacts argument) plus the new VT-1 test." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Forward field replaces next_obligation"
+objective = "The envelope change in one phase (design sec-2, sec-4, sec-5; golden-churn risk sec-9): derive Forward from snapshot + GateFacts, render it on JSON, prompt, status and resume, delete next_obligation, bump the envelope to version 2, cap cause lists, retire resume's runbook_section and Runbook::section, regenerate the show golden."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: GateFacts, gate_facts and forward_unmet exist; observe_watermark is in design_run/document.rs." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Forward, UnmetRow, RunbookAhead, CursorStep in render/envelope.rs; CappedCause and Cause::capped in gate.rs covering InquiriesOpen.nodes, SectionsUnreviewed.subjects, CoverageStale.moved, BlockersUndisposed.findings, ActMissing.lanes; scalar variants pass through with omitted 0." },
+  { id = "EX-2", text = "envelope::assemble derives forward per design sec-2 Derivation steps 1-6: None at Locked; diverged via observe_watermark; runbook via RunbookStanding with cursor text; unmet via forward_unmet capped at Detail::Normal (uncapped at Full) with remedy from Contract::remedy(); unchecked = live discharges of steps with non-empty verify; ready only when nothing blocks." },
+  { id = "EX-3", text = "ready is an ApplyRequest naming every field (no Default): run_uid, known_revision = current revision, submission_id = first of advance-<to>-r<rev>, -2, -3 … absent from run.receipts, stage { to, reason: None }. ApplyRequest::declare gains skip_serializing_if = Vec::is_empty." },
+  { id = "EX-4", text = "UnmetRow Display and Unmet Display share one formatter; an uncapped row is byte-identical to the refusal's; capped causes suffix (+N more). Refusals are never capped." },
+  { id = "EX-5", text = "forward_lines(&Forward) under FORWARD_LABEL renders prompt and resume per design sec-2 Rendering (diverged, runbook cursor/outstanding/stale, unmet, apply, unchecked; `forward none` at Locked); status renders one line. The stale-step wording moves from Runbook::section, which is deleted; commands::design::runbook_section is deleted and resume prints no runbook row outside forward." },
+  { id = "EX-6", text = "envelope::project / project_within / assemble take &GateFacts and slice_ref; envelope_turn and run_resume build GateFacts through gate_facts(…, None). forward is in the no-drop set, outside evict_one's ladder." },
+  { id = "EX-7", text = "RunHeader::next_obligation and TurnEnvelope::next_obligation deleted with all render sites; TURN_ENVELOPE_VERSION = 2 with a doc comment stating DEC-291's rule (removing a key bumps, adding does not). ENVELOPE_FORWARD_UNMET and ENVELOPE_CAUSE_MEMBERS in render/mod.rs with provenance comments." },
+  { id = "EX-8", text = "tests/e2e_design_show_golden.rs regenerated from the binary (version 2, forward, no next_obligation) and diffed by eye; e2e_design_projection key list and e2e_claude_install envelope-presence prefix (`forward`) updated. All other suites green." },
+]
+verification = [
+  { id = "VT-1", expects = "forward is None at Locked; ready only when nothing blocks, carrying uid, revision, advance-<to>-r<rev> and stage.to; divergence blocks ready and its row text equals the refusal's", test_file = "src/design_run/render/envelope.rs", keywords = ["forward_is_none_at_locked", "ready_only_when_nothing_is_outstanding", "divergence_blocks_ready"], waived = false },
+  { id = "VT-2", expects = "a receipt already holding advance-inquiring-r<N> makes ready mint advance-inquiring-r<N>-2", test_file = "src/design_run/render/envelope.rs", keywords = ["minted_id_avoids_retained_receipts"], waived = false },
+  { id = "VT-3", expects = "runbook rows: cursor carries text, others do not; stale steps render their marker; unchecked names only verified steps", test_file = "src/design_run/render/envelope.rs", keywords = ["cursor_carries_text_others_do_not", "stale_step_renders_its_marker", "unchecked_names_verified_steps"], waived = false },
+  { id = "VT-4", expects = "Cause::capped(5) over each list variant with 12 members keeps 5, omitted 7, renders (+7 more); scalar passes through; Full is uncapped; uncapped UnmetRow and Unmet Display byte-identical; UnmetRow JSON remedy equals Contract::remedy()", test_file = "src/design_run/gate.rs", keywords = ["fn capped", "cause_lists_are_capped_never_silently", "unmet_row_and_unmet_render_alike"], waived = false },
+  { id = "VT-5", expects = "snapshot fixtures carrying \"next_obligation\": null and a string both deserialise", test_file = "src/design_run/snapshot.rs", keywords = ["old_snapshots_with_next_obligation_load"], waived = false },
+  { id = "VT-6", expects = "maximal forward per embedded runbook (every reviewing->locked condition unmet at cap, every step outstanding, longest cursor text, every evictable list at limit) renders under ENVELOPE_NORMAL_BUDGET_BYTES", test_file = "src/design_run/render/envelope.rs", keywords = ["maximal_forward_fits", "ENVELOPE_CAUSE_MEMBERS"], waived = false },
+  { id = "VT-7", expects = "byte-exact golden at version 2 carries forward and no next_obligation", test_file = "tests/e2e_design_show_golden.rs", keywords = ["\"forward\"", "\"version\": 2"], waived = false },
+  { id = "VA-1", text = "Golden diff reviewed by eye: every changed line is forward, version or next_obligation removal; no other drift." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Forward end-to-end and bounds"
+objective = "Pin forward's behaviour through the real binary (design sec-8 end-to-end list) and the growing-run bounding fixture (design sec-5, REQ-437). Fix any disagreement the suite exposes in PHASE-02 code."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: forward rendered on every projection, version 2." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A new e2e suite covers: fresh run names explore.scope with text; discharged runbook names the unmet conditions and a following stage attempt refuses with the same set; ready applied verbatim advances and re-applying resumes idempotently; a squatted id still advances; an edited design.md yields a diverged row first, no apply row, and the same refusal sentence; explore.research discharged verified appears as unchecked; resume carries forward and no runbook row outside it; JSON has forward with unmet[].remedy, complete ready, version 2, no next_obligation; unreadable relation record renders governing-context-recorded unmet with ObservedStale." },
+  { id = "EX-2", text = "Growing-run fixture (300 blocking inquiries open, 300 sections unreviewed and moved under a stale act, 50 undisposed blockers): the normal envelope renders under ENVELOPE_NORMAL_BUDGET_BYTES through the binary, every cause row shows (+N more), --full lists every member." },
+  { id = "EX-3", text = "Batched submissions probe (notes, Further review passes): a stage move submitted in the same payload as the acts that satisfy it is either covered by a test showing forward/advance agree or recorded as out of forward's scope in notes." },
+  { id = "EX-4", text = "ENVELOPE_CAUSE_MEMBERS derivation checked against the growing-run's measured row sizes; the constant's provenance comment updated if the measurement contradicts it." },
+]
+verification = [
+  { id = "VT-1", expects = "end-to-end forward cases per EX-1", test_file = "tests/e2e_design_forward.rs", keywords = ["fresh_run_names_its_first_step", "ready_is_applied_as_printed", "squatted_id_does_not_break_ready", "edited_document_blocks_ready", "exploring_discloses_its_skipped_check", "resume_carries_forward", "json_carries_forward", "unobservable_fact_renders_unmet", "discharged_runbook_names_the_conditions"], waived = false },
+  { id = "VT-2", expects = "growing-run bounding fixture renders under budget with (+N more) markers; --full uncapped", test_file = "tests/e2e_design_forward.rs", keywords = ["large_run_still_renders", "(+"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Guidance points at forward"
+objective = "Design sec-6 guidance: the design stage hymn and the design skill's activation step point agents at the envelope's forward rows."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete (forward exists under that name)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/hymns/stage/design.md, under 'Say what is missing', gains the forward bullet after the first bullet (design sec-6 wording)." },
+  { id = "EX-2", text = "plugins/doctrine/skills/design/SKILL.md Activation step 2 reads 'It carries the stage and `forward`: what the next advance still needs, in order.' — no mention of next obligation remains." },
+  { id = "EX-3", text = "No other guidance names next_obligation (grep install/ plugins/ .agents/ memory/); installed copies refreshed per project convention (doctrine install) and doctrine prompt check / doctor green." },
+]
+verification = [
+  { id = "VT-1", expects = "hymn names forward and ready", test_file = "install/hymns/stage/design.md", keywords = ["`forward`", "`ready`"], waived = false },
+  { id = "VT-2", expects = "skill activation step names forward", test_file = "plugins/doctrine/skills/design/SKILL.md", keywords = ["`forward`: what the next advance still needs"], waived = false },
+  { id = "VA-1", text = "Wording reviewed at audit: each edit points at the envelope row, not at source, and adds no new vocabulary." },
+]
+specs        = []
+requirements = []
