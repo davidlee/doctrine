@@ -6,17 +6,26 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-24 · plan · f8a13cd41
 
 ### Produced
+- design locked (run rev 38): sec-1..9 in design.md (commits d1f5edd03, f8a13cd41); no code yet
+- RV-382 — codex design pass, F-1..F-5 fixed + verified
+- DEC-290..DEC-294 — forward edge, DEC-124 narrowing + envelope compat rule, GateFacts, placement/bounds, skipped-check disclosure
+- close-time bookkeeping owed (design sec-6): IMP-390 close, IMP-367 disposition note, IMP-372 override-bound note
+- reconcile-time REV owed (design sec-6): PRD-019 REQ-414, SPEC-029 REQ-437 + responsibilities
 
 ### Learned
+- mem_01a0d305ce2b76c1b18f04abd572cbb8 — inquiry disposal goes through a cp- checkpoint
+- observations: research baseline drifts on its own scope delta; inert-key discovery for inquiry disposal
 
 ### Open
+- none — every inquiry dispositioned; residual audit probes named in "Further review passes" below
 
 ## Design surface triage (2026-09-24, design run exploring)
 
 Source: `research/research.md` (✓ rows) plus these checks at the cited sites.
+Superseded by the locked design and DEC-290..DEC-294 — kept as the exploring-stage record only.
 
 ### New findings beyond research
 

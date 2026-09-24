@@ -1,0 +1,41 @@
+memory_uid = "mem_01a0d305ce2b76c1b18f04abd572cbb8"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Design run: an inquiry is disposed through a cp- checkpoint, never on the inq- node"
+summary = "To resolve an inquiry into a knowledge record, declare a separate `cp-N` subject with `disposes: inq-N` and `dispose`; `lifecycle`/`resolution`/`dispose`/`blocking` on an `inq-` subject are refused as inert."
+created = "2026-09-24"
+updated = "2026-09-24"
+
+[scope]
+paths = ["src/design_run/submission.rs"]
+globs = []
+commands = ["doctrine design apply"]
+tags = ["design-run", "payload", "gotcha"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "f8a13cd41cc53710c3bc8328c7875e385242d052"
+tree = "3ae91533b730edd3b99765b579b700885d738d40"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "f8a13cd41cc53710c3bc8328c7875e385242d052"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
