@@ -1,0 +1,70 @@
+id    = 379
+slug  = "reconciliation-review-of-sl-261"
+title = "reconciliation review of SL-261"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-261"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Code impact omits five SL-261 code paths; conformance reports them undeclared"
+detail = "Expected: design sec-6 and the design-target selectors cover every path the slice edits. Observed undeclared, all SL-261 commits: src/design_run/document.rs (dropped_head, bfd38442e), src/design_run/snapshot.rs (unchanged_since/reordered_since/changed_since, bfd38442e + 58a4c57f3), src/commands/guard.rs (write_class Adopt arm forced by the exhaustive match, bfd38442e), tests/common/mod.rs (unchanged_ids, RV-378 F-4, c80c38599), Cargo.lock (similar, 58a4c57f3). Each change is in scope and design-consistent (sec-3 names dropped_head and the snapshot set differences as the pure halves); only the registry and table are short."
+disposition = "verified → reconcile brief"
+response = "Reconcile: doctrine slice selector add 261 (design-target) for the five paths; mirror as sec-6 rows. See Reconciliation Brief."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Governance and memory surfaces touched but not registered as selectors"
+detail = "Expected: design sec-5/sec-6 surfaces registered. Observed undeclared: .doctrine/spec/tech/029/spec-029.toml, .doctrine/requirement/434/requirement-434.toml (REV-057), .doctrine/revision/057/**, and five memories under .doctrine/memory/items/ — the three sec-6 names plus mem_019ff439 (live payload-key list named adopt_authored) and mem_019faca1 (cited the renamed test), corrected in 6d3811eee as the same defect class."
+disposition = "verified → reconcile brief"
+response = "Reconcile: doctrine slice selector add 261 (design-target) for spec-029.toml, requirement-434.toml, the five memory dirs; sec-6 row names all five memories. REV-057 dir is the revision record itself (lifecycle, no selector)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "SL-263 commits ride SL-261's PHASE-04 and PHASE-06 ranges"
+detail = "Expected: a phase range holds only its own commits. Observed: src/boot.rs, plugins/doctrine/hooks/hooks.json, tests/e2e_claude_install.rs, .doctrine/slice/263/**, and SL-263's harvest records (mem.pattern.slice.phase-span-catches-foreign-commits, mem_01a0d217, observation be/01a0d217) are undeclared, from 1560f1f08/34a53191d/c1583705b and SL-263's earlier plan commits, interleaved between SL-261 commits on shared edge. PHASE-04 was tightened to its single commit; PHASE-06 spans 6d3811eee..5defe6c26 and cannot exclude the interleaved three (one contiguous range per phase)."
+disposition = "tolerated"
+response = "Shared edge with a concurrent slice; the phase-range model is one contiguous range per phase, and PHASE-04 was tightened to its own commit. The foreign paths are visible here, attributable to SL-263 by commit, and carry no SL-261 change."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "Lifecycle records appear as undeclared paths"
+detail = "Observed undeclared: RV-375 files, ISS-478 (backlog), .doctrine/slice/261/notes.md and slice-261.toml. These are the slice's own review, deferral and bookkeeping records, not implementation; no selector is owed."
+disposition = "aligned"
+response = "Lifecycle records (reviews, backlog deferrals, slice notes/toml) are not implementation surface; conformance lists them because they were committed inside phase ranges."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Design sec-3 names the pure adoption fn adopt_authored; code calls it run::adopt"
+detail = "Expected: design sec-3 and sec-6 name the landed symbol. Observed: PHASE-05 T9 renamed run::adopt_authored to run::adopt so the retired-key grep (PHASE-05 VA-1) reads clean; design.md sec-3's snippet and the sec-6 run.rs row still say adopt_authored(next, expect, derived)."
+disposition = "verified → reconcile brief"
+response = "Reconcile: direct edit design.md sec-3 snippet and sec-6 run.rs row to run::adopt(next, expect, derived)."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Design sec-7 moves the parser-readout probes to adopt --dry-run without saying how an aligned document is probed"
+detail = "Expected: the verification text is executable as written. Observed: straight after materialise the document is aligned and adopt short-circuits to its no-op before any parse, so a bare --dry-run probe reads nothing. PHASE-05 (sheet D1) resolved it inside the locked mechanisms: prepend one blank line (a whitespace-only head moves no body), then --dry-run; oracle = no section_fingerprint_changed row, every id unchanged, the head: line. Landed as the parser_readout helpers (e2e_design_state, e2e_design_materialise) and taught in mem_019facc2; the design does not record it."
+disposition = "verified → reconcile brief"
+response = "Reconcile: direct edit design.md sec-7 (Verification) to state the blank-line-head idiom and its three-part oracle, citing the parser_readout helpers."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
