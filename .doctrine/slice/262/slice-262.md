@@ -26,18 +26,23 @@ Make the envelope carry the turn, not only the state:
 
 1. **Derive the forward edge** (`DEC-290`) — a derived `forward` field on
    `TurnEnvelope`: the run's single outbound edge (`gate::Advance::from_stage`),
-   its outstanding runbook steps in order, then its unmet conditions of
-   `cumulative_conditions(to)` with causes and `Contract::remedy()`. The first
-   row is the next act; with nothing outstanding it reads `ready` and carries a
-   serialised `StageDeclaration`. `None` only at `locked`.
+   in the order a submission meets it: an authored-document divergence (the
+   pre-gate refusal), the runbook's outstanding steps (cursor step with text),
+   then the unmet conditions of `cumulative_conditions(to)` with causes and
+   `Contract::remedy()`. The first row is the next act; with nothing blocking it
+   reads `ready` and carries a complete `apply` payload, applicable as printed,
+   its submission id minted clear of retained receipts. `None` only at `locked`.
 2. **Delete `next_obligation`** from `RunHeader` and `TurnEnvelope`; envelope
    version → 2 under the compatibility rule of `DEC-291`, which also narrows
    `DEC-124`'s envelope clause to "no contract prose".
-3. **One observed-facts builder** (`DEC-292`) — `Observed` (authored
+3. **One gate-facts builder** (`DEC-292`) — `GateFacts` (authored
    fingerprint, observed facts, observed review, runbook) built once in the shell
    for apply and every envelope read; `satisfied` / `forward_unmet` take it;
-   `advance` delegates to `forward_unmet`.
-4. **Placement** (`DEC-293`) — `forward` is no-drop with a derived named limit;
+   `advance` delegates to `forward_unmet`. The authored-watermark check moves
+   into the design-run core so reads can see divergence.
+4. **Placement** (`DEC-293`) — `forward` is no-drop, its size bounded by the
+   binary (unmet rows ≤ the condition vocabulary; run-scaled cause lists capped
+   with a `(+N more)` count);
    JSON, `show --format prompt`, status (one line) and `resume` carry it; it
    replaces `resume`'s out-of-envelope `runbook_section`.
 5. **Disclosure** (`DEC-294`) — the forward line names the runbook checks a

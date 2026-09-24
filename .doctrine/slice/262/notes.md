@@ -57,3 +57,12 @@ Source: `research/research.md` (✓ rows) plus these checks at the cited sites.
 (`REQ-414`, `REQ-416`), `DEC-067`, `DEC-066`/`DEC-120`/`DEC-126`, `DEC-101`,
 `DEC-065`/`DEC-060` (storage rule), `DEC-124`, `DEC-261`, `STD-001`, `STD-003`,
 `ADR-001`.
+
+## Further review passes (2026-09-24, after RV-382 concluded)
+
+RV-382 (codex gpt-6-sol, adversarial) raised F-1..F-5; all fixed and verified.
+A further pass is not needed before lock. If one were run it would probe:
+the `forward_unmet`/`advance` equivalence under batched submissions (acts
+recorded in the same payload as the stage move), and the cause-cap
+constant's derivation once the growing-run fixture measures real row sizes.
+Both are better checked against code at audit than re-argued on the design.

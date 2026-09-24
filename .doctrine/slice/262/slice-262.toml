@@ -1,9 +1,9 @@
 id = 262
 slug = "envelope-names-the-next-move"
 title = "Envelope names the next move"
-status = "design"
+status = "plan"
 created = "2026-09-23"
-updated = "2026-09-23"
+updated = "2026-09-24"
 tags = []
 
 [relationships]
@@ -72,6 +72,14 @@ intent = "design-target"
 
 [[selector]]
 selector = "tests/e2e_claude_install.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/document.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/submission.rs"
 intent = "design-target"
 
 [[relation]]

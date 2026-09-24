@@ -1,0 +1,62 @@
+id    = 382
+slug  = "design-review-of-sl-262"
+title = "design review of SL-262"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+concluded = true
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-262"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Forward no-drop bound omits unbounded cause data"
+detail = "SL-262 design.md:333-362 bounds forward.unmet by Condition::ALL.len() and a fixture with longest causes, then leaves forward outside eviction. This bounds row count, not row size: gate.rs:1139-1144 carries every unreviewed section, gate.rs:1197-1204 carries every blocking inquiry, and gate.rs:1265-1285 plus :1307-1323 render those lists in full. Sections and inquiries scale with the run; render/envelope.rs:464-472 refuses EnvelopeIrreducible after all evictable lists are gone. Thus an ordinary large run can lose every normal envelope read, contradicting DEC-293 and REQ-437. Bound or summarize run-derived cause members with explicit omission, or prove an admission bound on their total rendered bytes; test the irreducible threshold with growing sections and inquiries."
+disposition = "fixed"
+response = "Verified: InquiriesOpen/SectionsUnreviewed/CoverageStale/BlockersUndisposed carry run-scaled lists. sec-5 adds Cause::capped(ENVELOPE_CAUSE_MEMBERS=5) over every list-carrying variant with (+N more) disclosure, uncapped at --full and in refusals; forward size is now binary-bounded. Bounding fixture adds a growing run (300 inquiries/sections, 50 blockers). DEC-293 amended."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Ready can ignore the authored-document refusal"
+detail = "SL-262 design.md:125-131 sets ready from runbook clearance and forward_unmet alone; :480-481 promises a ready stage application advances. For exploring→inquiring, gate.rs:560-609 has no MaterialisationCurrent condition, which enters only at :637-665. Yet commands/design.rs:2072-2076 calls refuse_authored_divergence before pure apply, and :663-695 refuses any externally edited design.md when the run has a watermark. A run with a cleared exploring runbook and both exploring conditions met can therefore render ready after an external document edit, while a stage-only apply is refused before advance. Include the ordinary-apply watermark guard in ready derivation or qualify readiness and disclose the pre-gate refusal; add an e2e case with an edited document at this edge."
+disposition = "fixed"
+response = "Verified: refuse_authored_divergence runs before the gate on every mutation. observe_watermark/AuthoredState move to design_run/document.rs; Forward.diverged blocks ready and renders first with the refusal text from one source (sec-2, sec-3). e2e: edited document on a ready edge."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "JSON unmet rows omit the discharging remedy"
+detail = "SL-262 slice-262.md:31-35 and design.md:18-20 promise unmet conditions with their discharging act across the envelope; design.md:82-84 chooses Vec<Unmet> and :173-176 says JSON is serde of Forward. But gate.rs:1207-1220 defines Unmet with only condition and causes; the remedy is computed solely in Display at gate.rs:1307-1323. Serde JSON of Forward.unmet will therefore omit Contract::remedy(), so JSON consumers cannot obtain the promised discharging act. Add a serializable projection carrying remedy derived from the contract, or explicitly narrow the JSON contract and adjust the slice objective and verification."
+disposition = "fixed"
+response = "Verified: Unmet serialises condition+causes only. forward.unmet is Vec<UnmetRow { condition, causes: Vec<CappedCause>, remedy }>, remedy from Contract::remedy(); one formatter shared with Unmet Display (sec-2). Unit test pins JSON remedy."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Ready payload is not an applicable apply payload"
+detail = 'SL-262 design.md:21-22 says ready carries the exact payload that crosses the edge, :88-90 and :125-131 set ready to StageDeclaration { to, reason: None }, and :480-481 says applying exactly that payload advances. Yet submission.rs:894-905 makes run_uid, known_revision and submission_id mandatory, while :1255-1263 places StageDeclaration under the stage key of ApplyRequest; commands/design.rs:1831-1833 parses that full request. Serializing StageDeclaration gives only {"to":"..."}, which cannot be applied as shown; even {"stage":{"to":"..."}} lacks the mandatory envelope. Specify ready as a stage fragment with instructions to compose a submission, or generate a complete ApplyRequest with a fresh submission identity and test literal application of the displayed object.'
+disposition = "fixed"
+response = "Verified: StageDeclaration alone is not an ApplyRequest. ready is a complete ApplyRequest: run uid, current revision, Doctrine-minted submission_id advance-<to>-r<revision>, stage; declare gains skip_serializing_if. Prompt prints an apply row; e2e applies it verbatim (sec-2, sec-8). DEC-290 amended."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Minted ready ID can collide with a retained receipt"
+detail = "SL-262 design.md:158-168 deterministically mints `advance-<to>-r<revision>` and promises that the printed `ready` payload applies exactly. `SubmissionEnvelope.submission_id` is an unrestricted String (`src/design_run/submission.rs:901-905`), and `parse_payload` adds no ID reservation (`src/commands/design.rs:1959-1981`). An ordinary successful submission at revision N can therefore use `advance-inquiring-r<N+1>` as its ID. Its receipt is retained (`src/design_run/run.rs:543-549`); when revision N+1 later renders ready for inquiring, `admit` looks up that ID before revision checking and returns `SubmissionReplayed` because the payload digest differs (`src/design_run/run.rs:219-242`). The displayed payload cannot advance despite ready. `tests/e2e_design_state.rs:712-736` confirms reused IDs with different payloads are refused. Reserve generated IDs or choose an identity that cannot collide with prior accepted submissions; test a pre-seeded future ID."
+disposition = "fixed"
+response = "Verified: admit looks up the id before revision (run.rs:219). sec-2 now mints the first of advance-<to>-r<rev>, -2, -3... with no retained receipt (ReceiptGroup::find), so the printed id is fresh at render; evicted ids are safe (minted revision >= floor); a concurrent submission refuses as stale. sec-8 adds a unit test (pre-seeded receipt -> -2) and an e2e squatted-id case."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

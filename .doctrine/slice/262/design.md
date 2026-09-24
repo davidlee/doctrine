@@ -12,12 +12,15 @@ This slice replaces that field with a derived **`forward`** field: the run's
 single outbound forward edge and everything it still needs, in the order the
 gate checks it.
 
-- **Runbook first.** The outstanding steps of the runbook guarding the edge (the
+- **An edited document first.** If `design.md` was edited outside the run,
+  every submission is refused before the gate is asked; `forward` says so and
+  names the remedy.
+- **Then the runbook.** The outstanding steps of the runbook guarding the edge (the
   stage's ordered checklist, `install/design-prompts/<stage>.toml`), the step at
   the cursor carrying its text.
 - **Then conditions.** Each gate condition of the target stage that is not yet
-  satisfied, with every cause and its discharging act — the same `Unmet` value a
-  refusal carries.
+  satisfied, with every cause and its discharging act — projected from the same `Unmet`
+  value a refusal carries, long cause lists capped with a count.
 - **Or ready.** Nothing outstanding: the row reads `ready` and carries the exact
   payload that crosses the edge.
 - **Or nothing.** A `locked` run has no forward edge; `forward` is absent.
@@ -77,17 +80,36 @@ pub(crate) forward: Option<Forward>,
 pub(crate) struct Forward {
     pub(crate) from: Stage,
     pub(crate) to: Stage,
+    /// `design.md` edited outside the run: every ordinary submission is refused
+    /// before the gate is asked (DEC-092 rule 1). `Some` blocks the edge.
+    pub(crate) diverged: Option<Divergence>,
     /// The runbook guarding this edge; `None` where the edge carries none.
     pub(crate) runbook: Option<RunbookAhead>,
-    /// Every unmet condition of `cumulative_conditions(to)`, every cause —
-    /// `gate::forward_unmet`'s answer, the value `GateNotCleared` carries.
-    pub(crate) unmet: Vec<Unmet>,
+    /// Every unmet condition of `cumulative_conditions(to)`, in table order.
+    pub(crate) unmet: Vec<UnmetRow>,
     /// Live discharges of steps that carry a `verify`, which `advance`
     /// re-runs and this read did not (DEC-294, STD-003).
     pub(crate) unchecked: Vec<String>,
-    /// The payload that crosses the edge. `Some` exactly when the runbook is
-    /// cleared and `unmet` is empty.
-    pub(crate) ready: Option<StageDeclaration>,
+    /// A complete `apply` payload that crosses the edge. `Some` exactly when
+    /// nothing above blocks it.
+    pub(crate) ready: Option<ApplyRequest>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct UnmetRow {
+    pub(crate) condition: Condition,
+    /// Every cause, each with its member list capped (sec-5).
+    pub(crate) causes: Vec<CappedCause>,
+    /// `Contract::remedy()` — the discharging act, carried so JSON has it.
+    pub(crate) remedy: String,
+}
+
+// in gate.rs, beside Cause — Cause::capped produces it (sec-5)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct CappedCause {
+    pub(crate) cause: Cause,
+    /// Members dropped from the cause's list by the cap; 0 when none.
+    pub(crate) omitted: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -112,48 +134,80 @@ pub(crate) struct CursorStep {
 }
 ```
 
-`RunbookAhead` is `RunbookStanding` (`runbook.rs:846`) projected for a read, plus
-the cursor step's text. It drops `regressed`, which a read cannot compute —
-`unchecked` says so instead of an always-empty list that would read as *nothing
-regressed*.
+`Divergence` is the `Diverged { expected, observed }` arm of `AuthoredState`,
+which moves from `commands/design.rs:663` into the design-run core (sec-3). `RunbookAhead` is `RunbookStanding` (`runbook.rs:846`)
+projected for a read, plus the cursor step's text. It drops `regressed`, which
+a read cannot compute; `unchecked` says so instead of an always-empty list that
+would read as *nothing regressed*.
 
 ### Derivation
 
-`envelope::assemble` builds it from the snapshot and `Observed` (the
-`observed-facts` section):
+`envelope::assemble` builds it from the snapshot and `GateFacts` (sec-3), under the envelope's `Detail`:
 
 1. `Advance::from_stage(stage)` — `None` at `Locked` → `forward: None`.
-2. `observed.runbook` (the edge's `RunbookFacts`) →
-   `book.standing(&run.runbook.discharges, &digests, &[])` → `RunbookAhead`.
-   The cursor step's text is looked up by id in `book.steps`.
-3. `gate::forward_unmet(to, run, observed)` → `unmet`.
-4. `unchecked`: steps with a non-empty `verify` whose `live_discharge` is `Some`.
-5. `ready = (runbook cleared && unmet empty).then(|| StageDeclaration { to, reason: None })`.
+2. `diverged` — `observe_watermark(run, facts.authored_fingerprint)`; the
+   `Diverged` arm, else `None`.
+3. `runbook` — `facts.runbook` (the edge's `RunbookFacts`) →
+   `book.standing(&run.runbook.discharges, &digests, &[])` → `RunbookAhead`,
+   the cursor step's text looked up by id in `book.steps`.
+4. `unmet` — `gate::forward_unmet(to, run, facts)`, each `Unmet` projected to
+   an `UnmetRow`: causes through `Cause::capped(ENVELOPE_CAUSE_MEMBERS)` at
+   `Detail::Normal` (uncapped at `Full`), remedy from
+   `condition.contract().remedy()`.
+5. `unchecked` — steps with a non-empty `verify` whose `live_discharge` is
+   `Some`.
+6. `ready` — when `diverged` is `None`, the runbook is cleared and `unmet` is
+   empty: an `ApplyRequest` carrying only its `SubmissionEnvelope` and
+   `stage`:
+   - `run_uid` — the run's uid;
+   - `known_revision` — the run's current revision;
+   - `submission_id` — minted by Doctrine: the first of
+     `advance-<to>-r<revision>`, `…-2`, `…-3`, … with no retained receipt
+     (`run.receipts.find`), so no earlier submission can have claimed it;
+   - `stage` — `StageDeclaration { to, reason: None }`.
+
+   The minted id matches no retained receipt at render time, so admission
+   meets it as fresh and the printed payload can be applied exactly as shown;
+   re-applying it resumes idempotently. An id whose receipt was evicted is safe
+   to reuse: admission no longer finds it, and the minted revision is never
+   below the receipt floor. A submission landing between the read and the
+   apply moves the revision, and the payload is refused as stale — correct. `ApplyRequest::declare` gains
+   `skip_serializing_if = "Vec::is_empty"` so the serialised payload shows only
+   what it sets. `ApplyRequest` has no `Default`; the builder names every
+   field, which keeps a future payload key a compile error here rather than a
+   silent omission.
 
 Every string is sourced from code or the runbook asset: stage tokens from
 `Stage`, condition tokens from `Condition::as_str`, causes from `Cause`'s
-`Display`, remedies from `Contract::remedy()`, step ids and text from the
-embedded runbook, the payload from serialising `StageDeclaration`. No new prose
-or vocabulary.
+`Display`, remedies from `Contract::remedy()`, the divergence text from the
+refusal it mirrors, step ids and text from the embedded runbook, the payload
+from serialising `ApplyRequest`. No new prose or vocabulary.
 
 ### Rendering
 
 One function, `forward_lines(&Forward) -> Vec<String>`, serves the prompt and
 resume projections; a `FORWARD_LABEL = "forward"` constant heads it (STD-001,
-as `REVIEW_PASS_LABEL`). Rows follow the order `advance` checks: runbook, then
-conditions; the first row is the next act.
+as `REVIEW_PASS_LABEL`). Rows follow the order a submission meets them: the
+divergence refusal, the runbook, then the conditions. The first row is the next
+act.
 
 ```
 forward inquiring→drafting blocked
   runbook inquiring 1/2 inquire.knowledge — Record, via /knowledge, what this inquiry settled …
   runbook outstanding inquire.scope
-  unmet blocking-inquiries-dispositioned: blocking inquiries await disposition: inq-1 → dispose every blocking inquiry on the map
+  unmet blocking-inquiries-dispositioned: blocking inquiries await disposition: inq-1, inq-2, inq-3, inq-4, inq-5 (+7 more) → dispose every blocking inquiry on the map
   unmet user-accepts-sufficiency: no live `sufficiency-accepted` from user → the user performs `sufficiency-accepted` (you record it on their assent)
 ```
 
 ```
-forward exploring→inquiring ready {"to":"inquiring"}
+forward exploring→inquiring ready
+  apply {"run_uid":"dr-…","known_revision":6,"submission_id":"advance-inquiring-r6","stage":{"to":"inquiring"}}
   unchecked explore.research — advance re-runs its check; this read did not
+```
+
+```
+forward exploring→inquiring blocked
+  diverged design.md has been edited outside this run — … review with `doctrine design adopt SL-262 --dry-run --diff`, then adopt it.
 ```
 
 ```
@@ -164,17 +218,22 @@ forward none
   discharge it again` — one row per stale step. The wording moves from
   `Runbook::section` (`runbook.rs:533`), which this slice retires; it is not
   copied.
-- An `unmet` row is `Unmet`'s existing `Display` (`gate.rs:1307`) prefixed with
-  `unmet `. The one multi-line remedy (`review-disposition-attested`) keeps its
-  indented continuation lines.
+- An `unmet` row is `UnmetRow`'s `Display`: `Unmet`'s existing format
+  (`gate.rs:1307`) with each capped cause suffixed `(+N more)` where
+  `omitted > 0`. The two share one formatter, so the refusal and the row
+  cannot drift. The one multi-line remedy (`review-disposition-attested`)
+  keeps its indented continuation lines.
+- The `diverged` row's text comes from the function `refuse_authored_divergence`
+  already uses, moved beside `observe_watermark`: one source for the refusal
+  and the row.
 - At `Locked`, prompt and resume both print `forward none` — one line,
   explicit, where `resume` today prints `next_obligation none recorded`.
 
 | projection | carries |
 |---|---|
-| JSON | `"forward": {…}` or `null`, serde of `Forward` |
+| JSON | `"forward": {…}` or `null`, serde of `Forward`; `unmet[].remedy` and `ready` complete |
 | `show --format prompt` | `forward_lines`, after the review lamps, where `next_obligation` rendered |
-| status | one line: `  forward      inquiring→drafting blocked — 2 steps, 2 conditions` / `ready` / `none` |
+| status | one line: `  forward      inquiring→drafting blocked — 2 steps, 2 conditions` / `blocked — design.md diverged` / `ready` / `none` |
 | `resume` | `forward_lines`, replacing the `next_obligation` line; `runbook_section` is removed |
 
 <!-- doctrine:section sec-3 -->
@@ -280,9 +339,26 @@ failure as *refusal*, and one read serving both would couple the envelope's lamp
 into the gate's input. The cost is one small file read, only once a conducted
 review is disposed.
 
+### The watermark check moves into the core
+
+`observe_watermark` and `AuthoredState` (`commands/design.rs:657-673`) are pure —
+a snapshot and an `Option<&Fingerprint>` in, a classification out — but live in
+the shell, so no read model can ask whether `design.md` has diverged. They move
+to `design_run/document.rs` (beside the renderer the watermark guards), with the
+refusal's text as a pure function over the `Diverged` arm and the slice's
+canonical id (`SL-262`), passed in by the shell as a `&str` — the core cannot
+name `crate::listing` (ADR-001), and the runbook's `Bindings { slice, .. }` is
+the precedent for a shell-rendered slice ref crossing into it. `envelope::project`
+gains that `slice_ref: &str` beside `&GateFacts`. `refuse_authored_divergence` keeps its call sites and wraps that
+function; `envelope::assemble` calls `observe_watermark` over
+`facts.authored_fingerprint` for `Forward::diverged`, and renders the same text.
+One classification, one sentence, two consumers.
+
 ### Truthfulness
 
-A fact the shell cannot observe is absent from `GateFacts`, and the gate reads
+The forward rows meet a submission in the order `apply` does: the
+authored-divergence refusal first, then the runbook, then the conditions. A fact
+the shell cannot observe is absent from `GateFacts`, and the gate reads
 absence as changed (`gate.rs:1436-1446`). On a read that renders as an `unmet`
 row with its `ObservedStale` cause — the answer `advance` would give on the same
 facts. A read never shows fewer unmet conditions than `advance` would refuse on,
@@ -331,41 +407,81 @@ none` at `locked`).
 ## Bounds
 
 `forward` is in the **no-drop set** (`DEC-293`): outside `evict_one`'s ladder,
-like `contract_pointer` and the totals. The ladder holds lists that grow with the
-run; `forward` grows only with the binary.
+like `contract_pointer` and the totals. That is sound only if `forward`'s
+rendered size is bounded by the binary, not by the run. Row *count* is; row
+*size* is not on its own, because several `Cause` variants carry lists that grow
+with the run — every open blocking inquiry, every unreviewed section, every moved
+section, every undisposed blocker (`gate.rs:1129-1206`). So cause members are
+capped at `Detail::Normal`.
 
-What bounds it:
+### The cause cap
+
+```rust
+impl Cause {
+    /// This cause with its member list cut to `max`, and how many were cut.
+    /// Every list-carrying variant is handled here, beside the variants, so a
+    /// new list variant cannot escape the cap.
+    pub(crate) fn capped(&self, max: usize) -> CappedCause;
+}
+```
+
+It applies to `InquiriesOpen.nodes`, `SectionsUnreviewed.subjects`,
+`CoverageStale.moved`, `BlockersUndisposed.findings` and `ActMissing.lanes`
+(already ≤ 2); scalar variants pass through with `omitted: 0`. The rendered
+cause gains `(+N more)` where `omitted > 0`, so no member is dropped silently
+(`STD-003`). `--full` (`Detail::Full`) renders uncapped, as it does for every
+other bounded list. Refusals stay uncapped: they have no byte budget and are
+the place to see the whole set.
+
+### What bounds forward
 
 | part | bound | source |
 |---|---|---|
-| `unmet` | ≤ `Condition::ALL.len()` (9) | the closed condition vocabulary |
+| `unmet` rows | ≤ `Condition::ALL.len()` (9) | the closed condition vocabulary |
+| causes per row | ≤ the row's act requirements + observed-fact bindings | the contract table (`gate.rs`) |
+| members per cause | ≤ `ENVELOPE_CAUSE_MEMBERS` | this slice |
+| `diverged` | one row, two fingerprints | fixed |
 | `runbook.outstanding`, `runbook.stale` | ≤ the edge's step count | the embedded runbook asset |
 | `runbook.cursor.text` | one step's text | the embedded runbook asset (`EX-14`) |
 | `unchecked` | ≤ steps carrying `verify` | the embedded runbook asset |
+| `ready` | four scalar keys | fixed |
 
-A named constant for the first, in `render/mod.rs` with the other `ENVELOPE_*`
-bounds and the same provenance-comment rule:
+Two named constants in `render/mod.rs`, with the other `ENVELOPE_*` bounds and
+the same provenance-comment rule:
 
 ```rust
 /// Unmet rows on the forward edge. Derivation: one per condition in the closed
 /// vocabulary — `cumulative_conditions` at `reviewing→locked` is all of them.
 const ENVELOPE_FORWARD_UNMET: usize = Condition::ALL.len();
+
+/// Members rendered per cause list on the forward edge. Derivation: the
+/// `ENVELOPE_BLOCKERS` precedent (5) — enough to name the first work items,
+/// and at DESIGN_ID_BYTES + lane (≤ 48 B) per member a capped cause stays
+/// under ~250 B, so nine rows cannot approach the ceiling.
+const ENVELOPE_CAUSE_MEMBERS: usize = 5;
 ```
 
 The runbook parts are bounded by assets the binary embeds, not by a constant:
-runbooks are parsed at runtime, and a constant that restated today's step counts
-would be a second copy of the asset. The **bounding fixture** (`REQ-437`)
-therefore asserts, for every embedded runbook, that a maximal envelope — every
-section, list and change row at its limit, every condition of `reviewing→locked`
-unmet with its longest causes, and the runbook with every step outstanding and
-the longest step text at the cursor — still renders under
-`ENVELOPE_NORMAL_BUDGET_BYTES`.
+runbooks are parsed at runtime, and a constant restating today's step counts
+would be a second copy of the asset.
+
+### The bounding fixture
+
+`REQ-437` asks for a run large enough to exceed every limit. The fixture adds:
+
+- **a growing run** — 300 blocking inquiries open, 300 sections unreviewed and
+  moved under a stale act, 50 undisposed blockers: the normal envelope still
+  renders under `ENVELOPE_NORMAL_BUDGET_BYTES`, every cause row shows
+  `(+N more)`, and `--full` shows every member;
+- **a maximal forward per embedded runbook** — every condition of
+  `reviewing→locked` unmet with every cause at its cap, every step outstanding,
+  the longest step text at the cursor, and every evictable list at its limit:
+  renders under the ceiling.
 
 If a future runbook (a project override, `IMP-372`) made the no-drop set alone
 exceed the ceiling, `project` already refuses with `EnvelopeIrreducible` rather
-than emitting a malformed envelope — the terminal rule holds without new code.
-`IMP-372` must then add an admission bound on override step count and text; that
-is recorded against `IMP-372`, not built here.
+than emitting a malformed envelope. `IMP-372` must then add an admission bound on
+override step count and text; that is recorded against `IMP-372`, not built here.
 
 <!-- doctrine:section sec-6 -->
 ## Governance and guidance
@@ -424,13 +540,15 @@ refusals, never envelope rows.
 | path | change |
 |---|---|
 | `src/design_run/run.rs` | add `GateFacts`; `DerivedInput` embeds it as `gate`; `advance` call site (`:1810-1822`) reads `derived.gate.runbook` |
-| `src/design_run/gate.rs` | `satisfied` and `advance` take `&GateFacts`; extract `forward_unmet` from `advance` (`:1678-1684`) |
-| `src/design_run/render/envelope.rs` | `Forward`, `RunbookAhead`, `CursorStep`; `forward` replaces `next_obligation`; `project`/`project_within`/`assemble` take `&GateFacts`; `forward_lines`; prompt, status, resume render sites; `TURN_ENVELOPE_VERSION = 2` |
-| `src/design_run/render/mod.rs` | `ENVELOPE_FORWARD_UNMET` |
+| `src/design_run/gate.rs` | `satisfied` and `advance` take `&GateFacts`; extract `forward_unmet` from `advance` (`:1678-1684`); `CappedCause`, `Cause::capped`; one formatter shared by `Unmet` and `UnmetRow` |
+| `src/design_run/document.rs` | receives `AuthoredState`, `observe_watermark` and the divergence sentence from `commands/design.rs:657-695` |
+| `src/design_run/submission.rs` | `ApplyRequest::declare` gains `skip_serializing_if = "Vec::is_empty"` |
+| `src/design_run/render/envelope.rs` | `Forward`, `UnmetRow`, `RunbookAhead`, `CursorStep`; `forward` replaces `next_obligation`; `project`/`project_within`/`assemble` take `&GateFacts` and `slice_ref`; `forward_lines`; prompt, status, resume render sites; `TURN_ENVELOPE_VERSION = 2` |
+| `src/design_run/render/mod.rs` | `ENVELOPE_FORWARD_UNMET`, `ENVELOPE_CAUSE_MEMBERS` |
 | `src/design_run/runbook.rs` | retire `Runbook::section`; the stale-step wording moves to `forward_lines`; expose what `forward` needs (step lookup by id, `verify` presence) |
 | `src/design_run/snapshot.rs` | delete `RunHeader::next_obligation` |
 | `src/design_run/tests.rs` | call sites that build `DerivedInput` move their gate fields under `gate` |
-| `src/commands/design.rs` | `gate_facts` builder; `observed_review` takes `Option<&ReviewDisposition>`; apply composes `DerivedInput` from it; `envelope_turn` and `run_resume` build `GateFacts`; retire `runbook_section` |
+| `src/commands/design.rs` | `gate_facts` builder; `observed_review` takes `Option<&ReviewDisposition>`; apply composes `DerivedInput` from it; `envelope_turn` and `run_resume` build `GateFacts`; retire `runbook_section`; `refuse_authored_divergence` wraps the moved watermark check |
 | `install/hymns/stage/design.md` | one bullet |
 | `plugins/doctrine/skills/design/SKILL.md` | activation step 2 wording |
 | `tests/e2e_design_show_golden.rs` | regenerated golden, version 2, `forward` |
@@ -441,7 +559,9 @@ refusals, never envelope rows.
 The design-target selectors for these paths are recorded on the slice.
 
 **Behaviour preserved.** Everything `apply` refuses today it refuses the same way
-and with the same text: `forward_unmet` is `advance`'s loop, moved. The existing
+and with the same text: `forward_unmet` is `advance`'s loop, moved, and the
+divergence refusal's sentence moves with its classifier, unchanged. Refusals
+are never capped. The existing
 gate and apply suites stay green unchanged except where they construct
 `DerivedInput` by field.
 
@@ -456,8 +576,23 @@ Pure (`design_run` unit):
 - **forward_unmet agrees with advance** — for each `Advance`, on a snapshot
   with a known unmet set, `forward_unmet(to, …)` equals the `unmet` inside
   `advance`'s `GateNotCleared`; empty ⇔ `advance` passes its condition leg.
-- **ready only when nothing is outstanding** — cleared runbook + empty `unmet`
-  yields `ready: Some(StageDeclaration { to })`; either non-empty yields `None`.
+- **ready only when nothing is outstanding** — no divergence, cleared runbook
+  and empty `unmet` yield a `ready` payload carrying the run's uid, current
+  revision, `advance-<to>-r<revision>` and `stage.to`; any one blocking yields
+  `None`.
+- **cause lists are capped, never silently** — `Cause::capped(5)` over each
+  list-carrying variant with 12 members keeps 5 and reports `omitted: 7`; the
+  rendered row ends `(+7 more)`; a scalar variant passes through with
+  `omitted: 0`; `Detail::Full` is uncapped.
+- **UnmetRow and Unmet render alike** — for an uncapped row the two
+  `Display`s are byte-identical; JSON of an `UnmetRow` carries `remedy`
+  equal to `Contract::remedy()`.
+- **minted id avoids retained receipts** — with a receipt already holding
+  `advance-inquiring-r<N>` at revision N, the ready payload mints
+  `advance-inquiring-r<N>-2`; admission meets it as fresh.
+- **divergence blocks ready** — a snapshot with a watermark and a different
+  observed fingerprint yields `diverged: Some` and `ready: None`; the row's
+  text equals `refuse_authored_divergence`'s refusal for the same inputs.
 - **cursor carries text, others do not** — two outstanding steps render one
   `runbook <name> 1/n <id> — <text>` row and one `runbook outstanding <id>` row.
 - **stale step renders its marker** — a discharge under an edited definition
@@ -477,15 +612,27 @@ End-to-end (`tests/e2e_design_*.rs`, real binary):
 - **a discharged runbook names the conditions** — with the runbook cleared,
   the forward rows are the unmet conditions with their remedies, and a
   subsequent stage attempt refuses with the same condition set.
-- **ready carries the payload** — satisfy every condition; the row reads
-  `ready {"to":"…"}` and applying exactly that payload advances.
+- **ready is applied as printed** — satisfy every condition; the `apply` row's
+  JSON, passed verbatim to `design apply --input`, advances the stage;
+  passing the same JSON again resumes idempotently on its submission id rather
+  than moving twice.
+- **a squatted id does not break ready** — seed an earlier accepted submission
+  under the id the ready row would mint; the printed payload still advances.
+- **an edited document blocks ready** — on an edge whose conditions are met,
+  edit `design.md` outside the run: the forward rows read `blocked` with a
+  `diverged` row first and no `apply` row, and a stage submission is refused
+  with the same sentence.
+- **a large run still renders** — the growing-run bounding fixture (sec-5)
+  renders under the ceiling through the real binary, with `(+N more)` markers;
+  `--full` lists every member.
 - **exploring discloses its skipped check** — after `explore.research` is
   discharged `verified`, the forward rows include
   `unchecked explore.research`.
 - **resume carries forward, not a runbook section** — `resume` prints
   `forward …` and no line beginning `runbook exploring obligation` outside it.
-- **JSON carries forward** — `show --format json` has `forward` and `version`
-  2, and no `next_obligation`.
+- **JSON carries forward** — `show --format json` has `forward` with
+  `unmet[].remedy` and a complete `ready` payload, `version` 2, and no
+  `next_obligation`.
 - **an unobservable fact renders unmet** — with the slice's relation record
   unreadable, `governing-context-recorded` renders unmet with its
   `ObservedStale` cause (fail closed, same as `advance`).
@@ -494,10 +641,10 @@ End-to-end (`tests/e2e_design_*.rs`, real binary):
 
 | scope objective | evidence |
 |---|---|
-| 1 derive the forward edge | fresh-run, conditions, ready, locked tests |
+| 1 derive the forward edge | fresh-run, conditions, ready-as-printed, divergence, locked tests |
 | 2 delete `next_obligation`, version 2 | JSON test, golden, old-snapshot test |
 | 3 one fact builder | forward/advance agreement; unobservable-fact test |
-| 4 placement | resume and JSON tests; maximal-forward bound |
+| 4 placement | resume and JSON tests; cause cap; growing-run and maximal-forward bounds |
 | 5 disclosure | unchecked tests |
 | 6 guidance | the two edits, reviewed at audit (`VA`) |
 
