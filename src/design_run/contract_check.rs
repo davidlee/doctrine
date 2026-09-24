@@ -29,10 +29,10 @@
 use serde_json::Value;
 
 #[cfg(test)]
-use super::payload_contract::closure_types;
+use super::payload_contract::{CREATE_RECORD, closure_types};
 use super::payload_contract::{
-    Fields, KeyContract, MapKey, PAYLOAD, Placement, Tagging, TypeContract, TypeForm,
-    VariantContract, VariantPayload, WireType, place,
+    Fields, KeyContract, MapKey, PAYLOAD, Placement, RETIRED_KEYS, RetiredKey, Tagging,
+    TypeContract, TypeForm, VariantContract, VariantPayload, WireType, place, retired_from,
 };
 use super::refusal::Refusal;
 
@@ -57,20 +57,33 @@ use super::refusal::Refusal;
 /// unknown variant **token** (likewise), and a key that is known but inert at the
 /// subject's **state** (`DEC-246`, the state axis).
 pub(crate) fn refuse_unknown_keys(payload: &Value) -> Result<(), Refusal> {
-    walk_type(payload, PAYLOAD, "")
+    refuse_unknown_keys_against(payload, RETIRED_KEYS)
+}
+
+/// [`refuse_unknown_keys`] against a given retired-key roster — the one seam a
+/// test reaches with a roster of its own while [`RETIRED_KEYS`] is empty.
+fn refuse_unknown_keys_against(payload: &Value, retired: &[RetiredKey]) -> Result<(), Refusal> {
+    walk_type(payload, &PAYLOAD, retired, "")
 }
 
 /// A value against the type that describes it.
-fn walk_type(value: &Value, contract: TypeContract, at: &str) -> Result<(), Refusal> {
+fn walk_type(
+    value: &Value,
+    contract: &'static TypeContract,
+    retired: &[RetiredKey],
+    at: &str,
+) -> Result<(), Refusal> {
     match contract.form {
         TypeForm::Struct { keys, .. } => match value.as_object() {
-            Some(object) => walk_keys(&Fields::plain(object), contract.name, keys, at),
+            Some(object) => walk_keys(&Fields::plain(object), contract, keys, retired, at),
             // A struct target that is not an object is a shape fault, and serde
             // reports it a moment later in its own words. Classifying it here
             // would be this walk answering a question it was not asked.
             None => Ok(()),
         },
-        TypeForm::Enum { tagging, variants } => walk_enum(value, contract, tagging, variants, at),
+        TypeForm::Enum { tagging, variants } => {
+            walk_enum(value, contract, tagging, variants, retired, at)
+        }
     }
 }
 
@@ -82,17 +95,27 @@ fn walk_type(value: &Value, contract: TypeContract, at: &str) -> Result<(), Refu
 /// walk's business — serde refuses a missing *required* one.
 fn walk_keys(
     fields: &Fields<'_>,
-    type_name: &str,
+    owner: &'static TypeContract,
     keys: &'static [KeyContract],
+    retired: &[RetiredKey],
     at: &str,
 ) -> Result<(), Refusal> {
     // `Fields::names` is ordered, so a payload with two unknown keys names the
     // same one on every run.
     for name in fields.names() {
         if !keys.iter().any(|row| row.key == name) {
+            // A once-known key earns its remedy, not the admitted list (`DEC-278`).
+            if let Some(row) = retired_from(retired, owner).find(|row| row.key == name) {
+                return Err(Refusal::RetiredPayloadKey {
+                    at: child(at, name),
+                    type_name: owner.name.to_owned(),
+                    key: name.to_owned(),
+                    remedy: row.remedy.to_owned(),
+                });
+            }
             return Err(Refusal::UnknownPayloadKey {
                 at: child(at, name),
-                type_name: type_name.to_owned(),
+                type_name: owner.name.to_owned(),
                 key: name.to_owned(),
                 admitted: keys.iter().map(|row| row.key.to_owned()).collect(),
             });
@@ -100,7 +123,7 @@ fn walk_keys(
     }
     for row in keys {
         if let Some(value) = fields.get(row.key) {
-            walk_wire(value, row.ty, &child(at, row.key))?;
+            walk_wire(value, row.ty, retired, &child(at, row.key))?;
         }
     }
     Ok(())
@@ -114,9 +137,10 @@ fn walk_keys(
 /// unknown-*key* refusal would be a refusal firing for the wrong reason.
 fn walk_enum(
     value: &Value,
-    contract: TypeContract,
+    contract: &'static TypeContract,
     tagging: Tagging,
     variants: &'static [VariantContract],
+    retired: &[RetiredKey],
     at: &str,
 ) -> Result<(), Refusal> {
     match tagging {
@@ -130,7 +154,7 @@ fn walk_enum(
             let Ok(placement) = place(contract.name, tagging, variant.payload, value) else {
                 return Ok(());
             };
-            walk_payload(&placement, variant.payload, contract.name, at)
+            walk_payload(&placement, variant.payload, contract, retired, at)
         }
         // Untagged: the variant is a shape rather than a token, and no untagged
         // variant in the closure reaches a key surface (`EN-4`; pinned by
@@ -145,7 +169,13 @@ fn walk_enum(
         // does not share earns `UnknownPayloadKey` — `walk_map`'s "expensive
         // direction", and the inverse of the defect this walk exists to fix.
         Tagging::Untagged => variants.iter().try_for_each(|variant| {
-            walk_payload(&Placement::Shape(value), variant.payload, contract.name, at)
+            walk_payload(
+                &Placement::Shape(value),
+                variant.payload,
+                contract,
+                retired,
+                at,
+            )
         }),
     }
 }
@@ -155,7 +185,8 @@ fn walk_enum(
 fn walk_payload(
     placement: &Placement<'_>,
     payload: VariantPayload,
-    type_name: &str,
+    owner: &'static TypeContract,
+    retired: &[RetiredKey],
     at: &str,
 ) -> Result<(), Refusal> {
     match payload {
@@ -163,12 +194,12 @@ fn walk_payload(
         VariantPayload::Keys(keys) => match placement.fields() {
             // `Fields` excludes the tag, so an internally tagged variant's own
             // discriminant is never read as an undeclared key.
-            Some(fields) => walk_keys(&fields, type_name, keys, at),
+            Some(fields) => walk_keys(&fields, owner, keys, retired, at),
             None => Ok(()),
         },
         VariantPayload::Inlines(target) => match (placement.fields(), target.form) {
             (Some(fields), TypeForm::Struct { keys, .. }) => {
-                walk_keys(&fields, target.name, keys, at)
+                walk_keys(&fields, target, keys, retired, at)
             }
             // An inlined *enum* has no key surface at this level — its own
             // tagging decides where its keys sit, and the closure holds no such
@@ -177,7 +208,7 @@ fn walk_payload(
             (Some(_), TypeForm::Enum { .. }) | (None, _) => Ok(()),
         },
         VariantPayload::Shape(shape) => match *placement {
-            Placement::Shape(inner) => walk_wire(inner, *shape, at),
+            Placement::Shape(inner) => walk_wire(inner, *shape, retired, at),
             // `place` refuses to pair a tagged placement with a shape payload,
             // so selection cannot deliver one here.
             Placement::Bare(_) | Placement::Beside { .. } | Placement::Nested { .. } => Ok(()),
@@ -186,7 +217,7 @@ fn walk_payload(
 }
 
 /// One key's value against the type declared for it. No wildcard arm.
-fn walk_wire(value: &Value, ty: WireType, at: &str) -> Result<(), Refusal> {
+fn walk_wire(value: &Value, ty: WireType, retired: &[RetiredKey], at: &str) -> Result<(), Refusal> {
     match ty {
         // Scalars carry no keys. Their vocabularies and bounds are the pure
         // core's (`A1`).
@@ -195,15 +226,14 @@ fn walk_wire(value: &Value, ty: WireType, at: &str) -> Result<(), Refusal> {
         | WireType::Boolean
         | WireType::Id(_)
         | WireType::Token(_) => Ok(()),
-        WireType::Named(target) => walk_type(value, *target, at),
+        WireType::Named(target) => walk_type(value, target, retired, at),
         WireType::Seq(inner) => match value.as_array() {
-            Some(items) => items
-                .iter()
-                .enumerate()
-                .try_for_each(|(index, item)| walk_wire(item, *inner, &format!("{at}[{index}]"))),
+            Some(items) => items.iter().enumerate().try_for_each(|(index, item)| {
+                walk_wire(item, *inner, retired, &format!("{at}[{index}]"))
+            }),
             None => Ok(()),
         },
-        WireType::Map { key, value: item } => walk_map(value, key, item, at),
+        WireType::Map { key, value: item } => walk_map(value, key, item, retired, at),
     }
 }
 
@@ -214,7 +244,13 @@ fn walk_wire(value: &Value, ty: WireType, at: &str) -> Result<(), Refusal> {
 /// treating `CreateRecord.facet`'s keys as a closed inventory would refuse every
 /// legitimate facet name — this slice's own defect, inverted into refusing input
 /// the engine would have acted on.
-fn walk_map(value: &Value, key: MapKey, item: &'static WireType, at: &str) -> Result<(), Refusal> {
+fn walk_map(
+    value: &Value,
+    key: MapKey,
+    item: &'static WireType,
+    retired: &[RetiredKey],
+    at: &str,
+) -> Result<(), Refusal> {
     let Some(object) = value.as_object() else {
         return Ok(());
     };
@@ -224,7 +260,12 @@ fn walk_map(value: &Value, key: MapKey, item: &'static WireType, at: &str) -> Re
             // so a `WireType` arm that ever has something to say about a scalar
             // says it about map keys too.
             MapKey::Of(key_ty) => {
-                walk_wire(&Value::String(name.clone()), *key_ty, &child(at, name))?;
+                walk_wire(
+                    &Value::String(name.clone()),
+                    *key_ty,
+                    retired,
+                    &child(at, name),
+                )?;
             }
             // Skipped by name, never by a wildcard: which keys are legal is
             // chosen by the *value* of a sibling field, from a vocabulary this
@@ -234,7 +275,7 @@ fn walk_map(value: &Value, key: MapKey, item: &'static WireType, at: &str) -> Re
             // `SelectorTable::unknown_keys`, which reads `Refused`.
             MapKey::Extern { .. } => {}
         }
-        walk_wire(item_value, *item, &child(at, name))?;
+        walk_wire(item_value, *item, retired, &child(at, name))?;
     }
     Ok(())
 }
@@ -403,6 +444,74 @@ mod tests {
         );
     }
 
+    /// A roster that retires `titel` from `CreateRecord` — a test-local stand-in
+    /// for [`RETIRED_KEYS`], which retires nothing until `PHASE-05`.
+    static ROSTER: &[RetiredKey] = &[RetiredKey {
+        owner: &CREATE_RECORD,
+        key: "titel",
+        remedy: "send `title` instead",
+    }];
+
+    /// `create` disposition carrying `key` beside its required rows.
+    fn creating_with(key: &str) -> Value {
+        declaring(serde_json::json!({
+            "form": "create",
+            "kind": "issue",
+            "title": "a record",
+            key: "a value",
+        }))
+    }
+
+    /// `SL-261` `VT-1` (`DEC-278`) — a once-admitted key is refused as retired,
+    /// naming its owner and the remedy rather than listing admitted keys that
+    /// never mention the replacement.
+    #[test]
+    fn retired_key_is_refused_with_its_remedy() {
+        let refused = refuse_unknown_keys_against(&creating_with("titel"), ROSTER)
+            .expect_err("a retired key is refused");
+        assert!(
+            matches!(refused, Refusal::RetiredPayloadKey { .. }),
+            "refused as retired, not unknown: {refused:?}"
+        );
+        let reason = refused.to_string();
+        for part in [
+            "`titel`",
+            "declare[0].dispose.titel",
+            "CreateRecord",
+            "send `title` instead",
+        ] {
+            assert!(reason.contains(part), "the refusal names {part}: {reason}");
+        }
+    }
+
+    /// `SL-261` `VT-1` — the roster matches its owner by **identity**, not by
+    /// key name: the same name under another type is simply unknown there.
+    #[test]
+    fn retired_key_matches_its_owner_only() {
+        let mut object = envelope();
+        object.insert("titel".to_owned(), Value::from("a value"));
+        let refused = refuse_unknown_keys_against(&Value::Object(object), ROSTER)
+            .expect_err("an unknown key is refused");
+        assert!(
+            matches!(refused, Refusal::UnknownPayloadKey { ref type_name, .. } if type_name == "ApplyRequest"),
+            "a key retired from CreateRecord is unknown on ApplyRequest: {refused:?}"
+        );
+    }
+
+    /// `SL-261` `VT-3` — a key no type ever admitted keeps the existing refusal
+    /// verbatim, roster or no roster.
+    #[test]
+    fn unknown_key_refusal_is_unchanged_for_never_known_keys() {
+        let payload = creating_with("colour");
+        let with_roster = refuse_unknown_keys_against(&payload, ROSTER);
+        assert!(
+            matches!(with_roster, Err(Refusal::UnknownPayloadKey { .. })),
+            "a never-known key is unknown: {with_roster:?}"
+        );
+        assert_eq!(with_roster, refuse_unknown_keys_against(&payload, &[]));
+        assert_eq!(with_roster, refuse_unknown_keys(&payload));
+    }
+
     /// Whether a wire type can reach a **key surface** — a described type's key
     /// rows — directly or through what [`walk_wire`] descends into.
     ///
@@ -437,7 +546,7 @@ mod tests {
     /// a full key surface.
     #[test]
     fn a_key_surface_is_reached_through_a_seq_or_a_map() {
-        const NAMED: WireType = WireType::Named(&PAYLOAD);
+        static NAMED: WireType = WireType::Named(&PAYLOAD);
         assert!(reaches_a_key_surface(NAMED));
         assert!(reaches_a_key_surface(WireType::Seq(&NAMED)));
         assert!(reaches_a_key_surface(WireType::Map {

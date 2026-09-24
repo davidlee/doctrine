@@ -1457,12 +1457,47 @@ pub(crate) static DECLARATION: TypeContract = TypeContract {
 /// count off it would reproduce the omission this contract exists to close.
 ///
 /// `unknown_keys` is `Refused`, and *serde* is not what refuses it:
+/// A key a type once admitted and no longer does (`DEC-243`, `DEC-278`).
+///
+/// A **wire-only** retirement: nothing stored carries the key, so there is no
+/// read tolerance to keep — only a write-path refusal that names what to do
+/// instead. A sibling table rather than a field on [`TypeForm::Struct`], so a
+/// retirement touches one place and no live contract literal changes.
+#[derive(Debug)]
+pub(crate) struct RetiredKey {
+    /// The type that admitted it, matched by identity (see [`retired_from`]).
+    pub(crate) owner: &'static TypeContract,
+    pub(crate) key: &'static str,
+    /// What to do instead, rendered verbatim in the refusal.
+    pub(crate) remedy: &'static str,
+}
+
+/// Every retired wire key. Retiring one is two edits: delete its
+/// [`KeyContract`] row, add its row here with a remedy. The pins in
+/// [`super::tests`] refuse a row whose key is still live, whose owner the
+/// closure cannot reach, or whose remedy is empty.
+pub(crate) static RETIRED_KEYS: &[RetiredKey] = &[];
+
+/// `roster`'s rows retired from `owner`, in roster order.
+///
+/// Matched by **node identity**, never by name: [`closure_types`] deduplicates
+/// by name, so nothing guarantees two contracts do not share one. Sound because
+/// every contract is a `static` and every edge holds `&'static TypeContract`.
+pub(crate) fn retired_from<'r>(
+    roster: &'r [RetiredKey],
+    owner: &'static TypeContract,
+) -> impl Iterator<Item = &'r RetiredKey> {
+    roster
+        .iter()
+        .filter(move |row| std::ptr::eq(row.owner, owner))
+}
+
 /// `#[serde(flatten)]` and `deny_unknown_fields` are mutually exclusive, so no
 /// attribute can reach this type's keys. [`super::contract_check`] reads this
 /// contract against the payload before deserialisation instead, which is how the
 /// outermost type — the only one a caller hand-authors from scratch — stopped
 /// discarding misspellings in silence (`ISS-333`, `SL-259` `DEC-244`).
-pub(crate) const PAYLOAD: TypeContract = TypeContract {
+pub(crate) static PAYLOAD: TypeContract = TypeContract {
     name: "ApplyRequest",
     form: TypeForm::Struct {
         unknown_keys: UnknownKeys::Refused,
@@ -1597,6 +1632,9 @@ const ID: &str = "id";
 /// A struct's disclosure about the keys its contract does not list. Spelled
 /// once, and read by both renderings and the extern region's block.
 const UNKNOWN_KEYS: &str = "unknown-keys";
+
+/// The word a retired key's row leads with, in both renderings (`DEC-278`).
+const RETIRED: &str = "retired";
 
 /// What a block leads with: the root's, and every other type's.
 const ROOT_LEAD: &str = "payload";
@@ -1837,15 +1875,33 @@ fn json_variant(tagging: Tagging, variant: &VariantContract) -> Value {
     Value::Object(map)
 }
 
-fn json_type(contract: &TypeContract) -> Value {
+fn json_type(contract: &'static TypeContract, retired: &[RetiredKey]) -> Value {
     match contract.form {
-        TypeForm::Struct { unknown_keys, keys } => object([
-            (
-                UNKNOWN_KEYS,
-                Value::String(unknown_keys_token(unknown_keys).to_owned()),
-            ),
-            ("struct", Value::Array(keys.iter().map(json_key).collect())),
-        ]),
+        TypeForm::Struct { unknown_keys, keys } => {
+            let mut rendered = object([
+                (
+                    UNKNOWN_KEYS,
+                    Value::String(unknown_keys_token(unknown_keys).to_owned()),
+                ),
+                ("struct", Value::Array(keys.iter().map(json_key).collect())),
+            ]);
+            // A member only where there is something to say, so a type that
+            // retired nothing reads exactly as it did before the roster existed.
+            let rows: Vec<Value> = retired_from(retired, contract)
+                .map(|row| {
+                    object([
+                        ("key", Value::String(row.key.to_owned())),
+                        ("remedy", Value::String(row.remedy.to_owned())),
+                    ])
+                })
+                .collect();
+            if let Value::Object(map) = &mut rendered
+                && !rows.is_empty()
+            {
+                map.insert(RETIRED.to_owned(), Value::Array(rows));
+            }
+            rendered
+        }
         TypeForm::Enum { tagging, variants } => object([
             ("tagging", json_tagging(tagging)),
             (
@@ -1909,9 +1965,14 @@ fn json_region(table: &SelectorTable) -> Value {
 /// `serde_json::Map` is a `BTreeMap` here (no `preserve_order` feature), so the
 /// object key order is deterministic and a golden can rest on it.
 pub(crate) fn render_json(extern_contracts: &ExternContracts) -> String {
+    render_json_against(extern_contracts, RETIRED_KEYS)
+}
+
+/// [`render_json`] against a given retired-key roster.
+fn render_json_against(extern_contracts: &ExternContracts, retired: &[RetiredKey]) -> String {
     let mut types = Map::new();
     for contract in closure_types(&PAYLOAD) {
-        types.insert(contract.name.to_owned(), json_type(contract));
+        types.insert(contract.name.to_owned(), json_type(contract, retired));
     }
 
     let mut regions = Map::new();
@@ -2056,9 +2117,10 @@ fn key_widths<'a>(rows: impl Iterator<Item = &'a KeyContract>) -> (usize, usize)
 /// difference between the two (`sec-5`).
 fn struct_block(
     lead: &str,
-    contract: &TypeContract,
+    contract: &'static TypeContract,
     unknown_keys: UnknownKeys,
     keys: &[KeyContract],
+    retired: &[RetiredKey],
 ) -> Vec<String> {
     let mut lines = vec![format!(
         "{lead} {name}{GAP}{UNKNOWN_KEYS}: {token}{GAP} {note}",
@@ -2070,6 +2132,10 @@ fn struct_block(
     lines.extend(
         keys.iter()
             .map(|row| format!("{GAP}{}", key_line(row, key_width, type_width))),
+    );
+    lines.extend(
+        retired_from(retired, contract)
+            .map(|row| format!("{GAP}{RETIRED} {} → {}", row.key, row.remedy)),
     );
     lines
 }
@@ -2279,6 +2345,14 @@ fn region_block(table: &SelectorTable) -> Vec<String> {
 /// are the closure's own declaration order, because field order is the
 /// commitment (`sec-5`).
 pub(crate) fn render_prompt(extern_contracts: &ExternContracts) -> Vec<String> {
+    render_prompt_against(extern_contracts, RETIRED_KEYS)
+}
+
+/// [`render_prompt`] against a given retired-key roster.
+fn render_prompt_against(
+    extern_contracts: &ExternContracts,
+    retired: &[RetiredKey],
+) -> Vec<String> {
     // The root's block leads, wherever the walk met it — asked for by name
     // rather than assumed from the walk's first entry.
     let mut root = Vec::new();
@@ -2288,10 +2362,16 @@ pub(crate) fn render_prompt(extern_contracts: &ExternContracts) -> Vec<String> {
     for contract in closure_types(&PAYLOAD) {
         match contract.form {
             TypeForm::Struct { unknown_keys, keys } if contract.name == PAYLOAD.name => {
-                root = struct_block(ROOT_LEAD, contract, unknown_keys, keys);
+                root = struct_block(ROOT_LEAD, contract, unknown_keys, keys, retired);
             }
             TypeForm::Struct { unknown_keys, keys } => {
-                structs.push(struct_block(TYPE_LEAD, contract, unknown_keys, keys));
+                structs.push(struct_block(
+                    TYPE_LEAD,
+                    contract,
+                    unknown_keys,
+                    keys,
+                    retired,
+                ));
             }
             TypeForm::Enum { tagging, variants } => {
                 enums.push(enum_block(contract, tagging, variants));
@@ -3718,6 +3798,49 @@ mod tests {
             .take_while(|line| !line.is_empty())
             .cloned()
             .collect()
+    }
+
+    /// A roster retiring `titel` from `CreateRecord` — [`RETIRED_KEYS`] is
+    /// empty until `SL-261` `PHASE-05`.
+    static ROSTER: &[RetiredKey] = &[RetiredKey {
+        owner: &CREATE_RECORD,
+        key: "titel",
+        remedy: "send `title` instead",
+    }];
+
+    /// `SL-261` `EX-4` (`DEC-278`) — a type's retired rows render after its
+    /// live rows, and only under their owner. `render_document` wraps
+    /// `render_prompt`, so it carries them by construction.
+    #[test]
+    fn retired_rows_render_after_their_owners_live_rows() {
+        let lines = render_prompt_against(&extern_fixture(), ROSTER);
+        let block: Vec<&String> = lines
+            .iter()
+            .skip_while(|line| !line.starts_with("type CreateRecord"))
+            .take_while(|line| !line.is_empty())
+            .collect();
+        let retired = format!("{GAP}{RETIRED} titel → send `title` instead");
+        assert_eq!(
+            block.last().map(|line| line.as_str()),
+            Some(retired.as_str()),
+            "the retired row closes CreateRecord's block: {block:#?}"
+        );
+        assert_eq!(
+            lines.iter().filter(|line| line.contains(RETIRED)).count(),
+            1,
+            "no other type renders the row"
+        );
+
+        let json: Value = serde_json::from_str(&render_json_against(&extern_fixture(), ROSTER))
+            .expect("the rendering is JSON");
+        assert_eq!(
+            json["types"]["CreateRecord"][RETIRED],
+            serde_json::json!([{ "key": "titel", "remedy": "send `title` instead" }])
+        );
+        assert!(
+            json["types"]["ApplyRequest"].get(RETIRED).is_none(),
+            "a type with no retired key carries no member"
+        );
     }
 
     /// `EX-4` — the root's header line stays inside the 100 columns the rest of

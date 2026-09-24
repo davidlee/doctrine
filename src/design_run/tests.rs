@@ -42,9 +42,10 @@ use super::inquiry::{
 use super::payload_contract::{
     ACCEPTANCE_DECLARATION, ADOPT_AUTHORED, AGENT_ACT_DECLARATION, CHECKPOINT_ACT_DECLARATION,
     CREATE_RECORD, DECLARATION, DISCHARGE_DECLARATION, Fields, KeyContract, MapKey, PAYLOAD,
-    Placement, Presence, REVIEW_POLICY_DECLARATION, STAGE_DECLARATION, TRAVERSAL_DECLARATION,
-    Tagging, TokenSource, TypeContract, TypeForm, VariantContract, VariantPayload, WireType,
-    claims, place, required_keys,
+    Placement, Presence, RETIRED_KEYS, REVIEW_POLICY_DECLARATION, RetiredKey, STAGE,
+    STAGE_DECLARATION, TRAVERSAL_DECLARATION, Tagging, TokenSource, TypeContract, TypeForm,
+    UnknownKeys, VariantContract, VariantPayload, WireType, claims, closure_types, place,
+    required_keys,
 };
 use super::prompt::contract_block;
 use super::refusal::{ActFault, Refusal};
@@ -4521,4 +4522,124 @@ fn value_kind_tokens_match_their_serde_spelling() {
             "{kind:?} spells itself the same way twice"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// SL-261 VT-2 — the retired-key roster's invariants (DEC-278, design sec-4).
+// Each pin is a pure function of a roster, so it is proved on `RETIRED_KEYS`
+// and shown to bite on an injected bad row.
+// ---------------------------------------------------------------------------
+
+/// Rows whose key is still admitted by its owner — or whose owner has no key
+/// rows at all, so the retirement names a surface that cannot have held it.
+fn live_retirements(roster: &[RetiredKey]) -> Vec<&'static str> {
+    roster
+        .iter()
+        .filter(|row| match row.owner.form {
+            TypeForm::Struct { keys, .. } => keys.iter().any(|live| live.key == row.key),
+            TypeForm::Enum { .. } => true,
+        })
+        .map(|row| row.key)
+        .collect()
+}
+
+/// Rows whose owner the closure rooted at `PAYLOAD` does not reach, by identity.
+fn unreachable_owners(roster: &[RetiredKey]) -> Vec<&'static str> {
+    let closure = closure_types(&PAYLOAD);
+    roster
+        .iter()
+        .filter(|row| {
+            !closure
+                .iter()
+                .any(|reached| std::ptr::eq(*reached, row.owner))
+        })
+        .map(|row| row.key)
+        .collect()
+}
+
+/// Rows with nothing to tell a caller.
+fn empty_remedies(roster: &[RetiredKey]) -> Vec<&'static str> {
+    roster
+        .iter()
+        .filter(|row| row.remedy.trim().is_empty())
+        .map(|row| row.key)
+        .collect()
+}
+
+/// `CreateRecord`'s name and form at a different address — a contract the
+/// closure does not hold, whatever it is called.
+static CREATE_RECORD_TWIN: TypeContract = TypeContract {
+    name: CREATE_RECORD.name,
+    form: CREATE_RECORD.form,
+};
+
+#[test]
+fn retired_keys_are_never_live() {
+    assert_eq!(live_retirements(RETIRED_KEYS), Vec::<&str>::new());
+    static BAD: &[RetiredKey] = &[
+        RetiredKey {
+            owner: &CREATE_RECORD,
+            key: "title",
+            remedy: "still admitted",
+        },
+        RetiredKey {
+            owner: &STAGE,
+            key: "to",
+            remedy: "an enum has no key rows",
+        },
+        RetiredKey {
+            owner: &CREATE_RECORD,
+            key: "titel",
+            remedy: "a sound row",
+        },
+    ];
+    assert_eq!(live_retirements(BAD), ["title", "to"]);
+}
+
+#[test]
+fn retired_key_owners_are_reachable() {
+    assert_eq!(unreachable_owners(RETIRED_KEYS), Vec::<&str>::new());
+    static STRAY: TypeContract = TypeContract {
+        name: "Stray",
+        form: TypeForm::Struct {
+            unknown_keys: UnknownKeys::Refused,
+            keys: &[],
+        },
+    };
+    static BAD: &[RetiredKey] = &[
+        RetiredKey {
+            owner: &STRAY,
+            key: "stray",
+            remedy: "outside the closure",
+        },
+        RetiredKey {
+            owner: &CREATE_RECORD_TWIN,
+            key: "twin",
+            remedy: "same name, not the node",
+        },
+        RetiredKey {
+            owner: &CREATE_RECORD,
+            key: "titel",
+            remedy: "a sound row",
+        },
+    ];
+    assert_eq!(unreachable_owners(BAD), ["stray", "twin"]);
+}
+
+#[test]
+fn retired_key_remedies_are_non_empty() {
+    assert_eq!(empty_remedies(RETIRED_KEYS), Vec::<&str>::new());
+    static BAD: &[RetiredKey] = &[
+        RetiredKey {
+            owner: &CREATE_RECORD,
+            key: "blank",
+            remedy: "  ",
+        },
+        RetiredKey {
+            owner: &CREATE_RECORD,
+            key: "titel",
+            remedy: "a sound row",
+        },
+    ];
+    assert_eq!(empty_remedies(BAD), ["blank"]);
 }

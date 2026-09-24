@@ -203,6 +203,20 @@ pub(crate) enum Refusal {
         /// Every key that type does admit, in contract order.
         admitted: Vec<String>,
     },
+    /// A key its type once admitted and has retired (`DEC-278`), read off
+    /// [`super::payload_contract::RETIRED_KEYS`] before [`Self::UnknownPayloadKey`]
+    /// would fire. Distinct from it because the admitted-key list never names
+    /// the replacement; the remedy does.
+    RetiredPayloadKey {
+        /// Where in the payload, as a dotted path from the root.
+        at: String,
+        /// The Rust type that retired it.
+        type_name: String,
+        /// The retired key.
+        key: String,
+        /// What to do instead, verbatim from the roster row.
+        remedy: String,
+    },
     /// A run-local id exceeds its admission bound. A refusal, never a trim: a
     /// truncated identity is a *wrong* identity rather than a shorter one.
     IdTooLong { raw: String, limit: usize },
@@ -672,6 +686,15 @@ impl fmt::Display for Refusal {
                 f,
                 "unknown key `{key}` at `{at}`: {type_name} admits {}",
                 join(admitted.iter().map(|admitted| format!("`{admitted}`")))
+            ),
+            Refusal::RetiredPayloadKey {
+                at,
+                type_name,
+                key,
+                remedy,
+            } => write!(
+                f,
+                "`{key}` at `{at}` was retired from {type_name} — {remedy}"
             ),
             Refusal::IdTooLong { raw, limit } => write!(
                 f,
