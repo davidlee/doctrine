@@ -223,8 +223,10 @@ registry and `RefreshReport.hooks` carries both outcomes.
   `SURFACE_TIMEOUT_SEC_CODEX` (5). Both render INSIDE `hooks: […]` beside
   `command` (golden-pinned), never on the matcher group. Claude specs leave them
   `None` and their rendered entries are byte-unchanged.
-- `entry_is_canonical` compares those handler fields against the emitted value
-  (missing → not canonical; stale → refreshed), so a pre-limit codex entry heals.
+- `entry_is_canonical` compares the handler fields a spec SETS against the emitted
+  value (missing/stale → healed). A field the spec does not configure is left
+  alone, so an operator's hand-set `timeout` survives — RV-380 `F-1` corrected the
+  first cut, which compared `None` as key-absent and silently stripped it.
 - Claude's canonical args are `memory surface --input claude`; the Claude
   predicate owns canonical-claude AND legacy-bare (self-heal in place, never a
   duplicate); the codex predicate owns canonical-codex only.
@@ -284,6 +286,9 @@ fresh-as-of: 2026-09-24 · PHASE-04 · 731f08874
   1560f1f08).
 - PHASE-04 — the generated pi surface extension (`templates/surface.ts`,
   `src/boot.rs`; commit aa6e4e5ac).
+- RV-380 review fixes — `F-1` (canonicality compares only fields a spec sets),
+  `F-2` (a real neutral-wire round-trip integration test), `F-3` (one
+  `BIN_PATH_MARKER`), `F-4` (`discover_surface_anchor` returns a `SurfaceAnchor`).
 - scope reconciled; design-target selectors: `src/memory.rs`, `src/boot.rs`,
   `src/retrieve.rs`, `templates/surface.ts`,
   `plugins/doctrine/hooks/hooks.json`.
@@ -316,10 +321,16 @@ fresh-as-of: 2026-09-24 · PHASE-04 · 731f08874
 - mem_01a0d22ca59c7d71997a028f3ccb7a10 — driving a generated `.ts` pi extension
   behaviourally under node (ESM `package.json`, type-only import, `/bin/sh`
   stub child; an early-exit stub for the EPIPE path).
+- mem_01a0d23b988370b38f13c416e8796973 — an idempotency comparator must compare
+  exactly what the writer emits, never assert absence of unowned fields.
+- mem_01a0d23b98cc7740ba50720d79726b1a — pi's `ExtensionRunner` catches handler
+  rejections; an unhandled stream `'error'` event is what can kill the process.
 
 ### Open
 
-- PHASE-01..PHASE-04 done → PHASE-05 next: draft POL-003 (from IDE-034), the
-  PRD-004 §2/§8 and SPEC-011 REVs, and re-ground `SL-263 governed_by POL-003`;
-  apply the revisions at reconcile.
+- PHASE-05 in progress — POL-003 authored; REV-058 (PRD-004) and REV-059
+  (SPEC-011) drafted `proposed`; `SL-263 governed_by POL-003` recorded. Approval
+  and application are the user's act at reconcile (VH-1); a governance review
+  thread with codex is running before the phase completes.
+- PHASE-01..PHASE-04 done (RV-380 `fix-now` findings reconciled).
 - OQ-4 follow-up: pi as a first-class boot `Harness` variant.

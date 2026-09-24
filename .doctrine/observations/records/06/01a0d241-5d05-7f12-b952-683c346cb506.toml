@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d241-5d05-7f12-b952-683c346cb506"
+recorded_at = "2026-09-24T07:11:34.1499905Z"
+kind = "friction"
+summary = "RV-380 arrived pre-disposed (raiser+responder collapsed); fixes' landed-state ambiguous"
+detail = "A code-review agent returned RV-380 with all four findings already at disposition=fix-now AND status=verified, each carrying a responder-voice response with a detailed fix plan. In the ADR-007 two-role protocol the responder leg should be the receiving agent's; here it was pre-filled by the review side. Cost: the receiver cannot tell from the ledger whether the fixes were applied or only described (the responses say 'Reconciled in this unit of work'), and has no ledger move left to make — only the code change. Read the findings as advisory fix-now intent was the only safe reading."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
