@@ -190,9 +190,31 @@ Live capture (codex 0.155.1, `gpt-6-luna`, a throwaway `PreToolUse` tee hook,
   recorded as an absence rather than fabricated.
 - Model spend: 3 runs, ~3.7k / 7.8k / 7.2k tokens.
 
+### PHASE-02 — neutral surface command and engine arity
+
+`memory surface` now speaks three wires and two forms behind a doctrine-owned
+`SurfaceRequest` (commit 48c082392):
+
+- `--input claude|codex|neutral` (default claude) selects `claude_request` /
+  `codex_request` / `neutral_request`; `--format claude|plain` (default claude)
+  selects the envelope or the bare block.
+- `probe_for(request, anchor, root)` resolves lexically — a relative value joins
+  the canonical anchor, an absolute value under the raw reported cwd is rebased
+  onto it, the result is normalised and stripped against root; out-of-root fails
+  open.
+- `paths_from_patch` parses codex's `apply_patch` grammar (update/add/delete/
+  move-to); `command_text` joins an argv vector; codex's `apply_patch` is read as
+  a Patch request.
+- `ScopeProbe::Path` → `Paths(Vec<PathBuf>)`; a multi-file patch is ONE ranked
+  query (`QueryContext.paths` was already a `Vec` — the engine needed only the
+  variant rename).
+- The tuning log gains `wire`; a path-set probe's key joins with ` | `.
+
+`doctrine check gate` green; 4571 bin tests + the e2e suites pass.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · started · 817b4a179
+fresh-as-of: 2026-09-24 · started · 48c082392
 
 ### Produced
 
@@ -202,6 +224,8 @@ fresh-as-of: 2026-09-24 · started · 817b4a179
 - `.doctrine/slice/263/design.md` — 9 sections, materialised at run rev 39.
 - `.doctrine/slice/263/plan.toml` + `plan.md` — 5 phases, VT mandates intact.
 - `tests/fixtures/codex/` — the PHASE-01 captured wire fixtures + README.
+- PHASE-02 — the neutral surface command and the `ScopeProbe` arity change
+  (`src/memory.rs`, `src/retrieve.rs`, `src/commands/guard.rs`).
 - scope reconciled; design-target selectors: `src/memory.rs`, `src/boot.rs`,
   `src/retrieve.rs`, `templates/surface.ts`,
   `plugins/doctrine/hooks/hooks.json`.
@@ -209,7 +233,8 @@ fresh-as-of: 2026-09-24 · started · 817b4a179
   Disposed `conducted RV-377`; nine section attestations and `design-accepted`
   recorded; run locked at rev 41 on the user's assent.
 - commits ddccae191, e270e886b, 1950d37d6, 0a0a35b38, ee6a0649f, 97c0a0a52,
-  b9bce77ee, b37a7ce4d, a898b3cd1, 3dd5e8de4, 817b4a179.
+  b9bce77ee, b37a7ce4d, a898b3cd1, 3dd5e8de4, 817b4a179, c7efe9f37,
+  3c7b140f6, 14d7b3ebb, 48c082392.
 
 ### Learned
 
@@ -229,8 +254,8 @@ fresh-as-of: 2026-09-24 · started · 817b4a179
 
 ### Open
 
-- PHASE-01 done (fixtures captured) → PHASE-02 next: the neutral surface command
-  and the `ScopeProbe` arity change.
+- PHASE-01 (fixtures) and PHASE-02 (neutral surface command + arity) done →
+  PHASE-03 next: codex `PreToolUse` wiring + the Claude canonical forms.
 - Governance leg (PHASE-05): draft POL-003 (from IDE-034) and the PRD-004 §2/§8
   and SPEC-011 REVs; apply all three at reconcile, then re-ground `SL-263
   governed_by POL-003`.
