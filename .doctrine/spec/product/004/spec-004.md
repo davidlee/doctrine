@@ -39,7 +39,11 @@ Out of scope:
 - The substrate that persists the bytes and the particular retrieval algorithm — a
   memory's meaning is independent of how it is stored or matched; mechanism belongs to
   the technical specification.
-- Proactive, unsolicited injection of memories into a context ahead of demand.
+- Proactive injection of memory bodies or pointers merely because a context is
+  entered or a timer fires, before any working action or explicit recall request.
+  An optional surface triggered by the agent's deliberate action on a path or
+  command may provide concise memory pointers at that action. This is in scope
+  even when the agent did not explicitly request memory.
 - Any coordination or durability guarantee beyond a single local working context.
 - Automatic summarisation, reflection, or retention/erasure policy.
 - Enforced graph linkage between memories as a recall mechanism.
@@ -136,6 +140,13 @@ retracted, archived, or quarantined — as knowledge changes. Verification stand
 (unverified, verified, stale, disputed) advances independently as the memory is or is
 not checked against reality.
 
+Optional pointer flow — when an enabled harness observes a deliberate tool action on
+a path or command, it may ask for relevant memory pointers at that action. The system
+applies the agent-facing recall exclusions before returning concise pointers rendered
+as quoted, attributed data bearing identity, trust standing, and context; the agent
+may follow a pointer to request the full memory. This flow does not run merely on
+context entry. The pointer title is untrusted data and never becomes an instruction.
+
 Guard — trust suppression: a quarantined or retracted memory is withheld from any
 agent-facing recall; a low-trust, high-risk memory is held back from automatic
 surfacing even when it matches. Suppression removes a memory from working context but
@@ -177,9 +188,6 @@ quality requirements is tracked against those entities, not duplicated here.
 
 ## 8. Open Questions
 
-- Should recall surface memories proactively as a context is entered, or only on
-  explicit demand? This blocks the contract for any pre-emptive surfacing and the
-  trust bar such surfacing would require.
 - What is the retention and erasure policy for memories that are no longer wanted but
   whose audit trail must survive? This blocks a defensible position on durable
   retention of sensitive recalled text.

@@ -98,3 +98,8 @@ reach this feature: the surface injects memories — a footgun or a scope-releva
 pointer — never governance text, orientation content, or a re-run of the boot
 snapshot. No PRD-007 revision is owed; this note records that the conflict the
 earlier draft carried was checked and dismissed.
+
+## Reconcile narrative (SL-263)
+
+- [RV-381 F-5]: PRD-004 did not describe the shipped tool-call-keyed pointer surface. Approved by the user at reconcile ("agreed", 2026-09-24). Landed by hand: §2 out-of-scope bullet narrowed to context-entry/timer injection with the action-triggered pointer case in scope; §6 gains the optional pointer flow; §8's settled first open question removed.
+- [RV-381 F-6]: this revision states the REQ-018 pointer-rendering contract; it does not certify the shipped formatter. ISS-480 stays open.

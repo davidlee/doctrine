@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 481
+slug = "ambient-pointer-surface"
+title = "The optional memory surface accepts a doctrine-owned neutral request for paths, commands or patch paths, performs one scoped retrieval through existing lifecycle and trust filters, and emits only bounded memory pointers in the selected output form, with session deduplication when a session id is available."
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

@@ -86,3 +86,39 @@ Standing risks and accepted tradeoffs:
   boot snapshot. `SL-263 governed_by POL-003` is already recorded.
 - **F-6** — no write. When applying REV-058/060, do not state that the shipped
   formatter conforms to REQ-018; ISS-480 remains the open owner.
+
+## Reconciliation Outcome
+
+User assent: "agreed" (2026-09-24), covering the scope edit, REV-058/059/060
+approval and application, and POL-003 → required.
+
+### Direct edits applied
+
+- `slice-263.md` Scope § Governance leg and § Affected surface now name REV-060
+  against SPEC-007 (F-4).
+
+### REVs completed
+
+- REV-058: done. PRD-004 §2, §6 and §8 were landed by hand (F-5).
+- REV-059: done. SPEC-011 overview, responsibilities, `boot install`,
+  Concerns and D6 were landed by hand. It introduced FR-010 → REQ-479 and
+  FR-011 → REQ-480 (F-5).
+- REV-060: done. SPEC-007 overview, responsibilities, a new ambient pointer
+  surface subsection and a pointer render-contract paragraph were landed by
+  hand. It introduced FR-008 → REQ-481 (F-5).
+- Each REV's narrative is in its `revision-NNN.md`.
+
+### Governance status
+
+- POL-003 is now `required`. `doctrine boot` was regenerated and the snapshot
+  lists POL-003.
+
+### Withdrawn / tolerated
+
+- F-2 is tolerated: the via-shell fixture cannot be captured on codex 0.155.1.
+- F-6 is tolerated: the pre-existing formatter does not meet REQ-018. ISS-480
+  remains open, and SPEC-007 names the discrepancy.
+- F-1 was fixed during the audit. F-3 was aligned.
+
+`doctrine spec validate` and `doctrine validate` are clean. Reconcile is
+complete; hand off to `/close`.

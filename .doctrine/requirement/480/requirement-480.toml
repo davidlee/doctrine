@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 480
+slug = "generated-pi-extensions"
+title = "`boot install` plans and installs the generated pi extensions — `index.ts`, `mcp.ts`, and `surface.ts` — through one descriptor core (four-way action, foreign-skip, regenerate-on-change) and reports each as its own `RefreshReport` leg; `surface.ts` is the neutral-wire adapter that maps pi's `read`/`edit`/`write` and `bash` tool results onto doctrine's neutral envelope, writes it to `memory surface --input neutral` on an async, bounded, fail-open child, and appends the returned block."
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

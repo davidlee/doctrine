@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 479
+slug = "codex-hook-registry-merge"
+title = "`boot install` idempotently merges doctrine's owned codex hook registry — a `SessionStart` emit hook and a `PreToolUse` memory-surface hook across codex's `Bash` and `apply_patch` matchers — into `.codex/hooks.json`, preserving foreign entries and refreshing an owned entry when its matcher, command, or handler fields differ; only the memory-surface handlers carry `additionalContextLimit` and `timeout`, both beside `command` rather than on the matcher group."
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

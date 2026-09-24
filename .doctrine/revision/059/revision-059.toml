@@ -1,8 +1,8 @@
 id      = 59
 slug    = "extend-spec-011-to-the-codex-hook-registry-and-generated-pi-extensions"
 title   = "Extend SPEC-011 to the codex hook registry and generated pi extensions"
-status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
-approval = "none"      # SEPARATE axis, orthogonal to status: none | requested | approved | rejected
+status = "done"
+approval = "approved"
 updated = "2026-09-24"
 tags    = []
 

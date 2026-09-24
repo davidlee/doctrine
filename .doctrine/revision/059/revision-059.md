@@ -100,3 +100,8 @@ patch reader, the neutral envelope) is a memory-engine mechanism, not a
 `FR-011` names the adapter's use of the neutral envelope; it does not define the
 envelope schema or the memory-side decoder. `REV-060` stages that memory-engine
 contract against `SPEC-007`.
+
+## Reconcile narrative (SL-263)
+
+- [RV-381 F-5]: SPEC-011 described codex as import-only and named only the Claude hook set. Approved by the user at reconcile ("agreed", 2026-09-24). Landed by hand: overview inventory, responsibilities (toml list + prose), the `boot install` codex paragraph (hook registry, handler fields, trust step, pi extension descriptor core), Concerns (settings-merge safety, written-is-not-active) and D6.
+- introduce rows landed via `spec req add`: FR-010 → REQ-479 (codex hook registry), FR-011 → REQ-480 (generated pi extensions).

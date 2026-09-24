@@ -119,6 +119,10 @@ N — arity, not a new query, admission rule, ranking or tuning knob.
     spec) adds the codex hook registry and the generated pi extensions to the
     installer's governed surface. User ruling (2026-09-24): dealt with at
     reconcile with the other two.
+  - **A `SPEC-007` revision** (`REV-060`), added at the governance review:
+    `SPEC-007` owns `src/memory.rs` and `src/retrieve.rs` but describes only
+    `find` / `retrieve`, so the pointer surface had no memory-side contract. It
+    adds a pointer-surface responsibility and `FR-008`.
 
 ## Non-Goals
 
@@ -168,6 +172,8 @@ N — arity, not a new query, admission rule, ranking or tuning knob.
 - `.doctrine/spec/tech/011/` + a REV — the **SPEC-011** revision extending its
   responsibilities/members to the codex hook registry and the generated pi
   extensions, applied at reconcile.
+- `.doctrine/spec/tech/007/` + a REV — the **SPEC-007** revision (`REV-060`)
+  adding the pointer-surface contract, applied at reconcile.
 - `tests/**` — hook envelope emission per format; installer goldens.
 - Behaviour-preservation gate: the existing memory + retrieve + boot suites stay
   green unchanged.

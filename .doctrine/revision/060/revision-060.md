@@ -69,3 +69,8 @@ trust standing. The existing holdback proves admission, not presentation.
 Applying this revision establishes the contract; it does not attest that the
 current formatter conforms. Resolve `ISS-480` before claiming implementation
 conformance.
+
+## Reconcile narrative (SL-263)
+
+- [RV-381 F-5]: SPEC-007 had no memory-side contract for the pointer surface. Approved by the user at reconcile ("agreed", 2026-09-24). Landed by hand: overview and responsibilities (toml list + prose), a new *The ambient pointer surface* subsection, and a render-contract paragraph binding pointers to REQ-018 with ISS-480 named as the open discrepancy.
+- introduce row landed via `spec req add`: FR-008 → REQ-481.

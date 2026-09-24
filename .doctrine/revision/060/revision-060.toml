@@ -1,8 +1,8 @@
 id      = 60
 slug    = "govern-spec-007-ambient-memory-pointer-surface"
 title   = "Govern SPEC-007 ambient memory pointer surface"
-status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
-approval = "none"      # SEPARATE axis, orthogonal to status: none | requested | approved | rejected
+status = "done"
+approval = "approved"
 updated = "2026-09-24"
 tags    = []
 

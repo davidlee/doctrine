@@ -15,8 +15,8 @@ governance kinds (ADR, policy, standard, memory) and the install/listing
 substrate for their row data; this spec restates none of that and owns only what
 is specific to *the projection and its wiring*: the pure assembly seam, the
 content-diff cache key, the section source-kind taxonomy and its marker
-fallback, the `@`-import + Claude hook-set installer, and the `--check` disk
-sentry.
+fallback, the `@`-import, harness hook registries and generated pi extension
+installer, and the `--check` disk sentry.
 
 ## Responsibilities
 
@@ -25,8 +25,10 @@ deterministic projection; order the build-volatile exec-path section last;
 project each governance kind through one status-filtered arm; fall back to a
 fixed marker on any miss; write only on content change; wire the `@`-import and
 the Claude hook set through `boot install`, into the scope-selected settings file
-and sweeping the abandoned sibling; and run `boot --check` as a disk-scoped
-sentry.
+and sweeping the abandoned sibling; merge the codex hook registry into
+`.codex/hooks.json` with the memory-surface limit and timeout on each handler;
+plan and install the generated pi extensions, one report leg per file; and run
+`boot --check` as a disk-scoped sentry.
 
 ### The pure assembly seam
 
@@ -115,8 +117,28 @@ riders report what the sweep removed, could not read, or did not attempt. A
 `worktree.baseRef` stranded in the abandoned file is reported rather than swept,
 with the message stating which of the two values actually governs.
 
-Codex is import-only (no hook set — one hook, baked form). A single harness's
-refresh failure is isolated and printed; the others still run.
+For codex, it merges doctrine's owned **hook registry** into `.codex/hooks.json`:
+a `SessionStart` emit hook and a `PreToolUse` memory-surface hook
+(`memory surface --input codex`) across codex's `Bash` and `apply_patch`
+matchers, in baked form. The merge rides the same ownership-predicate core as
+Claude's, preserving foreign entries. The memory-surface handlers carry
+`additionalContextLimit` and `timeout` beside `command` on the handler object,
+never on the matcher group, and an owned entry is canonical only when every
+handler field its spec sets matches — a missing or stale field is healed, a field
+the spec does not set is left alone. Codex runs a new or changed hook only after
+the operator trusts it in `/hooks`; writing the file does not activate it, so
+every wired or refreshed outcome prints that manual step naming all three hooks.
+
+The codex arm also plans and installs the generated **pi extensions** —
+`index.ts`, the `mcp.ts` bridge and the `surface.ts` memory-surface adapter —
+through one ownership-aware descriptor core: generate when absent, regenerate
+when the owned content differs, skip a foreign file. Each file reports as its own
+`RefreshReport` leg. `surface.ts` maps pi's `read`/`edit`/`write` and `bash`
+tool results onto doctrine's neutral envelope and writes it to
+`memory surface --input neutral --format plain` on an async, bounded, fail-open
+child. The envelope schema and its decoder are the memory engine's (SPEC-007),
+not this container's. A single harness's refresh failure is isolated and
+printed; the others still run.
 
 ### `boot --check` — the disk sentry
 
@@ -138,9 +160,14 @@ edit lags until `/clear` or restart. Closing that lag is the freshen-now ritual
   listing, a trailing blank line) would bust the content-diff cache every
   session; the marker fallback and trailing-newline trim exist to keep
   `render_boot` byte-stable.
-- **Settings-merge safety.** The hook merge writes into a hand-editable JSON
-  file it does not own; a malformed or oddly-typed `hooks`/`<event>` structure
-  must fail soft (print-and-skip), never clobber foreign content.
+- **Settings-merge safety.** The hook merges write into hand-editable JSON
+  files they do not own (Claude settings, `.codex/hooks.json`); a malformed or
+  oddly-typed `hooks`/`<event>` structure must fail soft (print-and-skip), never
+  clobber foreign content. A generated pi extension without doctrine's ownership
+  marker is foreign and skipped, never overwritten.
+- **Written is not active.** A codex hook the operator has not trusted is skipped
+  by codex at runtime. The installer can disclose the manual trust step; it
+  cannot verify it, and never reports a written hook as active.
 - **The sweep is the one destructive write.** Evicting the abandoned scope is
   what keeps a scope flip from leaving two live copies of every hook — a failure
   that presents as mild slowness and nothing else. It is bounded by the same
@@ -180,6 +207,8 @@ edit lags until `/clear` or restart. Closing that lag is the freshen-now ritual
   snapshot's freshness and unpopulated sections; the live in-session prefix lag
   is closed by the `/clear` freshen ritual, never claimed fresh by this verb.
 - **D6 — the installer preserves foreign content and fails soft.** The
-  `@`-import is an idempotent dedup'd prepend; the hook merge mutates settings
-  JSON at the narrow path, preserving every foreign hook, and prints a manual
-  snippet rather than clobbering a malformed file.
+  `@`-import is an idempotent dedup'd prepend; the hook merges (Claude settings,
+  `.codex/hooks.json`) mutate JSON at the narrow path, preserving every foreign
+  hook, and print a manual snippet rather than clobbering a malformed file; a
+  generated pi extension lacking doctrine's ownership marker is skipped and
+  reported.

@@ -12,8 +12,8 @@ engine (SPEC-004) for materialisation, the storage rule, and edit-preserving wri
 it restates none of that. What it owns is everything specific to *memory*: the
 named (UUID-identity, no-reservation) entity shape, the memory domain vocabulary,
 the `record` producer with its git-frame capture, the scope-aware `find`/`retrieve`
-reader with its deterministic ranking, git-anchored staleness as an engine-wide
-computation, the security render contract with its non-bypassable trust holdback,
+reader with its deterministic ranking, the optional ambient pointer surface
+(`memory surface`), git-anchored staleness as an engine-wide computation, the security render contract with its non-bypassable trust holdback,
 and the global/derived orientation class. The append-only lifecycle ledger, NDJSON interchange, and
 event-store backend adapter are designed reserved seams, not shipped, and are not
 owned here.
@@ -28,8 +28,9 @@ the model that rides it.
 
 Mirrors the structured `responsibilities` list: own the named memory entity and its
 store layout; carry the memory domain vocabulary; provide the `record` producer;
-build and freeze the git context frame; provide the scope-aware reader; compute
-git-anchored staleness; enforce the security render contract and trust holdback; and
+build and freeze the git context frame; provide the scope-aware reader; provide
+the optional ambient pointer surface over that reader; compute git-anchored
+staleness; enforce the security render contract and trust holdback; and
 carry `verify` plus the global/derived orientation class.
 
 ### The named memory entity and its store
@@ -103,6 +104,38 @@ recency, and a uid/key tiebreaker — so the same query yields the same order fo
 agent reproducibility. `find` and `retrieve` share this ranking; they differ only in
 the holdback and the render contract.
 
+### The ambient pointer surface
+
+`memory surface` is an optional, tool-call-keyed caller of the reader (PRD-004
+§6, optional pointer flow). A harness hook or adapter writes one tool call to
+its stdin; it answers with at most a few concise pointers (title, uid, triage
+label), never a memory body. It is fail-open: an empty, unresolvable or failed
+lookup emits nothing, and every path exits 0 so a hook never blocks the tool.
+
+- **Codec boundary.** `--input claude|codex|neutral` (default `claude`) selects
+  the codec that normalises the harness wire into a doctrine-owned neutral
+  request — a path set, a command, or a patch whose paths the pure
+  `paths_from_patch` reader extracts from codex's `apply_patch` grammar.
+  Harness tool names and input keys live only in the codecs (POL-003); the
+  shared pipeline never sees them. The main-thread gate on `agent_id` is keyed
+  on the Claude wire only.
+- **One query.** The request resolves, against the session's reported cwd and
+  the project root, to one scope probe; a path set is one ranked query over
+  `QueryContext.paths`, not one query per path. Resolution is lexical and an
+  out-of-root path fails open.
+- **One pipeline.** Rows come from the same reader, so lifecycle suppression and
+  the trust holdback apply before a pointer is formed (REQ-151, REQ-152). The
+  surface then admits rows by its own severity/staleness gate; the admitted
+  rows are deduplicated against a per-session seen-set when a session id is
+  present, capped, and formatted once for every wire.
+- **Output form.** `--format claude|plain` (default `claude`) selects the
+  harness envelope (`hookSpecificOutput.additionalContext`) or the bare block.
+  Only a delivered, non-empty block updates the seen-set and appends a
+  tuning-log line, which records the wire it decoded.
+
+The surface's contract is REQ-481. The installer wiring that places it in each
+harness is SPEC-011's.
+
 ### Git-anchored staleness
 
 Staleness has four explicit modes, the metric chosen by what anchoring is available:
@@ -134,6 +167,11 @@ agent context on `retrieve`, while `find` and `show` keep them inspectable (the
 find surface is holdback-exempt so risk stays visible). Partition by workspace and
 repo is a hard filter; a memory whose `repo` is non-empty and differs from the
 querying repo is filtered out — that filter *is* the cross-repo boundary.
+
+The render contract binds the pointer surface too. A pointer omits the body, but
+its title is recalled, untrusted content: each pointer must be rendered as quoted,
+attributed data bearing identity, trust standing and context (REQ-018). The
+shipped pointer formatter does not yet meet this — tracked by ISS-480.
 
 ### `verify` and the global/derived orientation class
 
