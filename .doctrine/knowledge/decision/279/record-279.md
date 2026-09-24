@@ -18,6 +18,10 @@ Without `--expect`, the basis is the fingerprint read at entry: bare `adopt` ado
 
 ## Locked runs (inq-7)
 
-`adopt` refuses on a locked run, with a remedy naming the regression to `reviewing` for a run still governing execution, and the direct-edit path at reconcile. No other verb's locked-stage behaviour changes (nothing else refuses at `locked` today; captured separately as backlog).
+On a locked run, `adopt` treats an aligned document as the no-op and refuses a diverged one before parsing it, with a remedy naming the regression to `reviewing` for a run still governing execution, and the direct-edit path at reconcile. No other verb's locked-stage behaviour changes (nothing else refuses at `locked` today; captured separately as backlog).
 
 This makes the reconcile workflow canonical: reconcile edits `design.md` directly and does not adopt; the divergence stands. The reconciled bytes cannot be lost to a later `materialise`: `materialise` refuses at entry on a diverged watermark (`commands/design.rs:2073`), and the only doctrine path that moves a locked run's authored tier is regress then `adopt`, which takes the document (the reconciled text) as truth. The residual is DEC-100's tolerated check-to-rename window, which needs a concurrent materialise.
+
+## One read, and bytes outside sections
+
+The verb reads `design.md` once; the fingerprint and the parsed sections come from the same bytes and travel together through the aligned test, `--expect`, the report, the re-baseline and the pre-write basis (as `start --from-design` does). A whitespace-only head before the first marker is accepted by the parser but not held, so `materialise` drops it; the report discloses a non-empty head rather than claiming byte-identity.

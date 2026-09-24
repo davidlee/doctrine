@@ -12,5 +12,50 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-261"
 
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "Bind adopted sections to the fingerprint from the same read"
+detail = "SL-261 sec-3 lines 191-200 and 230-232 retain the current apply pipeline, where src/commands/design.rs:1843 reads and hashes design.md and lines 1856-1857 read it again for authored_sections. If the file changes from A to B between reads, dry-run can report sections from B with the printed fingerprint of A. If it returns to A before the pre-write check at line 1959, the write succeeds with B section bodies and an A watermark, so later entry checks see a false alignment. src/commands/design.rs:1591-1595 explicitly uses one read for start to avoid this defect. Carry one document read through alignment, expect validation, section parsing, report, rebaseline, and PreWriteBasis, and test a change between the reads."
+disposition = "fixed"
+response = 'Verified: design.rs:1843 fingerprints and :1856 re-reads for sections; start --from-design reads once (:1591). sec-3 gains "One read of the document": the verb reads once, and fingerprint + sections travel together through aligned test, locked test, --expect, parse, report, rebaseline and PreWriteBasis; apply_pipeline takes the read on the Adopt path. sec-7 adds an injection-seam case for an edit between reads. DEC-279 amended. The two-read path itself is deleted with adopt_authored.'
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "Account for accepted bytes outside section bodies"
+detail = "SL-261 sec-2 lines 102-129 promises that materialise reproduces adopted design.md byte-identically and that the section diff represents the materialise delta. src/design_run/document.rs:295-300 accepts a whitespace-only head, and tests/e2e_design_materialise.rs:504-509 confirms such a document is adopted. The parser returns only sections at document.rs:340-345, while src/commands/design.rs:2155-2161 renders only those sections; materialise therefore drops the head. A head-only edit yields no changed-section row or diff, so the report says sections are unchanged while the next materialise rewrites the file. Either preserve these accepted bytes in run state or disclose the canonicalisation in the report and narrow the byte-identical promise; add a head-only e2e case."
+disposition = "fixed"
+response = "Verified: document.rs:295-300 accepts a whitespace-only head; render emits sections only. Chose disclosure over holding the head (whitespace only, no content loss): sec-2 narrows the byte-identical promise, adds a report head line, and states a head-only edit adopts with no changed section. sec-7 adds a head-only e2e. DEC-279 amended."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "minor"
+title = "Check locked state before marker parsing"
+detail = "SL-261 sec-2 lines 89-93 promises the locked-run refusal and its regression remedy, but sec-3 lines 220-255 places the only proposed AdoptionLocked check in run::apply. The retained shell path in src/commands/design.rs:1856-1857 calls authored_sections and returns any document::parse refusal before run::apply at line 1909. A locked run with a divergent document containing an unknown or missing marker therefore reports a marker error instead of AdoptionLocked. After the aligned no-op decision, check the locked stage before parsing the document in the shell, while keeping the pure guard as a backstop; add a locked malformed-document case."
+disposition = "fixed"
+response = "Verified: authored_sections parses in the shell before run::apply. sec-2/sec-3 order is now aligned test, then locked test, then parse; refuse_adoption_at is one pure predicate called by the shell first and by the core as backstop. sec-7 adds a locked + unknown-marker case."
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "minor"
+title = "Qualify the locked-run acceptance criterion"
+detail = "SL-261 sec-2 lines 85-93 explicitly returns success with no write for an aligned locked run, while sec-5 lines 381-385 proposes a new REQ-434 criterion saying adopt refuses on a locked run without qualification. Both cannot be true, so the normative criterion would reject the intended no-op and make verification ambiguous. State that a divergent adoption on a locked run refuses after the aligned check, or choose a strict locked-first rule and update the outcome and tests consistently."
+disposition = "fixed"
+response = "Agreed. sec-5 REQ-434 criterion now reads: on a locked run an aligned document is a no-op and a diverged one is refused before parsing. Swept DEC-279 and the reconcile-memory line for the same wording."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "minor"
+title = "Make the type-name uniqueness pin non-vacuous"
+detail = "SL-261 sec-4 lines 339-356 relies on owner.name for retired-key lookup and proposes a pin that type names are unique across the contract closure. The existing closure_types traversal in src/design_run/payload_contract.rs:1610-1625 deduplicates by contract.name before returning contracts. A uniqueness assertion over closure_types can never detect two distinct TypeContract nodes with the same name; the second is already discarded, and JSON rendering also overwrites by name at payload_contract.rs:1912-1915. Specify a pin that traverses raw named edges using node identity before name deduplication, including nested and inlined types, and injects a duplicate-name fixture that the pin rejects."
+disposition = "fixed"
+response = "Observation verified (closure_types dedups by name). Different repair: match the owner by node identity (std::ptr::eq on the static TypeContract) instead of by name, so no uniqueness pin is needed. walk_keys takes the owning &TypeContract (its three call sites hold it). sec-4 updated, uniqueness pin dropped; sec-7 adds retired_key_matches_its_owner_only."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
