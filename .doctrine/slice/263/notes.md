@@ -214,7 +214,7 @@ Live capture (codex 0.155.1, `gpt-6-luna`, a throwaway `PreToolUse` tee hook,
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · started · 48c082392
+fresh-as-of: 2026-09-24 · started · 553f6dec8
 
 ### Produced
 
@@ -234,7 +234,7 @@ fresh-as-of: 2026-09-24 · started · 48c082392
   recorded; run locked at rev 41 on the user's assent.
 - commits ddccae191, e270e886b, 1950d37d6, 0a0a35b38, ee6a0649f, 97c0a0a52,
   b9bce77ee, b37a7ce4d, a898b3cd1, 3dd5e8de4, 817b4a179, c7efe9f37,
-  3c7b140f6, 14d7b3ebb, 48c082392.
+  3c7b140f6, 14d7b3ebb, 48c082392, 553f6dec8.
 
 ### Learned
 
