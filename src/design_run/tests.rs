@@ -4530,8 +4530,13 @@ fn value_kind_tokens_match_their_serde_spelling() {
 // and shown to bite on an injected bad row.
 // ---------------------------------------------------------------------------
 
-/// Rows whose key is still admitted by its owner — or whose owner has no key
-/// rows at all, so the retirement names a surface that cannot have held it.
+/// Rows whose key is still admitted by its owner — or whose owner is an enum.
+///
+/// An enum owner is refused as out of the roster's checked domain, not because
+/// it has no keys: its variants' keys reach `walk_keys` with the enum as owner,
+/// so the walk would honour such a row, but this pin cannot yet tell a key live
+/// on one variant from one retired from another, and the renderer lists
+/// retired rows under struct blocks only (`ISS-478`, `RV-375` `F-2`).
 fn live_retirements(roster: &[RetiredKey]) -> Vec<&'static str> {
     roster
         .iter()
@@ -4585,7 +4590,7 @@ fn retired_keys_are_never_live() {
         RetiredKey {
             owner: &STAGE,
             key: "to",
-            remedy: "an enum has no key rows",
+            remedy: "an enum owner is out of domain",
         },
         RetiredKey {
             owner: &CREATE_RECORD,
