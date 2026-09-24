@@ -12,7 +12,7 @@ use std::ffi::OsStr;
 use std::fmt;
 use std::fs;
 use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
@@ -292,13 +292,23 @@ pub(crate) enum MemoryCommand {
         min_trust: Option<String>,
     },
 
-    /// Ambient memory surfacing (SL-205): a Claude `PreToolUse` hook handler.
-    /// Reads the hook envelope on stdin (`{session_id?, agent_id?, cwd?,
-    /// tool_name?, tool_input?}`), keys on the path being touched or the command
-    /// about to run, and emits advisory `additionalContext` (or nothing) —
-    /// **exit 0 always**. Main-thread only (a subagent's `agent_id` short-circuits
-    /// to nothing). Wired via `hooks.json`, not for interactive use.
-    Surface,
+    /// Ambient memory surfacing (SL-205; SL-263 ports it to codex and pi): a
+    /// harness hook handler. Reads a harness envelope on stdin — Claude/codex
+    /// `PreToolUse`, or doctrine's neutral wire — keys on the path being touched
+    /// or the command about to run, and emits an advisory block (or nothing) —
+    /// **exit 0 always**. Main-thread only on the Claude wire (a subagent's
+    /// `agent_id` short-circuits to nothing). Wired via `hooks.json` and the
+    /// generated pi extension, not for interactive use.
+    Surface {
+        /// Which harness wire the stdin envelope uses (design §5.2).
+        #[arg(long = "input", value_parser = Wire::from_str, default_value_t = Wire::Claude)]
+        input: Wire,
+
+        /// Output form: the Claude `additionalContext` envelope, or the bare
+        /// block the pi adapter appends (design §5.2).
+        #[arg(long = "format", value_parser = SurfaceFormat::from_str, default_value_t = SurfaceFormat::Claude)]
+        format: SurfaceFormat,
+    },
 
     /// Resolve memory wikilinks for one memory or the whole corpus.
     ResolveLinks {
@@ -672,7 +682,7 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
                 args.expand,
             )
         }
-        MemoryCommand::Surface => run_surface(),
+        MemoryCommand::Surface { input, format } => run_surface(input, format),
         MemoryCommand::ResolveLinks { reference, path } => {
             run_resolve_links(path, reference.as_deref())
         }
@@ -10492,6 +10502,91 @@ const TOOL_READ: &str = "Read";
 const TOOL_EDIT: &str = "Edit";
 const TOOL_WRITE: &str = "Write";
 const TOOL_BASH: &str = "Bash";
+/// codex's patch tool name — codex vocabulary, named once here beside the codec
+/// that consumes it, never in the neutral pipeline (design §5.3).
+const TOOL_APPLY_PATCH: &str = "apply_patch";
+
+// Wire tokens (STD-001) — the `--input` values, the codec selector and the
+// tuning log's `wire` field are one spelling in one place (design §5.2).
+const WIRE_CLAUDE: &str = "claude";
+const WIRE_CODEX: &str = "codex";
+const WIRE_NEUTRAL: &str = "neutral";
+// Output-form tokens (STD-001): the Claude envelope, or the bare block.
+const FORMAT_CLAUDE: &str = "claude";
+const FORMAT_PLAIN: &str = "plain";
+// The neutral wire's doctrine-owned class vocabulary — never a harness tool name
+// (design §5.2). There is deliberately no `patch` class: the pi adapter is the
+// only producer and speaks only paths and commands.
+const CLASS_PATH: &str = "path";
+const CLASS_COMMAND: &str = "command";
+
+/// Which harness wire the stdin envelope uses (design §5.2). `--input` selects
+/// the codec that normalises it into a [`SurfaceRequest`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum Wire {
+    #[default]
+    Claude,
+    Codex,
+    Neutral,
+}
+
+impl Wire {
+    /// The token this wire is spelled with (STD-001).
+    const fn as_str(self) -> &'static str {
+        match self {
+            Wire::Claude => WIRE_CLAUDE,
+            Wire::Codex => WIRE_CODEX,
+            Wire::Neutral => WIRE_NEUTRAL,
+        }
+    }
+}
+
+impl fmt::Display for Wire {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for Wire {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            WIRE_CLAUDE => Ok(Wire::Claude),
+            WIRE_CODEX => Ok(Wire::Codex),
+            WIRE_NEUTRAL => Ok(Wire::Neutral),
+            other => anyhow::bail!("unknown --input wire `{other}` (claude|codex|neutral)"),
+        }
+    }
+}
+
+/// Output form (design §5.2): the Claude `hookSpecificOutput` envelope, or the
+/// bare block the pi adapter appends to `event.content`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum SurfaceFormat {
+    #[default]
+    Claude,
+    Plain,
+}
+
+impl fmt::Display for SurfaceFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            SurfaceFormat::Claude => FORMAT_CLAUDE,
+            SurfaceFormat::Plain => FORMAT_PLAIN,
+        })
+    }
+}
+
+impl FromStr for SurfaceFormat {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            FORMAT_CLAUDE => Ok(SurfaceFormat::Claude),
+            FORMAT_PLAIN => Ok(SurfaceFormat::Plain),
+            other => anyhow::bail!("unknown --format `{other}` (claude|plain)"),
+        }
+    }
+}
 
 /// The `PreToolUse` stdin subset the surfacing adapter consumes (design §5.2).
 /// EVERY field is optional / `serde(default)` so a malformed or partial payload
@@ -10514,8 +10609,159 @@ struct SurfaceInput {
 struct SurfaceToolInput {
     #[serde(default)]
     file_path: Option<String>,
+    /// The raw `command` value. The observed wires send a string; an argv vector
+    /// is tolerated and joined (design §5.2), so a wrong guess about the wire
+    /// cannot fail the whole payload closed into silence.
     #[serde(default)]
-    command: Option<String>,
+    command: Option<serde_json::Value>,
+}
+
+/// The neutral wire's envelope (design §5.2) — doctrine-owned, produced by the
+/// generated pi adapter. `probe.class` is doctrine's own vocabulary.
+#[derive(Debug, Default, Deserialize)]
+struct NeutralInput {
+    #[serde(default)]
+    session_id: Option<String>,
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    probe: Option<NeutralProbe>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct NeutralProbe {
+    #[serde(default)]
+    class: Option<String>,
+    #[serde(default)]
+    value: Option<String>,
+}
+
+/// A harness-neutral description of what a tool call is about to touch (design
+/// §5.1). Each harness's codec produces one of these; nothing downstream learns
+/// which harness produced it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum SurfaceRequest {
+    /// A file path as the harness reported it — absolute, or relative to the
+    /// harness's working directory.
+    Path(String),
+    /// A shell command about to run.
+    Command(String),
+    /// A codex `apply_patch` envelope body (codex's `tool_input.command`).
+    Patch(String),
+}
+
+/// The working directory a wire reported, in the two forms resolution needs:
+/// the raw value (its prefix may be symlinked) and the canonical anchor root
+/// discovery computed (design §5.1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SurfaceAnchor {
+    raw: Option<PathBuf>,
+    canonical: PathBuf,
+}
+
+/// Read a wire's `command` value tolerantly (design §5.2): a string is taken as
+/// written; an argv vector is joined with single spaces. Anything else — or an
+/// empty result — yields `None` (emit nothing, never a failed payload).
+fn command_text(value: &serde_json::Value) -> Option<String> {
+    let text = match value {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(items) => items
+            .iter()
+            .map(serde_json::Value::as_str)
+            .collect::<Option<Vec<&str>>>()?
+            .join(" "),
+        _ => return None,
+    };
+    (!text.is_empty()).then_some(text)
+}
+
+/// Claude Code's `PreToolUse` vocabulary (design §5.2).
+fn claude_request(input: &SurfaceInput) -> Option<SurfaceRequest> {
+    match input.tool_name.as_deref() {
+        Some(TOOL_READ | TOOL_EDIT | TOOL_WRITE) => input
+            .tool_input
+            .file_path
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .map(|s| SurfaceRequest::Path(s.to_owned())),
+        Some(TOOL_BASH) => input
+            .tool_input
+            .command
+            .as_ref()
+            .and_then(command_text)
+            .map(SurfaceRequest::Command),
+        _ => None,
+    }
+}
+
+/// codex's `PreToolUse` vocabulary (design §5.2): `Bash` → a command, `apply_patch`
+/// → a patch body. codex's tool names are named here and nowhere below.
+fn codex_request(input: &SurfaceInput) -> Option<SurfaceRequest> {
+    match input.tool_name.as_deref() {
+        Some(TOOL_BASH) => input
+            .tool_input
+            .command
+            .as_ref()
+            .and_then(command_text)
+            .map(SurfaceRequest::Command),
+        Some(TOOL_APPLY_PATCH) => input
+            .tool_input
+            .command
+            .as_ref()
+            .and_then(command_text)
+            .map(SurfaceRequest::Patch),
+        _ => None,
+    }
+}
+
+/// doctrine's neutral wire (design §5.2).
+fn neutral_request(input: &NeutralInput) -> Option<SurfaceRequest> {
+    let probe = input.probe.as_ref()?;
+    let value = probe.value.as_deref().filter(|s| !s.is_empty())?;
+    match probe.class.as_deref() {
+        Some(CLASS_PATH) => Some(SurfaceRequest::Path(value.to_owned())),
+        Some(CLASS_COMMAND) => Some(SurfaceRequest::Command(value.to_owned())),
+        _ => None,
+    }
+}
+
+/// Everything a fire needs, decoded from whichever wire arrived.
+struct Decoded {
+    session_id: Option<String>,
+    agent_id: Option<String>,
+    cwd: Option<String>,
+    request: Option<SurfaceRequest>,
+}
+
+/// Parse the wire's envelope and run its codec (design §5.2). Unparseable stdin
+/// ⇒ `None` ⇒ emit nothing (INV-2).
+fn decode(wire: Wire, raw: &str) -> Option<Decoded> {
+    match wire {
+        Wire::Claude | Wire::Codex => {
+            let input: SurfaceInput = serde_json::from_str(raw).ok()?;
+            let request = if wire == Wire::Codex {
+                codex_request(&input)
+            } else {
+                claude_request(&input)
+            };
+            Some(Decoded {
+                session_id: input.session_id,
+                agent_id: input.agent_id,
+                cwd: input.cwd,
+                request,
+            })
+        }
+        Wire::Neutral => {
+            let input: NeutralInput = serde_json::from_str(raw).ok()?;
+            let request = neutral_request(&input);
+            Some(Decoded {
+                session_id: input.session_id,
+                agent_id: None,
+                cwd: input.cwd,
+                request,
+            })
+        }
+    }
 }
 
 /// Per-surface cap selector (design §5.5) — `CAP_PATH` / `CAP_COMMAND`.
@@ -10526,69 +10772,134 @@ fn cap_for(surface: Surface) -> usize {
     }
 }
 
-/// Discriminate `tool_name` + `tool_input` into a `(Surface, ScopeProbe)`
-/// (design §5.4): `Read|Edit|Write` ⇒ a path surface keyed on `file_path`;
-/// `Bash` ⇒ a command surface keyed on `command`. An unregistered tool, or a
-/// missing/empty key, ⇒ `None` ⇒ emit nothing.
-fn probe_for(input: &SurfaceInput, root: &Path) -> Option<(Surface, crate::retrieve::ScopeProbe)> {
-    match input.tool_name.as_deref() {
-        Some(TOOL_READ | TOOL_EDIT | TOOL_WRITE) => {
-            let fp = input
-                .tool_input
-                .file_path
-                .as_deref()
-                .filter(|s| !s.is_empty())?;
-            // The live harness sends `file_path` ABSOLUTE; the downstream scope
-            // match anchors at component 0 against root-relative `scope.paths`,
-            // so an absolute probe matches nothing (ISS-232). Relativize against
-            // the surface root; an out-of-root absolute path ⇒ `None` ⇒ nothing
-            // (INV-2 fail-open).
-            let rel = relativize_probe_path(fp, root)?;
-            Some((Surface::Path, crate::retrieve::ScopeProbe::Path(rel)))
+/// The `apply_patch` envelope headers codex 0.155.1 emits (design §5.3). Not
+/// unified diff — codex's own grammar, pinned by version.
+const PATCH_HEADERS: [&str; 4] = [
+    "*** Update File: ",
+    "*** Add File: ",
+    "*** Delete File: ",
+    "*** Move to: ",
+];
+
+/// Parse codex's `apply_patch` envelope grammar (design §5.3): the paths the
+/// body names, in header order, deduped, exactly as written. A malformed or
+/// unknown body yields an empty vector, never an error. Returning paths *as
+/// written* is deliberate — resolving them is `resolve_probe_path`'s job,
+/// because only it knows the anchor and the root.
+pub(crate) fn paths_from_patch(patch: &str) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    for line in patch.lines() {
+        for header in PATCH_HEADERS {
+            let Some(rest) = line.strip_prefix(header) else {
+                continue;
+            };
+            let path = rest.trim();
+            if !path.is_empty() {
+                let written = PathBuf::from(path);
+                if !out.contains(&written) {
+                    out.push(written);
+                }
+            }
+            break;
         }
-        Some(TOOL_BASH) => {
-            let cmd = input
-                .tool_input
-                .command
-                .as_deref()
-                .filter(|s| !s.is_empty())?;
-            Some((
-                Surface::Command,
-                crate::retrieve::ScopeProbe::Command(cmd.to_owned()),
-            ))
+    }
+    out
+}
+
+/// Fold `.`/`..` lexically — never canonicalising, because the file may not
+/// exist yet (a `Write`/`Add File` to a new path).
+fn lexical_normalise(p: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other.as_os_str()),
         }
-        _ => None,
+    }
+    out
+}
+
+/// Resolve one reported value against the anchor and strip `root` (design §5.1).
+/// Pure — the anchor's two forms and the root are threaded in as data.
+///
+/// - A RELATIVE value joins the canonical anchor.
+/// - An ABSOLUTE value under the **raw reported cwd** is rebased onto the
+///   canonical anchor: the reported prefix may be symlinked, and a bare lexical
+///   strip against a canonical root would miss it.
+/// - An ABSOLUTE value under neither prefix is taken as already canonical.
+///
+/// The result is normalised lexically, never canonicalised; an empty,
+/// unresolvable or out-of-root value ⇒ `None` (fail-open, INV-2).
+fn resolve_probe_path(value: &str, anchor: &SurfaceAnchor, root: &Path) -> Option<PathBuf> {
+    if value.is_empty() {
+        return None;
+    }
+    let p = Path::new(value);
+    let joined = if p.is_absolute() {
+        match anchor
+            .raw
+            .as_deref()
+            .and_then(|raw| p.strip_prefix(raw).ok())
+        {
+            Some(rest) => anchor.canonical.join(rest),
+            None => p.to_path_buf(),
+        }
+    } else {
+        anchor.canonical.join(p)
+    };
+    lexical_normalise(&joined)
+        .strip_prefix(root)
+        .ok()
+        .map(Path::to_path_buf)
+}
+
+/// Resolve a neutral request into the engine probe it denotes (design §5.1):
+/// `Path` ⇒ one path, `Command` ⇒ a command, `Patch` ⇒ every headered path
+/// (deduped after resolution), or `None` when nothing resolves (fail-open).
+fn probe_for(
+    request: SurfaceRequest,
+    anchor: &SurfaceAnchor,
+    root: &Path,
+) -> Option<(Surface, crate::retrieve::ScopeProbe)> {
+    match request {
+        SurfaceRequest::Path(raw) => {
+            let p = resolve_probe_path(&raw, anchor, root)?;
+            Some((Surface::Path, crate::retrieve::ScopeProbe::Paths(vec![p])))
+        }
+        SurfaceRequest::Command(cmd) => {
+            Some((Surface::Command, crate::retrieve::ScopeProbe::Command(cmd)))
+        }
+        SurfaceRequest::Patch(text) => {
+            let mut paths: Vec<PathBuf> = Vec::new();
+            for written in paths_from_patch(&text) {
+                let Some(p) = resolve_probe_path(&written.to_string_lossy(), anchor, root) else {
+                    continue;
+                };
+                if !paths.contains(&p) {
+                    paths.push(p);
+                }
+            }
+            (!paths.is_empty())
+                .then_some((Surface::Path, crate::retrieve::ScopeProbe::Paths(paths)))
+        }
     }
 }
 
 /// The log/dedup key for a probe (the touched path or the command string),
-/// computed BEFORE the probe is moved into `retrieve_rows`.
+/// computed BEFORE the probe is moved into `retrieve_rows`. A path-set probe
+/// joins its resolved paths with ` | ` (design §5.4).
 fn probe_key(probe: &crate::retrieve::ScopeProbe) -> String {
     match probe {
-        crate::retrieve::ScopeProbe::Path(p) => p.to_string_lossy().into_owned(),
+        crate::retrieve::ScopeProbe::Paths(ps) => ps
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect::<Vec<String>>()
+            .join(" | "),
         crate::retrieve::ScopeProbe::Command(c) => c.clone(),
     }
-}
-
-/// Relativize a harness-supplied `file_path` against the surface `root` so the
-/// downstream path-scope match (component-prefix, anchored at component 0
-/// against root-relative `scope.paths`) sees the form it expects. Pure — the
-/// root is threaded in as data, no IO here (root discovery stays in the shell).
-///
-/// - A RELATIVE path passes through unchanged (what the fixtures/manual probes
-///   used, and a form the match already accepts).
-/// - An ABSOLUTE path UNDER the root is stripped to its root-relative form (what
-///   the live harness actually sends: `/workspace/doctrine/src/x.rs` ⇒
-///   `src/x.rs`).
-/// - An ABSOLUTE path OUTSIDE the root ⇒ `None` (fail-open: surface nothing,
-///   never a bogus match). A lexical strip — never canonicalize `fp`, which may
-///   not exist yet (a `Write` to a new file).
-fn relativize_probe_path(fp: &str, root: &Path) -> Option<PathBuf> {
-    let p = Path::new(fp);
-    if p.is_relative() {
-        return Some(p.to_path_buf());
-    }
-    p.strip_prefix(root).ok().map(Path::to_path_buf)
 }
 
 /// Resolve the doctrine root by walking up from the stdin `cwd` (canonicalized),
@@ -10602,11 +10913,15 @@ fn relativize_probe_path(fp: &str, root: &Path) -> Option<PathBuf> {
 /// fallback arm untestable — edition-2024 `set_var` is `unsafe` and the ambient
 /// suite runs parallel in one process, so no test could pin the arm without
 /// poisoning its siblings. The impure read lives at the caller's shell boundary.
-fn discover_surface_root(cwd: Option<&str>, env_project_dir: Option<&OsStr>) -> Option<PathBuf> {
+fn discover_surface_anchor(
+    cwd: Option<&str>,
+    env_project_dir: Option<&OsStr>,
+) -> Option<(PathBuf, PathBuf)> {
     let anchor = cwd
         .and_then(|c| fs::canonicalize(c).ok())
         .or_else(|| env_project_dir.and_then(|v| fs::canonicalize(PathBuf::from(v)).ok()))?;
-    crate::root::find_from(&anchor, &crate::root::default_markers())
+    let root = crate::root::find_from(&anchor, &crate::root::default_markers())?;
+    Some((anchor, root))
 }
 
 /// The session seen-set path for `<session>` under the runtime state dir.
@@ -10656,6 +10971,7 @@ fn surface_log_line(
     fetched: usize,
     admitted: usize,
     uids: &[String],
+    wire: Wire,
 ) -> String {
     let truncated: String = key.chars().take(KEY_LOG_MAX).collect();
     let surface_label = match surface {
@@ -10665,6 +10981,7 @@ fn surface_log_line(
     serde_json::json!({
         "session": session.unwrap_or_default(),
         "surface": surface_label,
+        "wire": wire.as_str(),
         "key": truncated,
         "fetched": fetched,
         "admitted": admitted,
@@ -10682,20 +10999,23 @@ fn surface_log_line(
 /// `true` iff a non-empty block was successfully written; the caller records
 /// seen-set + log state ONLY on `true` (F-3 / INV-6). Emits ONLY
 /// `hookSpecificOutput.additionalContext` — never a decision field (INV-1).
-fn emit_surface(writer: &mut impl Write, block: Option<&str>) -> bool {
+fn emit_surface(writer: &mut impl Write, block: Option<&str>, format: SurfaceFormat) -> bool {
     let Some(block) = block else {
         return false;
     };
     if block.is_empty() {
         return false;
     }
-    let line = serde_json::json!({
-        "hookSpecificOutput": {
-            "hookEventName": HOOK_EVENT_SURFACE,
-            "additionalContext": block,
-        }
-    })
-    .to_string();
+    let line = match format {
+        SurfaceFormat::Claude => serde_json::json!({
+            "hookSpecificOutput": {
+                "hookEventName": HOOK_EVENT_SURFACE,
+                "additionalContext": block,
+            }
+        })
+        .to_string(),
+        SurfaceFormat::Plain => block.to_owned(),
+    };
     // F-1: a write error folds to "not delivered", NEVER a propagated `Err`.
     writeln!(writer, "{line}").is_ok()
 }
@@ -10720,26 +11040,37 @@ fn emit_surface(writer: &mut impl Write, block: Option<&str>) -> bool {
 fn run_surface_to(
     writer: &mut impl Write,
     raw: &str,
+    wire: Wire,
+    format: SurfaceFormat,
     env_project_dir: Option<&OsStr>,
 ) -> Result<()> {
-    // Parse — unparseable stdin ⇒ emit nothing (INV-2).
-    let Ok(input) = serde_json::from_str::<SurfaceInput>(raw) else {
+    // Decode — unparseable stdin ⇒ emit nothing (INV-2).
+    let Some(decoded) = decode(wire, raw) else {
         return Ok(());
     };
     // INV-3: a subagent (`agent_id` present) surfaces nothing and runs no
-    // retrieve (main-thread only, v1).
-    if input.agent_id.is_some() {
+    // retrieve (main-thread only; the Claude wire is the only one that carries
+    // `agent_id`, so the gate is inert on codex and neutral — design §5.7).
+    if decoded.agent_id.is_some() {
         return Ok(());
     }
-    // Root discovery from the stdin `cwd`; no discoverable root ⇒ nothing
-    // (INV-2). Discovered BEFORE the probe: the path surface relativizes an
-    // absolute `file_path` against this root (ISS-232).
-    let Some(root) = discover_surface_root(input.cwd.as_deref(), env_project_dir) else {
+    // Root discovery from the reported `cwd`, plus the canonical anchor it
+    // resolved; no discoverable root ⇒ nothing (INV-2). Both are needed before
+    // the probe: a relative value joins the anchor, and an absolute value under
+    // the raw reported cwd is rebased onto it (design §5.1).
+    let Some((canonical, root)) = discover_surface_anchor(decoded.cwd.as_deref(), env_project_dir)
+    else {
         return Ok(());
     };
-    // Discriminate the surface; an unregistered tool / missing key / an
-    // out-of-root absolute path ⇒ nothing.
-    let Some((surface, probe)) = probe_for(&input, &root) else {
+    let Some(request) = decoded.request else {
+        return Ok(());
+    };
+    let anchor = SurfaceAnchor {
+        raw: decoded.cwd.as_deref().map(PathBuf::from),
+        canonical,
+    };
+    // Resolve the request; an unresolvable or out-of-root request ⇒ nothing.
+    let Some((surface, probe)) = probe_for(request, &anchor, &root) else {
         return Ok(());
     };
     let key = probe_key(&probe);
@@ -10754,7 +11085,7 @@ fn run_surface_to(
     let admitted_count = admitted.len();
     // Session dedup (F-2): absent/empty `session_id` ⇒ dedup disabled — no
     // seen-set file read or written, no synthetic key.
-    let session = input.session_id.as_deref().filter(|s| !s.is_empty());
+    let session = decoded.session_id.as_deref().filter(|s| !s.is_empty());
     let state_dir = root.join(SURFACE_STATE_SUBDIR);
     let seen = match session {
         Some(sid) => read_seen(&state_dir, sid),
@@ -10766,12 +11097,12 @@ fn run_surface_to(
     // Emit (F-1: write `Err` swallowed). Record runtime state ONLY on a
     // delivered non-empty block (F-3 / INV-6): a failed or empty emit leaves the
     // seen-set untouched — dedup can never suppress an undelivered memory.
-    if emit_surface(writer, block.as_deref()) {
+    if emit_surface(writer, block.as_deref(), format) {
         // F-2: only append the seen-set when the session is nameable.
         if let Some(sid) = session {
             let _seen_io = append_lines(&seen_path(&state_dir, sid), &uids);
         }
-        let log = surface_log_line(session, surface, &key, fetched, admitted_count, &uids);
+        let log = surface_log_line(session, surface, &key, fetched, admitted_count, &uids, wire);
         let _log_io = append_lines(&state_dir.join(SURFACE_LOG_FILE), &[log]);
     }
     Ok(())
@@ -10784,11 +11115,17 @@ fn run_surface_to(
 /// This is the impure boundary: stdin and the `CLAUDE_PROJECT_DIR` anchor are
 /// both read here and passed down, so nothing below reads process state
 /// (ISS-220 / ISS-281). That is what lets the ambient VTs be hermetic.
-pub(crate) fn run_surface() -> Result<()> {
+pub(crate) fn run_surface(input: Wire, format: SurfaceFormat) -> Result<()> {
     let mut raw = String::new();
     let _read = io::stdin().read_to_string(&mut raw);
     let env_project_dir = std::env::var_os(ENV_PROJECT_DIR_SURFACE);
-    run_surface_to(&mut io::stdout(), &raw, env_project_dir.as_deref())
+    run_surface_to(
+        &mut io::stdout(),
+        &raw,
+        input,
+        format,
+        env_project_dir.as_deref(),
+    )
 }
 
 #[cfg(test)]
@@ -10803,7 +11140,23 @@ mod ambient_surface_tests {
     /// makes that structural instead of incidental. A test that wants the
     /// fallback exercised calls `run_surface_to` directly with `Some(..)`.
     fn surface(writer: &mut impl Write, raw: &str) -> Result<()> {
-        run_surface_to(writer, raw, None)
+        run_surface_to(writer, raw, Wire::Claude, SurfaceFormat::Claude, None)
+    }
+
+    /// Drive a fire on a chosen wire and output form (same hermetic anchor).
+    fn surface_as(
+        writer: &mut impl Write,
+        raw: &str,
+        wire: Wire,
+        format: SurfaceFormat,
+    ) -> Result<()> {
+        run_surface_to(writer, raw, wire, format, None)
+    }
+
+    /// The root discovery resolved, for the tests that pin discovery rather than
+    /// the anchor form.
+    fn discovered_root(cwd: Option<&str>, env: Option<&OsStr>) -> Option<PathBuf> {
+        discover_surface_anchor(cwd, env).map(|(_, root)| root)
     }
 
     /// A `SurfaceRow` literal builder for terse test setup.
@@ -11132,7 +11485,7 @@ mod ambient_surface_tests {
         // The seam itself: a failing writer folds to `false`, never a panic/Err.
         let mut fail = FailWriter;
         assert!(
-            !emit_surface(&mut fail, Some("a block")),
+            !emit_surface(&mut fail, Some("a block"), SurfaceFormat::Claude),
             "write Err ⇒ not delivered"
         );
 
@@ -11224,7 +11577,7 @@ mod ambient_surface_tests {
         // test claims to exercise, and the assertion below is only meaningful if
         // it holds.
         assert_eq!(
-            discover_surface_root(unresolvable.to_str(), None),
+            discovered_root(unresolvable.to_str(), None),
             None,
             "premise: neither arm yields an anchor ⇒ no discoverable root"
         );
@@ -11254,8 +11607,7 @@ mod ambient_surface_tests {
         let (_cwd_dir, cwd_root) = marked_root();
         let (_env_dir, env_root) = marked_root();
 
-        let found =
-            discover_surface_root(Some(cwd_root.to_str().unwrap()), Some(env_root.as_os_str()));
+        let found = discovered_root(Some(cwd_root.to_str().unwrap()), Some(env_root.as_os_str()));
 
         assert_eq!(
             found,
@@ -11272,7 +11624,7 @@ mod ambient_surface_tests {
         let (_env_dir, env_root) = marked_root();
 
         for cwd in [None, Some("/nonexistent/iss220/bogus")] {
-            let found = discover_surface_root(cwd, Some(env_root.as_os_str()));
+            let found = discovered_root(cwd, Some(env_root.as_os_str()));
             assert_eq!(
                 found,
                 Some(env_root.clone()),
@@ -11289,7 +11641,7 @@ mod ambient_surface_tests {
         let bogus = "/nonexistent/iss220/bogus";
         for env in [None, Some(OsStr::new("/nonexistent/iss220/env"))] {
             assert_eq!(
-                discover_surface_root(Some(bogus), env),
+                discovered_root(Some(bogus), env),
                 None,
                 "no resolvable cwd and no resolvable env anchor ({env:?}) ⇒ None"
             );
@@ -11314,9 +11666,352 @@ mod ambient_surface_tests {
         fs::create_dir_all(&nested).unwrap();
 
         assert_eq!(
-            discover_surface_root(Some("/nonexistent/iss220/bogus"), Some(nested.as_os_str())),
+            discovered_root(Some("/nonexistent/iss220/bogus"), Some(nested.as_os_str())),
             Some(env_root),
             "the env anchor walks up to the nearest marked root, like the cwd arm"
         );
+    }
+
+    // ── SL-263: the neutral request, the three codecs, the patch reader ─────
+
+    /// EX-2: `paths_from_patch` reads every header codex 0.155.1 emits, in
+    /// order, deduped; a non-patch body yields nothing.
+    #[test]
+    fn paths_from_patch_reads_all_headers_and_dedups() {
+        let patch = "*** Begin Patch\n*** Update File: src/a.rs\n@@\n*** Add File: src/b.rs\n+x\n*** Delete File: src/c.rs\n*** Move to: src/d.rs\n*** Update File: src/a.rs\n*** End Patch";
+        let paths: Vec<String> = paths_from_patch(patch)
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(paths, vec!["src/a.rs", "src/b.rs", "src/c.rs", "src/d.rs"]);
+        assert!(paths_from_patch("not a patch\n+++ b/x\n--- a/x\n").is_empty());
+        assert!(paths_from_patch("*** Add File: \n").is_empty());
+    }
+
+    /// EX-2: the tolerant `command` reader: a string as written, an argv vector
+    /// joined with single spaces, anything else ⇒ no request.
+    #[test]
+    fn command_text_accepts_a_string_and_joins_an_argv_vector() {
+        assert_eq!(
+            command_text(&serde_json::json!("cargo test")),
+            Some("cargo test".into())
+        );
+        assert_eq!(
+            command_text(&serde_json::json!(["cargo", "test", "--all"])),
+            Some("cargo test --all".into())
+        );
+        assert_eq!(command_text(&serde_json::json!(42)), None);
+        assert_eq!(command_text(&serde_json::json!(["cargo", 7])), None);
+        assert_eq!(command_text(&serde_json::json!([])), None);
+        assert_eq!(command_text(&serde_json::json!("")), None);
+    }
+
+    /// EX-2: each codec maps its own vocabulary and rejects the others'.
+    #[test]
+    fn codecs_map_each_vocabulary_and_reject_the_unknown() {
+        let claude_path = decode(
+            Wire::Claude,
+            r#"{"tool_name":"Read","tool_input":{"file_path":"src/x.rs"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            claude_path.request,
+            Some(SurfaceRequest::Path("src/x.rs".into()))
+        );
+        let claude_bash = decode(
+            Wire::Claude,
+            r#"{"tool_name":"Bash","tool_input":{"command":"cargo test"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            claude_bash.request,
+            Some(SurfaceRequest::Command("cargo test".into()))
+        );
+
+        // codex's codec does not claim Claude's `Read`.
+        assert_eq!(
+            codex_request_from(r#"{"tool_name":"Read","tool_input":{"file_path":"x"}}"#),
+            None
+        );
+        let codex_bash = decode(
+            Wire::Codex,
+            r#"{"tool_name":"Bash","tool_input":{"command":"ls"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            codex_bash.request,
+            Some(SurfaceRequest::Command("ls".into()))
+        );
+        let codex_patch = decode(
+            Wire::Codex,
+            r#"{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            codex_patch.request,
+            Some(SurfaceRequest::Patch("*** Begin Patch\n".into()))
+        );
+
+        let neutral = decode(
+            Wire::Neutral,
+            r#"{"probe":{"class":"command","value":"cargo test"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            neutral.request,
+            Some(SurfaceRequest::Command("cargo test".into()))
+        );
+        // A class with no producer — and an empty value — yield no request.
+        let no_patch_class =
+            decode(Wire::Neutral, r#"{"probe":{"class":"patch","value":"x"}}"#).unwrap();
+        assert_eq!(no_patch_class.request, None);
+        let empty = decode(Wire::Neutral, r#"{"probe":{"class":"path","value":""}}"#).unwrap();
+        assert_eq!(empty.request, None);
+    }
+
+    fn codex_request_from(raw: &str) -> Option<SurfaceRequest> {
+        decode(Wire::Codex, raw).unwrap().request
+    }
+
+    /// EX-2: `probe_for` resolves every form — relative, absolute under the raw
+    /// (symlinked) cwd, `..`, out-of-root, and a multi-file patch fanning out
+    /// into ONE deduped path-set probe.
+    #[test]
+    fn probe_for_resolves_relative_absolute_and_out_of_root() {
+        let root = PathBuf::from("/data/repo");
+        let anchor = SurfaceAnchor {
+            raw: Some(PathBuf::from("/home/u/link")),
+            canonical: root.clone(),
+        };
+        let path_probe = |v: &str| probe_for(SurfaceRequest::Path(v.into()), &anchor, &root);
+        let rel = crate::retrieve::ScopeProbe::Paths(vec![PathBuf::from("src/x.rs")]);
+        assert_eq!(path_probe("src/x.rs"), Some((Surface::Path, rel.clone())));
+        // An absolute value under the raw (symlinked) cwd is rebased onto the
+        // canonical anchor — the F-23 fix.
+        assert_eq!(
+            path_probe("/home/u/link/src/y.rs"),
+            Some((
+                Surface::Path,
+                crate::retrieve::ScopeProbe::Paths(vec![PathBuf::from("src/y.rs")])
+            ))
+        );
+        // `..` folds lexically.
+        assert_eq!(
+            path_probe("src/a/../b.rs"),
+            Some((
+                Surface::Path,
+                crate::retrieve::ScopeProbe::Paths(vec![PathBuf::from("src/b.rs")])
+            ))
+        );
+        // Out of root ⇒ fail open.
+        assert_eq!(path_probe("/elsewhere/z.rs"), None);
+        assert_eq!(path_probe(""), None);
+
+        // A multi-file patch is ONE multi-path probe, deduped after resolution.
+        let patch = "*** Update File: src/a.rs\n*** Add File: src/b.rs\n*** Update File: /home/u/link/src/a.rs";
+        assert_eq!(
+            probe_for(SurfaceRequest::Patch(patch.into()), &anchor, &root),
+            Some((
+                Surface::Path,
+                crate::retrieve::ScopeProbe::Paths(vec![
+                    PathBuf::from("src/a.rs"),
+                    PathBuf::from("src/b.rs"),
+                ]),
+            ))
+        );
+
+        // An absent raw cwd still resolves relative values against the anchor.
+        let no_raw = SurfaceAnchor {
+            raw: None,
+            canonical: root.clone(),
+        };
+        assert_eq!(
+            probe_for(SurfaceRequest::Path("src/x.rs".into()), &no_raw, &root),
+            Some((Surface::Path, rel))
+        );
+    }
+
+    /// EX-3: the CLI defaults — a bare `memory surface` is the Claude wire and
+    /// the Claude form.
+    #[test]
+    fn bare_invocation_defaults_to_the_claude_wire_and_form() {
+        assert_eq!(Wire::default(), Wire::Claude);
+        assert_eq!(SurfaceFormat::default(), SurfaceFormat::Claude);
+        assert_eq!(Wire::from_str("codex").unwrap(), Wire::Codex);
+        assert_eq!(
+            SurfaceFormat::from_str("plain").unwrap(),
+            SurfaceFormat::Plain
+        );
+        assert!(Wire::from_str("nope").is_err());
+        assert!(SurfaceFormat::from_str("json").is_err());
+    }
+
+    /// EX-4 + VT-4: a captured codex payload decodes as the codec says — driven
+    /// by the PHASE-01 fixtures, not by a body this test authored.
+    #[test]
+    fn captured_codex_fixtures_decode_as_the_codec_says() {
+        let shell = decode(
+            Wire::Codex,
+            include_str!("../tests/fixtures/codex/shell.json"),
+        )
+        .expect("shell fixture decodes");
+        assert_eq!(
+            shell.request,
+            Some(SurfaceRequest::Command("echo hi".into()))
+        );
+        assert_eq!(shell.agent_id, None, "codex carries no agent_id");
+
+        // A shell file write is a COMMAND, not a path — the codex path-surface
+        // delta the design records.
+        let write = decode(
+            Wire::Codex,
+            include_str!("../tests/fixtures/codex/shell_write.json"),
+        )
+        .expect("shell_write fixture decodes");
+        assert!(matches!(write.request, Some(SurfaceRequest::Command(_))));
+
+        let patch = decode(
+            Wire::Codex,
+            include_str!("../tests/fixtures/codex/apply_patch_tool.json"),
+        )
+        .expect("apply_patch fixture decodes");
+        let Some(SurfaceRequest::Patch(body)) = patch.request else {
+            panic!("apply_patch must yield a Patch request");
+        };
+        assert_eq!(
+            paths_from_patch(&body),
+            vec![PathBuf::from("/tmp/codex-capture/patched.txt")]
+        );
+    }
+
+    /// VT-4: a codex `Bash` fire surfaces the command block, like Claude's.
+    #[test]
+    fn codex_wire_command_surfaces_the_command_block() {
+        let root = temp_root_seeded(
+            "Codex footgun",
+            &[],
+            &["deploy"],
+            Some("high"),
+            Some("high"),
+        );
+        let raw = serde_json::json!({
+            "session_id": "s-cx",
+            "cwd": root.path().to_string_lossy(),
+            "tool_name": "Bash",
+            "tool_input": { "command": "deploy" },
+        })
+        .to_string();
+        let mut out: Vec<u8> = Vec::new();
+        assert!(matches!(
+            surface_as(&mut out, &raw, Wire::Codex, SurfaceFormat::Claude),
+            Ok(())
+        ));
+        let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        assert!(
+            v["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .unwrap()
+                .contains("Codex footgun")
+        );
+    }
+
+    /// VT-4: the neutral wire (the pi adapter's contract) surfaces too.
+    #[test]
+    fn neutral_wire_command_surfaces_the_command_block() {
+        let root = temp_root_seeded(
+            "Neutral footgun",
+            &[],
+            &["deploy"],
+            Some("high"),
+            Some("high"),
+        );
+        let raw = serde_json::json!({
+            "session_id": "s-n",
+            "cwd": root.path().to_string_lossy(),
+            "probe": { "class": "command", "value": "deploy" },
+        })
+        .to_string();
+        let mut out: Vec<u8> = Vec::new();
+        assert!(matches!(
+            surface_as(&mut out, &raw, Wire::Neutral, SurfaceFormat::Claude),
+            Ok(())
+        ));
+        let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        assert!(
+            v["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .unwrap()
+                .contains("Neutral footgun")
+        );
+    }
+
+    /// `--format plain` emits the bare block, never the envelope (the pi
+    /// adapter's contract).
+    #[test]
+    fn plain_format_emits_the_bare_block() {
+        let root = temp_root_path_hit();
+        let raw = stdin_read(root.path(), Some("s-plain"), None, "src/x.rs");
+        let mut out: Vec<u8> = Vec::new();
+        assert!(matches!(
+            surface_as(&mut out, &raw, Wire::Claude, SurfaceFormat::Plain),
+            Ok(())
+        ));
+        let text = String::from_utf8(out).unwrap();
+        assert!(
+            text.starts_with("Doctrine memories for this file:\n"),
+            "{text}"
+        );
+        assert!(
+            !text.contains("hookSpecificOutput"),
+            "plain is not the envelope: {text}"
+        );
+    }
+
+    /// F-18 VT: a relative path reported from a subdirectory cwd resolves to the
+    /// same probe as the absolute form.
+    #[test]
+    fn subdirectory_cwd_resolves_a_relative_path_like_the_absolute_form() {
+        let root = temp_root_path_hit();
+        let canonical = fs::canonicalize(root.path()).unwrap();
+        let subdir = canonical.join("nested/deep");
+        fs::create_dir_all(&subdir).unwrap();
+
+        let rel = serde_json::json!({
+            "session_id": "s-sub-rel",
+            "cwd": subdir.to_string_lossy(),
+            "tool_name": "Read",
+            "tool_input": { "file_path": "../../src/x.rs" },
+        })
+        .to_string();
+        let abs = serde_json::json!({
+            "session_id": "s-sub-abs",
+            "cwd": subdir.to_string_lossy(),
+            "tool_name": "Read",
+            "tool_input": { "file_path": canonical.join("src/x.rs").to_string_lossy() },
+        })
+        .to_string();
+
+        let mut rel_out: Vec<u8> = Vec::new();
+        assert!(matches!(surface(&mut rel_out, &rel), Ok(())));
+        let mut abs_out: Vec<u8> = Vec::new();
+        assert!(matches!(surface(&mut abs_out, &abs), Ok(())));
+        assert!(
+            !rel_out.is_empty() && !abs_out.is_empty(),
+            "both forms surface the hit"
+        );
+        assert_eq!(rel_out, abs_out, "both forms resolve to the same probe");
+    }
+
+    /// EX-6: the tuning-log line carries the wire it fired from.
+    #[test]
+    fn tuning_log_line_carries_the_wire() {
+        let root = temp_root_path_hit();
+        let raw = stdin_read(root.path(), Some("s-wire"), None, "src/x.rs");
+        let mut out: Vec<u8> = Vec::new();
+        assert!(matches!(surface(&mut out, &raw), Ok(())));
+        let log = fs::read_to_string(state_dir_of(root.path()).join(SURFACE_LOG_FILE)).unwrap();
+        let v: serde_json::Value = serde_json::from_str(log.lines().next().unwrap()).unwrap();
+        assert_eq!(v["wire"], "claude");
+        assert_eq!(v["surface"], "path");
     }
 }

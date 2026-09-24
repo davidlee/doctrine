@@ -104,7 +104,7 @@ ConceptMapCommand::New { .. } => Write("concept-map new"),
             | MemoryCommand::Retrieve { .. }
             // Surface reads memories and writes only runtime-tier state
             // (seen-set + tuning log under .doctrine/state) — a Read op (SL-205).
-            | MemoryCommand::Surface
+            | MemoryCommand::Surface { .. }
             | MemoryCommand::ResolveLinks { .. }
             | MemoryCommand::Backlinks { .. }
             | MemoryCommand::Paths { .. } => Read,
@@ -530,7 +530,10 @@ mod tests {
     #[test]
     fn memory_surface_classifies_as_read() {
         let cmd = Command::Memory {
-            command: MemoryCommand::Surface,
+            command: MemoryCommand::Surface {
+                input: crate::memory::Wire::Claude,
+                format: crate::memory::SurfaceFormat::Claude,
+            },
         };
         assert!(matches!(write_class(&cmd), WriteClass::Read));
     }

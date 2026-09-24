@@ -1020,13 +1020,15 @@ pub(crate) fn check_retrievable(
 // no change to `run_search`/`run_retrieve`/`search_for_mcp` behaviour.
 
 /// The scope probe an ambient-surfacing caller narrows a query with — exactly
-/// the two location shapes PHASE-03's adapter has to offer (a working-tree
-/// path, or a command name), mapped onto `load_query`'s existing `paths`/
+/// the two location shapes the per-harness adapters have to offer (working-tree
+/// paths, or a command name), mapped onto `load_query`'s existing `paths`/
 /// `commands` fan (the location-probe model, design §5.5) — no new query type.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ScopeProbe {
-    /// A working-tree path — becomes the sole element of `QueryContext::paths`.
-    Path(PathBuf),
+    /// One or more working-tree paths — become every element of
+    /// `QueryContext::paths`, so a multi-file probe is ONE ranked query rather
+    /// than N probes (SL-263 §5.1). A single-path probe is the one-element case.
+    Paths(Vec<PathBuf>),
     /// A command name — becomes the sole element of `QueryContext::commands`.
     Command(String),
 }
@@ -1070,7 +1072,12 @@ pub(crate) fn retrieve_rows(
     fetch: usize,
 ) -> Result<Vec<SurfaceRow>> {
     let (paths, commands) = match probe {
-        ScopeProbe::Path(p) => (vec![p.to_string_lossy().into_owned()], Vec::new()),
+        ScopeProbe::Paths(ps) => (
+            ps.iter()
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect(),
+            Vec::new(),
+        ),
         ScopeProbe::Command(cmd) => (Vec::new(), vec![cmd]),
     };
     let Loaded {
@@ -3880,7 +3887,7 @@ weight = {weight}
         let root = temp_project_with_holdback_pair();
         let rows = retrieve_rows(
             Some(root.path().to_path_buf()),
-            ScopeProbe::Path(PathBuf::from("src/x.rs")),
+            ScopeProbe::Paths(vec![PathBuf::from("src/x.rs")]),
             10,
         )
         .unwrap();
@@ -3901,6 +3908,32 @@ weight = {weight}
         );
     }
 
+    /// SL-263 VT-3: a path-set probe admits a memory anchored on ANY one of its
+    /// paths — the engine's own multi-path merge, asked once (design §5.1) —
+    /// while a probe that misses the anchor drops it.
+    #[test]
+    fn retrieve_rows_admits_a_memory_anchored_on_any_multi_path_probe_entry() {
+        let root = temp_project_with_holdback_pair();
+        let probe = |paths: &[&str]| {
+            retrieve_rows(
+                Some(root.path().to_path_buf()),
+                ScopeProbe::Paths(paths.iter().map(PathBuf::from).collect()),
+                10,
+            )
+            .unwrap()
+        };
+        let multi = probe(&["src/other.rs", "src/x.rs"]);
+        assert!(
+            multi.iter().any(|r| r.title == "Surfaced memory"),
+            "a memory anchored on any probe path must surface: {multi:?}"
+        );
+        let single = probe(&["src/other.rs"]);
+        assert!(
+            !single.iter().any(|r| r.title == "Surfaced memory"),
+            "a probe that misses the anchor must drop it: {single:?}"
+        );
+    }
+
     /// VT-2: `severity_rank` is `pub(crate)` (reachable cross-module) and
     /// preserves the existing scale — lower rank is more severe.
     #[test]
@@ -3909,7 +3942,7 @@ weight = {weight}
     }
 
     /// `ScopeProbe::Command` threads through `load_query`/`query` the same way
-    /// `Path` does: the seeded memory is unscoped (no command facet), so a
+    /// `Paths` does: the seeded memory is unscoped (no command facet), so a
     /// scope-bearing command probe drops it (D20 — scope-bearing excludes
     /// unscoped survivors), proving the `commands` fan wiring, not just `paths`.
     #[test]
