@@ -1,0 +1,34 @@
+id    = 376
+slug  = "code-review-of-sl-261-phase-02-pipeline-split-and-crossing-mode"
+title = "code review of SL-261 PHASE-02 (pipeline split and crossing mode)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-261"
+phase = "PHASE-02"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "nit"
+title = "Entry read of design.md precedes admission on the Ordinary path (EX-4 step order), changing error precedence for a replay"
+detail = """Expected (EX-4, plan.toml PHASE-02): admit is the first pipeline step. Observed (src/commands/design.rs:1791-1810, `apply`): read_snapshot -> parse_payload -> digest -> crossing -> read_authored -> apply_pipeline, whose first step is admit. The one document read therefore precedes Admission::Resumed. At 149b16c33^ admit ran first and a Resumed submission returned WITHOUT reading design.md at all. Impact: a replay of an already-applied submission whose design.md is unreadable (non-UTF-8, permission-denied, or a directory) now exits non-zero where it previously printed "resumed submission ... already applied" and exited 0 — read_design_doc returns Err for anything but NotFound (:393-400). No write and no divergence-basis change; the read is read-only. Disclosed in .doctrine/slice/261/notes.md (Open: "The wire's single document read now precedes admission rather than following it"); phase-02 A4 chose one read path for both crossings. EX-3 mandates the read as an argument only on the Adopt path, so the Ordinary-path reorder is a choice, not a requirement."""
+disposition = "tolerated"
+response = "Conscious tradeoff, not a defect to fix in PHASE-03. The read is read-only and precedes only Admission::Resumed; no divergence basis, digest, or write path changes. One read path for both crossings is what keeps apply_pipeline single-bodied and satisfies EX-3 without a second shell read (the alternative duplicates the read and is the parallel implementation the project rules forbid). The only observable delta is error precedence on a replay whose design.md is unreadable — an already-pathological document; SPEC-029/DEC-092 promise no idempotency under a corrupted authored file. Keep as documented drift."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "Refusal::AdoptionStale.expected is Option<String> where plan PHASE-03 EX-4 names Option<Fingerprint>"
+detail = """Expected: plan.toml PHASE-03 EX-4 — "AdoptionStale carries expected: Option<Fingerprint> and is worded for --expect / absent document." Observed (src/design_run/refusal.rs:251-254): expected: Option<String> and observed: Option<String>; run.rs:892-895 only maps them to Display strings. PHASE-02 pre-empted EX-4's type half (phase-02.md A5). The design itself defers the type (design.md:483: "AdoptionStale { expected: Option<_>, observed }"), and the incumbent observed field is already Option<String>, so String harmonises with the existing refusal; the plan criterion over-specifies. Consequence: PHASE-03 EX-4 cannot be met as written without either a type change (churn) or a plan amendment. notes.md records the retype but not its divergence from EX-4's named type."""
+disposition = "design-wrong"
+response = "The plan criterion is the defect, not the code. Option<String> harmonises with the incumbent observed: Option<String> and with the design, which deliberately leaves the type open (design.md:483 Option<_>). PHASE-03 should reconcile plan.toml EX-4 instead of churning the refusal field: EX-4 text over-specifies Option<Fingerprint>. Record the erratum in notes.md alongside the existing PHASE-02 retype note so the audit does not false-red on the divergence."
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

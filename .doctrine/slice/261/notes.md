@@ -57,7 +57,7 @@ implementation code review, so no further design pass is needed.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · PHASE-02 implemented (review pending; PHASE-03 next)
+fresh-as-of: 2026-09-24 · PHASE-02 implemented and code-reviewed (RV-376; PHASE-03 next)
 
 ### Produced
 
@@ -66,6 +66,7 @@ fresh-as-of: 2026-09-24 · PHASE-02 implemented (review pending; PHASE-03 next)
 - design.md locked (run dr-01a0d098, revision 37); plan.toml PHASE-01..06.
 - ISS-477, IDE-056, ISS-478 (deferred; originate from SL-261).
 - RV-375 (code review of PHASE-01, concluded; F-1 fixed in place, F-2 → ISS-478).
+- RV-376 (code review of PHASE-02, concluded; F-1 tolerated, F-2 design-wrong — see Open).
 - PHASE-02: `run::Crossing { Ordinary, Adopt { expect } }`; pure `apply` takes `&Crossing`, caller-map check split to `refuse_invalid_markers` and run only when the wire's `adopt_authored` rides along (transitional). Shell `apply` is now the wire shell over `parse_payload` + `apply_pipeline(root, slice, PipelineInput, Stop, pre_write, fault) -> PipelineOutcome`; `AuthoredRead`/`read_authored` is the one read (also used by `start` and `read_authored_fingerprint`); report lines factored to `applied_lines`.
 - PHASE-01: `RetiredKey`/`RETIRED_KEYS` (empty) + `retired_from` identity match in payload_contract; `Refusal::RetiredPayloadKey`; roster threaded through the contract_check walk via a private `refuse_unknown_keys_against`; `render_prompt_against`/`render_json_against` list retired rows after live rows (JSON member only when non-empty, so the published contract is byte-unchanged); VT-2 pins in design_run/tests.rs.
 
@@ -80,7 +81,8 @@ fresh-as-of: 2026-09-24 · PHASE-02 implemented (review pending; PHASE-03 next)
 
 ### Open
 
-- Plan erratum (PHASE-02 EX-5/VA-1): the pure `run::apply` tests live in `run.rs` `mod tests`, not `src/design_run/tests.rs`; the permitted mechanical `&Crossing::Ordinary` additions (18) landed there. Deviations: `apply_pipeline` also takes `prior` (keeps snapshot-before-parse error precedence; PHASE-03 reads the snapshot once) and params are bundled in `PipelineInput` (clippy arity); `AdoptionStale` retyped to `expected: Option<String>` now (EX-4's type half pulled forward from PHASE-03; wording unchanged for `Some`). The wire's single document read now precedes admission rather than following it.
+- Plan erratum (PHASE-02 EX-5/VA-1): the pure `run::apply` tests live in `run.rs` `mod tests`, not `src/design_run/tests.rs`; the permitted mechanical `&Crossing::Ordinary` additions (18) landed there. Deviations: `apply_pipeline` also takes `prior` (keeps snapshot-before-parse error precedence; PHASE-03 reads the snapshot once) and params are bundled in `PipelineInput` (clippy arity); `AdoptionStale` retyped to `expected: Option<String>` now (EX-4's type half pulled forward from PHASE-03; wording unchanged for `Some`). The wire's single document read now precedes admission rather than following it (RV-376 F-1; adjudicated tolerated — read-only, no divergence basis or write path changes, one read path for both crossings).
+- Plan erratum (PHASE-02 / RV-376 F-2): plan.toml PHASE-03 EX-4 names `AdoptionStale.expected: Option<Fingerprint>`, but PHASE-02 landed `Option<String>` (harmonised with the incumbent `observed: Option<String>` and design.md:483's deliberate `Option<_>`). Reconcile by amending EX-4's text, not the refusal field (RV-376 F-2, design-wrong).
 - PHASE-03: run.rs's test `payload(prior)` helper is `ApplyRequest::bare` in all but name — promote it rather than writing a second.
 
 - SPEC-029 revision (PHASE-06; user approval owed).
