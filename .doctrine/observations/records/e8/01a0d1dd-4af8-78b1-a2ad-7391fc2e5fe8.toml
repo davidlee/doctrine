@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d1dd-4af8-78b1-a2ad-7391fc2e5fe8"
+recorded_at = "2026-09-24T05:22:15.928197666Z"
+kind = "friction"
+summary = "phase-plan SL-261 PHASE-04: sheet reading list drifted from the tree it cited"
+detail = "Worker: adoption_lines cited at :2226, actually :2271 (PHASE-03 landed between planning and cite); sheet cited design 'sec-7 Diff size' but the locked design's risk is under Verification/Risks, not a sec-7 heading. Line numbers in a sheet authored against a moving tree cost worker lookup time."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

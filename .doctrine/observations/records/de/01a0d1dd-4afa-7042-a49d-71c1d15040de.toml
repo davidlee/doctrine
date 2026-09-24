@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d1dd-4afa-7042-a49d-71c1d15040de"
+recorded_at = "2026-09-24T05:22:15.930781268Z"
+kind = "friction"
+summary = "phase-plan SL-261 PHASE-04: EX-1 verification grep not literal-safe"
+detail = "Sheet said 'grep -rn similar src/ hits only commands/design.rs'; English-word hits (dissimilar_text, check_similar_node_label, clippy similar_names) make it unreadable literally. Should have been 'grep -rn similar:: src'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
