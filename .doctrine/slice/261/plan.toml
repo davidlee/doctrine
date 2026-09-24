@@ -77,7 +77,7 @@ exit_criteria = [
   { id = "EX-1", text = "DesignCommand::Adopt(AdoptArgs { slice, path, expect, dry_run }) and run_adopt. --diff is not added until PHASE-04." },
   { id = "EX-2", text = "run_adopt order: read snapshot, read document once, aligned test (with --expect absent or equal) → no-op line and exit 0 with nothing written, refuse_adoption_at(stage), then apply_pipeline with ApplyRequest::bare (run uid and revision from the snapshot, submission id adopt-<uuidv7>)." },
   { id = "EX-3", text = "refuse_adoption_at is one pure predicate in design_run::run, called by the shell and as the pure core's backstop. Refusal::AdoptionLocked names the regression and the reconcile direct-edit path." },
-  { id = "EX-4", text = "AdoptionStale carries expected: Option<Fingerprint> and is worded for --expect / absent document." },
+  { id = "EX-4", text = "AdoptionStale carries expected: Option<String> (retyped in PHASE-02, beside observed: Option<String>; RV-376 F-2) and is worded for --expect / absent document." },
   { id = "EX-5", text = "Report: header with the full fingerprint (adopted … at revision N, or dry run — would adopt …; nothing written), the core's change rows, an unchanged line, a reordered line when order moved, and a head line when the document has a whitespace-only head (RV-374 F-2)." },
   { id = "EX-6", text = "--dry-run returns at Stop::AfterCandidate: snapshot, journal and watermark byte-identical afterwards." },
 ]
