@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0d322fd7879e1a7d4864c601a7275"
+memory_key = "mem.pattern.lint.shadow-unrelated-new-binding"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Repo clippy denies shadow_unrelated — a new outer binding can collide with an existing closure parameter"
+summary = "`clippy::shadow_unrelated` is denied for the `doctrine` bin: introducing `let declared = …` in a function that already has a closure `|declared| …` fails the build; rename the new binding."
+created = "2026-09-24"
+updated = "2026-09-24"
+
+[scope]
+paths = []
+globs = ["src/**/*.rs"]
+commands = ["check"]
+tags = ["clippy", "lint", "rust", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "61ca55d753beb38634787b2d32ac5a4383bc4ab0"
+tree = "022cddadce39829895e656bed8ec24aaf04b782d"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "61ca55d753beb38634787b2d32ac5a4383bc4ab0"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
