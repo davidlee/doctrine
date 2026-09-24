@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0d368625b76b0a42e20968f7ef195"
+memory_key = "mem.pattern.tests.design-prompts-consumer-allowlist"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Reading install/design-prompts makes a crate an allowlisted consumer"
+summary = "Any new file mentioning `design-prompts` (e.g. an e2e `include_str!`) fails `e2e_claude_install`'s consumer gate until added to its allowlist."
+created = "2026-09-24"
+updated = "2026-09-24"
+
+[scope]
+paths = ["tests/e2e_claude_install.rs", "install/design-prompts/**"]
+globs = []
+commands = []
+tags = ["tests", "install", "design-prompts", "gate"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f09696162d9eb6246935c51d136d3a29e5229805"
+ref_name = "refs/heads/edge"
+checkout_state_id = "c54ce509cd66c13baead176351e097635c09430aaf7d9302aeea582602ca2e50"
+base_commit = "fe1b986f37668e14405380dea9d6cd39a78d2df8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+

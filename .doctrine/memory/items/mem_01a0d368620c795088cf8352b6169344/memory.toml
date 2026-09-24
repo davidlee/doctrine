@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0d368620c795088cf8352b6169344"
+memory_key = "mem.pattern.tests.design-run-squatted-minted-id"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Design-run e2e: a minted submission id cannot be pre-squatted by the binary"
+summary = "A ready payload's minted `advance-<to>-r<rev>` id can only be pre-squatted by seeding the receipt; any same-id submission at that revision advances it."
+created = "2026-09-24"
+updated = "2026-09-24"
+
+[scope]
+paths = ["tests/e2e_design_*.rs", "src/design_run/snapshot.rs"]
+globs = []
+commands = []
+tags = ["design-run", "tests", "submission-id", "e2e"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "fe1b986f37668e14405380dea9d6cd39a78d2df8"
+tree = "f09696162d9eb6246935c51d136d3a29e5229805"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "fe1b986f37668e14405380dea9d6cd39a78d2df8"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
