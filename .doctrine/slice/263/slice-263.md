@@ -77,7 +77,7 @@ format + seen-set/log IO). No new retrieval logic.
   harness name and the pipeline is called once, unchanged. The `apply_patch`
   reader's contract is then neutral: *patch text → root-relative paths*.
 - **Governance leg (in scope; drafted after design locks, applied at reconcile).**
-  This slice also closes the two governance gaps research `F1`/`F4` surfaced —
+  This slice also closes the governance gaps research `F1`/`F4` surfaced —
   deliberately *after* the port's design locks, so the governance text is drafted
   against a locked design rather than ahead of it. Sequencing (user ruling,
   2026-09-24): `/design` locks → mint a REV placeholder → draft any time → apply
@@ -94,6 +94,14 @@ format + seen-set/log IO). No new retrieval logic.
     **concise pointers** (`[triage] title — uid`), never memory bodies, delivered
     at the moment of demand (a tool call keyed on the path or command) rather
     than carrying memory payload *ahead of* demand.
+  - **A `SPEC-011` revision** covering the pi/codex boot sector this slice grows.
+    `SPEC-011`'s responsibilities stop at *"doctrine's owned **Claude** hook
+    SET"*; its members (REQ-185/186/476/477) govern the Claude settings merge
+    only, so `install_codex_hook` and the pi extension generators are
+    requirement-dark (research `F4`). The revision (a REV of SPEC-011, not a new
+    spec) adds the codex hook registry and the generated pi extensions to the
+    installer's governed surface. User ruling (2026-09-24): dealt with at
+    reconcile with the other two.`
 
 ## Non-Goals
 
@@ -128,6 +136,9 @@ format + seen-set/log IO). No new retrieval logic.
 - `.doctrine/policy/` — **POL-003** (authored from `IDE-034`), after design locks.
 - `.doctrine/spec/product/004/` + a REV — the **PRD-004** reconciliation, applied
   at reconcile.
+- `.doctrine/spec/tech/011/` + a REV — the **SPEC-011** revision extending its
+  responsibilities/members to the codex hook registry and the generated pi
+  extensions, applied at reconcile.
 - `tests/**` — hook envelope emission per format; installer goldens.
 - Behaviour-preservation gate: the existing memory + retrieve + boot suites stay
   green unchanged.
@@ -197,9 +208,4 @@ format + seen-set/log IO). No new retrieval logic.
   the modelling is orthogonal to this port.
 - **Subagent surfacing on pi/codex** — the `INV-3` parity gap left open by
   OQ-3, if tightening proves worthwhile.
-- **A requirement covering the codex hook registry and the generated pi
-  extensions.** SPEC-011's members (REQ-185/186/476/477) stop at the Claude
-  settings merge; `install_codex_hook` and the pi extension generators have no
-  requirement (research `F4`). Lighter than the two governance gaps this slice
-  closes; candidate REV of SPEC-011 rather than a new spec.
 - **Cursor** (`IMP-245`).
