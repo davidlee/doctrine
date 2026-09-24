@@ -1,0 +1,1 @@
+Narrows DEC-124's envelope clause and states the turn envelope's compatibility rule.

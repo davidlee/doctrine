@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 293
+slug = "forward-rows-are-no-drop-and-ride-every-projection"
+title = "Forward rows are no-drop and ride every projection"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-290 adds TurnEnvelope::forward; REQ-424/REQ-437 require named projection limits and signalled omission; resume renders a runbook_section outside the envelope."
+choice = "forward is no-drop (outside the eviction ladder, like contract_pointer). Its named limit is a constant derived from the runbook step count and Condition::ALL, not hand-picked; the bounding fixture adds a maximal-unmet run. JSON serialises it; show --format prompt renders the header plus every row; status renders one summary line; resume renders the full rows and they replace runbook_section. The discharged-history lines leave resume (change log and --full keep them); a stale discharge shows as a marker on its outstanding forward row. The contracts receipt stays (DEC-124)."
+alternatives = ["Evictable forward rows, tail-first with an omitted counter — weakens the slice's point for little budget"]
+rationale = "forward is bounded by the binary, not by the run, so the ladder has nothing to gain by holding it; one row family replaces resume's out-of-envelope runbook row."
+consequences = ["resume output changes: runbook_section removed", "bounds.rs gains a derived forward limit; bounding fixture extended"]
+decided_by = "user"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-262"

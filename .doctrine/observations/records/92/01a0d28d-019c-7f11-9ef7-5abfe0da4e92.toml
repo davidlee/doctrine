@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d28d-019c-7f11-9ef7-5abfe0da4e92"
+recorded_at = "2026-09-24T08:34:11.48405601Z"
+kind = "friction"
+summary = "[design; SL-262] disposing an inquiry takes three refusals to discover"
+detail = "Tried inq- subject with lifecycle+resolution, then dispose: each refused as 'inert at inq-, honoured for fnd-/cp-'. The lawful shape is a separate cp- subject with disposes=inq-N; neither the contract listing nor the inquiry fragment says so."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

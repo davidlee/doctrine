@@ -24,21 +24,26 @@ fetchable*. Two remain, and both are this slice:
 
 Make the envelope carry the turn, not only the state:
 
-1. **Derive the next move** from run state — runbook step outstanding at the
-   cursor, else the forward stage advance, else nothing (locked). Name the act
-   that discharges it.
-2. **Render the forward edge's unmet conditions** — for the run's single
-   outbound forward edge (`gate::Advance::from_stage`), which conditions of
-   `cumulative_conditions(to)` are not yet satisfied, each with its discharging
-   act from the `SL-244` contract table.
-3. **Settle `next_obligation`'s fate.** It is stored-but-derivable, which the
-   storage rule argues against (derived data is computed, not persisted). The
-   likely shape is: derive at render time and delete the stored field — design
-   decides. A closed vocabulary where the envelope today renders elided prose is
-   an envelope wire change under `DEC-064` (one structured turn envelope),
-   recorded as such (`notes.md:2164` of `SL-233`).
-4. Guidance (hymn, stage fragments) points at the new envelope rows rather than
-   at source.
+1. **Derive the forward edge** (`DEC-290`) — a derived `forward` field on
+   `TurnEnvelope`: the run's single outbound edge (`gate::Advance::from_stage`),
+   its outstanding runbook steps in order, then its unmet conditions of
+   `cumulative_conditions(to)` with causes and `Contract::remedy()`. The first
+   row is the next act; with nothing outstanding it reads `ready` and carries a
+   serialised `StageDeclaration`. `None` only at `locked`.
+2. **Delete `next_obligation`** from `RunHeader` and `TurnEnvelope`; envelope
+   version → 2 under the compatibility rule of `DEC-291`, which also narrows
+   `DEC-124`'s envelope clause to "no contract prose".
+3. **One observed-facts builder** (`DEC-292`) — `Observed` (authored
+   fingerprint, observed facts, observed review, runbook) built once in the shell
+   for apply and every envelope read; `satisfied` / `forward_unmet` take it;
+   `advance` delegates to `forward_unmet`.
+4. **Placement** (`DEC-293`) — `forward` is no-drop with a derived named limit;
+   JSON, `show --format prompt`, status (one line) and `resume` carry it; it
+   replaces `resume`'s out-of-envelope `runbook_section`.
+5. **Disclosure** (`DEC-294`) — the forward line names the runbook checks a
+   read did not run (`STD-003`).
+6. Guidance — one line in `install/hymns/stage/design.md`, and the design
+   skill's activation step, point at `forward`.
 
 ## Non-Goals
 
@@ -55,24 +60,29 @@ Make the envelope carry the turn, not only the state:
 - `src/design_run/render/envelope.rs` — projection and render
 - `src/design_run/gate.rs` — condition evaluation for the forward edge
 - `src/commands/design.rs` — envelope assembly for `show --format prompt` (`DEC-261`) and `resume`
+- `src/design_run/run.rs` — `DerivedInput` / `Observed`; `src/design_run/bounds.rs` — forward limit
 - `install/hymns/stage/design.md`, `install/design-prompts/**`
 - `tests/e2e_design_*.rs`
 
 ## Risks, assumptions, open questions
 
-- **Assumption:** every gate condition is evaluable without a write, so a
-  forward look is a pure function of the snapshot plus observed facts. Check
-  against the conditions that bind observed-fact fingerprints.
-- **Open:** does a next-move row belong in every envelope projection (compact /
-  `--full` / json), and what is its elision class under `DEC-064`'s byte budget?
+- **Checked:** every gate condition is evaluable without a write — `satisfied`
+  reads only the snapshot plus `authored_fingerprint`, `observed_facts`,
+  `observed_review` (`gate.rs:1382`, `:1442`, `:1609`); runbook standing reads
+  asset digests. The forward look is pure over `Observed` (`DEC-292`).
+- Settled: placement and elision class — `DEC-293`.
 - **Risk:** snapshot schema change for a persisted field — in-flight runs carry
   `next_obligation: null`; removal must deserialize old snapshots.
 
 ## Verification / closure intent
 
-- e2e: a run whose runbook is discharged names the stage advance as the next
-  move; an unmet forward condition renders with its discharging act; a locked
-  run names nothing.
+- e2e: a run whose runbook is discharged and conditions met reads `ready` with
+  the stage payload; an outstanding step and an unmet forward condition render
+  with their discharging acts; a locked run carries no `forward`; the exploring
+  edge names its skipped check.
+- Envelope golden at version 2 without `next_obligation`; bounding fixture
+  covers a maximal forward set; `resume` carries no `runbook_section`.
+- Old snapshots carrying `next_obligation: null` still deserialise.
 - No stored field without a writer remains for `next_obligation`.
 - Closes `IMP-390` (remaining faces); `IMP-367` updated for the disposition.
 

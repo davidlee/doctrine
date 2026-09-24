@@ -1,0 +1,1 @@
+The turn envelope replaces the writerless `next_obligation` with a derived `forward` field describing the run's single outbound forward edge.

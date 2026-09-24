@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d275-f6c5-7170-b1eb-c96eabd3ad35"
+recorded_at = "2026-09-24T08:09:01.381655733Z"
+kind = "friction"
+summary = "[design; SL-262] applying research's own scope delta invalidates the research baseline"
+detail = "research.md delta 1 recommended a scope wording fix; committing it (47b7a0338) drifted baseline.toml, so explore.research refused until a --restamp with no research change. Baseline hashes the scope it is meant to inform."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 294
+slug = "forward-line-names-the-checks-a-read-skipped"
+title = "Forward line names the checks a read skipped"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Reads run no runbook verifiers; advance re-runs every verified step's check (EX-11), so a forward row reading ready can still be refused on a regressed step."
+choice = "When the forward edge holds live discharges of steps that carry a verify, the forward header line names them: 'advance re-runs N check(s) not run on this read: <step ids>'. Derived from the runbook asset's verify entries crossed with live discharges; silent when there are none."
+alternatives = ["Run verifiers on every read — spawns subprocesses and makes reads impure", "Say nothing — violates STD-003"]
+rationale = "Discloses exactly what the read did not check, from existing data, at no read cost."
+consequences = []
+decided_by = "user"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-262"

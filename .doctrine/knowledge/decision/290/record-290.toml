@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 290
+slug = "envelope-carries-the-forward-edge-derived"
+title = "Envelope carries the forward edge, derived"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "TurnEnvelope.next_obligation had no writer and always rendered none; agents learned what the next advance required by being refused (IMP-390)."
+choice = "Delete RunHeader::next_obligation and TurnEnvelope::next_obligation. Add TurnEnvelope::forward: Option<Forward>, None only at Locked. Forward = {from, to, runbook: cursor step with its text (EX-14: only the cursor step carries prose) plus ids of the other outstanding and stale steps, unmet: [{condition, causes, remedy}], unchecked, ready}. Rows render runbook before conditions — the order advance checks them — so the first row is the next act. With nothing outstanding it reads ready and carries a serialised StageDeclaration { to } as the payload. Every part derives from code or the existing runbook asset: Advance::from_stage, Condition::as_str, Cause Display, Contract::remedy, and a forward_unmet evaluation extracted from advance that advance then calls. (Amended 2026-09-24 in drafting, user-accepted: step text at cursor only, per EX-14.)"
+alternatives = ["A: keep next_obligation as derived prose — no wire change, but prose for JSON and a second field still needed for unmet conditions", "C: a single priority-picked next move plus a separate unmet list — two fields and a priority rule, and it either proposes a refused advance or grows a fourth variant that is B"]
+rationale = "One field answers both the next move and what the edge still needs; never proposes an advance the gate refuses; no hand-kept literal — the ready payload is the serialised type."
+consequences = ["JSON key next_obligation removed — a wire change under the compatibility rule settled at inq-2", "runbook standing moves onto TurnEnvelope, so show --format prompt and JSON gain it (not only resume)", "PRD-019 REQ-414 wording ('persisted run state') needs a revision to 'derived from run state'"]
+decided_by = "user"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "forward edge on the one turn envelope"
+target = "DEC-064"
+
+[[relation]]
+label = "shapes"
+target = "SL-262"

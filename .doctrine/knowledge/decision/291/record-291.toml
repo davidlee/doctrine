@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 291
+slug = "envelope-carries-forward-status-compatibility-rule"
+title = "Envelope carries forward status; compatibility rule"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-124 ruled 'the envelope gets nothing new', rejecting contract prose on the envelope against its byte ceiling, and held IMP-390's gate-condition face discharged by the refusal. DEC-290 puts one line per unmet forward condition on the envelope. No accepted DEC states the envelope's compatibility rule."
+choice = "Narrow DEC-124's envelope clause to 'no contract prose on the envelope': the forward edge's live status — condition token, causes, remedy() line — rides the envelope. DEC-124's refusal, stage-entry receipt and per-condition addressing stand unchanged. Compatibility rule for TURN_ENVELOPE_VERSION: adding a key is additive, no bump; removing a key or changing an existing key's type or meaning bumps the version. Removing next_obligation (DEC-290) bumps it to 2."
+alternatives = ["Supersede DEC-124 with a restatement — restates three standing choices to change one", "Argue no conflict — not honest; DEC-124 says nothing new", "A 'never populated, removable without bump' exception — makes the rule history-dependent"]
+rationale = "A refusal is learned only by attempting the advance; status is a line per unmet condition, not the prose DEC-124 priced against the ceiling. A mechanical version rule costs one constant and one golden line."
+consequences = ["envelope forward rows need a named projection limit (inq-4, REQ-437)", "TURN_ENVELOPE_VERSION = 2 with SL-262", "IMP-390 gate-condition face is discharged by the forward look, not by the refusal alone"]
+decided_by = "user"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "narrows DEC-124's envelope clause to no contract prose"
+target = "DEC-124"
+
+[[relation]]
+label = "shapes"
+target = "SL-262"

@@ -12,7 +12,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/design_run/snapshot.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/design_run/render/**"
@@ -20,15 +20,15 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/design_run/gate.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/design.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "install/hymns/stage/design.md"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "install/design-prompts/**"
@@ -36,7 +36,43 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "tests/e2e_design_*.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/run.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/render/envelope.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/render/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/runbook.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/tests.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/design/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_design_show_golden.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_design_projection.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_claude_install.rs"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"

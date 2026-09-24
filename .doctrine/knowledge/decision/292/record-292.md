@@ -1,0 +1,1 @@
+The gate's shell-observed inputs become a named struct built by one shell function, shared by apply and every envelope read.

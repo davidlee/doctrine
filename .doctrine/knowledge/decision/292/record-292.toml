@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 292
+slug = "one-observed-facts-builder-for-apply-and-read"
+title = "One observed-facts builder for apply and read"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-24"
+updated = "2026-09-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-290's forward look evaluates gate conditions on reads. satisfied() reads four shell facts — authored fingerprint, observed facts, observed review, runbook facts — which today only apply assembles (inline, design.rs:2091). Observed facts fail closed, so a read that skipped them would render false unmet rows."
+choice = "Extract GateFacts { authored_fingerprint, observed_facts, observed_review, runbook }, embedded in DerivedInput as its gate field. One shell builder gate_facts(root, slice, run, authored_fingerprint, declared_disposition) serves both paths: apply passes the fingerprint it already holds and the payload's disposition; a read reads the fingerprint and passes None, using the stored act. satisfied, advance and the new forward_unmet take &GateFacts; envelope::project gains &GateFacts. (Amended 2026-09-24 in drafting, user-accepted: named GateFacts not Observed, avoiding a stutter with gate::ObservedFacts; the RV read is NOT shared with outstanding_by_severity — the lamp fails loud while the gate reads absence as refusal, and sharing would couple them.)"
+alternatives = ["Reuse DerivedInput whole on reads — half its fields meaningless on a read, and satisfied keeps taking more than it reads", "Compute the forward look in the shell outside project() — violates DEC-064, repeating resume's out-of-envelope runbook row"]
+rationale = "One builder, no parallel read-path assembly; the gate's input narrows to what it reads; a fact a read cannot observe renders unmet with its cause, the same answer advance gives."
+consequences = ["every envelope projection pays two small reads + hashes", " and an RV read once a conducted review is disposed", "apply-only fields (verifications / section digests / authored sections / declaration fingerprint) stay on DerivedInput"]
+decided_by = "user"
+decided_on = "2026-09-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-262"
