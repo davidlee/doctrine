@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d200-7dfd-7301-8ffa-721a47969d45"
+recorded_at = "2026-09-24T06:00:42.749463603Z"
+kind = "friction"
+summary = "code-review: mcpScript cannot reach the doctrine MCP server (server_backoff) while the directly-exposed tools work"
+detail = """Attempted to batch the four review_dispose calls through mcpScript with tools.call("doctrine_review_dispose", ...). Every call returned {ok:false, error:{code:server_backoff, message:'Server "doctrine" not available (last failed 0s ago)'}}, yet doctrine_review_dispose invoked as a direct tool immediately afterwards succeeded. The scripted path for MCP batching is unusable for the doctrine server, so sequential direct calls were the only option."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

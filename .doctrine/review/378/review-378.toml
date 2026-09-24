@@ -1,0 +1,53 @@
+id    = 378
+slug  = "code-review-of-sl-261-phase-05-retire-adopt-authored"
+title = "code review of SL-261 PHASE-05 (retire adopt_authored)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+concluded = true
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-261"
+phase = "PHASE-05"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Act-ordinal doc comments now overcount by one after adopt_authored left ApplyRequest"
+detail = """Expected: the ordinal labels on the writer-act constants track the act fields `adopt_authored` was removed from (the phase sheet's A6 rule is "counts move by exactly one"). Observed at `src/design_run/submission.rs:1039` `WRITER_ACT_DISCHARGE` is "The seventh act", `:1046` `WRITER_ACT_REVIEW_POLICY` "The eighth act", `:1050` `WRITER_ACT_CHECKPOINT_ACT`/`WRITER_ACT_AGENT_DECLARATION` "The ninth and tenth acts". Those ordinals count `ApplyRequest`'s act fields (submission.rs:1257+, `envelope` flattened aside), which were ten and are nine after this phase deleted the `adopt_authored` field; after the deletion `discharge` is the sixth, `review_policy` the seventh, `checkpoint_act`/`agent_declaration` the eighth and ninth, and there is no tenth act at all. Evidence the ordinals were positional, not frozen provenance: at HEAD the field order was adopt_authored(1) traversal(2) stage(3) acceptance(4) declare(5) delegation(6) discharge(7) review_policy(8) checkpoint_act(9) agent_declaration(10) — matching the labels exactly. The diff's own count edits (WRITER_ACTS 9→8, ACT_KEYS 10→9, contract 13→12 keys) renumbered every other count but not these. Fix is either to renumber (sixth/seventh/eighth and ninth) or to mark the ordinals explicitly historical."""
+disposition = "fix-now"
+response = """Fixed while the phase is still hot. Delete the drift-prone positional ordinal from the three writer-act doc comments (src/design_run/submission.rs:1039/1046/1050): "The discharge act (SL-233 PHASE-16)", "The review-policy act (SL-244 PHASE-03, DEC-073)", "The checkpoint and agent-declaration acts (SL-244 PHASE-05, DEC-121)". The ordinals counted ApplyRequest's act fields and moved with adopt_authored's removal; naming the act instead leaves nothing to drift on the next addition or retirement. Doc-only: cargo fmt + clippy --bin doctrine clean, e2e_design_delegation 225 passed, e2e_design_state 281 passed, doctrine check gate exit 0."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = """refuse_unknown_keys_against's doc still justifies its test seam with a false premise ("while RETIRED_KEYS is empty")"""
+detail = """Expected: a doc comment that describes the code as it now is. Observed `src/design_run/contract_check.rs:63-64`: "the one seam a test reaches with a roster of its own while [`RETIRED_KEYS`] is empty". This phase populated `RETIRED_KEYS` (`src/design_run/payload_contract.rs:1525-1529`), so the premise is false. The phase sheet A9 updated only the neighbouring test-local `ROSTER` doc (`:447-449`, which now correctly states the real roster "cannot prove the owner-identity rule on a non-root owner: its own row retires from the root"); this second, older justification for the same seam was missed. The fix is to state the remaining reason — the real roster's single row retires from the root, so a non-root-owner case needs a roster of its own."""
+disposition = "fix-now"
+response = """Fixed. src/design_run/contract_check.rs:63 now reads: "the seam a test reaches with a roster of its own. RETIRED_KEYS's single row retires from the root, so the non-root-owner and never-known cases need one the test owns." The false "while RETIRED_KEYS is empty" premise is gone; this complements the neighbouring ROSTER doc that A9 already updated. cargo fmt + clippy clean, gate exit 0."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "A2's parser-readout oracle drops its third conjunct: the head: line is never asserted"
+detail = """Expected (phase sheet A2, orchestrator decision D1): the parser-readout oracle is "no section_fingerprint_changed row, its unchanged line lists every declared id, and it carries the head: line". Observed: both call sites assert only the first two conjuncts — `tests/e2e_design_state.rs` (`parser_readout` at :276, asserted at :2470-2480 and :2589-2598) and `tests/e2e_design_materialise.rs` (`parser_readout` at :185, asserted at :317-330). The `head: N whitespace-only lines before sec-1 ...` line the probe's own doc comment describes is never checked. Honest scope: this is not a coverage gap in the byte-exactness proof — a document that was never diverged short-circuits to the aligned no-op and emits no `unchanged` line, so the set-equality already fails and the probe cannot silently degrade to a no-op. The head line is asserted where it belongs, in PHASE-03's `adopt_discloses_a_whitespace_head` (`tests/e2e_design_state.rs:3112`). The gap is only that the oracle as written in A2 is not the oracle as implemented; either add the assertion or amend A2."""
+disposition = "fix-now"
+response = """Fixed. Both parser_readout helpers now self-check the third A2 conjunct: they assert report.contains("head: ") after the forced whitespace-head dry run (tests/e2e_design_state.rs:276, tests/e2e_design_materialise.rs:185), so every call site inherits the A2 oracle verbatim rather than two-thirds of it. The probe's byte-exactness proof was never weakened, as the finding notes. e2e_design_state 281 passed, e2e_design_materialise 226 passed, gate exit 0."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "unchanged_ids is duplicated verbatim across the two e2e suites though it is a pure report parser"
+detail = """Expected (project standard: DRY, no parallel implementations; A3 sanctions per-suite duplication only for the fixture-bound probe, "the two-suite duplicate is the floor"). Observed: `unchanged_ids` — an 8-line pure function of the report string — is byte-identical in `tests/e2e_design_state.rs:296-302` and `tests/e2e_design_materialise.rs:194-200` (only the `BTreeSet` path spelling differs). It is not fixture-bound, so A3's exception does not reach it. `tests/common/mod.rs` is the existing home for exactly this kind of shared pure helper (`sha256` at :37, `marker_free_base` at :80). The fixture-bound `parser_readout` per suite (state :276, materialise :185) is correctly duplicated."""
+disposition = "fix-now"
+response = "Fixed. unchanged_ids moved to tests/common/mod.rs (single source, alongside sha256 — the same de-duplication precedent the module's own doc records for SL-233 PHASE-16); both suites call common::unchanged_ids and the two local copies are deleted. The module's #![allow(dead_code, unused_imports)] already covers the shared-helper case. Test-only; both suites green, gate exit 0."
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

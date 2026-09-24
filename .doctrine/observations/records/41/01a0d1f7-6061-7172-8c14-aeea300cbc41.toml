@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d1f7-6061-7172-8c14-aeea300cbc41"
+recorded_at = "2026-09-24T05:50:45.345181852Z"
+kind = "friction"
+summary = "SL-261 PHASE-05 sheet: the count rule and the prose-count cascade"
+detail = "A6 said 'Counts move by exactly one. Any other count change: STOP', and enumerated only the three semantic counts (WRITER_ACTS 9->8, delegation table 9->8, ACT_KEYS 10->9). Removing one struct (AdoptAuthored) also invalidated six further prose/test count claims in the same files: 'eleven contract-bearing structs'->ten, 'twelve closure structs'->eleven, 'thirteen rows'->twelve, 'twenty-five described types'->twenty-four, 'the twelfth closure struct'->eleventh, 'eleven contracts'->ten, plus 'other nine'/'the eight'->eight/seven. The STOP rule as written would have forbidden the mechanically-required update; the only safe reading is that 'counts move by exactly one' scopes the deltas, not the number of sites. Cost: had to re-derive which of ~8 prose counts were load-bearing versus incidental."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

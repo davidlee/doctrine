@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d200-71d2-7270-a2eb-9d38fca4c132"
+recorded_at = "2026-09-24T06:00:39.634222293Z"
+kind = "friction"
+summary = "code-review: review new --target rejects the <ref>@PHASE-NN spelling its own records display"
+detail = 'RV-375/RV-376 store target = "SL-261@PHASE-01"/"SL-261@PHASE-02" in their TOML, so I passed --target SL-261@PHASE-05 and got DANGLING_REF: Target not found. The accepted spelling is --target SL-261 --phase PHASE-05. --help documents --phase, so this cost one failed call; the trap is that the canonical stored/displayed target is not an accepted input for the verb that writes it.'
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
