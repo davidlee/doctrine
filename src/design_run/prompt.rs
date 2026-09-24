@@ -158,7 +158,7 @@ impl Condition {
 /// whole payload (design `sec-5`, DEC-122/DEC-123/DEC-124).
 ///
 /// **Pure.** The caller reads the narrative assets and hands them over, which
-/// is the split [`super::runbook::Runbook::section`] already makes: Doctrine
+/// is the split the envelope's forward edge makes over the runbook: Doctrine
 /// reads, the leaf renders. It is also what keeps the rendering assertable
 /// without a disk.
 ///

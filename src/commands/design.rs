@@ -2477,9 +2477,29 @@ fn baseline(run: &DesignSnapshot, declared: Option<u64>) -> u64 {
 /// about a ledger the run only names — never state the run stores (SL-244
 /// `EX-1`). A stored count would be stale on the next `design show`, which is the
 /// surface the lamp exists for.
+///
+/// The gate's facts are observed here too, through the one builder `apply` uses
+/// (DEC-292), so the envelope's forward edge evaluates what `apply` would. A
+/// read declares no review disposition: the stored act is the one judged.
 fn project(root: &Path, run: &DesignSnapshot, known: u64, detail: Detail) -> Result<TurnEnvelope> {
-    envelope::project(run, known, detail, outstanding_by_severity(root, run)?)
-        .map_err(|refused| refusal(&refused))
+    let slice = run.run.slice;
+    let facts = gate_facts(
+        root,
+        slice,
+        run,
+        read_authored_fingerprint(root, slice)?,
+        None,
+    )?;
+    let slice_ref = crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice);
+    envelope::project(
+        run,
+        known,
+        detail,
+        outstanding_by_severity(root, run)?,
+        &facts,
+        &slice_ref,
+    )
+    .map_err(|refused| refusal(&refused))
 }
 
 /// The run's own pass, counted by severity — `review`'s answer in the leaf's
@@ -2810,34 +2830,11 @@ fn run_resume(args: ResumeArgs) -> Result<()> {
     let mut lines = envelope::resume(&turn);
     lines.extend(fragment_lines(&run, &args.known_fragment));
     lines.extend(fragment_section(&run, &args.known_fragment)?);
-    lines.extend(runbook_section(&run)?);
-    // Last: the largest optional payload rides at the tail, and the three
-    // incumbent sections stay byte-identical, which is the cheaper diff to
-    // audit. The design fixes that the block sits beside the fragment and the
-    // runbook step, not the order among them.
+    // Last: the largest optional payload rides at the tail, and the incumbent
+    // sections stay byte-identical, which is the cheaper diff to audit. The
+    // runbook step now rides inside the envelope's forward rows (DEC-293).
     lines.extend(contract_section(&run, &args.known_contracts)?);
     emit(&lines)
-}
-
-/// The runbook obligation section of a turn read — the shell half of `A4`.
-///
-/// Beside [`fragment_section`] and for the same reason: the step text comes from
-/// the embed, so the asset read is Doctrine's and the *rendering* is the pure
-/// core's ([`design_run::runbook::Runbook::section`]). This function joins them
-/// and owns nothing else.
-///
-/// `&[]` for the verifications is the honest input, not a stub: a read runs no
-/// checks. What that costs is stated where the rendering states it.
-///
-/// A stage whose outbound edge carries no runbook renders nothing — the same
-/// real answer [`fragment_section`] gives a locked run.
-fn runbook_section(run: &DesignSnapshot) -> Result<Vec<String>> {
-    let Some(facts) = runbook_facts(run.run.stage)? else {
-        return Ok(Vec::new());
-    };
-    Ok(facts
-        .book
-        .section(&run.runbook.discharges, &facts.digests, &[]))
 }
 
 /// The runbook guarding `stage`'s outbound edge, read and digested — the shell
@@ -3187,9 +3184,8 @@ fn fragment_section(run: &DesignSnapshot, declared: &[String]) -> Result<Vec<Str
 /// would otherwise have carried, because a flag that changes what a read means
 /// is a flag a caller has to remember.
 /// The stage-entry receipt's contract block — the shell half of the split
-/// [`design_run::prompt::contract_block`] makes, and the third section built the
-/// same way as [`fragment_section`] and [`runbook_section`]: Doctrine resolves
-/// and reads, the pure core renders.
+/// [`design_run::prompt::contract_block`] makes, built the same way as
+/// [`fragment_section`]: Doctrine resolves and reads, the pure core renders.
 ///
 /// Selected by [`design_run::gate::Advance::from_stage`], exactly as the runbook
 /// step is. A locked run therefore emits nothing — no outbound edge, nothing to

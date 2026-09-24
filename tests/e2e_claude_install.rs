@@ -520,6 +520,10 @@ fn design_prompts_have_no_consumer_outside_the_design_run() {
         // SL-260 PHASE-02: the §4 route axis names the fragment that owns the
         // routing rule by address, as a reader pointer. It consumes nothing.
         "install/review-ledger.md",
+        // SL-262 PHASE-02 `VT-6`: the maximal-forward bound is measured against
+        // each embedded runbook, read test-only by `include_str!` — the leaf
+        // cannot reach the shell's embed. It renders nothing from the store.
+        "src/design_run/render/envelope.rs",
     ]
     .into_iter()
     .map(str::to_owned)
@@ -579,7 +583,7 @@ fn emitted_fragment_digest(out: &str, name: &str) -> String {
 /// TurnEnvelope. Checked in every case, because an envelope that disappears when
 /// a body is omitted breaks recovery exactly when recovery is needed.
 fn assert_envelope_present(out: &str, case: &str) {
-    for field in ["active_path", "open_questions", "next_obligation"] {
+    for field in ["active_path", "open_questions", "forward"] {
         assert!(
             out.lines().any(|line| line.starts_with(field)),
             "the TurnEnvelope is still projected ({case}) — `{field}` missing from:\n{out}"

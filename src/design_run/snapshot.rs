@@ -66,9 +66,6 @@ pub(crate) struct RunHeader {
     /// no-op by construction — the same argument [`Section::seq`] makes.
     #[serde(default)]
     pub(crate) review_policy: ReviewPolicy,
-    /// The next closed obligation, when the run knows one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) next_obligation: Option<String>,
 }
 
 /// One submission receipt — the idempotency key and what it produced.
@@ -664,7 +661,6 @@ impl DesignSnapshot {
                 revision: 1,
                 stage: Stage::Exploring,
                 review_policy: ReviewPolicy::default(),
-                next_obligation: None,
             },
             receipts: ReceiptGroup {
                 floor: 1,
@@ -728,6 +724,22 @@ mod tests {
     use super::super::change_log::{ChangeEvent, StoredRow, Unreadable};
     use super::super::fixture::{attest, id, pass_over, run_holding, section};
     use super::*;
+
+    /// `VT-5` (SL-262 `sec-4`) — `RunHeader::next_obligation` is gone and a
+    /// snapshot written while it existed still loads: `RunHeader` denies no
+    /// unknown fields. TOML has no `null`, so the key's two historical shapes
+    /// are absent (what every writer since SL-233 produced) and a string.
+    #[test]
+    fn old_snapshots_with_next_obligation_load() {
+        let fresh = DesignSnapshot::new("dr-test", 262, None);
+        let absent = to_toml(&fresh).unwrap();
+        assert!(!absent.contains("next_obligation"));
+        let carried = absent.replacen("[run]\n", "[run]\nnext_obligation = \"dispose inq-1\"\n", 1);
+        assert_ne!(carried, absent, "the fixture carries the retired key");
+        for text in [absent, carried] {
+            assert_eq!(parse(&text).unwrap(), fresh);
+        }
+    }
 
     /// Attest every section the run currently holds, in the default lane.
     fn attest_all(snapshot: &mut DesignSnapshot) {

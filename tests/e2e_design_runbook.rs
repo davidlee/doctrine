@@ -382,8 +382,10 @@ fn line_naming<'a>(rendered: &'a str, step: &str) -> &'a str {
 /// "discharged" rendering would collapse an agent's word and a check's exit code
 /// into one claim the mechanism is not entitled to make. `explore.scope` carries
 /// no verifier and `explore.research` is the one that does, so one run exhibits
-/// both — and the assertions run per line, in both directions: the attested step
-/// must not say verified, and the verified step must.
+/// both — and the assertions run per line. Since DEC-293 (SL-262) a read renders
+/// no discharge outcome at all, so the envelope half narrows to: no line says the
+/// attested step is verified, and the checked step is named as `unchecked`.
+/// The record half still tells the two outcomes apart.
 #[test]
 fn an_attested_step_is_never_rendered_as_verified() {
     let designed = DesignRun::start();
@@ -409,25 +411,24 @@ fn an_attested_step_is_never_rendered_as_verified() {
     assert_eq!(outcome("explore.scope"), DischargeOutcome::Attested);
     assert_eq!(outcome("explore.research"), DischargeOutcome::Verified);
 
-    // The ENVELOPE half.
+    // The ENVELOPE half, narrowed by DEC-293 (SL-262): discharge history left
+    // `resume`, so a read renders no outcome word at all and can never promote
+    // an attestation. What a read does say about a discharged step is the check
+    // it did not re-run — `unchecked` names only steps that carry one.
     let rendered = run(&designed.root, &["design", "resume", SLICE, "-p", "."]);
 
-    let scope = line_naming(&rendered, "explore.scope");
     assert!(
-        scope.contains("attested"),
-        "a step the agent merely attested must say so: {scope}"
-    );
-    assert!(
-        !scope.contains("verified"),
+        !rendered
+            .lines()
+            .any(|line| line.contains("explore.scope") && line.contains("verified")),
         "a step with NO verifier must never be rendered as verified — no exit code \
-         proves an agent read something: {scope}"
+         proves an agent read something:\n{rendered}"
     );
 
     let research = line_naming(&rendered, "explore.research");
     assert!(
-        research.contains("verified"),
-        "the one step whose check ran and exited zero is the one entitled to the \
-         stronger word: {research}"
+        research.starts_with("  unchecked explore.research"),
+        "the one step whose check ran is the one a read owns up to not re-running: {research}"
     );
 
     // `EX-14` — the current obligation, with its position. Two steps are

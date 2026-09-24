@@ -40,6 +40,7 @@
 
 use super::bounds::{DESIGN_EVENT_NAME_BYTES, DESIGN_ID_BYTES, DESIGN_STAGE_LABEL_BYTES};
 use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, ValueKind};
+use super::gate::Condition;
 
 pub(crate) mod change_row;
 pub(crate) mod envelope;
@@ -60,8 +61,8 @@ const ENVELOPE_FRONTIER_NODES: usize = 7;
 /// Active-path entries, retained from the **cursor** end.
 ///
 /// Derivation: six levels of decomposition is deeper than a readable design
-/// tree; above that, the top of the path is context the stage and the next
-/// obligation already carry.
+/// tree; above that, the top of the path is context the stage and the forward
+/// edge already carry.
 const ENVELOPE_ACTIVE_PATH_DEPTH: usize = 6;
 
 /// Blocker entries.
@@ -107,9 +108,9 @@ const ENVELOPE_QUESTION_BYTES: usize = 160;
 /// less the row's own labelling.
 const ENVELOPE_LABEL_BYTES: usize = 120;
 
-/// The next obligation, a blocker's reason, and a *live* regression reason.
+/// A blocker's reason, and a *live* regression reason.
 ///
-/// Derivation: these are the three prose fields an agent acts on directly, so
+/// Derivation: these are the prose fields an agent acts on directly, so
 /// they get the widest prose allowance the per-entry worst cases in sketch §(e)
 /// can carry.
 const ENVELOPE_REASON_BYTES: usize = 240;
@@ -122,6 +123,20 @@ const ENVELOPE_REASON_BYTES: usize = 240;
 /// authoring defect, refused rather than clipped. The assertion below is that
 /// refusal, moved to compile time.
 const ENVELOPE_DECLARATION_EXAMPLE_BYTES: usize = 1024;
+
+/// Unmet rows on the forward edge (SL-262, DEC-293).
+///
+/// Derivation: one per condition in the closed vocabulary —
+/// `cumulative_conditions` at `reviewing→locked` is all of them. Not a cap: the
+/// row count cannot exceed it, and this names the bound the no-drop set rests on.
+const ENVELOPE_FORWARD_UNMET: usize = Condition::ALL.len();
+
+/// Members rendered per cause list on the forward edge (SL-262, DEC-293).
+///
+/// Derivation: the [`ENVELOPE_BLOCKERS`] precedent (5) — enough to name the
+/// first work items, and at `DESIGN_ID_BYTES` + lane (≤ 48 B) per member a
+/// capped cause stays under ~250 B, so nine rows cannot approach the ceiling.
+const ENVELOPE_CAUSE_MEMBERS: usize = 5;
 
 /// The entire budgeted rendering.
 ///

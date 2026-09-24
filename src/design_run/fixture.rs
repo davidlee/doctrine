@@ -12,10 +12,14 @@ use std::collections::BTreeMap;
 
 use super::Stage;
 use super::attestation::{
-    AcceptanceAttestation, ActKind, AgentAct, AgentDeclaration, Attestation, CheckpointAct,
-    ContentCoverage, CoveredSet, DisposedPass, ReviewDisposition, ReviewPass, ReviewRef, Reviewer,
+    AcceptanceAttestation, ActKind, ActorClass, AgentAct, AgentActKind, AgentDeclaration,
+    Attestation, CheckpointAct, ContentCoverage, CoveredSet, DisposedPass, ReviewDisposition,
+    ReviewPass, ReviewRef, Reviewer,
 };
-use super::gate::{ObservedFact, ObservedFacts};
+use super::bounds::DESIGN_ID_BYTES;
+use super::gate::{
+    Cause, Condition, Coverage, DerivationRule, EngineSource, ObservedFact, ObservedFacts,
+};
 use super::ids::{DesignId, Fingerprint};
 use super::inquiry::{Disposition, InquiryNode, Provenance};
 use super::run::{DerivedInput, GateFacts};
@@ -265,4 +269,98 @@ pub(super) fn cleared() -> (DesignSnapshot, DerivedInput) {
         ..DerivedInput::default()
     };
     (run, derived)
+}
+
+/// One of every [`Cause`] variant, each list-carrying variant holding `members`
+/// members of the widest form — the worst case a forward row can render.
+pub(super) fn every_cause(members: usize) -> Vec<Cause> {
+    let ids = || -> Vec<DesignId> {
+        (0..members)
+            .map(|n| id(&format!("inq-{n:0>width$}", width = DESIGN_ID_BYTES - 4)))
+            .collect()
+    };
+    let review = || ReviewRef::new("RV-9999");
+    vec![
+        Cause::ActMissing {
+            act: ActKind::SufficiencyAccepted,
+            lanes: vec![ActorClass::Adversarial; members],
+        },
+        Cause::SectionsUnreviewed {
+            subjects: ids()
+                .into_iter()
+                .map(|subject| (subject, ActorClass::Adversarial))
+                .collect(),
+        },
+        Cause::NoSections,
+        Cause::CoverageStale {
+            act: ActKind::SufficiencyAccepted,
+            moved: ids(),
+        },
+        Cause::ObservedStale {
+            act: ActKind::SufficiencyAccepted,
+            fact: ObservedFact::GovernanceEdges,
+        },
+        Cause::ConfirmationStale {
+            act: ActKind::SufficiencyAccepted,
+            declaration: AgentActKind::BlockingSetDeclared,
+        },
+        Cause::BlockersUndisposed {
+            findings: (0..members).map(|n| format!("F-{n:0>5}")).collect(),
+        },
+        Cause::PassSuperseded {
+            disposed: review(),
+            current: review(),
+        },
+        Cause::ReviewUnavailable { review: review() },
+        Cause::InquiriesOpen { nodes: ids() },
+        Cause::MaterialisationStale,
+    ]
+}
+
+/// The widest cause set `satisfied` can report for `condition`, each list at
+/// `members`: its arms, followed per derivation rule rather than every variant
+/// on every row. Over-approximates only in giving every act the disposition
+/// causes, which only `review-disposed` can carry.
+pub(super) fn widest_causes(condition: Condition, members: usize) -> Vec<Cause> {
+    let every = every_cause(members);
+    let pick = |wanted: fn(&Cause) -> bool| -> Vec<Cause> {
+        every
+            .iter()
+            .filter(|cause| wanted(cause))
+            .cloned()
+            .collect()
+    };
+    match condition.contract().derivation {
+        DerivationRule::Engine(EngineSource::Dispositions) => {
+            pick(|cause| matches!(cause, Cause::InquiriesOpen { .. }))
+        }
+        DerivationRule::Engine(EngineSource::Materialisation) => {
+            pick(|cause| matches!(cause, Cause::MaterialisationStale))
+        }
+        DerivationRule::Attested(rule) if rule.binding.coverage == Coverage::PerSection => {
+            pick(|cause| matches!(cause, Cause::SectionsUnreviewed { .. }))
+        }
+        DerivationRule::Attested(rule) => rule
+            .acts
+            .iter()
+            .flat_map(|required| {
+                let mut causes = pick(|cause| matches!(cause, Cause::CoverageStale { .. }));
+                for _ in rule.binding.observed {
+                    causes.extend(pick(|cause| matches!(cause, Cause::ObservedStale { .. })));
+                }
+                if required.confirms.is_some() {
+                    causes.extend(pick(|cause| {
+                        matches!(cause, Cause::ConfirmationStale { .. })
+                    }));
+                }
+                causes.extend(pick(|cause| {
+                    matches!(
+                        cause,
+                        Cause::PassSuperseded { .. } | Cause::BlockersUndisposed { .. }
+                    )
+                }));
+                causes
+            })
+            .collect(),
+    }
 }

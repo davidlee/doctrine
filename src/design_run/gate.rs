@@ -1204,6 +1204,49 @@ pub(crate) enum Cause {
     MaterialisationStale,
 }
 
+/// A [`Cause`] with its member list cut to a bound, and how many were cut
+/// (SL-262 `sec-5`, DEC-293).
+///
+/// The envelope's forward edge is in the no-drop set, so its size must be
+/// bounded by the binary rather than the run; the list-carrying causes are the
+/// one part that grows with the run. Refusals never carry this — they have no
+/// byte budget and are the place to see the whole set.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct CappedCause {
+    pub(crate) cause: Cause,
+    /// Members dropped from the cause's list by the cap; 0 when none.
+    pub(crate) omitted: usize,
+}
+
+impl Cause {
+    /// This cause with its member list cut to `max`, and how many were cut.
+    ///
+    /// Every list-carrying variant is handled here, beside the variants, and
+    /// the match is wildcard-free so a new list variant cannot escape the cap.
+    pub(crate) fn capped(&self, max: usize) -> CappedCause {
+        fn cut<T>(list: &mut Vec<T>, max: usize) -> usize {
+            let omitted = list.len().saturating_sub(max);
+            list.truncate(max);
+            omitted
+        }
+        let mut cause = self.clone();
+        let omitted = match cause {
+            Cause::ActMissing { ref mut lanes, .. } => cut(lanes, max),
+            Cause::SectionsUnreviewed { ref mut subjects } => cut(subjects, max),
+            Cause::CoverageStale { ref mut moved, .. } => cut(moved, max),
+            Cause::BlockersUndisposed { ref mut findings } => cut(findings, max),
+            Cause::InquiriesOpen { ref mut nodes } => cut(nodes, max),
+            Cause::NoSections
+            | Cause::ObservedStale { .. }
+            | Cause::ConfirmationStale { .. }
+            | Cause::PassSuperseded { .. }
+            | Cause::ReviewUnavailable { .. }
+            | Cause::MaterialisationStale => 0,
+        };
+        CappedCause { cause, omitted }
+    }
+}
+
 /// One condition an edge required and did not get.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Unmet {
@@ -1314,14 +1357,25 @@ impl fmt::Display for Unmet {
     /// that the causes cannot, because *the exit exists* is not a way a condition
     /// failed.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}: {} → {}",
-            self.condition.as_str(),
-            join(self.causes.iter()),
-            self.condition.contract().remedy()
-        )
+        unmet_line(f, self.condition, self.causes.iter())
     }
+}
+
+/// The one spelling of an unmet-condition line: the refusal's [`Unmet`] and the
+/// envelope's forward row both render through it, so they cannot drift
+/// (SL-262 `EX-4`).
+pub(crate) fn unmet_line(
+    f: &mut fmt::Formatter<'_>,
+    condition: Condition,
+    causes: impl Iterator<Item = impl fmt::Display>,
+) -> fmt::Result {
+    write!(
+        f,
+        "{}: {} → {}",
+        condition.as_str(),
+        join(causes),
+        condition.contract().remedy()
+    )
 }
 
 /// Whether one condition holds against current content, and every way it does
@@ -1746,4 +1800,94 @@ pub(crate) fn regress(from: Stage, to: Stage, reason: &str) -> Result<Regression
         to,
         reason: reason.to_owned(),
     })
+}
+
+#[cfg(test)]
+#[expect(
+    clippy::unwrap_used,
+    reason = "test code — the repo's panic-avoidance denials target production paths"
+)]
+mod tests {
+    use super::{Cause, Condition, Unmet};
+    use crate::design_run::fixture::every_cause;
+    use crate::design_run::render::envelope::{Detail, UnmetRow};
+
+    /// Whether `cause` is one of the five list-carrying variants — stated here
+    /// rather than read off `capped`, which is what is under test.
+    const fn carries_a_list(cause: &Cause) -> bool {
+        matches!(
+            cause,
+            Cause::ActMissing { .. }
+                | Cause::SectionsUnreviewed { .. }
+                | Cause::CoverageStale { .. }
+                | Cause::BlockersUndisposed { .. }
+                | Cause::InquiriesOpen { .. }
+        )
+    }
+
+    /// `VT-4` — every list is cut to the cap and says how much it cut; a scalar
+    /// passes through untouched; an unbounded cap cuts nothing.
+    #[test]
+    fn cause_lists_are_capped_never_silently() {
+        let causes = every_cause(12);
+        assert_eq!(causes.iter().filter(|c| carries_a_list(c)).count(), 5);
+        for cause in &causes {
+            let capped = cause.capped(5);
+            if carries_a_list(cause) {
+                assert_eq!(capped.omitted, 7, "{cause}");
+                assert!(
+                    capped.to_string().ends_with(" (+7 more)"),
+                    "the cut is disclosed: {capped}"
+                );
+                assert!(!capped.to_string().contains("00011"), "and made: {capped}");
+            } else {
+                assert_eq!(capped.omitted, 0, "{cause}");
+                assert_eq!(capped.to_string(), cause.to_string());
+            }
+            let full = cause.capped(usize::MAX);
+            assert_eq!(
+                (full.omitted, &full.cause),
+                (0, cause),
+                "--full is uncapped"
+            );
+        }
+    }
+
+    /// `VT-4` — a forward row and the refusal share one formatter, so an
+    /// uncapped row is byte-identical to the refusal line; the row's JSON carries
+    /// the contract's remedy.
+    #[test]
+    fn unmet_row_and_unmet_render_alike() {
+        for condition in Condition::ALL {
+            let unmet = Unmet {
+                condition,
+                causes: every_cause(3),
+            };
+            let row = UnmetRow::of(&unmet, Detail::Normal);
+            assert_eq!(row.to_string(), unmet.to_string());
+            assert_eq!(
+                serde_json::to_value(&row).unwrap()["remedy"],
+                serde_json::json!(condition.contract().remedy())
+            );
+
+            let long = Unmet {
+                condition,
+                causes: every_cause(12),
+            };
+            assert!(
+                UnmetRow::of(&long, Detail::Normal)
+                    .to_string()
+                    .contains("(+7 more)")
+            );
+            assert_eq!(
+                UnmetRow::of(&long, Detail::Full).to_string(),
+                long.to_string(),
+                "--full renders the refusal's whole set"
+            );
+            assert!(
+                !long.to_string().contains("more)"),
+                "refusals are never capped"
+            );
+        }
+    }
 }

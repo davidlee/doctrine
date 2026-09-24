@@ -37,31 +37,45 @@
 //! construction, because every bounded list is on the ladder.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 
 use serde::Serialize;
 
+use super::super::Stage;
 use super::super::attestation::ActKind;
 use super::super::change_log::StoredRow;
+use super::super::document::{AuthoredState, divergence_refusal, observe_watermark};
+use super::super::gate::{Advance, CappedCause, Condition, Unmet, forward_unmet, unmet_line};
 use super::super::ids::DesignId;
 use super::super::inquiry::{Disposition, InquiryLifecycle, InquiryNode};
 use super::super::payload_contract::PAYLOAD_CONTRACT_POINTER;
 use super::super::refusal::Refusal;
+use super::super::run::{GateFacts, RunbookFacts};
 use super::super::snapshot::DesignSnapshot;
+use super::super::submission::{ApplyRequest, StageDeclaration, SubmissionEnvelope};
 use super::super::traversal::{Authority, Posture};
 use super::{
-    ENVELOPE_ACTIVE_PATH_DEPTH, ENVELOPE_BLOCKERS, ENVELOPE_CHANGE_ROWS,
-    ENVELOPE_DECLARATION_EXAMPLE_BYTES, ENVELOPE_DURABLE_RECORDS, ENVELOPE_FRONTIER_NODES,
-    ENVELOPE_LABEL_BYTES, ENVELOPE_NORMAL_BUDGET_BYTES, ENVELOPE_QUESTION_BYTES,
-    ENVELOPE_REASON_BYTES, ENVELOPE_SECTION_ROWS, FIELD_SEPARATOR, change_row, elide,
+    ENVELOPE_ACTIVE_PATH_DEPTH, ENVELOPE_BLOCKERS, ENVELOPE_CAUSE_MEMBERS, ENVELOPE_CHANGE_ROWS,
+    ENVELOPE_DECLARATION_EXAMPLE_BYTES, ENVELOPE_DURABLE_RECORDS, ENVELOPE_FORWARD_UNMET,
+    ENVELOPE_FRONTIER_NODES, ENVELOPE_LABEL_BYTES, ENVELOPE_NORMAL_BUDGET_BYTES,
+    ENVELOPE_QUESTION_BYTES, ENVELOPE_REASON_BYTES, ENVELOPE_SECTION_ROWS, FIELD_SEPARATOR,
+    change_row, elide,
 };
 
 /// The schema discriminator the JSON rendering carries, so a reader can tell a
 /// turn envelope from the snapshot it projects.
 const TURN_ENVELOPE_SCHEMA: &str = "doctrine.design-turn";
 /// The turn envelope's wire version.
-const TURN_ENVELOPE_VERSION: u32 = 1;
+///
+/// The compatibility rule (DEC-291): **removing a key bumps; adding one does
+/// not.** The version discriminates meaning, and a new key changes no existing
+/// key's meaning. `2` is SL-262's removal of `next_obligation`; `forward` alone
+/// would have been additive.
+const TURN_ENVELOPE_VERSION: u32 = 2;
 /// The label the pass line carries in both line renderings (STD-001).
 const REVIEW_PASS_LABEL: &str = "review_pass";
+/// The label the forward edge's rows carry in every line rendering (STD-001).
+const FORWARD_LABEL: &str = "forward";
 
 /// The worked next-mutation example — the contract in one line a caller can copy.
 ///
@@ -341,7 +355,15 @@ pub(crate) struct TurnEnvelope {
     pub(crate) detail: Detail,
     pub(crate) run: RunLine,
     pub(crate) totals: GlobalTotals,
-    pub(crate) next_obligation: Option<String>,
+    /// The run's single outbound forward edge and what it still needs
+    /// (DEC-290). Derived on every projection, never stored. `None` only at
+    /// `Locked`.
+    ///
+    /// In the **no-drop set** (DEC-293): a scalar outside [`evict_one`]'s
+    /// ladder, sound because its size is bounded by the binary — rows by the
+    /// condition vocabulary and the embedded runbooks, cause lists by
+    /// `ENVELOPE_CAUSE_MEMBERS`.
+    pub(crate) forward: Option<Forward>,
     pub(crate) pinned: Option<PinnedSlot>,
     pub(crate) active_path: Vec<PathEntry>,
     pub(crate) frontier: Vec<FrontierEntry>,
@@ -386,8 +408,9 @@ pub(crate) struct TurnEnvelope {
     /// guard on them would bar the very disposition that clears them.
     ///
     /// Shell-read on every projection and **never stored** (`EX-1`). It arrives as
-    /// a [`project`] argument rather than on `DerivedInput`, because `DerivedInput`
-    /// is assembled on the apply path alone and this must light on a plain
+    /// a [`project`] argument rather than on the gate's facts, because it is a lamp
+    /// and not a gate input: the gate reads an unreadable ledger as refusal, the
+    /// lamp fails loud (SL-262 `sec-3`), and it must light on a plain
     /// `design show` too — a lamp that only works on the turn a caller happens to
     /// apply something is not a lamp.
     ///
@@ -416,6 +439,103 @@ pub(crate) struct TurnEnvelope {
     pub(crate) truncated: bool,
 }
 
+/// The run's single outbound forward edge and what it still needs, in the order
+/// a submission meets it (SL-262 `sec-2`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct Forward {
+    pub(crate) from: Stage,
+    pub(crate) to: Stage,
+    /// `design.md` edited outside the run: every ordinary submission is refused
+    /// before the gate is asked (DEC-092 rule 1). `Some` blocks the edge.
+    pub(crate) diverged: Option<Divergence>,
+    /// The runbook guarding this edge; `None` where none could be read, which
+    /// the gate treats as blocking (it fails closed on a missing standing).
+    pub(crate) runbook: Option<RunbookAhead>,
+    /// Every unmet condition of the target's cumulative set, in table order.
+    pub(crate) unmet: Vec<UnmetRow>,
+    /// Live discharges of steps that carry a `verify`, which `advance` re-runs
+    /// and this read did not (DEC-294, STD-003).
+    pub(crate) unchecked: Vec<String>,
+    /// A complete `apply` payload that crosses the edge. `Some` exactly when
+    /// nothing above blocks it.
+    pub(crate) ready: Option<ApplyRequest>,
+}
+
+/// The authored-divergence refusal, as a forward row. `refusal` is the very
+/// sentence the refusal carries — one source, two consumers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct Divergence {
+    pub(crate) expected: Option<String>,
+    pub(crate) observed: Option<String>,
+    pub(crate) refusal: String,
+}
+
+/// One unmet condition on the forward edge — the refusal's [`Unmet`] with its
+/// cause lists capped and its remedy carried, so JSON has it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct UnmetRow {
+    pub(crate) condition: Condition,
+    /// Every cause, each with its member list capped (`sec-5`).
+    pub(crate) causes: Vec<CappedCause>,
+    /// `Contract::remedy()` — the discharging act.
+    pub(crate) remedy: String,
+}
+
+/// The runbook guarding the forward edge, projected for a read.
+///
+/// No `regressed`: a read runs no checks, so it cannot know.
+/// [`Forward::unchecked`] says so instead of an always-empty list that would
+/// read as *nothing regressed*.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct RunbookAhead {
+    /// `RunbookKey::name()` — the stage whose edge it guards.
+    pub(crate) name: &'static str,
+    /// The step a discharge must name next, with its text (SL-233 `EX-14`:
+    /// only this step carries prose). `None` once every step is discharged.
+    pub(crate) cursor: Option<CursorStep>,
+    /// Required steps with no live discharge, in runbook order.
+    pub(crate) outstanding: Vec<String>,
+    /// Steps whose discharge no longer binds the step's definition.
+    pub(crate) stale: Vec<String>,
+}
+
+/// The runbook step at the cursor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct CursorStep {
+    pub(crate) id: String,
+    /// 1-based.
+    pub(crate) position: usize,
+    pub(crate) of: usize,
+    pub(crate) text: String,
+}
+
+impl fmt::Display for CappedCause {
+    /// The cause as the refusal renders it, plus the omitted count — no member
+    /// is dropped silently (STD-003).
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{}", self.cause, more(self.omitted))
+    }
+}
+
+impl fmt::Display for UnmetRow {
+    /// Through the refusal's own formatter: uncapped, the two are byte-identical.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unmet_line(f, self.condition, self.causes.iter())
+    }
+}
+
+impl UnmetRow {
+    /// Project a refusal's [`Unmet`], its cause lists capped at `detail`.
+    pub(crate) fn of(unmet: &Unmet, detail: Detail) -> UnmetRow {
+        let max = detail.cap(ENVELOPE_CAUSE_MEMBERS);
+        UnmetRow {
+            condition: unmet.condition,
+            causes: unmet.causes.iter().map(|cause| cause.capped(max)).collect(),
+            remedy: unmet.condition.contract().remedy(),
+        }
+    }
+}
+
 // ── projection ────────────────────────────────────────────────────────────
 
 /// Project one turn, bounded.
@@ -430,17 +550,25 @@ pub(crate) struct TurnEnvelope {
 /// envelope, because eviction and the budget check run *inside*
 /// [`project_within`], and a post-hoc field would be unmeasured and could push the
 /// rendering past the ceiling this function just certified.
+///
+/// `facts` and `slice_ref` are shell-observed on the same grounds (DEC-292):
+/// the forward edge evaluates the gate over the facts `apply` would, and the
+/// divergence row names the slice by the canonical id this leaf cannot render.
 pub(crate) fn project(
     run: &DesignSnapshot,
     known_revision: u64,
     detail: Detail,
     outstanding: OutstandingBySeverity,
+    facts: &GateFacts,
+    slice_ref: &str,
 ) -> Result<TurnEnvelope, Refusal> {
     project_within(
         run,
         known_revision,
         detail,
         outstanding,
+        facts,
+        slice_ref,
         ENVELOPE_NORMAL_BUDGET_BYTES,
     )
 }
@@ -455,9 +583,11 @@ pub(crate) fn project_within(
     known_revision: u64,
     detail: Detail,
     outstanding: OutstandingBySeverity,
+    facts: &GateFacts,
+    slice_ref: &str,
     budget: usize,
 ) -> Result<TurnEnvelope, Refusal> {
-    let mut envelope = assemble(run, known_revision, detail, outstanding);
+    let mut envelope = assemble(run, known_revision, detail, outstanding, facts, slice_ref);
     if detail == Detail::Full {
         return Ok(envelope);
     }
@@ -531,6 +661,8 @@ fn assemble(
     known_revision: u64,
     detail: Detail,
     outstanding: OutstandingBySeverity,
+    facts: &GateFacts,
+    slice_ref: &str,
 ) -> TurnEnvelope {
     let (cursor, cursor_stale) = effective_cursor(run);
     let candidates = frontier_candidates(run, cursor.as_ref());
@@ -577,11 +709,7 @@ fn assemble(
             cursor_stale,
         },
         totals,
-        next_obligation: run
-            .run
-            .next_obligation
-            .as_ref()
-            .map(|text| elide(text, detail.prose(ENVELOPE_REASON_BYTES))),
+        forward: forward(run, facts, slice_ref, detail),
         pinned: pinned(run, detail),
         active_path,
         frontier,
@@ -607,6 +735,131 @@ fn assemble(
         truncated: omitted.any(),
         omitted,
     }
+}
+
+// ── the forward edge (SL-262 sec-2) ───────────────────────────────────────
+
+/// Derive the forward edge, in the order a submission meets it: the authored
+/// divergence refusal, the runbook, then the conditions. `None` at `Locked`.
+fn forward(
+    run: &DesignSnapshot,
+    facts: &GateFacts,
+    slice_ref: &str,
+    detail: Detail,
+) -> Option<Forward> {
+    let edge = Advance::from_stage(run.run.stage)?;
+    let to = edge.to();
+    let diverged = divergence(run, facts, slice_ref);
+    let runbook = facts.runbook.as_ref().map(|held| runbook_ahead(run, held));
+    let unchecked = facts
+        .runbook
+        .as_ref()
+        .map_or_else(Vec::new, |held| unchecked(run, held));
+    let unmet: Vec<UnmetRow> = forward_unmet(to, run, facts)
+        .iter()
+        .map(|unmet| UnmetRow::of(unmet, detail))
+        .collect();
+    debug_assert!(unmet.len() <= ENVELOPE_FORWARD_UNMET);
+    // A missing runbook blocks: `advance` fails closed on a missing standing.
+    let runbook_clear = runbook
+        .as_ref()
+        .is_some_and(|ahead| ahead.outstanding.is_empty());
+    let ready =
+        (diverged.is_none() && runbook_clear && unmet.is_empty()).then(|| ready_payload(run, to));
+    Some(Forward {
+        from: run.run.stage,
+        to,
+        diverged,
+        runbook,
+        unmet,
+        unchecked,
+        ready,
+    })
+}
+
+/// The rule-1 check `apply` runs first, over the same classifier and sentence.
+fn divergence(run: &DesignSnapshot, facts: &GateFacts, slice_ref: &str) -> Option<Divergence> {
+    let state = observe_watermark(run, facts.authored_fingerprint.as_ref());
+    let refusal = divergence_refusal(&state, slice_ref)?;
+    let AuthoredState::Diverged { expected, observed } = state else {
+        return None;
+    };
+    Some(Divergence {
+        expected,
+        observed,
+        refusal,
+    })
+}
+
+/// The edge's runbook standing, as a read sees it: no checks run (`&[]`).
+fn runbook_ahead(run: &DesignSnapshot, held: &RunbookFacts) -> RunbookAhead {
+    let standing = held
+        .book
+        .standing(&run.runbook.discharges, &held.digests, &[]);
+    let steps = held.book.steps();
+    let cursor = standing.cursor.as_ref().and_then(|id| {
+        steps
+            .iter()
+            .enumerate()
+            .find(|(_, step)| step.id() == id.as_str())
+            .map(|(index, step)| CursorStep {
+                id: id.clone(),
+                position: index + 1,
+                of: steps.len(),
+                text: step.text().to_owned(),
+            })
+    });
+    RunbookAhead {
+        name: held.key.name(),
+        cursor,
+        outstanding: standing.outstanding,
+        stale: standing.stale,
+    }
+}
+
+/// Steps carrying a `verify` whose discharge is live: `advance` re-runs their
+/// checks, and a read does not (DEC-294).
+fn unchecked(run: &DesignSnapshot, held: &RunbookFacts) -> Vec<String> {
+    held.book
+        .steps()
+        .iter()
+        .filter(|step| {
+            step.verify().is_some()
+                && held
+                    .book
+                    .live_discharge(step, &run.runbook.discharges, &held.digests)
+                    .is_some()
+        })
+        .map(|step| step.id().to_owned())
+        .collect()
+}
+
+/// The payload that crosses the edge, applicable as printed.
+///
+/// Built over [`ApplyRequest::bare`], which names every field, so a new payload
+/// key is a compile error there rather than a silent omission here.
+fn ready_payload(run: &DesignSnapshot, to: Stage) -> ApplyRequest {
+    ApplyRequest {
+        stage: Some(StageDeclaration { to, reason: None }),
+        ..ApplyRequest::bare(SubmissionEnvelope {
+            run_uid: run.run.uid.clone(),
+            known_revision: run.run.revision,
+            submission_id: minted_submission_id(run, to),
+        })
+    }
+}
+
+/// The first of `advance-<to>-r<revision>`, `…-2`, `…-3`, … that no retained
+/// receipt holds, so admission meets it as fresh.
+fn minted_submission_id(run: &DesignSnapshot, to: Stage) -> String {
+    let base = format!("advance-{}-r{}", to.as_str(), run.run.revision);
+    let mut id = base.clone();
+    let mut attempt = 1;
+    while run.receipts.find(&id).is_some() {
+        attempt += 1;
+        id = format!("{base}-{attempt}");
+    }
+    id
 }
 
 // ── (c) frontier selection ────────────────────────────────────────────────
@@ -1229,9 +1482,7 @@ pub(crate) fn prompt(envelope: &TurnEnvelope) -> Vec<String> {
     if !is_empty(&envelope.outstanding) {
         lines.push(outstanding_line(&envelope.outstanding));
     }
-    if let Some(obligation) = envelope.next_obligation.as_ref() {
-        lines.push(format!("next_obligation {obligation}"));
-    }
+    lines.extend(forward_lines(envelope.forward.as_ref()));
     if let Some(pin) = envelope.pinned.as_ref() {
         lines.push(format!(
             "pinned {} lifecycle={} blocked={} authority={} — {}",
@@ -1344,9 +1595,10 @@ pub(crate) fn status(envelope: &TurnEnvelope) -> Vec<String> {
             counts.blocker, counts.major, counts.minor, counts.nit
         ));
     }
-    if let Some(obligation) = envelope.next_obligation.as_ref() {
-        lines.push(format!("  next         {obligation}"));
-    }
+    lines.push(format!(
+        "  {FORWARD_LABEL}      {}",
+        forward_summary(envelope.forward.as_ref())
+    ));
     if envelope.truncated {
         lines.push(
             "  (this projection is bounded; `design show --format prompt --full` widens it)"
@@ -1404,14 +1656,93 @@ pub(crate) fn resume(envelope: &TurnEnvelope) -> Vec<String> {
     for entry in &envelope.blockers {
         lines.push(format!("  {} — {}", entry.id, entry.reason));
     }
-    lines.push(format!(
-        "next_obligation {}",
-        envelope
-            .next_obligation
-            .as_deref()
-            .unwrap_or("none recorded")
-    ));
+    lines.extend(forward_lines(envelope.forward.as_ref()));
     lines
+}
+
+/// The forward edge's rows (SL-262 `sec-2` *Rendering*), in the order a
+/// submission meets them — the first row is the next act. Shared by the prompt
+/// and resume renderings.
+fn forward_lines(forward: Option<&Forward>) -> Vec<String> {
+    let Some(forward) = forward else {
+        return vec![format!("{FORWARD_LABEL} none")];
+    };
+    let mut lines = vec![format!(
+        "{FORWARD_LABEL} {} {}",
+        forward_edge(forward),
+        if forward.ready.is_some() {
+            "ready"
+        } else {
+            "blocked"
+        }
+    )];
+    if let Some(diverged) = &forward.diverged {
+        lines.push(format!("  diverged {}", diverged.refusal));
+    }
+    if let Some(runbook) = &forward.runbook {
+        let name = runbook.name;
+        let cursor = runbook.cursor.as_ref();
+        if let Some(step) = cursor {
+            lines.push(format!(
+                "  runbook {name} {}/{} {} — {}",
+                step.position, step.of, step.id, step.text
+            ));
+        }
+        for id in &runbook.outstanding {
+            if cursor.is_none_or(|step| &step.id != id) {
+                lines.push(format!("  runbook outstanding {id}"));
+            }
+        }
+        for id in &runbook.stale {
+            lines.push(format!(
+                "  runbook stale {id} — its definition changed after it was discharged; \
+                 discharge it again"
+            ));
+        }
+    }
+    for row in &forward.unmet {
+        lines.push(format!("  unmet {row}"));
+    }
+    if let Some(ready) = &forward.ready {
+        lines.push(format!(
+            "  apply {}",
+            serde_json::to_string(ready)
+                .unwrap_or_else(|error| format!("<payload could not be rendered: {error}>"))
+        ));
+    }
+    for id in &forward.unchecked {
+        lines.push(format!(
+            "  unchecked {id} — advance re-runs its check; this read did not"
+        ));
+    }
+    lines
+}
+
+/// The status rendering's one line for the forward edge.
+fn forward_summary(forward: Option<&Forward>) -> String {
+    let Some(forward) = forward else {
+        return "none".to_owned();
+    };
+    let edge = forward_edge(forward);
+    if forward.ready.is_some() {
+        format!("{edge} ready")
+    } else if forward.diverged.is_some() {
+        format!("{edge} blocked — design.md diverged")
+    } else {
+        format!(
+            "{edge} blocked — {} steps, {} conditions",
+            forward
+                .runbook
+                .as_ref()
+                .map_or(0, |runbook| runbook.outstanding.len()),
+            forward.unmet.len()
+        )
+    }
+}
+
+/// `from→to`, in the stages' own tokens.
+fn forward_edge(forward: &Forward) -> String {
+    format!("{}→{}", forward.from.as_str(), forward.to.as_str())
 }
 
 /// The linked records whose canonical reference carries `prefix`.
@@ -1489,9 +1820,56 @@ fn more(omitted: usize) -> String {
 )]
 mod tests {
     use super::{
-        ChangeDelta, Detail, ENVELOPE_NORMAL_BUDGET_BYTES, OutstandingBySeverity, project,
-        project_within, prompt, rendered_bytes, resume, status,
+        BlockerEntry, CursorStep, Divergence, DurableRef, Forward, FrontierEntry, PathEntry,
+        RunbookAhead, SectionRow, UnmetRow,
     };
+    use super::{
+        ChangeDelta, Detail, ENVELOPE_NORMAL_BUDGET_BYTES, OutstandingBySeverity, TurnEnvelope,
+        project, project_within, prompt, rendered_bytes, resume, status,
+    };
+    use crate::design_run::document::{AuthoredState, divergence_refusal, observe_watermark};
+    use crate::design_run::fixture::widest_causes;
+    use crate::design_run::gate::{Condition, ObservedFacts, Unmet};
+    use crate::design_run::ids::Fingerprint;
+    use crate::design_run::run::{GateFacts, RunbookFacts};
+    use crate::design_run::runbook::{Discharge, Runbook, RunbookKey};
+    use crate::design_run::snapshot::Receipt;
+
+    /// The slice a fixture run's divergence row names.
+    const SLICE_REF: &str = "SL-233";
+
+    /// Project `run` at the normal detail, against the fixture's ceiling, with
+    /// no shell-observed facts — the input a cold run gets.
+    fn turn(
+        run: &DesignSnapshot,
+        outstanding: OutstandingBySeverity,
+    ) -> Result<TurnEnvelope, Refusal> {
+        project(
+            run,
+            0,
+            Detail::Normal,
+            outstanding,
+            &GateFacts::default(),
+            SLICE_REF,
+        )
+    }
+
+    /// [`turn`], against an explicit ceiling.
+    fn turn_within(
+        run: &DesignSnapshot,
+        outstanding: OutstandingBySeverity,
+        budget: usize,
+    ) -> Result<TurnEnvelope, Refusal> {
+        project_within(
+            run,
+            0,
+            Detail::Normal,
+            outstanding,
+            &GateFacts::default(),
+            SLICE_REF,
+            budget,
+        )
+    }
 
     /// The projection argument for a run whose ledger holds nothing — the honest
     /// input wherever the summary is not the test's subject, and the same value a
@@ -1537,7 +1915,7 @@ mod tests {
                 raw: toml::Value::Table(toml::map::Map::new()),
                 why,
             }));
-            let envelope = project(&run, 0, Detail::Normal, NOTHING_OUTSTANDING)
+            let envelope = turn(&run, NOTHING_OUTSTANDING)
                 .expect("a run holding an unreadable row still projects");
             let ChangeDelta::Since { rows, .. } = envelope.changes else {
                 panic!("the delta is available: {:?}", envelope.changes);
@@ -1643,7 +2021,7 @@ mod tests {
 
         // (b) sec-8 pin 7's envelope bullet.
         let (run, _) = cleared();
-        let envelope = project(&run, 0, Detail::Normal, NOTHING_OUTSTANDING).unwrap();
+        let envelope = turn(&run, NOTHING_OUTSTANDING).unwrap();
         let expected = format!(
             "contract {}",
             crate::design_run::payload_contract::PAYLOAD_CONTRACT_POINTER
@@ -1680,8 +2058,7 @@ mod tests {
 
         // The positive control, and it is load-bearing: without it, a lamp that
         // is stuck on renders the same assertion below as a lamp that works.
-        let current = project(&run, 0, Detail::Normal, NOTHING_OUTSTANDING)
-            .expect("the fixture run projects");
+        let current = turn(&run, NOTHING_OUTSTANDING).expect("the fixture run projects");
         assert!(
             !current.pass_stale,
             "the fixture's pass covers current content"
@@ -1708,8 +2085,7 @@ mod tests {
             "the fixture is set up: the pass no longer covers current content"
         );
 
-        let stale = project(&run, 0, Detail::Normal, NOTHING_OUTSTANDING)
-            .expect("a stale pass still projects");
+        let stale = turn(&run, NOTHING_OUTSTANDING).expect("a stale pass still projects");
         assert!(stale.pass_stale, "the lamp lights");
         assert!(
             prompt(&stale).contains(&format!("review_pass {PASS} STALE")),
@@ -1720,8 +2096,8 @@ mod tests {
         // `integrated_current` is `false` for both — so the guard that separates
         // them is asserted rather than commented.
         let unreviewed = run_holding(&[(SECTION_A, "sha256:a")]);
-        let unreviewed = project(&unreviewed, 0, Detail::Normal, NOTHING_OUTSTANDING)
-            .expect("a run with no pass projects");
+        let unreviewed =
+            turn(&unreviewed, NOTHING_OUTSTANDING).expect("a run with no pass projects");
         assert!(
             !unreviewed.pass_stale,
             "a run that never opened a pass has no stale one"
@@ -1772,8 +2148,8 @@ mod tests {
             nit: 0,
         };
 
-        let quiet = prompt(&project(&run, 0, Detail::Normal, NOTHING_OUTSTANDING).unwrap());
-        let loud = prompt(&project(&run, 0, Detail::Normal, counted).unwrap());
+        let quiet = prompt(&turn(&run, NOTHING_OUTSTANDING).unwrap());
+        let loud = prompt(&turn(&run, counted).unwrap());
 
         assert!(
             !quiet
@@ -1814,17 +2190,10 @@ mod tests {
             nit: 0,
         };
         let run = wide_run(40);
-        let roomy = project_within(
-            &run,
-            0,
-            Detail::Normal,
-            counted,
-            ENVELOPE_NORMAL_BUDGET_BYTES,
-        )
-        .unwrap();
+        let roomy = turn_within(&run, counted, ENVELOPE_NORMAL_BUDGET_BYTES).unwrap();
 
         let tight = rendered_bytes(&roomy) - 200;
-        let cut = project_within(&run, 0, Detail::Normal, counted, tight).unwrap();
+        let cut = turn_within(&run, counted, tight).unwrap();
         assert!(cut.omitted.any(), "the ladder ran");
         assert!(
             prompt(&cut)
@@ -1857,7 +2226,7 @@ mod tests {
             minor: 0,
             nit: 0,
         };
-        let envelope = project(&run, 0, Detail::Normal, counted).unwrap();
+        let envelope = turn(&run, counted).unwrap();
 
         for (rendering, lines) in [("prompt", prompt(&envelope)), ("status", status(&envelope))] {
             let joined = lines.join("\n");
@@ -1923,8 +2292,8 @@ mod tests {
         for stage in Stage::ALL {
             let (mut run, _) = cleared();
             run.run.stage = stage;
-            let envelope = project(&run, 0, Detail::Normal, NOTHING_OUTSTANDING)
-                .expect("the fixture run projects at every stage");
+            let envelope =
+                turn(&run, NOTHING_OUTSTANDING).expect("the fixture run projects at every stage");
             for (rendering, lines) in [
                 ("prompt", prompt(&envelope)),
                 ("status", status(&envelope)),
@@ -1957,8 +2326,7 @@ mod tests {
         attest(&mut run, "att-a", "sec-a", Reviewer::Adversarial);
 
         let settled = |run: &DesignSnapshot| {
-            let envelope = project(run, 0, Detail::Normal, NOTHING_OUTSTANDING)
-                .expect("the fixture run projects");
+            let envelope = turn(run, NOTHING_OUTSTANDING).expect("the fixture run projects");
             let row = envelope
                 .sections
                 .iter()
@@ -1996,14 +2364,7 @@ mod tests {
     #[test]
     fn the_eviction_ladder_fires_and_counts_every_drop() {
         let run = wide_run(40);
-        let roomy = project_within(
-            &run,
-            0,
-            Detail::Normal,
-            NOTHING_OUTSTANDING,
-            ENVELOPE_NORMAL_BUDGET_BYTES,
-        )
-        .unwrap();
+        let roomy = turn_within(&run, NOTHING_OUTSTANDING, ENVELOPE_NORMAL_BUDGET_BYTES).unwrap();
         assert_eq!(roomy.frontier.len(), super::ENVELOPE_FRONTIER_NODES);
         assert!(
             rendered_bytes(&roomy) <= ENVELOPE_NORMAL_BUDGET_BYTES,
@@ -2012,7 +2373,7 @@ mod tests {
 
         // A ceiling below the assembled size forces the ladder.
         let tight = rendered_bytes(&roomy) - 200;
-        let cut = project_within(&run, 0, Detail::Normal, NOTHING_OUTSTANDING, tight).unwrap();
+        let cut = turn_within(&run, NOTHING_OUTSTANDING, tight).unwrap();
         assert!(rendered_bytes(&cut) <= tight, "the ceiling is enforced");
         assert!(cut.truncated, "and the drop is not silent");
         assert!(
@@ -2021,12 +2382,416 @@ mod tests {
         );
     }
 
+    // ── the forward edge (SL-262) ─────────────────────────────────────────
+
+    /// A two-step runbook: the first step carries a check, the second does not.
+    const BOOK: &str = r#"mode = "sequence"
+
+[[step]]
+id   = "check.first"
+text = "Do the first thing."
+verify = ["true"]
+
+[[step]]
+id   = "check.second"
+text = "Do the second thing."
+"#;
+
+    /// [`BOOK`] as the shell would observe it for `key`. Digests are stand-ins:
+    /// the derivation only compares them for equality.
+    fn book_facts(key: RunbookKey) -> RunbookFacts {
+        let book = Runbook::parse(key, BOOK).unwrap();
+        let digests = book
+            .steps()
+            .iter()
+            .map(|step| (step.id().to_owned(), format!("d-{}", step.id())))
+            .collect();
+        RunbookFacts { key, book, digests }
+    }
+
+    /// Record a live discharge of `step` against `facts`' current digest.
+    fn discharge(run: &mut DesignSnapshot, facts: &RunbookFacts, step: &str) {
+        run.runbook.upsert(Discharge::attested(
+            facts.key,
+            step,
+            facts.digests.get(step).unwrap(),
+            1,
+        ));
+    }
+
+    /// [`cleared`] at `reviewing` with its runbook discharged: nothing blocks
+    /// the `reviewing→locked` edge.
+    fn crossable() -> (DesignSnapshot, GateFacts) {
+        let (mut run, derived) = cleared();
+        let mut facts = derived.gate;
+        let book = book_facts(RunbookKey::Reviewing);
+        for step in ["check.first", "check.second"] {
+            discharge(&mut run, &book, step);
+        }
+        facts.runbook = Some(book);
+        (run, facts)
+    }
+
+    fn forward_of(run: &DesignSnapshot, facts: &GateFacts) -> (Forward, Vec<String>) {
+        let envelope = project(
+            run,
+            0,
+            Detail::Normal,
+            NOTHING_OUTSTANDING,
+            facts,
+            SLICE_REF,
+        )
+        .unwrap();
+        let lines = prompt(&envelope);
+        (
+            envelope.forward.expect("a non-locked run has an edge"),
+            lines,
+        )
+    }
+
+    /// `VT-1` — a locked run has no forward edge, and every line rendering says
+    /// so explicitly.
+    #[test]
+    fn forward_is_none_at_locked() {
+        let (mut run, facts) = crossable();
+        run.run.stage = Stage::Locked;
+        let envelope = project(
+            &run,
+            0,
+            Detail::Normal,
+            NOTHING_OUTSTANDING,
+            &facts,
+            SLICE_REF,
+        )
+        .unwrap();
+        assert_eq!(envelope.forward, None);
+        assert!(prompt(&envelope).contains(&"forward none".to_owned()));
+        assert!(resume(&envelope).contains(&"forward none".to_owned()));
+        assert!(
+            status(&envelope)
+                .iter()
+                .any(|line| line.ends_with("forward      none"))
+        );
+    }
+
+    /// `VT-1` — `ready` exactly when nothing blocks, carrying the payload that
+    /// crosses; each blocker alone withholds it.
+    #[test]
+    fn ready_only_when_nothing_is_outstanding() {
+        let (run, facts) = crossable();
+        let (forward, lines) = forward_of(&run, &facts);
+        let ready = forward.ready.expect("nothing blocks");
+        assert_eq!(ready.envelope.run_uid, run.run.uid);
+        assert_eq!(ready.envelope.known_revision, run.run.revision);
+        assert_eq!(
+            ready.envelope.submission_id,
+            format!("advance-locked-r{}", run.run.revision)
+        );
+        assert_eq!(
+            ready.stage.as_ref().map(|stage| stage.to),
+            Some(Stage::Locked)
+        );
+        assert!(
+            lines.contains(&"forward reviewing→locked ready".to_owned()),
+            "{lines:?}"
+        );
+        let apply = lines
+            .iter()
+            .find_map(|line| line.strip_prefix("  apply "))
+            .expect("the payload is printed");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(apply).unwrap(),
+            serde_json::json!({
+                "run_uid": run.run.uid,
+                "known_revision": run.run.revision,
+                "submission_id": ready.envelope.submission_id,
+                "stage": {"to": "locked"},
+            }),
+            "only what it sets"
+        );
+        // The gate agrees on the same facts.
+        assert_eq!(
+            advance(
+                Stage::Reviewing,
+                Stage::Locked,
+                &run,
+                &facts,
+                Some(&RunbookStanding::default())
+            ),
+            Ok(Stage::Locked)
+        );
+
+        // A runbook step outstanding blocks.
+        let (mut stepped, facts) = crossable();
+        stepped.runbook.discharges.clear();
+        assert_eq!(forward_of(&stepped, &facts).0.ready, None);
+
+        // An unmet condition blocks.
+        let (run, mut unobserved) = crossable();
+        unobserved.observed_facts = ObservedFacts::default();
+        let (forward, lines) = forward_of(&run, &unobserved);
+        assert_eq!(forward.ready, None);
+        assert!(!forward.unmet.is_empty());
+        assert!(
+            lines.iter().any(|line| line.starts_with("  unmet ")),
+            "{lines:?}"
+        );
+
+        // A missing runbook blocks: the gate fails closed on it.
+        let (run, mut bookless) = crossable();
+        bookless.runbook = None;
+        assert_eq!(forward_of(&run, &bookless).0.ready, None);
+    }
+
+    /// `VT-1` — an edited `design.md` blocks the edge, first, with the
+    /// refusal's own sentence.
+    #[test]
+    fn divergence_blocks_ready() {
+        let (run, mut facts) = crossable();
+        facts.authored_fingerprint = Some(Fingerprint::new("sha256:edited"));
+        let (forward, lines) = forward_of(&run, &facts);
+        assert_eq!(forward.ready, None);
+        let diverged = forward.diverged.expect("the watermark no longer matches");
+        let refusal = divergence_refusal(
+            &observe_watermark(&run, facts.authored_fingerprint.as_ref()),
+            SLICE_REF,
+        )
+        .unwrap();
+        assert_eq!(diverged.refusal, refusal);
+        let at = lines
+            .iter()
+            .position(|line| line == "forward reviewing→locked blocked")
+            .expect("the edge heads the rows");
+        assert_eq!(
+            lines[at + 1],
+            format!("  diverged {refusal}"),
+            "and it is the first row"
+        );
+    }
+
+    /// `VT-2` — the minted id steps past one a retained receipt holds.
+    #[test]
+    fn minted_id_avoids_retained_receipts() {
+        let (mut run, facts) = crossable();
+        let taken = format!("advance-locked-r{}", run.run.revision);
+        run.receipts.receipts.push(Receipt {
+            submission: taken.clone(),
+            revision: run.run.revision,
+            digest: "sha256:earlier".to_owned(),
+            delegation: None,
+            delegation_state: None,
+        });
+        let ready = forward_of(&run, &facts).0.ready.unwrap();
+        assert_eq!(ready.envelope.submission_id, format!("{taken}-2"));
+        assert!(run.receipts.find(&ready.envelope.submission_id).is_none());
+    }
+
+    /// `VT-3` — only the cursor step carries its text.
+    #[test]
+    fn cursor_carries_text_others_do_not() {
+        let (mut run, facts) = crossable();
+        run.runbook.discharges.clear();
+        let (_, lines) = forward_of(&run, &facts);
+        assert!(
+            lines.contains(&"  runbook reviewing 1/2 check.first — Do the first thing.".to_owned()),
+            "{lines:?}"
+        );
+        assert!(lines.contains(&"  runbook outstanding check.second".to_owned()));
+        assert!(
+            !lines
+                .iter()
+                .any(|line| line.contains("Do the second thing."))
+        );
+    }
+
+    /// `VT-3` — a discharge under an edited definition renders its marker.
+    #[test]
+    fn stale_step_renders_its_marker() {
+        let (mut run, facts) = crossable();
+        let key = RunbookKey::Reviewing;
+        run.runbook
+            .upsert(Discharge::attested(key, "check.second", "d-superseded", 1));
+        let (forward, lines) = forward_of(&run, &facts);
+        assert_eq!(forward.runbook.unwrap().stale, ["check.second"]);
+        assert!(
+            lines.contains(
+                &"  runbook stale check.second — its definition changed after it was \
+              discharged; discharge it again"
+                    .to_owned()
+            )
+        );
+    }
+
+    /// `VT-3` — `unchecked` names the live discharges whose check a read skipped,
+    /// and never a step with no check.
+    #[test]
+    fn unchecked_names_verified_steps() {
+        let (run, facts) = crossable();
+        let (forward, lines) = forward_of(&run, &facts);
+        assert_eq!(forward.unchecked, ["check.first"]);
+        assert!(lines.contains(
+            &"  unchecked check.first — advance re-runs its check; this read did not".to_owned()
+        ));
+
+        let (mut undone, facts) = crossable();
+        undone.runbook.discharges.clear();
+        assert!(forward_of(&undone, &facts).0.unchecked.is_empty());
+    }
+
+    /// `VT-6` — the no-drop forward edge fits beside a saturated envelope, for
+    /// every embedded runbook: every condition unmet with every cause at its cap,
+    /// every step outstanding and stale and unchecked, the longest step text at
+    /// the cursor, and every evictable list at its limit.
+    #[test]
+    fn maximal_forward_fits() {
+        let embedded = [
+            (
+                RunbookKey::Exploring,
+                include_str!("../../../install/design-prompts/exploring.toml"),
+            ),
+            (
+                RunbookKey::Inquiring,
+                include_str!("../../../install/design-prompts/inquiring.toml"),
+            ),
+            (
+                RunbookKey::Drafting,
+                include_str!("../../../install/design-prompts/drafting.toml"),
+            ),
+            (
+                RunbookKey::Reviewing,
+                include_str!("../../../install/design-prompts/reviewing.toml"),
+            ),
+        ];
+        assert_eq!(embedded.len(), RunbookKey::ALL.len());
+        let unmet: Vec<UnmetRow> = Condition::ALL
+            .into_iter()
+            .map(|condition| {
+                UnmetRow::of(
+                    &Unmet {
+                        condition,
+                        causes: widest_causes(condition, usize::from(u8::MAX)),
+                    },
+                    Detail::Normal,
+                )
+            })
+            .collect();
+        assert_eq!(unmet.len(), super::ENVELOPE_FORWARD_UNMET);
+        assert!(unmet.iter().any(|row| row.to_string().contains(&format!(
+            "(+{} more)",
+            usize::from(u8::MAX) - super::ENVELOPE_CAUSE_MEMBERS
+        ))));
+
+        for (key, text) in embedded {
+            let book = Runbook::parse(key, text).unwrap();
+            let ids: Vec<String> = book
+                .steps()
+                .iter()
+                .map(|step| step.id().to_owned())
+                .collect();
+            let (position, longest) = book
+                .steps()
+                .iter()
+                .enumerate()
+                .max_by_key(|(_, step)| step.text().len())
+                .unwrap();
+            let mut envelope = saturated();
+            envelope.forward = Some(Forward {
+                from: Stage::Reviewing,
+                to: Stage::Locked,
+                diverged: Some(Divergence {
+                    expected: Some(format!("sha256:{}", "e".repeat(64))),
+                    observed: Some(format!("sha256:{}", "o".repeat(64))),
+                    refusal: divergence_refusal(
+                        &AuthoredState::Diverged {
+                            expected: Some(format!("sha256:{}", "e".repeat(64))),
+                            observed: Some(format!("sha256:{}", "o".repeat(64))),
+                        },
+                        "SL-99999",
+                    )
+                    .unwrap(),
+                }),
+                runbook: Some(RunbookAhead {
+                    name: key.name(),
+                    cursor: Some(CursorStep {
+                        id: longest.id().to_owned(),
+                        position: position + 1,
+                        of: ids.len(),
+                        text: longest.text().to_owned(),
+                    }),
+                    outstanding: ids.clone(),
+                    stale: ids.clone(),
+                }),
+                unmet: unmet.clone(),
+                unchecked: ids,
+                ready: None,
+            });
+            let bytes = rendered_bytes(&envelope);
+            assert!(
+                bytes <= ENVELOPE_NORMAL_BUDGET_BYTES,
+                "{} renders {bytes} B, over {ENVELOPE_NORMAL_BUDGET_BYTES}",
+                key.name()
+            );
+        }
+    }
+
+    /// An envelope with every evictable list at its cap, each entry at its
+    /// widest.
+    fn saturated() -> TurnEnvelope {
+        let mut envelope = turn(&wide_run(40), NOTHING_OUTSTANDING).unwrap();
+        let wide_id = |n: usize| format!("inq-{n:0>28}");
+        envelope.frontier = (0..super::ENVELOPE_FRONTIER_NODES)
+            .map(|n| FrontierEntry {
+                id: wide_id(n),
+                question: "q".repeat(super::ENVELOPE_QUESTION_BYTES),
+                kinship: "grandparent-or-nibling",
+                needs_in_degree: usize::MAX,
+                provenance: "agent-proposed",
+            })
+            .collect();
+        envelope.active_path = (0..super::ENVELOPE_ACTIVE_PATH_DEPTH)
+            .map(|n| PathEntry {
+                id: wide_id(n),
+                question: "q".repeat(super::ENVELOPE_QUESTION_BYTES),
+            })
+            .collect();
+        envelope.blockers = (0..super::ENVELOPE_BLOCKERS)
+            .map(|n| BlockerEntry {
+                id: wide_id(n),
+                reason: "r".repeat(super::ENVELOPE_REASON_BYTES),
+                needs_in_degree: usize::MAX,
+            })
+            .collect();
+        envelope.sections = (0..super::ENVELOPE_SECTION_ROWS)
+            .map(|n| SectionRow {
+                id: wide_id(n),
+                title: "t".repeat(super::ENVELOPE_LABEL_BYTES),
+                fingerprint: format!("sha256:{}", "f".repeat(64)),
+                review_outstanding: true,
+            })
+            .collect();
+        envelope.durable_records = (0..super::ENVELOPE_DURABLE_RECORDS)
+            .map(|n| DurableRef {
+                record: format!("DEC-{n:0>5}"),
+                node: wide_id(n),
+                form: "decision",
+            })
+            .collect();
+        envelope.changes = ChangeDelta::Since {
+            known_revision: 0,
+            rows: vec![
+                "c".repeat(super::super::SKETCH_WIDEST_ROW_BYTES);
+                super::ENVELOPE_CHANGE_ROWS
+            ],
+        };
+        envelope
+    }
+
     /// The terminal rule: when the no-drop set alone exceeds the ceiling, the
     /// projection REFUSES rather than emitting a quietly malformed envelope.
     #[test]
     fn the_no_drop_set_alone_over_the_ceiling_is_refused() {
         let run = wide_run(40);
-        let refused = project_within(&run, 0, Detail::Normal, NOTHING_OUTSTANDING, 1).unwrap_err();
+        let refused = turn_within(&run, NOTHING_OUTSTANDING, 1).unwrap_err();
         assert!(
             matches!(refused, Refusal::EnvelopeIrreducible { .. }),
             "{refused:?}"

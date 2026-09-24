@@ -71,6 +71,14 @@ watermark absent materialised false
 change_log_floor 1 receipt_floor 1
 posture breadth (agent-proposed) cursor unset
 totals nodes=0 open=0 resolved=0 deferred=0 pruned=0 blocked=0 open_outside_frontier=0 sections=0 sections_outstanding_review=0 changes_since_baseline=0
+forward exploring→inquiring blocked
+  runbook exploring 1/5 explore.scope — Read the slice scope, the specs and ADRs it descends from, and prior art.
+  runbook outstanding explore.research
+  runbook outstanding explore.canon
+  runbook outstanding explore.memory
+  runbook outstanding explore.triage
+  unmet governing-context-recorded: no live `governance-confirmed` from user → the user performs `governance-confirmed` (you record it on their assent)
+  unmet initial-concerns-recorded: no live `graph-reviewed` from user, no live `blocking-set-declared` from agent → the user performs `graph-reviewed` (you record it on their assent), naming the current `blocking-set-declared`; the agent performs `blocking-set-declared`
 frontier
 blockers
 sections
@@ -97,11 +105,12 @@ const PRIOR_STATUS: &str = r#"design run <UID> for slice 233
   inquiry      0 nodes — 0 open, 0 resolved, 0 deferred, 0 pruned, 0 blocked
   sections     0 (0 with outstanding review)
   changes      0 since the declared baseline
+  forward      exploring→inquiring blocked — 5 steps, 2 conditions
 "#;
 
 const PRIOR_JSON: &str = r#"{
   "schema": "doctrine.design-turn",
-  "version": 1,
+  "version": 2,
   "detail": "normal",
   "run": {
     "uid": "<UID>",
@@ -130,7 +139,77 @@ const PRIOR_JSON: &str = r#"{
     "sections_outstanding_review": 0,
     "changes_since_baseline": 0
   },
-  "next_obligation": null,
+  "forward": {
+    "from": "exploring",
+    "to": "inquiring",
+    "diverged": null,
+    "runbook": {
+      "name": "exploring",
+      "cursor": {
+        "id": "explore.scope",
+        "position": 1,
+        "of": 5,
+        "text": "Read the slice scope, the specs and ADRs it descends from, and prior art."
+      },
+      "outstanding": [
+        "explore.scope",
+        "explore.research",
+        "explore.canon",
+        "explore.memory",
+        "explore.triage"
+      ],
+      "stale": []
+    },
+    "unmet": [
+      {
+        "condition": "governing-context-recorded",
+        "causes": [
+          {
+            "cause": {
+              "act-missing": {
+                "act": "governance-confirmed",
+                "lanes": [
+                  "user"
+                ]
+              }
+            },
+            "omitted": 0
+          }
+        ],
+        "remedy": "the user performs `governance-confirmed` (you record it on their assent)"
+      },
+      {
+        "condition": "initial-concerns-recorded",
+        "causes": [
+          {
+            "cause": {
+              "act-missing": {
+                "act": "graph-reviewed",
+                "lanes": [
+                  "user"
+                ]
+              }
+            },
+            "omitted": 0
+          },
+          {
+            "cause": {
+              "act-missing": {
+                "act": "blocking-set-declared",
+                "lanes": [
+                  "agent"
+                ]
+              }
+            },
+            "omitted": 0
+          }
+        ],
+        "remedy": "the user performs `graph-reviewed` (you record it on their assent), naming the current `blocking-set-declared`; the agent performs `blocking-set-declared`"
+      }
+    ],
+    "unchecked": [],
+    "ready": null
+  },
   "pinned": null,
   "active_path": [],
   "frontier": [],

@@ -654,7 +654,7 @@ fn resume_returns_the_seven_scope_fields_without_optional_flags() {
         "assumptions",
         "evidence_references",
         "blockers",
-        "next_obligation",
+        "forward",
     ] {
         assert!(
             resumed.lines().any(|line| line.starts_with(field)),

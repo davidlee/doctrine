@@ -4251,11 +4251,15 @@ fn every_declared_site_is_reached_and_an_emptied_seq_breaks_the_coverage_equalit
         "an emptied `Seq` must break the coverage equality"
     );
     let lost: Vec<&String> = declared.difference(&control).collect();
-    let element = format!("{}{SITE_KEY}{DECLARE_KEY}{SITE_SEQ}", PAYLOAD.name);
+    // The key site goes with it since SL-262 made an empty `declare` skip on
+    // serialisation (the forward edge's `ready` payload shows only what it
+    // sets), so the key is not on the wire to arrive at either.
+    let key = format!("{}{SITE_KEY}{DECLARE_KEY}", PAYLOAD.name);
+    let element = format!("{key}{SITE_SEQ}");
     assert_eq!(
         lost,
-        vec![&element],
-        "an emptied `Seq` loses its element site and nothing else"
+        vec![&key, &element],
+        "an emptied `Seq` loses its key and element sites and nothing else"
     );
 
     let (arrived, _) = reached(&coverage_union(&ApplyRequest::fully_populated()));

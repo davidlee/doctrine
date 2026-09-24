@@ -1268,7 +1268,7 @@ pub(crate) struct ApplyRequest {
     /// acceptance rides so authority and the digest stay unclaimable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) acceptance: Option<AcceptanceDeclaration>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) declare: Vec<Declaration>,
     /// One delegation act (DEC-068). Run-level, like the acceptance: an
     /// assignment is about the run's obligation, not about a declaration subject.
