@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d33d-dfd6-7232-8e1a-1dc1c13c180f"
+recorded_at = "2026-09-24T11:47:22.71027755Z"
+kind = "friction"
+summary = "[execute; SL-262 PHASE-02] verify-vt reads UNATTRIBUTABLE until the phase is flipped completed"
+detail = "After committing PHASE-02, verify-vt still reported VT-5/VT-7 UNATTRIBUTABLE ('file not modified by this slice') although both files were committed and matched design-target selectors. They passed only after 'slice phase --status completed' recorded the boundary. The message names the wrong cause (modification) instead of the missing phase boundary; cost a selector investigation."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
