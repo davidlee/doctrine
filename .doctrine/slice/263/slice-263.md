@@ -111,20 +111,25 @@ format + seen-set/log IO). No new retrieval logic.
   `tool_input.command` field are stable enough to depend on (same class of
   assumption `SL-205` `A-1` made for Claude).
 
-## Open Questions (resolve in /design)
+## Open Questions
 
-- **OQ-1** codex path surface: ship the `apply_patch` patch-path extractor in
-  this slice, or ship codex command-surface-only and defer the path surface? The
-  extractor is the only genuinely new *logic* here; everything else is glue.
+- **OQ-1 → RESOLVED (in scope).** Ship the `apply_patch` patch-path extractor
+  here. A slice that ships codex surfacing with only the command surface is a
+  half-port, and the extractor is the only genuinely new *logic* in the slice —
+  everything else is glue.
 - **OQ-2** pi `--format plain`: emit bare text (one output form per consumer) or
   have the TS adapter parse the shared Claude envelope (zero Rust)? Codex
   confirms the envelope is a de-facto cross-harness contract, which weakens the
   coupling argument for a second form.
 - **OQ-3** pi subagent suppression: accept surfacing inside pi subagent sessions
   for v1 (documented), or find a signal (env marker / session metadata)?
-- **OQ-4** pi's extension install is hosted on the `Harness::Codex` arm today, so
-  a claude-only repo gets no pi extensions at all. Fix here (make pi a `Harness`
-  variant) or capture as its own slice?
+- **OQ-4 → RESOLVED (follow-up).** Left as a follow-up; the modelling is
+  functionally sufficient. `doctrine install --agent pi` accepts `pi` and wires
+  its boot legs through the **codex** arm — the dry run reports *"boot … session
+  hooks for codex"* plus *"skills for pi (delegates to npx)"* — while `doctrine
+  boot install --agent pi` refuses (`Unknown harness 'pi'`). NQR: pi is not a
+  boot `Harness` variant, so a claude-only repo that auto-detects without
+  `--agent pi` receives no pi extensions. Not load-bearing for this port.
 
 ## Verification / Closure intent
 
@@ -139,3 +144,13 @@ format + seen-set/log IO). No new retrieval logic.
   ownership-marked, regenerate-on-change, foreign-skipped.
 - Behaviour-preservation: existing memory, retrieve and boot suites green
   unchanged.
+
+## Follow-Ups
+
+- **pi as a first-class boot `Harness` variant.** `doctrine boot install --agent
+  pi` refuses and `resolve_harnesses` auto-detection never yields pi; the skills
+  installer compensates by routing pi's boot legs through the codex arm. Fixing
+  the modelling is orthogonal to this port.
+- **Subagent surfacing on pi/codex** — the `INV-3` parity gap left open by
+  OQ-3, if tightening proves worthwhile.
+- **Cursor** (`IMP-245`).
