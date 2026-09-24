@@ -55,12 +55,13 @@ exit_criteria = [
   { id = "EX-2", text = "commands::design splits run_apply into parse_payload (JSON parse, refuse_unknown_keys, deserialise) and apply_pipeline(root, slice, request, digest, crossing, read, stop, pre_write, fault). Stop { AfterCandidate, Write } is defined; only Write is used by the wire path." },
   { id = "EX-3", text = "On the Adopt path apply_pipeline takes one document read (text + fingerprint) as an argument; fingerprint and authored_sections derive from the same bytes (RV-374 F-1)." },
   { id = "EX-4", text = "Ordering unchanged: admit, divergence check (Ordinary), pass 1, DEC-250 mint hoisting, mints, pass 2, rebaseline (Adopt), journal, pre-write re-check, snapshot." },
-  { id = "EX-5", text = "Behaviour-preservation gate: every existing e2e_design_* and design_run unit test passes unchanged." },
+  { id = "EX-5", text = "Behaviour-preservation gate: every existing e2e_design_* and design_run unit test passes unchanged. The only permitted test edits are mechanical call-site additions of the new &Crossing argument in src/design_run/tests.rs; no assertion changes." },
+  { id = "EX-6", text = "Transitional: the wire adopt_authored maps to Crossing::Adopt { expect: Some(declared fingerprint) }, and the pure core keeps the caller-map comparison as a check reading request.adopt_authored when present. PHASE-05 deletes both." },
 ]
 verification = [
   { id = "VT-1", expects = "existing suites green with no test edits (the gate); apply_pipeline and Crossing present", test_file = "src/commands/design.rs", keywords = ["fn parse_payload", "fn apply_pipeline", "Crossing::Adopt", "Stop::AfterCandidate"], waived = false },
   { id = "VT-2", expects = "the pure core adopts only under Crossing::Adopt; Ordinary never reads authored sections", test_file = "src/design_run/tests.rs", keywords = ["ordinary_crossing_never_reads_authored_sections"], waived = false },
-  { id = "VA-1", text = "git diff of the PHASE-02 commit touches no file under tests/." },
+  { id = "VA-1", text = "git diff of the PHASE-02 commit touches no file under tests/, and its src/design_run/tests.rs hunks only add the &Crossing argument." },
 ]
 specs        = []
 requirements = []
@@ -137,7 +138,7 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-05 complete." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "A revision on SPEC-029 adds adopt to the command family, adds REQ-434's criterion (engine derives; optional --expect; entry read otherwise; locked: aligned is a no-op, diverged refused before parse), and re-expresses any responsibility text naming adopt_authored." },
+  { id = "EX-1", text = "A revision on SPEC-029 adds adopt to the command family, adds REQ-434's criterion (engine derives; optional --expect; entry read otherwise; locked: aligned is a no-op, diverged refused before parse), and re-expresses any responsibility text naming adopt_authored. Approving the revision is the user's act: lay out the change, get their plain reply, then record it." },
   { id = "EX-2", text = "install/hymns/stage/design.md and install/design-prompts/drafting.md name doctrine design adopt (review first with --dry-run --diff) as the only lawful crossing." },
   { id = "EX-3", text = "Memories mem_019fdf95 (correcting a locked run), mem_019facc2 (parser readout) and mem_01a00f17 (reconcile) edited via doctrine memory edit as in design sec-5; doctrine install refreshes installed copies; doctrine boot regenerated if needed." },
 ]
