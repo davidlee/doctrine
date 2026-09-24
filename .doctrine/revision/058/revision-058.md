@@ -12,30 +12,36 @@ surfacing mechanism: a harness hook fires on a tool call (Claude / codex
 `PreToolUse`; pi `tool_result`), resolves the call to a scope probe, and appends
 concise memory *pointers* to that tool's context. PRD-004 §2 out-scopes
 *proactive, unsolicited injection of memories into a context ahead of demand*,
-and §8 leaves the proactive-vs-demand question open, blocking any pre-emptive
-surfacing contract and the trust bar such surfacing would require. Reconcile owes
-the reading that makes the shipped mechanism consistent with — not an exception
-to — the authored scope.
+and §8 asks whether recall may happen before an explicit memory request. The
+tool action is deliberate, but it is **not** an explicit request for memory.
+The spec needs to name this context-triggered pointer case without treating it
+as either a context-entry push or an explicit memory query.
 
 ### The reading
 
-**A tool-call-keyed surface delivers concise pointers at the moment of demand,
-not memory payload ahead of demand.**
+**A tool-call-keyed surface delivers concise pointers when the agent acts on a
+path or command, without requiring an explicit memory query.**
 
-- **The demand signal is the tool call.** Recall fires because the caller chose
-  to act on a path or command, at the moment it acts — never on context entry,
-  never on a timer, never unsolicited.
-- **The payload is a pointer**, a memory's title and scope rather than its body,
-  so the surface offers a reference the model may follow rather than injecting
-  recalled knowledge it did not ask for.
-- **No new trust bar is owed.** The surface reuses the recall pipeline's existing
-  holdback (`REQ-018`'s non-bypassable trust gate; `REQ-151`/`REQ-152`), so a
-  suppressed or low-trust memory is withheld exactly as on any other recall.
+- **The trigger is a work action.** The hook asks the memory engine about the
+  path or command the agent chose to use. This is automatic surfacing at that
+  action, not an agent request to recall memory. It does not fire merely because
+  a context was entered or time passed.
+- **The payload is a pointer**, carrying a memory's title, uid and a short
+  triage label rather than its body, so the surface offers a reference the model
+  may follow.
+- **The existing suppression gate still applies.** The surface obtains rows
+  through the memory engine's retrieval path: quarantined and retracted
+  memories are suppressed (`REQ-017` / `REQ-151`), and low-trust,
+  high-severity memories pass through the non-bypassable holdback (`REQ-152`).
+  `REQ-018` governs the rendering of recalled knowledge as data; it is not
+  itself a trust gate. A pointer's title is recalled, untrusted knowledge, so
+  the pointer must also meet `REQ-018`'s quoted, attributed presentation rule.
+  The shipped formatter's discrepancy is tracked by `ISS-480`.
 
-So §2's out-of-scope bullet still stands in kind — it forbids injection *ahead
-of* demand, which this is not — and gains a clarification that a demand-keyed
-pointer surface is not the thing it out-scopes. §8's first open question
-resolves to the explicit-demand branch.
+So §2's out-of-scope bullet retains the context-entry boundary and gains an
+explicit in-scope case for action-triggered pointers. §8's first open question
+settles with three distinct cases: explicit memory queries, optional
+action-triggered pointers, and out-of-scope context-entry injection.
 
 This is the reading the locked design (`SL-263` §3, §9) carries; approval of the
 reading is the user's at reconcile.
@@ -48,13 +54,13 @@ reading is the user's at reconcile.
 
 **After:**
 
-> Proactive, unsolicited injection of memories into a context ahead of demand. A
-> *demand-keyed* surface — recall fired by the caller's own act (e.g. a tool
-> call) at the moment of that act, delivering pointers rather than memory bodies
-> — is not ahead-of-demand injection and is in scope; it is governed by the
-> recall requirements like any other recall.
+> Proactive injection of memory bodies or pointers merely because a context is
+> entered or a timer fires, before any working action or explicit recall request.
+> An optional surface triggered by the agent's deliberate action on a path or
+> command may provide concise memory pointers at that action. This is in scope
+> even when the agent did not explicitly request memory.
 
-### PRD-004 §8 — before/after
+### PRD-004 §6 and §8 — before/after
 
 **Before** (first open question, removed as settled):
 
@@ -62,24 +68,27 @@ reading is the user's at reconcile.
 > explicit demand? This blocks the contract for any pre-emptive surfacing and the
 > trust bar such surfacing would require.
 
-**After** (replaced by the settled reading, not an open question):
+**After** (remove the settled question from §8; add to §6 Behaviour):
 
-> **Settled:** recall surfaces on demand, never on context entry. The demand
-> signal may be the caller's own act — a tool call keyed to the path or command
-> it touches — which delivers the nudge at the moment of demand. Pre-emptive
-> surfacing on context entry remains out of scope (§2); no separate trust bar is
-> owed, because every surfaced pointer passes the existing recall holdback.
+> Optional pointer flow — when an enabled harness observes a deliberate tool
+> action on a path or command, it may ask for relevant memory pointers at that
+> action. The system applies the agent-facing recall exclusions before returning
+> concise pointers rendered as quoted, attributed data bearing identity, trust
+> standing, and context; the agent may follow a pointer to request the full
+> memory. This flow does not run merely on context entry. The pointer title is
+> untrusted data and never becomes an instruction.
 
 The second open question (retention and erasure) is untouched.
 
 ### Why not a requirement
 
-§2 and §8 are scope prose and an open question. The mechanism adds no recall
-behaviour beyond `REQ-013`–`REQ-016` (record, recall-for-context, lifecycle,
-identity) and the trust requirements it reuses, so a `[[change]]` row against a
-requirement would misstate a scope reading as a contract change. The row is
-`modify PRD-004` (prose, applied at reconcile); no `REQ` is introduced, modified,
-or retired.
+`REQ-014` already lets a caller request memories relevant to a working context;
+the enabled harness is a caller using that contract at a work action. This
+revision clarifies when that optional caller may act. It does not require every
+harness to install a pointer surface or change the full-memory recall contract.
+`REQ-017` / `REQ-151` / `REQ-152` still govern admission, and `REQ-018` still
+requires recalled knowledge to be presented as data. The row is `modify PRD-004`
+(prose, applied at reconcile); no `REQ` is introduced, modified, or retired.
 
 ### Sibling check — PRD-007
 

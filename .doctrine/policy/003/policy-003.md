@@ -1,9 +1,5 @@
 # POL-003: Harness independence from host-harness seams
 
-<!-- Body sections reuse the tuned prior art from spec-driver/supekku
-     templates/policy-template.md; its YAML frontmatter is dropped — metadata
-     lives in the sister policy.toml (storage rule / design D1). -->
-
 ## Statement
 
 Harness-specific behaviour — anything doctrine wires for one particular agent
@@ -24,11 +20,12 @@ incidental seams. Three prohibitions follow:
    an internal name a harness happens to canonicalise to, or a channel that
    merely works today. Where the only available seam is incidental, the
    behaviour is a documented delta or a follow-up, never a silent dependency.
-3. **Opt-in, and disclosed.** A supplement is installed deliberately and its
-   activation is announced — a manual step is named, a skipped or failed install
-   leg is reported, never absorbed. The neutral core functions with no supplement
-   present; a harness that lacks the capability loses the supplement, not
-   correctness.
+3. **Opt-in, and disclosed.** A supplement is installed deliberately. The
+   installer reports what it wired, names any manual activation step, and reports
+   a skipped or failed install leg. It does not claim a hook is active when the
+   harness still requires trust or approval. The neutral core functions with no
+   supplement present; a harness that lacks the capability loses the supplement,
+   not correctness.
 
 ## Rationale
 
@@ -50,8 +47,8 @@ ports; harness glue baked into the core forks.
 identical under every harness by construction. This policy makes the *rule* that
 decision implies enforceable — the recurring principle applied ad hoc in
 `SL-205` (Claude `PreToolUse` ambient memory surfacing) and generalised across
-the pi and codex ports (`SL-263`). Four instances is where a precedent becomes a
-rule of the road.
+the pi and codex ports (`SL-263`). Counting `ADR-011`'s surviving
+mechanism-in-the-binary principle, those are four instances of the same rule.
 
 ## Scope
 
@@ -81,8 +78,8 @@ mechanism with three questions:
    re-ground it on a doctrine-owned contract (the envelope, the install
    registry, the ownership predicate), or record the behaviour as a documented
    delta with a follow-up.
-3. Is it opt-in and disclosed? Is the supplement's activation named, and is a
-   skipped leg reported rather than absorbed (`STD-003`)?
+3. Is it opt-in and disclosed? Does the installer distinguish wiring from
+   activation, name any manual step, and report a skipped leg?
 
 The conformance work is the port programme itself: `SL-205`'s ambient surfacing
 and `SL-263`'s pi + codex ports are the worked examples the rule was induced
@@ -94,8 +91,8 @@ from.
   binary; the decision this rule makes enforceable).
 - `POL-002` — platform independence from host-project conventions and state
   (the sibling policy on the project axis).
-- `STD-001` — no magic strings; `STD-003` — no silent skip.
-- `SL-205` — ambient memory surfacing (the first instance).
+- `STD-001` — no magic strings.
+- `SL-205` — ambient memory surfacing (the second instance).
 - `SL-263` — the pi + codex ports (the third and fourth instances).
 - `IDE-034` — the backlog idea the policy was promoted from.
 - `PRD-004` / `SPEC-011` — the memory and boot-snapshot capabilities the

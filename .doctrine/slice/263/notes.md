@@ -267,6 +267,22 @@ registry and `RefreshReport.hooks` carries both outcomes.
 - Behavioural VTs run the generated `.ts` under `node` (`package.json`
   `{"type":"module"}` for ESM); delivered-to-stdin and EPIPE-survival both pass.
 
+## Governance draft review
+
+`POL-003` is `draft` pending acceptance. `REV-058` distinguishes an automatic
+tool-action pointer from an explicit memory request, and `REV-059` updates
+`SPEC-011`'s stale codex import-only claim. `REV-060` adds the missing
+`SPEC-007` memory-side contract. The owner confirmed that `REQ-018` applies
+to pointer titles, so `REV-058` and `REV-060` explicitly require quoted,
+attributed pointer data with identity, trust standing and context.
+
+`ISS-479` captures the already known pi-selection follow-up. `ISS-480` tracks
+the shipped formatter discrepancy; the holdback proves admission, not
+presentation. These implementation issues do not weaken the proposed rules.
+The four governance drafts remain unapproved. This review was landed onto
+`edge` from `review/SL-263-governance`; `doctrine spec validate` and
+`git diff --check` were clean. No code gate was run for the documentation edit.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-09-24 · PHASE-05 · f23132575
@@ -289,6 +305,8 @@ fresh-as-of: 2026-09-24 · PHASE-05 · f23132575
 - RV-380 review fixes — `F-1` (canonicality compares only fields a spec sets),
   `F-2` (a real neutral-wire round-trip integration test), `F-3` (one
   `BIN_PATH_MARKER`), `F-4` (`discover_surface_anchor` returns a `SurfaceAnchor`).
+- POL-003; REV-058 / REV-059 / REV-060 — reviewed governance drafts, unapproved.
+- ISS-479 / ISS-480 — known pi-selection and pointer-rendering follow-ups.
 - scope reconciled; design-target selectors: `src/memory.rs`, `src/boot.rs`,
   `src/retrieve.rs`, `templates/surface.ts`,
   `plugins/doctrine/hooks/hooks.json`.
@@ -328,9 +346,9 @@ fresh-as-of: 2026-09-24 · PHASE-05 · f23132575
 
 ### Open
 
-- PHASE-05 in progress — POL-003 authored; REV-058 (PRD-004) and REV-059
-  (SPEC-011) drafted `proposed`; `SL-263 governed_by POL-003` recorded. Approval
-  and application are the user's act at reconcile (VH-1); a governance review
-  thread with codex is running before the phase completes.
+- PHASE-05 in progress — POL-003 authored as `draft`; REV-058 (PRD-004),
+  REV-059 (SPEC-011), and REV-060 (SPEC-007) remain `proposed` and unapproved;
+  `SL-263 governed_by POL-003` is recorded. Approval and application occur at
+  reconcile (VH-1). `ISS-480` holds implementation conformance separately.
 - PHASE-01..PHASE-04 done (RV-380 `fix-now` findings reconciled).
 - OQ-4 follow-up: pi as a first-class boot `Harness` variant.

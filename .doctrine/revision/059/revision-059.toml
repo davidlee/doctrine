@@ -35,7 +35,7 @@ action = "introduce"
 primary = false
 new_label = "FR-010"
 member_of = "SPEC-011"
-new_statement = "The codex install leg wires doctrine's owned codex hook registry — a `SessionStart` emit hook and a `PreToolUse` memory-surface hook across codex's `Bash` and `apply_patch` matchers — with the per-hook `additionalContextLimit` and `timeout` on the handler (beside `command`, never on the matcher group), and judges an owned entry canonical only when those handler fields equal what doctrine emits, so a missing or stale limit is healed rather than left."
+new_statement = "`boot install` idempotently merges doctrine's owned codex hook registry — a `SessionStart` emit hook and a `PreToolUse` memory-surface hook across codex's `Bash` and `apply_patch` matchers — into `.codex/hooks.json`, preserving foreign entries and refreshing an owned entry when its matcher, command, or handler fields differ; only the memory-surface handlers carry `additionalContextLimit` and `timeout`, both beside `command` rather than on the matcher group."
 
 [[change]]
 action = "introduce"
