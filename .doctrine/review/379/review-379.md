@@ -90,3 +90,30 @@ captured.
 
 - None outstanding. REV-057 (SPEC-029 command family + REQ-434 criterion) is
   approved, applied and done.
+
+## Reconciliation Outcome
+
+User-confirmed in session ("yes", 2026-09-24).
+
+### Direct edits applied
+- design.md sec-3 snippet and sec-6 `run.rs` row: `adopt_authored(next,
+  expect, derived)` → `adopt(…)` (F-5).
+- design.md sec-6: rows for `snapshot.rs`, `document.rs`, `guard.rs`,
+  `Cargo.lock`, `tests/common/mod.rs`; memory row names all five memories; row
+  for SPEC-029 / REQ-434 via REV-057 (F-1, F-2 mirror).
+- design.md sec-7: the aligned-probe idiom and its three-part oracle (F-6).
+
+### Selector registry
+- 12 design-target selectors added (the five code paths, spec-029.toml,
+  requirement-434.toml, five memory dirs). Conformance: undeclared 39 → 22,
+  undelivered 0; the remainder is F-3 (SL-263, tolerated) and F-4 / the
+  REV-057 record (lifecycle, aligned).
+
+### REVs completed
+- REV-057: done (PHASE-06) — no further governance writes owed.
+
+### Withdrawn / tolerated
+- F-3 tolerated, F-4 aligned — rationale in the finding dispositions.
+
+design.md now diverges from its locked run's watermark by design
+(mem.pattern.reconcile.edit-design-out-of-band). Reconcile complete → /close.

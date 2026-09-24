@@ -74,6 +74,54 @@ intent = "design-target"
 selector = "tests/e2e_design_delegation.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/design_run/document.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/snapshot.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/common/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "Cargo.lock"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/spec/tech/029/spec-029.toml"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/requirement/434/requirement-434.toml"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/memory/items/mem_019fdf95d07979d0a7172f75381ef58c/**"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/memory/items/mem_019facc21a1b7c50a6d5b2eb7ec7f3c9/**"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/memory/items/mem_01a00f1782227d03af78935a152306bc/**"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/memory/items/mem_019ff439bede7fb29c7c09b7fd76d893/**"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/memory/items/mem_019faca1ef967f13820e9f34eb0ce518/**"
+intent = "design-target"
+
 [[relation]]
 label = "fulfils"
 target = "ISS-320"

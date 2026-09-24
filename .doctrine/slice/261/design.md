@@ -293,7 +293,7 @@ match on `crossing`. The adoption function keeps its body minus the caller-map
 comparison:
 
 ```rust
-fn adopt_authored(
+fn adopt(
     next: &mut DesignSnapshot,
     expect: Option<&Fingerprint>,
     derived: &DerivedInput,
@@ -478,16 +478,22 @@ recorded discharge goes stale.
 |---|---|
 | `Cargo.toml` | add `similar` |
 | `src/commands/design.rs` | `DesignCommand::Adopt(AdoptArgs)`; `run_adopt`; split `run_apply` into `parse_payload` + `apply_pipeline(…, &Crossing, Stop, …)`; `readopting` from `Crossing`; one document read carried through the `Adopt` path; aligned short-circuit, then `refuse_adoption_at`; head disclosure; report rendering (header, rows, unchanged, reordered, `--diff`); divergence and materialise read-back refusal text; `authored_sections` doc comment drops the caller-map reference |
-| `src/design_run/run.rs` | `Crossing` enum; `refuse_adoption_at(stage)`; `apply` takes `&Crossing`; `adopt_authored(next, expect, derived)` without the map comparison, with the locked backstop |
+| `src/design_run/run.rs` | `Crossing` enum; `refuse_adoption_at(stage)`; `apply` takes `&Crossing`; `adopt(next, expect, derived)` (renamed from `adopt_authored` with the key's retirement) without the map comparison, with the locked backstop |
 | `src/design_run/submission.rs` | delete `AdoptAuthored`, `ApplyRequest.adopt_authored`, `WRITER_ACT_ADOPT_AUTHORED` and its `WRITER_ACTS` row; add `ApplyRequest::bare(envelope)` |
 | `src/design_run/refusal.rs` | `AdoptionStale { expected: Option<_>, observed }` re-worded for `--expect`; add `AdoptionLocked`, `RetiredPayloadKey`; delete `AdoptionMarkersInvalid` |
+| `src/design_run/snapshot.rs` | `SectionGroup::unchanged_since` / `reordered_since` / `changed_since` — the report's set differences and the `--diff` pairs |
+| `src/design_run/document.rs` | `dropped_head` — the whitespace-only head count, beside the head rule |
+| `src/commands/guard.rs` | `write_class` gains the `Adopt` arm (exhaustive match) |
+| `Cargo.lock` | `similar` |
+| `tests/common/mod.rs` | `unchanged_ids`, shared by the two `parser_readout` helpers |
 | `src/design_run/payload_contract.rs` | `PAYLOAD` `const` → `static`; delete `ADOPT_AUTHORED` and its `PAYLOAD` row; add `RetiredKey`, `RETIRED_KEYS`; the three renderers list retired rows |
 | `src/design_run/contract_check.rs` | `walk_type`/`walk_enum`/`walk_keys` take `&'static TypeContract`; test `NAMED` const → static; roster consult by node identity before `UnknownPayloadKey` |
 | `src/design_run/tests.rs` | pins follow the deletions; roster pins |
 | `install/design-payload-contract.md` | regenerated (`cargo test --bin doctrine regen_payload_contract -- --ignored`) |
 | `install/hymns/stage/design.md`, `install/design-prompts/drafting.md` | wording |
 | `tests/e2e_design_state.rs`, `tests/e2e_design_materialise.rs`, `tests/e2e_design_delegation.rs` | adoption through the verb; parser-readout probes through `--dry-run`; writer-act table loses its row |
-| `.doctrine/memory/items/` (`mem_019fdf95…`, `mem_019facc2…`, `mem_01a00f17…`) | edited via `doctrine memory edit`, as in *Governance and guidance* |
+| `.doctrine/memory/items/` (`mem_019fdf95…`, `mem_019facc2…`, `mem_01a00f17…`, and `mem_019ff439…`, `mem_019faca1…` which named the key) | edited via `doctrine memory edit`, as in *Governance and guidance* |
+| `.doctrine/spec/tech/029/spec-029.toml`, `.doctrine/requirement/434/requirement-434.toml` | REV-057: `adopt` in the command family; REQ-434's crossing criterion |
 
 Layering holds (`ADR-001`): `Crossing` and the adoption rule are pure
 (`design_run::run`); reading files, generating the submission id, diffing and
@@ -540,8 +546,13 @@ spelling changed (behaviour-preservation gate). New and moved cases:
   and no changed section; the adoption re-baselines; a following `materialise`
   drops the head.
 - a payload carrying `adopt_authored` refuses as retired, naming the verb.
-- the parser-readout probes in `e2e_design_materialise.rs` move to
-  `adopt --dry-run`.
+- the parser-readout probes in `e2e_design_materialise.rs` (and the digest-map
+  probes in `e2e_design_state.rs`) move to `adopt --dry-run`. A
+  just-materialised document is aligned, and the aligned no-op returns before
+  any parse, so each probe first prepends one blank line — a whitespace-only
+  head that moves no section body. The oracle is no
+  `section_fingerprint_changed` row, every declared id in `unchanged`, and the
+  `head:` line (the `parser_readout` helpers).
 - the writer-act table in `e2e_design_delegation.rs` has no `adopt_authored`
   row.
 
