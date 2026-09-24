@@ -38,6 +38,10 @@ is. Doctrine owns the procedural state; you own the reasoning.
 
 - Name blockers and unmet gate conditions explicitly. A stage boundary that will
   not advance is information, not an obstacle to work around.
+- The envelope's `forward` rows are what the next advance still needs —
+  runbook steps first, then unmet conditions; act on the first. `ready` names
+  the payload that crosses. Read it before attempting a stage move rather than
+  learning the edge by refusal.
 - Prefer a refusal you understand to a mutation that guesses. When the run
   refuses, read it — the refusal names the key it objected to.
 - Never edit authored design bytes behind the run's back —

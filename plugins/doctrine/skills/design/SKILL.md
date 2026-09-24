@@ -17,8 +17,8 @@ not decide the order here, and do not reconstruct it from this file.
 
 1. **Establish or resume the run.** `doctrine design start <slice>` when none
    exists, `doctrine design resume` when one does.
-2. **Surface the envelope and do what it says.** It carries the stage, the next
-   obligation, and the outstanding runbook steps.
+2. **Surface the envelope and do what it says.** It carries the stage and
+   `forward`: what the next advance still needs, in order.
 
 ## Recovery
 
