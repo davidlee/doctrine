@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0d187a9d47883b65f69835c8e80b7"
+memory_key = "mem.pattern.node.async-spawn-input-ignored"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Node async execFile/spawn ignore an input option — write the child's stdin"
+summary = "Async execFile/spawn have no input option; the value is silently dropped and the child blocks on an unclosed stdin"
+created = "2026-09-24"
+updated = "2026-09-24"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["node", "pi", "subprocess", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "afe7fcdfdbe9e2e3d0c7b89b532c08080a099542"
+ref_name = "refs/heads/edge"
+checkout_state_id = "067e0e344fddcc3fe8b88ce439b66d54aba1aabbd7466468b1996de1478cb3ff"
+base_commit = "1950d37d6825789cd1023ce959a7880a277f65b0"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-263"
+

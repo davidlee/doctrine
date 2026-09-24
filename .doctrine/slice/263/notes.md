@@ -122,20 +122,53 @@ unit and value hold under a real block; and whether the Claude two-form
 ownership predicate has a third ancestor form the refresh should also own. None
 is load-bearing for the design's shape.
 
+## Fresh adversarial pass
+
+A third pass (an external reviewer on the run's own RV-377) raised F-16..F-21 —
+1 major, 4 minor, 1 nit, none blocking. Each was verified against the source
+(the generated-handler transport, `entry_is_canonical`) or this repo's own
+toolchain before disposition; all six are answered `fix-now` and none was
+contested.
+
+- **F-16 (major)** — Node's async `execFile`/`spawn` accept no `input` option, so
+  the pi sketch would have blocked on an unwritten stdin and emitted nothing,
+  with fail-open hiding it. Fixed: the sketch writes `child.stdin.end(json)`; a
+  new §5.7 contract bullet; §9's grep check replaced with a behavioural node run.
+- **F-17 (minor)** — R-3 still claimed the read → edit nudge precedes the edit
+  "on both"; false for codex, which has no read surface. Fixed: R-3 split.
+- **F-18 (minor)** — `probe_for` must receive the canonicalised anchor, not the
+  raw reported cwd, and an absent `cwd` must be specified. Fixed in §5.1; §9
+  gains the symlinked-anchor and absent-cwd cases.
+- **F-19 (minor)** — under harness-side timeouts "delivered" no longer means the
+  model saw it. Fixed: §5.4 states the bounded `INV-6` weakening.
+- **F-20 (minor)** — the three design-only §7 rows lacked DEC records; the
+  phase-1 capture gate is not confined-worker work; the Claude fixture was
+  labelled captured but is not. Fixed: `DEC-287`/`DEC-288`/`DEC-289`;
+  §9/§6 mark the gate `VH`; §9 names the `SL-205` fixture.
+- **F-21 (nit)** — stale prose left by the F-5..F-15 round. Fixed in §1, §3,
+  §5.4, §5.6 and the scope's `--format` bullet.
+
+Sections revised: 1, 3, 5, 6, 7, 8, 9 (materialised at run rev 37). `pass_stale`
+stays true by construction after any revision; the lock edge's `BlockersUndisposed`
+cause reads only blocker-severity *open/contested* findings, and none of the six
+is one.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · design/reviewing · ddccae191
+fresh-as-of: 2026-09-24 · design/reviewing · 1950d37d6
 
 ### Produced
 
-- DEC-280..DEC-286 — the seven settled inquiry decisions.
-- `.doctrine/slice/263/design.md` — 9 sections, materialised at run rev 35.
+- DEC-280..DEC-289 — the seven settled inquiry decisions plus the three design
+  resolutions the fresh pass recorded (engine probe arity, path resolution, pi
+  transport).
+- `.doctrine/slice/263/design.md` — 9 sections, materialised at run rev 37.
 - scope reconciled; design-target selectors: `src/memory.rs`, `src/boot.rs`,
   `src/retrieve.rs`, `templates/surface.ts`,
   `plugins/doctrine/hooks/hooks.json`.
-- RV-377 — 15 findings; F-1..F-4 verified, F-5..F-15 answered, awaiting raiser
+- RV-377 — 21 findings; F-1..F-15 verified, F-16..F-21 answered, awaiting raiser
   verification.
-- commit ddccae191.
+- commits ddccae191, e270e886b, 1950d37d6.
 
 ### Learned
 
@@ -149,14 +182,17 @@ fresh-as-of: 2026-09-24 · design/reviewing · ddccae191
   multi-path is native.
 - mem_01a0d17f827772b096e836f95a2887c4 — design-review `pass_stale` is a lamp,
   not a gate.
+- mem_01a0d187a9d47883b65f69835c8e80b7 — Node async `execFile`/`spawn` ignore an
+  `input` option (only the `*Sync` variants honour it); the envelope must be
+  written with `child.stdin.end(...)`.
 
 ### Open
 
-- RV-377 F-5..F-15 raiser verification → pass disposition (conducted) → 9
+- RV-377 F-16..F-21 raiser verification → pass disposition (conducted) → 9
   section attestations → `design-accepted` → lock. Design is not binding until
   locked.
-- F-11's fixture-capture gate (design §6's three codex unknowns) must become a
-  `/plan` phase-1 exit criterion.
+- F-11/F-20's fixture-capture gate (design §6's three codex unknowns) must become
+  a `/plan` phase-1 exit criterion, marked `VH` (orchestrator/human).
 - Governance leg at reconcile: POL-003 (from IDE-034), the PRD-004 §2/§8 REV,
   the SPEC-011 REV; re-ground SL-263 `governed_by` on POL-003.
 - OQ-4 follow-up: pi as a first-class boot `Harness` variant.
