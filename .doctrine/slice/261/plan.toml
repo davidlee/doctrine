@@ -1,0 +1,151 @@
+# Implementation plan for SL-261 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-261"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber.
+[[phase]]
+id        = "PHASE-01"
+name      = "Retired wire-key roster"
+objective = "DEC-278's mechanism: contract walk by node identity and a retired-key roster consulted before the unknown-key refusal. No key is retired yet."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (DEC-278, design sec-4)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "payload_contract::PAYLOAD is a static; contract_check walk_type/walk_enum/walk_keys take &'static TypeContract; the test-only NAMED const is a static." },
+  { id = "EX-2", text = "RetiredKey { owner, key, remedy } and RETIRED_KEYS exist in payload_contract; RETIRED_KEYS is empty in production." },
+  { id = "EX-3", text = "walk_keys consults the roster by std::ptr::eq on the owner before UnknownPayloadKey; a hit returns Refusal::RetiredPayloadKey naming key, owner name and remedy." },
+  { id = "EX-4", text = "render_prompt, render_document and render_json list a type's retired rows after its live rows." },
+  { id = "EX-5", text = "Pins: a retired key is never live on its owner; every owner is reachable from PAYLOAD; remedies are non-empty. Existing contract_check and payload_contract suites green unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "a retired key is refused with its remedy; the same key name under a different owner is refused as unknown (identity, not name) — exercised with a test-local roster", test_file = "src/design_run/contract_check.rs", keywords = ["retired_key_is_refused_with_its_remedy", "retired_key_matches_its_owner_only", "RetiredPayloadKey"], waived = false },
+  { id = "VT-2", expects = "roster pins: retired not live, owner reachable, remedy non-empty; each pin fails on an injected bad row", test_file = "src/design_run/tests.rs", keywords = ["RETIRED_KEYS", "retired_keys_are_never_live", "retired_key_owners_are_reachable"], waived = false },
+  { id = "VT-3", expects = "never-known keys keep the existing UnknownPayloadKey refusal verbatim", test_file = "src/design_run/contract_check.rs", keywords = ["unknown_key_refusal_is_unchanged_for_never_known_keys"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Pipeline split and crossing mode"
+objective = "Behaviour-preserving refactor: run_apply splits into parse_payload + apply_pipeline taking a typed ApplyRequest, a Crossing and a Stop; the pure core reads adoption from the Crossing. The wire adopt_authored still works, mapped to Crossing::Adopt."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "design_run::run::Crossing { Ordinary, Adopt { expect } } exists; run::apply takes &Crossing; readopting derives from it, not from the request." },
+  { id = "EX-2", text = "commands::design splits run_apply into parse_payload (JSON parse, refuse_unknown_keys, deserialise) and apply_pipeline(root, slice, request, digest, crossing, read, stop, pre_write, fault). Stop { AfterCandidate, Write } is defined; only Write is used by the wire path." },
+  { id = "EX-3", text = "On the Adopt path apply_pipeline takes one document read (text + fingerprint) as an argument; fingerprint and authored_sections derive from the same bytes (RV-374 F-1)." },
+  { id = "EX-4", text = "Ordering unchanged: admit, divergence check (Ordinary), pass 1, DEC-250 mint hoisting, mints, pass 2, rebaseline (Adopt), journal, pre-write re-check, snapshot." },
+  { id = "EX-5", text = "Behaviour-preservation gate: every existing e2e_design_* and design_run unit test passes unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "existing suites green with no test edits (the gate); apply_pipeline and Crossing present", test_file = "src/commands/design.rs", keywords = ["fn parse_payload", "fn apply_pipeline", "Crossing::Adopt", "Stop::AfterCandidate"], waived = false },
+  { id = "VT-2", expects = "the pure core adopts only under Crossing::Adopt; Ordinary never reads authored sections", test_file = "src/design_run/tests.rs", keywords = ["ordinary_crossing_never_reads_authored_sections"], waived = false },
+  { id = "VA-1", text = "git diff of the PHASE-02 commit touches no file under tests/." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "design adopt verb"
+objective = "The verb: one read, aligned no-op, locked refusal, --expect, --dry-run, and the report (rows, unchanged, reordered, head disclosure). adopt_authored still admitted alongside."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "DesignCommand::Adopt(AdoptArgs { slice, path, expect, dry_run }) and run_adopt. --diff is not added until PHASE-04." },
+  { id = "EX-2", text = "run_adopt order: read snapshot, read document once, aligned test (with --expect absent or equal) → no-op line and exit 0 with nothing written, refuse_adoption_at(stage), then apply_pipeline with ApplyRequest::bare (run uid and revision from the snapshot, submission id adopt-<uuidv7>)." },
+  { id = "EX-3", text = "refuse_adoption_at is one pure predicate in design_run::run, called by the shell and as the pure core's backstop. Refusal::AdoptionLocked names the regression and the reconcile direct-edit path." },
+  { id = "EX-4", text = "AdoptionStale carries expected: Option<Fingerprint> and is worded for --expect / absent document." },
+  { id = "EX-5", text = "Report: header with the full fingerprint (adopted … at revision N, or dry run — would adopt …; nothing written), the core's change rows, an unchanged line, a reordered line when order moved, and a head line when the document has a whitespace-only head (RV-374 F-2)." },
+  { id = "EX-6", text = "--dry-run returns at Stop::AfterCandidate: snapshot, journal and watermark byte-identical afterwards." },
+]
+verification = [
+  { id = "VT-1", expects = "pure: derives sections without a caller map; locked refuses via refuse_adoption_at; mismatched --expect and absent document are stale; no --expect takes the observed fingerprint; DEC-066 invalidation on changed sections only", test_file = "src/design_run/tests.rs", keywords = ["adopt_derives_sections_without_a_caller_map", "adopt_refuses_on_a_locked_run", "adopt_with_mismatched_expect_is_stale", "adopt_with_absent_document_is_stale", "adopt_without_expect_takes_the_observed_fingerprint", "adopt_invalidates_evidence_on_changed_sections_only"], waived = false },
+  { id = "VT-2", expects = "e2e: hand-edit → adopt in one call, report names changed section and invalidated act/review; following materialise byte-identical", test_file = "tests/e2e_design_state.rs", keywords = ["adopt_verb_crosses_a_hand_edit_in_one_call"], waived = false },
+  { id = "VT-3", expects = "e2e: --dry-run writes nothing; --expect wrong refuses and printed value succeeds; aligned is a no-op with no receipt; locked refuses with remedy, also with an unknown marker; aligned locked is the no-op", test_file = "tests/e2e_design_state.rs", keywords = ["adopt_dry_run_writes_nothing", "adopt_expect_mismatch_refuses", "adopt_on_an_aligned_document_is_a_no_op", "adopt_on_a_locked_run_refuses_before_parsing"], waived = false },
+  { id = "VT-4", expects = "e2e: one read — an edit injected between the entry read and the pipeline never yields B's sections under A's fingerprint", test_file = "tests/e2e_design_state.rs", keywords = ["adopt_reads_the_document_once"], waived = false },
+  { id = "VT-5", expects = "e2e: head-only whitespace edit reports the head line and no changed section; rebaselines; materialise drops the head", test_file = "tests/e2e_design_state.rs", keywords = ["adopt_discloses_a_whitespace_head"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Per-section diff"
+objective = "--diff: a unified diff per changed section (held body vs document body) via the similar crate, with or without --dry-run."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "AdoptArgs gains --diff; similar added to Cargo.toml and used only in commands::design (shell)." },
+  { id = "EX-2", text = "--diff appends, for each changed section only, a --- sec-N (run) / +++ sec-N (design.md) unified diff with three lines of context; unchanged sections print nothing." },
+]
+verification = [
+  { id = "VT-1", expects = "e2e: --dry-run --diff shows a hunk for each changed section and none for unchanged; --diff without --dry-run adopts and prints the same hunks", test_file = "tests/e2e_design_state.rs", keywords = ["adopt_diff_shows_changed_sections_only"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Retire adopt_authored"
+objective = "One crossing: delete the payload protocol, retire the key through the PHASE-01 roster, re-word refusals to name the verb, and move every test onto the verb."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 and PHASE-04 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Deleted: AdoptAuthored, ApplyRequest.adopt_authored and its fully_populated row, ADOPT_AUTHORED and its PAYLOAD row, WRITER_ACT_ADOPT_AUTHORED and its WRITER_ACTS row (9 → 8), the caller-map comparison in run.rs, Refusal::AdoptionMarkersInvalid. The wire path passes Crossing::Ordinary only." },
+  { id = "EX-2", text = "RETIRED_KEYS holds the adopt_authored row on PAYLOAD with a remedy naming doctrine design adopt." },
+  { id = "EX-3", text = "refuse_authored_divergence and the materialise read-back refusal name doctrine design adopt SL-N (review first with --dry-run --diff); no source string names adopt_authored outside the roster row and its tests." },
+  { id = "EX-4", text = "e2e_design_state adoption tests, e2e_design_materialise parser-readout probes (now adopt --dry-run) and the e2e_design_delegation writer-act table are migrated; install/design-payload-contract.md regenerated." },
+]
+verification = [
+  { id = "VT-1", expects = "e2e: a payload carrying adopt_authored is refused as retired, naming the verb", test_file = "tests/e2e_design_state.rs", keywords = ["adopt_authored_is_refused_as_retired"], waived = false },
+  { id = "VT-2", expects = "e2e: the divergence refusal names design adopt", test_file = "tests/e2e_design_state.rs", keywords = ["divergence_refusal_names_design_adopt"], waived = false },
+  { id = "VT-3", expects = "regenerated contract shows the retired row and no AdoptAuthored type", test_file = "install/design-payload-contract.md", keywords = ["adopt_authored", "doctrine design adopt"], waived = false },
+  { id = "VA-1", text = "grep -rn adopt_authored src tests install: every hit is the roster row, its tests, or the regenerated contract's retired row." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Governance and guidance"
+objective = "Bring the spec, the stage guidance and the memories in line with the verb."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A revision on SPEC-029 adds adopt to the command family, adds REQ-434's criterion (engine derives; optional --expect; entry read otherwise; locked: aligned is a no-op, diverged refused before parse), and re-expresses any responsibility text naming adopt_authored." },
+  { id = "EX-2", text = "install/hymns/stage/design.md and install/design-prompts/drafting.md name doctrine design adopt (review first with --dry-run --diff) as the only lawful crossing." },
+  { id = "EX-3", text = "Memories mem_019fdf95 (correcting a locked run), mem_019facc2 (parser readout) and mem_01a00f17 (reconcile) edited via doctrine memory edit as in design sec-5; doctrine install refreshes installed copies; doctrine boot regenerated if needed." },
+]
+verification = [
+  { id = "VT-1", expects = "hymn names the verb", test_file = "install/hymns/stage/design.md", keywords = ["doctrine design adopt"], waived = false },
+  { id = "VT-2", expects = "drafting fragment names the verb", test_file = "install/design-prompts/drafting.md", keywords = ["doctrine design adopt"], waived = false },
+  { id = "VA-1", text = "doctrine spec show SPEC-029 / doctrine spec req show REQ-434 carry the revised text; the revision is applied." },
+  { id = "VA-2", text = "The three memories name the verb, teach no digest computation, and doctrine memory validate passes." },
+]
+specs        = []
+requirements = []
