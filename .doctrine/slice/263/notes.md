@@ -212,9 +212,36 @@ Live capture (codex 0.155.1, `gpt-6-luna`, a throwaway `PreToolUse` tee hook,
 
 `doctrine check gate` green; 4571 bin tests + the e2e suites pass.
 
+### PHASE-03 — codex PreToolUse wiring and canonical hook forms
+
+`codex_hook_specs` (commit 1560f1f08): `boot_emit` + a `memory_surface_codex`
+spec over the codex matchers `Bash` / `apply_patch`, so the Codex arm loops its
+registry and `RefreshReport.hooks` carries both outcomes.
+
+- `HookSpec` gains handler-level `additional_context_limit` / `timeout`;
+  `memory_surface_codex` sets `SURFACE_CONTEXT_LIMIT_CODEX` (1200) and
+  `SURFACE_TIMEOUT_SEC_CODEX` (5). Both render INSIDE `hooks: […]` beside
+  `command` (golden-pinned), never on the matcher group. Claude specs leave them
+  `None` and their rendered entries are byte-unchanged.
+- `entry_is_canonical` compares those handler fields against the emitted value
+  (missing → not canonical; stale → refreshed), so a pre-limit codex entry heals.
+- Claude's canonical args are `memory surface --input claude`; the Claude
+  predicate owns canonical-claude AND legacy-bare (self-heal in place, never a
+  duplicate); the codex predicate owns canonical-codex only.
+  `plugins/doctrine/hooks/hooks.json` moved with it, and
+  `tests/e2e_claude_install.rs`'s command filter moved to the explicit form.
+- The manual `/hooks` notice prints once per codex arm (not per spec) and names
+  all three codex hooks — the `SessionStart` hook and both `PreToolUse` groups.
+- Gate green after the change. `VA-1` attested live: `boot install --agent codex`
+  printed the three-hook notice and wrote both handler-configured groups.
+- Boundary: another agent's SL-261 commits interleaved the shared tree between
+  the `in_progress` stamp and this commit; the phase span was named explicitly
+  (`record-delta --start <own>^ --end <own>`) so the foreign commit is not
+  attributed here.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-24 · started · 553f6dec8
+fresh-as-of: 2026-09-24 · PHASE-03 · 1560f1f08
 
 ### Produced
 
@@ -226,6 +253,9 @@ fresh-as-of: 2026-09-24 · started · 553f6dec8
 - `tests/fixtures/codex/` — the PHASE-01 captured wire fixtures + README.
 - PHASE-02 — the neutral surface command and the `ScopeProbe` arity change
   (`src/memory.rs`, `src/retrieve.rs`, `src/commands/guard.rs`).
+- PHASE-03 — codex `PreToolUse` wiring + canonical hook forms (`src/boot.rs`,
+  `plugins/doctrine/hooks/hooks.json`, `tests/e2e_claude_install.rs`; commit
+  1560f1f08).
 - scope reconciled; design-target selectors: `src/memory.rs`, `src/boot.rs`,
   `src/retrieve.rs`, `templates/surface.ts`,
   `plugins/doctrine/hooks/hooks.json`.
@@ -234,13 +264,14 @@ fresh-as-of: 2026-09-24 · started · 553f6dec8
   recorded; run locked at rev 41 on the user's assent.
 - commits ddccae191, e270e886b, 1950d37d6, 0a0a35b38, ee6a0649f, 97c0a0a52,
   b9bce77ee, b37a7ce4d, a898b3cd1, 3dd5e8de4, 817b4a179, c7efe9f37,
-  3c7b140f6, 14d7b3ebb, 48c082392, 553f6dec8.
+  3c7b140f6, 14d7b3ebb, 48c082392, 553f6dec8, 1560f1f08.
 
 ### Learned
 
 - mem_01a0d17f6b5a795081e684ec41a96d89 — codex hook contract; **updated** with
   the live wire facts (string `command`, the model's own command, `apply_patch`
-  as a distinct tool, the unreachable via-shell form, absolute patch headers).
+  as a distinct tool, the unreachable via-shell form, absolute patch headers,
+  handler-level limit/timeout).
 - mem_01a0d17f6b2577818ec693b77ba8e3d9 — pi `tool_result` context (no agent
   identity; `ctx.sessionManager`/`ctx.cwd`; `PI_SUBAGENT_CHILD` is
   package-owned).
@@ -251,12 +282,15 @@ fresh-as-of: 2026-09-24 · started · 553f6dec8
 - mem_01a0d187a9d47883b65f69835c8e80b7 — Node async `execFile`/`spawn` ignore an
   `input` option (only the `*Sync` variants honour it); the envelope must be
   written with `child.stdin.end(...)`.
+- mem_01a0d2174ba779a3a121431fe0ed5674 — a shared primary tree lets foreign
+  commits land inside a phase's stamped span; name your own span with
+  `record-delta --start/--end` rather than spanning or forcing.
 
 ### Open
 
-- PHASE-01 (fixtures) and PHASE-02 (neutral surface command + arity) done →
-  PHASE-03 next: codex `PreToolUse` wiring + the Claude canonical forms.
-- Governance leg (PHASE-05): draft POL-003 (from IDE-034) and the PRD-004 §2/§8
-  and SPEC-011 REVs; apply all three at reconcile, then re-ground `SL-263
-  governed_by POL-003`.
+- PHASE-01 (fixtures), PHASE-02 (neutral surface command + arity) and PHASE-03
+  (codex wiring + canonical forms) done → PHASE-04 next: the generated pi surface
+  extension (`templates/surface.ts`).
+- PHASE-05: draft POL-003 (from IDE-034) and the PRD-004 §2/§8 and SPEC-011 REVs;
+  apply all three at reconcile, then re-ground `SL-263 governed_by POL-003`.
 - OQ-4 follow-up: pi as a first-class boot `Harness` variant.

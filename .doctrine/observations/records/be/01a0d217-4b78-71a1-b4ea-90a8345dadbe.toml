@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d217-4b78-71a1-b4ea-90a8345dadbe"
+recorded_at = "2026-09-24T06:25:37.144936603Z"
+kind = "friction"
+summary = "shared-tree phase stamp catches foreign commits in the phase span (record-delta)"
+detail = "SL-263 PHASE-03 ran in the shared primary tree while another agent (SL-261) committed to edge. doctrine slice phase --status in_progress stamped code_start 78efda9d4; 6d3811eee (SL-261 PHASE-06) landed after. Completing the phase would attribute the foreign commit to PHASE-03; record-delta --commit refused with a long guard message requiring --force or an explicit --start/--end. The CLI names no 'foreign commit' case, only 'narrower span under-reports'; the right move (exclude foreign, name own span) is inferable but not stated."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
