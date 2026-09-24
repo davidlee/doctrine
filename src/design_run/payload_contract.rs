@@ -1457,41 +1457,6 @@ pub(crate) static DECLARATION: TypeContract = TypeContract {
 /// count off it would reproduce the omission this contract exists to close.
 ///
 /// `unknown_keys` is `Refused`, and *serde* is not what refuses it:
-/// A key a type once admitted and no longer does (`DEC-243`, `DEC-278`).
-///
-/// A **wire-only** retirement: nothing stored carries the key, so there is no
-/// read tolerance to keep — only a write-path refusal that names what to do
-/// instead. A sibling table rather than a field on [`TypeForm::Struct`], so a
-/// retirement touches one place and no live contract literal changes.
-#[derive(Debug)]
-pub(crate) struct RetiredKey {
-    /// The type that admitted it, matched by identity (see [`retired_from`]).
-    pub(crate) owner: &'static TypeContract,
-    pub(crate) key: &'static str,
-    /// What to do instead, rendered verbatim in the refusal.
-    pub(crate) remedy: &'static str,
-}
-
-/// Every retired wire key. Retiring one is two edits: delete its
-/// [`KeyContract`] row, add its row here with a remedy. The pins in
-/// [`super::tests`] refuse a row whose key is still live, whose owner the
-/// closure cannot reach, or whose remedy is empty.
-pub(crate) static RETIRED_KEYS: &[RetiredKey] = &[];
-
-/// `roster`'s rows retired from `owner`, in roster order.
-///
-/// Matched by **node identity**, never by name: [`closure_types`] deduplicates
-/// by name, so nothing guarantees two contracts do not share one. Sound because
-/// every contract is a `static` and every edge holds `&'static TypeContract`.
-pub(crate) fn retired_from<'r>(
-    roster: &'r [RetiredKey],
-    owner: &'static TypeContract,
-) -> impl Iterator<Item = &'r RetiredKey> {
-    roster
-        .iter()
-        .filter(move |row| std::ptr::eq(row.owner, owner))
-}
-
 /// `#[serde(flatten)]` and `deny_unknown_fields` are mutually exclusive, so no
 /// attribute can reach this type's keys. [`super::contract_check`] reads this
 /// contract against the payload before deserialisation instead, which is how the
@@ -1570,6 +1535,41 @@ pub(crate) static PAYLOAD: TypeContract = TypeContract {
         ],
     },
 };
+
+/// A key a type once admitted and no longer does (`DEC-243`, `DEC-278`).
+///
+/// A **wire-only** retirement: nothing stored carries the key, so there is no
+/// read tolerance to keep — only a write-path refusal that names what to do
+/// instead. A sibling table rather than a field on [`TypeForm::Struct`], so a
+/// retirement touches one place and no live contract literal changes.
+#[derive(Debug)]
+pub(crate) struct RetiredKey {
+    /// The type that admitted it, matched by identity (see [`retired_from`]).
+    pub(crate) owner: &'static TypeContract,
+    pub(crate) key: &'static str,
+    /// What to do instead, rendered verbatim in the refusal.
+    pub(crate) remedy: &'static str,
+}
+
+/// Every retired wire key. Retiring one is two edits: delete its
+/// [`KeyContract`] row, add its row here with a remedy. The pins in
+/// [`super::tests`] refuse a row whose key is still live, whose owner the
+/// closure cannot reach, or whose remedy is empty.
+pub(crate) static RETIRED_KEYS: &[RetiredKey] = &[];
+
+/// `roster`'s rows retired from `owner`, in roster order.
+///
+/// Matched by **node identity**, never by name: [`closure_types`] deduplicates
+/// by name, so nothing guarantees two contracts do not share one. Sound because
+/// every contract is a `static` and every edge holds `&'static TypeContract`.
+pub(crate) fn retired_from<'r>(
+    roster: &'r [RetiredKey],
+    owner: &'static TypeContract,
+) -> impl Iterator<Item = &'r RetiredKey> {
+    roster
+        .iter()
+        .filter(move |row| std::ptr::eq(row.owner, owner))
+}
 
 // ---------------------------------------------------------------------------
 // Where the contract is published (sec-6)
