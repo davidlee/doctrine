@@ -63,14 +63,6 @@ selector = "plugins/doctrine/skills/design/SKILL.md"
 intent = "design-target"
 
 [[selector]]
-selector = "tests/e2e_design_show_golden.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "tests/e2e_design_projection.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "tests/e2e_claude_install.rs"
 intent = "design-target"
 
@@ -80,6 +72,14 @@ intent = "design-target"
 
 [[selector]]
 selector = "src/design_run/submission.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/fixture.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/prompt.rs"
 intent = "design-target"
 
 [[relation]]

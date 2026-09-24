@@ -7,10 +7,10 @@ title = "Hold design workflow state and prescribe the next obligation"
 status = "pending"
 kind = "functional"
 
-description = "The framework holds the run's stage, pending obligation, refresh boundary, and submission identity, and resolves the next obligation from that state rather than relying on the agent to recall where it is."
+description = "The framework holds the run's stage, refresh boundary, and submission identity, and derives the next obligation from that state on every read rather than storing it or relying on the agent to recall where it is."
 tags = []
 acceptance_criteria = [
-  "The next obligation is resolved from persisted run state, not from conversational recall.",
-  "A run's stage and pending obligation are readable without consulting the transcript.",
+  "The next obligation is derived from persisted run state on every read, not stored and not taken from conversational recall.",
+  "A run's stage and next obligation are readable without consulting the transcript.",
   "Open-ended inquiry, synthesis, drafting, and adversarial reasoning remain the agent's and are not prescribed as mechanical steps.",
 ]

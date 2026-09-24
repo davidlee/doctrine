@@ -7,10 +7,10 @@ title = "Hold named projection limits against a large run"
 status = "pending"
 kind = "quality"
 
-description = "Named limits bound the ordinary projection's frontier, change summary, blockers, and declaration detail, and hold against a run large enough to exceed each of them."
+description = "Named limits bound the ordinary projection's frontier, change summary, blockers, declaration detail, and forward edge, and hold against a run large enough to exceed each of them."
 tags = []
 acceptance_criteria = [
   "Limits are named constants in one place rather than literals at use sites.",
-  "The bounding fixture exceeds every limit before projection.",
+  "The bounding fixture exceeds every limit before projection, and a maximal forward edge per embedded runbook renders within the normal budget.",
   "Assertions compare against the named constants rather than against observed output.",
 ]

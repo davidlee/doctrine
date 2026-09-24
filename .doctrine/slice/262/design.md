@@ -36,26 +36,26 @@ cannot disagree.
 ```mermaid
 flowchart LR
   subgraph shell["commands/design.rs (shell)"]
-    observe["observe(root, slice, run, declared)"]
+    gf["gate_facts(root, slice, run, fingerprint, declared)"]
   end
   subgraph leaf["design_run (pure leaf)"]
-    observed[/"Observed"/]
-    fu["gate::forward_unmet(to, run, observed)"]
+    facts[/"GateFacts"/]
+    fu["gate::forward_unmet(to, run, facts)"]
     adv["gate::advance"]
     asm["envelope::assemble → forward"]
   end
-  observe --> observed
-  observed --> fu
-  observed --> asm
+  gf --> facts
+  facts --> fu
+  facts --> asm
   fu --> adv
   fu --> asm
   asm --> P["prompt · json · status · resume"]
 ```
 
 *Purpose: one fact set and one evaluation feed both the gate and every read.*
-`observe` is the only place facts are gathered; `forward_unmet` is the only
+`gate_facts` is the only place facts are gathered; `forward_unmet` is the only
 place conditions are evaluated. Apply passes the payload's review disposition
-to `observe`; a read passes none and the stored act is used.
+to `gate_facts`; a read passes none and the stored act is used.
 
 **Boundaries.** Nothing here changes what the gate enforces, the refusal text,
 or the stage-entry contract receipt (`DEC-124`, narrowed by `DEC-291` only in
@@ -135,7 +135,10 @@ pub(crate) struct CursorStep {
 ```
 
 `Divergence` is the `Diverged { expected, observed }` arm of `AuthoredState`,
-which moves from `commands/design.rs:663` into the design-run core (sec-3). `RunbookAhead` is `RunbookStanding` (`runbook.rs:846`)
+which moves from `commands/design.rs:663` into the design-run core (sec-3),
+plus `refusal`: the rendered refusal sentence. The leaf cannot render the
+slice's `SL-NNN`, so the shell passes `slice_ref` in and the sentence is built
+once; JSON then carries the same text the prompt prints. `RunbookAhead` is `RunbookStanding` (`runbook.rs:846`)
 projected for a read, plus the cursor step's text. It drops `regressed`, which
 a read cannot compute; `unchecked` says so instead of an always-empty list that
 would read as *nothing regressed*.
@@ -173,9 +176,10 @@ would read as *nothing regressed*.
    below the receipt floor. A submission landing between the read and the
    apply moves the revision, and the payload is refused as stale — correct. `ApplyRequest::declare` gains
    `skip_serializing_if = "Vec::is_empty"` so the serialised payload shows only
-   what it sets. `ApplyRequest` has no `Default`; the builder names every
-   field, which keeps a future payload key a compile error here rather than a
-   silent omission.
+   what it sets. `ApplyRequest` has no `Default`; `ready` is built as
+   `ApplyRequest { stage, ..ApplyRequest::bare(envelope) }`, and `bare` is the
+   exhaustive literal that names every field, which keeps a future payload key
+   a compile error there rather than a silent omission.
 
 Every string is sourced from code or the runbook asset: stage tokens from
 `Stage`, condition tokens from `Condition::as_str`, causes from `Cause`'s
@@ -381,8 +385,9 @@ except the runbook checks it cannot run, which `unchecked` names.
 carries no `deny_unknown_fields`, so serde ignores a `next_obligation` key on
 read, and the field was `skip_serializing_if = "Option::is_none"` — and always
 `None` — so no snapshot written since `SL-233` carries it anyway. No snapshot
-schema version bump. A unit test deserialises a snapshot fixture carrying
-`"next_obligation": null` and one carrying a string, and asserts both load
+schema version bump. A unit test deserialises a snapshot with the key absent
+and one carrying it as a string, and asserts both load — TOML has no `null`,
+so the absent key is the `None` case
 (design-run snapshots are long-lived; a serde break is not licensed by "runtime
 state is disposable").
 
@@ -548,11 +553,13 @@ refusals, never envelope rows.
 | `src/design_run/runbook.rs` | retire `Runbook::section`; the stale-step wording moves to `forward_lines`; expose what `forward` needs (step lookup by id, `verify` presence) |
 | `src/design_run/snapshot.rs` | delete `RunHeader::next_obligation` |
 | `src/design_run/tests.rs` | call sites that build `DerivedInput` move their gate fields under `gate` |
+| `src/design_run/fixture.rs` | `GateFacts` in the fixtures; `every_cause` / `widest_causes` for the cap and maximal-forward tests |
+| `src/design_run/prompt.rs` | doc comment retargeted from `Runbook::section` to the forward edge |
 | `src/commands/design.rs` | `gate_facts` builder; `observed_review` takes `Option<&ReviewDisposition>`; apply composes `DerivedInput` from it; `envelope_turn` and `run_resume` build `GateFacts`; retire `runbook_section`; `refuse_authored_divergence` wraps the moved watermark check |
 | `install/hymns/stage/design.md` | one bullet |
 | `plugins/doctrine/skills/design/SKILL.md` | activation step 2 wording |
-| `tests/e2e_design_show_golden.rs` | regenerated golden, version 2, `forward` |
-| `tests/e2e_design_projection.rs` | key list; forward rows; bounding run |
+| `tests/e2e_design_show_golden.rs` | regenerated golden, version 2, `forward` (under the `tests/e2e_design_*.rs` selector) |
+| `tests/e2e_design_projection.rs` | key list; forward rows; bounding run (under the `tests/e2e_design_*.rs` selector) |
 | `tests/e2e_claude_install.rs` | envelope-presence prefix `forward` |
 | `tests/e2e_design_*.rs` | new forward cases (the `verification` section) |
 
@@ -599,8 +606,8 @@ Pure (`design_run` unit):
   renders `runbook stale <id> — …`.
 - **unchecked names verified steps** — a live discharge of a step with `verify`
   appears in `unchecked`; a step without `verify` never does.
-- **old snapshots load** — fixtures carrying `"next_obligation": null` and a
-  string deserialise.
+- **old snapshots load** — fixtures with `next_obligation` absent and carrying
+  a string deserialise.
 - **maximal forward fits** — for every embedded runbook, the bounding envelope
   with every condition unmet renders under `ENVELOPE_NORMAL_BUDGET_BYTES`.
 

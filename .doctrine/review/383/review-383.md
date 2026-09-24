@@ -95,3 +95,28 @@ It costs two small reads and keeps `project()` free of a special case.
 - IMP-390 closes; IMP-367 gets a note that `next_obligation`'s disposition was
   settled here; IMP-372 gets a note that an override must bring an admission
   bound (design sec-6).
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- Selector registry (RV-383 F-2): `slice selector add` `src/design_run/fixture.rs`,
+  `src/design_run/prompt.rs` (design-target); `slice selector rm`
+  `tests/e2e_design_show_golden.rs`, `tests/e2e_design_projection.rs` (covered by
+  the `tests/e2e_design_*.rs` glob). `slice conformance` now reports 0
+  undelivered and only the slice's own `notes.md`/`plan.toml` as undeclared.
+- design.md (RV-383 F-2, F-3), out of band on the locked run, so the watermark
+  divergence is expected: sec-1 names `gate_facts`/`GateFacts`; sec-2
+  `Divergence` carries `refusal`; sec-2 step 6 describes `ApplyRequest::bare`;
+  sec-4 and sec-8 old-snapshot fixture is absent key + string; sec-7 table gains
+  `fixture.rs` and `prompt.rs` and notes the glob-covered tests.
+
+### REVs completed
+- REV-061 (`reconcile-sl-262`): done. REQ-414 (the obligation is derived, not
+  held), REQ-437 (forward edge among the named limits; maximal-forward bounding
+  case), SPEC-029 responsibilities (the forward edge is a projection of the gate
+  contract table). Covers RV-383 F-4. Rationale in revision-061.md.
+
+### Withdrawn / tolerated
+- None. F-1 was fixed in audit (e8b15c18e); F-5 is aligned.
+
+Reconcile pass complete; hand off to /close.
