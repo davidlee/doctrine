@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d8c7-a961-7df3-943a-80ac23d3ce71"
+recorded_at = "2026-09-25T13:35:58.817031664Z"
+kind = "friction"
+summary = "feedback/design: section body trailing newline doubles blank lines on materialise"
+detail = "SL-266 RV-388 round 2: re-declaring sec-N bodies extracted from materialised design.md (split on section markers) kept the inter-section blank line; materialise then emitted two blank lines per boundary. Needed a second apply (revision churn, digest restale) with body.rstrip()+newline. Engine could normalise trailing whitespace on declared section bodies."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

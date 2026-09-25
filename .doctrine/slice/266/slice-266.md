@@ -44,13 +44,13 @@ sample-states  (6 answered, 7 open)
 2. **Read surface** — `doctrine design show --format tree` plus shorthand
    `doctrine design tree [SL-NNN]` (DEC-304). The slice is optional on `tree`
    only: latest non-locked run of a non-terminal slice by snapshot mtime, named
-   and marked chosen in the header (DEC-305). The tree is a rendering of the
+   and marked chosen (open when scanned) in the header (DEC-305). The tree is a rendering of the
    turn envelope projected at `Detail::Full`, which gains the whole map
    (DEC-303); line anatomy, wrapping and marks per DEC-306/307/308.
 3. **Delivery mode config** — `doctrine.toml` `[design] map_delivery =
    "relay" | "sidecar"`, default `relay` (DEC-309). Relay: any write that
-   changed the map — `design apply`, a written `design adopt`,
-   `design start --from-design`, detected by comparing the map before and
+   changed the map — `design apply`, `design start --from-design` (adopt
+   re-seats sections only and never changes the map), detected by comparing the map before and
    after — ends with a line telling the agent to show the user the
    `design tree` output verbatim before ending the turn; sidecar: no line
    (DEC-310). The tree output itself names the `doctrine design tree SL-NNN`
@@ -82,7 +82,7 @@ sample-states  (6 answered, 7 open)
 - `src/state.rs` — `design_snapshot_root`.
 - `src/commands/cli.rs` — resolved colour reaches `design::dispatch`.
 - `src/dtoml.rs` — `[design]` config (`DesignConfig`).
-- `design apply` / `adopt` / `start` output — relay line (DEC-310).
+- `design apply` / `start` output — relay line, last (DEC-310).
 - `install/design-prompts/inquiry.md`,
   `install/design-prompts/conditions/initial-concerns-recorded.md`.
 - `install/design-payload-contract.md` / reference docs if the read surface is
@@ -108,9 +108,8 @@ sample-states  (6 answered, 7 open)
 - Envelope: `Detail::Normal` never carries the map; `Full` carries all nodes.
 - CLI: `design tree` with and without a slice arg; chosen run named in the
   header; parity with `design show --format tree`.
-- Config: relay → every map-changing write (apply, written adopt, start
-  --from-design) ends with the relay line; non-map writes, replays, dry runs
-  and no-op adopts do not; sidecar → never; unknown value refused.
+- Config: relay → every map-changing write (apply, start --from-design)
+  ends with the relay line; non-map writes, adopts and replays do not; sidecar → never; unknown value refused.
 - Robustness: unreadable snapshots and record titles disclosed with cause;
   orphan/cyclic nodes rendered, never dropped.
 - ISS-299 resolved on close; CHR-065 unblocked.

@@ -16,9 +16,9 @@ This slice adds three things:
    question or what answered it.
 2. **A project choice of who shows it** — `[design] map_delivery` in
    `doctrine.toml`. `relay` (the default): after any write that changed the map
-   (`design apply`, a written `design adopt`, `design start --from-design`),
-   its output tells the agent to paste the tree to the user verbatim. `sidecar`: the user keeps `design tree` open in a spare pane, and
-   the agent stays quiet.
+   (`design apply`, `design start --from-design`), its output tells the agent
+   to paste the tree to the user verbatim. `sidecar`: the user keeps
+   `design tree` open in a spare pane, and the agent stays quiet.
 3. **Prompt text that points at it** — the inquiry fragment names `design tree`
    as the user's view of the map, and the initial-concerns condition asks for its
    output instead of a hand-built listing.
@@ -37,7 +37,7 @@ flowchart LR
   proj["envelope::project<br/>(pure)"]
   env[TurnEnvelope]
   tree["render::tree<br/>(pure)"]
-  apply[design apply / adopt / start]
+  apply[design apply / start]
   out1[/tree text → user/]
   out2[/write output → agent/]
 
@@ -199,7 +199,8 @@ doctrine design tree SL-266
 plus `, c blocked`, `, d deferred`, `, e pruned` when non-zero. Counts only —
 no word that certifies completeness (PRD-019 REQ-425). When
 `envelope.selection` is present, a second header line discloses it:
-`chosen: latest of N open runs` (or `the only open run`), then one line per
+`chosen: newest of N runs open when scanned` (or `the only run open when
+scanned`), then one line per
 skipped snapshot, `skipped <path>: <reason>` (STD-003).
 
 **Footer.** The legend, then the command that reproduces the view
@@ -214,21 +215,27 @@ count. (Admission refuses cycles and unknown parents; only a hand-edited
 runtime snapshot can reach this.)
 
 **Wrapping and overflow** (DEC-307). Width is `style.width`, else
-`TREE_PIPED_WIDTH` (100). Everything left of the right-hand text is the
-*prefix*, measured with `unicode-width`.
+`TREE_PIPED_WIDTH` (100), measured with `unicode-width`. Every line is one of
+two kinds:
 
-1. Right-hand text fills to `width − prefix` with `textwrap`; continuation
-   lines repeat the ancestors' rails and blank the node's own columns.
-2. If `width − prefix < TREE_MIN_TEXT_COLS` (24), the text starts on the next
+- a **node line**: a *prefix* (guides, marks, id), then right-hand text —
+  placed or `unplaced`;
+- a **free line**: the header and its `chosen:` / `skipped` lines, the
+  `unplaced` heading, the legend, the footer.
+
+1. Node text fills to `width − prefix` with `textwrap`; continuation lines
+   repeat the ancestors' rails and blank the node's own columns.
+2. If `width − prefix < TREE_MIN_TEXT_COLS` (24), node text starts on the next
    line at a fixed indent of `TREE_DROP_INDENT` (8 columns, rails not drawn)
    and fills to `width − 8`.
-3. The prefix (guides + marks + id) is never broken. When it alone exceeds
-   `width`, that line overflows; nothing is dropped.
-4. The legend wraps between entries; the footer command is one unbreakable
-   token and may overflow.
+3. Free lines fill to `width`; the legend breaks only between entries.
+4. Words are never split (`break_words: false`) and the prefix is never
+   broken. A prefix, or one word (a long id, a path, the footer command),
+   wider than the space it has overflows; nothing is dropped.
 
-So the guarantee is: no text is truncated, and a line exceeds `width` only
-when an unbreakable prefix or token does.
+So the guarantee is: no text is truncated, and a line exceeds `width` only when
+it holds a single unbreakable item — a prefix or a word — wider than the space
+available.
 
 **Colour** (only when `style.colour`): marks by state (resolved green, open
 cyan, blocked/deferred yellow, pruned red), provenance letter and resolved text
@@ -283,8 +290,9 @@ Purpose: the only branching logic the verb owns, and where the shell reads.
 
 - **One read.** The parsed snapshot that won selection is the one projected —
   no second read — so the rendered run is the one whose stage was checked.
-  Slice status is read once, during the scan. (A slice closed after that read
-  is rendered as it was when chosen; the next invocation re-scans.)
+  Slice status is read once, during the scan, so the `chosen:` line claims
+  only what was true then — *open when scanned*. A slice closed after that
+  read is rendered as it was; the next invocation re-scans.
 - **Selection** is a pure function over `(slice, stage, slice_status, mtime)`:
   newest `mtime` wins; equal `mtime` → higher slice number. Unit-tested.
 - **Skipped snapshots** carry path and the verbatim read or parse error into
@@ -334,22 +342,26 @@ pin, posture) lives outside `InquiryMap` and does not count. One pure function,
 `design_run::map_changed(prior, next) -> bool`, owns the rule.
 
 **Relay line** (DEC-310). When `map_delivery` is `Relay` and `map_changed`
-holds, the write's output ends with:
+holds, the command's last line of output is:
 
 ```
 map changed — before ending this turn, show the user the output of `doctrine design tree SL-266` verbatim
 ```
 
-Emitted by every write that can change the map:
+Emitted by every write that can change the map, as the last line the command
+prints — appended after any other output the command adds:
 
 | path | output function |
 |---|---|
 | `design apply` | `applied_lines` (beside `LOCK_ACCEPTANCE_DISCLOSURE`) |
-| `design adopt` (written, not `--dry-run`) | `adoption_lines` |
 | `design start --from-design` | the start report (prior map is empty) |
 
-Not emitted: `Sidecar`; no map change (including a no-op adopt); a dry run; a
-`resumed submission` replay. The shell reads the config once per command
+`design adopt` is not a map write: it re-seats sections from the document
+(`run.rs` `adopt`) and never touches `InquiryMap`, so `map_changed` cannot hold
+for it and it carries no relay line. `materialise` likewise writes only the
+document and its watermark.
+
+Not emitted: `Sidecar`; no map change; a `resumed submission` replay. The shell reads the config once per command
 (`load_doctrine_toml(root)?.design`) and passes the value to these pure line
 builders.
 
@@ -385,7 +397,7 @@ old bytes — intended, and the reason these edits are made once, here.
 | `src/dtoml.rs` | `DoctrineToml.design` |
 | `src/state.rs` | `design_snapshot_root`; `design_snapshot_path` joins onto it |
 | `src/commands/cli.rs` | pass the resolved colour to `design::dispatch` |
-| `src/commands/design.rs` | `dispatch(command, color)`; `ShowFormat::Tree`; `DesignCommand::Tree(TreeArgs)`; tree projection at `Full` with titles; `record_titles(root, &run) -> BTreeMap<String, TitleLookup>` via `knowledge::resolve_ref` + the record's TOML; run scan + pure `select_run`; relay line in `applied_lines`, `adoption_lines` and the start report; config read in `run_apply` / adopt / start |
+| `src/commands/design.rs` | `dispatch(command, color)`; `ShowFormat::Tree`; `DesignCommand::Tree(TreeArgs)`; tree projection at `Full` with titles; `record_titles(root, &run) -> BTreeMap<String, TitleLookup>` via `knowledge::resolve_ref` + the record's TOML; run scan + pure `select_run`; relay line, last, in `applied_lines` and the start report; config read in `run_apply` and `run_start` |
 | `install/design-prompts/inquiry.md` | one mode-neutral sentence (sec-5) |
 | `install/design-prompts/conditions/initial-concerns-recorded.md` | tree output replaces the hand-built listing (sec-5) |
 | CLI help goldens / docs listing `design` verbs | the new verb and format value |
@@ -425,16 +437,18 @@ Every row is a `VT` (by test) unless marked.
 - **VT-7 — wrapping and overflow.** At width 80 a long title wraps under its
   column with rails continued; below 24 free columns text drops to the 8-column
   indent; at depth 12 on width 40 the prefix overflows but no text is lost; a
-  wide-Unicode (CJK) label measures correctly; the legend wraps between entries.
-  Every line longer than the width is exactly one whose unbreakable prefix or
-  footer token is; no `…` appears.
+  wide-Unicode (CJK) label measures correctly; the legend wraps between entries;
+  at width 16 the header, `chosen:` and `skipped` lines wrap between words.
+  Every line longer than the width holds a single prefix or word wider than its
+  space; no `…` appears.
 - **VT-8 — colour.** `colour: false` output has no escape sequences;
   `colour: true` output with escapes stripped equals the plain output.
 - **VT-9 — run selection (pure).** Excludes locked stages and `done`/`abandoned`
   slices; picks newest mtime; breaks an mtime tie by higher slice number;
   reports candidate count; empty set → none.
 - **VT-10 — CLI.** `design tree SL-N` equals `design show SL-N --format tree`;
-  `design tree` alone renders the newest open run with the `chosen:` line; a
+  `design tree` alone renders the newest open run with the `chosen: … open
+  when scanned` line; a
   malformed snapshot present in the state tier is listed as `skipped <path>:
   <reason>`; none open → refusal naming `design tree SL-NNN`;
   `--format tree --json` is refused; `--color always` emits escapes and
@@ -444,9 +458,9 @@ Every row is a `VT` (by test) unless marked.
   each yields `true`; a step discharge, a traversal-only change, an
   acceptance-only act and an identical redeclaration each yield `false`.
 - **VT-12 — relay line.** Default config: an apply creating a node ends with the
-  relay line naming the slice; a step-discharge apply does not; a resumed replay
-  does not; a written adopt that grows the map does, a no-op adopt and a
-  `--dry-run` do not; `start --from-design` with imported nodes does. With
+  relay line naming the slice, as its last line; a step-discharge apply does
+  not; a resumed replay does not; a written adopt does not;
+  `start --from-design` with imported nodes does, as its last line. With
   `map_delivery = "sidecar"` none do. An unknown value fails config load naming
   both variants.
 - **VA-1 — prompt text.** `inquiry.md` and `initial-concerns-recorded.md` carry
