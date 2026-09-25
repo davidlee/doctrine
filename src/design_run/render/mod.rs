@@ -44,6 +44,7 @@ use super::gate::Condition;
 
 pub(crate) mod change_row;
 pub(crate) mod envelope;
+pub(crate) mod tree;
 
 // ── cardinality caps (sketch §(a)) ────────────────────────────────────────
 //

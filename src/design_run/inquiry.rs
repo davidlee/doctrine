@@ -49,15 +49,24 @@ pub(crate) enum Provenance {
 }
 
 impl Provenance {
+    /// [`Provenance::UserDirected`]'s label.
+    pub(crate) const USER_DIRECTED: &'static str = "user-directed";
+    /// [`Provenance::AgentProposed`]'s label.
+    pub(crate) const AGENT_PROPOSED: &'static str = "agent-proposed";
+    /// [`Provenance::ShapingQuestion`]'s label.
+    pub(crate) const SHAPING_QUESTION: &'static str = "shaping-question";
+    /// [`Provenance::ImportedProse`]'s label.
+    pub(crate) const IMPORTED_PROSE: &'static str = "imported-prose";
+
     /// The closed-vocabulary label this provenance renders as on a change row.
     /// Bounded at admission by [`super::bounds::DESIGN_STAGE_LABEL_BYTES`] — the
     /// longest member, `shaping-question`, is 16 B.
     pub(crate) const fn label(&self) -> &'static str {
         match self {
-            Provenance::UserDirected => "user-directed",
-            Provenance::AgentProposed => "agent-proposed",
-            Provenance::ShapingQuestion { .. } => "shaping-question",
-            Provenance::ImportedProse { .. } => "imported-prose",
+            Provenance::UserDirected => Self::USER_DIRECTED,
+            Provenance::AgentProposed => Self::AGENT_PROPOSED,
+            Provenance::ShapingQuestion { .. } => Self::SHAPING_QUESTION,
+            Provenance::ImportedProse { .. } => Self::IMPORTED_PROSE,
         }
     }
 }
