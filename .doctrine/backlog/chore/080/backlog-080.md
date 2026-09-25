@@ -60,6 +60,21 @@ snapshot: regenerating with `doctrine boot` does not add them and `doctrine boot
 --check` reports the snapshot clean. ISS-215 owns that fix; listed here because
 "shipped but not reachable" belongs to the same class as "shipped but not true".
 
+## The POL-002 rule already exists — for two other sub-corpora
+
+Worth knowing before treating this as ungoverned ground. The rule "shipped
+content must not load-bear on this repo" is already recorded twice, each scoped
+to one sub-corpus: `mem.pattern.doctrine.shipped-skill-platform-independence`
+(the skills under `plugins/`, glob `plugins/**`) and
+`mem.pattern.doctrine.shipped-master-body-scrub` (memory *bodies* being promoted
+to a shipped master). Neither reaches `install/`'s published reference docs, nor
+the prose already inside shipped memories — which is precisely the corpus this
+sweep found unverified.
+
+That is a seam worth assessing in the remediation slice rather than assuming: two
+rules for two sub-corpora, no single home, and the largest sub-corpus ungoverned.
+A third parallel rule would be the wrong answer.
+
 ## Method
 
 Per shipped artifact, pair every behavioural claim with the verb that decides it,

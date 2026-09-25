@@ -1,0 +1,58 @@
+memory_uid = "mem_01a0d8f19c4a7e619a99a5b970e09c7e"
+memory_key = "mem.pattern.install.shipped-corpus-citation-illustrations"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Auditing the shipped corpus: the citation grep's illustration classes"
+summary = "The shipped corpus contains ~80 id-shaped strings that are format illustrations or client-structure refs, not citations — do not sweep them."
+created = "2026-09-25"
+updated = "2026-09-25"
+
+[scope]
+paths = []
+globs = ["install/**", "memory/**"]
+commands = []
+tags = ["install", "memory", "asset-policy"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3a5251f101e2fac11fc26f36e8d8dbf44a6c4321"
+ref_name = "refs/heads/edge"
+checkout_state_id = "02dc45078ef9cf2119018ed84d04328cbe049d5ffc898cebf40b0f911febe3c1"
+base_commit = "1c88cdf2b772f18a754e4daa1f0d302daa256444"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.doctrine.shipped-skill-platform-independence"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.doctrine.shipped-master-body-scrub"
+
+[[relation]]
+label = "related"
+target = "mem.system.governance.ship-usage-guidance-to-clients"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.doctrine.reseat-renumbers-does-not-retarget"
+

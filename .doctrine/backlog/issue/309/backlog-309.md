@@ -193,6 +193,15 @@ Two parts, and the second is what stops the drift returning.
    without the id. `sketches/thin-adapter.md` is the hard case: the reasoning it
    carries is load-bearing for two runbook steps, so it needs a home in the
    shipped corpus or an inlined summary.
+
+   **Proving the sweep worked is not "the id is gone."** Removing a citation and
+   grep-confirming zero hits proves the deletion ran, not that the reader is now
+   correctly served. This repo has already been bitten by exactly that confusion
+   (`mem.pattern.doctrine.reseat-renumbers-does-not-retarget`: a renumber is not a
+   retarget, and a zero-hit search is a claim about the search). The evidence
+   that matters is that the *replacement* resolves in a client repo — a published
+   `reference/<name>.md` address, or prose that stands without an id. Read the
+   post-sweep text as a client agent with no corpus; do not count removed ids.
 2. **A check.** A lint over the shipped corpus refusing repo-private entity-id
    and path citations, run by `doctrine doctor` / `check gate`. Without it the
    corpus re-drifts on the next asset, because the defect is invisible to the
