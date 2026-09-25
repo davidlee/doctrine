@@ -54,6 +54,11 @@ intent = "design-target"
 selector = "install/design-payload-contract.md"
 intent = "design-target"
 
+[[selector]]
+selector = "src/commands/design.rs"
+intent = "design-target"
+note = "Gained the KeyContract home field's construction site (home: None) in PHASE-02, and the node-declaring payload fixtures. Under-declared by design.md sec-5; added at PHASE-05's whole-slice selector sweep."
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"
