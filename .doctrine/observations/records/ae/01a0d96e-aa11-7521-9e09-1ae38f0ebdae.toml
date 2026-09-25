@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d96e-aa11-7521-9e09-1ae38f0ebdae"
+recorded_at = "2026-09-25T16:38:23.505528994Z"
+kind = "friction"
+summary = "audit SL-266: slice conformance undeclared cell polluted by interleaved foreign commits on shared edge"
+detail = "Solo phases on edge record one [start,end] range per phase; SL-267/SL-264 commits landed inside PHASE-02/03 ranges, so 25 of 33 undeclared paths were foreign and had to be attributed commit-by-commit by hand. A per-phase commit set (or excluding commits whose subject scope names another slice) would remove the noise."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

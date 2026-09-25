@@ -140,9 +140,24 @@ the implementation review and audit will exercise.
   files. `/audit`'s pre-close review covers this delta next.
 - Boundary: `slice record-delta 266 PHASE-04 --start 94fb3870b^ --end 94fb3870b`.
 
+## Audit (2026-09-26)
+
+- RV-393 (pre-close code review, Opus sub-agent): F-1..F-5 verified, concluded
+  (`fd3c53453`, `doc` follow-up). F-4, the user's choice: the design writes read
+  only the raw `[design]` entry (`dtoml::load_design_entry`), and
+  `DoctrineToml.design` is gone. This supersedes PHASE-04's "`DoctrineToml.design`
+  is raw". F-3's typed-field half went to IMP-486.
+- RV-394 (conformance audit): 6 findings, all verified, concluded. F-1..F-5 are
+  canon drift for `/reconcile` (see its Reconciliation Brief). F-6 is
+  tolerated: the per-phase `[start,end]` ranges for PHASE-02/03 span SL-267 and
+  SL-264 commits, so 25 of 33 undeclared paths are foreign (friction observation
+  recorded).
+- Evidence: `doctrine check gate` exit 0 (8877/0; ISS-331 did not fire);
+  `slice verify-vt 266` 14/14.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · PHASE-04 completed, VT-1..3 pass, VA-1 attested; gate green bar ISS-331 · 94fb3870b
+fresh-as-of: 2026-09-26 · audit done (RV-393, RV-394 concluded); gate green; → reconcile
 
 ### Produced
 
@@ -158,6 +173,8 @@ fresh-as-of: 2026-09-26 · PHASE-04 completed, VT-1..3 pass, VA-1 attested; gate
 - RV-392 (per-phase code review, done, F-1..F-3 fix-now)
 - SL-266 PHASE-04 on edge: `94fb3870b` (`design_run::config`, `map_changed`,
   `relay`, relay line in `apply` / `start --from-design`, prompt text)
+- RV-393 (pre-close code review, F-1..F-5; fixes `fd3c53453`); IMP-486
+- RV-394 (audit ledger + Reconciliation Brief)
 
 ### Learned
 
@@ -181,12 +198,10 @@ fresh-as-of: 2026-09-26 · PHASE-04 completed, VT-1..3 pass, VA-1 attested; gate
 
 - ~~`MapAnswer::Record.form` rendered by neither surface~~ — settled at
   PHASE-02: `json --full` carries it; no model change.
-- `design.md` sec-3 rule 2 still states the rail-less drop — reconcile to
-  DEC-307's amendment.
+- `/reconcile`: execute RV-394's Reconciliation Brief (F-1..F-5: design sec-3,
+  sec-4, sec-5, sec-6 prose + selector add/rm).
 - ~~PHASE-04's relay line must reuse `tree::TREE_COMMAND`~~ — done: `relay_line`
   and the footer share one `command()`.
-- `/reconcile`: design sec-4 does not state that an unreadable slice record, or
-  a snapshot naming another slice, skips the run — PHASE-03 decisions to fold in.
 - ~~`src/design_run/tests.rs` reads `UNATTRIBUTABLE`~~ — PHASE-04 modified it.
 - ISS-331 (`cordage` `scale_cliffs` wall-clock false-red) reds `just gate` under
   load on this host — twice in PHASE-04. Nothing to do with SL-266, but it will
