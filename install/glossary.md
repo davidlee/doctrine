@@ -12,11 +12,7 @@ The kinds below group into a small set of durable entities + typed facets.
 | requirement label (membership) | FR-001 / NF-001 |  |
 | **slices**                   | --       |        |
 | slice                        | SL-001   |   y    |
-| tech design                  | DES-001  |        |
-| design review                | RVW-001  |        |
-| implementation plan          | PLN-001  |        |
 | phase sheet                  | PHASE-01 | phases |
-| audit                        | AUD-001  |   y    |
 | **governance**               | --       |        |
 | policy                       | POL-123  |        |
 | standard                     | STD-123  |        |
@@ -28,6 +24,7 @@ The kinds below group into a small set of durable entities + typed facets.
 | constraint                   | CON-001  |   y    |
 | evidence                     | EVD-001  |   y    |
 | hypothesis                   | HYP-001  |   y    |
+| concept                      | CPT-001  |   y    |
 | **backlog**                  | --       |        |
 | issue                        | ISS-001  |   y    |
 | improvement                  | IMP-001  |   y    |
@@ -78,16 +75,17 @@ Each knowledge record kind carries a status vocabulary:
 
 | kind       | status vocabulary |
 |------------|-------------------|
-| assumption | `pending \| proven \| disproven \| withdrawn` |
-| decision   | `pending \| active \| superseded \| withdrawn` |
-| question   | `open \| answered \| settled \| withdrawn` |
-| constraint | `active \| relaxed \| removed \| withdrawn` |
+| assumption | `held \| testing \| validated \| invalidated \| obsolete` |
+| decision   | `proposed \| accepted \| rejected \| superseded` |
+| question   | `open \| answered \| obsolete` |
+| constraint | `active \| waived \| superseded \| retired` |
 | evidence   | `captured \| disputed \| confirmed \| retracted \| superseded` |
 | hypothesis | `proposed \| confirmed \| refuted` |
+| concept    | `draft \| active \| retired` |
 
 Evidence (`EVD`) and hypothesis (`HYP`) records may be linked to other knowledge
-records via `supports` / `disputes` evidentiary edges (`doctrine link EVD-1
-supports DEC-2`). An EVD's `confirmed` status is deliberately non-terminal — it
+records via `supports` / `disputes` evidentiary edges (`doctrine link EVD-001
+supports DEC-002`). An EVD's `confirmed` status is deliberately non-terminal — it
 can be reopened or superseded by subsequent evidence. A HYP's `confirmed` means
 the hypothesis is supported by evidence; `refuted` means it has been falsified.
 

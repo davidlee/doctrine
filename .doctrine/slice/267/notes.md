@@ -482,8 +482,146 @@ anchor**, so a sweep must re-resolve every intra-file link it touches.
 - **No golden moved incidentally.** `publication validate` still 98 entries;
   `tests/**` untouched; `doctrine doctor` unchanged.
 
-## Harvest
-<!-- single-copy: updated in place each harvest; ids only, never restated content -->
+## PHASE-04 claim-accuracy ledger
+
+Evidence for PHASE-04 `EX-1` — every behavioural claim paired with the artifact
+that decides it (`design.md` sec-6 Axis B). Claim **groups**, not sentences: an
+enumerated vocabulary, a default, a verb set, an id-prefix registry, a command
+shape. Groups with no divergence are recorded as **verified**, never omitted
+(`VA-1`). Built **before the corrections** (`A2`, `DEC-314`).
+
+### Mechanical legs (`EX-4`), whole corpus, with positive controls
+
+**Leg 1 — dangling `[[mem.*]]` wikilinks.**
+```
+$ grep -rhoE '\[\[mem\.[a-zA-Z0-9._-]+\]\]' install/ memory/ plugins/ | tr -d '[]' | sort -u > refs   # 32
+$ # key set from memory/*/memory.toml `memory_key` (+ key-named dirs)                                    # 35
+$ comm -23 refs keys                           → EMPTY  (zero dangling)
+$ CONTROL present key (mem.signpost.doctrine.file-map)   → not flagged
+$ CONTROL injected fake key (mem.signpost.doctrine.NONEXISTENT-CONTROL) → flagged
+```
+
+**Leg 2 — id-prefix registry.**
+```
+$ grep -rhoE '\b[A-Z]{2,6}-[0-9]{2,3}\b' install/ memory/ plugins/ | sed 's/-[0-9]*$//' | sort -u
+# present-but-not-CLI-minted vs src/kinds/mod.rs::ALL_KINDS (+ doc-local PHASE, labels FR/NF):
+AUD  DES  OQ  PLN  RVW
+$ doctrine show DES-001 → Error: unknown kind prefix `DES`   (same for RVW-001, PLN-001, AUD-001)
+$ CONTROL doctrine show SL-267 → SL-267 — Shipped-corpus conformance
+```
+`AUD`/`DES`/`PLN`/`RVW` are four rows of `glossary.md`'s kind↔abbreviation table;
+`OQ` is `spec-product/SKILL.md:220`, which teaches a doc-local question as
+zero-padded `OQ-001` where the convention is bare `OQ-1`. All five corrected
+(T4/T5).
+
+### Claim groups
+
+| group | files | deciding invocation | result | correction |
+|---|---|---|---|---|
+| G1 dangling wikilinks | `install/ memory/ plugins/` | ref-vs-key `comm -23` + controls | **verified** (0) | — |
+| G2 id-prefix registry | whole shipped corpus | `[A-Z]{2,6}-[0-9]{2,3}` vs `ALL_KINDS` + `doctrine show <ID>` | **divergent**: `AUD/DES/PLN/RVW/OQ` | T4, T5 |
+| G3 command/verb existence | whole shipped corpus | 104 real `doctrine <g> <v>` pairs vs `<g> <v> --help` | **verified** — all 104 accepted; the 3 misses are prose (`backlog item`, `dispatch worker`) and an explicit *not-built* note (`slice reconcile`) | — |
+| G4 named flags | `review-ledger.md`, `design-payload-contract.md`, `drafting.toml`, `model-band.md`, `using-doctrine.md` | `<cmd> --help` per named command | **verified** — `review new`, `design adopt`, `slice selector add`, `prompt resolve`, `observation record friction` all carry the named flags | — |
+| G5 knowledge kinds | `mem.signpost.doctrine.knowledge`, `glossary.md` | `knowledge new --help` + 7 `knowledge-*.toml` | **divergent**: `concept`/`CPT-001` absent from both | T3, T4 |
+| G6 knowledge status/defaults | same | `src/knowledge.rs::statuses()` + template `status=` | **divergent**: 4 rows wrong — assumption, decision, question, constraint; concept row missing | T3, T4 |
+| G7 knowledge verbs | knowledge signpost | `knowledge --help` | **divergent**: `inspect`/`edit`/`settle`/`paths` absent; `settle` is the resolving verb | T3 |
+| G8 zero-pad examples | knowledge signpost, `glossary.md` | glossary § reference forms + STD-002; the example is ungrammatical as cloned | **divergent**: `doctrine link EVD-1 supports DEC-2` | T3, T4 |
+| G9 review severity | `mem.signpost.doctrine.review` | `review raise --help` | **divergent**: `cosmetic` where the CLI accepts `nit` | T5 |
+| G10 review verbs/lifecycle | same | `review --help` | **divergent**: `conclude` (declares the pass finished; the design-run `Conducted` disposition depends on it) absent | T5 |
+| G11 supersede applicability | `mem.signpost.doctrine.relating-entities` | `supersede --help` + `src/supersede.rs::supersede_policy` | **divergent**: "ADR kind only" false — ADR/POL/STD/DEC/CON/EVD flip to `superseded`, ASM/QUE to `obsolete` | T5 |
+| G12 backlog lifecycle | `mem.signpost.doctrine.backlog` | `backlog --help` + `BACKLOG_STATUSES` | **divergent**: `open → resolved → closed` omits `triaged`/`started` | T5 |
+| G13 install projection | `mem.signpost.doctrine.{install,reference-docs}`, file-map | fresh `git init` + `doctrine install -y` in `/tmp`; `install/manifest.toml [base] backings` | **divergent**: reference docs are **published**, not copied into `.doctrine/` | T5 |
+| G14 concept-map verbs | `mem.signpost.doctrine.concept-map` | `concept-map --help` | **verified** — 8 of 9 named; `paths` omitted from a "key verbs" list | — |
+| G15 requirements/coverage | `mem.signpost.doctrine.requirements` | `reconcile --help`, `coverage --help` | **verified** | — |
+| G16 specs verbs | `mem.signpost.doctrine.specs` | `spec --help` | **verified** | — |
+| G17 memory verbs | `mem.signpost.doctrine.recording-memories` | `memory --help` (`find` is a real alias of `search`) | **verified** | — |
+| G18 ADR lifecycle | `mem.signpost.doctrine.adrs` | `adr status --help` | **verified** — a paraphrase; omits `rejected`/`deprecated`, claims none the CLI refuses | — |
+| G19 design-run stages | `install/design-run-stages.md` | generated from `src/design_run/artifact.rs` | **verified** — machine-generated, cannot drift | — |
+
+Divergent groups: **G2, G5–G13**. Verified groups: **G1, G3, G4, G14–G19**.
+
+### Corrections (before → after, and the command that decided it)
+
+| # | file | before | after | decided by |
+|---|---|---|---|---|
+| C1 | knowledge signpost | 6 kinds, no `concept` | `concept` (`CPT-NNN`, seed `draft`) added | `knowledge new --help`; `knowledge-concept.toml` |
+| C2 | knowledge signpost | assumption `pending \| proven \| disproven \| withdrawn` | `held \| testing \| validated \| invalidated \| obsolete` (seed `held`) | `src/knowledge.rs::statuses()`; `knowledge-assumption.toml` |
+| C3 | knowledge signpost | decision `pending \| active \| superseded \| withdrawn` | `proposed \| accepted \| rejected \| superseded` (seed `proposed`) | same |
+| C4 | knowledge signpost | question `open \| answered \| settled \| withdrawn` | `open \| answered \| obsolete` | same |
+| C5 | knowledge signpost | constraint `active \| relaxed \| removed \| withdrawn` | `active \| waived \| superseded \| retired` | same |
+| C6 | knowledge signpost | verbs `new, list, show, status` | `new, list, show, inspect, edit, status, settle, paths` (`settle` named as the resolving verb) | `knowledge --help` |
+| C7 | knowledge signpost | `doctrine link EVD-1 supports DEC-2` | `EVD-001`/`DEC-002` | glossary § reference forms; STD-002 |
+| C8 | glossary | no `concept` row in the kind table | `concept \| CPT-001 \| y` added | `knowledge new --help` |
+| C9 | glossary | status table: 4 wrong rows, no concept | all 7 rows corrected/added | `src/knowledge.rs::statuses()` |
+| C10 | glossary | `doctrine link EVD-1 supports DEC-2` | `EVD-001`/`DEC-002` | same |
+| C11 | glossary | kind table rows `DES-001`, `RVW-001`, `PLN-001`, `AUD-001` | removed — slice-internal artifacts (`design.md`/`plan.toml`/`audit.md`), not entity kinds | `doctrine show <ID>` → "unknown kind prefix" |
+| C12 | review signpost | severity `… \| cosmetic` | `… \| nit` | `review raise --help` |
+| C13 | review signpost | verbs omit `conclude`; lifecycle ends at `withdraw` | `conclude` added to the verb list and as lifecycle step 7 (declares the pass finished) | `review --help`; `review conclude --help` |
+| C14 | relating-entities signpost | supersede "ADR kind only", flips to `superseded` | covers ADR/POL/STD/ASM/QUE/DEC/CON/EVD; ASM/QUE flip to `obsolete` | `supersede --help`; `supersede_policy` |
+| C15 | backlog signpost | lifecycle `open → resolved → closed` | `open → triaged → started → resolved → closed` | `backlog --help`; `BACKLOG_STATUSES` |
+| C16 | install signpost | "Copies shipped reference docs into `.doctrine/`"; seeds the tree with templates | minimal projection (`.gitignore`/`doctrine.toml`/`project-orientation.md`); reference docs are **published** (`doctrine library show reference/<name>.md`) | fresh `git init` + `doctrine install -y`; `install/manifest.toml [base] backings` |
+| C17 | reference-docs signpost | "ships … to every installed project under `.doctrine/`"; "install once and stay inert" | published, read on demand; no copy lands on disk | same |
+| C18 | file-map signpost | `.doctrine/using-doctrine.md` / `.doctrine/glossary.md`; "`install/` — sources copied into `.doctrine`" | published addresses; installer projects only the minimal base | same |
+| C19 | `spec-product/SKILL.md` | doc-local example `OQ-001` | `OQ-1` (bare, per glossary § reference forms) | glossary § reference forms |
+
+**Not corrected, recorded.** The glossary kind table still omits the minted
+kinds `RV`/`REC`/`RFC`/`CM`, and its `folder` column is stale (e.g. ADR).
+Neither is an id whose prefix the CLI does not mint, so `EX-4` does not reach
+it and the plan's `EX-3` names only the knowledge-records table and the status
+vocabulary; a full table rebuild whose `folder` semantics are unverified would
+be invention. Recorded for the audit as a residual (a completeness gap, not a
+false prefix).
+
+### Verification (EX-1..EX-6, `VT-1`..`VT-3`, `VA-1`..`VA-2`)
+
+- **`EX-1` — ledger one row per claim group.** The table above: 19 groups, each
+  with its deciding invocation; 9 groups recorded **verified**, 10 **divergent**
+  with a correction row. Clean groups are not omitted (`VA-1`).
+- **`EX-2` — knowledge signpost.** `VT-1` keywords present in
+  `memory/mem_019ed2791edc70e2a2a1caeb2521aad0/memory.md`: `concept`, `CPT`,
+  `settle`, `held`, `proposed` all ≥1; the file was re-read whole from the
+  **materialised** `.doctrine/memory/shipped/` copy.
+- **`EX-3` — glossary.** `VT-2` keywords present in `install/glossary.md`:
+  `CPT`, `held`, `proposed`, `EVD-001` all ≥1; the published copy read back with
+  `doctrine library show reference/glossary.md` shows the corrected rows and no
+  `DES-001`/`RVW-001`/`PLN-001`/`AUD-001`.
+- **`EX-4` — mechanical legs, whole corpus, with controls.** Leg 1 `comm -23` →
+  empty, with a present key not flagged and an injected fake key flagged. Leg 2
+  found `AUD/DES/PLN/RVW/OQ`, each re-tested with `doctrine show <ID>` (refused)
+  against the `SL-267` control (resolves); after C11/C19 the leg re-runs empty.
+- **`EX-5` — re-embedded and materialised.** `doctrine memory sync` dry-run:
+  `0 new, 7 changed, 24 unchanged, 0 prune`; the real run matches; `diff -rq`
+  against the pre-phase snapshot lists **exactly the 7 edited masters** (no
+  additions, removals, or files outside the edited set). `doctrine install`
+  produced **exactly one** changed skill (`spec-product/SKILL.md`). Both trees
+  are gitignored; the file lists + the sync counter are the re-derivable
+  evidence (`mem_019fd1d862887d42b7a1f88c28fd28a7`).
+- **`EX-6` / `VT-3` — no corrected claim teaches a refused command.** `cargo test
+  --test e2e_claude_install` **13/13**, including
+  `every_command_named_by_core_process_is_accepted_by_the_binary`,
+  `every_command_named_by_guardrails_is_accepted_by_the_binary`, and
+  `design_prompts_have_no_consumer_outside_the_design_run` with
+  `store_allowlist` **byte-unchanged** (`git diff --stat tests/e2e_claude_install.rs`
+  empty). The G3 verb-existence pass found zero real refusals.
+- **Gates.** `doctrine check gate` **exit 0** (124 `test result: ok`, zero
+  failures); `doctrine doctor` **51** findings (unchanged); `publication
+  validate` **98** `ok` (unchanged); `doctrine memory validate` clean for the
+  shipped corpus (the advisory rows are all local `.doctrine/memory/items/`).
+- **`VA-2` — corrected values agree with the live CLI.** Every correction's
+  value was re-derived at edit time (`knowledge --help`, `src/knowledge.rs`
+  status vocab, `review raise/conclude --help`, `supersede --help` +
+  `supersede_policy`, `backlog --help` + `BACKLOG_STATUSES`, a fresh scratch
+  `doctrine install`), not copied from `CHR-080`; each corrected file was read
+  once whole as a client agent.
+
+**Build note.** `EN-2` was momentarily blocked: a sibling (SL-266) held
+uncommitted `src/design_run/**` + `src/dtoml.rs` edits that failed dead-code
+(`field 'design' is never read`). The phase's build-independent work (T1–T5)
+proceeded; the sibling's tree compiled before `T6`, so the rebuild, gates and
+materialisation ran on the same `HEAD` (`4c95636f9`) with a current binary. The
+sibling's `src/**` and `tests/e2e_design_tree.rs` changes were left untouched.
+
+
 fresh-as-of: 2026-09-26 · PHASE-03 · bfd0d466b
 
 ### Produced
