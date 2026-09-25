@@ -3876,19 +3876,11 @@ pub(crate) fn dispatch(cmd: KnowledgeCommand, color: bool) -> anyhow::Result<()>
         } => run_new(path, kind, title, slug),
         KnowledgeCommand::List { list, path } => run_list(path, list.into_list_args(color)),
         KnowledgeCommand::Show { common } => {
-            let format = if common.json {
-                Format::Json
-            } else {
-                common.format
-            };
+            let format = common.format();
             run_show(common.path, &common.id, format)
         }
         KnowledgeCommand::Inspect { common } => {
-            let format = if common.json {
-                Format::Json
-            } else {
-                common.format
-            };
+            let format = common.format();
             run_inspect(common.path, &common.id, format)
         }
         // The kind-dispatched tier first: a subverb in the slot means the

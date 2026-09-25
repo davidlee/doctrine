@@ -231,6 +231,14 @@ pub(crate) struct CommonShowArgs {
     pub(crate) path: Option<PathBuf>,
 }
 
+impl CommonShowArgs {
+    /// The resolved output format: `--json` wins over `--format` (the one
+    /// place this shorthand lives).
+    pub(crate) fn format(&self) -> Format {
+        if self.json { Format::Json } else { self.format }
+    }
+}
+
 /// Extract the clean subcommand path from the process args by walking the clap
 /// tree (SL-208 PHASE-02). Skips flag tokens (`-`-led) and `help`; for each
 /// remaining token, descends via `find_subcommand` when it names a real child,
@@ -783,6 +791,11 @@ mod write_class_tests {
     fn inspect_is_read() {
         // SL-046: the cross-kind relation view reads only — never mints/derives.
         assert_eq!(cls(&["doctrine", "inspect", "SL-046"]), None);
+    }
+
+    #[test]
+    fn show_is_read() {
+        assert_eq!(cls(&["doctrine", "show", "SL-001"]), None);
     }
 
     #[test]

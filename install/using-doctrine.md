@@ -19,7 +19,7 @@ reach-for-it map):
 
 | intent | verb |
 |---|---|
-| read an entity (all tiers, synthesized) | `doctrine <kind> show <ID>` |
+| read an entity (all tiers, synthesized) | `doctrine show <REF>` · `doctrine <kind> show <ID>` |
 | survey what exists | `doctrine <kind> list` |
 | scope a change | `doctrine slice new` |
 | capture a unit of work intent | `doctrine backlog new <kind>` |
@@ -135,11 +135,13 @@ differs per developer.
 
 ## Reading entities — always via `show`
 
-Read an entity through `doctrine <kind> show <ID>`, never by opening one raw
-file. An entity is stored across tiers: structured data in `*.toml`, prose in
-`*.md`. `show` synthesizes both. A `*.md` body may be **empty by design** — its
-substance living in the sibling `*.toml` — so judging an entity "hollow" from its
-prose tier alone is a false reading. When in doubt, `show` it.
+Read an entity through `doctrine show <REF>` — any canonical ref resolves its
+kind (the prefix names the kind), so you need not restate it — never by opening
+one raw file. `doctrine <kind> show <ID>` is the per-kind form. An entity is
+stored across tiers: structured data in `*.toml`, prose in `*.md`. `show`
+synthesizes both. A `*.md` body may be **empty by design** — its substance
+living in the sibling `*.toml` — so judging an entity "hollow" from its prose
+tier alone is a false reading. When in doubt, `show` it.
 
 A requirement is a peer entity reached through its spec's namespace, not a
 top-level `show`: `doctrine spec req show <REQ-NNN>` renders one requirement's

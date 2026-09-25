@@ -19,6 +19,7 @@ pub(crate) mod publication;
 pub(crate) mod relation;
 pub(crate) mod reservation;
 pub(crate) mod serve;
+pub(crate) mod show;
 pub(crate) mod supersede;
 pub(crate) mod tag;
 pub(crate) mod validate;

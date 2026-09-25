@@ -171,6 +171,9 @@ pub(crate) enum Command {
     /// Full-text search over the entity corpus.
     Search(SearchArgs),
 
+    /// Show one entity by its canonical ref — the prefix selects the kind.
+    Show(crate::CommonShowArgs),
+
     /// Create, show, and transition revisions (the REV change-axis kind, ADR-013).
     Revision {
         #[command(subcommand)]
@@ -917,6 +920,7 @@ static FAMILIES: &[Family] = &[
         suppress_verbs: false,
         members: &[
             "search",
+            "show",
             "inspect",
             "relation",
             "concept-map",
@@ -1558,6 +1562,10 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 term_width: crate::tty::stdout_terminal_width(),
             },
         ),
+        Command::Show(common) => {
+            let format = common.format();
+            crate::commands::show::run_show(common.path, &common.id, format)
+        }
         Command::Revision { command } => crate::revision::dispatch(command, color),
         Command::Reconcile {
             req,
@@ -2007,7 +2015,8 @@ mod tests {
         // + `publication` (SL-223 PHASE-02) + `graph` (SL-226 PHASE-04)
         // + `library` (SL-227 PHASE-02) + `design` (SL-233 PHASE-04)
         // + `verify` (SL-233 PHASE-16).
-        assert_eq!(visible.len(), 56, "expected 56 visible top-level commands");
+        // + `show` (SL-265 PHASE-01).
+        assert_eq!(visible.len(), 57, "expected 57 visible top-level commands");
     }
 
     /// R-a — narrow-width WRAP case (design watchout): at a width that forces the

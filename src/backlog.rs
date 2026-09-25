@@ -287,19 +287,11 @@ pub(crate) fn dispatch(cmd: BacklogCommand, color: bool, ops: &DepSeqOps) -> any
             run_list(path, kind, by, &after, &needs, list.into_list_args(color))
         }
         BacklogCommand::Show { common } => {
-            let format = if common.json {
-                Format::Json
-            } else {
-                common.format
-            };
+            let format = common.format();
             run_show(common.path, &common.id, format)
         }
         BacklogCommand::Inspect { common } => {
-            let format = if common.json {
-                Format::Json
-            } else {
-                common.format
-            };
+            let format = common.format();
             run_inspect(common.path, &common.id, format)
         }
         BacklogCommand::Edit {

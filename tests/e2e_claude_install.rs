@@ -672,6 +672,21 @@ fn core_process_paragraph(text: &str, source: &str) -> String {
     rest[..end].to_owned()
 }
 
+/// The paragraph opener the guardrails sentence is authored under.
+const GUARDRAILS_MARKER: &str = "**Guardrails:**";
+
+/// The `**Guardrails:**` paragraph of `text` — marker to the blank line that
+/// ends it. Sibling of `core_process_paragraph`; panics on absence for the same
+/// reason (a projection with no guardrails paragraph is a broken fixture).
+fn guardrails_paragraph(text: &str, source: &str) -> String {
+    let from = text
+        .find(GUARDRAILS_MARKER)
+        .unwrap_or_else(|| panic!("{source} carries a {GUARDRAILS_MARKER} paragraph:\n{text}"));
+    let rest = &text[from..];
+    let end = rest.find("\n\n").unwrap_or(rest.len());
+    rest[..end].to_owned()
+}
+
 /// Install into `dir`, regenerate the boot snapshot from the embed, return its
 /// text. This is the GENERATED surface: `doctrine boot` inlines
 /// `routing-process.md` out of the binary's own embed, so what it writes is what
@@ -777,6 +792,39 @@ fn every_command_named_by_core_process_is_accepted_by_the_binary() {
         assert!(
             out.status.success(),
             "the core process names `doctrine {}`, which the built binary \
+             refuses:\n{}",
+            argv.join(" "),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+/// SL-265 PHASE-03 — every command the generated **Guardrails** sentence names is
+/// accepted by the binary that generated it. The core-process test parses a
+/// different paragraph (RV-384 F-27), so this is the guardrail's own gate.
+#[test]
+fn every_command_named_by_guardrails_is_accepted_by_the_binary() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let snapshot = generated_boot_snapshot(tmp.path());
+    let guardrails = guardrails_paragraph(&snapshot, "the generated boot snapshot");
+
+    let invocations = invocations_named_by(&guardrails);
+    // ANTI-VACUITY: a parser that extracts nothing would satisfy the loop below.
+    assert!(
+        !invocations.is_empty(),
+        "the guardrails sentence names a doctrine invocation, but none parsed \
+         out of:\n{guardrails}"
+    );
+
+    for argv in &invocations {
+        let out = common::doctrine_cmd(tmp.path())
+            .args(argv)
+            .arg("--help")
+            .output()
+            .expect("spawn doctrine");
+        assert!(
+            out.status.success(),
+            "the guardrails sentence names `doctrine {}`, which the built binary \
              refuses:\n{}",
             argv.join(" "),
             String::from_utf8_lossy(&out.stderr)
