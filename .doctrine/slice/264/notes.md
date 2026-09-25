@@ -372,7 +372,7 @@ Reconciliation ledger, 15 findings, all terminal; brief in `review-390.md`.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · RV-390 audit done · pending-reconcile
+fresh-as-of: 2026-09-26 · reconciled (c3a13b7cf) · closing
 
 ### Produced
 - RV-385 — re-homed RV-386's seven live findings (F-1..F-7) onto the run's pass; commits f491f490e, 3e5b85e00
@@ -380,6 +380,7 @@ fresh-as-of: 2026-09-26 · RV-390 audit done · pending-reconcile
 - RV-389 — pre-audit code review, 18 findings terminal; repairs 00c747b7d, c793fbfc3, 166f69a9f, e58a53f34
 - RV-390 — audit, 15 findings terminal; fix 0841788fb; reconciliation brief in review-390.md
 - 01a0d906 — friction record: backlog scaffold names originates_from, link refuses it for ISS
+- IMP-485 — conformance registry mode for post-phase review repairs (RV-390 F-3)
 
 ### Learned
 - mem_01a0d8fea6887683af86b6aaf2e4b4f2 — Sparse null does not survive a TOML round-trip
