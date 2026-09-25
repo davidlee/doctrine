@@ -7,12 +7,12 @@ title = "The exploring edge is guarded by attested user checkpoints"
 record_kind = "decision"
 status = "accepted"
 created = "2026-08-03"
-updated = "2026-08-03"
+updated = "2026-09-25"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 context      = "ISS-285's three futures for `governing-context-recorded` and `initial-concerns-recorded` all read the pair as run state. It is not: `exploring.toml`'s five steps and `inquiring.toml`'s two are all agent-solo, so the only user contact across orientation and interrogation is one blanket `user-accepts-sufficiency` at the far end. The pair is the residue of an interaction SL-233 specified in a bullet and never built."
-choice       = "Specify both as DEC-120 Attested conditions over real user interactions. Governing context: the agent presents what binds AND what it dismissed with reasons; the artefact is the confirmed edge set. Initial concerns: the user reviews the seeded inquiry graph, and the agent declares which questions it considers settled or settleable without asking."
+choice = "Specify both as DEC-120 Attested conditions over real user interactions. Governing context: the agent presents what binds AND what it dismissed with reasons; the artefact is the confirmed edge set. Initial concerns: the user reviews the seeded inquiry graph, and the agent declares which questions it considers settled or settleable without asking. AMENDED 2026-09-25 (SL-264, DEC-302, RV-386 F-14, at the user's assent): both actors' judgements remain, but the agent's is now a per-node blocking attribute required at node creation rather than a separate recorded act, and the user's graph-reviewed binds it through ReviewedGraph coverage. Initial concerns is therefore one act, not two; the refusal that names the missing half is replaced by refusing an unjudged node at declaration."
 alternatives = [
   "Derive both from run state (node presence). Rejected: derives the wrong thing — one junk inquiry clears the gate. Worse than the status quo because it looks enforced.",
   "Fold both into `user-accepts-sufficiency`. Rejected: makes the edge a single yes/no with nothing decomposed, so a refusal can never say which part is missing.",

@@ -85,3 +85,8 @@ Related: `DEC-120` (the kinds), `DEC-088` (the attestation primitive this rides)
 `ISS-285` (closable on this decision), `ISS-286` (its subject-rule complaint is
 answered as a side effect: the attested artefact *is* the subject, replacing the
 arbitrary section fingerprint), `SPEC-029`, `RFC-026`.
+
+
+## Amendment (2026-09-25)
+
+Under `SL-264` (`DEC-302`, `RV-386` `F-14`), initial concerns is **one act, two actors**. The agent's judgement of which questions block moved from a free-standing `blocking-set-declared` act onto each inquiry node, required at creation; the user's `graph-reviewed` binds it through `ReviewedGraph` coverage. The two-act rationale (a refusal can name the missing half) is met by refusing an unjudged node at declaration.

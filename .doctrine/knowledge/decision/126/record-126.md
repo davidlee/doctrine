@@ -136,3 +136,8 @@ Related: `DEC-120` (the kinds), `DEC-121` (the exploring pair), `DEC-124` (chann
 — the refusal carries the remedy), `DEC-125` (the finding model this depends on),
 `DEC-088`, `DEC-101`, `DEC-102`, `RFC-026` E3, `ISS-285`, `ISS-286`, `IMP-361`,
 `IMP-390`.
+
+
+## Amendment (2026-09-25)
+
+The `initial-concerns-recorded` row now reads *reviewed graph with per-node blocking judgements* (`DEC-302`, amending `DEC-121`): one user act, whose coverage compares the effective blocking set; the agent's judgement is node state rather than an act.
