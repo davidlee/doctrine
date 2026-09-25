@@ -32,10 +32,19 @@ X-/F- labels.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-25 · design reviewing (run rev 36) · 82e2c6287
 
 ### Produced
 
+- DEC-303, DEC-304, DEC-305, DEC-306, DEC-307, DEC-308, DEC-309, DEC-310
+- IMP-472 (design watch), IMP-473 (prune/defer reasons)
+- RV-388 (design review ledger)
+
 ### Learned
 
+- Observations recorded (design-run payload friction, pi agents outside jail,
+  boot resolve `--role`): `.doctrine/observations/records/` 03, 94, 97, c6.
+
 ### Open
+
+- RV-388 — raiser verification pass (codex, run by the user) in flight.
