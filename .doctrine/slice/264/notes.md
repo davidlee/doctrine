@@ -91,9 +91,27 @@ A second pass would not re-probe: the mechanism mapping in `research/research.md
 (`material()`, `materials()`, the digest's binding, the two staleness causes) — all
 verified against source during design.
 
+## PHASE-01 — `needs: null` clears the set (completed 2026-09-25)
+
+- Landed `37d26a5ff`. `declare_node`'s needs arm now matches all three `Sparse` states
+  through one `Option<BTreeSet<DesignId>>` binding that feeds the **existing** difference
+  loops — no second row loop, no new `ChangeEvent`. Closes `ISS-481`.
+- **Finding for `/audit` (durable).** The plan's `VT-2` is RED-impossible in its plain
+  form: an edge-free `needs: null` is the identity under *both* the buggy and the fixed
+  code (before, `Null` reads as omission; after, it clears an already-empty set), so a
+  test asserting only "no rows on an edge-free node" passes before the fix — a weak red.
+  The worker strengthened it with a control clause (the same spelling *does* record
+  removals where an edge exists) per `mem.pattern.tests.mutate-the-data-not-just-delete-it`
+  and `mem.pattern.harness.grep-negative-needs-positive-control`; in that form it is RED
+  before the fix. `VT-2` is therefore discharged by a control-bearing test, not by a
+  direct no-op discrimination — read it that way at audit.
+- Binding renamed to `declared_needs`: clippy `shadow_unrelated` is denied at zero warnings.
+- Pre-existing and unrelated: `reserve::tests::vt3_auto_degradation_is_fail_closed_with_explicit_optin`
+  fails in this jail via `DOCTRINE_RESERVATION_FALLBACK=1` (`ISS-483`); `src/reserve.rs` untouched.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · reviewing · 3e5b85e00
+fresh-as-of: 2026-09-25 · PHASE-01 · 37d26a5ff
 
 ### Produced
 - RV-385 — re-homed RV-386's seven live findings (F-1..F-7) onto the run's pass; commits f491f490e, 3e5b85e00
