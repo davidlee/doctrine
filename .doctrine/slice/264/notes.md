@@ -208,9 +208,47 @@ verified against source during design.
   judgement (`judged_blocking`); a reviewer may want them fused. `live_acts` is no longer
   rule-free — it looks each act's coverage up via `requirement_for`.
 
+## PHASE-05 — mirrors, integration and the fitness re-measure (completed 2026-09-25)
+
+- **The prompt prose corrected.** `install/design-prompts/conditions/initial-concerns-recorded.md`
+  no longer teaches the retired two-act shape ("declare the blocking set you showed and record
+  their review of it in one submission"); it now says the tree and its marks are the whole of
+  what the user confirms, so there is no separate set to declare. Framing and voice untouched;
+  no `blocking-set-current` prompt exists (nine condition prompts, the designed-and-dropped
+  tenth absent).
+- **The measurement is a test, not a claim.**
+  `tests/e2e_design_forward.rs::map_growth_after_sufficiency_re_faces_only_for_a_blocking_addition`
+  drives the built binary: a non-blocking addition after `user-accepts-sufficiency` re-faces
+  nothing; a blocking addition re-faces `initial-concerns-recorded` and **only** that row
+  (`user-accepts-sufficiency` is `InquiryMap` over carried keys). Measured **2 nodes and 1
+  edge** added after the acceptance without voiding it — `RFC-031`'s quantity. Taken at the
+  `reviewing` edge rather than inquiring→drafting; equivalent because both conditions are
+  cumulative.
+- **Selector amended: `src/commands/design.rs` (design-target).** The design's own decision
+  that `KeyContract` gains the home it applies at forces the extern-contract construction site
+  (`home: None`) in the command layer, and the node-declaring payload fixtures live there too.
+  The slice's selector list omitted the file; the change was not out of bounds, the declaration
+  was incomplete.
+- **FINDING for `/audit` → `/reconcile`: `design.md` sec-5's code-impact table under-declares
+  its own surface.** The diff touches six paths it never names: `src/commands/design.rs` (the
+  escape above) and five `src/design_run/` modules — `contract_check.rs`, `delegation.rs`,
+  `fixture.rs`, `refusal.rs`, `render/envelope.rs`. All five sit inside `src/design_run/**` so
+  no selector escaped, but the table is the design's own account of what it changes, and its
+  closing sentence commits the design-target selectors to that under-declared set. The first
+  four were known from PHASE-02's notes; `contract_check.rs` (PHASE-03's legacy enum-token
+  exception) was flagged nowhere until this sweep.
+- **Nit for `/audit`.** `src/commands/design.rs:3549`'s unknown-key fixture carries a
+  **duplicated** `blocking` key (`"blocking":false,"blocking":false`). Harmless — serde reads
+  last-wins and the test targets the unknown `cursror` — but a duplicated key in a fixture is
+  misleading and worth a ledger row.
+- `doctrine check gate` green through fmt, clippy (zero warnings), eslint, build and validate;
+  `test-all`'s only red is the pre-existing `ISS-483` reserve test. `architecture_layering` 25
+  passed; all twelve `e2e_design_*` binaries green. `doctrine slice selector doctor 264`
+  reports four **pre-existing** redundant selectors subsumed by `src/design_run/**` (advisory).
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · PHASE-04 · pending-land
+fresh-as-of: 2026-09-25 · PHASE-05 · pending-land
 
 ### Produced
 - RV-385 — re-homed RV-386's seven live findings (F-1..F-7) onto the run's pass; commits f491f490e, 3e5b85e00
