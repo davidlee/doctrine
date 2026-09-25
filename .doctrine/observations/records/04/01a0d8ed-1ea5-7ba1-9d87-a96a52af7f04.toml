@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d8ed-1ea5-7ba1-9d87-a96a52af7f04"
+recorded_at = "2026-09-25T14:16:53.66980156Z"
+kind = "friction"
+summary = "auditing the shipped corpus: the library namespace has no on-disk path to grep"
+detail = "During /route-driven recon for a shipped-corpus audit, I ran an entity-id grep over install/reference/ and got zero hits with no error. The path does not exist: install/ is flat on disk and 'reference/' is a virtual namespace presented only by 'doctrine library tree' (published-not-projected, ADR-019). An agent auditing shipped prose has no filesystem seam to sweep, so it must either reconstruct the namespace mapping or fall back to grepping the flat tree and guessing which files are published. Cost: one wasted tool call plus a wrong 'no violations found' reading that I nearly accepted."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d8ed-1ea6-79a3-9c15-c91f3c8eb34a"
+recorded_at = "2026-09-25T14:16:53.67100142Z"
+kind = "friction"
+summary = "memory list reports zero rows for the shipped corpus, with no indication it excluded it"
+detail = "Auditing shipped memories, I ran 'doctrine memory list --limit 0' and got an empty result (0 rows) despite 71 shipped memory items existing under memory/. The verb enumerates local items only; the shipped corpus is silently absent. An empty list from a --limit 0 'all' query reads as 'corpus is empty', not 'this verb has a narrower scope than you assumed'. I had to fall back to ls on the shipped tree and to the boot snapshot's Memory index to enumerate what actually ships."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

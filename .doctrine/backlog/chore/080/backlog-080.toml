@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 309
-slug = "shipped-assets-cite-repo-private-ids-that-collide-in-client-repos"
-title = "Shipped assets cite repo-private ids that collide in client repos"
-kind = "issue"
+id = 80
+slug = "shipped-corpus-accuracy-sweep"
+title = "Shipped-corpus accuracy sweep: verify shipped claims against the CLI"
+kind = "chore"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
-created = "2026-08-03"
-updated = "2026-08-03"
-tags = ["asset-policy", "correctness", "documentation", "install", "publication"]
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = ["area:install", "area:memory", "correctness", "documentation"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -22,18 +22,15 @@ after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
-label = "governed_by"
-target = "ADR-019"
-
-[[relation]]
 label = "references"
-role = "originates_from"
-target = "SL-244"
+role = "concerns"
+descriptor = "the shipped-claim drift gate this sweep's findings should feed"
+target = "IMP-163"
 
 [[relation]]
 label = "related"
-target = "CHR-080"
+target = "ISS-309"
 
 [[relation]]
 label = "related"
-target = "IMP-484"
+target = "ISS-215"

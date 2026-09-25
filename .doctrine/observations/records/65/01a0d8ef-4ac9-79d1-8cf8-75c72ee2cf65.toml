@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d8ef-4ac9-79d1-8cf8-75c72ee2cf65"
+recorded_at = "2026-09-25T14:19:16.041170801Z"
+kind = "friction"
+summary = "read-tool output appends a mem-surface receipt block indistinguishable from file content"
+detail = "Inspecting .doctrine/backlog/issue/309/backlog-309.md, the read tool's output ended with a 'Doctrine memories for this file:' list of memory keys. Nothing marked it as injected rather than file content, and the read tool's own truncation notice ('6 more lines') was consistent with it being in the file. I began constructing an edit that preserved the block, which would have written tool-generated output into an authored, committed entity body. Escape was a raw grep showing 0 occurrences of the header in the file. The receipt injection is a doctrine feature (see CHR-066); it needs a delimiter that survives a read-then-edit round trip."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
