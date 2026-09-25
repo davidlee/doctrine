@@ -15,7 +15,7 @@ ref   = "SL-265"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Totality test must iterate KINDS, not the sibling ALL_KINDS literal"
 detail = "sec-3 and DEC-298 pin total routing with a test over kinds::ALL_KINDS. But the router's prefixes arrive from parse_resolvable_ref, which resolves through kind_by_prefix over the KINDS KindRef table. ALL_KINDS is a separate &str literal with no structural tie to KINDS: kinds_table_covers_the_numbered_kinds pins KINDS's own literal, and nothing asserts the two sets are equal. A kind added to KINDS without ALL_KINDS would resolve in parse_resolvable_ref and fall through route()'s None arm — exactly the silent unrouting OQ-4 exists to prevent. The totality test must iterate KINDS and add a negative control."
@@ -24,7 +24,7 @@ response = "Candidate the check must reject: a KINDS row whose prefix yields no 
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Governance phase needs coverage verify; record alone leaves the cell Planned"
 detail = "sec-5's third act is coverage record --mode VT with a runnable check. The verb's own contract: a check-bearing cell is a VT recipe that leans Planned until verified. coverage record therefore leaves the new REQ's cell Planned, not Verified; only coverage verify SLICE re-runs the check and re-derives it. REQ-113's closure gate reads the observed cell, so a record-only phase leaves residual drift the gate refuses. The phase must sequence record then verify, and its exit criterion is the Verified cell."
@@ -49,7 +49,7 @@ response = "Integrated. RFC joins the governance-spine row and the Route set."
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Totality test cannot be an integration test: route() and KINDS are pub(crate)"
 detail = "sec-6 lists tests/e2e_show_totality.rs, but src/lib.rs exports no kinds items and route() would be pub(crate), so an integration test cannot reach either. The precedent is a unit test (kinds_table_covers_the_numbered_kinds, src/kinds/mod.rs:590). Repair: house every_kinds_row_routes as a cfg(test) unit test in src/commands/show.rs; drop the ALL_KINDS wording from sec-6."
@@ -121,7 +121,7 @@ response = "Integrated. state the map in sec-7."
 
 [[finding]]
 id = "F-13"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The coverage record sample does not bind a check"
 detail = "The shown command has no --command or --alias, so has_check is false and the cell cannot re-derive to Verified, which is sec-5's own exit criterion. Repair: include the concrete check binding in the sample."
