@@ -120,8 +120,12 @@ the work is wiring, not design:
 - **A no-op emits no rows.** An edge-free `null` records no mutation, and `REQ-478` obliges a
   row for a mutation the run *records*. The two spellings collapse by construction rather
   than by convention.
-- A clearing is a real mutation: it advances the revision (`REQ-429`/`REQ-430`). A no-op must
-  not invent one.
+- **A clearing is a recorded mutation and advances the revision** (`REQ-429`/`REQ-430`).
+- **A no-op claims no rows, not a frozen revision.** `apply` increments `run.revision`
+  unconditionally before it reads any declaration (`run.rs:347-349`) — that is the
+  compare-and-swap invariant, not a mutation the run recorded. So "the two spellings
+  collapse" means no change *rows*; no rule is needed to hold the revision still, and the
+  design does not claim one (`RV-386` `F-3`).
 
 `SPEC-029` Responsibilities[13] and `DEC-063` already require this, so the contract does not
 change. The code was the deviation.
@@ -136,11 +140,16 @@ change. The code was the deviation.
 | `src/design_run/submission.rs` | the new row's key-home / state-axis entry, where one is owed |
 | `src/design_run/run.rs` | `declare_node`'s `needs` block: `Sparse::Null` |
 | `src/design_run/tests.rs` | the flipped pin: `stale_conjunct_does_not_satisfy` becomes the VT-1 assertion, and the new criteria land beside it |
+| `install/design-prompts/conditions/blocking-set-current.md` (new) | the condition's mandatory narrative (`SPEC-029`): what the obligation is, and that re-declaring a changed set shows the added or changed blocking questions with their text, as `initial-concerns-recorded` shows the map |
 | `install/design-run-stages.md` | regenerated mirror of the condition table, golden-pinned by the render tests |
+
+`blocking-set-current` is a new condition, so `prompt.rs`'s per-condition key derivation
+(`design-prompts/conditions/<token>.md`) and the test that every key has an asset make the
+narrative a compile-time-obliged artefact, not an optional one (`RV-386` `F-5`).
 
 The design-target selectors this section commits to: `src/design_run/gate.rs`,
 `src/design_run/attestation.rs`, `src/design_run/run.rs`, `src/design_run/tests.rs`,
-`install/design-run-stages.md`.
+`install/design-prompts/conditions/**`, `install/design-run-stages.md`.
 
 <!-- doctrine:section sec-6 -->
 ## Verification
@@ -167,7 +176,7 @@ The design-target selectors this section commits to: `src/design_run/gate.rs`,
 - **Loosening invalidation is a truthfulness change** — `RFC-031` T1's class inverted, where
   a condition that should have invalidated and did not becomes a silent lie. VT-1's derived
   half and VT-4 are the guards, and they are criteria rather than intentions.
-- **Seventeen live snapshots change semantics underneath.** The change is read-side only; no
+- **Live snapshots change semantics underneath.** The change is read-side only; no
   stored shape moves, and `DEC-059` prefers that. Nothing becomes unreadable
   (`mem.fact.design-run.snapshot-outlives-the-binary`).
 - **`blocking-set-current` is a ninth condition** on a table of eight. `DEC-126`'s ledger is
@@ -178,4 +187,5 @@ The design-target selectors this section commits to: `src/design_run/gate.rs`,
   this very run, once when its own node resolved, and no verb derives the next); the
   requirement-tier statement of the map's dynamic mode (`IMP-471`); and whether a
   traversal-only apply owes a change row (`IDE-057`, observed during this run).
+
 

@@ -14,38 +14,48 @@ ref   = "SL-264"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Late-node moves and rewrites escape the claimed human invalidation"
 detail = "SL-264 design.md:18,43-50,59-62 and 158-159 say a move or reword must re-face the human, but compare only keys carried by the old act. ContentCoverage in src/design_run/attestation.rs:432-440 can implement that filter only by excluding an added key forever; NodeMaterial stores parent and question on that node, not incoming children, at src/design_run/inquiry.rs:304-311. Concrete path: accept map containing inq-1, add inq-2, re-declare the unchanged blocking set, then re-parent or reword inq-2. The old GraphReviewed and SufficiencyAccepted records never carried inq-2; the new full-union guard clears on the re-declaration; no human act goes stale. VT-4 tests only a covered node, so it passes while this path violates the stated move/reword invariant and DEC-301."
+disposition = "correct observation — escalated (needs a DEC-301 ruling)"
+response = "Verified at attestation.rs:432-440 and inquiry.rs:304-311: the carried-keys filter cannot see a move or re-word of a node the act did not cover, and NodeMaterial carries no incoming children. This is not fixed by mechanism: a late node's parent change is indistinguishable from its addition without history, so the only coherent reading is that a move re-faces only when the act covered that node. That scopes DEC-301's unqualified consequence that re-parenting a node remains a deliberate re-attestation event. Surfaced to the user rather than narrowed unilaterally."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Unchanged re-declaration lets a late blocking question pass unseen"
 detail = "SL-264 design.md:75-91 and 148-151 claims the new condition closes R4 and an unchanged blocking set is free. src/design_run/admission.rs:164-181 validates only that declared IDs exist, not that the set includes each question that should block; src/design_run/gate.rs:1543-1564 checks only IDs in that declared set. src/design_run/tests.rs:2457-2464 already demonstrates re-declaring the same set over a larger map while keeping the confirmation digest. Concrete path: add an open question whose answer could invalidate the design, re-declare the old set unchanged over the larger map, then advance. blocking-set-current becomes current, ConfirmationStale stays absent, blocking-inquiries-dispositioned ignores the new question, and the user is never asked to see it. VT-1 checks only an open DECLARED blocker and therefore cannot detect this R4 failure; the design must either narrow the guarantee or add a guard/visibility mechanism that can enforce it."
+disposition = "correct observation — escalated (guarantee scope)"
+response = "Verified at admission.rs:164-181 (existence only) and gate.rs:1543-1564 (declared set only): a question added late and judged blocking by the agent can be left out of an otherwise unchanged re-declaration. The new condition restores the re-declaration obligation over the current map; completeness of the set remains the agent's attested judgement and no mechanical check can supply it. Widening the mechanism means re-facing the human on every addition, which DEC-300 rejects. Needs the user's ruling on the guarantee the design claims."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "answered"
 severity = "major"
 title = "No-op needs clearing still advances the revision"
 detail = "SL-264 design.md:120-124 and 152-154 requires edge-free needs:null to emit no rows and invent no revision. In src/design_run/run.rs:347-349 apply unconditionally increments revision before declarations; src/design_run/run.rs:1440-1463 emits no NeedsRemoved when the existing set is empty; src/design_run/run.rs:544-565 nevertheless records a receipt and returns the incremented snapshot. src/commands/design.rs:2146-2173 persists that snapshot on the ordinary apply path. Thus wiring Null to the existing clearing arm yields a successful zero-row apply with revision N+1; VT-2 as written requires an additional no-effect rule outside the stated needs wiring."
+disposition = "accepted — fixed in sec-4"
+response = "sec-4 amended: a clearing is a recorded mutation and advances the revision (REQ-429/REQ-430); a no-op claims no change rows, not a frozen revision. run.rs:347-349 increments unconditionally before any declaration is read, which is the compare-and-swap invariant, so no additional rule is needed and the design no longer claims one."
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Attested growth guard contradicts the accepted derived decision"
 detail = "DEC-300 via doctrine knowledge show chooses a derived cumulative growth condition, while SL-264 design.md:79-100 explicitly specifies blocking-set-current as Attested([BlockingSetDeclared(Agent)]) and calls the kind change a wording refinement. This is a formal distinction: src/design_run/gate.rs:301-317 maps Engine to derived and Attested to attested, and install/design-run-stages.md:42-47 publishes different discharge semantics. The draft is lower authority than accepted DEC-300; either the decision needs an explicit amendment or the design must implement a derived condition. Calling both derived over state under DEC-120 does not erase the published kind axis."
+disposition = "correct — escalated (contradicts accepted DEC-300)"
+response = "Verified: DEC-300 chooses a derived growth condition; the design specifies Attested([BlockingSetDeclared(Agent)]) and calls the kind change a wording refinement. gate.rs:301-317 maps Engine to derived and Attested to attested, and install/design-run-stages.md publishes different discharge semantics, so the kind axis is formal, not verbal. The design is lower authority than the accepted decision. Either DEC-300 is amended explicitly or the design implements the derived form; surfaced to the user."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "answered"
 severity = "major"
 title = "New condition has no specified contract prose or delta display"
 detail = "SL-264 design.md:90-93 says a changed blocking set re-shows exactly what changed, yet its code-impact list at :129-143 adds only the generated stage-table mirror, not the mandatory condition narrative asset. SPEC-029 requires one narrative per condition; src/design_run/prompt.rs:264-280 derives a design-prompts/conditions/<token>.md key per condition and src/commands/design.rs:4793-4820 tests that every key has an asset. The current initial-concerns guidance at install/design-prompts/conditions/initial-concerns-recorded.md:18-22 is where the map/tree and blocking marks are shown; splitting the agent obligation into blocking-set-current needs its own instructions. In code, ConfirmationStale at src/design_run/gate.rs:1164-1169 carries only act/declaration kinds, and NodeCreated at src/design_run/run.rs:1358-1382 omits question text, so neither existing cause nor row delivers the claimed exact delta. A changed set can require assent without showing the changed question unless the design specifies that projection."
+disposition = "accepted — fixed in sec-5"
+response = "sec-5 now adds install/design-prompts/conditions/blocking-set-current.md to the code impact and the design-target selectors, and states that prompt.rs per-condition key derivation plus the every-key-has-an-asset test make the narrative compelled. The delta-display obligation lands in that narrative: re-declaring a changed set shows the added or changed blocking questions with their text, as initial-concerns-recorded shows the map."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
