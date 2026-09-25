@@ -1,0 +1,55 @@
+memory_uid = "mem_01a0d933e3af732288db6ac51cb93046"
+memory_key = "mem.pattern.shipped-corpus.delivery-copy-cannot-cite-its-owner"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "A shipped delivery copy cannot cite its governance owner — the link runs governance → published address only"
+summary = "A shipped doc delivering a rule owned by repo-local governance cannot name it; the ADR cites the published address and the doc describes its owner in prose"
+created = "2026-09-25"
+updated = "2026-09-25"
+
+[scope]
+paths = []
+globs = ["install/**", "plugins/**", "memory/**"]
+commands = []
+tags = ["shipped-corpus", "publication", "asset-policy", "citation"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c7b181d8de6fca8a44fdb80fedf215a4484e29a5"
+ref_name = "refs/heads/edge"
+checkout_state_id = "53e9360131ef67490f24c3ccacdf20ac2549792d33c5d9ea15a89e3b26607ecf"
+base_commit = "d7f49ae0a076567683aba5a13a7d1691a85facc6"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "adr"
+ref = "ADR-024"
+
+[[source]]
+kind = "decision"
+ref = "DEC-311"
+
+[[relation]]
+label = "related"
+target = "mem_01a0d8f19c4a7e619a99a5b970e09c7e"
+

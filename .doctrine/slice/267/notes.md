@@ -109,19 +109,22 @@ ledgers: ISS-309 (citations), CHR-080 (accuracy), IMP-484 (sufficiency).
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · design (locked) · a51c614bb
+fresh-as-of: 2026-09-26 · PHASE-01 · 187f05f91
 
 ### Produced
 - design locked — SL-267 under run dr-01a0d8ff-b311 (rev 35); `design.md` 9 sections (commits 9750594e4, c17d9229a, 53add8888).
-- minted: DEC-311..DEC-316 (the six design decisions, accepted at lock); CHR-081 (local-memory consolidation follow-up); RV-391 (design review; 12 findings, 11 verified, F-7 deferred to plan).
+- plan authored — 6 phases, rule-first; runtime sheets materialised (commit e4fa00d7a).
+- PHASE-01 done — the rule and its two published homes: ADR-024 (accepted; `related` ADR-005/ADR-019; DEC-127 carries the reverse `concerns` edge), `reference/shipped-corpus-authoring.md`, `reference/design-run-obligations.md`, and their two `publication/manifest.toml` rows (commit 187f05f91).
+- minted: ADR-024; DEC-311..DEC-316; CHR-081; RV-391; mem.pattern.shipped-corpus.delivery-copy-cannot-cite-its-owner.
 - ledger corrections: IMP-484 (observation gap re-verified false, swept in the design, the item and slice-267.md); CHR-080 and ISS-309 carried as the accuracy and citation ledgers.
+- gates: `doctrine check gate` green at 187f05f91; publication 32/32; e2e_claude_install 13/13.
 
 ### Learned
+- mem.pattern.shipped-corpus.delivery-copy-cannot-cite-its-owner — a shipped delivery copy cannot cite its governance owner; the link runs governance → published address, one way.
 - mem.pattern.design-run.review-disposition-route-and-vocab — a severe finding's disposition needs route *and* vocab; the tool accepts the route alone.
 - observation 01a0d908-973f — `library tree` groups a template under a `reference/` heading but its address is `templates/<name>`.
 
 ### Open
-- QUE-227 — drift-gate seam and the duplicate POL-002 rule (deferred; ISS-309 part 2). The gate is the only durable defence against re-drift.
-- RV-391 F-7 — the scratch-repo control criterion is owed to /plan: plant one repo-private id per channel; the read must flag each.
+- QUE-227 — drift-gate seam and the duplicate POL-002 rule (ISS-309 part 2); the only durable defence against re-drift.
 - CHR-081 — consolidate the two local memories restating the grounding rule (out of scope; local-memory health is a non-goal corpus).
 - ISS-215 — boot-index defect; CHR-036 — distilling project-local memories (both out of scope).
