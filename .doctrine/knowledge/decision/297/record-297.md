@@ -1,0 +1,1 @@
+`doctrine show 31` is accepted. Resolution is `kinds::parse_resolvable_ref` (canonical or bare), then `kinds::canonical_id(prefix, id)` produces the canonical ref handed to the callee.

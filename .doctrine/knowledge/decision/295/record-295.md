@@ -1,0 +1,1 @@
+`doctrine show <REF>` emits stdout byte-identical to `doctrine <kind> show <REF>`. The router resolves the ref, canonicalises it, and calls the owning kind's existing `run_show`; it owns no renderer.

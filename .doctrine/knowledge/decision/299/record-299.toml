@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 299
+slug = "spec-013-amendment-is-its-own-phase-rev-introduce-manual-req-apply-coverage"
+title = "SPEC-013 amendment is its own phase: REV introduce, manual req apply, coverage"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-265 OQ-5 (user-directed): the scope left the SPEC-013 amendment as a footnote. It is a REV introduce row, a manual `spec req add` apply, and a coverage record — a governance phase in its own right."
+choice = "A distinct plan phase, sequenced after the code phase. (1) Author a REV: doctrine revision new, then ONE revision change add --action introduce --new-label FR-006 --member-of SPEC-013; the SPEC-013 § Uniform command grammar prose naming the router rides the revision-NNN.md prose companion, because a modify row takes a live peer FK, not a prose section. (2) After revision approve and revision apply (which surface the introduce row for manual handling), spec req add SPEC-013 --kind functional --label FR-006 mints the requirement as pending — Coherent with no cells; the REQ-113 lever bites at the reconcile flip to active. (3) coverage record with an explicit check binding (--command/--matcher-*), then coverage verify 265; the exit criterion is the cell reading Verified, not merely recorded. (Amended 2026-09-25 after RV-384 F-6/F-7/F-13.)"
+alternatives = ["Fold the governance work into the code phase — hides a REQ-113 obligation and a manual apply step inside a code commit", "Land the introduce row before code and the coverage only at reconcile — splits one coherent obligation across two phases and leaves the new REQ uncovered through the audit"]
+rationale = "ADR-013 routes the governance change through a REV; REQ-136 makes `spec req add` the only producer and the REV introduce rows land manually; REQ-113 makes covering the new REQ a closure obligation. Three discrete, verifiable acts belong to one phase with its own exit criteria. A check-less `coverage record --mode VT` silently stores an attestation, so the cell must bind a real test (a positive control that fails if the test never ran)."
+consequences = ["the plan carries a distinct governance phase with its own EN/EX and a VT binding the new REQ", " reconcile flips the new REQ pending to active with a Verified cell in hand", " the slice's authored deliverable (REV plus .doctrine/spec/tech/013) reports as undeclared in slice conformance — expected", " disposed aligned"]
+decided_by = "user"
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-265"

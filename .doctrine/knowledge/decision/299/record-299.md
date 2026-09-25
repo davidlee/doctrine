@@ -1,0 +1,1 @@
+The governance change is a plan phase of its own, sequenced after the code phase: author the REV introduce row (frozen FR-006 on SPEC-013), apply it manually with `spec req add` (minting the REQ `pending`), then record a runnable VT coverage cell binding the code phase's equivalence test.

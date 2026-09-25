@@ -1,0 +1,213 @@
+id    = 384
+slug  = "design-review-of-sl-265"
+title = "design review of SL-265"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+concluded = true
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-265"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "major"
+title = "Totality test must iterate KINDS, not the sibling ALL_KINDS literal"
+detail = "sec-3 and DEC-298 pin total routing with a test over kinds::ALL_KINDS. But the router's prefixes arrive from parse_resolvable_ref, which resolves through kind_by_prefix over the KINDS KindRef table. ALL_KINDS is a separate &str literal with no structural tie to KINDS: kinds_table_covers_the_numbered_kinds pins KINDS's own literal, and nothing asserts the two sets are equal. A kind added to KINDS without ALL_KINDS would resolve in parse_resolvable_ref and fall through route()'s None arm — exactly the silent unrouting OQ-4 exists to prevent. The totality test must iterate KINDS and add a negative control."
+disposition = "route:control fixed"
+response = "Candidate the check must reject: a KINDS row whose prefix yields no route. Criterion: the totality test iterates the KINDS table prefixes — the same table parse_resolvable_ref and kind_by_prefix resolve against — and asserts each yields Some(Route), plus a negative control asserting a synthetic unrouted prefix returns None. Obligation: sec-3 and the totality VT name KINDS as the iterated set; the design prose and DEC-298 are amended to match."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "Governance phase needs coverage verify; record alone leaves the cell Planned"
+detail = "sec-5's third act is coverage record --mode VT with a runnable check. The verb's own contract: a check-bearing cell is a VT recipe that leans Planned until verified. coverage record therefore leaves the new REQ's cell Planned, not Verified; only coverage verify SLICE re-runs the check and re-derives it. REQ-113's closure gate reads the observed cell, so a record-only phase leaves residual drift the gate refuses. The phase must sequence record then verify, and its exit criterion is the Verified cell."
+disposition = "route:control fixed"
+response = "Candidate the check must reject: a Planned VT cell accepted as coverage. Criterion: the governance phase's exit asserts the new requirement's cell reads Verified after coverage verify 265, not merely recorded. Obligation: the governance phase sequences record then verify, and its exit criterion is the Verified cell; sec-5 and sec-7 are amended."
+
+[[finding]]
+id = "F-3"
+status = "withdrawn"
+severity = "blocker"
+title = "test"
+detail = "test"
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "blocker"
+title = "Delegation table omits RFC: 23 of 24 KINDS rows routed"
+detail = "sec-2's table maps 5 singleton + 3 governance + 2 spec + REQ + 7 record + 5 backlog = 23 rows. RFC is a KINDS row, routed today by rfc::run_show (src/rfc.rs:128), and the design's own worked example is doctrine show RFC-031. The Route enum has no RFC arm either. Repair: RFC joins the governance-spine row and the Route set."
+disposition = "route:owner-fix fixed"
+response = "Integrated. RFC joins the governance-spine row and the Route set."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "major"
+title = "Totality test cannot be an integration test: route() and KINDS are pub(crate)"
+detail = "sec-6 lists tests/e2e_show_totality.rs, but src/lib.rs exports no kinds items and route() would be pub(crate), so an integration test cannot reach either. The precedent is a unit test (kinds_table_covers_the_numbered_kinds, src/kinds/mod.rs:590). Repair: house every_kinds_row_routes as a cfg(test) unit test in src/commands/show.rs; drop the ALL_KINDS wording from sec-6."
+disposition = "route:control fixed"
+response = "Integrated. house every_kinds_row_routes as a cfg(test) unit test in src/commands/show.rs; drop the ALL_KINDS wording from sec-6."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "REV staging sequence is not executable as written"
+detail = "revision change add appends ONE [[change]] row, so one invoke cannot stage an introduce row plus a modify row. A modify row takes a live peer FK, not a prose section. The sequence also omits revision new. Repair: revision new; one introduce row; the SPEC-013 prose naming rides the revision-NNN.md companion, which ADR-013 surfaces for manual handling."
+disposition = "route:review fixed"
+response = "Integrated. revision new; one introduce row; the SPEC-013 prose naming rides the revision-NNN.md companion, which ADR-013 surfaces for manual handling."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "New requirement lands pending and Coherent, not Indeterminate"
+detail = "spec req add mints status pending (src/requirement.rs:549), and coverage show REQ-439 reads pending / observed none / Coherent. So the claim that the new REQ lands Indeterminate and that a record-only phase leaves the gate refusing is false. The lever bites once the requirement is active at the reconcile flip. Repair: restate the sequence and keep the Verified exit."
+disposition = "route:review fixed"
+response = "Integrated. restate the sequence and keep the Verified exit."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "The chosen home adds a commands -> governance edge; the top-level risk is Unclassified, not tangle"
+detail = "No file under src/commands/ imports crate::governance (grep empty), so a router calling governance::run_show adds a new top-level edge. count_tangle_edges counts only same-SCC edges, so a new top-level module would fail on a missing tier row (Unclassified), not on tangle growth. Repair: call the per-kind wrappers adr/policy/standard/rfc::run_show, already imported under src/commands/, so the no-new-edge claim holds; restate R1."
+disposition = "route:owner-fix fixed"
+response = "Integrated. call the per-kind wrappers adr/policy/standard/rfc::run_show, already imported under src/commands/, so the no-new-edge claim holds; restate R1."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "major"
+title = "spec::run_show takes no SpecSubtype"
+detail = "The signature is (path, spec_ref, format) and it resolves the subtype internally via resolve_spec_ref (src/spec.rs:1526). Route::Spec(SpecSubtype) is a redundant payload and the cited contract is wrong. Repair: Route::Spec carries no payload; PRD and SPEC both call spec::run_show."
+disposition = "route:owner-fix fixed"
+response = "Integrated. Route::Spec carries no payload; PRD and SPEC both call spec::run_show."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "The --json shorthand has four call sites, not two"
+detail = "Inline at backlog.rs:290 (Show) and :298 (Inspect), and knowledge.rs:3879 (Show) and :3887 (Inspect) — all four share CommonShowArgs. Repair: name all four."
+disposition = "route:review fixed"
+response = "Integrated. name all four."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "minor"
+title = "The bare-id premise is not universal"
+detail = "slice, adr, policy, rfc, revision, rec and concept-map accept a bare id through listing::parse_ref's raw fallback; only backlog, knowledge, spec and review reject it. Canonicalisation is still required for those four and REQ, so the conclusion holds but the universal premise does not. Repair: narrow the claim."
+disposition = "route:review fixed"
+response = "Integrated. narrow the claim."
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "minor"
+title = "Equivalence test needs a per-group reference-command map; REQ is not doctrine req show"
+detail = "There is no doctrine req show; REQ is doctrine spec req show (src/spec.rs:301). PRD/SPEC map to doctrine spec show, the seven record prefixes to doctrine knowledge show, the five backlog prefixes to doctrine backlog show. Repair: state the map in sec-7."
+disposition = "route:review fixed"
+response = "Integrated. state the map in sec-7."
+
+[[finding]]
+id = "F-13"
+status = "answered"
+severity = "minor"
+title = "The coverage record sample does not bind a check"
+detail = "The shown command has no --command or --alias, so has_check is false and the cell cannot re-derive to Verified, which is sec-5's own exit criterion. Repair: include the concrete check binding in the sample."
+disposition = "route:control fixed"
+response = "Integrated. include the concrete check binding in the sample."
+
+[[finding]]
+id = "F-14"
+status = "verified"
+severity = "minor"
+title = "REQ-197 is misquoted: it mandates, not admits-only"
+detail = "REQ-197 mandates that every numbered entity kind present through the uniform kind-verb grammar while ALLOWING non-entity capability containers to reuse it. The conclusion that a new REQ is warranted survives; only the word only inverts it. Repair: rephrase."
+disposition = "route:review fixed"
+response = "Integrated. rephrase."
+
+[[finding]]
+id = "F-15"
+status = "verified"
+severity = "nit"
+title = "Three prose nits"
+detail = "sec-1: the twelve are entity-kind commands; memory, coverage and design also expose show. sec-2: listing::parse_ref strips its own prefix then falls back to the raw string before a digit parse. sec-2/sec-3: the fallthrough literal is outbound_for's own message, not the shorthand quoted."
+disposition = "route:review fixed"
+response = "Integrated. Prose repaired."
+
+[[finding]]
+id = "F-16"
+status = "open"
+severity = "major"
+title = "Negative control panics: debug_assert!(false) sits inside route()"
+detail = 'sec-3 item 1 puts the outbound_for-style debug_assert!(false) inside route(prefix) -> Option<Route>; item 3 and sec-7 add a negative control asserting route(synthetic) returns None. cargo test builds with debug_assertions on, so that assertion panics instead of observing None: the verification as designed cannot pass. outbound_for (src/catalog/scan.rs:69) can carry the assert because it is not itself probed with an unrouted prefix. DEC-298 carries the same contradiction ("wildcard arm that debug_assert!(false) and returns the unknown-ref error" on a fn returning Option). Repair: route() is a pure lookup with no assert; if the loud-failure is wanted, it lives at the dispatch site on None. The unit test already pins totality, so dropping the assert is also sound.'
+
+[[finding]]
+id = "F-17"
+status = "open"
+severity = "major"
+title = "Governance phase never lands the SPEC-013 prose or closes the REV"
+detail = 'sec-5 routes the SPEC-013 prose change through the revision-NNN.md companion, which ADR-013 surfaces for manual landing, but no act in the sequence performs that landing: steps are revision new, change add, approve, apply, spec req add, coverage record/verify. The prose must change: spec-013.md § Uniform command grammar states "A top-level Command enum names each entity kind", which a top-level show falsifies, and the § Responsibilities paragraph mirrors the structured responsibilities list in spec-013.toml, which needs a matching entry. No CLI verb edits either (spec edit covers descent/parent only), so it is a hand-edit. The REV lifecycle (proposed→started→done, revision status) is also never advanced; ADR-013 says done requires every row landed. sec-7 "VA — governance landed" checks the REQ and the REV companion, not the spec prose. Repair: add the hand-edit of spec-013.md (grammar section + responsibilities) and spec-013.toml responsibilities, then revision status REV-NNN done; extend the VA to check the SPEC-013 prose names the router.'
+
+[[finding]]
+id = "F-18"
+status = "open"
+severity = "major"
+title = "Shipped guidance keeps prescribing <kind> show; the fix does not reach agents"
+detail = "The design rests its value on dissolving the RFC-011 failure, but every agent-facing source still instructs the per-kind form: install/using-doctrine.md:22 (verb table) and :138; install/routing-process.md:58 (inlined into every boot snapshot as a guardrail); install/authority-model.md:22; the canon and walkthrough skills; three shipped memories. sec-1 Boundary excludes docs and sec-8 names no residual or follow-up for this. An agent following the boot guardrail never uses doctrine show, so the RFC-011 failure mode persists. Repair: bring at least the using-doctrine verb table and the routing-process guardrail into scope (the latter moves the boot snapshot, which sec-4 already regenerates), or name the guidance sweep as an explicit follow-up with the tradeoff stated."
+
+[[finding]]
+id = "F-19"
+status = "open"
+severity = "minor"
+title = "Route::Knowledge(RecordKind) and Route::Backlog(ItemKind) carry dead payloads"
+detail = "knowledge::run_show and backlog::run_show take (path, reference, format) and re-resolve the prefix themselves (knowledge::resolve_ref, backlog parse_ref; src/knowledge.rs:2730, src/backlog.rs:2001). The payload is never read, the same defect F-9 fixed for Route::Spec. A never-read tuple-variant field is a dead_code warning under the zero-warning gate. Repair: unit variants Knowledge and Backlog; route() still classifies via RecordKind::from_prefix / backlog::kind_from_prefix (single-sourced, not a prefix list). Update the sec-2 table and the sec-3 variant list."
+
+[[finding]]
+id = "F-20"
+status = "open"
+severity = "minor"
+title = "The equivalence claim is unconditional but the router accepts fewer refs"
+detail = "sec-1 states doctrine show REF ≡ doctrine <kind> show REF. Every per-kind parser accepts a lowercase prefix (listing::parse_ref strips PREFIX- or prefix-; knowledge::resolve_ref uppercases), but parse_canonical_ref looks up the prefix verbatim, so doctrine show dec-031 refuses with unknown kind prefix while doctrine knowledge show dec-031 succeeds. Repair: either state the domain (the equivalence holds over canonical-case refs; the router refuses others with the resolver error) or uppercase the prefix before resolving. Stating it is cheaper; either way sec-1 and DEC-295 should not claim unconditional equivalence."
+
+[[finding]]
+id = "F-21"
+status = "open"
+severity = "minor"
+title = "Equivalence fixture source is unspecified"
+detail = 'sec-7 says the corpus supplies one entity per prefix and "the review checked every prefix has a fixture". Which corpus is not stated: the e2e convention is hand-seeded tempdir corpora, with tests/common repo_root reserved for the few goldens that read the real tree. The live tree is the cheap and sound choice here because the property is relative (two outputs of one binary over one tree, not a golden), but the design must say so and how ids are chosen (one pinned id per prefix vs discovered). The review-history clause is not verification. Repair: state the fixture source and selection rule.'
+
+[[finding]]
+id = "F-22"
+status = "open"
+severity = "minor"
+title = "The REQ-113 residual is answerable now, and is not a risk"
+detail = "sec-8 leaves open whether the closure gate sweeps all of SPEC-013 members (eight read Indeterminate). Source answers it: gate_requirement_set (src/slice.rs, used by undischarged_drift) is the slice-local covered requirements plus [gate].extra_reqs plus requirements named in owned REC status_deltas. It does not enumerate the owning spec members. The eight existing Indeterminate members never enter SL-265s gate set. Repair: replace the residual with that fact; it removes a scope contingency from /plan."
+
+[[finding]]
+id = "F-23"
+status = "open"
+severity = "minor"
+title = "DEC-296 and DEC-298 still cite ALL_KINDS after F-1"
+detail = 'The F-1 amendment reached DEC-298s choice facet only. DEC-298 title ("plus an ALL_KINDS test") and body ("covers all 24 ALL_KINDS rows ... a test asserts every ALL_KINDS row routes") contradict it; DEC-296 choice and body define the address scope as kinds::ALL_KINDS. The design (sec-2, sec-3) says KINDS. Repair: amend both records to KINDS.'
+
+[[finding]]
+id = "F-24"
+status = "open"
+severity = "nit"
+title = "route() should match on kinds prefix constants, not literals"
+detail = "STD-001 (no magic strings) is listed as constraining in the notes, and kinds already exports named prefix consts (kinds::SL, kinds::ADR, … used by ALL_KINDS). outbound_for, the precedent the design mirrors, matches on string literals. The design should say route() matches on the kinds constants (const patterns are valid in a &str match), so the precedent is not copied with its defect."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

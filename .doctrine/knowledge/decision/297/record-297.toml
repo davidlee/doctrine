@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 297
+slug = "router-accepts-bare-ids-through-parse-resolvable-ref"
+title = "Router accepts bare ids through parse_resolvable_ref"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-265 OQ-3: accept a bare id, or require the canonical form?"
+choice = "Accept bare ids. Resolve with `kinds::parse_resolvable_ref`, canonicalise with `kinds::canonical_id`, delegate. Unknown prefix, dangling ref and ambiguous bare id keep that function's error contract."
+alternatives = ["Require the canonical form — simpler, but canonicalisation is mandatory anyway (every per-kind parser rejects a foreign prefix; spec::resolve_spec_ref demands the hyphen), so bare ids ride the same call path at no extra cost."]
+rationale = "One resolver, already carrying cross-kind ambiguity detection (SL-188 / RV-212 F-1); no second parser is introduced. Since canonicalisation before delegation is not optional, `show 31` and `show SL-031` converge on one call."
+consequences = ["an ambiguous bare id fails naming the candidate kinds; first-match-wins is refused", "the router never passes a bare id to a callee"]
+decided_by = "agent"
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-265"

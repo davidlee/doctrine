@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 295
+slug = "byte-identical-delegation-is-the-show-routers-fidelity-contract"
+title = "Byte-identical delegation is the show router's fidelity contract"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-265 OQ-1: the scope offered byte-identical delegation (its default) against a normalised cross-kind envelope."
+choice = "Byte-identical delegation. No new renderer, no cross-kind envelope, no per-kind content change."
+alternatives = ["A normalised cross-kind envelope — would reimplement ~10 renderers and move every kind's goldens; drifts from kind-owned content (review returns ReviewOutput; concept-map takes edges/nodes booleans)."]
+rationale = "Every per-kind show already exists, differs by design, and is pinned by its own goldens (SPEC-013 D5). Delegation makes the router a pure addition: the strongest test is `show X` == `<kind> show X`, and no kind module changes."
+consequences = ["VT asserts byte-identity per numbered prefix in both table and JSON formats", "the router gains no `--format` semantics beyond the shared `CommonShowArgs` triple", "future kind verbs inherit the router for free"]
+decided_by = "agent"
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-265"

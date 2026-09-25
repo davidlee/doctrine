@@ -12,27 +12,39 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/commands/cli.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/guard.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/main.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/show.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/e2e_show*.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = ".doctrine/spec/tech/013/**"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/backlog.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/knowledge.rs"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/revision/**"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"

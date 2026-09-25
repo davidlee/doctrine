@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 296
+slug = "router-address-scope-is-the-numbered-canonical-prefixes-only"
+title = "Router address scope is the numbered canonical prefixes only"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-265 OQ-2: does the router also accept `mem_…`, observation uids and design refs?"
+choice = "The 24 numbered canonical prefixes in `kinds::ALL_KINDS` (SL ADR POL STD PRD SPEC REQ ISS IMP CHR RSK IDE RV REC ASM DEC QUE CON EVD HYP CPT CM REV RFC) only."
+alternatives = ["Include memory and observations — a second route with different argument shapes (memory::run_show takes a writer; observations resolve bare UUIDs under SPEC-028), not a table row; deferred to a later slice if ever warranted."]
+rationale = "The numbered prefixes are exactly the `kinds` table rows and already share one resolution authority (`parse_resolvable_ref`). Memory is conformant-by-exception in SPEC-013 and observations are a non-entity UUID ledger with their own verbs; folding them in would widen the router's contract beyond `kind = prefix`."
+consequences = ["`doctrine memory show` / observation / `doctrine design show` remain the spellings for their namespaces", "SPEC-013 prose states the numbered-prefix boundary explicitly"]
+decided_by = "agent"
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-265"
