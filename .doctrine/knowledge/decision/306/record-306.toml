@@ -12,7 +12,7 @@ tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 context = "The tree view needs a line shape that reads at a glance and obeys PRD-019 REQ-425 (counts, never certify) and REQ-417 (blocked is derived)."
-choice = "Line = tree guides, lifecycle mark, node id, right-hand text. Marks: resolved ●, open ○, derived-blocked ◌ (in place of ○), deferred ◐, pruned ⊘; cursor suffix ← cursor. Right text: open/deferred/pruned → question; blocked → needs <ids>; resolved → disposition: record id plus record title for create/adopt, note text for unresolved/non-durable. Titles are read by the command shell and passed into project() as input, so the envelope carries them (SPEC-029 REQ-433) and projection stays pure. Header: slice, stage, revision, counts only."
+choice = "Line = tree guides, lifecycle mark, node id, right-hand text. Marks: resolved ●, open ○, derived-blocked ◌ (in place of ○), deferred ◐, pruned ⊘; cursor suffix ← cursor. Right text: open/deferred/pruned → question; blocked → needs <ids>: <question> (blockers first so they survive wrapping, question kept readable — PRD-019 REQ-417); resolved → disposition: record id plus record title for create/adopt, note text for unresolved/non-durable. Titles are read by the command shell and passed into project() as input, so the envelope carries them (SPEC-029 REQ-433) and projection stays pure. Header: slice, stage, revision, counts only."
 alternatives = ["Resolved nodes show the record id only"]
 rationale = "Record titles make the tree readable without lookups; passing them in keeps the pure/impure split and the one-envelope rule."
 consequences = ["one title lookup per cited record on a tree read", "long titles force a wrapping rule (inq-width)"]

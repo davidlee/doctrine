@@ -95,12 +95,12 @@ response = "sec-4/sec-6: design::dispatch gains the resolved colour (as observat
 
 [[finding]]
 id = "F-10"
-status = "contested"
+status = "answered"
 severity = "major"
 title = "Design config errors will break unrelated commands"
 detail = "SL-266 sec-5 adds a closed DesignConfig directly to DoctrineToml and says an unknown map_delivery fails load_doctrine_toml. src/dtoml.rs:23-44 and :89-94 show this is the shared eager parser, called by review, slice, spec, install and dispatch commands, so a typo in a display preference can make unrelated operations fail. Preserve the DEC-309 parse error when design delivery is used, but isolate validation of this area from unrelated consumers; include a regression test that an unrelated command still reads its own config with an invalid design value."
-disposition = "contested"
-response = "The eager whole-file parse is the house pattern, not introduced here: [dispatch] preferred_subprocess_harness (src/dispatch_config.rs:69) is already a closed enum on the same load_doctrine_toml (27 call sites), with identical blast radius. Isolating per-area validation is a house-wide change; sec-8 now names the residual. Open to a backlog item if the user wants one."
+disposition = "fixed"
+response = "Contest upheld (user agreed; DEC-309 revised). dtoml.rs:52-59 is an explicit counter-precedent. sec-5: DesignConfig.map_delivery is raw Option<String> in the shared parse; DesignConfig::map_delivery() resolves it, called only by design apply/start before writing; unknown value refuses those naming both values. VT-12 asserts an unrelated [conduct] read of the same file still succeeds. sec-8 notes [dispatch] remains eager, out of scope."
 
 [[finding]]
 id = "F-11"
@@ -167,10 +167,12 @@ response = "sec-3: TreeStyle.width is Option<u16>; the pure tree module applies 
 
 [[finding]]
 id = "F-18"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Blocked questions should remain readable, but tree replaces them with need ids"
 detail = "SL-266 sec-3 lines 187-196 specifies blocked right-hand text as only `needs <ids>`, while MapNode still carries the question (sec-2 lines 75-84). For an open node with an unsettled dependency, the tree thus hides the very question the user needs to inspect. PRD-019 REQ-417 requires open design questions as an inspectable decomposition, and sec-1 promises one line per question. DEC-306 contains the same blocked-text choice, so reconcile that decision as well. Render the question plus the blocking ids (on one wrapped line or a continuation), and add a golden asserting both are visible."
+disposition = "fixed"
+response = "Accepted (user agreed; DEC-306 revised). sec-3: blocked right-hand text is 'needs <ids>: <question>' — blockers first so they survive wrapping, question kept. VT-4 asserts both are visible on the derived-blocked node."
 
 [[finding]]
 id = "F-19"

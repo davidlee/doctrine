@@ -192,7 +192,7 @@ doctrine design tree SL-266
 | provenance letter | `u` user-directed · `a` agent-proposed · `s` shaping-question · `i` imported-prose |
 | blocking | `*` when the effective judgement is blocking, else a space |
 | label | node id |
-| right-hand text | resolved + record → `REC-NNN <title>`, or `REC-NNN (record not found)`, or `REC-NNN (unreadable: <reason>)`; resolved + note → `<form>: <note>`; blocked → `needs <ids>`; otherwise the question |
+| right-hand text | resolved + record → `REC-NNN <title>`, or `REC-NNN (record not found)`, or `REC-NNN (unreadable: <reason>)`; resolved + note → `<form>: <note>`; blocked → `needs <ids>: <question>` (blockers first, so they survive wrapping); otherwise the question |
 | suffix | `← cursor`, `← pinned`, `← cursor, pinned`; when `run.cursor_stale`, `← cursor (moved up: declared cursor is settled)` |
 
 **Header.** Slice, stage, revision, then counts: `N questions: a resolved, b open`
@@ -311,15 +311,21 @@ Purpose: the only branching logic the verb owns, and where the shell reads.
 already follow:
 
 ```rust
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum MapDelivery { #[default] Relay, Sidecar }
-
+/// `[design]` as the shared parse reads it: raw text, never validated there.
 #[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub(crate) struct DesignConfig {
   #[serde(default)]
-  pub(crate) map_delivery: MapDelivery,
+  pub(crate) map_delivery: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MapDelivery { #[default] Relay, Sidecar }
+
+impl DesignConfig {
+  /// The one resolver, called only by the design writes. Absent → `Relay`;
+  /// anything but `MAP_DELIVERY_RELAY` / `MAP_DELIVERY_SIDECAR` → an error
+  /// naming both.
+  pub(crate) fn map_delivery(&self) -> anyhow::Result<MapDelivery>;
 }
 ```
 
@@ -328,10 +334,13 @@ pub(crate) struct DesignConfig {
 map_delivery = "sidecar"   # default "relay"
 ```
 
-An unknown value fails `load_doctrine_toml` with serde's error, which names the
-two variants — no fallback (STD-003). This is the same eager, whole-file parse
-every area config already shares (`[dispatch]`'s closed
-`preferred_subprocess_harness` enum behaves identically).
+Validation is lazy, following the `[estimation]` precedent in `dtoml::parse`
+(`dtoml.rs:52-59`): `load_doctrine_toml` is shared by review, slice, spec,
+install and dispatch commands, so it only reads the text, and a bad display
+preference never fails an unrelated command. `design apply` and
+`design start` resolve the value before writing; an unknown value refuses
+them, naming both values — no fallback (STD-003). The two spellings are
+constants beside the enum (STD-001).
 
 **When the map changed.** The trigger compares state, not rows: a write changed
 the map when `prior.map.inquiry != next.map.inquiry` (`InquiryMap` derives
@@ -362,7 +371,7 @@ for it and it carries no relay line. `materialise` likewise writes only the
 document and its watermark.
 
 Not emitted: `Sidecar`; no map change; a `resumed submission` replay. The shell reads the config once per command
-(`load_doctrine_toml(root)?.design`) and passes the value to these pure line
+(`load_doctrine_toml(root)?.design.map_delivery()?`) and passes the value to these pure line
 builders.
 
 **Prompt text** — both edits mode-neutral, so neither asset's digest depends on
@@ -393,7 +402,7 @@ old bytes — intended, and the reason these edits are made once, here.
 | `src/design_run/render/mod.rs` | `pub(crate) mod tree;` |
 | `src/design_run/inquiry.rs` | `InquiryMap::unsettled_needs`; `is_blocked` delegates to it |
 | `src/design_run/mod.rs` (or `run.rs`) | pure `map_changed(prior, next)` |
-| `src/design_run/config.rs` *(or the existing area-config home)* | `MapDelivery`, `DesignConfig` |
+| `src/design_run/config.rs` *(or the existing area-config home)* | `DesignConfig` (raw text), `MapDelivery`, the `map_delivery()` resolver and its two spelling constants |
 | `src/dtoml.rs` | `DoctrineToml.design` |
 | `src/state.rs` | `design_snapshot_root`; `design_snapshot_path` joins onto it |
 | `src/commands/cli.rs` | pass the resolved colour to `design::dispatch` |
@@ -428,7 +437,8 @@ Every row is a `VT` (by test) unless marked.
 - **VT-4 — tree anatomy.** A fixture with one node per lifecycle, a
   derived-blocked node, all four provenances, blocking and non-blocking, cursor,
   pin, cursor+pin and a stale cursor renders to a golden: marks, letters, `*`,
-  guides, suffixes, header counts, legend and footer.
+  guides, suffixes, header counts, legend and footer; the derived-blocked
+  node shows both its blocking ids and its question.
 - **VT-5 — header never certifies.** A fully resolved map's header holds counts
   and none of a completeness denylist (`complete`, `done`).
 - **VT-6 — placement.** A snapshot with an absent parent and one with a parent
@@ -461,8 +471,9 @@ Every row is a `VT` (by test) unless marked.
   relay line naming the slice, as its last line; a step-discharge apply does
   not; a resumed replay does not; a written adopt does not;
   `start --from-design` with imported nodes does, as its last line. With
-  `map_delivery = "sidecar"` none do. An unknown value fails config load naming
-  both variants.
+  `map_delivery = "sidecar"` none do. An unknown value refuses `design apply`
+  and `design start` before writing, naming both values, while an unrelated
+  reader of the same `doctrine.toml` (the `[conduct]` load) still succeeds.
 - **VA-1 — prompt text.** `inquiry.md` and `initial-concerns-recorded.md` carry
   the sec-5 wording; neither claims the map has no other viewer, and neither
   instructs a paste unconditionally.
@@ -481,9 +492,10 @@ Every row is a `VT` (by test) unless marked.
 - **mtime is a heuristic.** Any write to another run's snapshot moves the
   default to that run. The `chosen:` disclosure is the mitigation; the slice
   argument is the override.
-- **Eager config parse.** A bad `map_delivery` value fails every command that
-  loads `doctrine.toml`, as a bad value in any other area table already does.
-  Isolating per-area validation would be a house-wide change, not this slice's.
+- **Eager config parse elsewhere.** `[dispatch]`'s closed
+  `preferred_subprocess_harness` enum still fails every `doctrine.toml` reader
+  on a bad value. `[design]` follows the lazy `[estimation]` pattern instead;
+  aligning `[dispatch]` is outside this slice.
 - **Deferred.** `design watch` live repaint — IMP-472. Reasons on
   pruned/deferred nodes — IMP-473. Changed-since-revision marks on the tree —
   a later increment (DEC-308). ISS-298 (`--full` and the change-log floor

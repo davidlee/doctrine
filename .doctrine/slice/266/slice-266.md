@@ -38,7 +38,7 @@ sample-states  (6 answered, 7 open)
    the whole map, uncapped. Marks `●` resolved, `○` open, `◌` derived-blocked,
    `◐` deferred, `⊘` pruned; provenance letter; `*` blocking; `← cursor` /
    `← pinned`; legend line (DEC-306, DEC-308). Right-hand text: question, or
-   `needs <ids>`, or disposition record id + title / note. Wraps with a hanging
+   `needs <ids>: <question>`, or disposition record id + title / note. Wraps with a hanging
    indent, never truncates; `--color` (DEC-307). Own module under
    `src/design_run/render/`, not grown into `envelope.rs`.
 2. **Read surface** — `doctrine design show --format tree` plus shorthand
@@ -81,7 +81,8 @@ sample-states  (6 answered, 7 open)
 - `src/design_run/` — pure `map_changed(prior, next)`.
 - `src/state.rs` — `design_snapshot_root`.
 - `src/commands/cli.rs` — resolved colour reaches `design::dispatch`.
-- `src/dtoml.rs` — `[design]` config (`DesignConfig`).
+- `src/dtoml.rs` — `[design]` config (`DesignConfig`, raw text; resolved
+  lazily by the design writes).
 - `design apply` / `start` output — relay line, last (DEC-310).
 - `install/design-prompts/inquiry.md`,
   `install/design-prompts/conditions/initial-concerns-recorded.md`.
@@ -109,7 +110,8 @@ sample-states  (6 answered, 7 open)
 - CLI: `design tree` with and without a slice arg; chosen run named in the
   header; parity with `design show --format tree`.
 - Config: relay → every map-changing write (apply, start --from-design)
-  ends with the relay line; non-map writes, adopts and replays do not; sidecar → never; unknown value refused.
+  ends with the relay line; non-map writes, adopts and replays do not; sidecar → never; an unknown value refuses the design
+  writes only, never an unrelated `doctrine.toml` reader.
 - Robustness: unreadable snapshots and record titles disclosed with cause;
   orphan/cyclic nodes rendered, never dropped.
 - ISS-299 resolved on close; CHR-065 unblocked.
