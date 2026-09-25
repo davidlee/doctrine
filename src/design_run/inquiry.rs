@@ -530,22 +530,40 @@ impl InquiryMap {
         self.nodes.is_empty()
     }
 
+    /// The `needs` targets of `id` that are **not yet settled** — `open` or
+    /// `deferred`; `resolved` and `pruned` both settle a dependency.
+    ///
+    /// The **one** expression of *which dependencies still hold* (`SL-266`
+    /// `EX-1`): [`Self::is_blocked`] is this read's non-emptiness and nothing
+    /// else, and the envelope's `MapNode.blocked_by` is this read's output. One
+    /// home, so the blocked mark, the count and the reader that names the
+    /// blockers cannot disagree (`RV-386` F-13's argument, applied here).
+    ///
+    /// Total: an id the map does not hold, and a node with no `needs` edges,
+    /// both yield no unsettled target rather than an error.
+    pub(crate) fn unsettled_needs(&self, id: &DesignId) -> Vec<&DesignId> {
+        let Some(node) = self.nodes.get(id) else {
+            return Vec::new();
+        };
+        node.needs()
+            .iter()
+            .filter(|needed| {
+                self.nodes.get(needed).is_some_and(|target| {
+                    matches!(
+                        target.lifecycle(),
+                        InquiryLifecycle::Open | InquiryLifecycle::Deferred
+                    )
+                })
+            })
+            .collect()
+    }
+
     /// Whether `id` is blocked — **derived**, never stored (DEC-060).
     ///
-    /// A node is blocked when anything it needs is not yet settled. `pruned` and
-    /// `resolved` both settle a dependency; `open` and `deferred` do not.
+    /// A node is blocked when anything it needs is not yet settled; that is
+    /// [`Self::unsettled_needs`] and there is no second rule here.
     pub(crate) fn is_blocked(&self, id: &DesignId) -> bool {
-        let Some(node) = self.nodes.get(id) else {
-            return false;
-        };
-        node.needs().iter().any(|needed| {
-            self.nodes.get(needed).is_some_and(|target| {
-                matches!(
-                    target.lifecycle(),
-                    InquiryLifecycle::Open | InquiryLifecycle::Deferred
-                )
-            })
-        })
+        !self.unsettled_needs(id).is_empty()
     }
 
     /// Every node, in id order.
@@ -633,5 +651,140 @@ impl InquiryMap {
         path.remove(at);
         settled.insert(at);
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Disposition, InquiryLifecycle, InquiryMap, InquiryNode, Provenance};
+    use crate::design_run::fixture::id;
+    use crate::design_run::ids::DesignId;
+
+    /// One map holding a `needs` target of every lifecycle, plus a node waiting
+    /// on all four — the row set the one blocked derivation ranges over.
+    ///
+    /// Node ids are chosen so `BTreeSet`'s order is also a readable one:
+    /// `deferred` sorts before `open`, so the settled/unsettled split is visible
+    /// in the returned vector without a sort here.
+    fn waiting_on_every_lifecycle() -> (InquiryMap, DesignId) {
+        let settled = |record: &str| Disposition::Created {
+            record: record.to_owned(),
+        };
+        let mut map = InquiryMap::default();
+        let (open, deferred) = (id("inq-open"), id("inq-deferred"));
+        let (resolved, pruned) = (id("inq-resolved"), id("inq-pruned"));
+        for node in [
+            InquiryNode::open(
+                open.clone(),
+                "still open?",
+                Provenance::UserDirected,
+                Some(false),
+            ),
+            InquiryNode::open(
+                deferred.clone(),
+                "later?",
+                Provenance::AgentProposed,
+                Some(false),
+            )
+            .transition(InquiryLifecycle::Deferred)
+            .expect("deferred is not `resolved`"),
+            InquiryNode::open(
+                resolved.clone(),
+                "answered?",
+                Provenance::AgentProposed,
+                Some(false),
+            )
+            .resolve(settled("DEC-999")),
+            InquiryNode::open(
+                pruned.clone(),
+                "dropped?",
+                Provenance::AgentProposed,
+                Some(false),
+            )
+            .transition(InquiryLifecycle::Pruned)
+            .expect("pruned is not `resolved`"),
+        ] {
+            map.insert(node).expect("a well-formed node inserts");
+        }
+        let waiting = id("inq-waiting");
+        map.insert(
+            InquiryNode::open(
+                waiting.clone(),
+                "waits on all four?",
+                Provenance::AgentProposed,
+                Some(true),
+            )
+            .needing(open)
+            .needing(deferred)
+            .needing(resolved)
+            .needing(pruned),
+        )
+        .expect("a well-formed node inserts");
+        (map, waiting)
+    }
+
+    /// `EX-1` — the derivation ranges over exactly `open` and `deferred`.
+    ///
+    /// The settled half is asserted too, and it is not decoration: a version
+    /// that returned *every* target passes the unsettled half alone, and a
+    /// version that returned only `open` passes neither.
+    #[test]
+    fn unsettled_needs_returns_open_and_deferred_targets() {
+        let (map, waiting) = waiting_on_every_lifecycle();
+        let unsettled: Vec<&str> = map
+            .unsettled_needs(&waiting)
+            .into_iter()
+            .map(DesignId::as_str)
+            .collect();
+        assert_eq!(
+            unsettled,
+            ["inq-deferred", "inq-open"],
+            "`resolved` and `pruned` settle a dependency; `open` and `deferred` do not"
+        );
+        // A node with no `needs` edges at all is unblocked for the same reason:
+        // an empty edge set, not a second rule.
+        assert!(map.unsettled_needs(&id("inq-open")).is_empty());
+        // And the read is total: an id the map does not hold is not blocked.
+        assert!(map.unsettled_needs(&id("inq-absent")).is_empty());
+    }
+
+    /// `EX-1` — `is_blocked` is exactly the non-emptiness of `unsettled_needs`,
+    /// for every node, so no second blocked derivation survives.
+    ///
+    /// The equivalence is asserted over the whole map rather than at one node,
+    /// because a second derivation would agree on one fixture and drift on the
+    /// next. The last half is the behaviour the derivation must have: settling
+    /// the last unsettled dependency unblocks the waiter without touching it.
+    #[test]
+    fn unsettled_needs_is_the_one_blocked_derivation() {
+        let (mut map, waiting) = waiting_on_every_lifecycle();
+        assert!(map.is_blocked(&waiting), "an open dependency blocks");
+        for node in map.nodes() {
+            assert_eq!(
+                map.is_blocked(node.id()),
+                !map.unsettled_needs(node.id()).is_empty(),
+                "`is_blocked` is `unsettled_needs` non-emptiness at {}",
+                node.id()
+            );
+        }
+
+        let before = map.get(&waiting).expect("present").clone();
+        for (raw, record) in [("inq-deferred", "DEC-998"), ("inq-open", "DEC-997")] {
+            let settled =
+                map.get(&id(raw))
+                    .expect("present")
+                    .clone()
+                    .resolve(Disposition::Created {
+                        record: record.to_owned(),
+                    });
+            map.insert(settled).expect("a well-formed node inserts");
+        }
+        assert!(!map.is_blocked(&waiting));
+        assert!(map.unsettled_needs(&waiting).is_empty());
+        assert_eq!(
+            map.get(&waiting),
+            Some(&before),
+            "the waiter's value is byte-identical across the change — blocked is not a field"
+        );
     }
 }
