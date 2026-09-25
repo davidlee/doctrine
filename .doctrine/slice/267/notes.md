@@ -240,15 +240,259 @@ Evidence for PHASE-02 `EX-1`/`EX-2` (`design.md` sec-8: one row per candidate,
 - **Gates** (`EX-7`): `cargo build` clean; `doctrine publication validate` ok; `cargo test --test e2e_claude_install` **13/13** (incl. `design_prompts_have_no_consumer_outside_the_design_run` with `store_allowlist` byte-unchanged, `no_shipped_guidance_advertises_slice_design_as_canonical`, and both command-acceptance tests).
 - **No golden moved incidentally** (`EX-6`): manifest entry count still 98 (PHASE-01's two rows); no test pins the install asset set beyond the frozen e2e suite, which is green.
 
+## PHASE-03 disposition ledger — shipped memory and skills
+
+Evidence for PHASE-03 `EX-1` (`design.md` sec-8: one row per candidate,
+`file:line | class | disposition | resolution`). Built **before the bulk edit**
+(`EN-1`, `EN-2`).
+
+### Locators, with positive controls (`DEC-314`)
+
+- id grep (full prefix set — `mem.pattern.install.shipped-corpus-citation-grep-prefix-set`):
+  `grep -rnE '\b[A-Z]{2,5}-[0-9]{2,3}\b' memory/ plugins/` → **memory/ 16 lines / 9 files** (+1 path-only, +2 doc-path-only), **plugins/ 69 lines / 15 files** (+ `elicit/SKILL.md` = 16 files).
+- ISS-309's narrower regex over the same two trees → 81 lines: it misses `FR-001`
+  (`spec-product/SKILL.md:129`), `SL-42`/`QUE-7` (`knowledge/SKILL.md:60`),
+  `D-C8` (`close/SKILL.md:48`), `CON-006` (`plan/SKILL.md:52`).
+- **path** grep `(src/[A-Za-z0-9_./-]+\.rs|install/[A-Za-z0-9_./-]+\.md|doc/[A-Za-z0-9_./-]+\.md|slice-[0-9]{3})`
+  → `memory/` 6 lines / 5 files (3 `src/`+`install/`, 3 `doc/`), `plugins/` 0.
+- **doc-local designs (`D-NN`, `D-CNb`, `F-N`, `S-N`, `INV-N`, `C-V`, `OQ-N`,
+  `§N.M`)** — a fourth dimension the id regex cannot see at all: 5 lines in
+  `memory/`, ~30 sites across 8 skill files. Found by a widened pass
+  (`\bF[0-9]+\b|\bC-V\b|\bINV-[0-9]+\b|\bD[0-9]+\b|\bS[0-9]\b`) **after** the
+  first bulk pass — see "Additions", and `A2`'s premise is confirmed a third time.
+- **Positive controls**: the id regex finds ids in `.doctrine/adr/019/adr-019.md`;
+  the path regex finds `src/relation.rs` in `.doctrine/slice/267/design.md`; the
+  dangling-key search finds an injected fake key and not a present one (T7).
+- `grep -rn 'design-prompts' memory/ plugins/` → **zero** (R4 binds as *do not
+  introduce*). Control: the same grep finds `install/review-ledger.md:181`.
+- Frontmatter `description:` fields and the two sibling skill files
+  (`worktree/NOTICE.md`, `rigour/reference.md`) carry **no** candidate.
+
+### EN-2 — the two rebuild paths, exercised on one file each (R5, A4)
+
+Both demonstrated **before** the bulk edit, each on a real site (no wasted edit).
+
+**(a) memory path** — `memory/mem_019ec92b301478e0ab67f4e4eb534fb9/memory.md:3`
+(`Revisions (REV kind, ADR-013)` → `Revisions (the **REV kind**)`), then
+`cargo build` → `doctrine memory sync -y` (dry-run first: `1 changed`) →
+`doctrine install`. Result: `diff -r` of the pre-phase copy against
+`.doctrine/memory/shipped/` shows **exactly one file, one hunk, three lines** — the
+edit. `doctrine install` is *not* what materialises the corpus; `memory sync` is.
+
+**(b) plugins path** — `plugins/doctrine/skills/elicit/SKILL.md:8` (`(RFC-019)`
+removed), then `cargo build` **without** touching `src/install.rs` →
+`doctrine install -a claude -s elicit -y` → `diff` of
+`.doctrine/skills/elicit/SKILL.md` shows **exactly the edit**.
+
+**Finding (corrects two memories at once).** The `plugins/` root **does** re-embed
+on a plain `cargo build` — no `touch src/install.rs` needed. So
+`mem.pattern.build.rust-embed-no-rerun`'s "not re-probed: `plugins/`" caveat is
+now resolved by probe (it covers the `install/templates` root, and explicitly
+left `memory/`+`plugins/` open), **and** `mem_019eae55811f7412b11559068fe8a279`'s
+"Skill content refresh = … + touch src/install.rs" over-states the touch as a
+precondition rather than an escape hatch. The touch remains harmless and is kept
+as belt-and-suspenders in the bulk rebuilds.
+
+**Collateral check.** `doctrine install` wrote `.claude/settings.json`,
+`.claude/agents/dispatch-worker.md`, `.claude/skills/elicit` — all under
+`.claude/*`, which `.gitignore:4` covers. `git status --porcelain` shows **only**
+the two corpus files dirty. No tracked path moved.
+
+### Do-not-sweep classes re-checked against these two sub-corpora (EN-1)
+
+**ISS-309's claim is wrong and is corrected here.** It asserts "all genuine, none
+illustrations" under `plugins/` and "none" in the 11 memory files. Both are
+wrong: five illustration/fill-in-the-blank sites exist under `plugins/` (**and
+the memory inventory is 13 masters, not 11** — see "Additions"). The five
+under `plugins/`:
+
+- `spec-product/SKILL.md:129` — `- FR-001 — …` is the *reference-form
+  illustration* (it teaches what a requirements heading looks like).
+- `spec-product/SKILL.md:220` — `OQ-001` worked example; doc-local enumerations
+  are bare by convention, and the shape is obviously synthetic.
+- `knowledge/SKILL.md:60` — `doctrine needs SL-42 QUE-7`: non-zero-padded ⇒
+  obviously synthetic (STD-002 forbids the real corpus from minting it).
+- `plan/SKILL.md:71` — `test_file = "src/plan.rs"`: synthetic path in a TOML
+  example.
+- `slice/SKILL.md:39` — `src/foo/**`, `src/bar.rs`: synthetic selector example.
+
+Client-structure references under `plugins/` (the *client's own* tree — leave):
+`slice/SKILL.md:10,15`, `preflight/SKILL.md:84`, `research/SKILL.md:13`,
+`record-memory/SKILL.md:33`, `inquisition/SKILL.md:58` — all `.doctrine/spec/`,
+`.doctrine/adr/`, `.doctrine/slice/`, `.doctrine/memory/items/`.
+
+Client-structure references under `memory/` (leave): the `.doctrine/slice/`,
+`.doctrine/adr/`, `.doctrine/spec/{product,tech}/`, `.doctrine/memory/items/`,
+`.doctrine/revision/` directory conventions in `mem_019e9a11cda27db…`,
+`mem_019e9a1234ff7e6…`, `mem_019e9a12c5a97d0…`, `mem_019ec92b300d7530…`,
+`mem_019ec92b300f7d43…`, `mem_019ec92b10067842…`, `mem_019e9a11e8337613…`,
+`mem_019e9a1244d37f7…` (`.doctrine/slice/nnn/`), and the `memory.toml`
+`paths`/`globs` scope matchers (D3).
+
+### Rows — `memory/`
+
+| file:line | class | disposition | resolution |
+|---|---|---|---|
+| mem_019ec92b301478e0ab67f4e4eb534fb9/memory.md:3 | one-clause rationale | inline | **DONE (EN-2 probe)** — "Revisions (the **REV kind**)" |
+| mem_88193c2859d72f043ef83a97a5952a96/memory.md:72-73 | private spec as point of truth | inline | **EX-2** — the cascade rule stands in the body; drop the `spec-023.md` path, `SPEC-023` and the `install/hymns/README.md` path |
+| mem_019f2b93f5e178009191711f607caff6/memory.md:35 | dangling wikilink | drop | **EX-3** — `[[mem.signpost.doctrine.dispatch-claude-arm-wrong-base]]` names a key not in the corpus; the clause restates the trap, so delete the pointer |
+| mem_019f2b93f5e178009191711f607caff6/memory.md:26 | one-clause rationale | inline | "the global class"; "tiering" — drop `ADR-002`/`ADR-005` |
+| mem_019f2b93f5e178009191711f607caff6/memory.md:28 | author note | drop | `CHR-036` is the chore that produced this — no client meaning |
+| mem_019f2b93f5e178009191711f607caff6/memory.md:31-32 | durable referent | inline | keep the four posture *descriptions*, drop `ADR-006`/`008`/`011`/`012` |
+| mem_019e9a11cda27db19c0c75bafa453d5d/memory.md:19 | one-clause rationale | inline | "revision change-axis records" — drop `REV kind, ADR-013` |
+| mem_019e9a11cda27db19c0c75bafa453d5d/memory.md:37 | one-clause rationale | inline | "docs (the pull tier)" |
+| mem_019ec92b10037850817507044f0f99ef/memory.md:25 | one-clause rationale | inline | "shipped reference docs (the pull tier)" |
+| mem_019ed279444273b093816ccbb8e5da64/memory.md:4 | one-clause rationale | inline | "review (the **RV kind**)" |
+| mem_019ec92b30127db0aac7eb7badb1cbf2/memory.md:13 | one-clause rationale | inline | "**review ledger** (the RV kind)" |
+| mem_019ec92b30127db0aac7eb7badb1cbf2/memory.md:28 | doc-local design id | inline | drop `(D-C9b)` — "The close gate refuses …" |
+| mem_019e9a11e8337613bdf8e96f75a9e6b2/memory.md:24 | one-clause rationale | inline | "(the closure seam)" |
+| mem_019e9a12789f7ac39c0841f4d976503b/memory.md:21 | one-clause rationale | inline | "(the RV kind) … a reconciliation gate" |
+| mem_019e9a1244d37f72a9b7246d2c976ef7/memory.md:12 | private source path | inline | drop `(\`src/git.rs\`)` — "behind a thin seam" |
+| mem_019e9a1244d37f72a9b7246d2c976ef7/memory.md:26-28 | private doc paths as point of truth | repoint | `doc/entity-model.md` + `doc/relation-index.md` (neither exists) → `reference/using-doctrine.md`; drop "The code lives under `src/`" |
+| mem_019e9a1234ff7e619d865592b0042cb9/memory.md:25-27 | private doc path as point of truth | repoint | **file not in ISS-309** — `doc/entity-model.md` → `reference/using-doctrine.md` ("Storage tiers — what goes where") |
+| mem_019e9a12560d7972b29124e09f4de704/memory.md:26-27 | private doc path as point of truth | drop | **file not in ISS-309** — `doc/memory-spec.md` dropped; the `doctrine memory --help` surface kept |
+| mem_019f176f71537d12b1b09826a003a602/memory.md:10 | private path + fn name | inline | "the predicate demands ALL THREE" |
+| mem_019f176f71537d12b1b09826a003a602/memory.md:36-39 | historical slice/revision ids | inline | "a slice modified a requirement (via a revision) and attested another"; drop `SL-165`/`REQ-316`/`REV-014`/`REQ-317`/`REC-093`/`REC-094`/`SL-064` |
+
+### Rows — `plugins/`
+
+| file:line | class | disposition | resolution |
+|---|---|---|---|
+| spec-product/SKILL.md:150-151,208,229 | misinstruction | inline | **EX-4** — restate so the **client's own** PRD is the canonical shape; drop `PRD-001` |
+| spec-tech/SKILL.md:56-61 | misinstruction | inline | **EX-4** — the three C4 levels as level *descriptions*; drop `SPEC-003`/`004`/`005` |
+| spec-tech/SKILL.md:40,48 | one-clause rationale | inline | drop `PRD-012`; "both home-grown and forward-intent" |
+| spec-product/SKILL.md:129 | reference-form illustration | leave | A3 — teaches the requirements-heading shape |
+| spec-product/SKILL.md:220 | doc-local example | leave | A3 — bare local enumeration by convention |
+| reconcile/SKILL.md:9,37,61-62,175-179,199,224,227-228,231,244 | worked-example narrative | inline | the `(SL-080)` narrative's pedagogy survives without private ids → synthetic shapes; `ADR-003 §7/§11`, `ADR-009 §1`, `ADR-006 §D5`, `REQ-077`, `REV-011`, `RV-042`, `SL-080`, `SL-056` |
+| close/SKILL.md:40,46,49,94,108,111,132,135-136 | private refs | inline | `ADR-009 §1`→"the back-edge"; `ADR-007`→"the review kind"; `ISS-314` (a **live open issue here**)→drop; `ISS-030`, `SL-121`, `SPEC-022`, `SL-190`, `SL-211`, `IMP-236`→descriptions |
+| dispatch/SKILL.md:16,19,23,125,130,157,176 | private refs | inline | drop `ADR-008`/`ADR-012` labels, `ISS-234`, `IMP-101`, `D6`/`IMP-171`, `SL-170 S3/S6`, `ISS-052` — keep the mechanism each names |
+| dispatch/SKILL.md:15 | client-structure + placeholder | leave | `.dispatch/SL-<n>` — the client's own dir and id |
+| worktree/SKILL.md:45,51,62,75,123,240 | private refs | inline | `SL-031 §5.2`, `SL-064`, `ADR-012`, `SL-056`, `SL-156`, `SL-008` — keep "a THIRD path", "the sole write target", the traits |
+| audit/SKILL.md:11,63,84,135-136 | private refs | inline | `ADR-007`; `RFC-004`/`SL-147`→"the old seeding was retired"; `ADR-006 §D5`/`REQ-077`→the generic dispositions |
+| plan/SKILL.md:43,52,66 | private refs + doc-local | inline | `RFC-026 P10 trial`→"provisional"; `CON-006`→"an unenforced clause"; `IMP-209`→the rule |
+| plan/SKILL.md:85 | rule name | inline | `POL-002` names the shipping rule; keep in prose if it reads as prose, else drop the label |
+| plan/SKILL.md:71 | synthetic | leave | A3 |
+| execute/SKILL.md:43,82-83 | example ids | inline | `feat(SL-009)` → `feat(SL-NNN)`; `slice/SL-029-…`/`.worktrees/SL-029` → synthetic shapes |
+| record-memory/SKILL.md:23,106 | private refs | inline | `SL-008 D6` → the behaviour it describes |
+| record-memory/SKILL.md:33 | client-structure | leave | `.doctrine/memory/items/` |
+| inquisition/SKILL.md:21,71 | private refs | inline | `ADR-007`; `SL-147` |
+| inquisition/SKILL.md:58 | client-structure | leave | `.doctrine/adr/`, `.doctrine/spec/*` |
+| code-review/SKILL.md:92,136 | private refs | inline | `ADR-007`; `SL-147` |
+| handover/SKILL.md:115 | private ref | inline | drop `SL-170 S6` / `S1` |
+| elicit/SKILL.md:8 | one-clause rationale | inline | **DONE (EN-2 probe)** — "the queue/curator split" |
+| elicit/SKILL.md:14 | doc-local design id | inline | drop `(D18)` |
+| worktree/SKILL.md:25,45,62,75,82,100,116-117,123,154,181,186,192,203,240 | doc-local + private refs | inline | see the additional class below — `OQ-1`, `D1`/`D5`/`D9`/`F1`, `F2`, `F7`, `C-V`, `SL-031 §5.2`, `SL-064`, `SL-056`, `SL-156`, `SL-008`; **anchors updated** (`#provisioning`) |
+| reconcile/SKILL.md:13,40,51,199,224,227-228,231,244 | doc-local design ids | inline | `D2`/`D9`/`D3` dropped; `F2`→`finding F-2`, `RV-042`→`RV-NNN`, `REV-011`→`REV-NNN`, `SL-056`→description, `ADR-009`→the back-edge |
+| audit/SKILL.md:27,105,125,144,167 | doc-local design ids | inline | `F-2`/`D3`/`D-C9b` dropped |
+| close/SKILL.md:47-48 | doc-local design ids | inline | `D-C9b`/`D7`/`D-C8` dropped, the semantics kept |
+| dispatch/SKILL.md:50,169 | doc-local invariant ids | inline | `INV-1`/`INV-6` labels dropped |
+| execute/SKILL.md:32,59,106 | doc-local design refs | inline | `design D5`/`F-6`/`§8.1` dropped |
+| plan/SKILL.md:64,91 | doc-local stage ids | inline | `S3`/`S6` dropped — "the VT gate" |
+| code-review/SKILL.md:126 | private design section | inline | drop `design §5.5`; keep the `review-ledger.md §1` (a published address) |
+| record-memory/SKILL.md:23,106 | private refs | inline | drop `SL-008 D6`; keep the behaviour it describes |
+| knowledge/SKILL.md:60 | synthetic | leave | A3 |
+| slice/SKILL.md:10,15 | client-structure | leave | `.doctrine/spec/` |
+| slice/SKILL.md:39 | synthetic | leave | A3 |
+| preflight/SKILL.md:84 | client-structure | leave | `.doctrine/spec/tech/` |
+| research/SKILL.md:13 | client-structure | leave | `.doctrine/slice/NNN/research/` |
+
+### Additions / corrections beyond ISS-309 (EN-1 finding)
+
+**Finding 1 — the `plugins/` inventory is stale by growth.** "14 skill files, 74
+sites" was swept 2026-08-03; the shipped skill tree now holds **35 `SKILL.md`**
+and the live full-prefix grep finds **69 id lines across 15 files** (+ the
+`elicit` probe). Its "none illustrations under `plugins/`" claim is **wrong**
+(five sites, above). Durable input for `ISS-309` part 2 / `QUE-227`, alongside
+PHASE-02's prefix-set finding.
+
+**Finding 2 — the memory inventory is 13 masters, not 11.** ISS-309's "11 of 35"
+counts only the id-grep class. A fourth class — a **private `doc/` path cited as
+a point of truth** — puts two more masters in scope (`storage-model`,
+`memory-model`; `doc/` does not exist in this repo at all, so these are dangling
+*and* authoritative-sounding, the same failure shape as `hymn-cascade`'s SPEC-023
+line). Its "none [illustrations] in the 11 memory files" claim happens to hold
+for the three do-not-sweep classes, but the denominator was wrong. **This is the
+first time in the slice that a claim of mine (`EN-1` confirmed the 11 holds) was
+falsified by a later pass** — recorded as the phase's own lesson, not hidden.
+
+**Finding 3 — a fourth locator dimension: doc-local design ids.** `D-NN`,
+`D-CNb`, `F-N`, `S-N`, `INV-N`, `C-V`, `§N.M` are invisible to *both* the
+ISS-309 regex and the full-prefix `\b[A-Z]{2,5}-[0-9]{2,3}\b` set — they have no
+matching prefix shape. ~35 sites across 8 skill files and 1 memory (`D-C9b`).
+They are the references PHASE-02 already swept under the same heading
+(`D-C8`/`D-Q3`/`Slice B`), so the class is established; what is new is that the
+*skill* corpus carries ~7× as many as `install/` did. Found only after a second,
+widened pass — **the locator came third, which is why `DEC-314` is a discipline
+and not a formality.**
+
+**A near-miss worth naming.** `worktree/SKILL.md` used `D-NN` as *section labels*
+(`## Provisioning (D9)`) and a **cross-reference anchor** (`#provisioning-d9`).
+Dropping the label silently broke the anchor; it was caught by grepping the
+whole file for `#provisioning` after the edit, not by the ledger. Recorded as a
+pattern rather than a one-off: **a doc-local id may be load-bearing as an
+anchor**, so a sweep must re-resolve every intra-file link it touches.
+
+### Verification (EX-1..EX-6, VA-1..VA-3)
+
+- **`EX-1` — one row per candidate.** Both tables above; each `repoint`'s
+  resolution is a published address (`doctrine library show reference/model-band.md`,
+  `…/reference/using-doctrine.md` both stream), each `inline` names the post-edit
+  line, each `leave` names its class.
+- **`EX-2` — hymn-cascade no longer names a private spec as truth.**
+  `grep -n 'spec-023\|SPEC-023\|install/hymns' memory/mem_88193c2859d72f043ef83a97a5952a96/memory.md`
+  → **zero**; the cascade rule stands in the body, and the pointer is
+  `reference/model-band.md`.
+- **`EX-3` — zero dangling wikilinks.** `grep -rhoE '\[\[mem\.[a-zA-Z0-9._-]+\]\]' memory/ plugins/`
+  → keys, `comm -23` against `ls memory/` → **empty**. Controls: a present key
+  (`mem.signpost.doctrine.file-map`) is *not* reported; an injected fake key **is**.
+  The `dispatch` signpost's `…dispatch-claude-arm-wrong-base` pointer is gone.
+- **`EX-4` — the two misinstruction sites.** `spec-product/SKILL.md` now says
+  "Mirror the canonical shape of **your own repo's** product spec";
+  `spec-tech/SKILL.md` teaches `context`/`container`/`component` as level
+  descriptions and names no `SPEC-NNN`. Both re-read **in the installed tree**
+  (`.doctrine/skills/…`) — see `VA-3`.
+- **`EX-5` — re-embedded and materialised, with the diff as evidence.**
+  `diff -rq` of the pre-phase snapshots against the live trees returns **exactly
+  13 `memory/shipped/*.md`** and **exactly 14 `.doctrine/skills/*/SKILL.md`** — no
+  additions, no removals, no file outside the edited set. Both trees are
+  gitignored, so the file lists + the mechanism (T1) are the re-derivable
+  evidence; the pre-phase snapshots are at `/tmp/sl267-pre/` for this session.
+- **`EX-6` — green.** `doctrine check gate` exit **0** (124 `test result: ok`,
+  zero failures); `doctrine doctor` **51** findings (byte-identical to PHASE-02's
+  pre-existing count); `doctrine publication validate` **98** `ok` entries
+  (unchanged); `cargo test --test e2e_claude_install` **13/13** — including
+  `design_prompts_have_no_consumer_outside_the_design_run` with `store_allowlist`
+  **byte-unchanged** (`git diff --stat tests/` empty) and both `VT-1` keywords
+  (`install_wires_skills_agent_and_hooks_directly`,
+  `sealed_design_hymn_and_four_fragments_ship_installed`).
+- **`VA-1` — replacement resolving, whole-file reads.** Every repoint proven with
+  `doctrine library show`; the changed regions were re-read from the
+  *materialised* copies (memory) and the *installed* tree (skills), not the
+  sources — hymn-cascade, dispatch signpost, reconcile narrative + Outcome,
+  worktree headings/anchors, spec-product, spec-tech.
+- **`VA-2` — post-sweep corpus clean, illustrations untouched.** `memory/` id
+  grep → **zero**; `plugins/` id grep → only the 3 do-not-sweep sites; doc-local
+  grep → only `OQ-001` (a doc-local enumeration, admissible); path grep → only
+  synthetic placeholders and the two `.toml` scope records (D3);
+  `grep -rn design-prompts memory/ plugins/` → **zero**.
+- **`VA-3` — read in the installed tree.** `.doctrine/skills/spec-product/SKILL.md`
+  and `.doctrine/skills/spec-tech/SKILL.md` read correctly for a client with no
+  doctrine corpus: no `PRD-001`, no `SPEC-003/004/005`, the referent in both is
+  the client's own record.
+- **No golden moved incidentally.** `publication validate` still 98 entries;
+  `tests/**` untouched; `doctrine doctor` unchanged.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · PHASE-02 · 599dfb5c8
+fresh-as-of: 2026-09-26 · PHASE-03 · b8d622a4c
 
 ### Produced
 - design locked — SL-267 under run dr-01a0d8ff-b311 (rev 35); `design.md` 9 sections (commits 9750594e4, c17d9229a, 53add8888).
 - plan authored — 6 phases, rule-first; runtime sheets materialised (commit e4fa00d7a).
 - PHASE-01 done — the rule and its two published homes: ADR-024 (accepted; `related` ADR-005/ADR-019; DEC-127 carries the reverse `concerns` edge), `reference/shipped-corpus-authoring.md`, `reference/design-run-obligations.md`, and their two `publication/manifest.toml` rows (commit 187f05f91).
 - PHASE-02 done — the `install/` sweep: 33 files, every repo-private id/path inlined, dropped or repointed; the `inquiring.toml` repoint to `reference/design-run-obligations.md`; the `doctrine.toml.example` per-knob whys inlined; the `routing-process.md` boot pointer + worked example. Disposition ledger + evidence in this file (commit 599dfb5c8).
+- PHASE-03 done — the `memory/` + `plugins/` sweep: **13 masters** (not ISS-309's 11), **14 skill files**; every repo-private entity id, source/spec path and doc-local design id inlined, dropped or repointed to a published address; the two misinstruction sites restated (`spec-product` ↔ `PRD-001`, `spec-tech` ↔ `SPEC-003/004/005`); the dangling `dispatch` wikilink removed. Disposition ledger + materialisation diffs in this file (commits 13e4fcbf1, b8d622a4c).
+- minted: mem.pattern.build.plugins-embed-auto-rebuild; three new sections appended to mem.pattern.install.shipped-corpus-citation-grep-prefix-set.
 - minted: ADR-024; DEC-311..DEC-316; CHR-081; RV-391; mem.pattern.shipped-corpus.delivery-copy-cannot-cite-its-owner.
 - ledger corrections: IMP-484 (observation gap re-verified false, swept in the design, the item and slice-267.md); CHR-080 and ISS-309 carried as the accuracy and citation ledgers.
 - gates: `doctrine check gate` exit 0 at PHASE-01 (187f05f91) and PHASE-02 (599dfb5c8); publication validate ok; e2e_claude_install 13/13 both times (PHASE-02's `store_allowlist` byte-unchanged).
@@ -259,9 +503,15 @@ fresh-as-of: 2026-09-26 · PHASE-02 · 599dfb5c8
 - observation 01a0d908-973f — `library tree` groups a template under a `reference/` heading but its address is `templates/<name>`.
 - **ISS-309's id regex is incomplete** — it omits `CON`/`EVD`/`HYP`/`CPT`, `FR-`/`NF-` membership labels, and doc-local `D-*` design ids. The `install/` site count was under-stated; PHASE-02 swept five further live sites (ledger § "Additions"). Durable input for `ISS-309` part 2 / `QUE-227`.
 - **The maintainer-note header has a settled fix** — name the doc's own published address, keep "published, not projected", drop the repo-private id and the `install/<file>.md` source path (five docs rewritten to the PHASE-01 doc shape).
+- **mem.pattern.build.plugins-embed-auto-rebuild** — the `plugins/` RustEmbed root re-embeds on a **plain `cargo build`**; `touch src/install.rs` is an escape hatch, not a precondition (`mem.pattern.build.rust-embed-no-rerun`'s "not re-probed: plugins/" caveat is now closed by probe). What *is* mandatory is the final `install -s <id>`: the re-embed moves the **binary**, only `install` moves the **installed tree**. Also probed: `memory/` re-materialises through `doctrine memory sync`, a different path from the cargo embed.
+- **ISS-309 is a floor on three axes, not one.** PHASE-02 found the prefix-set gap; PHASE-03 found the skill corpus has *grown* past the item (14→16 files, 74→~104 sites, 35 `SKILL.md` on disk) **and** that the item omits an entire fourth locator dimension — no-hyphen doc-local design ids (`D1`/`F2`/`S3`/`INV-6`/`C-V`/`§8.1`, ~35 sites across 8 skill files) — **and** that its memory count is 11 where the live grep finds 13 (a private `doc/` path cited as a point of truth is a citation too). All three are appended to `mem.pattern.install.shipped-corpus-citation-grep-prefix-set`.
+- **A doc-local id can be load-bearing as an anchor.** `worktree/SKILL.md` labelled its sections `(D9)` and cross-referenced `[Provisioning](#provisioning-d9)`; dropping the label silently broke the link. A sweep must re-resolve every intra-file `#anchor` it touches — caught by grep, not by the ledger.
+- **A `.toml` scope field is data, not prose.** `paths`/`globs` in a shipped `memory.toml` are matchers against the *client's* tree, so `.doctrine/**` entries are correct and a private entry (`memory/`, `src/`, `doc/*.md`) is a dead matcher — recorded, not swept (D3).
 
 ### Open
 - QUE-227 — drift-gate seam and the duplicate POL-002 rule (ISS-309 part 2); the only durable defence against re-drift.
 - CHR-081 — consolidate the two local memories restating the grounding rule (out of scope; local-memory health is a non-goal corpus).
 - ISS-215 — boot-index defect; CHR-036 — distilling project-local memories (both out of scope).
 - **Audit flag (PHASE-02 D3)** — `install/review-ledger.md`'s `design-prompts/reviewing.md` pointer is a *published address* (conforming form 2) but sits inside the e2e `store_allowlist`; left `leave` because conforming it would need an out-of-selector `tests/**` edit. Weigh at audit.
+- **Audit flag (PHASE-03 D3)** — five shipped `memory.toml` scope entries name doctrine-private matchers: `memory/` + `doc/memory-spec.md` (`mem_019e9a12560d7972b29124e09f4de704`), `src/` + `doc/entity-model.md` + `doc/relation-index.md` (`mem_019e9a1244d37f72a9b7246d2c976ef7`), `install/hymns/` (`mem_88193c2859d72f043ef83a97a5952a96`). Left `leave`: a scope field is a retrieval matcher, not a citation, and editing one changes behaviour outside axis A. Weigh at audit — this is the one class the sweep *deferred by design*.
+- **Audit flag (PHASE-03 A2)** — the plan's PHASE-03 objective states "11 of the 35 shipped memory masters, and 14 skill files carrying 74 sites". All three numbers were low. Not a scope breach (the selectors cover the whole sub-corpus and `EX-1` says *per candidate*), but the plan's terrain description is now known-inaccurate for the audit's conformance read.

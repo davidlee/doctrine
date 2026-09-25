@@ -1,0 +1,50 @@
+memory_uid = "mem_01a0d94fa01f7a828cfd0e4f68e345f8"
+memory_key = "mem.pattern.build.plugins-embed-auto-rebuild"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "The plugins/ RustEmbed root re-embeds on a plain cargo build"
+summary = "Skill refresh needs only cargo build + doctrine install -s <id>; touching src/install.rs is an escape hatch, not a precondition"
+created = "2026-09-25"
+updated = "2026-09-25"
+
+[scope]
+paths = []
+globs = ["plugins/**", "src/install.rs"]
+commands = []
+tags = ["area:install", "rust-embed"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e4c6fe77e30b4ffe2ea020132be75679086b1ed6"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0e338223b3111282bed6439d920a2a4a514a84d7e284ba10b68a6a81ad42034a"
+base_commit = "b8d622a4cdeed439237b03c03b478c50d45cd7f7"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.build.rust-embed-no-rerun"
+
+[[relation]]
+label = "related"
+target = "mem_019eae55811f7412b11559068fe8a279"
+

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d946-f90e-7ad2-8d27-aaf757d0ad70"
+recorded_at = "2026-09-25T15:55:02.286311528Z"
+kind = "friction"
+summary = "retrieve-memory skill: no way to retrieve one named memory by key"
+detail = "Running /retrieve-memory, I had the exact durable keys in hand (from the handover). `doctrine memory retrieve <key>` is refused — `retrieve` takes only scope/query flags, no reference argument. So the only way to read those exact memories is `doctrine memory show <key>`, which the retrieve-memory skill treats as the *inspection* verb (holdback-exempt, not the safe-recall surface). Cost: three failed invocations over the CLI + one MCP attempt (server unreachable) before falling back to `show` for five keys, and `show` dumps full bodies + relations + backlinks where the skill's framing expects bounded framed blocks. Skill: retrieve-memory. Phase: SL-267 PHASE-03 /phase-plan."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
