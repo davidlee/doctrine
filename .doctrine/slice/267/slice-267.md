@@ -23,12 +23,12 @@ ISS-309, CHR-080, IMP-484) and found it fails that reader in three separable way
    resolving verb — from its verb list, and its own syntax example (`EVD-1`) breaks
    the zero-pad rule and would be refused. The id-vocabulary table in
    `glossary.md` has no row for the `concept`/`CPT` kind at all.
-3. **Whole CLI surfaces have no shipped orientation.** The corpus instructs actions
-   it does not document — the sharpest being friction observation, which the
-   shipped boot snapshot tells *every* agent to record while no shipped doc
-   explains the ledger. Also unoriented: the corpus-health surface (`doctor`,
-   `validate`, `check`, `publication`), the reports group (`next` et al.), `config`,
-   and the facets group.
+3. **Whole CLI surfaces have no shipped orientation.** The corpus instructs
+   actions it does not explain — the corpus-health surface (`doctor`, `validate`,
+   `check`, `publication`), the reports group (`next` et al.), `config`, and the
+   facets group. (The observation surface was named as the sharpest instance of
+   this; it is in fact documented at `install/using-doctrine.md:68-105`, and the
+   claim is corrected in `IMP-484` — design review `RV-391` `F-6`.)
 
 **Why one change and not three.** The acceptance test is a single reader. Each axis
 is a separate way that reader is failed, and all three rest on one design question —

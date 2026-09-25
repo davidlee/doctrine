@@ -26,14 +26,16 @@ is sick, and shipped guidance mentions them only incidentically — `install/mod
 and `install/hymns/role/worker.md`. An agent cannot be told to run a check it has
 never been told exists.
 
-**`observation`.** The sharpest instance, because the product already instructs
-the action: the shipped boot snapshot's Instrumentation section tells *every*
-agent to record friction observations as it works, and to prefer the MCP tool in
-a confined worker. But no shipped doc or signpost explains the observation
-ledger — what it is for, that records are authored and committed rather than
-disposable, the local-exclusion tradeoff, or why a fork-local capture is refused.
-The corpus asks for an action and documents it nowhere. (One table row in
-`install/using-doctrine.md` is the entire coverage.)
+**`observation` — re-verified 2026-09-26, NOT a gap.** This item's earlier claim
+that the ledger is documented nowhere is false. `install/using-doctrine.md:68-105`
+is the documented home: what an observation is, `doctrine observation record
+friction`, reading the corpus back with `list`/`search`, correction via
+`supersede`/`retract`, the interface table (CLI / MCP tool / hand-back), and that
+records are authored and committed rather than disposable. The instruction this
+item quoted — the "Instrumentation" section telling every agent to record
+friction — is this repo's own `.doctrine/governance.md` surfaced into the boot
+snapshot, not shipped text. Recorded here so the next sweep does not re-derive a
+gap that does not exist (SL-267 design review `RV-391` `F-6`).
 
 **The reports group — `status`, `next`, `blockers`, `survey`, `explain`,
 `findings`.** No shipped signpost at all; `doctrine next` appears once in shipped

@@ -45,13 +45,14 @@ to use documented at a reachable tier.
 <!-- doctrine:section sec-2 -->
 ## Current state
 
-Three sub-corpora, three delivery channels (`ADR-019`), each reaching a client
-by a separate seam:
+Three shipped sub-corpora, each with its own embed root (`ADR-019`); a
+sub-corpus may reach a client through **more than one seam**, and sec-6
+enumerates them with a reach check each:
 
-| sub-corpus | embed root | channel |
+| sub-corpus | embed root | how it leaves the repo |
 |---|---|---|
-| `install/` | `InstallAssets` (`src/asset_source.rs`) | **published** — only `.gitignore`, `doctrine.toml`, `project-orientation.md` are projected; the rest is reached on demand via `publication/manifest.toml` and `doctrine library show reference/<name>.md` |
-| `memory/` | `CorpusAssets` (`src/corpus.rs`) | **embedded + materialised** — `doctrine memory sync` writes `.doctrine/memory/shipped/` |
+| `install/` | `InstallAssets` (`src/asset_source.rs`) | **published** on demand via `publication/manifest.toml` and `doctrine library show reference/<name>.md` (only `.gitignore`, `doctrine.toml`, `project-orientation.md` are projected eagerly); its templates are also **rendered** into client entities, its boot fragments **assembled** into the client snapshot, its design prompts **served** during runs, and its agents/hooks/config **installed** to stable paths |
+| `memory/` | `CorpusAssets` (`src/corpus.rs`) | **materialised** — `doctrine memory sync` writes `.doctrine/memory/shipped/` |
 | `plugins/` | `PluginAssets` (`src/install.rs`) | **installed** — `install_skills_direct` materialises the skill tree |
 
 The defect is structural, not textual: entity ids are per-repo sequential, so
@@ -72,14 +73,16 @@ flowchart LR
     M[memory/**] --> CA[CorpusAssets]
     P[plugins/**] --> QA[PluginAssets]
   end
-  PA -->|published: library show| C1[client agent]
-  CA -->|sync: .doctrine/memory/shipped| C2[client agent]
-  QA -->|install: skills tree| C3[client agent]
-  C1 --> R{resolves?}
-  C2 --> R
-  C3 --> R
+  PA -->|published: library show| C[client agent]
+  PA -->|rendered: entity scaffolds| C
+  PA -->|boot-assembled fragments| C
+  PA -->|served: design prompts| C
+  PA -->|installed: agents, hooks, config| C
+  CA -->|materialised: .doctrine/memory/shipped| C
+  QA -->|installed: skills tree| C
+  C --> R{resolves?}
   R -->|private id| X[resolves to the CLIENT's record - silent]
-  R -->|published address| OK[resolves]
+  R -->|listed form (sec-5)| OK[resolves]
 ```
 
 Nothing checks it. `doctor`'s citation check scans `.doctrine/**/*.md` only;
@@ -340,10 +343,19 @@ file is touched twice; mechanical legs before the prose pass.
 <!-- doctrine:section sec-8 -->
 ## Verification
 
-- **Environment.** The client-read test runs in a **scratch repo** (`git init`
-  plus `doctrine install`), never in this worktree: inside doctrine, `ADR-007`
-  resolves to doctrine's own record, which is exactly the false pass the test
-  exists to catch. One check per channel (sec-6).
+- **Environment and negative control.** The client-read test runs in a **scratch
+  repo** (`git init` plus `doctrine install`), never in this worktree: inside
+  doctrine, `ADR-007` resolves to doctrine's own record, which is exactly the
+  false pass the test exists to catch. The check **asserts** that in the scratch
+  repo's copy of each channel (sec-6) no swept file carries a repo-private
+  entity id or path — every citation resolves to a listed form (sec-5) or
+  stands alone. **Negative control:** deliberately leave one repo-private id
+  (for example `ADR-007`) in one swept file per channel, and require the
+  scratch-repo read to flag each planted id; a read that returns clean over a
+  planted id does not pass. **What the hosting phase must supply:** a scratch-repo
+  fixture, one planted-id file per channel, and the recorded flag for each — so
+  the obligation becomes a phase criterion at `/plan` (a control-route finding
+  is verified only once its obligation is a criterion, not at design lock).
 - **Citation conformance.** Per-channel client-read test. Evidence is the
   replacement resolving: for each swept site, the disposition plus, for a
   repoint, the published address that resolves via
@@ -390,5 +402,5 @@ dispositions, corrected claims, dispositioned gaps) are the closure artefact.
 
 **Residuals:** `QUE-227` (gate seam + duplicate rule) stays open; `ISS-215` (boot
 index) and `CHR-036` are untouched. The consolidation of the two local memories
-that partly restate the grounding rule (`.doctrine/memory/items/`) is a recorded
-follow-up, excluded here because local-memory health is a non-goal corpus (F-9).
+that partly restate the grounding rule (`.doctrine/memory/items/`) is follow-up
+`CHR-081`, excluded here because local-memory health is a non-goal corpus (F-9).
