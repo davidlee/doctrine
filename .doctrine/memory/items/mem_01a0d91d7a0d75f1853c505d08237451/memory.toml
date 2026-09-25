@@ -1,0 +1,43 @@
+memory_uid = "mem_01a0d91d7a0d75f1853c505d08237451"
+memory_key = "mem.pattern.design-run.review-disposition-route-and-vocab"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "A design-review disposition on a severe finding needs both the route and the vocab token"
+summary = """RFC-026 P10: a blocker/major finding's disposition must be "route:<route> <vocab>"; the tool accepts the route alone, so the vocab is easy to drop."""
+created = "2026-09-25"
+updated = "2026-09-25"
+
+[scope]
+paths = []
+globs = []
+commands = ["doctrine review dispose"]
+tags = ["design-run", "review", "rfc-026", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "4368425c888b3e3649de7808a9372b95be1784dd"
+ref_name = "refs/heads/edge"
+checkout_state_id = "41ef1ef62234b49f82b3af2925f69da7ad281d2b7ae591b50e41dfee13e85313"
+base_commit = "a51c614bb8780cb5dd2593d18d0aabb7eb5bb5bf"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+

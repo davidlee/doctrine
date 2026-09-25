@@ -106,3 +106,22 @@ ledgers: ISS-309 (citations), CHR-080 (accuracy), IMP-484 (sufficiency).
   settled in inquiry (DEC-311..316), the review findings are integrated, and the
   remaining uncertainty is implementation-level, exercised by the plan's
   verification and the audit.
+
+## Harvest
+<!-- single-copy: updated in place each harvest; ids only, never restated content -->
+fresh-as-of: 2026-09-26 · design (locked) · a51c614bb
+
+### Produced
+- design locked — SL-267 under run dr-01a0d8ff-b311 (rev 35); `design.md` 9 sections (commits 9750594e4, c17d9229a, 53add8888).
+- minted: DEC-311..DEC-316 (the six design decisions, accepted at lock); CHR-081 (local-memory consolidation follow-up); RV-391 (design review; 12 findings, 11 verified, F-7 deferred to plan).
+- ledger corrections: IMP-484 (observation gap re-verified false, swept in the design, the item and slice-267.md); CHR-080 and ISS-309 carried as the accuracy and citation ledgers.
+
+### Learned
+- mem.pattern.design-run.review-disposition-route-and-vocab — a severe finding's disposition needs route *and* vocab; the tool accepts the route alone.
+- observation 01a0d908-973f — `library tree` groups a template under a `reference/` heading but its address is `templates/<name>`.
+
+### Open
+- QUE-227 — drift-gate seam and the duplicate POL-002 rule (deferred; ISS-309 part 2). The gate is the only durable defence against re-drift.
+- RV-391 F-7 — the scratch-repo control criterion is owed to /plan: plant one repo-private id per channel; the read must flag each.
+- CHR-081 — consolidate the two local memories restating the grounding rule (out of scope; local-memory health is a non-goal corpus).
+- ISS-215 — boot-index defect; CHR-036 — distilling project-local memories (both out of scope).
