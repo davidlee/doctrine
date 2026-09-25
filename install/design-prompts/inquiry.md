@@ -39,6 +39,14 @@ has accepted your summary.
   way in. Add a `needs` edge only where one question genuinely cannot be
   answered before another — it is the exception, and a map where everything
   needs everything has recorded nothing.
+- The map is **declared as it is discovered**, not once and then left alone. An
+  answer that reveals a question adds a node; a dependency an answer exposes
+  adds a `needs` edge; a question an answer has made moot is disposed of rather
+  than left sitting open. The first pass usually lands most of the map and later
+  turns add the rest — that is the normal shape of inquiry, not a revision of
+  it. Declare late arrivals when they land: a question you are holding but have
+  not declared is invisible to the user whose acceptance the run is about to ask
+  for, and to every reader after them.
 
 ## What the machine will reject
 

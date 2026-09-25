@@ -33,11 +33,23 @@ possible intervention on the observe side: upgrade the instruction and re-measur
 
 ## Shape
 
-Name growth where an agent cannot miss it — a step in the `inquiring` runbook
-("a new answer may reveal a node; declare it"), or a line in the every-turn
-fragment stating that the map is live rather than a preamble. It is worth stating
-the *cost* in the same breath, since it is currently unstated and cuts the other
-way (`IMP-469`): a shape change re-faces the cumulative gates.
+**Decided (2026-09-25): the every-turn fragment, not the runbook.** The `inquiring`
+runbook is the wrong home, by the pack's own authoring rule (`DEC-104`, `RV-325`
+`F-5`, stated at the head of `inquiring.toml`): a step is residue that *completes at
+the boundary*, and "keep the map live" has no truthful completion point. Adding it
+as a step would also restate the obligation and make every discharge of it stale,
+deliberately — a real cost for no gain. Guidance with no completion point is a
+lens, and the lens is delivered every turn of both stages.
+
+So: one bullet added to the map paragraph in the `inquiry.md` fragment, stating
+that the map is declared as it is discovered — an answer that reveals a question
+adds a node, an exposed dependency adds an edge, a mooted node is disposed of
+rather than left open — and saying why it matters (an undeclared question is
+invisible to the user whose acceptance the run asks for).
+
+Deliberately **not** stated in the prose: what a shape change *costs*. That is
+`IMP-469`'s subject and `SL-264` will change it; writing the current cost into a
+shipped lens would bake in a fact about to move.
 
 ## Implementation note
 
