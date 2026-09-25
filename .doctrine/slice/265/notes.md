@@ -162,7 +162,7 @@ selector commit).
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · PHASE-03 landed (8868d76a0) · 3/4 phases
+fresh-as-of: 2026-09-25 · PHASE-04 landed (cdc35d1f9) · 4/4 phases
 
 ### Produced
 
@@ -180,6 +180,10 @@ fresh-as-of: 2026-09-25 · PHASE-03 landed (8868d76a0) · 3/4 phases
   <REF>`; `tests/e2e_claude_install.rs` gains `guardrails_paragraph` + the
   anti-vacuity-guarded execution test. Declared `tests/e2e_claude_install.rs` a
   selector (`6bc730dd8`).
+- `PHASE-04` (`cdc35d1f9`): `REV-062` (introduce `FR-006` on `SPEC-013`,
+  approved/done); `REQ-482` minted `pending`; a check-bound, `Verified` coverage
+  cell in `.doctrine/slice/265/coverage.toml`; `SPEC-013` prose +
+  `responsibilities` name the router.
 
 ### Learned
 
@@ -213,14 +217,22 @@ fresh-as-of: 2026-09-25 · PHASE-03 landed (8868d76a0) · 3/4 phases
   `.doctrine/` state — which a confined worker cannot write and the import belt
   rejects. It must be driven directly in a writable tree (the coord tree has the
   PHASE-02 test to bind the coverage check).
+- **`coverage record` never populates `touched_paths`**, so a fresh VT cell's
+  staleness is undecidable and `coverage show` reads `stale` despite
+  `status = "verified"`. Anchor the cell by hand-adding `touched_paths` (a
+  round-trip-tested field) if the evidence must read `verified`; the candidate
+  fix is for `coverage record` to capture the check-backed paths. Observation
+  `01a0d84a-4ba8-7632-afb4-5c49299929ed`.
+- `dispatch commit` **does** accept `.doctrine/` governance paths (the ISS-234
+  guard does not block them); `spec req add`'s title is a positional, not
+  `--title`.
 
 ### Open
 
-- `PHASE-04` (governance) — the one phase left. Orchestrator-driven, in the
-  **coord tree** (`dispatch/265` carries the PHASE-01 code + the PHASE-02 test the
-  coverage check binds): `revision new` → one `introduce FR-006 on SPEC-013` row
-  → `revision approve`/`apply` → `spec req add` → check-bound `coverage record`
-  then `coverage verify 265` (exit on the `Verified` cell) → hand-land
-  `spec-013.md` § *Uniform command grammar* + § *Responsibilities* and
-  `spec-013.toml`'s `responsibilities` → `revision status … done`. Then
-  `dispatch sync --prepare-review` and `/audit`.
+- All four phases have landed on `dispatch/265` (`cdc35d1f9`) and the primary's
+  runtime sheets read 4/4 `completed`. Next: the **conclude/audit** stage —
+  `slice verify-vt 265` (coord) → `dispatch sync --prepare-review` → remove the
+  coord worktree → `slice status 265 audit` → `/audit`. The one residual the
+  audit should weigh: `REQ-482` is `pending` with `Verified` evidence (verdict
+  `Divergent: evidence-outruns-authored`) and is flipped `pending → active` at
+  `/reconcile` (EX-6), not here.

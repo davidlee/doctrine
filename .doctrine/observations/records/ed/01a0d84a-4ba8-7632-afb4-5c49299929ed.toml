@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d84a-4ba8-7632-afb4-5c49299929ed"
+recorded_at = "2026-09-25T11:19:02.824567809Z"
+kind = "friction"
+summary = "coverage record: the CLI never populates touched_paths, so a VT cell's staleness is undecidable and coverage show reads stale/Indeterminate"
+detail = "SL-265 PHASE-04. `coverage record --slice 265 --requirement REQ-482 ... --matcher-source stdout` wrote an entry with no touched_paths (the only assignment is a test helper, src/coverage.rs:606). `coverage verify 265` flipped status planned->verified, but `coverage show SPEC-013` reported observed=stale because IsStale::from(commits_touching(.., &[], ..)) => None (empty paths guard, src/git.rs:2519) => Undecidable -> the stale bucket. The phase VA requires coverage show to read Verified, so I hand-added touched_paths = [src/commands/show.rs, src/commands/cli.rs, src/commands/guard.rs, src/main.rs] to the authored coverage.toml (the field round-trips, src/coverage.rs:803); it then read observed=verified. Gap: coverage record should capture the check-backed paths (or accept --touched-path)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
