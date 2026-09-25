@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d908-c4e2-75e3-a223-dd4868edd9b0"
+recorded_at = "2026-09-25T14:47:05.698866845Z"
+kind = "friction"
+summary = "audit: mirrored RV-386 findings left answered on the original ledger held SL-264's reconcile gate"
+detail = "RV-386's seven live findings were mirrored onto the run's pass RV-385 and verified there (ISS-322 workaround), but the originals stayed answered. slice status 264 reconcile refused on RV-386/F-15, F-16 at audit time. Fixed by verifying the originals with a note citing the mirror. The mirror workaround should close its source findings when it copies them."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
