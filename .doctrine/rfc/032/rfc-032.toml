@@ -1,0 +1,52 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 32
+slug = "review-ledger-effectiveness"
+title = "Review ledger effectiveness"
+status = "open"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = ["area:governance", "area:review", "cluster:review-system"]
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the governing decision; D-C8 and D-C10 are the two points of drift"
+target = "ADR-007"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the originating build slice"
+target = "SL-040"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "declared the warm-cache prose tier dead"
+target = "RFC-004"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "design-review evidence and the P10 route convention"
+target = "RFC-026"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "managed design workflow"
+target = "SPEC-019"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the load-bearing first slice (design-run/RV unification)"
+target = "IMP-392"
+
