@@ -319,9 +319,15 @@ of defects:
   reader, which demands a `status` reviews deliberately never store — so
   **`reseat` can never renumber any review**. `SL-151` had already solved this
   class for `scan_kind` and left `reseat` on the strict path.
-- [`ISS-059`] (open, 2026-06-30) and [`ISS-259`] (resolved/fixed 2026-07-27,
-  fulfilled by `SL-234`) appear to describe the same prime-on-symlink defect.
-  `ISS-059` is still open; either it is a distinct residual or a stale duplicate.
+- [`ISS-059`] (open, 2026-06-30): a **distinct residual**, not a duplicate of
+  [`ISS-259`]. `SL-234` filtered non-file entries in the *glob-expansion* arm of
+  `resolve_selectors_to_fileset`; a **literal** selector passes through unresolved
+  (`src/review.rs:3044-3056` skips the tracked-file filter for `is_literal_selector`) and
+  is then hashed by `contentset::compute`, which `std::fs::read`s it — a
+  symlink-to-directory literal still errors `IsADirectory` (ISS-059's exact case:
+  `memory/mem.pattern.doctrine.close-drift-discharge-rec`). The guard needs to
+  apply in the literal arm too. (Corrected 2026-09-25: an earlier draft called
+  this a probable stale duplicate of `ISS-259`; the code says otherwise.)
 - [`IMP-107`] (resolved/fixed) wired `ReviewError::{LockContention,DanglingRef}`
   to call sites.
 
@@ -546,28 +552,32 @@ or accept ADR-007 as sole authority and keep it current. `[unfiled]`.
 ### Tier 6 — test debt
 
 **C23.** e2e CLI golden for the verb family (`IMP-029`). **C24.** the `IMP-068`
-behaviour-preserving refactor. **C25.** resolve the `ISS-059`/`ISS-259`
-duplicate. **C26.** phase-boundary foreign-scope detection ([obs `01a0d23b`]).
+behaviour-preserving refactor. **C25.** fix the **literal-selector** arm of
+`review prime` (ISS-059 — distinct from ISS-259/SL-234, which fixed only the
+glob arm). **C26.** phase-boundary foreign-scope detection ([obs `01a0d23b`]).
 **C27.** `IMP-259` (prime on non-slice targets) — decide whether `prime` stays a
 hard requirement or degrades for non-slice subjects.
 
 ---
 
-## 6. Questions for you (before anything is routed or filed)
+## 6. Decisions taken and open questions
 
-1. **Scope of the fix vehicle.** Several Tier-1/2 items are small and
-   independent; Tier-3 (design-run unification) is architectural. Do you want one
-   slice that settles the read surface + rationale first (C1–C8), or a
-   coverage-assessment → spec first (C22) so the RV kind gets an owner before
-   more patching?
-2. **ADR-007 D-C8 and D-C10 amendments.** Both require a governance change, not
-   just code. Do you want me to open a Revision (or a design→ADR change) as the
-   first step, or keep this doc as the input and defer?
-3. **Which candidates should I file as backlog now?** The `[unfiled]` ones
-   (C6, C7, C8, C15, C18, C19, C20, C21, C22, plus C3's amend path and C4's
-   security class) currently have no owning item.
-4. **`ISS-059` vs `ISS-259`.** I believe `ISS-059` may be a stale duplicate of
-   the defect `SL-234` fixed. Confirm before I propose closing it.
+Decisions recorded after review of the first draft (2026-09-25):
+
+1. **Vehicle.** A programme of several slices, driven from this RFC. Front-load
+   the two hard decisions — the **read surface** and the **design-run/RV
+   integration architecture** — and have each slice leave behind spec coverage.
+2. **Governance route.** Drive design; mint a **REV** once the design locks;
+   promote it during reconcile. D-C8 and D-C10 are amendments that piggyback on
+   their slices rather than standalone governance turns.
+3. **Backlog first.** Every candidate is (or points at) an actionable entity
+   before the RFC leans on it; the RFC's pointer table is the index.
+4. **`ISS-059`** is a distinct residual in the literal-selector arm, not a
+   duplicate of `ISS-259` — see F11 and C25.
+
+Still open: the Slice-1 boundary (how much of the design-run cluster lands in
+it), whether a PRD/SPEC takes ownership of the RV kind (`IMP-481`), and whether
+the D-C9b close-gate needs an index (`IMP-479`).
 
 ---
 
@@ -636,7 +646,7 @@ Open unless noted.
 | `CHR-050` | Audit runtime-state scope resolution for `review/` |
 | `IDE-045` | Configurable design review postures |
 | `IDE-056` | Refuse design-run regression after slice audit |
-| `ISS-059` | prime fails on directory/symlink selector (dup of `ISS-259`?) |
+| `ISS-059` | prime fails on a literal symlink-to-dir selector (glob arm fixed by `SL-234`; literal arm open) |
 | `ISS-277` | `reseat` cannot renumber a review |
 | `ISS-279` | Id reservation has local reach |
 | `ISS-280` | contest records no durable rationale |
