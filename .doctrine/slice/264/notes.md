@@ -260,6 +260,80 @@ PHASE-01's evidence is therefore the commit log, not the ledger: `37d26a5ff` (th
 `needs: null` change) and `e6d0ee9c8` (its notes), i.e. the range
 `6564b2bcc..e6d0ee9c8`. `/audit` should attribute PHASE-01 from those commits.
 
+## Deviation for `/audit` — the `RFC-031` re-measure was synthetic (`RV-389` F-11)
+
+Design sec-6 `VA` and PHASE-05 `EX-4`/`VA-2` ask for the re-measure **on a real run**, with
+the run named. PHASE-05 substituted
+`tests/e2e_design_forward.rs::map_growth_after_sufficiency_re_faces_only_for_a_blocking_addition`,
+a synthetic e2e run, and presented it as the measurement rather than as a substitution.
+That run crosses every edge below `reviewing` over an **empty** map, so the covered map at
+`user-accepts-sufficiency` is empty: every later node is uncovered by construction and
+`RV-386` F-1's covered-node scoping (the part a real run exercises) is never in play. It
+is good regression evidence for the uncovered-addition half, not the `VA` the design asked
+for. Disclosed here as a deviation for `/audit` to rule on — accept the substitution
+(waive), or require a re-measure on a live run with a non-empty covered map at acceptance.
+The covered-node scoping itself is evidenced at unit level (`a_move_re_faces_for_a_covered_node_only`,
+and the lifecycle cases of `the_change_log_agrees_with_the_gate_on_every_case`), not on a run.
+
+## `RV-389` repairs (2026-09-26)
+
+Fourteen `fix-now` findings; F-5 is follow-up (`IMP-474`), untouched. Red-first evidence
+is the mutation or regression each new test was shown to fail against, then reverted.
+
+- **F-8 + F-13** — `fixture.rs::LEGACY_SNAPSHOT`, a frozen full-TOML stored snapshot (nodes
+  unjudged, a `blocking-set-declared` act naming `inq-1`/`inq-4`, the legacy act's
+  `act_recorded` row and a two-term `node_created` row), and
+  `tests.rs::a_stored_legacy_snapshot_parses_and_keeps_its_pre_change_verdicts`, read through
+  `snapshot::parse`. Asserts the effective set equals the stored act's, the mixed regime after
+  judging another node, no row for the legacy act on that edit, and every condition's verdict
+  against the **pre-change binary's**: taken by parsing the same text with the tree at
+  `37d26a5ff^` (a `git archive` export, built out of tree) and asking `satisfied` of all nine
+  conditions. They differ in exactly one place — `user-accepts-sufficiency`, stale by the
+  `inq-3` addition alone, now current (the slice's intended change); `initial-concerns-recorded`
+  was stale by the addition and a `ConfirmationStale` and stays stale on the second alone.
+  In-test negative control: the act token renamed does not parse. Red: the review's
+  mutant (`snapshot::parse` refusing text naming `blocking-set-declared`) fails it at the parse.
+- **F-10 + F-14** — `tests.rs::the_change_log_agrees_with_the_gate_on_every_case` now asserts the
+  full `ActInvalidated` subject set equals the gate-stale set over **both** attested acts
+  (`cpa-graph`, `cpa-suff`), across six cases all driven through `apply`: non-blocking add,
+  blocking add, covered re-word, covered flip, add-then-resolve (via a checkpoint disposition),
+  and resolving a covered blocker. Red: `live_acts` excluding `SufficiencyAccepted` fails it on
+  the covered re-word.
+- **F-12** — `tests.rs::needs_empty_and_needs_null_are_one_clearing`: both spellings over the
+  same edge-bearing and edge-free priors give equal rows and an equal stored node (helper
+  `run_with_an_edge_free_node` extracted). Red: `needs: null` read as an omission fails it.
+- **F-15** — the tautological unchanged-set assertion dropped; the doc says `apply`'s
+  `&DesignSnapshot` makes it a type guarantee. Renamed `submitted_legacy_act_is_refused`, and
+  `plan.toml` PHASE-03 `EX-6`/`VT-1` keywords updated to the new name.
+- **F-9** — `change_log.rs`: `PayloadKey::Blocking` added; `NodeCreated`'s `payload_terms` gain
+  `(Blocking, Label)`, rendered through the existing `judgement_label` vocabulary.
+  `run.rs::created_prior` pushes the term. Budget: `node_created` saturates at 93 B, well
+  inside the 145 B widest (`stage_moved`); stored two-term rows still read (the frozen
+  fixture holds one). Red: `blocking_flip_emits_one_node_blocking_changed_row` now asserts
+  the creation row's `blocking=non-blocking` label and failed with the key added but no term
+  pushed. No `install/*.md` enumerates the terms. **For `/reconcile`:** `SL-233`'s
+  `sketches/projection-bounds.md` §(d) table still lists `node_created` as *parent id,
+  provenance* — the code calls that table its source; left for reconcile rather than edited
+  in a closed slice.
+- **F-1** — `run.rs::declare_node` rides `Sparse::apply_collection` for `needs`; the three-arm
+  match and the `Option` wrapper are gone (an omission diffs empty).
+- **F-2** — `gate.rs::Coverage::carried_shape` is the one Coverage→stored-shape statement
+  (`attestation.rs::CoveredShape`, `CoveredSet::shape`); `admission.rs::coverage_fault` and
+  `run.rs::covered_in` read it. `CoveredSet::moved` now takes `Option<&CoveredSet>`, holds the
+  only fail-closed fallback, and gives `InquiryMap`/`ReviewedGraph` separate arms;
+  `gate.rs::coverage_moved` shrank to a call. The fault still names a `Nodes` shape
+  `inquiry-map` (`CoveredShape::incumbent`), so refusal text is unchanged.
+- **F-3** — `run.rs::admit_and_record` branches on `ActKind::is_legacy` (a `None` rule for a
+  non-legacy kind fails closed on the same refusal — panics are denied, so no `unreachable!`);
+  `live_acts` computes each kind once behind one guard. Docs corrected (`gate.rs::requirement_for`).
+- **F-4** — one set-builder, `inquiry.rs::blocking_marks` over materials beside
+  `judged_blocking`; `attestation.rs`'s private copy and `InquiryMap::blocking_marks` removed;
+  `open_blockers` filters on `effective_blocking` directly; the gate doc points at the builder.
+- **F-6** — `Declaration::blocking()` → `finding_blocks()`.
+- **F-7** — `run.rs::resolve_blocking`, pure, carrying the four-case doc; unit test
+  `a_blocking_judgement_resolves_per_case`.
+- **F-11** — the deviation above.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-09-25 · PHASE-05 complete · pending-land
