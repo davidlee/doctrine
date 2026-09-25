@@ -1,0 +1,119 @@
+# Implementation plan for SL-265 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-265"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order. Ids are PHASE-NN (zero-padded), immutable, never reused. Criterion
+# ids are local to their phase: EN-1 entry, EX-1 exit, VT-n test, VA-n agent,
+# VH-n human. Every VT row carries the structured mandate (test_file + keywords);
+# without it verify-vt reports UNCHECKABLE and the S3 gate is inert (IMP-209).
+
+[[phase]]
+id        = "PHASE-01"
+name      = "The verb: router, clap surface, guard, census"
+objective = "Add the kind-blind `show` verb. `src/commands/show.rs` holds the router — `Route`, `route()` and `run_show()` — which resolves a ref through `kinds::parse_resolvable_ref`, canonicalises it, and delegates to the kind's own `run_show`; it renders nothing. Wire it into the surface: `Command::Show`, the `explore` family, the `guard.rs` Read arm, the census bump, and the shared `CommonShowArgs::format()` accessor that removes the fifth copy of the `--json` shorthand (design sec-2, sec-3, sec-4, sec-6)."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (revision 36, `forward none`) and `RV-384` concluded. Design sec-2..sec-7 premises re-grepped against the tree at plan time: every path and symbol resolves; only line numbers drifted (<=2)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/commands/show.rs` exists, declared by one `pub(crate) mod show;` in `src/commands/mod.rs`, and defines: `Route` as a closed 13-variant enum (Slice, Adr, Policy, Standard, Rfc, Spec, Req, Knowledge, Backlog, Review, Rec, Revision, ConceptMap); `pub(crate) fn route(prefix: &str) -> Option<Route>` naming all 24 `KINDS` rows explicitly through the `kinds::` prefix constants (STD-001, no string literals) and falling through to `None` with NO assertion; and `pub(crate) fn run_show(path: Option<PathBuf>, reference: &str, format: Format) -> Result<()>` performing `parse_resolvable_ref` -> `kinds::canonical_id(prefix, id)` -> delegate. `Route::Spec`, `Route::Knowledge` and `Route::Backlog` carry no payload; the knowledge and backlog rows are classified through `RecordKind::from_prefix` / `backlog::kind_from_prefix` and the value discarded." },
+  { id = "EX-2", text = "`run_show`'s dispatch is a `match Route` with no wildcard. It calls the per-kind wrappers `adr::run_show` / `policy::run_show` / `standard::run_show` / `rfc::run_show` (never `governance::run_show` directly — the home adds no top-level layering edge, `RV-384` F-8); `RV` calls `review::run_show` then `print_review`; `CM` calls `concept_map::run_show(path, ref, format, false, false)`; `REQ` calls `spec::run_req_show`; `PRD`/`SPEC` call `spec::run_show`. The unrouted-prefix refusal lives at the dispatch site when `route()` is `None`, not inside `route()` (`RV-384` F-16)." },
+  { id = "EX-3", text = "`CommonShowArgs::format()` in `src/main.rs` is the single home of the `--json` shorthand (`if json { Format::Json } else { format }`); the four existing inline sites — `backlog.rs` Show/Inspect and `knowledge.rs` Show/Inspect — call it. No behaviour change at any of the four." },
+  { id = "EX-4", text = "`src/commands/cli.rs` gains the `Command::Show(CommonShowArgs)` leaf variant and its dispatch arm; `\"show\"` joins the `explore` family; the `families_partition_the_visible_command_tree` census moves 56 -> 57 with its comment updated. `src/commands/guard.rs` classifies `Command::Show { .. }` `Read` in the combined leaf arm. `src/main.rs`'s `write_class_tests` gains a `show_is_read` test asserting `cls(&[\"doctrine\", \"show\", \"SL-001\"])` is `None`." },
+  { id = "EX-5", text = "`RV-384` F-1 + F-5: a `#[cfg(test)]` unit test `every_kinds_row_routes` lives in `src/commands/show.rs` (not in `tests/` — `route()` and `KINDS` are `pub(crate)` and `src/lib.rs` exports no `kinds` items). It iterates `kinds::KINDS`' prefixes — the table `parse_resolvable_ref` / `kind_by_prefix` resolve against — asserting each yields `Some(_)`, and carries a negative control asserting a synthetic unrouted prefix returns `None`." },
+  { id = "EX-6", text = "Behaviour preservation: every existing `<kind> show` golden and the census test pass unchanged, and no kind module's `run_show` body is edited." },
+]
+verification = [
+  { id = "VT-1", expects = "the KINDS-table totality test and its negative control (RV-384 F-1, F-5)", test_file = "src/commands/show.rs", keywords = ["fn every_kinds_row_routes", "KINDS"], waived = false },
+  { id = "VT-2", expects = "the new verb classifies Read (REQ-192 section 3)", test_file = "src/main.rs", keywords = ["fn show_is_read"], waived = false },
+  { id = "VT-3", expects = "the visible-command census moves to 57", test_file = "src/commands/cli.rs", keywords = ["visible.len(), 57"], waived = false },
+  { id = "VA-1", text = "Behaviour preservation: the phase's diff touches no kind module's `run_show` body; every existing `<kind> show` golden and `families_partition_the_visible_command_tree` pass unchanged." },
+  { id = "VA-2", text = "`doctrine show` appears in `explore` in `doctrine --help` and `doctrine --boot-map`; the census assertion is updated, not deleted." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Fidelity: byte-equivalence and refusals"
+objective = "Pin the slice's central property through the real binary: for every prefixed ref a kind's own `show` accepts, `doctrine show <REF>` emits stdout byte-identical to that kind's own invocation, in both `--format table` and `--format json`; and an unknown prefix, a dangling ref and an ambiguous bare id each fail with `kinds::parse_resolvable_ref`'s error unchanged (design sec-7). Fix any disagreement a failing case exposes in the router, never in a kind."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: `doctrine show` is reachable and the router delegates to every kind." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`tests/e2e_show_equivalence.rs` invokes both sides through the built binary and asserts stdout byte-equality for one fixture entity of every numbered prefix, in `--format table` and `--format json`, using the per-group reference map: `REQ` -> `doctrine spec req show`; `PRD`/`SPEC` -> `doctrine spec show`; the seven record prefixes (`ASM DEC QUE CON EVD HYP CPT`) -> `doctrine knowledge show`; the five backlog prefixes (`ISS IMP CHR RSK IDE`) -> `doctrine backlog show`; every other prefix -> `doctrine <kind> show` (RV-384 F-12)." },
+  { id = "EX-2", text = "The fixtures are the named corpus entities, one per `KINDS` row — all verified present at plan time: SL-001, RV-001, REC-001, REV-001, CM-001, ADR-001, POL-001, STD-001, RFC-001, PRD-001, SPEC-001, REQ-197, ASM-001, DEC-001, QUE-001, CON-001, EVD-001, HYP-001, CPT-001, ISS-008, IMP-012, CHR-001, RSK-232, IDE-007. Both sides are stdout from the same binary invoked twice — no stored golden to age (RV-384 F-21)." },
+  { id = "EX-3", text = "`tests/e2e_show_refusals.rs` asserts each refusal exits non-zero carrying `kinds::parse_resolvable_ref`'s own error text: an unknown prefix, a dangling ref (a well-formed prefix with no entity), and an ambiguous bare id (a bare id held by more than one kind)." },
+  { id = "EX-4", text = "No kind module's `run_show` body is modified by this phase; a failing equivalence is repaired in the router." },
+]
+verification = [
+  { id = "VT-1", expects = "byte-equivalence per prefix in both formats", test_file = "tests/e2e_show_equivalence.rs", keywords = ["show_matches_the_kind_verb_in_table", "show_matches_the_kind_verb_in_json"], waived = false },
+  { id = "VT-2", expects = "the three refusals carry the resolver's error", test_file = "tests/e2e_show_refusals.rs", keywords = ["unknown_prefix_is_refused", "dangling_ref_is_refused", "ambiguous_bare_id_is_refused"], waived = false },
+  { id = "VA-1", text = "The phase's diff touches no kind `run_show` body; the equivalence reference commands are the kinds' own verbs mapped per group, never a stored golden." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Guidance names the router"
+objective = "Point the agent-facing read path at `doctrine show`: the verb table and read-entity paragraph in `install/using-doctrine.md`, the Guardrails sentence in `install/routing-process.md`, the regenerated boot snapshot, and a `guardrails_paragraph` sibling in the install test so the router the guardrail names is executed rather than left knowingly unguarded (design sec-1, sec-4, sec-7; RV-384 F-18, F-27)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: the verb exists and is visible in `explore`." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`install/using-doctrine.md`'s verb-table read-entity row names `doctrine show <REF>`, and the read-entity paragraph that currently teaches only the per-kind form follows (design sec-6)." },
+  { id = "EX-2", text = "`install/routing-process.md`'s Guardrails sentence (\"read entities via `doctrine <kind> show <ID>`\") names the router." },
+  { id = "EX-3", text = "`tests/e2e_claude_install.rs` gains a `guardrails_paragraph` helper sibling to `core_process_paragraph` (marker `**Guardrails:**`, to the blank line that ends it), and the guardrail's named invocations are executed through the built binary — the existing `every_command_named_by_core_process_is_accepted_by_the_binary` parses the core-process paragraph, which does not carry this sentence — with an anti-vacuity floor on the parsed count (RV-384 F-27). `invocations_named_by` drops `<...>` placeholders, so `doctrine show <REF>` yields `show`. The snapshot under test is the one generated from the binary's own embed of `routing-process.md`, not the repo working copy." },
+  { id = "EX-4", text = "`doctrine boot` regenerates `.doctrine/state/boot.md` carrying the guardrail with the router named; `doctrine boot --check` is green." },
+  { id = "EX-5", text = "The out-of-scope guidance — the canon and walkthrough skills, `authority-model.md`, and the shipped memories — is untouched; that sweep is `CHR-078`." },
+]
+verification = [
+  { id = "VT-1", expects = "the guardrails paragraph is parsed and its commands executed", test_file = "tests/e2e_claude_install.rs", keywords = ["fn guardrails_paragraph"], waived = false },
+  { id = "VT-2", expects = "the guardrail names the router", test_file = "install/routing-process.md", keywords = ["doctrine show"], waived = false },
+  { id = "VT-3", expects = "the verb table names the router", test_file = "install/using-doctrine.md", keywords = ["doctrine show <REF>"], waived = false },
+  { id = "VA-1", text = "`doctrine boot` regenerated and `doctrine boot --check` green; the guardrails test parses the Guardrails sentence, not the core-process paragraph, and its anti-vacuity floor holds." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Governance: the SPEC-013 amendment and its evidence"
+objective = "Carry the kind-blind `show` grammar through a Revision on SPEC-013 (ADR-013, REV-038 precedent): author the REV, stage the introduce row (frozen FR-006 on SPEC-013), approve and apply, mint the requirement, bind and verify a runnable coverage check, land the spec prose by hand, and close the REV (design sec-5, sec-7; RV-384 F-2, F-6, F-7, F-13, F-17)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: `tests/e2e_show_equivalence.rs` exists, since the coverage check binds it." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "RV-384 F-6: `doctrine revision new \"<title>\"` mints a REV-NNN skeleton (`proposed`, `approval=none`, no rows); `doctrine revision change add REV-NNN --action introduce --new-label FR-006 --member-of SPEC-013 --new-statement \"...\"` is the single typed row (FR-006 is the next free functional label; FR-001..FR-005 are taken); the prose companion `revision-NNN.md` carries the before/after for the `SPEC-013` section `Uniform command grammar` and section `Responsibilities`." },
+  { id = "EX-2", text = "RV-384 F-7: `doctrine revision approve REV-NNN`, then `doctrine revision apply REV-NNN` (surfaces the introduce row for manual handling rather than landing it), then `doctrine spec req add SPEC-013 --kind functional --label FR-006 --title \"...\"` mints the requirement — it lands `pending`/`Coherent`, not `Indeterminate`." },
+  { id = "EX-3", text = "RV-384 F-13: `doctrine coverage record --slice 265 --requirement <the FR-006 REQ> --change SL-265 --mode VT --command cargo --command test --command=--test --command e2e_show_equivalence --matcher-source stdout --matcher-pattern \"show_matches_the_kind_verb_in_table \\.\\.\\. ok\" --regex` binds a concrete runnable check; the cell is a VT recipe, not a bare attestation." },
+  { id = "EX-4", text = "RV-384 F-2: `doctrine coverage verify 265` re-derives the cell and it reads `Verified` — the phase's exit is that reading, not merely `record`ed." },
+  { id = "EX-5", text = "RV-384 F-17: the prose lands by hand — `spec-013.toml`'s structured `responsibilities` list and `spec-013.md` section `Uniform command grammar` + section `Responsibilities` name the top-level kind-blind `doctrine show` router; then `doctrine revision status REV-NNN done` (every `[[change]]` row landed first)." },
+  { id = "EX-6", text = "The new requirement's `pending -> active` flip is left to `/reconcile`: an `active` requirement with no verified evidence is residual drift `REQ-113` refuses, so it flips with the `Verified` cell already in hand (design sec-5)." },
+]
+verification = [
+  { id = "VT-1", expects = "the coverage cell is check-bound and re-derived to verified", test_file = ".doctrine/slice/265/coverage.toml", keywords = ["e2e_show_equivalence", "status = \"verified\""], waived = false },
+  { id = "VT-2", expects = "the spec prose names the router", test_file = ".doctrine/spec/tech/013/spec-013.md", keywords = ["doctrine show"], waived = false },
+  { id = "VT-3", expects = "the structured responsibilities name the router", test_file = ".doctrine/spec/tech/013/spec-013.toml", keywords = ["doctrine show"], waived = false },
+  { id = "VT-4", expects = "FR-006 lands as a SPEC-013 member", test_file = ".doctrine/spec/tech/013/members.toml", keywords = ["FR-006"], waived = false },
+  { id = "VA-1", text = "`doctrine revision show REV-NNN` reads status=done, approval=approved, with its single introduce row landed; `doctrine coverage show` reads the new requirement's cell Verified." },
+]
+specs        = []
+requirements = []

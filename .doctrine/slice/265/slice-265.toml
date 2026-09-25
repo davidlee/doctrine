@@ -46,6 +46,14 @@ intent = "design-target"
 selector = ".doctrine/revision/**"
 intent = "design-target"
 
+[[selector]]
+selector = "install/using-doctrine.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/routing-process.md"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"
