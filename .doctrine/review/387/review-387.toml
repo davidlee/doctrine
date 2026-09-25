@@ -1,0 +1,52 @@
+id    = 387
+slug  = "reconciliation-review-of-sl-265"
+title = "reconciliation review of SL-265"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-265"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "conformance should cover the governance deliverable; observed: the new REQ has no design-target selector"
+detail = '`doctrine slice conformance 265` reports 5 undeclared, 0 undelivered, 18 conformant. Three undeclared paths are the PHASE-04 requirement: `.doctrine/requirement/482-kind-blind-show-resolves-the-refs-kind` (the slug symlink) and `.doctrine/requirement/482/requirement-482.{toml,md}`. The design names the new REQ as intended surface (sec-1 boundary; sec-6 code-impact row ".doctrine/spec/tech/013/**, a new `REQ`"), so a deliverable authored by a landed phase should be selector-covered. The registry carries `.doctrine/spec/tech/013/**` and `.doctrine/revision/**` but no requirement selector. The two remaining undeclared paths are the slice-own files of F-2.'
+disposition = "verified"
+response = "Delegated to /reconcile (Reconciliation Brief, per-slice): `doctrine slice selector add 265 '.doctrine/requirement/**' --intent design-target` — mirroring this slice's own sibling glob `.doctrine/revision/**`. The code is correct; only the registry entry is missing, and the registry is what makes the REQ conformant."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "conformance should be clean; observed: 2 undeclared slice-own authored files"
+detail = "`.doctrine/slice/265/coverage.toml` (the PHASE-04 coverage cell) and `.doctrine/slice/265/slice-265.toml` (the selector registry, edited by the phase commits d820791ca/6bc730dd8, plus the lifecycle status) are undeclared. Both are slice-own authored bookkeeping rather than design-target surface — the class RV-383 F-2 disposed as expected (`notes.md`/`plan.toml`)."
+disposition = "aligned"
+response = "No selector: these are the slice-own authored files (the registry cannot meaningfully select itself). The REV/spec deliverable is glob-covered; the requirement subtree is F-1."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "design sec-5 should predict the real conformance reading; observed: it calls the REV/spec paths undeclared when they are conformant"
+detail = """design sec-5 closes: "The slice's authored deliverable (the `REV` entity and `.doctrine/spec/tech/013/**`) has no `src/` selector and reports as `undeclared` in slice conformance — expected, disposed `aligned`." Observed: both are declared design-target globs (`.doctrine/revision/**`, `.doctrine/spec/tech/013/**`), so all four REV-062 and spec-013 paths report conformant. The actual undeclared set is `.doctrine/requirement/482*` (F-1) plus the two slice-own files (F-2). The paragraph's second clause is stale."""
+disposition = "verified"
+response = "Delegated to /reconcile (Reconciliation Brief, per-slice design.md direct edit): sec-5's closing paragraph restates the actual reading — the REV + spec deliverable is glob-covered and conformant; the requirement subtree takes the new selector (F-1); the two slice-own files are expected (F-2)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "the full gate should be green; observed: reserve VT-3 fails on the ambient jail env var DOCTRINE_RESERVATION_FALLBACK=1"
+detail = '`doctrine check gate` on the candidate surface is 4608 passed / 1 failed — `reserve::tests::vt3_auto_degradation_is_fail_closed_with_explicit_optin`, panicking at src/reserve.rs:800 ("auto + failing configured remote hard-errors when fallback declined"). Cause is ambient-env leakage, not this slice: the test asserts fail-closed WITHOUT opt-in while the jail exports `DOCTRINE_RESERVATION_FALLBACK=1` (required for entity creation in the jail — mem_019ef7d0cb...). Evidence: (a) `git diff main..edge -- src/reserve.rs` is empty, so the failure reproduces identically at the base B = 2464bbfd6; (b) with the variable unset, `reserve::tests` is 19/19 green in the same candidate tree; (c) the same failure is recorded on RV-154 F-4 (SL-150). Consequence: `doctrine check gate` — the documented close ritual — is red for every jailed agent, and `check regression diff` false-halts on it because the signature keeps the panic thread pid (observation 01a0d82d...).'
+disposition = "follow-up"
+response = "Delegated to owned future work: captured as ISS-483 (backlog issue, tagged area:dispatch/area:jail/area:testing, references SL-265 as originates_from) — the reserve suite must scrub `DOCTRINE_RESERVATION_FALLBACK` so it is independent of the ambient jail env. Precedent: ISS-220 and ISS-260 resolved sibling env-sensitive tests. Not a blocker: src/reserve.rs is untouched by SL-265, and every suite the slice owns is green."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

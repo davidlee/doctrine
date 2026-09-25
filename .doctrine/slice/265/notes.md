@@ -162,7 +162,7 @@ selector commit).
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · PHASE-04 landed (cdc35d1f9) · 4/4 phases
+fresh-as-of: 2026-09-25 · audit (RV-387) · d9e2a9a2b
 
 ### Produced
 
@@ -184,6 +184,13 @@ fresh-as-of: 2026-09-25 · PHASE-04 landed (cdc35d1f9) · 4/4 phases
   approved/done); `REQ-482` minted `pending`; a check-bound, `Verified` coverage
   cell in `.doctrine/slice/265/coverage.toml`; `SPEC-013` prose +
   `responsibilities` name the router.
+- **Audit** (RV-387, reconciliation): coord worktree `.dispatch/SL-265` removed
+  (refs kept); candidate `cand-265-review-001` (`34aeec3ac`) surfaced and admitted
+  for review/close. 4 findings, all terminal — `F-1` (minor, selector registry →
+  reconcile), `F-2` (aligned), `F-3` (nit, design sec-5 → reconcile), `F-4`
+  (major, pre-existing env failure).
+- minted: `ISS-483` — the reserve suite is not env-isolated (the ambient jail
+  `DOCTRINE_RESERVATION_FALLBACK=1` turns `check gate` red).
 
 ### Learned
 
@@ -226,13 +233,30 @@ fresh-as-of: 2026-09-25 · PHASE-04 landed (cdc35d1f9) · 4/4 phases
 - `dispatch commit` **does** accept `.doctrine/` governance paths (the ISS-234
   guard does not block them); `spec req add`'s title is a positional, not
   `--title`.
+- **The prepare-review plumbing desync also blocks coord teardown.** After
+  `prepare-review` the coordination worktree reads a *phantom staged deletion* of
+  `journal.toml` (HEAD advanced by plumbing; index/worktree did not), so
+  `git worktree remove` refuses. Resync first —
+  `git -C <coord> restore --source=HEAD --staged --worktree -- .doctrine/dispatch/<slice>/journal.toml`
+  — then remove. Observation `01a0d851-dec4-7a91-91f2-61a1cb3437f1`.
+- **PHASE-03's boot-snapshot VA is re-derivable on the candidate surface.** The
+  snapshot is gitignored runtime state, so the removed coord tree leaves no
+  evidence; running `doctrine boot` then `doctrine boot --check` in the candidate
+  worktree reconstructs it (clean, guardrail carries `doctrine show <REF>`).
+- **The `reserve` VT-3 failure is ambient-env leakage, not a slice defect.** The
+  jail exports `DOCTRINE_RESERVATION_FALLBACK=1`; the test asserts fail-closed
+  *without* opt-in, so `check gate` is red in the jail (`src/reserve.rs` is
+  untouched `main..edge`; `reserve::tests` is 19/19 green with the var unset).
+  `ISS-483`.
 
 ### Open
 
-- All four phases have landed on `dispatch/265` (`cdc35d1f9`) and the primary's
-  runtime sheets read 4/4 `completed`. Next: the **conclude/audit** stage —
-  `slice verify-vt 265` (coord) → `dispatch sync --prepare-review` → remove the
-  coord worktree → `slice status 265 audit` → `/audit`. The one residual the
-  audit should weigh: `REQ-482` is `pending` with `Verified` evidence (verdict
-  `Divergent: evidence-outruns-authored`) and is flipped `pending → active` at
-  `/reconcile` (EX-6), not here.
+- Hand off to `/reconcile`: `F-1` selector registry
+  (`doctrine slice selector add 265 '.doctrine/requirement/**' --intent
+  design-target`); `F-3` design sec-5 restored to the real conformance reading;
+  `REQ-482` `pending → active` by a `REV` carrying a `status` row (SL-256
+  `REV-055` precedent). The slice advances `audit → reconcile`; `verify-vt 265` is
+  14/14 PASS on the admitted candidate; `REV-062` is `done`.
+- `ISS-483` — reserve-suite env isolation (`F-4`); out of this slice.
+- Close-time: regenerate the primary's `.doctrine/state/boot.md` after the code
+  lands and the primary binary is rebuilt (runtime state — an act, not a diff).

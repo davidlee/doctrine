@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0d858a31a7630b0a95795e9181fee"
+memory_key = "mem.pattern.dispatch.prepare-review-desync-blocks-coord-teardown"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "prepare-review's plumbing advance blocks coord teardown — resync before removing"
+summary = "After prepare-review the coordination worktree has a phantom staged deletion of journal.toml, so git worktree remove refuses — resync from HEAD first"
+created = "2026-09-25"
+updated = "2026-09-25"
+
+[scope]
+paths = ["src/dispatch.rs", "src/git.rs"]
+globs = []
+commands = []
+tags = ["dispatch", "worktree"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "14875324ba62f97b7fdcc4ea3cc1298ed89d8692"
+ref_name = "refs/heads/edge"
+checkout_state_id = "36a4545ae21a2bc658baa24bc46179e069298b204779925a0853c69269039e9a"
+base_commit = "2b55f9b78454b042279934338779eb41023943bc"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.prepare-review-plumbing-desync-reverts-journal"
+

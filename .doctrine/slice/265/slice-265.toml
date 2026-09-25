@@ -1,7 +1,7 @@
 id = 265
 slug = "unified-doctrine-show"
 title = "Unified doctrine show: one verb for any canonical ref"
-status = "audit"
+status = "reconcile"
 created = "2026-09-25"
 updated = "2026-09-25"
 tags = ["area:cli", "area:spec", "area:ux", "cluster:cli-ux"]

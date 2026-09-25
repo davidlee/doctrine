@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d851-dec4-7a91-91f2-61a1cb3437f1"
+recorded_at = "2026-09-25T11:27:19.236283314Z"
+kind = "friction"
+summary = "dispatch: coord-worktree teardown refuses on prepare-review's phantom staged deletion"
+detail = "After `dispatch sync --prepare-review` (which commits the CAS journal onto dispatch/265 via plumbing, advancing the ref without touching index/worktree), the coordination worktree reads `D .doctrine/dispatch/265/journal.toml` as a STAGED deletion (index lacks the file HEAD has). The documented conclude step 'remove coordination worktree directory' then fails: `git worktree remove .dispatch/SL-265` refuses on the staged change. Recovery is a manual, undocumented resync — `git -C <coord> restore --source=HEAD --staged --worktree -- .doctrine/dispatch/<slice>/journal.toml` — before remove succeeds. Skill: dispatch. Consequence: every prepare-review→teardown cycle needs an undocumented escape, and a naive operative reaches for `git worktree remove --force` (the very 'drunk with a chainsaw' the skill forbids). Related memory: mem.pattern.dispatch.prepare-review-plumbing-desync-reverts-journal (covers the working-tree-commit variant, not the teardown variant)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
