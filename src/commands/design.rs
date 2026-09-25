@@ -2696,11 +2696,12 @@ struct RunScan {
 
 /// Read every slice's snapshot under [`crate::state::design_snapshot_root`].
 ///
-/// A child that is not a slice number is not a slice's state, and a slice
-/// state holding no snapshot has no run; neither is a candidate. Anything else
-/// that fails — the snapshot, its mtime, its slice's status — is **skipped with
-/// its cause** rather than dropped: a status the scan could not read cannot be
-/// claimed open. A missing scan root is an empty tier.
+/// A child that is not a slice's canonical state directory is not a slice's
+/// state, and a slice state holding no snapshot has no run; neither is a
+/// candidate. Anything else that fails — the snapshot, a snapshot naming another
+/// slice, its mtime, its slice's status — is **skipped with its cause** rather
+/// than dropped: a status the scan could not read cannot be claimed open. A
+/// missing scan root is an empty tier.
 fn scan_runs(root: &Path) -> Result<RunScan> {
     let scan_root = crate::state::design_snapshot_root(root);
     let mut scan = RunScan {
@@ -2717,10 +2718,17 @@ fn scan_runs(root: &Path) -> Result<RunScan> {
     let mut slices: Vec<u32> = Vec::new();
     for entry in entries {
         let entry = entry.with_context(|| format!("read {}", scan_root.display()))?;
+        // Only the directory `design_snapshot_path` itself names is a slice's
+        // state: `0233/` parses as 233 but is not where 233's run lives, and
+        // counting it would count one run twice (RV-392 `F-2`).
+        let path = entry.path();
         if let Some(slice) = entry
             .file_name()
             .to_str()
             .and_then(|name| name.parse().ok())
+            .filter(|&slice| {
+                crate::state::design_snapshot_path(root, slice).parent() == Some(path.as_path())
+            })
         {
             slices.push(slice);
         }
@@ -2756,6 +2764,14 @@ fn read_candidate(
         Err(error) => return Err(error.into()),
     };
     let run = snapshot::parse(&text)?;
+    // The status judged must be the rendered run's own slice's (RV-392 `F-1`).
+    let slice_ref = |n| crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, n);
+    anyhow::ensure!(
+        run.run.slice == slice,
+        "the snapshot is filed under {} but names {}",
+        slice_ref(slice),
+        slice_ref(run.run.slice),
+    );
     let mtime = std::fs::metadata(path)?.modified()?;
     let slice_status = crate::slice::status(root, slice)?;
     Ok(Some(RunCandidate {

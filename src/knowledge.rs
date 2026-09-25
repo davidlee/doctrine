@@ -3318,29 +3318,18 @@ pub(crate) fn record_toml_path(root: &Path, kind: RecordKind, id: u32) -> PathBu
 }
 
 /// The title of the record `reference` names — `None` when no record stands at
-/// its path, an error (with its cause) when the ref or the file cannot be read.
+/// its path, an error (with its cause) when the ref or the record cannot be read.
 ///
-/// Reads the TOML tier only: a title is all the caller (`design tree`, SL-266
-/// `DEC-303`) renders, so the prose tier and the full validation `read_record`
-/// applies are not paid for.
+/// Reads through [`read_record`], the canonical validated read, so a record the
+/// corpus would refuse elsewhere is never presented as found here (STD-003,
+/// RV-392 `F-3`). Absence is decided first, from the path, because
+/// `read_record` reports a missing file as an error like any other.
 pub(crate) fn record_title(root: &Path, reference: &str) -> anyhow::Result<Option<String>> {
     let (kind, id) = resolve_ref(reference)?;
-    let path = record_toml_path(root, kind, id);
-    let text = match std::fs::read_to_string(&path) {
-        Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(error).with_context(|| format!("read {}", path.display()));
-        }
-    };
-    let table: toml::Table = text
-        .parse()
-        .with_context(|| format!("parse {}", path.display()))?;
-    let title = table
-        .get("title")
-        .and_then(toml::Value::as_str)
-        .with_context(|| format!("no string `title` in {}", path.display()))?;
-    Ok(Some(title.to_owned()))
+    if !record_toml_path(root, kind, id).try_exists()? {
+        return Ok(None);
+    }
+    Ok(Some(read_record(root, kind, id)?.title))
 }
 
 /// Write a record's `.md` prose tier (SL-249, DEC-086 step 5).
@@ -4510,8 +4499,19 @@ notes = []
     fn record_title_tells_found_absent_and_unreadable_apart() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        seed_record(root, RecordKind::Question, 2, "title = \"Which store?\"\n");
+        let valid = render_record_toml_seed(
+            RecordKind::Question,
+            2,
+            "which-store",
+            "Which store?",
+            "2026-01-01",
+        )
+        .unwrap();
+        seed_record(root, RecordKind::Question, 2, &valid);
         seed_record(root, RecordKind::Decision, 3, "title = [\n");
+        // RV-392 F-3: a title alone is not a record — the canonical read's
+        // required fields are missing, so the title must not read as found.
+        seed_record(root, RecordKind::Decision, 4, "title = \"Looks valid\"\n");
 
         assert_eq!(
             record_title(root, "QUE-002").unwrap().as_deref(),
@@ -4519,6 +4519,7 @@ notes = []
         );
         assert_eq!(record_title(root, "DEC-009").unwrap(), None);
         assert!(record_title(root, "DEC-003").is_err());
+        assert!(record_title(root, "DEC-004").is_err());
         assert!(record_title(root, "not-a-ref").is_err());
     }
 

@@ -136,3 +136,37 @@ fn format_tree_refuses_json() {
     );
     assert!(err.contains("--format tree"), "{err}");
 }
+
+/// RV-392 `F-1`: a snapshot filed under one slice's directory but naming
+/// another is not judged by either slice's status — it is skipped, with the
+/// mismatch as its cause.
+#[test]
+fn design_tree_skips_a_snapshot_filed_under_another_slice() {
+    let fixture = DesignRun::start();
+    seed_slice_record(&fixture.root, SLICE_NUMBER);
+    let done = open_run(&fixture.root, "234", "done", 5);
+    std::fs::copy(&done, &fixture.snapshot).unwrap();
+
+    let err = fail(&fixture.root, &["design", "tree", "-p", "."]);
+    assert!(
+        err.contains("skipped .doctrine/state/slice/233/design.toml: ") && err.contains("SL-234"),
+        "the misfiled snapshot is disclosed, naming the slice it claims: {err}"
+    );
+}
+
+/// RV-392 `F-2`: a state directory that only parses as a slice number
+/// (`0233`) is not a second copy of slice 233's run.
+#[test]
+fn design_tree_counts_each_run_once() {
+    let fixture = DesignRun::start();
+    seed_slice_record(&fixture.root, SLICE_NUMBER);
+    let slice_dir = fixture.snapshot.parent().unwrap();
+    std::fs::create_dir(slice_dir.with_file_name(format!("0{SLICE_NUMBER}"))).unwrap();
+
+    let out = tree(&fixture.root, "never", &[]);
+    assert_eq!(
+        out.lines().nth(1),
+        Some("chosen: the only run open when scanned"),
+        "{out}"
+    );
+}
