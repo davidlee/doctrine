@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d96f-5c3c-7192-b1ed-d15958c279de"
+recorded_at = "2026-09-25T16:39:09.116817079Z"
+kind = "friction"
+summary = "SL-267: re-flipping a completed phase silently overwrites a hand-tightened boundary row with an auto-computed one"
+detail = "record-delta 267 PHASE-05 --start fd3c53453 --end 682902651 recorded the exact code delta (1 commit, zero foreign), verified by verify-vt. Re-running the idempotent 'slice phase 267 PHASE-05 --status completed' (e.g. to re-read the warning) re-invoked the automatic solo phase-binding and clobbered the row: start reverted to edd986b19 and end advanced to the then-HEAD f7fd93e24 - a sibling's commit. Any later 'completed' flip keeps widening it with every foreign commit on trunk, so a tightened boundary must be recorded LAST. The warning text ('boundary spans N commits') is computed start..HEAD, not start..code_end, so it keeps growing regardless of what is recorded."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
