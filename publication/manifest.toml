@@ -907,3 +907,26 @@ title         = "Claude Code activation guide"
 licence       = "MIT"
 provenance    = "declared"
 customization = "customizable"
+
+# The shipped-corpus grounding rule's two published homes: the rule and its
+# disposition procedure, and the design-run obligation rationale the inquiring
+# runbook points at. Both are hand-authored reference prose, so both take the
+# reference family's customization.
+
+[[entry]]
+address       = "reference/shipped-corpus-authoring.md"
+backing       = "shipped-corpus-authoring.md"
+kind          = "reference"
+title         = "Shipped-corpus authoring"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "reference/design-run-obligations.md"
+backing       = "design-run-obligations.md"
+kind          = "reference"
+title         = "Design-run obligations"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"

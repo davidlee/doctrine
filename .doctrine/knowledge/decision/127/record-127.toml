@@ -59,5 +59,11 @@ descriptor = "the corpus already violates the general rule this decision establi
 target = "ISS-309"
 
 [[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the install/-scoped precedent the shipped-corpus grounding rule generalises"
+target = "ADR-024"
+
+[[relation]]
 label = "shapes"
 target = "SL-244"
