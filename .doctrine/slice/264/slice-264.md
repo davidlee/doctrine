@@ -53,8 +53,8 @@ Three objectives, two substantive and one mechanical:
 3. **`needs: null` clears**, emitting one `NeedsRemoved` per removed edge —
    exactly what `needs: []` already does, so the rows machinery needs nothing new.
 
-Objectives 1 and 2 are one change: the narrowing is only safe alongside the
-narrowed set, and the derived set is what makes the narrowing's guarantee whole.
+Objectives 1 and 2 are one change: the narrowing is only safe alongside a
+derived set, and the derived set is what makes the narrowing's guarantee whole.
 
 ## Non-Goals
 
