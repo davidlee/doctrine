@@ -836,12 +836,15 @@ impl Declaration {
     /// refused on these rather than quietly changed in meaning (`RV-389` F-16,
     /// `IMP-483`). Pinned to the contract's sparse key set by
     /// `every_sparse_key_is_reported_when_null`.
+    ///
+    /// `blocking` is not among them: its inquiry-home `null` is refused by the
+    /// direct path's own rule, and at a finding `null` reads as absent, so
+    /// dropping it changes nothing (`RV-389` F-18).
     pub(crate) fn nulled_keys(&self) -> Vec<&'static str> {
         [
             (KEY_QUESTION, self.question.is_null()),
             (KEY_NEEDS, self.needs.is_null()),
             (KEY_PARENT, self.parent.is_null()),
-            (KEY_BLOCKING, self.blocking.is_null()),
         ]
         .into_iter()
         .filter_map(|(key, nulled)| nulled.then_some(key))

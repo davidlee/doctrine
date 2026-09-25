@@ -724,3 +724,26 @@ fn a_proposal_creating_an_unjudged_inquiry_is_refused_at_propose() {
         "a refused proposal is not stored"
     );
 }
+
+/// At a finding `blocking: null` reads as absent — the direct apply stores it —
+/// so a proposal storing it loses nothing and must not be refused as though it
+/// cleared a field (`RV-389` F-18).
+#[test]
+fn a_proposal_may_send_a_findings_blocking_null() {
+    let fixture = Fixture::inquiring();
+    fixture.export();
+
+    fixture.apply(&fixture.payload(
+        "propose-finding-null",
+        &proposing(&json!([{
+            "subject": "fnd-1",
+            "concerns": "sec-1",
+            "summary": "a concern",
+            "blocking": null,
+        }])),
+    ));
+    assert!(
+        fixture.delegation().proposal().is_some(),
+        "a finding's null judgement is no clearing, so the proposal is stored"
+    );
+}
