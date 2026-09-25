@@ -39,6 +39,21 @@ re-verified by the raiser. What remains unproven is implementation-level
 (wrap goldens, config refusals) and is pinned by VT-7, VT-10 and VT-12, which
 the implementation review and audit will exercise.
 
+## PHASE-02 — tree renderer (2026-09-26)
+
+- **VH-1 amended the wrapping rule** (user, recorded on DEC-307): dropped text
+  keeps its rails, one level in; the bare 8-column indent is the fallback only
+  below `TREE_MIN_DROP_COLS` (16) beside the rails. Legend marks and letters
+  are coloured like the nodes. `design.md` sec-3 rule 2 still states the
+  locked (rail-less) form — reconcile at `/reconcile`.
+- `MapAnswer::Record.form` stays on the model: the locked anatomy prints
+  `REC-NNN <title>` for both forms, and `form` is carried by `json --full`
+  serialisation — a live reader, so no model change.
+- **Gap: the envelope has no canonical slice ref** for the header/footer; the
+  leaf cannot format ids. Placeholder formats `SL-{:03}` from `run.slice`;
+  choice put to the user (envelope field, serialised or skipped).
+- Header counts partition the map: open excludes derived-blocked.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-09-26 · PHASE-01 landed, gated, verified · 3e55c758b
