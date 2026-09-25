@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0d78aa10478c1ad6dde452eef329d"
+memory_key = "mem.fact.design-run.shape-invalidation-asymmetry"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Design-run gate invalidation: shape voids acceptance, progress does not"
+summary = "Adding a node or edge to the inquiry map voids the two cumulative attested gates; resolving or reopening a node does not."
+created = "2026-09-25"
+updated = "2026-09-25"
+
+[scope]
+paths = ["src/design_run/", "install/design-run-stages.md"]
+globs = []
+commands = ["doctrine design"]
+tags = ["design-run", "gate", "lifecycle"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "c62df1015422245727c80611dddc358f41c415e9"
+tree = "e88a2a9927adc7b9b0565cf7865e5348ec9d449f"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "c62df1015422245727c80611dddc358f41c415e9"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d78a-ba80-72e2-86ed-24efe39f4451"
+recorded_at = "2026-09-25T07:49:48.288476442Z"
+kind = "friction"
+summary = "In /backlog + RFC authoring: doctrine check quick cannot separate my delta from pre-existing findings"
+detail = "After authoring RFC-031 and four backlog items, `doctrine check quick` reported 51 findings — dominated by unresolved-citation warnings from test fixtures (SL-998/999/1000/1001, RFC-035, QUE-005) plus stale worktree-hook warnings. There is no baseline or 'findings in changed files' view, so the only way to establish that my change introduced nothing was to pipe the whole run through grep for my entity ids. For an agent making an authored-only change this is the one verification step that should be cheap and isn't; a --changed/--since or file-scoped mode would remove it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
