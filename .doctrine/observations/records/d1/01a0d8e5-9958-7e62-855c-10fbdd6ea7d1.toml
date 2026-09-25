@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d8e5-9958-7e62-855c-10fbdd6ea7d1"
+recorded_at = "2026-09-25T14:08:40.792099842Z"
+kind = "friction"
+summary = "plan: verify-vt says 'keyword present' for keywords that do not exist yet"
+detail = "SL-266 plan: before any implementation, slice verify-vt reported 'UNATTRIBUTABLE — keyword present but <file> not modified by this slice' for mandates whose keywords (fn select_run, fn map_changed_table, fn unsettled_needs) are absent from the file (grep confirms). The file-unmodified check seems to short-circuit before the keyword check, and the message asserts a match that was never made — cost a verification detour."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d8d1-c0ff-7b03-834e-eefb35fb4be9"
+recorded_at = "2026-09-25T13:47:00.223274447Z"
+kind = "friction"
+summary = "code-review: doctrine link references cannot target an RV, so a follow-up backlog item cannot cite the review finding that routed it"
+detail = "RV-389 F-5 disposed follow-up to IMP-474; 'doctrine link IMP-474 references --role originates_from RV-389' refused: references target must be one of [ISS, IMP, CHR, RSK, IDE, SL]. Linked to SL-264 instead; the RV provenance survives only in the body prose."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
