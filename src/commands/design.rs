@@ -3546,7 +3546,7 @@ mod tests {
         // `Declaration` DOES carry `deny_unknown_fields` — serde would have
         // caught this one unaided.
         let attributed = format!(
-            "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false,\"blocking\":false,\"cursror\":\"inq-1\"}}]}}",
+            "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false,\"cursror\":\"inq-1\"}}]}}",
             envelope(root, slice, 1, "sub-1")
         );
         let error = apply(root, slice, &attributed, &|| {}, &no_fault)

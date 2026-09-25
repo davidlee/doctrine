@@ -6404,6 +6404,13 @@ fn import_seeds_blocking_true_on_every_seeded_node() {
         seeded.iter().all(|(judged, _)| *judged == Some(true)),
         "every import path seeds the judgement visible, never free: {seeded:?}"
     );
+    // …and the judgement is load-bearing: with no legacy act, both seeded nodes
+    // are open blockers in the effective set the gate reads (`VT-7`).
+    assert_eq!(
+        run.map.inquiry.open_blockers(&BTreeSet::new()).count(),
+        2,
+        "every seeded node is an open blocker in the effective set"
+    );
 }
 
 /// The payload contract names the same kind for a `Declaration` key as the
