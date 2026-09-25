@@ -64,6 +64,7 @@ verification = [
   { id = "VT-4", expects = "design VT-6: absent parent and parent cycle both render every node, terminate, and match the header count", test_file = "src/design_run/render/tree.rs", keywords = ["fn unplaced_nodes_are_rendered_not_dropped", "unplaced"], waived = false },
   { id = "VT-5", expects = "design VT-7: wrap at 80 with rails; drop indent below 24 free cols; depth 12 at width 40; CJK label; legend wraps between entries; width 16 header/chosen/skipped wrap; every over-width line holds one prefix or word; no ellipsis", test_file = "src/design_run/render/tree.rs", keywords = ["fn wrapping_and_overflow", "TREE_MIN_TEXT_COLS", "TREE_DROP_INDENT"], waived = false },
   { id = "VT-6", expects = "design VT-8: colour false has no escapes; colour true stripped equals plain", test_file = "src/design_run/render/tree.rs", keywords = ["fn colour_is_additive"], waived = false },
+  { id = "VH-1", text = "The user reads the renderer's golden outputs, printed by the phase: the anatomy golden, a real map (SL-266's own run at width 100), and the wrap cases at widths 80, 40 and 16. They confirm that the tree is legible at a glance, that blocked lines keep their question readable, that wrapped text stays visibly under its node, and that the legend explains every mark shown. Judged plain and coloured." },
 ]
 specs        = []
 requirements = []
