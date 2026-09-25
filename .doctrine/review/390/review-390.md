@@ -114,3 +114,44 @@ asserts the effective set, and a duplicated fixture key is gone (`F-8`, `F-9`).
 
 - `F-15` → `ISS-488`. `F-3`, `F-12` tolerated. `F-13` aligned. `F-1`, `F-2`, `F-8`,
   `F-9` fixed in the audit.
+
+## Reconciliation Outcome
+
+No governance or spec rows came from this brief, so no REV was authored.
+
+### Selector registry
+- `F-4`: added `install/design-prompts/delegation.md` (`design-target`), with a note
+  on the selector. Conformance reads it **undelivered** by construction. Its only
+  edit is `RV-389` `F-16`'s post-phase repair, which sits in no phase row. This is
+  `F-3`'s tolerated blindness, and it is expected rather than a defect.
+- `F-5`: removed `src/design_run/{gate,attestation,run,tests}.rs`, which
+  `src/design_run/**` already covers.
+- Residual undeclared cells are the interleaved `SL-266` commit's `.doctrine/`
+  files, as the Synthesis states.
+
+### Direct edits applied
+- `design.md` sec-5 (`F-6`): six code-impact rows added (`src/commands/design.rs`,
+  `refusal.rs`, `contract_check.rs`, `delegation.rs` + `fixture.rs`,
+  `render/envelope.rs`, `install/design-prompts/delegation.md`). The closing
+  sentence now states the selector set the registry actually holds.
+- `design.md` sec-6 `VT-6` (`F-11`): removed the stray "no", so the clause reads
+  "a submitted `blocking-set-declared` is refused".
+- `design.md` sec-6 `VA` (`F-7`): recorded that the criterion was discharged by this
+  audit's replay on `SL-264`'s own locked run.
+- These are out-of-band edits to a locked run. The divergence in section
+  fingerprints is expected.
+
+### Knowledge
+- `DEC-126` (`F-10`): the `initial-concerns-recorded` table row now reads "reviewed
+  graph with per-node blocking judgements (`DEC-302`)". The amendment section is kept.
+
+### Handed to /close
+- `F-14`: resolve `IMP-469` and `ISS-481`. Record the outcome on `RFC-031` T4: the
+  `DEC-062` reading in `DEC-301`, and the fitness measure from `F-7` (2 nodes and
+  1 edge added after sufficiency acceptance, with no void).
+
+### Not reconcile's
+- `F-15` → `ISS-488`. `F-3` and `F-12` tolerated. `F-13` aligned. `F-1`, `F-2`,
+  `F-8` and `F-9` were fixed in the audit.
+
+Reconcile pass complete; handoff to /close.

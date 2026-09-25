@@ -36,7 +36,7 @@ Ten conditions in, **nine out — two Derived, seven Attested, zero Claimed.**
 | condition | today | kind | note |
 |---|---|---|---|
 | `governing-context-recorded` | claimed | **Attested** | `DEC-121` — the confirmed governance edge set |
-| `initial-concerns-recorded` | claimed | **Attested** | `DEC-121` — reviewed graph + declared blocking set |
+| `initial-concerns-recorded` | claimed | **Attested** | `DEC-121` — reviewed graph with per-node blocking judgements (`DEC-302`) |
 | `blocking-inquiries-dispositioned` | claimed | **Derived** | dispositions must exist; whose is irrelevant |
 | `user-accepts-sufficiency` | claimed | **Attested** | `DEC-088`'s mechanism, generalised |
 | ~~`required-sections-exist`~~ | claimed | **retired** | replaced by a drafting-readiness attestation |

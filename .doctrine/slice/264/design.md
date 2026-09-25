@@ -284,10 +284,18 @@ change. The code was the deviation.
 | `install/design-prompts/conditions/initial-concerns-recorded.md` | the single-act shape, with no separate set declaration to confirm |
 | `install/design-prompts/conditions/blocking-set-current.md` | **not created** — the condition this design first proposed is dropped |
 | `install/design-run-stages.md` | regenerated mirror of the condition table |
+| `src/commands/design.rs` | the `KeyContract` `home` construction site (`home: None`) and the node-declaring payload fixtures |
+| `src/design_run/refusal.rs` | the `BlockingJudgementMissing`, `BlockingJudgementWithdrawn`, `RetiredAct` and `ProposalCannotClear` refusals |
+| `src/design_run/contract_check.rs` | the explicit legacy exception: a legacy act kind keeps its enum token so a stored act still parses |
+| `src/design_run/delegation.rs`, `src/design_run/fixture.rs` | `InquiryNode::open` call sites pass the judgement; the frozen `LEGACY_SNAPSHOT` fixture |
+| `src/design_run/render/envelope.rs` | the per-home contract render |
+| `install/design-prompts/delegation.md` | the proposal-cannot-clear bullet: any `null` is refused (`RV-389` `F-16`) |
 
-The design-target selectors this section commits to: `src/design_run/**`,
-`install/design-prompts/conditions/**`, `install/design-payload-contract.md`,
-`install/design-run-stages.md`.
+The design-target selectors, as the slice registry holds them after the audit:
+`src/design_run/**`, `src/commands/design.rs`, `tests/e2e_design_*.rs`,
+`install/design-prompts/conditions/**`, `install/design-prompts/delegation.md`,
+`install/design-payload-contract.md`, `install/design-run-stages.md`
+(`RV-390` `F-4`–`F-6`).
 
 <!-- doctrine:section sec-6 -->
 ## Verification
@@ -318,7 +326,7 @@ The design-target selectors this section commits to: `src/design_run/**`,
 - **VT-6** — legacy compatibility, over a fixture holding a stored `blocking-set-declared`
   act (`F-7`, `F-8`): the snapshot **parses**; with no node judged, the effective set equals
   the stored act's; after judging one *other* node `blocking: false`, every unjudged legacy
-  blocker is still open in `blocking-inquiries-dispositioned` (the mixed regime); and no
+  blocker is still open in `blocking-inquiries-dispositioned` (the mixed regime); and
   a submitted `blocking-set-declared` is refused (`RetiredAct`) and the stored set is
   unchanged (`F-16`); a map edit on the snapshot produces no row for the legacy act
   (`F-17`); no condition's verdict differs from the pre-change binary's on read **except** an act stale only
@@ -329,7 +337,8 @@ The design-target selectors this section commits to: `src/design_run/**`,
   and imported-prose questions with `blocking: true`, and they appear in the effective set.
 - **VA** — on a real run, a non-blocking addition does not re-face the human gates;
   re-measured against `RFC-031`'s fitness measure (nodes and edges added after
-  `user-accepts-sufficiency`).
+  `user-accepts-sufficiency`). Discharged by the audit's replay on `SL-264`'s own locked
+  run (`RV-390` `F-7`), not by the PHASE-05 e2e.
 
 <!-- doctrine:section sec-7 -->
 ## Risks, residuals and deferred debt

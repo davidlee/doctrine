@@ -31,22 +31,6 @@ selector = "install/design-run-stages.md"
 intent = "design-target"
 
 [[selector]]
-selector = "src/design_run/gate.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/design_run/attestation.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/design_run/run.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/design_run/tests.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "install/design-prompts/conditions/**"
 intent = "design-target"
 
@@ -58,6 +42,11 @@ intent = "design-target"
 selector = "src/commands/design.rs"
 intent = "design-target"
 note = "Gained the KeyContract home field's construction site (home: None) in PHASE-02, and the node-declaring payload fixtures. Under-declared by design.md sec-5; added at PHASE-05's whole-slice selector sweep."
+
+[[selector]]
+selector = "install/design-prompts/delegation.md"
+intent = "design-target"
+note = "Edited only by RV-389 F-16's post-phase repair (c793fbfc3), which sits in no phase row; conformance reads it undelivered by construction (RV-390 F-3 tolerated, F-4)."
 
 [[relation]]
 label = "governed_by"
