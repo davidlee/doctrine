@@ -43,15 +43,43 @@ selector = "src/design_run/mod.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/design_run/run.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "src/state.rs"
 intent = "design-target"
 
 [[selector]]
 selector = "src/commands/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/knowledge.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/tests.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_design_tree.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_design_show_golden.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_subcommand_help.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/design_fixture/mod.rs"
 intent = "design-target"
 
 [[relation]]

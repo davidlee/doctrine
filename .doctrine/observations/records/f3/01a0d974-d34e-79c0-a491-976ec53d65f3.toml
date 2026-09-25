@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d974-d34e-79c0-a491-976ec53d65f3"
+recorded_at = "2026-09-25T16:45:07.278566312Z"
+kind = "friction"
+summary = "reconcile SL-266: design show calls an out-of-band reconcile edit 'behind its run' and suggests materialise"
+detail = "After the sanctioned reconcile direct edit of a locked run's design.md, 'doctrine design show 266' prints 'note: design.md is behind its run (revision 48); doctrine design materialise SL-266'. The file is ahead of (diverged from) the run, not behind, and materialise is the wrong move at reconcile (mem.pattern.reconcile.edit-design-out-of-band). An agent without that memory would be steered into materialising."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

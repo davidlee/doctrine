@@ -69,3 +69,34 @@ Lines of attack:
 
 ### Governance/spec (REV)
 - None. No ADR, policy, standard, PRD-019 or SPEC-029 claim diverges.
+
+## Reconciliation Outcome
+
+### Direct edits applied (`design.md`, out of band on the locked run — expected divergence)
+- F-1 — "The tree rendering" rule 2: the drop now keeps the node's rails, and
+  falls back to the bare `TREE_DROP_INDENT` only when fewer than
+  `TREE_MIN_DROP_COLS` (16) columns remain; `TREE_MIN_DROP_COLS` added to the
+  constants list.
+- F-2 — "Command surface and run resolution": both skip causes (snapshot naming
+  another slice; unreadable slice status), plus the canonical-directory
+  candidate rule (RV-392 `F-2`).
+- F-3 — "Delivery": config read is `dtoml::load_design_entry` / `design_entry`
+  (bare-table, `[design]` only); `DoctrineToml` carries no `design` field; the
+  shell call spelled `resolve_map_delivery(load_design_entry(root)?.as_ref())?`.
+- F-4 — `slice selector add 266` (8 selectors, design-target); "Code impact"
+  rows for `guard.rs`, `knowledge.rs` (and `record_titles` via `read_record`),
+  `slice.rs`, the VT suites/fixture; selector list mirrored.
+- F-5 — `slice selector rm 266 src/design_run/run.rs`; "(or `run.rs`)" and the
+  list entry dropped.
+
+`slice conformance 266` after: undelivered 0, conformant 20, undeclared 25 —
+exactly F-6's tolerated foreign-commit paths.
+
+### REVs completed
+- None — the brief carried no governance/spec items.
+
+### Withdrawn / tolerated
+- F-6: tolerated — per-phase range registry cannot exclude interleaved foreign
+  commits; rationale in the disposition.
+
+Reconcile pass complete — handoff to /close.

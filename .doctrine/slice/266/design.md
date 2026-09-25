@@ -226,8 +226,11 @@ two kinds:
 1. Node text fills to `width − prefix` with `textwrap`; continuation lines
    repeat the ancestors' rails and blank the node's own columns.
 2. If `width − prefix < TREE_MIN_TEXT_COLS` (24), node text starts on the next
-   line at a fixed indent of `TREE_DROP_INDENT` (8 columns, rails not drawn)
-   and fills to `width − 8`.
+   line under the node's rails (the ancestors' rails plus the node's own child
+   rail) and fills to `width − rails` (DEC-307, amended at PHASE-02 VH-1). Only
+   when fewer than `TREE_MIN_DROP_COLS` (16) columns remain beside those rails
+   does it fall back to a fixed indent of `TREE_DROP_INDENT` (8 columns, rails
+   not drawn), filling to `width − 8`.
 3. Free lines fill to `width`; the legend breaks only between entries.
 4. Words are never split (`break_words: false`) and the prefix is never
    broken. A prefix, or one word (a long id, a path, the footer command),
@@ -244,7 +247,7 @@ colour-only.
 
 **Constants** (STD-001), private to `render/tree.rs`: each mark, provenance
 letter and suffix; `TREE_BLOCKING_MARK`; `TREE_MIN_TEXT_COLS`;
-`TREE_DROP_INDENT`; `TREE_PIPED_WIDTH`. The legend is built from the same
+`TREE_MIN_DROP_COLS`; `TREE_DROP_INDENT`; `TREE_PIPED_WIDTH`. The legend is built from the same
 constants.
 
 <!-- doctrine:section sec-4 -->
@@ -297,7 +300,15 @@ Purpose: the only branching logic the verb owns, and where the shell reads.
   newest `mtime` wins; equal `mtime` → higher slice number. Unit-tested.
 - **Skipped snapshots** carry path and the verbatim read or parse error into
   `RunSelection.skipped`, rendered by sec-3, and are listed in the no-candidate
-  refusal too (STD-003).
+  refusal too (STD-003). Beyond an unreadable or malformed snapshot, two more
+  causes skip a run with its cause, never judging it (RV-392 `F-1`, `F-3`):
+  a snapshot naming a slice other than the one its directory names, and a slice
+  record whose status cannot be read — a status the scan could not read cannot
+  be claimed open.
+- **Candidates** come only from a slice's canonical state directory, the one
+  `design_snapshot_path` names (RV-392 `F-2`): another child of the scan root
+  (e.g. `0233/`) is not a slice's state, and a slice state holding no snapshot
+  has no run. Neither is a candidate or a skip.
 - **The scan root** is a new `state::design_snapshot_root(root)`, which
   `design_snapshot_path` then joins onto, so `STATE_SLICE_DIR` stays
   single-sourced (STD-001).
@@ -306,9 +317,13 @@ Purpose: the only branching logic the verb owns, and where the shell reads.
 <!-- doctrine:section sec-5 -->
 ## Delivery: config, relay line, prompt text
 
-**Config** (DEC-309). `DoctrineToml` gains `design: Option<toml::Value>`
-(`#[serde(default)]`) — the `[design]` entry kept raw, so the shared parse
-checks nothing about it: not its keys, not their types, not their values.
+**Config** (DEC-309). The `[design]` entry is read raw by its own reader,
+`dtoml::load_design_entry` (pure half `dtoml::design_entry`): the body is
+parsed as a bare TOML table and only the `design` key is taken, so nothing
+checks its keys, types or values there — and no other table's shape can refuse
+the design writes (RV-393 `F-4`). `DoctrineToml` has no `design` field, so the
+shared parse ignores it like any unknown key. Only malformed TOML syntax
+refuses both readers.
 
 ```rust
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -327,10 +342,10 @@ pub(crate) fn resolve_map_delivery(design: Option<&toml::Value>)
 map_delivery = "sidecar"   # default "relay"
 ```
 
-Validation is lazy, following the `[estimation]` precedent in `dtoml::parse`
-(`dtoml.rs:52-59`): `load_doctrine_toml` is shared by review, slice, spec,
-install and dispatch commands, and any well-formed TOML under `[design]` passes
-it, so a bad display preference never fails an unrelated command. `design apply`
+Validation is lazy, following the `[estimation]` precedent in `dtoml::parse`:
+`load_doctrine_toml` is shared by review, slice, spec, install and dispatch
+commands, and never sees `[design]`, so a bad display preference never fails an
+unrelated command; conversely, the design writes read nothing but `[design]`. `design apply`
 and `design start` resolve it before writing, and every malformation refuses
 them — a wrong type, an unknown value, and a misspelt key, which would
 otherwise leave the key absent and silently select `Relay` (STD-003). The key
@@ -365,7 +380,7 @@ for it and it carries no relay line. `materialise` likewise writes only the
 document and its watermark.
 
 Not emitted: `Sidecar`; no map change; a `resumed submission` replay. The shell reads the config once per command
-(`resolve_map_delivery(load_doctrine_toml(root)?.design.as_ref())?`) and passes the value to these pure line
+(`resolve_map_delivery(load_design_entry(root)?.as_ref())?`) and passes the value to these pure line
 builders.
 
 **Prompt text** — both edits mode-neutral, so neither asset's digest depends on
@@ -395,21 +410,28 @@ old bytes — intended, and the reason these edits are made once, here.
 | `src/design_run/render/tree.rs` | **new** — pure `render(&TurnEnvelope, TreeStyle) -> Vec<String>`; marks, legend, header/selection/footer, placement with unplaced section, wrapping and overflow; private `TREE_*` constants |
 | `src/design_run/render/mod.rs` | `pub(crate) mod tree;` |
 | `src/design_run/inquiry.rs` | `InquiryMap::unsettled_needs`; `is_blocked` delegates to it |
-| `src/design_run/mod.rs` (or `run.rs`) | pure `map_changed(prior, next)` |
+| `src/design_run/mod.rs` | pure `map_changed(prior, next)` |
 | `src/design_run/config.rs` *(or the existing area-config home)* | `MapDelivery`, pure `resolve_map_delivery`, the key and value constants |
-| `src/dtoml.rs` | `DoctrineToml.design: Option<toml::Value>` (raw) |
+| `src/dtoml.rs` | `design_entry` / `load_design_entry`: the raw `[design]` entry off a bare table |
 | `src/state.rs` | `design_snapshot_root`; `design_snapshot_path` joins onto it |
 | `src/commands/cli.rs` | pass the resolved colour to `design::dispatch` |
-| `src/commands/design.rs` | `dispatch(command, color)`; `ShowFormat::Tree`; `DesignCommand::Tree(TreeArgs)`; tree projection at `Full` with titles; `record_titles(root, &run) -> BTreeMap<String, TitleLookup>` via `knowledge::resolve_ref` + the record's TOML; run scan + pure `select_run`; relay line, last, in `applied_lines` and the start report; config read in `run_apply` and `run_start` |
+| `src/commands/guard.rs` | `DesignCommand::Tree` joins the read-only arm beside `show` |
+| `src/knowledge.rs` | the record-title lookup `record_titles` uses, through the canonical `read_record` (RV-392 `F-3`) |
+| `src/slice.rs` | `status(root, id)`, the slice status token the run scan reads |
+| `src/commands/design.rs` | `dispatch(command, color)`; `ShowFormat::Tree`; `DesignCommand::Tree(TreeArgs)`; tree projection at `Full` with titles; `record_titles(root, &run) -> BTreeMap<String, TitleLookup>` via `knowledge::resolve_ref` + `read_record`; run scan + pure `select_run`; relay line, last, in `applied_lines` and the start report; config read in `run_apply` and `run_start` |
 | `install/design-prompts/inquiry.md` | one mode-neutral sentence (sec-5) |
 | `install/design-prompts/conditions/initial-concerns-recorded.md` | tree output replaces the hand-built listing (sec-5) |
 | CLI help goldens / docs listing `design` verbs | the new verb and format value |
+| `src/design_run/tests.rs`, `tests/e2e_design_tree.rs`, `tests/e2e_design_show_golden.rs`, `tests/e2e_subcommand_help.rs`, `tests/design_fixture/mod.rs` | the VT suites and their shared fixture |
 
 The design-target selectors this section commits to:
 `src/design_run/render/**`, `src/design_run/inquiry.rs`,
-`src/design_run/mod.rs`, `src/design_run/run.rs`, `src/design_run/config.rs`,
-`src/dtoml.rs`, `src/state.rs`, `src/commands/cli.rs`,
-`src/commands/design.rs`, `install/design-prompts/inquiry.md`,
+`src/design_run/mod.rs`, `src/design_run/config.rs`,
+`src/design_run/tests.rs`, `src/dtoml.rs`, `src/state.rs`,
+`src/commands/cli.rs`, `src/commands/design.rs`, `src/commands/guard.rs`,
+`src/knowledge.rs`, `src/slice.rs`, `tests/e2e_design_tree.rs`,
+`tests/e2e_design_show_golden.rs`, `tests/e2e_subcommand_help.rs`,
+`tests/design_fixture/mod.rs`, `install/design-prompts/inquiry.md`,
 `install/design-prompts/conditions/initial-concerns-recorded.md`.
 
 <!-- doctrine:section sec-7 -->
