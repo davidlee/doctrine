@@ -661,9 +661,9 @@ fn a_proposal_carrying_null_is_refused_at_propose() {
 
     for (key, says) in [
         ("blocking", "not withdrawn"),
-        ("question", "IMP-483"),
-        ("needs", "IMP-483"),
-        ("parent", "IMP-483"),
+        ("question", "cannot clear"),
+        ("needs", "cannot clear"),
+        ("parent", "cannot clear"),
     ] {
         let stderr = fixture.refuse(&fixture.payload(
             &format!("propose-null-{key}"),

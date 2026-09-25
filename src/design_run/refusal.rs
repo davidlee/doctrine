@@ -956,7 +956,7 @@ impl fmt::Display for Refusal {
             Refusal::ProposalCannotClear { subject, key } => write!(
                 f,
                 "a delegated proposal sends `{key}: null` at {subject} — a proposal cannot \
-                 clear a field yet (IMP-483): omit the key, or let the coordinator clear it \
+                 clear a field yet: omit the key, or let the coordinator clear it \
                  by a direct declaration"
             ),
             Refusal::ActAdmissionInvalid { act, causes } => write!(

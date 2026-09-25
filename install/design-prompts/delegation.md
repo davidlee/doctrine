@@ -16,4 +16,4 @@ Hand one bounded obligation out; stay the sole writer.
   objected to. Delegates contribute answers, not run-level writes.
 - A proposal's declarations are checked when proposed, against the rules a
   direct declaration meets — a new node still owes its `blocking` judgement. A
-  proposal cannot clear a field yet: any `null` in it is refused (IMP-483).
+  proposal cannot clear a field yet: any `null` in it is refused.
