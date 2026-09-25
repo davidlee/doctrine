@@ -24,3 +24,9 @@ node. Amended rule:
 
 Also from VH-1: the legend paints its marks and provenance letters as the
 nodes do.
+
+
+Also from VH-1 (user: "let's give the cursor and pinned signifiers a colour
+too. cursor = same as the open sigil; pinned = .. magenta"): the cursor suffix
+takes the open mark's colour (bold); `pinned` is magenta. Legibility verdict:
+"legible".
