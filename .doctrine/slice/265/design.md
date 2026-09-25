@@ -298,8 +298,12 @@ is the code phase's test. At reconcile the requirement flips `pending → active
 with its `Verified` cell already in hand.
 
 The slice's authored deliverable (the `REV` entity and
-`.doctrine/spec/tech/013/**`) has no `src/` selector and reports as `undeclared`
-in slice conformance — expected, disposed `aligned`.
+`.doctrine/spec/tech/013/**`) is covered by the declared design-target globs
+`.doctrine/revision/**` and `.doctrine/spec/tech/013/**`, so it reports
+**conformant**. The requirement subtree carries its own selector
+(`.doctrine/requirement/**`, added at reconcile, `RV-387` `F-1`); the paths that
+remain undeclared are the slice's own bookkeeping (`.doctrine/slice/265/coverage.toml`,
+`slice-265.toml`) — expected, disposed `aligned` (`RV-387` `F-2`, `F-3`).
 
 <!-- doctrine:section sec-6 -->
 ## Code impact

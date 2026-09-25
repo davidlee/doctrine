@@ -62,6 +62,10 @@ intent = "design-target"
 selector = "tests/e2e_claude_install.rs"
 intent = "design-target"
 
+[[selector]]
+selector = ".doctrine/requirement/**"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"
