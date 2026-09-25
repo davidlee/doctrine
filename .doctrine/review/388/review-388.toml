@@ -8,6 +8,7 @@ title = "design review of SL-266"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+concluded = true
 
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-266"
@@ -95,7 +96,7 @@ response = "sec-4/sec-6: design::dispatch gains the resolved colour (as observat
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Design config errors will break unrelated commands"
 detail = "SL-266 sec-5 adds a closed DesignConfig directly to DoctrineToml and says an unknown map_delivery fails load_doctrine_toml. src/dtoml.rs:23-44 and :89-94 show this is the shared eager parser, called by review, slice, spec, install and dispatch commands, so a typo in a display preference can make unrelated operations fail. Preserve the DEC-309 parse error when design delivery is used, but isolate validation of this area from unrelated consumers; include a regression test that an unrelated command still reads its own config with an invalid design value."
@@ -185,7 +186,7 @@ response = "Moot after F-11: adopt no longer emits a relay line. The class (rela
 
 [[finding]]
 id = "F-20"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Misspelled design delivery key silently selects relay"
 detail = '.doctrine/slice/266/design.md:315-328 defines DesignConfig with #[serde(default)] map_delivery: Option<String> but no unknown-field check, and the resolver defaults an absent field to Relay. A config spelling such as [design] map_delviery = "sidecar" is accepted by derived deserialization as an unknown field, leaves map_delivery absent, and silently enables relay even though the operator requested sidecar (STD-003). Adding deny_unknown_fields to this shared struct would reintroduce the unrelated-reader failure in F-10; keep the raw design table in the shared parse and validate its keys and value type in the design-only resolver. Add a misspelled-key test for a design write and an unrelated reader.'

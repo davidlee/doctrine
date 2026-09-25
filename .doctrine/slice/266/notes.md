@@ -30,9 +30,18 @@ X-/F- labels.
   structs — implementation waits for it. Prune/defer carry no reason (F4);
   out of scope.
 
+## Further review (2026-09-26, after RV-388 concluded)
+
+No further pass needed. RV-388 ran three raiser rounds (codex): 20 findings,
+all verified, round 3 raised nothing new. The round-2/3 edits (wrapping,
+relay scope, run-selection wording, lazy `[design]` config) were each
+re-verified by the raiser. What remains unproven is implementation-level
+(wrap goldens, config refusals) and is pinned by VT-7, VT-10 and VT-12, which
+the implementation review and audit will exercise.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · design reviewing (run rev 36) · 82e2c6287
+fresh-as-of: 2026-09-26 · design reviewing (run rev 45) · d805bef48
 
 ### Produced
 
@@ -43,8 +52,11 @@ fresh-as-of: 2026-09-25 · design reviewing (run rev 36) · 82e2c6287
 ### Learned
 
 - Observations recorded (design-run payload friction, pi agents outside jail,
-  boot resolve `--role`): `.doctrine/observations/records/` 03, 94, 97, c6.
+  boot resolve `--role`): `.doctrine/observations/records/` 03, 94, 97, c6;
+  round 2: 71 (section-body trailing newline), db (shared binary broken by a
+  concurrent agent's red build).
 
 ### Open
 
-- RV-388 — raiser verification pass (codex, run by the user) in flight.
+- User gates: section-reviewed sec-1..sec-8, review-disposed (RV-388
+  conducted), design-accepted.
