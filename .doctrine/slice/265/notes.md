@@ -100,12 +100,31 @@ in-session findings):
 pre-integration section set); the human section attestations at lock cover the
 final content.
 
+### Repair pass and lock (2026-09-25)
+
+`F-16`–`F-22`, `F-24` verified; `F-20`→`F-25`, `F-23`→`F-26` rework, `F-27` new,
+`F-28` new. Repaired across `sec-2`/`sec-7`/`sec-8`, `DEC-295`/`DEC-296`/`DEC-298`
+and `slice-265.md`: the router ASCII-uppercases the prefix unconditionally, and
+the equivalence is scoped to **prefixed** refs (a bare id resolves across kinds
+and refuses as ambiguous). `RV-384` concluded with `F-1`, `F-2`, `F-5`, `F-13`
+left `answered` for `/plan` (instrument-routed `route:control`); the eight
+sections attested and `design-accepted`. Design run **locked at revision 36**.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-25 · locked (revision 36) · 73895ec9d
 
 ### Produced
 
+- `SL-265` design locked; slice advanced to `plan`.
+
 ### Learned
 
+- The per-kind ref parsers do not share a prefix case rule (`listing::parse_ref`
+  two literal cases; `knowledge`/`backlog` uppercase; `spec` case-sensitive) —
+  `RV-384` `F-25`.
+
 ### Open
+
+- `/plan`: transcribe the `route:control` criteria (`F-1`, `F-2`, `F-5`, `F-13`)
+  onto phases; then implement.

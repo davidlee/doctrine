@@ -1,0 +1,50 @@
+memory_uid = "mem_01a0d809d1777191b3bfebe50de545ce"
+memory_key = "mem.fact.cli.ref-parser-case-heterogeneity"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Per-kind ref parsers do not share a prefix case rule"
+summary = "listing::parse_ref strips two literal cases; knowledge/backlog uppercase; spec is case-sensitive"
+created = "2026-09-25"
+updated = "2026-09-25"
+
+[scope]
+paths = ["src/kinds/resolve.rs", "src/listing.rs", "src/knowledge.rs", "src/backlog.rs", "src/spec.rs"]
+globs = []
+commands = []
+tags = ["cli", "parsing", "refs", "case", "routing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "0546714855e2d0ae75bd70b5719e02d90d25e165"
+ref_name = "refs/heads/edge"
+checkout_state_id = "4b69b741ee98e37a16c1c781125ccf8f77beb3374cb36df2bfac758ec94e159d"
+base_commit = "73895ec9d53ab91a4b6ac83c203c3dca1b95d2cf"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019f20c604b67f42a6a305230456c91b"
+
+[[relation]]
+label = "related"
+target = "mem_019f20e37e4d7cf2911f9e3937c76afb"
+

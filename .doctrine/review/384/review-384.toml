@@ -184,7 +184,7 @@ response = "Fixed. Route::Knowledge and Route::Backlog are unit variants: knowle
 
 [[finding]]
 id = "F-20"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The equivalence claim is unconditional but the router accepts fewer refs"
 detail = "sec-1 states doctrine show REF ≡ doctrine <kind> show REF. Every per-kind parser accepts a lowercase prefix (listing::parse_ref strips PREFIX- or prefix-; knowledge::resolve_ref uppercases), but parse_canonical_ref looks up the prefix verbatim, so doctrine show dec-031 refuses with unknown kind prefix while doctrine knowledge show dec-031 succeeds. Repair: either state the domain (the equivalence holds over canonical-case refs; the router refuses others with the resolver error) or uppercase the prefix before resolving. Stating it is cheaper; either way sec-1 and DEC-295 should not claim unconditional equivalence."
@@ -211,7 +211,7 @@ response = """Fixed as fact, verified against the code rather than deferred. cov
 
 [[finding]]
 id = "F-23"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "DEC-296 and DEC-298 still cite ALL_KINDS after F-1"
 detail = 'The F-1 amendment reached DEC-298s choice facet only. DEC-298 title ("plus an ALL_KINDS test") and body ("covers all 24 ALL_KINDS rows ... a test asserts every ALL_KINDS row routes") contradict it; DEC-296 choice and body define the address scope as kinds::ALL_KINDS. The design (sec-2, sec-3) says KINDS. Repair: amend both records to KINDS.'
@@ -229,7 +229,7 @@ response = "Fixed. route() matches on the named prefix constants kinds already e
 
 [[finding]]
 id = "F-25"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "F-20 repair: the case rule rests on a false premise and its VT contradicts the equivalence"
 detail = "sec-2 says the per-kind parsers share listing::parse_ref two-literal-case rule and the router mirrors it; sec-7 adds a VT that Dec-031 is refused; sec-8 says mixed-case refusal is the per-kind parsers behaviour too. The parsers disagree. knowledge::resolve_ref (src/knowledge.rs:1937) and backlog parse_ref (src/backlog.rs:1656) uppercase the prefix, so they are fully case-insensitive: doctrine knowledge show Dec-031 succeeds, and the designed router refuses it. That breaks the central equivalence for 12 of 24 prefixes, and the new VT asserts the break. In the other direction, spec::resolve_spec_ref (src/spec.rs:1232) is case-sensitive, so doctrine spec show spec-013 refuses while the router accepts it. Only the listing::parse_ref kinds (slice, governance spine, rec, review, revision, concept-map) follow the two-literal rule. Repair (simpler than the current rule): ASCII-uppercase the prefix unconditionally before resolving. The router then accepts every ref any kind accepts, plus a few a strict kind refuses. State the property as: for every ref the kind own show accepts, the output is byte-identical. Drop the mixed-case refusal VT and the sec-8 residual."
@@ -238,7 +238,7 @@ response = "Two accounts of one fact disagreed: the design's claim that every pe
 
 [[finding]]
 id = "F-26"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "F-23 repair incomplete: DEC-296 and DEC-298 bodies still say ALL_KINDS and debug_assert"
 detail = 'The facets were amended; the prose bodies were not. DEC-296 body: "The router accepts the 24 numbered canonical prefixes in kinds::ALL_KINDS." DEC-298 body: "covers all 24 ALL_KINDS rows with a debug_assert!(false) wildcard ... a test asserts every ALL_KINDS row routes", which now contradicts both F-1 and F-16. The F-23 response said only the amendment note retains ALL_KINDS; doctrine knowledge show shows otherwise. DEC-298 slug still reads plus-an-all-kinds-test (identity, fine to leave). Repair: rewrite both body paragraphs.'
@@ -247,12 +247,21 @@ response = "The contest is correct: only the facets were amended. Both prose bod
 
 [[finding]]
 id = "F-27"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Two soft spots left in sec-7"
 detail = 'The equivalence paragraph keeps "(the review checked every prefix has a fixture)", which is review history, not verification; the new same-binary sentence makes it redundant. And the guidance VA hands the phase a choice ("either extend that test to the guardrail paragraph or record that it is knowingly unguarded"). The design should make that call; extending the parser from the core-process paragraph to the Guardrails sentence is small, and an unguarded command name in every boot snapshot is the failure mode the test exists to stop.'
 disposition = "fix-now"
 response = "Both soft spots are closed and the design now decides. The equivalence paragraph drops the review-history clause (the review checked every prefix has a fixture) - the same-binary sentence already states the fixture source and selection. For the guardrail, sec-7's guidance VA now has the phase extend every_command_named_by_core_process_is_accepted_by_the_binary with a guardrails_paragraph sibling to its core_process_paragraph, so the router named in the boot guardrail is executed rather than recorded as knowingly unguarded."
+
+[[finding]]
+id = "F-28"
+status = "verified"
+severity = "minor"
+title = "The restated equivalence property has a bare-id counterexample"
+detail = 'sec-2, sec-7, DEC-295 and slice objective 1 now state: for every ref a kind own show accepts, doctrine show emits the same bytes. A bare id falsifies it. The listing::parse_ref kinds accept a bare id against their own namespace (doctrine slice show 31 → SL-031), while the router resolves a bare id across all KINDS and refuses when more than one kind has id 031, which in this corpus is the usual case. The router is right to do that (DEC-297); the stated domain is what is wrong. Repair: qualify the property to prefixed refs, e.g. "for every prefixed ref a kind own show accepts", and note that a bare id resolves across kinds and so may be refused as ambiguous where the kind-scoped verb accepts it.'
+disposition = "fix-now"
+response = """Correct, and verified against kinds::parse_resolvable_ref: a bare id scans every KINDS row and refuses when more than one matches, while a per-kind show parses the id inside its own namespace. The property is now scoped to prefixed refs: "for every prefixed ref a kind's own show accepts, doctrine show emits the same bytes", with a clause stating that a bare id is a router convenience - it resolves only when exactly one kind holds it and otherwise refuses as ambiguous, which is DEC-297's contract where the per-kind verb would have accepted it. Landed in sec-2's Case paragraph, sec-7's byte-equivalence VT, DEC-295's body, and slice-265.md's objective 1 and equivalence VT. The ambiguous-bare-id refusal already stays in the refusals VT."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
