@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d91c-be49-7103-bb2c-f057f8b428c1"
+recorded_at = "2026-09-25T15:08:54.729391882Z"
+kind = "friction"
+summary = "[execute; SL-266 PHASE-02] design gap: envelope lacks canonical slice ref the tree header/footer need"
+detail = "Locked design sec-3 shows SL-266 in header/footer and EX-1 says renderer reads only envelope+style, but TurnEnvelope carries only run.slice:u32 and the design_run leaf cannot reach crate::kinds to format it. project() receives slice_ref but only the divergence row keeps it. Surfaced to user mid-phase."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

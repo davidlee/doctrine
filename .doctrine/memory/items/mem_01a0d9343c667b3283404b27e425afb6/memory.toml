@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0d9343c667b3283404b27e425afb6"
+memory_key = "mem.pattern.render.textwrap-no-hyphenation-for-ids"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "textwrap splits at hyphens by default — use NoHyphenation for ids"
+summary = "textwrap's default HyphenSplitter breaks words at existing hyphens; break_words(false) alone does not stop it"
+created = "2026-09-25"
+updated = "2026-09-25"
+
+[scope]
+paths = ["src/design_run/render/tree.rs"]
+globs = []
+commands = []
+tags = ["render", "textwrap", "wrapping"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c7b181d8de6fca8a44fdb80fedf215a4484e29a5"
+ref_name = "refs/heads/edge"
+checkout_state_id = "6e35e55e6ad3391127fc5e215c46f3e212f6f43933f6a7f25bea8de782a49af6"
+base_commit = "d7f49ae0a076567683aba5a13a7d1691a85facc6"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "commit"
+ref = "a51c614bb"
+

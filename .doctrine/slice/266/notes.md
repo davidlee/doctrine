@@ -63,7 +63,7 @@ the implementation review and audit will exercise.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · PHASE-01 landed, gated, verified · 3e55c758b
+fresh-as-of: 2026-09-26 · PHASE-02 completed, gated, VT-1..6 pass, VH-1 accepted · d7f49ae0a
 
 ### Produced
 
@@ -71,6 +71,9 @@ fresh-as-of: 2026-09-26 · PHASE-01 landed, gated, verified · 3e55c758b
 - SL-266 PHASE-01, landed as `3e55c758b` (merge of `3ba03030e` — `unsettled_needs`
   + the `blockers()` sweep — and `3e745780f` — the `Full`-only whole-map envelope
   field with `project`'s `titles`/`selection`)
+- SL-266 PHASE-02 on edge: `a51c614bb`, `d4c6f8ba9`, `78d8e0b44`, `c47451f1a`
+  (renderer; VH-1 amendments; `TurnEnvelope.slice_ref`); DEC-307 amended
+  (`4362c2516`, `cf02f2735`)
 
 ### Learned
 
@@ -84,11 +87,17 @@ fresh-as-of: 2026-09-26 · PHASE-01 landed, gated, verified · 3e55c758b
 - A solo phase's boundary is never auto-recorded: `land`'s merge commit is
   rejected as `code_end` (non-merge required), so `slice record-delta` is the
   *normal* route for solo, not an escape hatch.
+- `mem.pattern.render.textwrap-no-hyphenation-for-ids`; observation `c1`
+  (envelope lacked a canonical slice ref)
+- `mem.pattern.design-run.leaf-rule-binds-tests` bit: no `crate::` in
+  `design_run` tests either (strip-ansi spelled locally in `tree.rs`)
 
 ### Open
 
 - ~~`MapAnswer::Record.form` rendered by neither surface~~ — settled at
   PHASE-02: `json --full` carries it; no model change.
+- `design.md` sec-3 rule 2 still states the rail-less drop — reconcile to
+  DEC-307's amendment.
 - PHASE-04's relay line must reuse the tree's `TREE_COMMAND` (widen to
   `pub(crate)`), not re-spell `doctrine design tree` (STD-001).
 - `src/design_run/tests.rs` is a PHASE-04 `VT-1` test_file and currently reads
