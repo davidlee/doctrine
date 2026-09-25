@@ -246,9 +246,23 @@ verified against source during design.
   passed; all twelve `e2e_design_*` binaries green. `doctrine slice selector doctor 264`
   reports four **pre-existing** redundant selectors subsumed by `src/design_run/**` (advisory).
 
+## Wrinkle for `/audit` — PHASE-01 has no boundary row
+
+`.doctrine/state/slice/264/boundaries.toml` holds rows for PHASE-02..05 only. While
+finishing PHASE-05 I accidentally re-issued `slice phase 264 PHASE-01 --status planned`
+and then restored it to `completed`; the runtime status write cleared PHASE-01's
+`code_start_oid`, and re-completing it reported *"phase-binding capture skipped for
+PHASE-01: no code_start_oid stamped"*. The row was **not** hand-written back: the
+boundaries ledger is machine-written disposable state, and a fabricated row would be
+indistinguishable from a real one to a later reader.
+
+PHASE-01's evidence is therefore the commit log, not the ledger: `37d26a5ff` (the
+`needs: null` change) and `e6d0ee9c8` (its notes), i.e. the range
+`6564b2bcc..e6d0ee9c8`. `/audit` should attribute PHASE-01 from those commits.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · PHASE-05 · pending-land
+fresh-as-of: 2026-09-25 · PHASE-05 complete · pending-land
 
 ### Produced
 - RV-385 — re-homed RV-386's seven live findings (F-1..F-7) onto the run's pass; commits f491f490e, 3e5b85e00
