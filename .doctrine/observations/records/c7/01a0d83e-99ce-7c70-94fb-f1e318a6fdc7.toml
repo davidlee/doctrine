@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d83e-99ce-7c70-94fb-f1e318a6fdc7"
+recorded_at = "2026-09-25T11:06:16.398878443Z"
+kind = "friction"
+summary = "design (reviewing): SL-264's adversarial pass ran on a second RV the run's lock gate cannot see (ISS-322 recurrence)"
+detail = "Run dr-01a0d797 minted its pass RV-385 on entry to reviewing at revision 24. The three adversarial passes (18 findings) were conducted on RV-386, opened with review new. The reviewing->locked gate reads only the run's pass RV: review-disposed Conducted refuses any other (ForeignPass), the pass slot cannot be re-pointed (review_pass_plan always Create; no contract key), and pass_stale is a currency lamp, not a gate cause. So RV-386's findings cannot hold the edge; the only admissible routes are Conducted over the empty RV-385 (after review conclude RV-385 - the laundering ISS-322 warns about) or Waived. The envelope's review_pass RV-385 STALE line (ISS-476's fix, landed 2026-09-23) named the pass and the agent opened a second anyway. Recorded as a recurrence data point for ISS-322."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
