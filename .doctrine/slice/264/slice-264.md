@@ -98,7 +98,8 @@ Authoritative list: design `sec-5`. In summary:
   set-identity that ignores additions, or a reach conditional on the *accepted*
   subset. (b) Mint a derived "added since acceptance" row that blocks advance
   without voiding judgement. (b) reads closer to intent — it blocks without
-  retracting — but adds a ninth condition to a table of eight. `/design` decides
+  retracting — but adds a tenth condition to a table of nine *(corrected under
+  `RV-386` `F-18`)*. `/design` decides
   and records why.
 - **OQ-2 — `initial-concerns-recorded` names a set.** It requires the current
   `blocking-set-declared` to be named, so growth re-faces it even under a narrowed
@@ -153,9 +154,10 @@ intent did not:
   the full set, so a node declared blocking moves the user's act and reaches them;
   a node declared non-blocking is free. `R4` closes by construction, against the
   human.
-- `blocking-set-declared`, `ActKind::BlockingSetDeclared` and
-  `Cause::ConfirmationStale` retire; a stored snapshot whose nodes carry no
-  judgement reads the retired act (read-side only, `DEC-059`).
+- `blocking-set-declared` can no longer be written. *(Second pass: its enum
+  variants and `Cause::ConfirmationStale` stay as a legacy read-only class so
+  stored snapshots parse and keep their verdicts — see below.)* A node with no
+  judgement reads the stored set, per node (read-side only, `DEC-059`).
 - `RV-386` `F-1` scopes `DEC-301`'s move rule to **covered** nodes: a node added
   after the accepting act and later moved was never shown, so it does not re-face.
   Recorded as an amendment to `DEC-301` itself and pinned by `VT-4`.
@@ -164,7 +166,11 @@ intent did not:
   also compares the full blocking set. The legacy act stays in its enums so
   stored snapshots parse, and the fallback is per node, so a partly-judged run
   keeps its unjudged blockers. `blocking` is one key with two homes; import seeds
-  `blocking: true`; the change log reads the gate's predicate. `DEC-121`'s
+  `blocking: true`; the change log reads the gate's predicate. *(Third pass,
+  `F-15`–`F-18`: the review compares blocking marks regardless of lifecycle;
+  legacy act kinds are a named read-only class, refused at write and excluded
+  from the change log; `blocking` parses as `Sparse<bool>` and the contract
+  renders it per home; the condition table keeps nine rows.)* `DEC-121`'s
   two-act letter is amended explicitly — both actors' judgements remain.
 - **R1 — loosening invalidation is a truthfulness change.** `RFC-031` T1 was about
   the exit signal telling the truth; making a condition stop re-deriving is the
@@ -182,7 +188,8 @@ intent did not:
   kept adding to it during inquiry. Growth is permitted and exercised; the
   disincentive is cost, not refusal.
 - **R4 — the guard is coupled** *(found in the pre-design research round, and it
-  narrows `OQ-1`)*. `blocking-inquiries-dispositioned` quantifies over the
+  narrows `OQ-1`; historical — the declared set it describes is retired by
+  `DEC-302`, and `R4` is now closed by the derived node judgements)*. `blocking-inquiries-dispositioned` quantifies over the
   **declared** blocking set, and its own doc comment says a declaration whose map
   has moved *"goes stale there rather than being silently re-read here"*
   (`src/design_run/gate.rs`, above `blocking_inquiries_open`). So the derived

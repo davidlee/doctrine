@@ -56,10 +56,13 @@ act moves — and differ only in the `Coverage` their rule names:
 
 - **Material, over carried keys.** A key the act never covered cannot be a change to what
   it covered. A covered node whose material moved is stale; an uncovered node is not.
-- **Blocking membership, over the full set** — `ReviewedGraph` only. The ids whose
-  *effective* judgement is blocking (`sec-3`) are compared in full, because a *new*
-  blocking node is exactly the event that must reach the user. A key absent from the
-  carried map reads as not blocking, so a new non-blocking node is no change.
+- **Blocking marks, over the full set** — `ReviewedGraph` only. The ids whose
+  *effective* judgement is blocking (`sec-3`) are compared in full, **whatever their
+  lifecycle**, because a *new* blocking node is exactly the event that must reach the
+  user. A key absent from the carried map reads as not blocking, so a new non-blocking
+  node is no change. Lifecycle is excluded on purpose (`RV-386` `F-15`): resolving a
+  covered blocker is progress, not a change to what was seen, and resolving a *new*
+  blocker before the next edge must not quietly restore the old set and revive the act.
 
 Why sufficiency does not take the second projection: the user who sees a new blocking
 question is re-faced by `initial-concerns-recorded`, which is cumulative and so already
@@ -109,14 +112,19 @@ marked"*. The act is the inconsistency, not the map (`DEC-302`).
 - On the wire, **required on creation**, optional on update (omission persists, a value
   replaces). A creation that omits it is refused, and so is `null` in either state: a
   judgement can be changed but not withdrawn, and silently reading `null` as omission is
-  `SL-259`'s disease.
+  `SL-259`'s disease. The wire field is therefore `Sparse<bool>`, not `Option<bool>`, so
+  absence and `null` stay distinct through parsing (`RV-386` `F-9`); the finding home
+  reads `Null` exactly as it reads absence today, unchanged (`ISS-482`).
 - **One key, two homes** (`RV-386` `F-9`). `blocking` is already a finding key —
   create-only, absent reads non-blocking. The wire-key table holds one home per key today,
   so `inert_key` would refuse it at an inquiry. The table gains a key with more than one
   home, each row pairing a kind with its own state rule: `Finding` × `Only(Absent)`,
   unchanged, and `Inquiry` × `EitherState`, required at `Absent`. The kind axis refuses
-  only when **no** row for the key names the subject's kind. `design contract` renders
-  both homes. The finding's `null`-reads-as-absent is the same disease on the older home;
+  only when **no** row for the key names the subject's kind. The payload contract's
+  `KeyContract` gains the home it applies at, so the `blocking` key is two rows — `finding`:
+  optional, create-only; `inquiry`: required at create, optional at update, `null` refused —
+  and `design contract` renders each under its kind rather than one unqualified optional
+  key. The finding's `null`-reads-as-absent is the same disease on the older home;
   it is captured as follow-up work, not fixed here.
 - Stored as `Option<bool>` with `serde(default)`. `None` means **unjudged**, and only a
   node that predates this change can hold it (`sec-3` *Compatibility*).
@@ -141,11 +149,16 @@ check.
 
 **The set derives.** A node's **effective** judgement is its own when it has one, and
 otherwise its membership in the stored legacy set (*Compatibility*, below).
-`blocking_inquiries_open` stops reading a declaration and filters the nodes: effective
-judgement blocking and lifecycle not `Resolved`. `blocking-inquiries-dispositioned` keeps
-its contract (`derived`, `engine(dispositions)`, cumulative) and changes only its source.
-`ReviewedGraph`'s second projection compares the same effective set, so the gate and the
-coverage cannot disagree about which nodes block.
+Two reads share that one judgement and differ only in lifecycle:
+
+- **the marks** — every node whose effective judgement is blocking, any lifecycle. This is
+  what the user reviews and what `ReviewedGraph` compares.
+- **the open blockers** — the marks whose lifecycle is not `Resolved`.
+  `blocking_inquiries_open` returns these; `blocking-inquiries-dispositioned` keeps its
+  contract (`derived`, `engine(dispositions)`, cumulative) and changes only its source.
+
+One judgement function, so the gate and the coverage cannot disagree about which nodes
+block; two sets, so answering a question neither stales the review nor revives it.
 
 **The growth obligation closes without a new condition.** `initial-concerns-recorded`
 becomes a single-act rule — `Attested([GraphReviewed(User)])` with `Coverage::ReviewedGraph`.
@@ -158,7 +171,7 @@ replaces the link is `sec-2`'s second projection:
   stale → the user is asked to see it, tree and blocking marks together.
 
 So a question the agent judges blocking cannot pass unseen — `SL-264`'s `R4` closed by
-construction rather than by a ninth condition (`RV-386` `F-2`). It closes against the
+construction rather than by a new condition (`RV-386` `F-2`). It closes against the
 **user**, not only the agent, which is what `OQ-4`'s "blocking, not a warning" asked for.
 And `DEC-126`'s kind axis is untouched: the condition stays `Attested`, and no
 `EngineSource` or derivation rule is added.
@@ -180,6 +193,25 @@ parser, and the admission fault that checked its node ids goes with it. But
 most stored snapshots hold the act, `AgentAct` derives `Deserialize`, and the
 snapshot is parsed whole — deleting the variant fails the parse before any fallback runs.
 Each is documented as *legacy, read-only*, and no rule requires either.
+
+**Legacy act kinds are a named class, not an accident of the table** (`RV-386` `F-16`,
+`F-17`). Today every `ActKind` is named by exactly one contract row
+(`every_act_kind_is_named_by_exactly_one_contract_row`), and two readers lean on that:
+`admit_and_record` treats a missing rule as unreachable and **stores the record unchecked**,
+and `live_acts` would look a rule up per act. Keeping `BlockingSetDeclared` without a rule
+breaks the invariant, so it is restated with its exception: `ActKind::is_legacy()` names the
+kinds that stay readable but have no rule, and the test becomes *every non-legacy kind is
+named by exactly one row, every legacy kind by none*. Each reader then states its policy:
+
+- **Write** — `admit_and_record`'s `None` arm stops being "unreachable" and **refuses** a
+  legacy kind (`Refusal::RetiredAct`, naming the kind). The variant still deserialises, so
+  without this a submitted `blocking-set-declared` would replace the stored legacy set and
+  move every unjudged node's effective judgement.
+- **Change log** — `live_acts` **excludes** legacy kinds, explicitly and in both the before
+  and the after set. Nothing reads a legacy act's currency: the fallback reads its content
+  whether current or not, exactly as `blocking_inquiries_open` always has. So it can
+  neither die nor be reported dead, and the exclusion is a stated rule, not a skipped
+  record (`STD-003`).
 
 The `confirms` link leaves the **rule** but not the **read**. A stored `graph-reviewed`
 carries the digest of the declaration it confirmed (`CheckpointAct::confirms`). If that
@@ -241,14 +273,14 @@ change. The code was the deviation.
 | path | what changes |
 |---|---|
 | `src/design_run/inquiry.rs` | `InquiryNode` / `NodeMaterial` gain `blocking: Option<bool>` (`serde(default)`, `None` = unjudged legacy), a material member; constructors take the judgement; the effective-judgement read with the legacy set |
-| `src/design_run/run.rs` | `declare_node`'s `blocking` arm — refused when absent on creation or `null`, persisted on omission, replaced on value — and the `NodeBlockingChanged` row on a flip; import's `seed_node` callers pass `blocking: true`; `live_acts` passes each act's rule `Coverage` to `CoveredSet::moved`; the covered-set constructor (`run.rs:841`) builds `Nodes` for `ReviewedGraph` too |
+| `src/design_run/run.rs` | `declare_node`'s `blocking` arm — refused when absent on creation or `null`, persisted on omission, replaced on value — and the `NodeBlockingChanged` row on a flip; `admit_and_record` refuses a legacy act kind; import's `seed_node` callers pass `blocking: true`; `live_acts` passes each act's rule `Coverage` to `CoveredSet::moved` and excludes legacy kinds; the covered-set constructor (`run.rs:841`) builds `Nodes` for `ReviewedGraph` too |
 | `src/design_run/change_log.rs` | `ChangeEvent::NodeBlockingChanged`, emittable and driven by the fixture ladder (`REQ-478`) |
-| `src/design_run/gate.rs` | `Coverage::ReviewedGraph`; `coverage_moved` reads through `CoveredSet::moved`; `initial-concerns-recorded` becomes a single-act rule over `ReviewedGraph`; `blocking_inquiries_open` derives from effective judgements; the `confirms` requirement leaves the rule while a stored `confirms` digest is still read, frozen, through `Cause::ConfirmationStale`; `ActKind::BlockingSetDeclared` stays, legacy read-only |
-| `src/design_run/submission.rs` | the `blocking-set-declared` key leaves the parser; the wire-key table admits a key with two homes (`blocking`: `Finding` create-only, `Inquiry` either state) and `inert_key` / the state axis honour every home; `null` refused at the inquiry home |
+| `src/design_run/gate.rs` | `Coverage::ReviewedGraph`; `coverage_moved` reads through `CoveredSet::moved`; `initial-concerns-recorded` becomes a single-act rule over `ReviewedGraph`; the marks / open-blockers reads over one effective judgement; `ActKind::is_legacy()` and the restated one-row-per-kind test; the `confirms` requirement leaves the rule while a stored `confirms` digest is still read, frozen, through `Cause::ConfirmationStale`; `ActKind::BlockingSetDeclared` stays, legacy read-only |
+| `src/design_run/submission.rs` | the `blocking-set-declared` key leaves the parser; `blocking` parses as `Sparse<bool>`; the wire-key table admits a key with two homes (`blocking`: `Finding` create-only, `Inquiry` either state) and `inert_key` / the state axis honour every home; `null` refused at the inquiry home |
 | `src/design_run/attestation.rs` | `CoveredSet::moved` takes a `Coverage` — carried-keys material for `InquiryMap`, plus the full-set effective-blocking comparison for `ReviewedGraph`; `diff` stays for the whole-map `is_current` users; `AgentAct::BlockingSetDeclared` stays, legacy read-only |
 | `src/design_run/admission.rs` | the blocking-set-names-known-nodes fault retires; `coverage_fault` accepts `Nodes` for both `InquiryMap` and `ReviewedGraph` |
 | `src/design_run/tests.rs` | the flipped pin (`stale_conjunct_does_not_satisfy` becomes VT-1), and the new criteria beside it |
-| `src/design_run/payload_contract.rs`, `install/design-payload-contract.md` | the retired act, the new node field and its two-home key |
+| `src/design_run/payload_contract.rs`, `install/design-payload-contract.md` | the retired act, the new node field, and `KeyContract` gaining the home it applies at, so `blocking` renders once per home |
 | `install/design-prompts/conditions/initial-concerns-recorded.md` | the single-act shape, with no separate set declaration to confirm |
 | `install/design-prompts/conditions/blocking-set-current.md` | **not created** — the condition this design first proposed is dropped |
 | `install/design-run-stages.md` | regenerated mirror of the condition table |
@@ -265,7 +297,9 @@ The design-target selectors this section commits to: `src/design_run/**`,
   (`RV-386` `F-6`); a node declared `blocking: true` **does** stale
   `initial-concerns-recorded` (the user is re-faced); a node declared `blocking: false` does
   not; and `blocking-inquiries-dispositioned` still reports unsatisfied for an open node with
-  `blocking = true`. The derived half demonstrably not exempted. The change log agrees with
+  `blocking = true`. The derived half demonstrably not exempted. Lifecycle is not shape
+  (`F-15`): resolving a covered blocker leaves `initial-concerns-recorded` current; adding a
+  blocker after the act and then resolving it before the next edge leaves it **stale**. The change log agrees with
   the gate in each case: an `ActInvalidated` row exactly for the act the gate calls stale,
   and none for a non-blocking addition (`F-13`).
 - **VT-2** — `needs: null` clears and emits one `NeedsRemoved` per removed edge; `null` on an
@@ -276,14 +310,18 @@ The design-target selectors this section commits to: `src/design_run/**`,
 - **VT-4** — a move still re-faces for a **covered** node (re-parenting voids
   `initial-concerns-recorded`); a node added after the act and then re-parented does **not**
   re-face, which is `F-1`'s scoping pinned as behaviour rather than left implicit.
-- **VT-5** — a creation omitting `blocking` is refused, and `blocking: null` is refused in
-  either state; a flipped judgement emits exactly one `NodeBlockingChanged` row; `blocking` is
+- **VT-5** — through the JSON payload path, not a constructed value (`F-9`): a creation
+  omitting `blocking` is refused, and `blocking: null` is refused in either state while an
+  update omitting it persists the prior judgement; `design contract` renders `blocking` under
+  both homes; a flipped judgement emits exactly one `NodeBlockingChanged` row; `blocking` is
   admitted at an inquiry in either state and still create-only at a finding (`F-9`).
 - **VT-6** — legacy compatibility, over a fixture holding a stored `blocking-set-declared`
   act (`F-7`, `F-8`): the snapshot **parses**; with no node judged, the effective set equals
   the stored act's; after judging one *other* node `blocking: false`, every unjudged legacy
   blocker is still open in `blocking-inquiries-dispositioned` (the mixed regime); and no
-  condition's verdict differs from the pre-change binary's on read **except** an act stale only
+  a submitted `blocking-set-declared` is refused (`RetiredAct`) and the stored set is
+  unchanged (`F-16`); a map edit on the snapshot produces no row for the legacy act
+  (`F-17`); no condition's verdict differs from the pre-change binary's on read **except** an act stale only
   by an addition, which now reads current — the slice's intended change; a stored
   `graph-reviewed` already `ConfirmationStale` stays stale. A negative control
   deletes the variant and asserts the parse fails, so the criterion can see the defect.
@@ -316,8 +354,10 @@ The design-target selectors this section commits to: `src/design_run/**`,
 - **`F-1`'s scoping is a deliberate narrowing.** A node added after the accepting act and
   then moved or re-worded does not re-face the human. That is the coherent reading: the act
   was never shown that node. It is pinned by VT-4 so it cannot drift silently.
-- **The condition table loses a row rather than gaining one**, and `blocking-set-current` —
-  the ninth condition the earlier draft proposed — is not built.
+- **The condition table keeps its nine rows** (`RV-386` `F-18`). What shrinks is
+  `initial-concerns-recorded`'s act list, from two requirements to one — a change inside a
+  row, not a lost row. `blocking-set-current`, the tenth condition the earlier draft
+  proposed, is not built.
 - **Deferred, by name.** Backward cascade (`IMP-386`, gated on `QUE-218`); surfacing the map
   (`ISS-299`); the derived traversal cursor (`IMP-389`); the requirement-tier statement of the
   map's dynamic mode (`IMP-471`); and whether a traversal-only apply owes a change row

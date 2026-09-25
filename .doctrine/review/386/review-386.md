@@ -112,3 +112,74 @@ verified finding. Recorded as a friction observation rather than hand-edited.
 **Correction.** `F-7`'s response says 21 of 22 snapshots hold the act; the
 kebab-token count is 20, as the raiser said. The design no longer pins either
 count — a census of gitignored runtime state does not belong in authored prose.
+
+## Third pass (2026-09-25)
+
+Read the repairs in commits `0dca75b6f` and `c2bd07a6d` against the current
+design, accepted `DEC-300`/`DEC-301`/`DEC-302`/`DEC-121`/`DEC-126`, the ten
+design-run modules named in the review request, and the stored run snapshots.
+The current snapshot set has 22 files; 20 hold `BlockingSetDeclared`. Normal
+recording replaces declarations by act kind (`snapshot.rs:470-490`), so the
+multiple declaration records in a run are different kinds, not competing
+blocking sets. All observed stored `graph-reviewed` confirmation digests match
+their corresponding declaration fingerprint; the stale-digest case still needs
+the fixture in `VT-6`.
+
+| finding | third-pass verdict | evidence |
+| --- | --- | --- |
+| `F-1` | Substance resolved; ledger remains `verified` | The accepted `DEC-301` choice and consequences now scope re-attestation to covered nodes. `design.md:14-20,276-278` agrees. No reopening verb exists; no TOML hand edit. |
+| `F-6` | Verified | `design.md:48-70` gives sufficiency `InquiryMap` over carried material and concerns `ReviewedGraph` with full blocking membership. The two cumulative rows are distinct at `gate.rs:585-634`. `F-15` attacks the new projection, not this split. |
+| `F-7` | Verified | `design.md:176-193` retains the deserialised legacy variants and `ConfirmationStale`, allowing the stored snapshots to parse. `F-16` addresses the separate write boundary this creates. |
+| `F-8` | Verified | `design.md:195-203` resolves `Some(bool)` first, then the legacy set per unjudged node, preserving the open blockers in the `SL-252` snapshot after another node is judged. |
+| `F-9` | Contested | The two kind/state rows in `design.md:113-120` solve admission of a value, but `payload_contract.rs:1398-1402` has one unqualified optional key and no way to render both homes; `submission.rs:168-171,521-524` still collapses `blocking: null` and omission into `Option::None` on an inquiry update. The repair specifies neither a context-aware contract representation nor a lossless wire read for the promised null refusal. |
+| `F-10` | Verified | `design.md:132-140` seeds both import routes in `run.rs:1058-1101` with `blocking: true`, through constructors that require a judgement. |
+| `F-11` | Contested | The revised slice still says `ActKind::BlockingSetDeclared` and `Cause::ConfirmationStale` retire at `slice-264.md:156-158`, then says the opposite at `:162-165`; its `R4` discussion at `:184-190` still explains the retired declared-set guard as current. |
+| `F-12` | Contested | The accepted facets and consequences were amended, but `record-300.md:1` still says the derived re-declaration condition is required and `record-301.md:1` still states an unscoped move rule. `knowledge show` publishes these contradictory lines beside the accepted amendments. |
+| `F-13` | Verified | `design.md:72-79,244-248` routes active acts through rule-specific `CoveredSet::moved`, so the gate and change log can agree for non-blocking additions. `F-17` addresses stored legacy acts that have no rule to look up. |
+| `F-14` | Verified | `DEC-121`'s accepted choice and dated amendment now authorize one recorded user act with the agent's per-node judgement; `DEC-126` has the matching amendment. `design.md:166-174` states the departure explicitly. |
+
+New findings on the repair: `F-15` (blocker, resolved blockers make
+`ReviewedGraph` stale and can revive an unseen addition), `F-16` (blocker,
+legacy blocking-set act remains writable), `F-17` (major, rule-based
+`live_acts` has no coverage for a legacy declaration), and `F-18` (minor,
+condition-row count contradicts the generated table). Their fixed details and
+failure paths are in the ledger.
+
+The carried confirmation check can be deterministic without another shell
+digest: `CheckpointAct::confirms` and `AgentDeclaration::fingerprint` are stored
+values (`attestation.rs:646-679`), while `DerivedInput.declaration_fingerprint`
+is needed only when writing a declaration (`run.rs:160-169,584-607`). A stale
+legacy confirmation stays stale until a new `GraphReviewed` replaces it; the
+new single-act rule records no confirmation (`run.rs:654-670`). The old
+confirmation also detects a legacy-set change made after an old act, whereas a
+matching stored fingerprint permits the per-node fallback to use the current
+set. `VT-6` needs its stated stale-digest fixture to pin that read.
+
+The other named criteria have useful failure signals: `VT-1` distinguishes the
+two coverage rules and the derived open-blocker check but misses `F-15`'s
+add-then-resolve sequence; `VT-2` tests clearing and per-edge rows; `VT-3`
+pins the old result before it flips; `VT-4` distinguishes covered from late
+node moves; `VT-5` will expose the null-refusal gap if exercised through JSON;
+`VT-6` covers parse and mixed legacy fallback but not the new write boundary;
+`VT-7` covers both import creation routes. A covered resolved node whose
+`blocking` mark is flipped also re-faces the user. That is an acceptable cost
+of changing material the user reviewed (`design.md:123-129`), distinct from the
+ordinary lifecycle transition in `F-15`.
+
+## Response to the third pass (2026-09-25)
+
+All seven points accepted on evidence and answered on the ledger.
+
+- **`F-15`.** One effective judgement, two reads: the *marks* (any lifecycle),
+  which `ReviewedGraph` compares, and the *open blockers*, which the derived
+  row counts. Answering a question neither stales the review nor revives it.
+- **`F-16`, `F-17` — one class.** The design had assumed every `ActKind` has a
+  contract row. Legacy kinds are now named (`ActKind::is_legacy`), the
+  one-row-per-kind test states the exception, the write path refuses them
+  (`RetiredAct`), and `live_acts` excludes them by stated rule.
+- **`F-9`.** `blocking` parses as `Sparse<bool>`; `KeyContract` carries its
+  home, so the contract renders the key once per home.
+- **`F-11`, `F-12`, `F-18`.** Slice document, decision prose and the condition
+  count brought in line (nine rows; the dropped proposal would have been the
+  tenth). The decision-prose edits bring summaries into line with amendments
+  the user already assented to; no new position is recorded.
