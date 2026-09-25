@@ -140,9 +140,42 @@ verified against source during design.
 - Pre-existing and unrelated: `ISS-483`'s `reserve::tests::vt3_auto_degradation_...`
   remains the only red in the unit suite (the jail's `DOCTRINE_RESERVATION_FALLBACK=1`).
 
+## PHASE-03 — legacy act kinds, retired (completed 2026-09-25)
+
+- `ActKind::is_legacy()` names `BlockingSetDeclared` as the single source of the class;
+  the invariant is restated (non-legacy exactly one contract row, legacy none);
+  `admit_and_record`'s `None` arm refuses `Refusal::RetiredAct { kind }` instead of
+  storing unchecked (`RV-386` F-16); `live_acts` excludes legacy kinds in both sets by
+  *stated* rule (`STD-003`); the `blocking-set-declared` key left the contract model;
+  the stored `confirms` digest is now a carried-driven, frozen read. Both goldens
+  regenerated (`install/design-run-stages.md` moved with the rule's remedy line).
+- **The A/B split was wrong, and the plan with it.** Dropping the `BlockingSetDeclared`
+  `ActRequirement` from `initial-concerns-recorded` is entailed by *"legacy kinds have no
+  rule"*, so the rule removal belongs with the class, not with the key's retirement.
+  Doing it in one pass also let the submitting tests be flipped **once**. The plan's
+  `EX-7`/Part-B split ("the class and the retirement land together") is satisfied; the
+  intermediate cut was the error.
+- **`EX-7`/B3 was unnecessary.** `stale_conjunct_does_not_satisfy`'s setup writes the
+  store directly (`run.declarations.record`), never through admission, so the retired
+  key could not break it. Its assertion is **unchanged and green** — the PHASE-04 flip has
+  its pin intact, and the sheet's re-base task is dropped.
+- **CRITICAL for PHASE-04 — a coverage hole the phase opens.** With no writable blocking
+  set and the derived set not yet landed, a submission-produced run reports **no open
+  blockers**: `blocking-inquiries-dispositioned` is trivially satisfied until PHASE-04
+  derives the set from `blocking: true` nodes. `e2e_design_projection`'s
+  `large_run_still_renders` (300 open blockers) was adapted in place with a comment.
+  **PHASE-04 must restore that coverage from node attributes**, and `/audit` should treat
+  the range PHASE-03→PHASE-04 as holding an intentionally trivially-met guard.
+- `ActRequirement.confirms` is now always `None`; the field and its two readers
+  (`confirmation_fault`, `confirmation`) are inert but retained — the design retires the
+  *link*, not the field. `ContentCoverage::covers` was removed as unused.
+- `VT-1` is discharged on the **admission** path; because the key left the contract, no
+  wire submission reaches that arm, so `admit_and_record_refuses_a_legacy_kind_with_no_rule`
+  pins it directly. `VT-4`'s test name does not match the `retired` cargo filter.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · PHASE-02 · pending-land
+fresh-as-of: 2026-09-25 · PHASE-03 · pending-land
 
 ### Produced
 - RV-385 — re-homed RV-386's seven live findings (F-1..F-7) onto the run's pass; commits f491f490e, 3e5b85e00
