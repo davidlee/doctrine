@@ -127,6 +127,7 @@ const PRIOR_JSON: &str = r#"{
     "cursor": null,
     "cursor_stale": false
   },
+  "slice_ref": "SL-233",
   "totals": {
     "nodes": 0,
     "open": 0,

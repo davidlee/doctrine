@@ -206,15 +206,10 @@ pub(crate) fn render(envelope: &TurnEnvelope, style: TreeStyle) -> Vec<String> {
     lines
 }
 
-/// The canonical slice reference this view names.
-fn slice_ref(envelope: &TurnEnvelope) -> String {
-    format!("SL-{:03}", envelope.run.slice)
-}
-
 /// The command that reproduces this view — the footer, so a verbatim relay
 /// teaches the user the command (`DEC-309`).
 fn footer(envelope: &TurnEnvelope) -> String {
-    format!("{TREE_COMMAND} {}", slice_ref(envelope))
+    format!("{TREE_COMMAND} {}", envelope.slice_ref)
 }
 
 /// The header counts and, when the shell chose the run, how (`DEC-305`).
@@ -237,7 +232,7 @@ fn header(envelope: &TurnEnvelope, width: usize) -> Vec<String> {
     let noun = if nodes == 1 { "question" } else { "questions" };
     let mut free = vec![
         [
-            slice_ref(envelope),
+            envelope.slice_ref.clone(),
             envelope.run.stage.to_owned(),
             format!("rev {}", envelope.run.revision),
             format!("{nodes} {noun}: {}", counts.join(", ")),
@@ -942,6 +937,16 @@ doctrine design tree SL-266";
         let mut both = anatomy();
         both.run.cursor = Some("inq-pin".to_owned());
         assert!(line_of(&render(&both, PLAIN), "inq-pin").ends_with("Pin me? ← cursor, pinned"));
+
+        // The slice is named by the shell's canonical ref, never re-formatted.
+        let mut other = anatomy();
+        other.slice_ref = "SL-1234".to_owned();
+        let lines = render(&other, PLAIN);
+        assert!(lines[0].starts_with("SL-1234 · "), "{}", lines[0]);
+        assert_eq!(
+            lines.last().expect("a footer"),
+            "doctrine design tree SL-1234"
+        );
 
         let mut stale = anatomy();
         stale.run.cursor_stale = true;

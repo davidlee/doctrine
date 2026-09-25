@@ -434,6 +434,11 @@ pub(crate) struct TurnEnvelope {
     pub(crate) version: u32,
     pub(crate) detail: Detail,
     pub(crate) run: RunLine,
+    /// The slice's canonical reference, as the shell formats it (`DEC-292`) —
+    /// the leaf cannot format an entity id, and the tree names the slice by it
+    /// (`SL-266` PHASE-02). Additive, so [`TURN_ENVELOPE_VERSION`] holds
+    /// (`DEC-291`).
+    pub(crate) slice_ref: String,
     pub(crate) totals: GlobalTotals,
     /// The run's single outbound forward edge and what it still needs
     /// (DEC-290). Derived on every projection, never stored. `None` only at
@@ -823,6 +828,7 @@ fn assemble(
         schema: TURN_ENVELOPE_SCHEMA,
         version: TURN_ENVELOPE_VERSION,
         detail,
+        slice_ref: slice_ref.to_owned(),
         run: RunLine {
             uid: run.run.uid.clone(),
             slice: run.run.slice,
