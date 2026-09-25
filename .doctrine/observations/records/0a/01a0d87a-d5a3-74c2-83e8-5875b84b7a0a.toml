@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d87a-d5a3-74c2-83e8-5875b84b7a0a"
+recorded_at = "2026-09-25T12:12:03.875910145Z"
+kind = "friction"
+summary = "capsule-driver: one phase exceeded a single worker's 30-min budget and was cut off mid-verification"
+detail = "PHASE-02 of SL-264 (capsule-driver, in-session) spanned six production modules, a new vocabulary variant (Presence::RequiredAtCreation), a regenerated payload-contract golden and ~500 lines of test/fixture churn. The worker completed the implementation, ran cargo fmt, and was cut off by the 1800s timeout on its FIRST verification command ('Command aborted' right after '=== fmt done'). Cost: the worker's hand-back (its decisions, findings and residual risks) was never produced, so the orchestrator recovered decisions by grepping the source and re-ran the whole verification suite — roughly a second verification pass. Skill: capsule-driver. The sizing lesson is in the skill's own idiom: 'charter ~3 phases' at the orchestrator tier, but a phase sized for one worker should be about half of what PHASE-02 turned out to be. Related plan-side cause: plan.toml's PHASE-02 EX list omitted src/design_run/refusal.rs and the InquiryNode::open call sites, so scope was discovered at execution."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
