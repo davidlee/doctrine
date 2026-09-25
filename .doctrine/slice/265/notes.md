@@ -162,38 +162,46 @@ selector commit).
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · PHASE-01 landed (1ca75a00a) · 1/4 phases
+fresh-as-of: 2026-09-25 · PHASE-02 landed (99f3ad4fd) · 2/4 phases
 
 ### Produced
 
 - `SL-265` plan authored (`plan.toml` + `plan.md`) and its runtime sheets
   materialised; `RV-384` closed `done`.
-- `PHASE-01` landed on `dispatch/265`: the `show` router (`src/commands/show.rs`),
+- `PHASE-01` (`1ca75a00a`): the `show` router (`src/commands/show.rs`),
   `Command::Show`, the `explore` family row, `guard.rs` `Read`, census 56→57,
-  `CommonShowArgs::format()` (four inline `--json` sites collapsed).
+  `CommonShowArgs::format()` (four inline `--json` sites collapsed), and the
+  declared `src/commands/mod.rs` selector (`d820791ca`).
+- `PHASE-02` (`99f3ad4fd`): `tests/e2e_show_equivalence.rs` (24 prefixes ×
+  `--format table|json`, both sides the same binary) and
+  `tests/e2e_show_refusals.rs` (unknown prefix / dangling ref / ambiguous bare id).
 
 ### Learned
 
 - The per-kind ref parsers do not share a prefix case rule (`listing::parse_ref`
   two literal cases; `knowledge`/`backlog` uppercase; `spec` case-sensitive) —
   `RV-384` `F-25`.
-- **The import scope belt is the selector set, not the design's prose.** The
-  design's code-impact table names `src/commands/mod.rs` only in prose, so the
-  import refused the delta `undeclared-scope`; the remedy (`doctrine slice
-  selector add SL-265 src/commands/mod.rs`) was applied to the coord branch and
-  the primary. Any file a phase edits must be a declared selector *before* the
-  spawn, not merely named in the design.
+- **The import scope belt is the selector set, not the design's prose.** A file a
+  phase edits must be a declared selector *before* the spawn (PHASE-01 refused
+  `src/commands/mod.rs` `undeclared-scope`; remedy `doctrine slice selector add`).
 - **`doctrine check regression diff` false-halts a persisted env failure.** The
-  failure signature normalises `src/<file>.rs:LINE:COL` but keeps the panic's
-  **thread id** (`(39267)`), so the same pre-existing failure classifies
-  `changed` (a halt) rather than `persistent` (tolerated). Observed on
-  `reserve::tests::vt3_auto_degradation_is_fail_closed_with_explicit_optin`
-  (ambient `DOCTRINE_RESERVATION_FALLBACK=1`), reproduced identically at `B` in
-  the untouched primary tree. Observation
-  `01a0d82d-21cd-7b50-9b95-a3fe859ab25a`.
+  signature normalises `src/<file>.rs:LINE:COL` but keeps the panic's **thread
+  id**, so the same pre-existing failure (`reserve::tests::vt3_auto_degradation…`,
+  ambient `DOCTRINE_RESERVATION_FALLBACK=1`) reads `changed` (halt) instead of
+  `persistent` (tolerated). Reproduced identically at `B` in the untouched
+  primary tree. Observation `01a0d82d-21cd-7b50-9b95-a3fe859ab25a`.
+- **`worktree gc` certifies TRUNK landing, not coord-branch landing.** A fork
+  whose delta landed only on `dispatch/265` refuses a plain reap (`not-landed`);
+  reap with `--superseded-head <B>` (asserts the branch spent at its exact head),
+  never a blind `--force`.
+- All 24 numbered prefixes are **byte-identical** to their kind's own `show` in
+  both formats — the PHASE-01 delegation table is faithful; PHASE-02 needed no
+  router repair.
 
 ### Open
 
-- `/phase-plan` `PHASE-02` (equivalence + refusals e2e), then drive it. Note the
-  learned item above: PHASE-02's `tests/e2e_show_equivalence.rs` /
-  `tests/e2e_show_refusals.rs` are already declared selectors (`tests/e2e_show*.rs`).
+- `/phase-plan` `PHASE-03` (guidance: `install/using-doctrine.md`,
+  `install/routing-process.md`, `doctrine boot`, the `guardrails_paragraph` test),
+  then `PHASE-04` (governance: `REV` + `FR-006` + check-bound coverage +
+  `spec-013` prose). Order between them is free; both depend only on PHASE-01/02,
+  which have landed.
