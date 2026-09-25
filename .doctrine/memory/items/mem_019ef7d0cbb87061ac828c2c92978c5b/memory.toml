@@ -4,10 +4,10 @@ schema_version = 1
 lifespan = "procedural"
 memory_type = "pattern"
 status = "active"
-title = "Jail id reservation needs DOCTRINE_RESERVATION_FALLBACK"
-summary = "In the jail, entity-creating doctrine commands need DOCTRINE_RESERVATION_FALLBACK=1 (remote reservation unreachable, ssh disabled)"
+title = "Jail id reservation: repo config is local; the env-fallback workaround is retired"
+summary = 'Superseded context: since 2026-07-03 .doctrine/doctrine.toml sets [reservation] reach="local" with allow-local-fallback=true, so id-reserving verbs work in the jail WITHOUT DOCTRINE_RESERVATION_FALLBACK — and the flake no longer exports it (2026-09-25).'
 created = "2026-06-24"
-updated = "2026-06-24"
+updated = "2026-09-25"
 
 [scope]
 paths = []
@@ -32,7 +32,7 @@ normalizer = "forget.checkout.v1"
 [review]
 verification_state = "unverified"
 reviewed = ""
-review_by = ""
+review_by = "2027-03-25"
 
 [trust]
 trust_level = "high"
