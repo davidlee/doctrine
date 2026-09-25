@@ -51,3 +51,18 @@ agreeing with each other and disagreeing with the tree.
 
 Related: [[mem.pattern.design-run.correcting-a-locked-run]] (the in-flight
 protocol this one bounds), [[mem.pattern.doctrine.core-loop]].
+
+
+
+## Observable consequence: the review pass reads STALE
+
+A locked run whose `design.md` reconcile edited out of band reports
+`review_pass RV-NNN STALE — it no longer covers current content`, with a change
+count since the declared baseline. That is **expected**, and it is the normal
+reading of a *completed* slice's run — eleven of the twelve locked runs in the
+corpus read exactly that way (2026-09-25).
+
+So do not diagnose "the invalidation rule is over-broad" from a `STALE` review
+pass on a locked run. The discriminator is the same one as above: a `STALE` pass
+on a run that is still governing is a real invalidation; on a run whose slice is
+at or past reconcile, it is the out-of-band edit. (`RFC-031` state, 2026-09-25.)
