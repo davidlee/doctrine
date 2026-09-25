@@ -28,7 +28,23 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "install/design-run-stages.md"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/gate.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/attestation.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/run.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/tests.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"

@@ -1,0 +1,1 @@
+The inquiry map's two cumulative attested conditions stop treating an addition as a change to what they covered, and a new derived condition requires the map's additions to be re-declared before the run can advance. Reasoning, alternatives rejected and consequences are in the facet; the mechanism is designed in SL-264 and reconciled against DEC-062 by a companion record.

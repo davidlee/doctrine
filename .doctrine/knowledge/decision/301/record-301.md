@@ -1,0 +1,1 @@
+DEC-062's five maintenance operations, mapped against what actually invalidates: pinning, deferring and pruning were always exempt; adding is exempted by DEC-300; moving is not, deliberately. The reading recorded here is what makes the residue a position rather than an oversight.

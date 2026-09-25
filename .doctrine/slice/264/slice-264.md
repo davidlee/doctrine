@@ -100,6 +100,29 @@ rather than a foregone conclusion (see `OQ-1`).
   a warning? `DEC-101` supplies the precedent for a stale discharge that *warns
   without blocking*; `DEC-120` supplies the case against the judgement surviving
   silently.
+
+**Settled in the design run, 2026-09-25** — by `DEC-300` and `DEC-301`:
+
+- `OQ-1` → **both halves, not either.** The two attested rows' map comparison
+  narrows to ignore *additions*, **and** a new derived cumulative condition
+  requires the map's additions to be re-declared before the next edge
+  (`DEC-300`). Narrowing alone was rejected: the derived blocking check quantifies
+  over the *declared* set and relies on the map-moved staleness, so a newly-added
+  blocking question could pass.
+- `OQ-2` → the two mechanisms stay distinct. `CoverageStale` is what narrows;
+  `ConfirmationStale` continues to carry the delta, which is exactly why
+  re-declaring an unchanged set is free and re-declaring a changed one re-shows
+  it.
+- `OQ-3` → the acceptance **survives** a change of shape. Recorded in `DEC-300`,
+  not left implicit.
+- `OQ-4` → **blocking, not a warning.** A warning nobody is made to see is worth
+  nothing (`ISS-299`).
+- `R4` → closed by the derived condition; the guard is preserved deliberately
+  rather than as a side effect.
+- **Governance delta:** `DEC-062`'s *"moving"* is read narrowly — an addition is
+  not a change to what was seen, but a move or a re-word is (`DEC-301`). A
+  `Revision` cannot reach a `DEC`; `REQ-427` was verified not to reach gate
+  attestations, so no REV is owed.
 - **R1 — loosening invalidation is a truthfulness change.** `RFC-031` T1 was about
   the exit signal telling the truth; making a condition stop re-deriving is the
   same class of change in the other direction. A condition that *should* have
