@@ -1,0 +1,112 @@
+# Implementation plan for SL-266 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-266"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order. Ids are PHASE-NN (zero-padded), immutable, never reused. Criterion
+# ids are local to their phase: EN-1 entry, EX-1 exit, VT-n test, VA-n agent,
+# VH-n human. Every VT row carries the structured mandate (test_file + keywords).
+
+[[phase]]
+id        = "PHASE-01"
+name      = "The envelope carries the whole map at Full"
+objective = "Give the turn envelope the whole inquiry map at `Detail::Full` and nothing at `Normal` (design sec-2, DEC-303): `InquiryMap::unsettled_needs` becomes the one blocked derivation; `MapNode` / `MapAnswer` / `TitleLookup` / `RunSelection` / `SkippedSnapshot` join the model; `project` / `project_within` take shell-supplied `titles` and `selection`; `prompt --full` gains the `map` block. Pure layer only — no renderer, no command change beyond passing empty inputs through."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (run dr-01a0d88d-0adf-7a21-b09a-cfe4a9b7b1a7, revision 48) and RV-388 concluded, 20/20 verified. SL-264's per-node `blocking` (`InquiryNode::blocking`, effective judgement) is on edge. Premises re-grepped at plan time: `InquiryMap::is_blocked` (`src/design_run/inquiry.rs`), `envelope::project` / `project_within` / `Detail` (`src/design_run/render/envelope.rs`), `InquiryLifecycle::as_str`, `Provenance::label`." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`InquiryMap::unsettled_needs(id)` returns the open and deferred `needs` targets; `is_blocked` delegates to it; no second blocked derivation exists." },
+  { id = "EX-2", text = "`TurnEnvelope.map` holds every node in `seq` order at `Full` with `blocked_by`, effective `blocking`, and `answer` (record + `TitleLookup`, or note); it is empty at `Normal`. `TurnEnvelope.selection` carries what the shell passes. Both skip serialisation when empty." },
+  { id = "EX-3", text = "Existing callers of `project` / `project_within` pass empty `titles` and `None` selection; `Normal` output of `prompt`, `status` and `json` is byte-identical (existing goldens green unchanged)." },
+  { id = "EX-4", text = "`prompt()` emits the `map` block, one line per node, only when `map` is non-empty." },
+]
+verification = [
+  { id = "VT-1", expects = "design VT-1: map is Full-only; Normal prompt/status unchanged; Full prompt has one map line per node", test_file = "src/design_run/render/envelope.rs", keywords = ["fn map_is_full_only", "MapNode"], waived = false },
+  { id = "VT-2", expects = "design VT-2: unsettled_needs returns open+deferred targets; is_blocked equals its non-emptiness; blocked_by equals it", test_file = "src/design_run/inquiry.rs", keywords = ["fn unsettled_needs", "fn unsettled_needs_is_the_one_blocked_derivation"], waived = false },
+  { id = "VT-3", expects = "design VT-3 (model half): created and adopted dispositions carry the record id and the shell's TitleLookup (Found / NotFound / Unreadable), including a non-DEC record; note forms carry their note", test_file = "src/design_run/render/envelope.rs", keywords = ["fn map_answers_carry_record_and_title_lookup", "TitleLookup::Unreadable"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Pure tree renderer"
+objective = "Add `render/tree.rs`: `render(&TurnEnvelope, TreeStyle) -> Vec<String>` (design sec-3; DEC-306, DEC-307, DEC-308). Line anatomy with marks, provenance letters, blocking `*`, `needs <ids>: <question>` for blocked nodes, cursor/pin suffixes; header counts with the `chosen:` / `skipped` lines; legend and footer from the same constants; placement with the `unplaced` section; node-line and free-line wrapping with no truncation; optional colour."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: `TurnEnvelope.map` and `.selection` exist." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`render/tree.rs` reads only the envelope and the style; every mark, letter, suffix and width constant is a private `TREE_*` constant, and the legend is built from them (STD-001)." },
+  { id = "EX-2", text = "Wrapping follows sec-3 rules 1-4: node text fills beside its prefix, drops to the 8-column indent below 24 free columns; free lines fill to width; words are never split; nothing is truncated." },
+  { id = "EX-3", text = "Rendered node count always equals the header count, including absent-parent and cyclic nodes under `unplaced`." },
+  { id = "EX-4", text = "Colour is additive: with escapes stripped, coloured output equals plain output." },
+]
+verification = [
+  { id = "VT-1", expects = "design VT-3 (text half): Found / NotFound / Unreadable and note forms each render their own right-hand text", test_file = "src/design_run/render/tree.rs", keywords = ["fn title_lookups_render_their_own_text", "record not found", "unreadable:"], waived = false },
+  { id = "VT-2", expects = "design VT-4: anatomy golden — every lifecycle, derived-blocked node showing ids and question, all provenances, blocking, cursor, pin, cursor+pin, stale cursor, header, legend, footer", test_file = "src/design_run/render/tree.rs", keywords = ["fn anatomy_golden", "TREE_BLOCKING_MARK"], waived = false },
+  { id = "VT-3", expects = "design VT-5: a fully resolved header holds counts and no completeness word", test_file = "src/design_run/render/tree.rs", keywords = ["fn header_never_certifies"], waived = false },
+  { id = "VT-4", expects = "design VT-6: absent parent and parent cycle both render every node, terminate, and match the header count", test_file = "src/design_run/render/tree.rs", keywords = ["fn unplaced_nodes_are_rendered_not_dropped", "unplaced"], waived = false },
+  { id = "VT-5", expects = "design VT-7: wrap at 80 with rails; drop indent below 24 free cols; depth 12 at width 40; CJK label; legend wraps between entries; width 16 header/chosen/skipped wrap; every over-width line holds one prefix or word; no ellipsis", test_file = "src/design_run/render/tree.rs", keywords = ["fn wrapping_and_overflow", "TREE_MIN_TEXT_COLS", "TREE_DROP_INDENT"], waived = false },
+  { id = "VT-6", expects = "design VT-8: colour false has no escapes; colour true stripped equals plain", test_file = "src/design_run/render/tree.rs", keywords = ["fn colour_is_additive"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Command surface and run resolution"
+objective = "Wire the read surface (design sec-4; DEC-304, DEC-305): `ShowFormat::Tree` on the envelope partition; `design tree [SLICE]`; resolved colour into `design::dispatch`; `record_titles` via `knowledge::resolve_ref`; `state::design_snapshot_root`; the no-slice scan with pure `select_run` projecting the same parsed snapshot it selected, with `chosen: … open when scanned` and skipped-snapshot disclosure."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: `tree::render` exists." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`design tree SL-N` and `design show SL-N --format tree` produce identical output; `--format tree --json` is refused through `refuse_off_partition`." },
+  { id = "EX-2", text = "`select_run` is pure over (slice, stage, slice status, mtime): excludes locked and done/abandoned, newest mtime, tie → higher slice number; the scan reads each snapshot once and projects the winner's parsed value." },
+  { id = "EX-3", text = "`design_snapshot_path` joins onto `design_snapshot_root`; `STATE_SLICE_DIR` stays private to `state.rs` and no caller outside it spells the path (STD-001)." },
+  { id = "EX-4", text = "`--color` reaches both tree paths; `design::dispatch` takes `color: bool` as `observation::dispatch` does." },
+]
+verification = [
+  { id = "VT-1", expects = "design VT-9: select_run excludes locked and terminal, newest mtime wins, tie by higher slice, reports candidate count, empty → none", test_file = "src/commands/design.rs", keywords = ["fn select_run", "fn select_run_breaks_mtime_ties_by_slice"], waived = false },
+  { id = "VT-2", expects = "design VT-10: tree parity with show --format tree; no-slice picks newest open run with the chosen line; malformed snapshot listed as skipped; none open → refusal naming design tree SL-NNN; --json refused; --color always/never on both paths", test_file = "tests/e2e_design_tree.rs", keywords = ["fn design_tree_matches_show_format_tree", "open when scanned", "skipped "], waived = false },
+  { id = "VA-1", text = "CLI help goldens and the reference docs that list `design` verbs name `design tree` and the `tree` format value." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Delivery: config, map_changed, relay line, prompt text"
+objective = "Deliver the map (design sec-5; DEC-309, DEC-310): `DoctrineToml.design` as a raw `Option<toml::Value>` with the pure `resolve_map_delivery`; pure `design_run::map_changed(prior, next)`; the relay line as the last line of `design apply` and `design start --from-design` output in relay mode; the two mode-neutral prompt-text edits."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: `doctrine design tree SL-NNN` exists for the relay line to name." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The shared `doctrine.toml` parse accepts any well-formed `[design]` entry; `resolve_map_delivery` refuses non-table, unknown key, non-string and unknown string, each naming what is accepted; the key and values are constants (STD-001, STD-003)." },
+  { id = "EX-2", text = "`map_changed` is `prior.map.inquiry != next.map.inquiry`, one pure function; traversal and section-only writes do not count." },
+  { id = "EX-3", text = "In relay mode, `design apply` and `design start --from-design` print the relay line last when the map changed; resumed replays, sidecar mode, adopt and non-map writes do not. Config is resolved before the write." },
+  { id = "EX-4", text = "`inquiry.md` and `initial-concerns-recorded.md` carry the sec-5 wording; SL-264's text in the condition is untouched." },
+]
+verification = [
+  { id = "VT-1", expects = "design VT-11: map_changed true for create, lifecycle, reparent, needs add/remove, blocking flip, reword, checkpoint resolve; false for step discharge, traversal-only, acceptance-only, identical redeclaration", test_file = "src/design_run/tests.rs", keywords = ["fn map_changed_table", "map_changed("], waived = false },
+  { id = "VT-2", expects = "design VT-12: relay line last on map-changing apply and start --from-design; absent on step discharge, replay, adopt, sidecar; each malformed [design] entry refuses apply and start before writing while an unrelated [conduct] read succeeds", test_file = "tests/e2e_design_tree.rs", keywords = ["map changed — before ending this turn", "map_delivery = 42", "sidecar"], waived = false },
+  { id = "VT-3", expects = "resolve_map_delivery unit table: absent → Relay; relay; sidecar; each malformation refused naming the accepted form", test_file = "src/design_run/config.rs", keywords = ["fn resolve_map_delivery", "MAP_DELIVERY_SIDECAR", "MAP_DELIVERY_KEY"], waived = false },
+  { id = "VA-1", text = "design VA-1: both prompt assets carry the sec-5 wording; neither claims the map has no other viewer; neither orders a paste unconditionally." },
+]
+specs        = []
+requirements = []
