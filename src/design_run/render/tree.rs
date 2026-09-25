@@ -136,7 +136,7 @@ impl State {
         }
     }
 
-    fn style(self) -> Style {
+    const fn style(self) -> Style {
         match self {
             State::Resolved => Style::new().green(),
             State::Open => Style::new().cyan(),
@@ -145,6 +145,11 @@ impl State {
         }
     }
 }
+
+/// The cursor suffix: the open mark's colour, bold.
+const TREE_CURSOR_STYLE: Style = State::Open.style().bold();
+/// The pinned suffix.
+const TREE_PINNED_STYLE: Style = Style::new().magenta();
 
 /// Provenance label → (letter, legend word), in legend order.
 const TREE_PROVENANCES: [(&str, &str, &str); 4] = [
@@ -403,6 +408,12 @@ fn sibling_frames(
 
 // ── one node ──────────────────────────────────────────────────────────────
 
+/// The cursor/pin suffix and the style it leads with.
+struct Suffix {
+    text: String,
+    lead: Style,
+}
+
 struct Layout<'a> {
     envelope: &'a TurnEnvelope,
     width: usize,
@@ -443,9 +454,10 @@ impl Layout<'_> {
         );
         let (body, suffix) = self.text(row);
         let text = match &suffix {
-            Some(suffix) => format!("{body} {suffix}"),
+            Some(suffix) => format!("{body} {}", suffix.text),
             None => body,
         };
+        let lead = suffix.as_ref().map(|suffix| suffix.lead);
         let body_style = if state == Some(State::Resolved) {
             Style::new().dimmed()
         } else {
@@ -474,7 +486,7 @@ impl Layout<'_> {
             let wrapped = wrap(&text, self.width.saturating_sub(display_width(&indent)));
             return std::iter::once(prefix.trim_end().to_owned())
                 .chain(
-                    self.paint_text(&wrapped, body_style, suffix.is_some())
+                    self.paint_text(&wrapped, body_style, lead)
                         .into_iter()
                         .map(|line| format!("{indent}{line}")),
                 )
@@ -490,7 +502,7 @@ impl Layout<'_> {
             fill = prefix_width - display_width(&own_rails),
         );
         let wrapped = wrap(&text, free);
-        self.paint_text(&wrapped, body_style, suffix.is_some())
+        self.paint_text(&wrapped, body_style, lead)
             .into_iter()
             .enumerate()
             .map(|(nth, line)| match nth {
@@ -501,7 +513,7 @@ impl Layout<'_> {
     }
 
     /// The right-hand text (sec-3 line anatomy) and the cursor/pin suffix.
-    fn text(&self, row: &Row<'_>) -> (String, Option<String>) {
+    fn text(&self, row: &Row<'_>) -> (String, Option<Suffix>) {
         let node = row.node;
         let answered = match &node.answer {
             Some(MapAnswer::Record { record, title, .. }) => match title {
@@ -536,37 +548,57 @@ impl Layout<'_> {
             .as_ref()
             .is_some_and(|pin| pin.id == node.id)
             .then_some(TREE_SUFFIX_PINNED);
+        let lead = if cursor.is_some() {
+            TREE_CURSOR_STYLE
+        } else {
+            TREE_PINNED_STYLE
+        };
         let marks: Vec<&str> = cursor.into_iter().chain(pinned).collect();
-        let suffix =
-            (!marks.is_empty()).then(|| format!("{TREE_SUFFIX_ARROW} {}", marks.join(", ")));
+        let suffix = (!marks.is_empty()).then(|| Suffix {
+            text: format!("{TREE_SUFFIX_ARROW} {}", marks.join(", ")),
+            lead,
+        });
         (body, suffix)
     }
 
-    /// Colour wrapped text: the body in `body`, the suffix — everything from
-    /// the last arrow on — bold.
-    fn paint_text(&self, wrapped: &[String], body: Style, has_suffix: bool) -> Vec<String> {
-        let split = has_suffix
-            .then(|| {
-                wrapped
-                    .iter()
-                    .enumerate()
-                    .rev()
-                    .find_map(|(nth, line)| line.rfind(TREE_SUFFIX_ARROW).map(|at| (nth, at)))
-            })
-            .flatten();
-        let bold = Style::new().bold();
+    /// Colour wrapped text: the body in `body`; the suffix — everything from
+    /// the last arrow on — in `lead`, its `pinned` word in [`TREE_PINNED_STYLE`].
+    fn paint_text(&self, wrapped: &[String], body: Style, lead: Option<Style>) -> Vec<String> {
+        let split = lead.and_then(|_| {
+            wrapped
+                .iter()
+                .enumerate()
+                .rev()
+                .find_map(|(nth, line)| line.rfind(TREE_SUFFIX_ARROW).map(|at| (nth, at)))
+        });
+        let lead = lead.unwrap_or(body);
         wrapped
             .iter()
             .enumerate()
             .map(|(nth, line)| match split {
                 Some((at_line, at)) if nth == at_line => {
                     let (head, tail) = line.split_at(at);
-                    [self.paint(head, body), self.paint(tail, bold)].concat()
+                    [self.paint(head, body), self.paint_suffix(tail, lead)].concat()
                 }
-                Some((at_line, _)) if nth > at_line => self.paint(line, bold),
+                Some((at_line, _)) if nth > at_line => self.paint_suffix(line, lead),
                 _ => self.paint(line, body),
             })
             .collect()
+    }
+
+    /// One line's share of the suffix: `lead`, then `pinned` magenta.
+    fn paint_suffix(&self, part: &str, lead: Style) -> String {
+        match part.rfind(TREE_SUFFIX_PINNED) {
+            Some(at) => {
+                let (head, pinned) = part.split_at(at);
+                [
+                    self.paint(head, lead),
+                    self.paint(pinned, TREE_PINNED_STYLE),
+                ]
+                .concat()
+            }
+            None => self.paint(part, lead),
+        }
     }
 
     fn paint(&self, text: &str, style: Style) -> String {
@@ -1160,6 +1192,26 @@ doctrine design tree SL-266";
             assert!(coloured.iter().any(|line| line.contains('\u{1b}')));
             let stripped: Vec<String> = coloured.iter().map(|line| strip_ansi(line)).collect();
             assert_eq!(stripped, plain, "at {width:?}");
+            let pinned = super::paint(true, super::TREE_SUFFIX_PINNED, super::TREE_PINNED_STYLE);
+            let root = coloured
+                .iter()
+                .position(|line| strip_ansi(line).starts_with("├── ○ u * inq-root"))
+                .expect("the root");
+            let cursor_lines = coloured[root..]
+                .iter()
+                .take(6)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("");
+            let cursor = format!("{} {}", super::TREE_SUFFIX_ARROW, super::TREE_SUFFIX_CURSOR);
+            assert!(
+                cursor_lines.contains(&super::paint(true, &cursor, super::TREE_CURSOR_STYLE)),
+                "the cursor takes the open mark's colour: {cursor_lines:?}"
+            );
+            assert!(
+                coloured.iter().any(|line| line.contains(&pinned)),
+                "the pin is magenta"
+            );
             let start = coloured
                 .iter()
                 .position(|line| strip_ansi(line).starts_with(super::TREE_MARK_RESOLVED))
