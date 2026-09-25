@@ -1738,7 +1738,7 @@ const PROMPT_MODEL_KEYS_CMD: &str = "doctrine prompt model-keys";
 /// repeatable (SL-192 — conjunctive trait-set targeting), so the taught form shows
 /// the compose shape, not a single-valued one (IMP-239).
 const PROMPT_RESOLVE_MODEL_CMD: &str =
-    "doctrine prompt resolve --band model --model <id> [--model <id> …]";
+    "doctrine prompt resolve --role <role> --band model --model <id> [--model <id> …]";
 
 /// Render the `doctrine_onboard` markdown: mapping table + model-band self-ID
 /// guidance (SL-187). The two-memory onboarding load now rides the cached boot
@@ -1767,6 +1767,7 @@ fn render_model_band_guidance(root: &Path, model_keys: ModelKeysFn) -> anyhow::R
          `doctrine_onboard` cannot read your model — identify yourself.\n\n\
          Available `--model` keys (`{PROMPT_MODEL_KEYS_CMD}`):\n{key_lines}\n\n\
          Then resolve your model band yourself:\n\n    {PROMPT_RESOLVE_MODEL_CMD}\n\n\
+         `--role` is required — pass `worker` or `orchestrator`.\n\
          `--model` is repeatable — each occurrence adds a key to your context \
          trait set, and a band selector matches only when its whole pinned set is \
          present (a conjunction). Pass every key that describes you, not just one.\n\n\

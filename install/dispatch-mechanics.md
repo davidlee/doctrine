@@ -361,6 +361,27 @@ completion:
   completion event and kills the process on match, so the spawn returns at
   completion rather than at timeout.
 
+## The worktree verbs
+
+The funnel's git moves are `doctrine worktree` verbs, and the CLI splits them by
+class:
+
+- **Orchestrator-classed** — `fork`, `coordinate`, `create-fork`, `import`,
+  `land`, `gc`. Each mints, moves, or reaps a worktree, so the CLI refuses it
+  under worker-mode: a confined worker cannot mint its own isolation or land its
+  own delta. The refusal is the safety property, not a permissions error.
+- **Read-classed** — `status`, `list`. Safe from anywhere, including inside a
+  worker; they report rather than move.
+
+`fork` is the sole creation path: it copies the allowlisted files into a fresh
+worktree, with the coordination/runtime tier always excluded. `coordinate` mints
+the markerless coordination tree the orchestrator drives from, and `gc` reaps a
+spent fork only once it has provably landed. The remaining verbs are the plumbing
+those call — `provision` is the copier behind the mint verbs, `check-allowlist`
+and `branch-point-check` are the guards (the latter asserts coordination HEAD
+stationarity at the spawn boundary), and `jail-prefix` emits the confinement wrap
+the spawn path uses.
+
 ## See also
 
 - `mem.signpost.doctrine.dispatch` — the retrieval index for the sharp

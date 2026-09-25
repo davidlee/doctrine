@@ -177,6 +177,11 @@ Connect entities with the **`link` verb**, not a hand-written row. `doctrine lin
 removes it. Storage is **outbound-only** — you link from the source side and
 reciprocity is derived; `inspect` / `show` render both directions.
 
+One relation is not a `link` label: `doctrine supersede <NEW> <OLD>` records that
+one entity replaces another. It is still a typed, verb-written edge — and which
+terminal status the superseded record takes is decided from its kind, so ask the
+CLI rather than hand-editing a `supersedes` row.
+
 The legal `(source, label) → target` vocabulary lives in **`RELATION_RULES`**
 — the single source of truth. Don't transcribe it;
 `link` rejects an illegal pair. Not every axis is `link`-writable: most relations
@@ -196,6 +201,73 @@ drift malformed and skip the legality check (`doctrine link` is the validated se
   spec — cite the `REQ-NNN` they label). Reference forms: `glossary.md`.
 - Preserve surrounding structure when hand-editing — match the file's existing
   shape rather than reformatting it.
+
+## Keeping the corpus healthy
+
+Four surfaces report on the corpus itself — reach for them when a read looks
+wrong, before a release, or after a bulk edit:
+
+- **`doctrine doctor`** — the full health scan. It reports findings across every
+  check it owns; a finding is a report, not a failure, and the scan exits zero.
+- **`doctrine validate`** — entity-id integrity. Use it when a reference does
+  not resolve or an id reads malformed.
+- **`doctrine check <cadence>`** — the project's own check run, at one of three
+  cadences: `quick` per edit, `commit` before a commit, `gate` at the end of a
+  phase. The command each cadence runs is declared in the project's
+  `doctrine.toml`, so the verb is a stable name for a project-local cadence
+  rather than a fixed recipe.
+- **`doctrine publication validate`** — the publication declaration. It proves
+  each declared public address has a backing; run it after editing a published
+  doc or its manifest entry.
+
+These report; you adjudicate. None is a gate you must clear to proceed.
+
+## Reading the worklist
+
+The "what should I work on" verbs read a priority model rather than an authored
+ordering:
+
+- **`doctrine status`** — the orientation dashboard: counts across the kinds,
+  what is next up, what is blocked. The first thing to run in a fresh session.
+- **`doctrine next`** — the advisory worklist, ranked, with the facets that fed
+  each score. Advisory: it recommends, it does not mandate.
+- **`doctrine blockers <ID>`** — who blocks this entity, and whom it blocks.
+- **`doctrine survey`** — the same ranking across every kind, with terminal and
+  promoted items included on request.
+- **`doctrine explain <ID>`** — why one row scores what it scores, component by
+  component.
+- **`doctrine findings`** — where an entity's ranked position and its survey
+  position diverge, so the ranking that looks wrong can be interrogated rather
+  than distrusted.
+
+`next` gives the list; `explain` and `findings` are how you question it. When the
+list looks wrong, the fault is usually a missing or stale facet on the entity —
+see the next section — not the model.
+
+## Facets — what feeds the worklist
+
+The worklist is assembled, not authored: a row's score is built from facets
+attached to the entity.
+
+- **`doctrine estimate`** — cost bounds on the subject.
+- **`doctrine value`** — a value anchor, the subject's worth to the project.
+- **`doctrine compare`** — a pairwise value judgement between two subjects;
+  `doctrine compare elicit` surfaces the next comparison worth asking.
+- **`doctrine risk`** — likelihood, impact, origin, and controls on a risk item.
+- **`doctrine tag`** — subject tags, the only way to make a corpus addressable by
+  subject, and a coefficient input in their own right.
+
+Set a facet where it changes a triage decision, not for completeness: a facet is
+**evidence for the ranking**, so a stale one is worse than an absent one.
+
+## Project configuration
+
+`doctrine config` inspects and modifies the `[priority]` coefficients in the
+project's `doctrine.toml` — `show`, `get`, `set`, `unset` — and
+`doctrine config validate` checks the `[dispatch]` posture. The coefficients are
+authored data: read them with `show` rather than recalling them (the worklist's
+scores are derived from exactly these numbers), and commit a change with the
+decision that needed it.
 
 ## Pointers
 

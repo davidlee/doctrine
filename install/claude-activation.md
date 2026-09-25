@@ -66,6 +66,20 @@ expansion, expanded by whatever shell runs the hook command (`sh -c` on
 Linux/macOS, Git Bash on Windows). Doctrine does not target a non-POSIX
 Windows shell for this form.
 
+## The MCP server
+
+The hooks are one half of doctrine's Claude integration; the MCP server is the
+other. `doctrine serve --mcp` starts a Model Context Protocol stdio server — the
+process doctrine's MCP tools are served from. A project's `.mcp.json` names that
+command as its server entry, and the entry takes the same
+`${DOCTRINE_BIN:-doctrine}` override the hook commands take, for the same reason:
+a committed file must not carry a host absolute path.
+
+So when an MCP tool call reports doctrine as unavailable, the hooks are not the
+thing to check. The server is not running: check that the binary the `.mcp.json`
+entry resolves is on `PATH` (or that `DOCTRINE_BIN` points at it), and try
+`doctrine serve --mcp` by hand.
+
 ## The cutover: install first, then disable the plugin
 
 If you were previously running doctrine's Claude plugin (`enabledPlugins` +

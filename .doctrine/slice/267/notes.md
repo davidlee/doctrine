@@ -657,3 +657,125 @@ fresh-as-of: 2026-09-26 · PHASE-04 · 25c4f0c35
 - **Audit flag (PHASE-03 D3)** — five shipped `memory.toml` scope entries name doctrine-private matchers: `memory/` + `doc/memory-spec.md` (`mem_019e9a12560d7972b29124e09f4de704`), `src/` + `doc/entity-model.md` + `doc/relation-index.md` (`mem_019e9a1244d37f72a9b7246d2c976ef7`), `install/hymns/` (`mem_88193c2859d72f043ef83a97a5952a96`). Left `leave`: a scope field is a retrieval matcher, not a citation, and editing one changes behaviour outside axis A. Weigh at audit — this is the one class the sweep *deferred by design*.
 - **Audit flag (PHASE-03 A2)** — the plan's PHASE-03 objective states "11 of the 35 shipped memory masters, and 14 skill files carrying 74 sites". All three numbers were low. Not a scope breach (the selectors cover the whole sub-corpus and `EX-1` says *per candidate*), but the plan's terrain description is now known-inaccurate for the audit's conformance read.
 - **Audit flag (PHASE-04)** — `install/glossary.md`'s kind↔abbreviation table still omits the minted kinds `RV`/`REC`/`RFC`/`CM` and its `folder` column is stale (e.g. ADR). A completeness gap, not a false prefix, so `EX-4` did not reach it and the plan's `EX-3` names only the knowledge-records table. Either a follow-up item or a PHASE-06 read judgement.
+
+## PHASE-05 sufficiency ledger
+
+Evidence for PHASE-05 `EX-1` — one row per `IMP-484` gap, **re-derived against the
+live CLI and the corpus**, never transcribed from the item (`EN-1`).
+
+### Method
+
+Per gap: `<group> --help` for existence and shape · `grep -rl` across
+`install/ memory/ plugins/` for shipped orientation · the placement procedure in
+`design.md` sec-6 for the destination tier · `ADR-005`'s reachability test.
+
+### Dispositions
+
+| # | gap | verdict | destination | deciding invocation |
+|---|---|---|---|---|
+| D1 | corpus-health group (`doctor`, `validate`, `check`, `publication`) | **admitted** | `install/using-doctrine.md` § *Keeping the corpus healthy* | `doctrine doctor|validate|check|publication --help` |
+| D2 | reports group (`status`, `next`, `blockers`, `survey`, `explain`, `findings`) | **admitted** | `install/using-doctrine.md` § *Reading the worklist* | per-verb `--help` + `doctrine status` run |
+| D3 | `config` | **admitted** | `install/using-doctrine.md` § *Project configuration* | `doctrine config --help` (`show/get/set/unset/validate`) |
+| D4 | facets group (`estimate`, `value`, `compare`, `risk`, `tag`) | **admitted** | `install/using-doctrine.md` § *Facets — what feeds the worklist* | per-verb `--help` |
+| D5 | `prompt` | **admitted — re-classified** | `install/model-band.md` (the band doc) | `doctrine prompt resolve --help` |
+| D6 | `supersede` | **admitted** | `install/using-doctrine.md` § Relating entities (extension) | `doctrine supersede --help`; `G11` |
+| D7 | `serve --mcp` | **admitted** | `install/claude-activation.md` § *The MCP server* | `doctrine serve --help`; `.mcp.json` |
+| D8 | `worktree` | **admitted** | `install/dispatch-mechanics.md` § *The worktree verbs* | `doctrine worktree --help` |
+| D9 | `observation` | **not a gap** | already documented — `install/using-doctrine.md` § *Capturing friction — observations* | `grep -n '^## Capturing friction'` |
+| D10 | `reseat` | **out of scope** | developer surface — renumbers *this* corpus's ids | `doctrine reseat --help` |
+| D11 | `export` | **out of scope** | developer surface — external interchange dump | `doctrine export --help` |
+| D12 | `reservation` | **out of scope** | developer surface — remote id reservations (`refs/doctrine/reservation/*`) | `doctrine reservation --help` |
+| D13 | `verify` | **out of scope** | developer surface — self-described "doctrine's own runbook checks" | `doctrine verify --help` |
+| D14 | `catalog` | **out of scope** | developer surface — debug catalog inspection | `doctrine catalog --help` |
+| D15 | structural: thin `skill-map` | **judgement** | recorded — see below | `doctrine memory show mem.signpost.doctrine.skill-map` |
+| D16 | structural: boot Memory index signposts-only | **judgement** | recorded — `src/boot.rs`, outside the slice boundary | `src/boot.rs:225-240`, `:3964` |
+| D17 | structural: three unindexed signposts | **left to `ISS-215`** | re-verified below | `doctrine memory show <key>` → not found |
+
+No gap was settled by silence: every row is a destination or a recorded reason
+(`EX-1`).
+
+### Corrections to `IMP-484` itself
+
+1. **`prompt` is not developer-only.** `IMP-484` lists it in "judged correctly out
+   of scope"; `design.md` sec-6 overrides — the shipped band directive tells every
+   client agent to run it. Re-classified D5.
+2. **D9 (`observation`)** was already corrected in the design (`RV-391` `F-6`);
+   recorded here so the verdict lives in an artefact.
+3. **D17's cause is not the boot index's shape.** The three signposts are absent
+   because three masters sit at `memory/mem.signpost.doctrine.<key>/` as **real
+   directories**, where every other master is `memory/<uid>/` plus a `mem.<key>`
+   symlink. `corpus.rs::gather_assets` admits **canonical uid dirs only** (it
+   skips alias symlinks by design), so all three are dropped from the embed, never
+   materialised into `shipped/`, and are therefore **unreachable**:
+   `doctrine memory show mem.signpost.doctrine.concept-map` → `UNREACHABLE`
+   (contrast `mem.signpost.doctrine.skill-map` → reachable). `ISS-215` already
+   names this cause (`"key-named dirs skipped by gather_assets"`) and owns it;
+   nothing is absorbed here (`EX-7`).
+
+### Structural-gap judgements (`EX-7`)
+
+- **D15 — the thin `skill-map` (778 bytes).** Judgement: it is a **pointer**
+  memory, not a catalogue. Boot's `## Routing & Process` table is the
+  authoritative When→Skill mapping, and the memory deliberately cites it rather
+  than restating it (`design.md` sec-4, *one rule, one home*). Widening it would
+  mint a second routing table that drifts. Recorded, not acted on.
+- **D16 — boot's Memory index enumerates signposts only.** Judgement: the filter
+  is `memory::boot_keys` (`src/boot.rs`, `collect_all` → `status == Active &&
+  kind == Signpost`), and a test pins it (`SL-069` `VT-1`,
+  `boot_memory_section_is_signpost_only_excludes_other_types`). Widening the index
+  is a **`src/**` change** — outside this slice's boundary (`design.md` sec-1) — so
+  it is recorded with its reason rather than invented around. Boot already directs
+  every agent to `/retrieve-memory`, so the fourteen explanatory memories are
+  reachable even though not enumerated.
+- **D17 — left to `ISS-215`**, per `EX-7`. Cause re-verified above; the item is
+  correct as filed.
+
+### Divergence found while landing the orientation (accuracy-axis overlap)
+
+**`install/model-band.md` taught a command the binary refuses.** The shipped band
+directive read `doctrine prompt resolve --band model --model <id> …`;
+`--role <ROLE>` is **required** — the CLI exits 2 with "required arguments were
+not provided: --role". Every client agent following the floor directive got a
+refusal instead of its model band.
+
+The same string was duplicated in **three** places: the doc, the
+`doctrine_onboard` MCP tool (`src/mcp_server/tools.rs::PROMPT_RESOLVE_MODEL_CMD`),
+and two `src/boot.rs` boot assertions (`"prompt resolve --band model"` — one
+positive, one negative). Correcting the doc alone therefore turned the closing
+`check gate` red.
+
+**Disposition (user-authorised boundary departure, 2026-09-26).** All four sites
+corrected to `doctrine prompt resolve --role <role> --band model …`, plus a prose
+sentence naming the two legal roles. The departure is **textual, not semantic**
+(a taught command string and two test substrings), so `design.md` sec-1's "no
+semantic change to `src/**`" is preserved. Recorded for audit.
+
+**Why `PHASE-04` missed it.** Its `G4` row recorded `prompt resolve` as
+*verified* because the *named flags exist*; it never executed the taught form.
+Existence is not executability — a durable input for `QUE-227` and the
+`EX-6`-shaped gate.
+
+### `EX-5` / `VA-2` — no signpost minted
+
+Every section landed in an **existing published doc**; `publication/manifest.toml`
+is untouched (98 entries, unchanged) and no new doc was minted.
+`doctrine memory list --type signpost` → no signpost whose subject is a CLI
+surface group (grep for `doctor|blockers|estimate|survey|explain|findings|config|facets|worklist`
+over the signpost titles/keys → 0). This phase mints nothing.
+
+### `EX-6` — commands named are accepted
+
+The four edited published docs name only verbs that exist; the core-process and
+guardrails command-acceptance tests parse the boot fragments
+(`install/routing-process.md`), which this phase did not touch, and stay green.
+
+### Verification
+
+- `doctrine check gate` → **exit 0**, 124 suites ok, zero failures.
+- `doctrine doctor` → 51 findings (unchanged).
+- `doctrine publication validate` → 98 ok (unchanged).
+- `cargo test --test e2e_claude_install` → 13/13.
+- `doctrine slice verify-vt 267` → **PHASE-05 `VT-1 ✓ PASS`** (`VT-2` present,
+  attributable once this phase's delta is committed).
+- Renders read through `doctrine library show reference/<name>.md`, never the
+  build line — both `VT` keyword sets present in the RENDER.

@@ -3296,7 +3296,7 @@ mod tests {
         );
         assert!(snapshot.contains("hymns"), "carries the hymns keyword");
         assert!(
-            snapshot.contains("prompt resolve --band model"),
+            snapshot.contains("prompt resolve --role <role> --band model"),
             "carries the resolve directive"
         );
     }
@@ -3441,7 +3441,7 @@ mod tests {
 
         // no Model band / resolved content bleeds into the Onboarding section.
         assert!(
-            !section.contains("prompt resolve --band model") && !section.contains("hymns"),
+            !section.contains("prompt resolve --role") && !section.contains("hymns"),
             "model-band content must not leak into Onboarding:\n{section}"
         );
     }
