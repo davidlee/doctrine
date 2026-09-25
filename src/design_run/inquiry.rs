@@ -330,6 +330,22 @@ impl InquiryNode {
         self.blocking
     }
 
+    /// Whether this node's **effective** judgement is blocking (`SL-264` sec-3).
+    ///
+    /// The node's own judgement when it holds one, else its membership in the
+    /// stored legacy `blocking-set-declared` set. The fallback is **per node**
+    /// (`RV-386` `F-8`): an unjudged node is blocking exactly when the set the
+    /// run recorded before this attribute existed named it, so a partly-judged
+    /// map keeps every unjudged blocker, and a node leaves the fallback only by
+    /// being judged itself.
+    ///
+    /// Pure, and the legacy set is **passed in** rather than fetched: this leaf
+    /// module takes no dependence on the act that holds the set to answer the
+    /// question (`ADR-001`).
+    pub(crate) fn effective_blocking(&self, legacy: &BTreeSet<DesignId>) -> bool {
+        self.blocking.unwrap_or_else(|| legacy.contains(&self.id))
+    }
+
     /// What this node is made of, for coverage purposes — everything except the
     /// two fields [`NodeMaterial`] excludes and the `id` the map keys on.
     fn material(&self) -> NodeMaterial {
@@ -505,6 +521,35 @@ impl InquiryMap {
         self.nodes
             .values()
             .filter(|node| self.is_blocked(node.id()))
+    }
+
+    /// The **marks**: every node whose effective judgement is blocking, whatever
+    /// its lifecycle (`SL-264` sec-3).
+    ///
+    /// The set the user reviews and the one a `ReviewedGraph` coverage compares.
+    /// The sibling of [`InquiryMap::open_blockers`], differing only in lifecycle,
+    /// so the gate and the coverage read this one judgement and cannot disagree
+    /// about which nodes block (`RV-386` `F-13`).
+    pub(crate) fn blocking_marks<'a>(
+        &'a self,
+        legacy: &'a BTreeSet<DesignId>,
+    ) -> impl Iterator<Item = &'a InquiryNode> {
+        self.nodes
+            .values()
+            .filter(move |node| node.effective_blocking(legacy))
+    }
+
+    /// The **open blockers**: the marks whose lifecycle is not `Resolved` — the
+    /// inquiries the run still owes a disposition (`SL-264` sec-3).
+    ///
+    /// `Resolved` is the only lifecycle that can carry a [`Disposition`]
+    /// (DEC-062), so *has a disposition* and *is resolved* are one question.
+    pub(crate) fn open_blockers<'a>(
+        &'a self,
+        legacy: &'a BTreeSet<DesignId>,
+    ) -> impl Iterator<Item = &'a InquiryNode> {
+        self.blocking_marks(legacy)
+            .filter(|node| node.lifecycle() != InquiryLifecycle::Resolved)
     }
 
     /// The first cycle reachable from `start` through either relation, as the

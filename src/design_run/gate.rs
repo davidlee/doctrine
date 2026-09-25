@@ -12,7 +12,7 @@
 //! shape rather than out of a flag: after a direct regression there is nothing to
 //! un-set, and returning forward cannot inherit clearance it no longer earns.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -24,7 +24,6 @@ use super::attestation::{
 };
 use super::bounds::DESIGN_ID_BYTES;
 use super::ids::{DesignId, Fingerprint};
-use super::inquiry::InquiryLifecycle;
 use super::refusal::Refusal;
 use super::run::GateFacts;
 use super::runbook::{RunbookKey, RunbookStanding};
@@ -1529,45 +1528,48 @@ fn act_causes(
 
 /// The blocking inquiries this run still owes a disposition, id-ordered.
 ///
-/// **Which inquiries are blocking is the run's own recorded answer**, not a
-/// re-derivation: DEC-121 makes the agent's [`AgentAct::BlockingSetDeclared`] the
-/// artefact and the user's `GraphReviewed` the confirmation of it, so the set the
-/// user steered is the set this row quantifies over. Reading *every open node*
-/// instead would gate on questions nobody said were blocking, and would leave the
-/// declared set with no consumer at all — which is the one thing DEC-121 created
-/// it to be.
-///
-/// It cannot be gated on a set nobody declared: `initial-concerns-recorded` is
-/// [`Reach::Cumulative`] and carries the declaration, so this edge and every edge
-/// above it already require one. A declaration whose map has moved goes stale
-/// there rather than being silently re-read here.
+/// **Derived from the node itself** (`SL-264` sec-3): a node's *effective*
+/// judgement is its own `blocking` when it holds one, else its membership in the
+/// stored legacy `blocking-set-declared` set — resolved **per node**, so a
+/// partly-judged run keeps every unjudged blocker (`RV-386` `F-8`). The two
+/// reads are one judgement differing only in lifecycle:
+/// [`InquiryMap::blocking_marks`] is every node whose effective judgement is
+/// blocking whatever its lifecycle, and this read is the marks not yet
+/// `Resolved` ([`InquiryMap::open_blockers`]). One judgement, so the gate and
+/// the coverage cannot disagree about which nodes block (`RV-386` `F-13`).
 ///
 /// **Disposed** is `resolved`, which is the only lifecycle that can carry a
 /// [`Disposition`](super::inquiry::Disposition) — DEC-062 makes resolution
 /// without one unrepresentable, so *has a disposition* and *is resolved* are one
-/// question. A node that has left the map entirely is not outstanding: the
-/// declaration's `InquiryMap` coverage is what answers for a map that moved.
+/// question.
 ///
-/// [`AgentAct::BlockingSetDeclared`]: super::attestation::AgentAct::BlockingSetDeclared
+/// [`InquiryMap::blocking_marks`]: super::inquiry::InquiryMap::blocking_marks
+/// [`InquiryMap::open_blockers`]: super::inquiry::InquiryMap::open_blockers
 fn blocking_inquiries_open(run: &DesignSnapshot) -> Vec<DesignId> {
+    let legacy = legacy_blocking_set(run);
+    run.map
+        .inquiry
+        .open_blockers(&legacy)
+        .map(|node| node.id().clone())
+        .collect()
+}
+
+/// The ids the run's stored `blocking-set-declared` act named, or empty where it
+/// holds none (`SL-264` sec-3, *compatibility*).
+///
+/// The **per-node fallback's** source. Consumed whether the act is current or
+/// not, exactly as the blocking set has always been read — which is why nothing
+/// asks an act of this kind its currency ([`ActKind::is_legacy`]).
+///
+/// `pub(super)` for the criterion that pins the stored set unchanged when a
+/// node's own judgement overrides its membership.
+pub(super) fn legacy_blocking_set(run: &DesignSnapshot) -> BTreeSet<DesignId> {
     run.declarations
         .declarations
         .iter()
         .find_map(|held| match held.act {
-            AgentAct::BlockingSetDeclared { ref blocking } => Some(blocking),
+            AgentAct::BlockingSetDeclared { ref blocking } => Some(blocking.clone()),
             AgentAct::DraftingReady => None,
-        })
-        .map(|blocking| {
-            blocking
-                .iter()
-                .filter(|node| {
-                    run.map
-                        .inquiry
-                        .get(node)
-                        .is_some_and(|node| node.lifecycle() != InquiryLifecycle::Resolved)
-                })
-                .cloned()
-                .collect()
         })
         .unwrap_or_default()
 }

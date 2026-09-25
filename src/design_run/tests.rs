@@ -34,7 +34,7 @@ use super::gate::{
     ActRequirement, ActRule, Advance, AttestationRule, Binding, CONTRACTS, Cause, Condition,
     ConditionKind, Contract, Coverage, DerivationRule, EngineSource, ObservedFact, Reach,
     RequiredActor, Unmet, advance, boundary_conditions, boundary_runbook, cumulative_conditions,
-    forward_unmet, regress, requirement_for, satisfied,
+    forward_unmet, legacy_blocking_set, regress, requirement_for, satisfied,
 };
 use super::ids::{DesignId, Fingerprint, IdKind, SubjectState};
 use super::inquiry::{
@@ -3170,6 +3170,151 @@ fn the_payload_contract_admits_legacy_enum_variants() {
     assert!(
         refuse_unknown_keys(&wire).is_ok(),
         "the legacy token reaches the core rather than being refused as a key"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// SL-264 PHASE-04 Part 1 — the blocking set is derived from the node
+// (design sec-3; `RV-386` F-8, F-13).
+// ---------------------------------------------------------------------------
+
+/// Part-1 pin — a node holding **no** judgement still blocks when the stored
+/// legacy set names it (`RV-386` F-8).
+///
+/// The compatibility fallback, resolved per node: a run that predates the
+/// attribute reads its blockers through the set it recorded. The node's silence
+/// is not a judgement, so the mark is the act's membership. Green before the
+/// derived read and green after — the fallback is the one path the old reader
+/// already had, and this pins that deriving the set did not drop it.
+#[test]
+fn an_unjudged_node_still_blocks_when_the_legacy_set_names_it() {
+    let (mut run, derived) = cleared();
+    let unjudged = id("inq-7");
+    run.map
+        .inquiry
+        .insert(InquiryNode::open(
+            unjudged.clone(),
+            "a blocker the run recorded before the judgement existed",
+            Provenance::AgentProposed,
+            None,
+        ))
+        .expect("a fresh node closes no cycle");
+    let mut legacy = blocking_set_declared("agd-blocking", &[BLOCKING_NODE, "inq-7"]);
+    legacy.covered = Some(CoveredSet::Nodes(ContentCoverage::of(
+        run.map.inquiry.materials(),
+    )));
+    run.declarations.record(legacy);
+
+    assert_eq!(
+        causes_of(Condition::BlockingInquiriesDispositioned, &run, &derived),
+        vec![Cause::InquiriesOpen {
+            nodes: vec![unjudged],
+        }],
+        "the unjudged node reads its judgement from the stored set"
+    );
+}
+
+/// Part-1 criterion — a node judged **not** blocking leaves the open set even
+/// though the stored legacy set still names it.
+///
+/// The node's own judgement overrides its membership, and the override is the
+/// node's rather than an edit to the set: the stored act is asserted unchanged,
+/// so the criterion cannot pass by the run having dropped the id from the
+/// declaration. RED before the derived read, by *blocking*: the set still named
+/// the judged-out node, so it stayed an open blocker.
+#[test]
+fn a_node_judged_non_blocking_leaves_the_open_set_without_touching_the_legacy_set() {
+    let (mut run, derived) = cleared();
+    run.map
+        .inquiry
+        .insert(InquiryNode::open(
+            id("inq-9"),
+            "judged not to hold the stage, though the old set named it",
+            Provenance::AgentProposed,
+            Some(false),
+        ))
+        .expect("a fresh node closes no cycle");
+    let mut legacy = blocking_set_declared("agd-blocking", &[BLOCKING_NODE, "inq-9"]);
+    legacy.covered = Some(CoveredSet::Nodes(ContentCoverage::of(
+        run.map.inquiry.materials(),
+    )));
+    run.declarations.record(legacy);
+
+    assert_holds(Condition::BlockingInquiriesDispositioned, &run, &derived);
+    assert!(
+        legacy_blocking_set(&run).contains(&id("inq-9")),
+        "the legacy set still names the node; the node's own judgement, not an \
+         edit to the set, is what left it out of the open set"
+    );
+}
+
+/// `VA-2` (plan) — a node judged blocking at creation, which the stored legacy
+/// set never named, opens `blocking-inquiries-dispositioned`.
+///
+/// Driven through the JSON payload rather than a constructed node (F-9's
+/// ground): the criterion is the *derived* read, and a fresh judgement can only
+/// come through the payload now that the set is retired from writing. Before the
+/// derived read the row was trivially met — no `blocking: true` node reached
+/// `blocking_inquiries_open` — so this observed its red by **not blocking**, not
+/// by a compile error.
+#[test]
+fn blocking_inquiries_dispositioned_blocks_an_open_node_judged_blocking() {
+    let (run, derived) = cleared();
+    let applied = declare_over(
+        &run,
+        r#"{"subject": "inq-9", "question": "does this hold the stage?", "blocking": true}"#,
+    )
+    .expect("a judged creation applies");
+
+    assert_eq!(
+        causes_of(
+            Condition::BlockingInquiriesDispositioned,
+            &applied.snapshot,
+            &derived
+        ),
+        vec![Cause::InquiriesOpen {
+            nodes: vec![id("inq-9")],
+        }],
+        "a node the legacy set never named blocks from its own judgement"
+    );
+}
+
+/// `VT-4` (plan) — a partly-judged map keeps **every** unjudged legacy blocker
+/// (`RV-386` F-8).
+///
+/// One node of the stored set is judged and judged out; the rest hold no
+/// judgement and stay blocking. The fallback resolves per node, so the set is
+/// neither dropped whole for the one judged node nor read whole over the node's
+/// stated judgement. RED before the derived read: the stored set named the
+/// judged-out node too, so the cause listed three ids rather than two.
+#[test]
+fn the_mixed_legacy_map_keeps_every_unjudged_blocker() {
+    let (mut run, derived) = cleared();
+    for raw in ["inq-7", "inq-8"] {
+        run.map
+            .inquiry
+            .insert(InquiryNode::open(
+                id(raw),
+                format!("unjudged legacy blocker {raw}"),
+                Provenance::AgentProposed,
+                None,
+            ))
+            .expect("a fresh node closes no cycle");
+    }
+    // `OPEN_NODE` holds `Some(false)` (the fixture's control) and the stored set
+    // names it; `inq-7`/`inq-8` hold no judgement at all, so only they remain.
+    let mut legacy = blocking_set_declared("agd-blocking", &[OPEN_NODE, "inq-7", "inq-8"]);
+    legacy.covered = Some(CoveredSet::Nodes(ContentCoverage::of(
+        run.map.inquiry.materials(),
+    )));
+    run.declarations.record(legacy);
+
+    assert_eq!(
+        causes_of(Condition::BlockingInquiriesDispositioned, &run, &derived),
+        vec![Cause::InquiriesOpen {
+            nodes: vec![id("inq-7"), id("inq-8")],
+        }],
+        "the judged-out node leaves the set; both unjudged blockers stay"
     );
 }
 

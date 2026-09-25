@@ -697,18 +697,18 @@ fn ladder_to_reviewing() -> DesignRun {
 fn growing_run() -> DesignRun {
     let designed = ladder_to_reviewing();
 
-    // 300 inquiries, then a re-declared blocking set naming every one. The
-    // re-declaration is what makes them *blocking*: the set is the run's own
-    // recorded answer (DEC-121), and the map's growth is what moves
+    // 300 inquiries, each judged blocking where it is born. The judgements are
+    // what make them *blocking* (`SL-264` sec-3): the set is derived from the
+    // nodes, not from a declared act, and the map's growth is what moves
     // `user-accepts-sufficiency`'s coverage — the one InquiryMap-bound act.
     let nodes: Vec<Value> = (0..300)
         .map(|index| {
             json!({
                 "subject": node(index),
                 "question": format!("blocking question {index}"),
-                // Judged where each node is born as well as declared in the set
-                // below: a judgement is owed at creation (`SL-264` sec-3), and
-                // this fixture's nodes are the blocking ones by construction.
+                // Judged where each node is born: a judgement is owed at
+                // creation (`SL-264` sec-3), and this fixture's nodes are the
+                // blocking ones by construction.
                 "blocking": true,
             })
         })
@@ -799,12 +799,8 @@ fn large_run_still_renders() {
 
     // (1) Every list cause is present and over its cap before projection — a
     // bound the fixture never reaches is a bound nobody proved.
-    //
-    // `blocking-inquiries-dispositioned` is not here: `SL-264` sec-3 retires the
-    // writable blocking set before PHASE-04 derives the set from the node's own
-    // `blocking` attribute, so no run produced by a submission has an open
-    // blocker at this phase and the row is trivially met. PHASE-04 restores it.
     let listed = [
+        "blocking-inquiries-dispositioned",
         "user-accepts-sufficiency",
         "section-attestations-current",
         "review-disposition-attested",
@@ -843,7 +839,10 @@ fn large_run_still_renders() {
             "`{condition}` names what the cap dropped: {line}"
         );
     }
-    assert!(rendered.contains("(+295 more)"), "300 sections capped at 5");
+    assert!(
+        rendered.contains("(+295 more)"),
+        "300 inquiries capped at 5"
+    );
     assert!(rendered.contains("(+45 more)"), "50 blockers capped at 5");
 
     // (4) `--full` is uncapped, so the whole set is reachable.
@@ -859,12 +858,17 @@ fn large_run_still_renders() {
     );
     let inquiries = full_rows
         .iter()
-        .find(|row| row["condition"] == json!("blocking-inquiries-dispositioned"));
-    assert!(
-        inquiries.is_none(),
-        "no open blocker exists at this phase, so the inquiries row is met \
-         (PHASE-04 derives it from the node attribute)"
-    );
+        .find(|row| row["condition"] == json!("blocking-inquiries-dispositioned"))
+        .expect("the inquiries row");
+    let nodes = inquiries["causes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find_map(|cause| cause["cause"].get("inquiries-open"))
+        .expect("an `InquiriesOpen` cause")["nodes"]
+        .as_array()
+        .expect("node ids");
+    assert_eq!(nodes.len(), 300, "every blocking inquiry is listed");
 
     // (5) `EX-4` — the cause cap's derivation, measured against this real run.
     // `ENVELOPE_CAUSE_MEMBERS`' provenance claims a capped cause stays small
