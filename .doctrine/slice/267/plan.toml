@@ -1,0 +1,191 @@
+# Implementation plan for SL-267 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-267"
+
+# Canonical spec/requirement links — cite ids, never restate what they say.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order. Ids are PHASE-NN (zero-padded), immutable, never reused.
+# Criterion ids are local to their phase: EN-1 entry, EX-1 exit, VT-n test,
+# VA-n agent, VH-n human. Every VT row carries the structured mandate
+# (test_file + keywords); without it verify-vt reports UNCHECKABLE (IMP-209).
+#
+# This slice is prose: it changes `install/**`, `memory/**`, `plugins/**` and
+# two governance/delivery files, and no `src/**`. A sweep of shipped prose has
+# no automated oracle that is not the deferred drift gate (a non-goal, R7), so
+# VA carries the semantic weight — a client-read, recorded in notes.md — and VT
+# anchors only what is genuinely mechanical: the manifest rows, the two
+# first-party tests that already guard shipped guidance, and the presence of the
+# named replacements in the files this plan commits to.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "The grounding rule and its shipped homes"
+objective = "Mint the grounding rule as governance and publish its two shipped homes, so the sweep that follows has one authoritative rule and every replacement it produces has a client-resolvable address to point at. Deliverables: a new ADR descending from ADR-005/ADR-019 (DEC-312) recording DEC-311's six admissible forms and the absolute prohibition on repo-private ids and source/spec paths; install/shipped-corpus-authoring.md, published as reference/shipped-corpus-authoring.md, carrying the rule and the per-site disposition procedure; install/design-run-obligations.md, published as reference/design-run-obligations.md, carrying the relocated thin-adapter rationale of DEC-313; and the two publication/manifest.toml rows that make both resolvable. No existing corpus file is edited here — the routing-process pointer, the inquiring.toml repoint and the doctrine.toml.example inlining all belong to PHASE-02, so each install/ file is touched once."
+entrance_criteria = [
+  { id = "EN-1", text = "Design run dr-01a0d8ff-b311 locked at revision 35; DEC-311..DEC-316 accepted; RV-391 concluded (11 verified, F-7 deferred to this plan); slice lifecycle `plan`." },
+  { id = "EN-2", text = "ADR-005 and ADR-019 are accepted and readable (`doctrine adr show`), and `.doctrine/adr/024/` does not exist — the next free ADR id. The reference-entry shape and the address↔backing convention are confirmed against a neighbouring row in publication/manifest.toml (address `reference/<name>.md`, backing `<name>.md`, kind `reference`, licence MIT, provenance declared, customization customizable)." },
+  { id = "EN-3", text = ".doctrine/slice/233/sketches/thin-adapter.md is readable — it is the one private source this phase relocates — and the two inquiring.toml runbook steps that cite it are identified from ISS-309 before writing." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A new ADR (ADR-024) exists with status `accepted`, titled for the shipped-corpus grounding rule, and states the rule once: a shipped asset may ground a claim on inline prose, a published `reference/<name>.md` address, a shipped memory key, a skill name, a CLI verb, or an in-corpus relative path only where the target is installed beside the citing file — and never on a repo-private entity id or repo-private source/spec path. ADR-005 and ADR-019 are its ancestors through the ADR's descent relation (not superseded), and DEC-127 is related as the install/-scoped precedent. The ADR does not restate POL-002 and is not a third POL-002 rule (QUE-227); CHR-081 records the two local memories' consolidation as out of scope." },
+  { id = "EX-2", text = "install/shipped-corpus-authoring.md exists and is published at reference/shipped-corpus-authoring.md; its prose states the six admissible forms, the illustration/client-structure/fill-in-the-blank test, the per-site decision procedure and the disposition-class table, and it contains no repo-private entity id or source/spec path of its own." },
+  { id = "EX-3", text = "install/design-run-obligations.md exists and is published at reference/design-run-obligations.md; it carries the thin-adapter rationale for both inquiring.toml steps as standalone prose that a client agent can act on, and cites no path inside this repository." },
+  { id = "EX-4", text = "publication/manifest.toml gains exactly two [[entry]] rows — address `reference/shipped-corpus-authoring.md` backing `shipped-corpus-authoring.md`, and address `reference/design-run-obligations.md` backing `design-run-obligations.md` — each kind `reference`, licence MIT, provenance declared, customization customizable, formatted in the manifest's ring." },
+  { id = "EX-5", text = "Neither new file's text contains the literal `design-prompts` (R4): `files_mentioning(\"design-prompts\")` over CONSUMER_DOMAIN must stay equal to the named allowlist. The design-run rationale names the fragments by published address or by description, never by their store path." },
+  { id = "EX-6", text = "`doctrine publication validate` passes; `doctrine library show reference/shipped-corpus-authoring.md` and `doctrine library show reference/design-run-obligations.md` both resolve." },
+]
+verification = [
+  { id = "VT-1", expects = "the two new reference addresses land in the publication manifest", test_file = "publication/manifest.toml", keywords = ["reference/shipped-corpus-authoring.md", "reference/design-run-obligations.md"], waived = false },
+  { id = "VT-2", expects = "the fragment-store blast-radius bound still holds after the new doc", test_file = "tests/e2e_claude_install.rs", keywords = ["fn design_prompts_have_no_consumer_outside_the_design_run", "store_allowlist"], patterns = ["files_mentioning\\(\"design-prompts\"\\)"], waived = false },
+  { id = "VA-1", text = "`doctrine adr show ADR-024` renders the rule, its `accepted` status, and its ADR-005/ADR-019 ancestors; the rule appears once and is pointed at, not restated, by the authoring doc." },
+  { id = "VA-2", text = "Both new docs are read once end-to-end as a client agent with no doctrine corpus: every citation is one of the six forms, and neither doc names a repo-private id or path." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Citation sweep — install/"
+objective = "Apply the PHASE-01 rule site-by-site across install/: every repo-private entity id and source/spec path is inlined, dropped, repointed to a published address, or published; every do-not-sweep illustration is left byte-for-byte and named as such in the ledger. install/ is the largest sub-corpus (ISS-309: 141 raw sites) and reaches a client through five different seams — published docs, rendered entity scaffolds, boot-assembled fragments, served design prompts, installed integration assets — so the sweep must resolve each site against the seam that actually carries it. This phase also lands the two hard cases DEC-313 defers to the corpus: the inquiring.toml repoint to PHASE-01's published rationale, and the doctrine.toml.example per-knob whys inlined as comments on the knobs they explain. It adds the boot-tier pointer from routing-process.md that makes the authoring doc reachable."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: ADR-024 accepted, both reference addresses declared and resolving, and `doctrine library show reference/shipped-corpus-authoring.md` returns the disposition procedure." },
+  { id = "EN-2", text = "ISS-309's install/ ledger is read in full, and the three do-not-sweep classes with their site lists are transcribed into the disposition ledger in notes.md before any edit — so the exclusion is decided in advance, not rationalised after a grep." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Every non-illustration candidate in ISS-309's install/ ledger carries one row in the disposition ledger in notes.md, shape `file:line | class | disposition (inline | drop | repoint | publish | leave) | resolution`. A repoint's resolution is the published address; an inline's is the post-edit line that now stands alone; a drop's is the clause removed." },
+  { id = "EX-2", text = "The do-not-sweep sites are recorded as `leave`, one row each: glossary.md's kind↔abbreviation table, routing-process.md's reference-form list, the templates/*.md reference-form headers and commented payload examples, the client-structure references (.doctrine/spec/, .doctrine/adr/, adr-nnn.md, phase-01.md, handover.md, research.md) and the fill-in-the-blank scaffolding in harvest.md." },
+  { id = "EX-3", text = "install/design-prompts/inquiring.toml's two sketches/thin-adapter.md citations are repointed to reference/design-run-obligations.md, and the file's text contains no `design-prompts` literal (R4)." },
+  { id = "EX-4", text = "install/doctrine.toml.example's per-knob ids are gone; each knob that carried one states the same why as a comment on the knob it explains (DEC-313). install/doctrine.toml — a projected base backing, so it lands as the client's own config — and install/manifest.toml carry no repo-private id or path in their comments either." },
+  { id = "EX-5", text = "install/routing-process.md's reference-docs register names the new authoring doc alongside glossary.md and using-doctrine.md, so the rule is reachable from the boot tier; and its routing-process.md:70 worked example (SL-233's OQ-1, RV-325 F-4) is inlined so the clause no longer commits the error its own rule forbids." },
+  { id = "EX-6", text = "No golden or docs listing the install asset set or manifest entry count was updated incidentally; any such update is named in the ledger with the reason (design sec-8)." },
+  { id = "EX-7", text = "`doctrine doctor` and `tests/e2e_claude_install.rs` are green: the design-prompts allowlist, the retired-verb sweep and the two command-acceptance tests all still hold." },
+]
+verification = [
+  { id = "VT-1", expects = "the hard-case repoint lands in the runbook itself", test_file = "install/design-prompts/inquiring.toml", keywords = ["reference/design-run-obligations.md"], waived = false },
+  { id = "VT-2", expects = "the authoring doc is reachable from the boot-tier register", test_file = "install/routing-process.md", keywords = ["shipped-corpus-authoring"], waived = false },
+  { id = "VT-3", expects = "the fragment-store allowlist is unbroken by the install/ sweep", test_file = "tests/e2e_claude_install.rs", keywords = ["fn design_prompts_have_no_consumer_outside_the_design_run", "fn no_shipped_guidance_advertises_slice_design_as_canonical"], waived = false },
+  { id = "VA-1", text = "The ledger has one row per candidate, and the evidence is the replacement resolving: each repoint is proven with `doctrine library show <address>`, and each changed file is read once, whole, as a client agent — not counted by grep (DEC-314). A zero-hit grep is recorded as a locator with a positive control, never as the evidence." },
+  { id = "VA-2", text = "`git diff` shows no edit to the excluded illustration sites (glossary.md's kind table, routing-process.md's form list, the templates/*.md headers) — the do-not-sweep classes are provably untouched, not merely listed." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Citation sweep — shipped memory and skills"
+objective = "Apply the rule across the other two shipped sub-corpora: 11 of the 35 shipped memory masters, and 14 skill files under plugins/ carrying 74 sites. The skills are the most context-resident shipped surface and the one already governed by mem.pattern.doctrine.shipped-skill-platform-independence — so this phase closes a written rule that was being violated in 74 places, including two instructions worse than a dangling reference: spec-product/SKILL.md tells the reader to mirror this repo's PRD-001 as the canonical shape, and spec-tech/SKILL.md teaches the C4 taxonomy through this repo's SPEC-003/004/005. Shipped memory masters have no write verb (ASM-2): each edit is hand-edit plus `cargo build` plus `doctrine memory sync` plus `doctrine install`; the skills re-embed by recompiling the plugins/ embed root (R5)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete. ISS-309's memory/ and plugins/ inventories are read in full; the three do-not-sweep classes are re-checked against these two sub-corpora and the ledger's claim (no illustration class under plugins/, none in the 11 memory files) is confirmed or corrected before editing." },
+  { id = "EN-2", text = "The two rebuild paths are exercised on ONE file before the bulk edit: a memory master edit reaches .doctrine/memory/shipped/ through `cargo build` + `doctrine memory sync` + `doctrine install`, and a plugins/ edit reaches the installed skills tree through a rebuild — so a later no-op is attributable to the edit rather than to a skipped rebuild (R5)." },
+  { id = "EN-3", text = "The worktree is checked for concurrent writers before the memory/ and plugins/ edits (R6); the phase stages and commits by explicit path." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "One disposition-ledger row per non-illustration memory/ and plugins/ candidate, in PHASE-02's column shape, with each repoint naming the published address that resolves." },
+  { id = "EX-2", text = "mem_88193c2859d72f…'s `Point of truth: .doctrine/spec/tech/023/spec-023.md (SPEC-023 …)` no longer directs a client agent at a private spec as authoritative; the fact it carried is inlined or repointed to a published address." },
+  { id = "EX-3", text = "mem.signpost.doctrine.dispatch's dangling `[[mem.signpost.doctrine.dispatch-claude-arm-wrong-base]]` wikilink (a citation to a key that does not exist — axis A, not a claim defect) is removed or repointed to an existing shipped key, and a positive-controlled search over memory/ finds zero dangling `[[mem.*]]` keys." },
+  { id = "EX-4", text = "plugins/doctrine/skills/spec-product/SKILL.md and spec-tech/SKILL.md no longer instruct the reader to mirror this repo's PRD-001 or its SPEC-003/004/005 taxonomy as the canonical shape; each instruction is restated so the client's own records are the referent." },
+  { id = "EX-5", text = "All changed masters and skill files are re-embedded and materialised, and a diff of the materialised copy against the master shows the change visible in what the client reads — the phase's own proof that the rebuild happened, not a promise (R5)." },
+  { id = "EX-6", text = "`doctrine doctor`, `doctrine check gate` and the design-prompts allowlist test stay green." },
+]
+verification = [
+  { id = "VT-1", expects = "the skills still wire and install after the plugins/ sweep", test_file = "tests/e2e_claude_install.rs", keywords = ["fn install_wires_skills_agent_and_hooks_directly", "fn sealed_design_hymn_and_four_fragments_ship_installed"], waived = false },
+  { id = "VA-1", text = "The ledger has one row per memory/ and plugins/ candidate; each changed file is read once, whole, as a client agent, and each repoint is proven with `doctrine library show <address>`." },
+  { id = "VA-2", text = "A dangling-key search over memory/ returns zero, with a known-present key as the positive control; and the materialised `.doctrine/memory/shipped/` copy of each changed master differs from the pre-phase copy in exactly the edited places." },
+  { id = "VA-3", text = "The two misinstruction sites (spec-product PRD-001, spec-tech SPEC-003/004/005) are re-read in the installed skills tree, not the source, and now read correctly for a client repo." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Accuracy — shipped claims verified against the CLI"
+objective = "Verify every shipped claim about CLI behaviour against the artifact that decides it, and correct the mismatches for the whole corpus rather than only the known-bad instances (DEC-316). Two mechanical legs run first: dangling `[[mem.*]]` wikilinks, and any id whose prefix the CLI does not mint. The prose pass then pairs each behavioural claim with `doctrine <verb> --help` for shapes, live `list` output plus install/templates/*.toml for vocabularies and defaults. The confirmed instances are mem.signpost.doctrine.knowledge (six kinds where the CLI mints seven; `pending` where the defaults are `held` and `proposed`; `settle`, the resolving verb, absent from the verb list; an ungrammatical `EVD-1` example the CLI would refuse) and install/glossary.md (no concept/CPT row, and the same zero-pad violation in its own linking example). The claim-vs-CLI pass must not trust the item's text — IMP-484's own observation gap was already proved false once — so every instance is re-derived live."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete. CHR-080 is read in full, then its instances are re-derived against the live CLI (`doctrine knowledge new --help`, `doctrine knowledge list`, install/templates/knowledge-*.toml) rather than taken on the item's word." },
+  { id = "EN-2", text = "The corpus is at a known commit, so a divergence introduced by an earlier phase of this slice is not mistaken for a pre-existing one; the build is current." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Every behavioural claim in install/, memory/ and plugins/ is paired with the invocation that decides it and recorded as a ledger row in notes.md; each corrected claim records the before, the after, and the command that decided it." },
+  { id = "EX-2", text = "mem.signpost.doctrine.knowledge names all seven kinds including concept/CPT; gives the correct default statuses (`held` for assumption, `proposed` for decision); lists the full verb list including `settle`; and carries a zero-padded example the binary accepts." },
+  { id = "EX-3", text = "install/glossary.md's knowledge-records table gains the concept/CPT-001 row and its status-vocabulary row; its `doctrine link EVD-1 supports DEC-2` example is zero-padded to EVD-001/DEC-002; and the remaining status vocabularies agree with the CLI." },
+  { id = "EX-4", text = "The two mechanical legs run over the whole corpus: zero dangling `[[mem.*]]` wikilinks and zero ids whose prefix the CLI does not mint, each accompanied by a known-positive control so the empty result is trusted as the absence, not as the search." },
+  { id = "EX-5", text = "Every corrected source is re-embedded — memory masters through the build+sync+install path, docs through their embed root — so the shipped copy carries the correction and not only the working tree." },
+  { id = "EX-6", text = "No corrected claim introduces a command the binary refuses: the core-process and guardrails command-acceptance tests, and the retired-verb sweep, stay green." },
+]
+verification = [
+  { id = "VT-1", expects = "the knowledge signpost names the seventh kind, the real defaults and the resolving verb", test_file = "memory/mem_019ed2791edc70e2a2a1caeb2521aad0/memory.md", keywords = ["concept", "CPT", "settle", "held", "proposed"], waived = false },
+  { id = "VT-2", expects = "the glossary gains the concept/CPT row and the corrected status vocabularies", test_file = "install/glossary.md", keywords = ["CPT", "held", "proposed", "EVD-001"], waived = false },
+  { id = "VT-3", expects = "no corrected claim teaches a command the binary refuses", test_file = "tests/e2e_claude_install.rs", keywords = ["fn every_command_named_by_core_process_is_accepted_by_the_binary", "fn every_command_named_by_guardrails_is_accepted_by_the_binary"], waived = false },
+  { id = "VA-1", text = "The claim ledger covers the whole corpus, not the confirmed instances: each claim group names its deciding invocation, and groups with no divergence are recorded as verified rather than omitted." },
+  { id = "VA-2", text = "Each corrected doc is read once end-to-end as a client agent; the corrected values agree with live `list`/`--help` output re-run at that moment, not with the item's transcription." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Sufficiency — shipped orientation for the unoriented surfaces"
+objective = "Disposition every IMP-484 gap and give each admitted gap shipped orientation at its ADR-005 tier (DEC-315). observation is already documented at install/using-doctrine.md:68-105 and is recorded as not-a-gap with its locating citation. The corpus-health group (doctor, validate, check, publication), the reports group (status, next, blockers, survey, explain, findings), config and the facets group each gain a section in the pull-tier orientation doc (install/using-doctrine.md, already pointed at from boot); prompt gains a section in the shipped band-mechanism doc (install/model-band.md); supersede, serve --mcp and worktree extend the domain doc that already owns each surface, or gain a section if none does. The developer-only surfaces (reseat, export, reservation, verify, catalog) are recorded out of scope with their reason. No signpost is minted per verb — a signpost is minted only where memory orientation is the right tier, never as a table of contents for the CLI."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete. IMP-484 is re-read and every claimed gap re-verified against the live CLI and the corpus before it is trusted — the item's own observation claim was false, so its text is evidence, not instruction." },
+  { id = "EN-2", text = "ADR-005's tiers and design sec-6's placement table are read; the anti-pattern to avoid is restating `doctrine --help` — using-doctrine.md's own header already states it names verbs and states discipline, never reproducing help." },
+  { id = "EN-3", text = "The existing domain docs are checked for an owner before any new home is minted: install/model-band.md for prompt, install/claude-activation.md for serve --mcp, install/dispatch-mechanics.md for worktree, install/using-doctrine.md § Relating entities for supersede." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "One ledger row per IMP-484 gap in notes.md — including observation (not-a-gap, with install/using-doctrine.md:68-105 as the citation) and each developer-only surface (out of scope, with the reason) — so no gap is settled by silence." },
+  { id = "EX-2", text = "The corpus-health group (doctor, validate, check, publication) gains a pull-tier orientation section, reachable from boot or a skill — an agent told to run a check it has never been told exists is the defect this axis closes." },
+  { id = "EX-3", text = "The reports group, config and the facets group each gain a pull-tier orientation section; the prose names the verbs and their intent and does not reproduce `doctrine --help`." },
+  { id = "EX-4", text = "prompt gains a section in install/model-band.md; supersede, serve --mcp and worktree extend the domain doc named at EN-3, or gain a section where no doc owns the surface, with the choice recorded per gap." },
+  { id = "EX-5", text = "No new signpost is minted for a verb. It is confirmed that the sections landed in existing published docs; if any gap genuinely needs a new published doc, that doc is declared in publication/manifest.toml, pointed at from boot or a skill, and the divergence from this plan's default home is recorded — never a silent third home." },
+  { id = "EX-6", text = "Every command the new orientation names is accepted by the binary — the core-process and guardrails command-acceptance tests stay green." },
+  { id = "EX-7", text = "IMP-484's structural gaps (the thin skill-map; the boot Memory index enumerating signposts only) are each either acted on within its tier or recorded as a judgement with its reason — with ISS-215's three missing signposts explicitly left to ISS-215, not absorbed here." },
+]
+verification = [
+  { id = "VT-1", expects = "the corpus-health and reports orientation lands in the pull-tier doc", test_file = "install/using-doctrine.md", keywords = ["doctrine doctor", "doctrine blockers", "doctrine explain", "doctrine estimate"], waived = false },
+  { id = "VT-2", expects = "the shipped band mechanism explains the verb it already tells clients to run", test_file = "install/model-band.md", keywords = ["doctrine prompt resolve", "band"], waived = false },
+  { id = "VA-1", text = "The disposition ledger covers every IMP-484 gap with a destination or a recorded out-of-scope reason; each admitted gap's section is read once as a client agent and orients without reproducing `--help`." },
+  { id = "VA-2", text = "No signpost is minted as a table of contents for a verb; `doctrine memory list --type signpost` shows no signpost whose subject is a CLI surface group." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Client-read verification and the F-7 control"
+objective = "Prove conformance by the acceptance test the design names — a client agent's read in a scratch repo, per channel, with the RV-391 F-7 negative control — rather than by a diff (design sec-8, DEC-314). Each of sec-6's seven channels reaches the client by a different seam, so each needs its own check: the published install/ copies (library show, no file on disk), the materialised .doctrine/memory/shipped/ copies, the installed skills tree, the rendered entity scaffolds, the boot-assembled fragments, the served design prompts, and the installed integration assets. The control plants one repo-private id (ADR-007) in one swept file per channel and requires the read to flag every planted id; a read that returns clean over a planted id is a failure, not a pass. This is the criterion F-7 owed to the plan."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 complete; every corpus file is swept, and the three per-axis evidence sets (citation dispositions, corrected claims, dispositioned gaps) are in notes.md." },
+  { id = "EN-2", text = "The scratch repo is created with the freshly built in-tree binary (`./target/debug/doctrine`), never the read-only installed copy, and never inside this worktree — in doctrine, ADR-007 resolves to doctrine's own record, which is exactly the false pass the test exists to catch." },
+  { id = "EN-3", text = "The seven channels of design sec-6 are enumerated with their reach check before the read begins, so the read's scope is fixed in advance." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A scratch repo exists at a recorded temp path (`git init` plus `doctrine install`) carrying all seven channels: the published install/ copies, the materialised shipped memory, the installed skills tree, rendered entity scaffolds, the boot-assembled snapshot, served design prompts, and installed integration assets." },
+  { id = "EX-2", text = "For each channel, one repo-private id (ADR-007) is planted in one swept file and the read reports the exact file and the flagged id; every planted id is flagged. A channel whose planted id goes unflagged is recorded as a failure of the read, and the read is repaired before the phase exits." },
+  { id = "EX-3", text = "The planted ids are removed, and the channel reads over the unplanted copy are clean: every citation resolves to one of DEC-311's forms or stands alone." },
+  { id = "EX-4", text = "The read is per changed corpus file — one whole-file read per channel — not a grep; each repoint is proven with `doctrine library show <address>` executed in the scratch repo." },
+  { id = "EX-5", text = "A mechanical sweep of the post-sweep corpus for repo-private ids accompanies the read, with a known-positive control; every hit is dispositioned, and none is reported as a clean zero." },
+  { id = "EX-6", text = "On the final tree, `doctrine doctor`, `doctrine check gate`, `doctrine publication validate` and tests/e2e_claude_install.rs are green, and no golden was edited incidentally." },
+  { id = "EX-7", text = "The closure artefact is complete in notes.md: the three per-axis evidence sets plus a per-channel control log naming, for each channel, the planted id, the swept file it was planted in, and whether the read flagged it." },
+]
+verification = [
+  { id = "VT-1", expects = "the shipped-guidance gates are green on the final tree", test_file = "tests/e2e_claude_install.rs", keywords = ["fn design_prompts_have_no_consumer_outside_the_design_run", "fn every_command_named_by_core_process_is_accepted_by_the_binary"], waived = false },
+  { id = "VT-2", expects = "both new published addresses are still declared after the sweep", test_file = "publication/manifest.toml", keywords = ["reference/shipped-corpus-authoring.md", "reference/design-run-obligations.md"], waived = false },
+  { id = "VA-1", text = "THE F-7 CONTROL. In the scratch repo, one repo-private id is planted in one swept file per channel, and the read flags every planted id. A read that passes over a planted id is a failure and is recorded as one — the control proves the read is not vacuous, which is the only thing that makes the clean reads meaningful." },
+  { id = "VA-2", text = "The per-channel reads over the unplanted copies are clean, and each repoint in the ledger resolves through `doctrine library show <address>` in the scratch repo, not in this worktree." },
+]
+specs        = []
+requirements = []
