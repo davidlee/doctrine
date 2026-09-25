@@ -54,7 +54,8 @@ pub(crate) struct DoctrineToml {
 const DESIGN_KEY: &str = "design";
 
 /// Parse a project `doctrine.toml` body into its sub-configs (PURE). The shell
-/// owns the file read; this is the ONLY `doctrine.toml` parser.
+/// owns the file read; this and [`design_entry`] are the only `doctrine.toml`
+/// parsers.
 pub(crate) fn parse(text: &str) -> anyhow::Result<DoctrineToml> {
     // Design §3.3: confidence bounds are "purely informational until consumed" —
     // no runtime effect in this slice. We deliberately do NOT eagerly validate

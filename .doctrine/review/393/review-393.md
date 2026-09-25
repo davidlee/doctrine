@@ -39,3 +39,29 @@ Lines of attack:
 7. **Tests.** Behaviour vs theatre; golden brittleness; VT-1..VT-12 coverage.
 8. **Prompt text.** Mode-neutral; no dangling reference to the retired
    hand-built listing.
+
+## Synthesis
+
+- **Overall:** solid
+- **Synopsis:** SL-266 renders the whole inquiry map as a tree over the
+  `Detail::Full` turn envelope, through one path (`tree_lines`) shared by
+  `design tree` and `show --format tree`. The pure renderer's placement (cycles,
+  absent parents), wrap/drop/overflow rules, colour-additive output and header
+  counts are sound and tested for behaviour. `map_changed` compares the
+  `InquiryMap` state, and the relay line fires last, only in relay mode and only
+  on a map change — never on replay, adopt or sidecar. Five findings, all
+  verified at `fd3c53453`. F-1 (doc comment moved onto the wrong fn), F-2
+  (`slice_ref` is now the one spelling) and F-5 (the condition's "that listing"
+  now reads "that tree") were fixed. F-4 was fixed by `dtoml::design_entry`,
+  so the design writes now depend only on `[design]` and on valid TOML syntax,
+  with red/green e2e and unit coverage. F-3 was part-fixed (`State::word`
+  derives from `InquiryLifecycle::as_str`); the typed `MapNode` fields that
+  would delete the renderer's unreachable string fallbacks are follow-up
+  IMP-486. Residuals: `dtoml::parse`'s doc still claims to be "the ONLY
+  `doctrine.toml` parser", which `design_entry` makes untrue (a one-line doc
+  nit). The design reconciliation items stay open for `/reconcile`: sec-3
+  rule 2 against DEC-307's railed drop, and the sec-4 scan skip rules. RV-392's
+  scan fixes hold.
+- **Haiku:** *One table, not six —
+  / the tree now waits on its own
+  / key, and names its view.*
