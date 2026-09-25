@@ -1,12 +1,11 @@
-<!-- Shipped reference (ADR-005 PULL tier). Edit the source in
-     `install/review-ledger.md`. Published, not projected (ADR-019): there is no
-     copy on disk in an installed project — read it with `doctrine library show
+<!-- Shipped reference. Published, not projected: there is no copy on disk in an
+     installed project — read it with `doctrine library show
      reference/review-ledger.md`. Names verbs and states the invariant protocol — it never reproduces
      `doctrine review --help`; ask the CLI for exact flags. -->
 
 # The review ledger
 
-How to drive a review on the **RV kind** (`RV-NNN`, ADR-007) — the structured,
+How to drive a review on the **RV kind** (`RV-NNN`) — the structured,
 append-only audit substrate the hand-made `audit.md` lacked. This doc owns the
 *invariant* protocol shared by every review skill (`/audit`, `/code-review`,
 `/inquisition`): pick the subject, open + prime, raise, dispose + resolve,
@@ -96,8 +95,8 @@ Warm the reviewer context so the staleness signal has a path-set to hash:
 1. `doctrine review prime RV-NNN` — populates the warm-cache from the **target
    slice's selectors** (`scope-relevant` + `design-target`; the path-set the
    staleness signal hashes). One call, no curation step. (The hand-authored
-   `domain_map` of areas/invariants/risks was a dead authoring tax — retired in
-   SL-147; selectors, seeded at `/slice` and `/design`, are the path-set now.)
+   `domain_map` of areas/invariants/risks was a dead authoring tax — retired;
+   selectors, seeded at `/slice` and `/design`, are the path-set now.)
 2. Seed the ledger's `## Brief` (in `review-NNN.md`) with the **lines of attack**:
    what this review is probing and the invariants it pins the subject to — this is
    where the reviewer's intent lives, not in a persisted map.
@@ -121,7 +120,7 @@ first time.
 
 - **`blocker`** is the only severity that gates the *target's* close. An unresolved
   blocker on an active RV refuses the `audit→reconcile` and `reconcile→done`
-  transitions (the close-gate teeth, enforced in the binary; D-C9b). Reserve it for
+  transitions (the close-gate teeth, enforced in the binary). Reserve it for
   findings that must not ship unreconciled.
 - **`major` / `minor` / `nit`** record the finding but never block close.
 
@@ -160,12 +159,12 @@ Then close each finding **terminal**:
 - **Self-review** drives both roles via `--as` (raiser raises / verifies /
   withdraws; responder disposes). The per-review lock and the per-finding `can()`
   gate keep a one- or two-party review correct; `--as` is **cooperative role
-  assertion, not a security boundary** (ADR-007).
+  assertion, not a security boundary**.
 - Loose conversation notes are **insufficient** for closure-grade work — findings
   live in the ledger, not the conversation.
 
-**Route axis** (provisional — applies to design-review ledgers under the
-RFC-026 P10 trial; not to `/audit` or `/code-review` passes):
+**Route axis** (provisional — applies to design-review ledgers, not to
+`/audit` or `/code-review` passes):
 
 Severe findings on a design-review ledger additionally carry a route as the
 first token of the disposition — `route:<route> <vocab>`. The vocab above
@@ -180,8 +179,7 @@ other finding, routed or not.
 The operative rule — the closed route set, what each route owes, and the form
 `--response` must take — is delivered on every reviewing turn by
 `design-prompts/reviewing.md`, which owns it. This entry exists so the axis is
-discoverable beside the vocab, not to restate it. Nothing validates it; see
-`CON-006`.
+discoverable beside the vocab, not to restate it. Nothing validates it.
 
 ### Anti-escape guardrails
 
@@ -208,19 +206,19 @@ the owning skill** (e.g. an audit's phase-sheet harvest).
 
 ## §6 — Done + close-gate
 
-A review is **done** when **every finding is terminal** — verified or withdrawn
-(D-C9a). `doctrine review status RV-NNN` then reports `done · await=none`. Done is
+A review is **done** when **every finding is terminal** — verified or withdrawn.
+`doctrine review status RV-NNN` then reports `done · await=none`. Done is
 about the *ledger*; closing the *subject* is the next, separate move.
 
-**The empty ledger is the carve-out, not an instance of the rule.** D-C9a is
-vacuously true of a review with no findings; D-C8 overrides it and fixes an
+**The empty ledger is the carve-out, not an instance of the rule.** The
+all-terminal rule is vacuously true of a review with no findings; the
+empty-ledger carve-out overrides it and fixes an
 empty ledger at `active · await=raiser`, "so an implementation can never mistake
-'no findings yet' for completion". Read D-C9a as the all-terminal rule for a
-*non-empty* ledger. (Reading §6 alone, without D-C8, is how `IMP-098` talked
-itself into vacuous-done; `ISS-314` tracks the incumbent `derived_status` still
-answering `done` here, against the ADR.)
+'no findings yet' for completion". Read the all-terminal rule as applying to a
+*non-empty* ledger. (Reading §6 alone, without the carve-out, is how a review
+talks itself into vacuous-done.)
 
-The **close-gate** (D-C9b): an unresolved `blocker` on an active RV refuses the
+The **close-gate**: an unresolved `blocker` on an active RV refuses the
 target's closure transitions — resolve it (`verify` or `withdraw`) before the
 subject can advance. `major` / `minor` / `nit` never gate.
 

@@ -2,22 +2,22 @@
 target = ".doctrine"
 
 [base]
-# The MINIMAL projection base (SL-227 FR-007/FR-008, D8). `doctrine install`
+# The MINIMAL projection base. `doctrine install`
 # eagerly projects ONLY these backings; every other embedded asset is PUBLISHED
 # (reachable on demand via the publication manifest), never eagerly copied. Keys
-# MUST match publication.rs's BASE_BACKINGS. `.gitignore` is served by the
+# MUST match the engine's `BASE_BACKINGS`. `.gitignore` is served by the
 # [gitignore] leg below; the two content backings map to `install/<key>` embed
 # sources and land write-if-absent into `.doctrine/<key>`.
 backings = [".gitignore", "doctrine.toml", "project-orientation.md"]
 
 [dirs]
-# Entity roots are NO LONGER eagerly scaffolded here (FR-008): each appears
-# lazily on first `<kind> new` via entity.rs `materialise*`. Infrastructure dirs
+# Entity roots are NO LONGER eagerly scaffolded here: each appears
+# lazily on first `<kind> new` via the entity engine's `materialise*`. Infrastructure dirs
 # (agents, hymns, workflows) are created by their own forward-step install legs.
 create = []
 
 [memory]
-# The eager orientation-memory seed is retired (D8, ACCEPTED). Its orientation
+# The eager orientation-memory seed is retired. Its orientation
 # content now ships as the projected `project-orientation.md` base backing, so a
 # base install seeds NO memory entity. `seed_authoring_memories` early-returns on
 # this empty list; `seed_by_key` remains a live caller for explicit re-seeding.
@@ -26,13 +26,13 @@ seed_items = []
 [gitignore]
 # Runtime state is disposable and must never be committed; the convenience
 # `phases` symlink and ad-hoc `handover.md` are gitignored so they never enter
-# the tracked authored tree (slice-004 D6/D8). Additive — re-install is a no-op.
+# the tracked authored tree. Additive — re-install is a no-op.
 #
 # Memory: `items/` holds committed authored entities (created above, NOT ignored).
 # The derived subtrees (index/embeddings/state) are regenerable — ignore the
 # contents narrowly; never blanket `.doctrine/memory/*`, which would swallow
-# the committed `items/` tree (slice-005 PHASE-06). `shipped/` is the
-# binary-materialized global-memory corpus (SL-018) — derived, gitignored.
+# the committed `items/` tree. `shipped/` is the
+# binary-materialized global-memory corpus — derived, gitignored.
 entries = [
   ".doctrine/state/",
   ".doctrine/slice/*/phases",
@@ -44,7 +44,7 @@ entries = [
   ".doctrine/memory/shipped/",
   ".doctrine/dispatch/",
   ".doctrine/skills/*",
-  # Observations (SL-231): authoritative records under
+  # Observations: authoritative records under
   # `.doctrine/observations/records/` are AUTHORED collection data — committed,
   # diffable, visible in review by default. Only the reserved publication
   # temporaries are ignored: the writer publishes by writing a complete sibling
@@ -53,13 +53,13 @@ entries = [
   # crossed against this entry by `observation_publication_temps_are_ignored`.
   # Do NOT broaden this to the tree: that silently makes a client's corpus
   # local-only and forfeits correlation and audit history. A project that wants
-  # that tradeoff opts in explicitly — see install/using-doctrine.md.
+  # that tradeoff opts in explicitly — see the `using-doctrine.md` reference.
   ".doctrine/observations/**/.tmp.*",
 ]
 
 [hymns]
 # `stage/design` seals the invariant stage fragment of the managed design
-# workflow (SL-233, PRD-019, SPEC-023): the framework body is authoritative and
+# workflow: the framework body is authoritative and
 # any user-provenance twin at that slot is dropped before matching.
 seal = ["preamble/core","stage/design"]
 expose = ["harness/claude","harness/cursor","model/anthropic/claude-sonnet-4","model/deepseek/_default","role/worker"]

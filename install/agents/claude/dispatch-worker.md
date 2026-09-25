@@ -33,5 +33,5 @@ Role guidance:
 {{ prompt resolve --role worker }}
 
 `name:` above MUST equal the `DISPATCH_WORKER_AGENT_TYPE` discriminator in
-`src/worktree/mod.rs` — the spawn path names this agent type. A drift test pins
+`doctrine worktree` — the spawn path names this agent type. A drift test pins
 the two together.

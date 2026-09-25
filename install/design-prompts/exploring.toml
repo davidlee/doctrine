@@ -1,4 +1,4 @@
-# The runbook guarding the edge out of `exploring` (SL-233 PHASE-16, DEC-101).
+# The runbook guarding the edge out of `exploring`.
 #
 # Structured data in TOML, prose in Markdown — this store's two-tier convention.
 # Its sibling `.md` files are process fragments: what the machine will reject.
@@ -14,7 +14,7 @@
 #
 # Step ids are API. Doctrine's downstream logic keys on the id and never on the
 # command behind it, so a project will be able to substitute a verifier and keep
-# the contract's identity once the override seam lands (IMP-372). Ids are
+# the contract's identity once the override seam lands. Ids are
 # explicit and author-assigned, never positional: if identity were list
 # position, inserting a step at the top would silently repoint every persisted
 # discharge — the rule this repo already enforces on `PHASE-NN` and `EN-/EX-/VT-`.

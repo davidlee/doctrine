@@ -1,6 +1,6 @@
 # REC {{ref}} — {{move}}
 
-Reconciliation record (SPEC-002). The structured deltas + evidence live in the
+Reconciliation record. The structured deltas + evidence live in the
 sister `rec-NNN.toml`; this prose companion carries the rationale for the act.
 
 ## Rationale

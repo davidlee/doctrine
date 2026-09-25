@@ -97,12 +97,12 @@ instead: `"disposition": {"conducted": {"review": "RV-NNN"}}`.
   fill with invented findings.
 - The current design must stand alone. A history ledger may explain how it
   changed, but it may not carry context required to understand or implement it.
-  *One provisional exception, under the RFC-026 P10 trial:* an instrument-routed
+  *One provisional exception, under a provisional trial:* an instrument-routed
   finding's criterion sketch and placement constraint stay on the RV ledger and are not
   repaired into the design, and `/plan` is instructed to read them there.
   Nothing else may lean on the ledger this way.
 
-## Routing a severe finding (provisional — RFC-026 P10 trial)
+## Routing a severe finding (provisional)
 
 Applies to `blocker` and `major` findings on a design-review ledger. `minor` and
 `nit` dispositions are unchanged.
@@ -179,5 +179,5 @@ prose, so you verify it in this review as usual.
 
 Nothing validates any of this. The slice close gate will not let a blocker be
 closed over unverified, which forces the verify act to happen — but no gate
-reads what you wrote, and none checks that a criterion exists. `CON-006`
-enumerates every unenforced clause with the code site proving it.
+reads what you wrote, and none checks that a criterion exists. Each unenforced
+clause is enumerated with the code site proving it.

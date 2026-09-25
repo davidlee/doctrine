@@ -1,6 +1,5 @@
-<!-- Shipped reference (ADR-005 PULL tier). Edit the source in
-     `install/using-doctrine.md`. Published, not projected (ADR-019): there is no
-     copy on disk in an installed project — read it with `doctrine library show
+<!-- Shipped reference. Published, not projected: there is no copy on disk in an
+     installed project — read it with `doctrine library show
      reference/using-doctrine.md`. Names verbs and states discipline — it never reproduces
      `doctrine --help`; ask the CLI for exact flags. -->
 
@@ -49,7 +48,7 @@ Four homes, told apart by what the record *is* — do not conflate them:
   (`open|triaged|started|resolved|closed`), it is **not** a backlog item. A
   `risk` is admitted only as *unresolved work-risk* — uncertain future harm that
   may need mitigation, acceptance, or expiry — never as a general epistemic note.
-- **knowledge_record (PRD-010) = epistemic / governance records** — seven kinds:
+- **knowledge_record = epistemic / governance records** — seven kinds:
   assumptions (ASM), decisions (DEC), questions (QUE), constraints (CON),
   evidence (EVD), hypotheses (HYP), and concepts (CPT); each with its own held→validated
   lifecycle. EVD and HYP carry `supports`/`disputes` evidentiary edges for
@@ -176,10 +175,10 @@ hand-edited. Keep each datum on its correct side of the tier split.
 Connect entities with the **`link` verb**, not a hand-written row. `doctrine link
 <source-id> <label> <target-id>` writes the outbound relation; `doctrine unlink`
 removes it. Storage is **outbound-only** — you link from the source side and
-reciprocity is derived (ADR-004); `inspect` / `show` render both directions.
+reciprocity is derived; `inspect` / `show` render both directions.
 
 The legal `(source, label) → target` vocabulary lives in **`RELATION_RULES`**
-(`src/relation.rs`, ADR-010) — the single source of truth. Don't transcribe it;
+— the single source of truth. Don't transcribe it;
 `link` rejects an illegal pair. Not every axis is `link`-writable: most relations
 (e.g. a slice's `governed_by` / `specs` / `supersedes`) are, but the spec spine
 (`descends_from` / `parent` / `members` / …) stays a typed key written by its own

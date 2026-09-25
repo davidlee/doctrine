@@ -67,15 +67,18 @@ criteria ids (`EN-/EX-/VT-`) are immutable — edits append, never renumber.
 (`FR-`/`NF-`). Doc-local enumerations — bare (`OQ-1`, `D1`, `R1`, `Q1`, `C1`).
 A doc-local id means nothing outside the artefact holding it, and your reader
 has not memorised it, so **introduce it qualified by that artefact's durable
-id** on first use in a message — `SL-233`'s `OQ-1`, `RV-325` `F-4` — with a
+id** on first use in a message — a slice's `OQ-1` written as `SL-NNN`'s
+`OQ-1`, or a review's `F-4` as `RV-NNN`'s `F-4`, say — with a
 one-line synopsis where context does not supply one. This binds your own prose,
 not only what you quote. Criteria modes — `VT` by test / `VA` by agent / `VH` by
 human.
 
 **Reference docs (read on demand).** Cited bare as `<name>.md` throughout the
 skills and templates; they are **published, not projected** — there is no copy
-on disk to read or glob for (ADR-019). Read one with `doctrine library show
+on disk to read or glob for. Read one with `doctrine library show
 reference/<name>.md`; `doctrine library tree` lists them. `glossary.md` — kinds,
 ids, full reference forms, verification taxonomy. `using-doctrine.md` — which
 verb for which intent, reading via `show`, storage tiers, and hand-editing /
-edit-preserving rules.
+edit-preserving rules. `shipped-corpus-authoring.md` — how to write text that
+doctrine ships into a client repo, and the per-site procedure for citing without
+a repo-private id.

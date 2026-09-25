@@ -1,6 +1,6 @@
 # REV {{ref}} — {{title}}
 
-Revision (ADR-013) — a pending revise-intent against authored governance/spec
+Revision — a pending revise-intent against authored governance/spec
 truth. The structured `[[change]]` payload lives in the sister `revision-NNN.toml`;
 this prose companion carries the rationale and the free-text before/after excerpts
 for prose-body section edits.

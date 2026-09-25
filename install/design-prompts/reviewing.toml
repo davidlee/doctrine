@@ -1,4 +1,4 @@
-# The runbook guarding the edge out of `reviewing` (SL-233 PHASE-08, DEC-101).
+# The runbook guarding the edge out of `reviewing`.
 #
 # THE AUTHORING RULE, the step-id-is-API contract and the digest-staleness rule
 # are stated once, in `exploring.toml`, and govern this file unchanged.
@@ -12,14 +12,14 @@
 #
 # TWO OF THE THREE FIRE FOR A SECOND TIME. Scope reconciliation fires on edge 2
 # and again here; selector recording fires on edge 3 and again here. That is
-# DEC-103, not bookkeeping error: an obligation that bites at several moments is
+# Not bookkeeping error: an obligation that bites at several moments is
 # delivered at every one of them, and the review is precisely where a decision
 # may have moved the scope or the touch-set.
 #
 # THE ORDER IS ARBITRARY AND IS CONCEDED AS SUCH. Nothing makes scope
 # reconciliation precede selector recording, and `sequence` refuses any discharge
 # that does not name the step at the cursor. `set` mode — a coverage set with no
-# order — is deferred to IMP-373 because its RENDER is unsketched, not because
+# order — is deferred because its RENDER is unsketched, not because
 # these steps do not want it. Imposed order on three discrete acts is fake
 # determinism, judged cheap, not argued away.
 

@@ -2,11 +2,11 @@
 #
 # This is a reference example, not a live config. To use it: place it at
 # `.doctrine/doctrine.toml` — the single canonical home for project-local
-# config (ISS-055).
+# config.
 # and uncomment the table below. With NO file present, the baked defaults shown
 # here are in force, so adopting this is purely opt-in.
 #
-# The [conduct] table declares the *conduct axis* (SL-028, ADR-009 §2): per
+# The [conduct] table declares the *conduct axis*: per
 # lifecycle state, who conducts it (`actor`) and how much latitude exiting it
 # carries (`autonomy`). It is ADVISORY in v1 — `slice status` and `slice show`
 # PRINT the posture; nothing is enforced or gated. `actor` is declared intent,
@@ -33,7 +33,7 @@
 # [conduct.plan]      # "no code without an approved plan" gate
 # autonomy = "gate"
 #
-# [conduct.reconcile] # the closure gate (ADR-003 §8)
+# [conduct.reconcile] # the closure gate
 # autonomy = "gate"
 #
 # [estimation]
@@ -45,7 +45,7 @@
 # unit = "magic_beans"
 #
 # [reservation]
-# # How fresh entity ids are allocated (SL-148).
+# # How fresh entity ids are allocated.
 # #   local  — single-tree: local mkdir is the claim; remote is never touched
 # #   shared — cross-clone: remote ref CAS is the claim; unreachable remote hard-errors
 # #   auto   — shared when a remote is reachable, degrade to local otherwise (default)
@@ -80,13 +80,13 @@
 #
 # [dispatch]
 # # Preferred subprocess harness for dispatch workers.
-# # "pi"   — pi RPC mode (SL-108)
+# # "pi"   — pi RPC mode
 # # "codex" — codex exec (default)
 # preferred-subprocess-harness = "pi"
 # # The trunk delivery ref dispatch advances to / the close-integration
 # # gate checks against. Defaults to refs/heads/main.
 # deliver-to = "refs/heads/main"
-# # Buffered-trunk posture (SL-166). The source-of-truth ref where `.doctrine`
+# # Buffered-trunk posture. The source-of-truth ref where `.doctrine`
 # # content is authored, ahead of `deliver-to`. Setting it declares that
 # # `deliver-to` is a non-checked-out integration buffer promoted from this ref,
 # # and ENABLES the corpus-loss guards g1 (refuse trunk-mutating verbs while HEAD
@@ -97,7 +97,7 @@
 # # buffer. Rebased/divergent history, shallow/grafted clones, and multiple
 # # authoring branches are UNSUPPORTED and hard-refuse setup.
 # authoring-branch = "refs/heads/edge"
-# # The DECLARED hard scope tier for a dispatch worker's delta (SL-198): no path
+# # The DECLARED hard scope tier for a dispatch worker's delta: no path
 # # matching a line below may reach the coordination tree. GITIGNORE SYNTAX —
 # # positive + negative globs, with last-match-wins precedence, so a project
 # # NEGATES a defaulted zone with `!path` or EXTENDS the set as legitimate writes
@@ -110,7 +110,7 @@
 # # this very config lives under the first of them. The two entries below are a
 # # visible echo of those floors.
 # #
-# # SL-254: the belt that read the REST of this list was the retired
+# # The belt that read the REST of this list was the retired
 # # `worker_commit` tool. Until its replacement reader lands, the lines beyond the
 # # two code floors are a DECLARATION of intent, not an enforced fence.
 # worker-forbidden-writes = [

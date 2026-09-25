@@ -1,6 +1,6 @@
 # Review {{ref}} — {{facet}} of {{target}}
 
-Adversarial-review ledger (ADR-007). Structured findings live in the sister
+Adversarial-review ledger. Structured findings live in the sister
 ledger toml; this prose companion carries the reviewer's framing.
 
 ## Brief

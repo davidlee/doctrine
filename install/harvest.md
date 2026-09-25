@@ -1,6 +1,5 @@
-<!-- Shipped reference (ADR-005 PULL tier). Edit the source in
-     `install/harvest.md`. Published, not projected (ADR-019): there is no copy on
-     disk in an installed project — read it with `doctrine library show
+<!-- Shipped reference. Published, not projected: there is no copy on disk in an
+     installed project — read it with `doctrine library show
      reference/harvest.md`. Owns the end-of-work harvest procedure once; consuming skills cite it and
      carry only their own freshness check inline. -->
 
@@ -88,7 +87,7 @@ The load-bearing part. A consumer of a `## Harvest` section checks its
 - **stale** → the harvest is **owed**: route to `/harvest` first to bring it
   current, never silently re-derive the manifest by hand.
 
-**ADR-005 conformance.** This freshness check rides **inline in each consumer
+**Shipped-corpus conformance.** This freshness check rides **inline in each consumer
 skill's own body** — the doc explains the contract; the skill carries the
 behavioural rule. Demoting the check to a mere pulled pointer into this doc would
 be an error: the behaviour must be present where the skill acts.

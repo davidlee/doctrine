@@ -6,7 +6,7 @@ approval = "none"      # SEPARATE axis, orthogonal to status: none | requested |
 updated = "{{date}}"
 tags    = []
 
-# A Revision (REV, ADR-013) is a first-class change-axis entity: a pending
+# A Revision (REV) is a first-class change-axis entity: a pending
 # revise-intent against authored governance/spec truth plus a staged delta payload.
 # Lifecycle (proposed→started→done; abandoned from any non-terminal) is moved by
 # `revision status REV-N <state>`. `approval` is orthogonal — lifecycle transitions

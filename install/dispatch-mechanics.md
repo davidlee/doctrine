@@ -1,9 +1,8 @@
-<!-- Shipped reference (ADR-005 PULL tier). Edit the source in
-     `install/dispatch-mechanics.md`. Published, not projected (ADR-019): there is
-     no copy on disk in an installed project — read it with `doctrine library show
+<!-- Shipped reference. Published, not projected: there is no copy on disk in an
+     installed project — read it with `doctrine library show
      reference/dispatch-mechanics.md`. Explains the fork→land funnel and
      its sharp edges — it never reproduces `doctrine --help`; ask the CLI for exact
-     flags. Distilled from project-local dispatch memories (CHR-036). -->
+     flags. -->
 
 # Dispatch mechanics
 
@@ -135,7 +134,7 @@ commit --slice N -m <msg> -- <path>…`**, never a raw `git commit`. The verb:
   never rides along — the AGENTS.md path-limit rule, enforced);
 - **refuses before touching the index** if the to-be-committed set escapes the
   declared paths (`commit-undeclared-path`) or deletes a path that was not
-  *explicitly* named (`commit-undeclared-deletion`) — the ISS-234 mass-delete shape;
+  *explicitly* named (`commit-undeclared-deletion`) — the mass-delete shape;
 - hands the child `git commit` exactly the *validated* deletion set via a
   child-scoped `DOCTRINE_ALLOWED_DELETIONS`, so a **declared** deletion passes the
   coord pre-commit hook's deletion arm while its **reversion arm still runs**.
@@ -309,7 +308,7 @@ a candidate workflow is active (**never** `review/<N>`, a review surface that is
 never a trunk payload) — asserts that payload is **already an ancestor** of trunk
 (the same `is_ancestor` standard the close gate holds), and commits one
 **Verified** trunk row to `dispatch/<N>`, mutating no external ref. It is the
-sanctioned replacement for a hand-edited `journal.toml` trunk row (SL-211). It
+sanctioned replacement for a hand-edited `journal.toml` trunk row. It
 *records*; it never *advances* — landing the payload is a separate, out-of-band
 step (`git merge --no-ff phase/<N>-NN`, or the admitted candidate). Retrieve
 `mem.pattern.dispatch.split-lineage-close-conflict-direct-land` for the full
@@ -366,6 +365,6 @@ completion:
 
 - `mem.signpost.doctrine.dispatch` — the retrieval index for the sharp
   mid-operation traps (retrieve *during* a dispatch, not up front).
-- ADR-006 (worktree posture), ADR-008 (jail isolation), ADR-011 (harness-agnostic
-  spawn), ADR-012 (integration topology) — the decisions behind this machinery.
+- worktree posture, jail isolation, harness-agnostic spawn, and integration
+  topology — the decision shapes behind this machinery.
 - `doctrine dispatch --help`, `doctrine worktree --help` — exact command shapes.

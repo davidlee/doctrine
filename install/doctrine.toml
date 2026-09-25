@@ -1,6 +1,6 @@
 # doctrine.toml — project conduct config (installed starter).
 #
-# This is the single canonical home for project-local config (ISS-055). It is
+# This is the single canonical home for project-local config. It is
 # written once by `doctrine install` and then yours to edit; a re-install never
 # clobbers it. Every table below is OPTIONAL — with a key (or the whole file)
 # absent, the baked defaults are in force. Uncomment only what you want to steer.
@@ -8,7 +8,7 @@
 # For the exhaustive, annotated catalogue of every knob, see the shipped
 # reference `doctrine.toml.example` (published, not projected).
 
-# --- Conduct axis (ADR-009 §2) -------------------------------------------
+# --- Conduct axis -------------------------------------------------------
 # Per-lifecycle-state posture; ADVISORY in v1 (printed by `slice status`, never
 # enforced). `autonomy` is EXIT semantics — it governs advancing OUT of a state.
 #   actor    = self | agent | peer | team   (`self` = the human author)

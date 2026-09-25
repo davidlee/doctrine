@@ -1,9 +1,9 @@
-# The runbook guarding the edge out of `drafting` (SL-233 PHASE-08, DEC-101).
+# The runbook guarding the edge out of `drafting`.
 #
 # THE AUTHORING RULE, the step-id-is-API contract and the digest-staleness rule
 # are stated once, in `exploring.toml`, and govern this file unchanged.
 #
-# ONE STEP, AND THAT IS THE RESULT (DEC-104, RV-325 F-2). This edge was once
+# ONE STEP, AND THAT IS THE RESULT. This edge was once
 # proposed with nineteen: the fifteen content items a design section must cover,
 # plus four standing guardrails. `mode = "sequence"` admits one discharge per
 # turn, so nineteen obligations here would be nineteen serial mutation turns

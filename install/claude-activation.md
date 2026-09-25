@@ -1,13 +1,12 @@
-<!-- Shipped reference (ADR-005 PULL tier). Edit the source in
-     `install/claude-activation.md`. Published, not projected (ADR-019): there is
-     no copy on disk in an installed project — read it with `doctrine library show
+<!-- Shipped reference. Published, not projected: there is no copy on disk in an
+     installed project — read it with `doctrine library show
      reference/claude-activation.md`. Explains how Claude Code activation works
-     since SL-250 retired the plugin/marketplace install path — it never
+     since the plugin/marketplace install path retired — it never
      reproduces `doctrine --help`; ask the CLI for exact flags. -->
 
 # Claude Code activation
 
-Since SL-250, `doctrine install` activates Claude Code by writing hooks
+`doctrine install` activates Claude Code by writing hooks
 straight into a Claude settings file — no marketplace registration, no plugin
 install. This doc explains what gets written, where, in what command form, and
 what changes if you are mid-cutover from the old plugin path or run under a
@@ -53,11 +52,11 @@ The two scopes write different command forms, because only one of the two
 files is safe to commit:
 
 - **`project`** (committed) writes `${DOCTRINE_BIN:-doctrine}` — never a host
-  absolute path in a tracked file (SL-195, POL-002). If `doctrine` is on every
+  absolute path in a tracked file. If `doctrine` is on every
   collaborator's `PATH`, the entries just work as `doctrine <args>`. If it
   isn't — a harness sandbox where the binary lives somewhere non-standard, for
   example — **set `DOCTRINE_BIN`** to the absolute path before the harness
-  runs; that's the same override `.mcp.json` has taken since SL-195, and the
+  runs; that's the same override `.mcp.json` has taken, and the
   hook commands honour it identically.
 - **`local`** (gitignored) writes the baked absolute path directly, since the
   file never leaves the checkout that produced it.
