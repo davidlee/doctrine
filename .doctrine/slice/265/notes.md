@@ -143,22 +143,57 @@ Plan decisions:
 - The tracked `.doctrine/using-doctrine.md` is a stale projected copy (ADR-019);
   `install/using-doctrine.md` is the source, and the legacy copy is out of scope.
 
+## Execution (2026-09-25) — PHASE-01 landed
+
+Driven through the dispatch funnel: coord `dispatch/265` off `B=2464bbfd6`,
+confined `pi` worker fork `dispatch/sl265-p01` (reaped). Landed as **two**
+commits on `dispatch/265`:
+
+- `d820791ca` `chore(SL-265): declare src/commands/mod.rs a design-target selector`
+- `1ca75a00a` `feat(SL-265): kind-blind show router, Command::Show, guard, census (PHASE-01)`
+
+Verified on the coord tree: `every_kinds_row_routes`, `show_is_read`,
+`families_partition_the_visible_command_tree` green; the five `show` goldens
+(`adr`/`standard`/`knowledge`/`help_families`/`boot_map`) pass unchanged;
+`doctrine show SL-001` is byte-identical to `doctrine slice show SL-001`;
+`[explore]` carries `show` in `--help` and `--help --boot-map`. `record-delta`
+spans `B..S` (the `--start/--end` escape hatch — the phase legitimately spans the
+selector commit).
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · planned (4 phases) · e2b3e23f5
+fresh-as-of: 2026-09-25 · PHASE-01 landed (1ca75a00a) · 1/4 phases
 
 ### Produced
 
 - `SL-265` plan authored (`plan.toml` + `plan.md`) and its runtime sheets
   materialised; `RV-384` closed `done`.
+- `PHASE-01` landed on `dispatch/265`: the `show` router (`src/commands/show.rs`),
+  `Command::Show`, the `explore` family row, `guard.rs` `Read`, census 56→57,
+  `CommonShowArgs::format()` (four inline `--json` sites collapsed).
 
 ### Learned
 
 - The per-kind ref parsers do not share a prefix case rule (`listing::parse_ref`
   two literal cases; `knowledge`/`backlog` uppercase; `spec` case-sensitive) —
   `RV-384` `F-25`.
+- **The import scope belt is the selector set, not the design's prose.** The
+  design's code-impact table names `src/commands/mod.rs` only in prose, so the
+  import refused the delta `undeclared-scope`; the remedy (`doctrine slice
+  selector add SL-265 src/commands/mod.rs`) was applied to the coord branch and
+  the primary. Any file a phase edits must be a declared selector *before* the
+  spawn, not merely named in the design.
+- **`doctrine check regression diff` false-halts a persisted env failure.** The
+  failure signature normalises `src/<file>.rs:LINE:COL` but keeps the panic's
+  **thread id** (`(39267)`), so the same pre-existing failure classifies
+  `changed` (a halt) rather than `persistent` (tolerated). Observed on
+  `reserve::tests::vt3_auto_degradation_is_fail_closed_with_explicit_optin`
+  (ambient `DOCTRINE_RESERVATION_FALLBACK=1`), reproduced identically at `B` in
+  the untouched primary tree. Observation
+  `01a0d82d-21cd-7b50-9b95-a3fe859ab25a`.
 
 ### Open
 
-- `/phase-plan` `PHASE-01`, then `/execute`. `PHASE-01` is the largest phase;
-  its split option is recorded in `plan.md`.
+- `/phase-plan` `PHASE-02` (equivalence + refusals e2e), then drive it. Note the
+  learned item above: PHASE-02's `tests/e2e_show_equivalence.rs` /
+  `tests/e2e_show_refusals.rs` are already declared selectors (`tests/e2e_show*.rs`).

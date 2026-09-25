@@ -54,6 +54,10 @@ intent = "design-target"
 selector = "install/routing-process.md"
 intent = "design-target"
 
+[[selector]]
+selector = "src/commands/mod.rs"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"
