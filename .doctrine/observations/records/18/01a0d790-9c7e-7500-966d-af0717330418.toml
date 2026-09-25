@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d790-9c7e-7500-966d-af0717330418"
+recorded_at = "2026-09-25T07:56:13.822527374Z"
+kind = "friction"
+summary = "slice: the slice.toml scaffold's own example names a retired relation label"
+detail = """install/templates/slice.toml:20 tells the authoring agent to run `doctrine link SL-NNN specs SPEC-018`, but `specs` was retired by the SL-149/ADR-016 migration (PHASE-05 dropped the Specs/Requirements variants): relation::RelationLabel::from_name has no "specs" arm (src/relation.rs:158-182), so the verb is refused. Every freshly scaffolded slice-<NNN>.toml inherits the stale comment (visible in the live corpus, e.g. .doctrine/slice/146, /255, /213 ...). Cost: one refused command per agent that follows the template's own guidance, then a hunt for the live spelling (`doctrine link SL-NNN references --role implements SPEC-NNN`). SL-265 met it while wiring its scope. The template line is RustEmbed'd into the binary, so the fix is an install/templates edit plus a rebuild."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
