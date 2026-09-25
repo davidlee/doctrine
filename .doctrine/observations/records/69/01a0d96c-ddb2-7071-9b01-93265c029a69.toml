@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d96c-ddb2-7071-9b01-93265c029a69"
+recorded_at = "2026-09-25T16:36:25.650321833Z"
+kind = "friction"
+summary = "PHASE-05: a shipped string taught verbatim in three homes — fixing the doc alone turns the gate red"
+detail = "install/model-band.md's band directive was duplicated in src/mcp_server/tools.rs::PROMPT_RESOLVE_MODEL_CMD (doctrine_onboard output) and pinned by two src/boot.rs boot assertions. Correcting the doc in place — the slice's in-scope surface — failed check gate until the out-of-selector src/ sites were also edited, forcing a user-authorised boundary departure. The corpus sweep has no way to see a taught string that a shipped tool *emits*; only a grep for the literal finds it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
