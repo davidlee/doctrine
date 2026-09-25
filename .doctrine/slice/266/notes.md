@@ -157,7 +157,7 @@ the implementation review and audit will exercise.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · audit done (RV-393, RV-394 concluded); gate green; → reconcile
+fresh-as-of: 2026-09-26 · closed — reconciled (RV-394 outcome), close gate green 8877/0
 
 ### Produced
 
@@ -198,8 +198,11 @@ fresh-as-of: 2026-09-26 · audit done (RV-393, RV-394 concluded); gate green; �
 
 - ~~`MapAnswer::Record.form` rendered by neither surface~~ — settled at
   PHASE-02: `json --full` carries it; no model change.
-- `/reconcile`: execute RV-394's Reconciliation Brief (F-1..F-5: design sec-3,
-  sec-4, sec-5, sec-6 prose + selector add/rm).
+- ~~`/reconcile`: RV-394's brief~~ — done (design prose + selector registry).
+- IMP-486 (typed `MapNode` lifecycle/provenance) — owned follow-up.
+- Memory harvest at close: consciously none new. The audit/reconcile gotchas are
+  already covered (`mem.pattern.reconcile.edit-design-out-of-band`) or captured
+  as observations (`records/ae`, `records/f3`).
 - ~~PHASE-04's relay line must reuse `tree::TREE_COMMAND`~~ — done: `relay_line`
   and the footer share one `command()`.
 - ~~`src/design_run/tests.rs` reads `UNATTRIBUTABLE`~~ — PHASE-04 modified it.
