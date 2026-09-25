@@ -11,10 +11,20 @@ canonical id already carries the kind: `SPEC-013` fixes the prefix as identity
 for numbered kinds (`REQ-201`), so `DEC-031` names exactly one kind and
 `doctrine knowledge show DEC-031` spells a fact the ref already stated.
 
-The friction is on record. RFC-011's case-notes (`a2077b93d`) record a failed
-call: `doctrine backlog show RFC-016` was rejected (`unknown backlog prefix
-RFC`) because the cross-kind `search` listing renders `RFC-016` in the same
-column as `IMP`/`ISS` rows and does not hint which `show` verb each id needs.
+**Why it is worth doing, first for a human.** The reader already holds the
+answer: `SPEC-013` fixes the prefix as identity for numbered kinds (`REQ-201`)
+and `STD-002` makes the id authoritative, so `DEC-031` names exactly one kind.
+Being made to restate it — `doctrine knowledge show DEC-031` — is typing the
+caller has already done, and the long kind names are where it costs most
+(`knowledge`, `concept-map`, `revision`). One predictable read verb removes the
+lookup without asking anything of the id that the id does not already carry.
+
+**Second, for an agent.** The same redundancy is where an agent fails. RFC-011's
+case-notes (`a2077b93d`) record a failed call: `doctrine backlog show RFC-016`
+was rejected (`unknown backlog prefix RFC`) because the cross-kind `search`
+listing renders `RFC-016` in the same column as `IMP`/`ISS` rows without hinting
+which `show` verb each id needs. The router dissolves that at its source rather
+than patching the `search` output.
 
 This slice adds one top-level, kind-blind verb:
 
@@ -28,13 +38,18 @@ the twelve that already exist.
 
 **Boundary.** The change is confined to the command layer — a `Command::Show`
 variant, a router under `src/commands/`, one exhaustive-match arm in `guard.rs`,
-one `FAMILIES` entry, and a `SPEC-013` amendment. No kind's `show` implementation
-is touched, no `--format` semantics change, no MCP tool is added.
+one `FAMILIES` entry, a `SPEC-013` amendment, and the two agent-facing surfaces an
+agent reads *at the moment it chooses a verb*: `install/using-doctrine.md`'s verb
+table and the `install/routing-process.md` guardrail, which is inlined into every
+boot snapshot (`sec-4` regenerates it). The remaining guidance — the canon and
+walkthrough skills, `authority-model.md`, and the shipped memories — is out of
+scope and filed as `CHR-078`: those edits take a different mechanism (a shipped
+memory needs a rebuild, `memory sync` and `install`), and the leading intent here
+is the human read path. No kind's `show` implementation is touched, no `--format`
+semantics change, no MCP tool is added (`RV-384` `F-18`).
 
-**Why it is worth doing.** One predictable read verb for any id in hand, and the
-RFC-011 failure dissolves at its source rather than being patched in `search`
-output. The cost is a resolution and a call: no new renderer, no normalised
-envelope, no per-kind content change.
+The cost is a resolution and a call: no new renderer, no normalised envelope, no
+per-kind content change.
 
 The five decisions this rests on are `DEC-295`–`DEC-299` (from `inq-1`–`inq-5`).
 
@@ -67,6 +82,16 @@ The router accepts the 24 numbered prefixes in `kinds::KINDS` and nothing else
 (`DEC-296`). `mem_…`/`mem.<key>`, SPEC-028 observation uids and design-run refs
 are separate address spaces with their own verbs; including them would be a
 second route with a different argument shape, not a table row.
+
+**Case.** The router accepts the canonical `PREFIX-NNN` form and the bare `NNN`
+form, and it accepts an all-lowercase prefix for the same reason the per-kind
+parsers do: `listing::parse_ref` strips the prefix in exactly two literal cases —
+`PREFIX-` or its lowercase spelling — and deliberately **not** case-insensitively,
+so `dec-031` resolves while `Dec-031` is refused. The router mirrors that rule
+rather than inventing a third one: a ref whose prefix is wholly lowercase is
+uppercased before resolution, and mixed case stays refused. Without this the
+design's own equivalence would be false in the spelling a human is most likely to
+type (`RV-384` `F-20`).
 
 ```mermaid
 flowchart TD
@@ -129,16 +154,30 @@ unavoidable, and a wildcard is where a kind added later lands silently. The
 design splits the guarantee into three parts, each enforced where it can be:
 
 1. **Resolution is a pure, testable lookup.** `route(prefix) -> Option<Route>`
-   names every `KINDS` row explicitly and falls through to `None` otherwise,
-   mirroring `outbound_for`'s own fallthrough arm — including its
-   `debug_assert!(false, "outbound_for: unrouted KINDS prefix `{other}`")`
-   precedent — so a debug build that meets an unrouted prefix fails loudly
-   instead of returning a quiet `None`.
+   names every `KINDS` row explicitly, matching on the named prefix constants
+   `kinds` already exports (`kinds::SL`, `kinds::ADR`, …) rather than on string
+   literals — `STD-001`, and `outbound_for` matches literals, which is the
+   precedent *not* to copy (`RV-384` `F-24`). It falls through to `None`
+   otherwise, and it carries **no assertion**. `outbound_for` can hold a
+   `debug_assert!(false)` fallthrough because nothing probes it with an unrouted
+   prefix; `route()` is probed exactly that way by the negative control below, and
+   `cargo test` builds with `debug_assertions` on, so an assertion here would
+   panic rather than return the `None` the test observes. The loud failure lives
+   at the **dispatch site**, where `None` becomes the unrouted-prefix refusal
+   (`RV-384` `F-16`).
 2. **Handling is compiler-exhaustive.** `Route` is a closed enum —
-   `Slice`, `Adr`, `Policy`, `Standard`, `Rfc`, `Spec`, `Req`,
-   `Knowledge(RecordKind)`, `Backlog(ItemKind)`, `Review`, `Rec`, `Revision`,
-   `ConceptMap` (13 variants over the 24 prefixes) — and dispatch is a
-   `match route` with no wildcard, so a new variant cannot be left unhandled.
+   `Slice`, `Adr`, `Policy`, `Standard`, `Rfc`, `Spec`, `Req`, `Knowledge`,
+   `Backlog`, `Review`, `Rec`, `Revision`, `ConceptMap` (13 variants over the 24
+   prefixes) — and dispatch is a `match route` with no wildcard, so a new variant
+   cannot be left unhandled. The knowledge and backlog variants carry **no
+   payload**: `knowledge::run_show` and `backlog::run_show` take
+   `(path, reference, format)` and re-resolve their own kind, so a carried
+   `RecordKind`/`ItemKind` would be a never-read field — the defect `F-9` fixed
+   for `Route::Spec`, and a `dead_code` warning under the zero-warning gate
+   (`RV-384` `F-19`). `route()` classifies those rows through
+   `RecordKind::from_prefix` and `backlog::kind_from_prefix` and then discards the
+   value, so the classification stays single-sourced rather than becoming a
+   prefix list.
 3. **Coverage is pinned by a unit test over the resolver's own table.**
    `every_kinds_row_routes` is a `#[cfg(test)]` unit test in
    `src/commands/show.rs` (it reaches `pub(crate)` `route()` and `KINDS`, which
@@ -157,7 +196,7 @@ so a test over `ALL_KINDS` would not notice a `KINDS` row that
 flowchart LR
   P["prefix from parse_resolvable_ref"] --> R{"route(prefix)"}
   R -->|"Some(Route)"| M["match Route — exhaustive, no wildcard"]
-  R -->|"None"| DA["debug_assert!(false) · refusal"]
+  R -->|"None"| DA["dispatch site: unrouted-prefix refusal"]
   T["every_kinds_row_routes over KINDS (unit test)"] -.->|"pins"| R
 ```
 
@@ -211,7 +250,11 @@ acts are discrete and separately verifiable:
    next free functional label (`FR-001`–`FR-005` are taken). The `SPEC-013`
    § *Uniform command grammar* prose naming the router is **not** a typed row: a
    `modify` row takes a live peer FK, and prose rides the `revision-NNN.md`
-   companion, which `ADR-013` surfaces for manual handling.
+   companion, which `ADR-013` surfaces for manual handling. **Surfacing is not
+landing, and nothing else does it:** no CLI verb edits spec prose — `spec edit`
+sets the descent/parent scalars only (`src/commands/spec.rs`), as the revision's
+own companion is prose — so the companion is applied by hand, and the phase has to
+name that as an act rather than assume it (`RV-384` `F-17`).
 2. **Manual apply.** After `revision approve` and `revision apply` (which surface
    the introduce row for manual handling rather than landing it), `doctrine spec
    req add SPEC-013 --kind functional --label FR-006 --title …` mints the
@@ -229,6 +272,16 @@ acts are discrete and separately verifiable:
    the phase then runs `doctrine coverage verify 265`, and **the exit criterion
    is the cell reading `Verified`, not merely recorded** (`RV-384` `F-13`,
    `F-7`).
+
+4. **Land the prose by hand, then close the `REV`.** Two authored edits, neither
+   reachable from a verb: `spec-013.md` § *Uniform command grammar*, whose line
+   "A top-level `Command` enum names each entity kind" a top-level `show`
+   falsifies, and its § *Responsibilities* paragraph — plus the matching entry in
+   `spec-013.toml`'s structured `responsibilities` list, which mirrors that
+   paragraph. Then `doctrine revision status REV-NNN done`: `ADR-013` requires
+   every `[[change]]` row landed before `done`, and the introduce row landed at
+   step 2 while the prose lands here, so this transition is the phase's last act
+   rather than a formality (`RV-384` `F-17`).
 
 The phase is sequenced **after** the code phase, because the evidence it records
 is the code phase's test. At reconcile the requirement flips `pending → active`
@@ -252,6 +305,8 @@ in slice conformance — expected, disposed `aligned`.
 | `tests/e2e_show_refusals.rs` (new) | unknown prefix / dangling ref / ambiguous bare id |
 | `.doctrine/spec/tech/013/**`, a new `REQ` | the grammar amendment (governance phase) |
 | `.doctrine/revision/NNN/**` | the `REV` staging the introduce row and the prose companion (governance phase) |
+| `install/using-doctrine.md` | the read-entity row of the verb table names `doctrine show <REF>`, and the read-entity paragraph at `:138` follows |
+| `install/routing-process.md` | the guardrail's "read entities via `doctrine <kind> show <ID>`" names the router; the boot snapshot regenerates (`sec-4`) |
 
 The totality assertion is a **unit** test inside `src/commands/show.rs`, not an
 integration test: `route()` and `KINDS` are `pub(crate)`, and `src/lib.rs`
@@ -283,7 +338,9 @@ layering edge (`RV-384` `F-8`).
   yields a routed arm, plus a negative control asserting a synthetic unrouted
   prefix returns `None`.
 - **VT — refusals.** An unknown prefix, a dangling ref and an ambiguous bare id
-  each fail with `kinds::parse_resolvable_ref`'s error, unchanged.
+  each fail with `kinds::parse_resolvable_ref`'s error, unchanged; and a
+  mixed-case prefix (`Dec-031`) is refused where its all-lowercase spelling
+  resolves, per `sec-2`'s case rule.
 - **VT — the new requirement.** The governance phase records a check-bound
   coverage cell and re-derives it with `coverage verify 265`; the exit is the
   cell reading `Verified`.
@@ -293,12 +350,26 @@ layering edge (`RV-384` `F-8`).
 - **VA — surface visible.** `doctrine show` appears in `explore` in `--help` and
   `--boot-map`; the census assertion is updated, not deleted.
 - **VA — governance landed.** `SPEC-013` carries the new `REQ` with its frozen
-  label, the `REV` carries the introduce row and the prose companion, and the
-  coverage cell reads `Verified`.
+  label; `spec-013.md` § *Uniform command grammar* and § *Responsibilities*, and
+  `spec-013.toml`'s `responsibilities` list, all name the top-level router; the
+  `REV` reads `done` with every row landed; and the coverage cell reads
+  `Verified`.
+- **VA — guidance names the router.** `install/using-doctrine.md`'s verb table
+  and `install/routing-process.md`'s guardrail name `doctrine show`, and the
+  regenerated boot snapshot carries the guardrail with the router named. Note the
+  guardrail's sentence is **not** covered by
+  `every_command_named_by_core_process_is_accepted_by_the_binary`, which parses
+  the *core-process* paragraph and executes each invocation it finds there; the
+  `<kind> show` line sits in the **Guardrails** sentence, so naming the router
+  there is unguarded. The phase should either extend that test to the guardrail
+  paragraph or record that it is knowingly unguarded.
 
 The equivalence test needs one entity per prefix; the corpus supplies one (the
 review checked every prefix has a fixture). The plan names them and the test
-enumerates them by group.
+enumerates them by group. **Both sides are stdout from the same binary, invoked
+twice** — the reference is the kind's own verb, not a stored golden, so there are
+no copied bytes to age and the test compares this build against itself, reading
+the repo corpus it is run in (`RV-384` `F-21`).
 
 <!-- doctrine:section sec-8 -->
 ## Risks and residuals
@@ -317,14 +388,25 @@ enumerates them by group.
 - **`A1` — every numbered prefix has a working `show` today.** The review probed
   every prefix; the totality unit test surfaces a counterexample if that stops
   holding.
-- **Residual — `SPEC-013`'s existing members.** Its eight active requirements all
-  read `Indeterminate` today (`coverage show SPEC-013`). Whether `REQ-113`'s
-  closure gate scopes that drift to the whole member set or only the touched
-  member is a plan/audit question; if it is the whole set, the slice must cover
-  or REC-excuse them at close.
+- **Not a residual — `SPEC-013`'s existing members.** Its eight active
+  requirements read `Indeterminate` today (`coverage show SPEC-013`), and
+  `REQ-113`'s closure gate does **not** block on them. The gate's set is built
+  from the requirements a slice's own `coverage.toml` physically covers —
+  `coverage_scan::slice_local_covered_reqs`, whose own doc calls it "the
+  closure-gate `covered` term" — plus what the slice lists explicitly and names in
+  its own reconciliation records. Untouched members are outside it by
+  construction, so no REC-excuse is owed. Stated from the code rather than
+  deferred to planning (`RV-384` `F-22`).
 - **Residual — `CommonShowArgs` unification.** Seven kinds still hand-declare the
   `--format`/`--json`/`--path` triple. Collapsing them onto the flatten is a
   companion change (`REQ-199`'s precedent), deliberately not absorbed here.
+- **Residual — mixed case stays refused.** The all-lowercase prefix is normalised
+  in the router (`sec-2`), mirroring `listing::parse_ref`'s two-literal-case rule.
+  Mixed case is deliberately not normalised: `Dec-031` is refused where `dec-031`
+  resolves, which is the per-kind parsers' behaviour too.
+- **Residual — the guidance sweep.** The canon and walkthrough skills,
+  `authority-model.md`, and the shipped memories still prescribe the per-kind
+  form; filed as `CHR-078` (`RV-384` `F-18`).
 - **Residual — `search` verb hint.** A column naming the `show` verb an id needs
   would prevent the RFC-011 failure at its source as well as dissolving it.
 - **Residual — MCP parity.** No `doctrine_show` tool; the MCP surface is a

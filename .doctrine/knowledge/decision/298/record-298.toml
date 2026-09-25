@@ -3,7 +3,7 @@ version = 1
 
 id = 298
 slug = "router-totality-is-pinned-by-a-pure-route-lookup-plus-an-all-kinds-test"
-title = "Router totality is pinned by a pure route lookup plus an ALL_KINDS test"
+title = "Router totality is pinned by a pure route lookup plus a KINDS test"
 record_kind = "decision"
 status = "proposed"
 created = "2026-09-25"
@@ -12,7 +12,7 @@ tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 context = "SL-265 OQ-4: pin total routing so a kind added later cannot land silently unrouted."
-choice = 'One pure route(prefix) -> Option(Route) over an explicit match covering every row of the KINDS KindRef table — the same table parse_resolvable_ref and kind_by_prefix resolve against — with a wildcard arm that debug_assert!(false, "unrouted KINDS prefix") and returns the unknown-ref error (the catalog::scan::outbound_for precedent). Dispatch is a match Route, compiler-exhaustive so a new route variant cannot be left unhandled. A test iterates the KINDS prefixes and asserts every one yields Some(Route), with a negative control asserting a synthetic unrouted prefix returns None. (Amended 2026-09-25 after RV-384 F-1: ALL_KINDS is a sibling literal with no structural tie to KINDS, so iterating it would not have pinned routing.)'
+choice = "One pure route(prefix) -> Option(Route) over an explicit match covering every row of the KINDS KindRef table — the same table parse_resolvable_ref and kind_by_prefix resolve against — matching on the named prefix constants rather than string literals (STD-001). The wildcard arm returns None and carries NO assertion: the unit test probes route() with a synthetic unrouted prefix, and cargo test builds with debug_assertions on, so an assertion there would panic instead of returning the None the negative control observes (RV-384 F-16). The loud failure lives at the dispatch site, where None becomes the unrouted-prefix refusal. Dispatch is a match Route, compiler-exhaustive so a new route variant cannot be left unhandled. A test iterates the KINDS prefixes and asserts every one yields Some(Route), with a negative control asserting a synthetic unrouted prefix returns None. (Amended 2026-09-25 after RV-384 F-1: ALL_KINDS is a sibling literal with no structural tie to KINDS, so iterating it would not have pinned routing; amended again after F-16, which removed the assertion from route().)"
 alternatives = ["Rely on the wildcard `debug_assert` alone — fires only in a debug build on the unrouted path, and a kind whose ids are never exercised stays silent", "Introspect the match arms — impossible; Rust exposes no match-arm reflection"]
 rationale = "A `match &str` cannot be compiler-exhaustive, so totality must be an observable property. Splitting resolution (pure, testable) from dispatch (exhaustive variant match) gives a compile-time guarantee for handling and a test-time guarantee for coverage; together they make silent un-routing impossible."
 consequences = ["route is crate-visible and unit-testable over the KINDS table", " adding a KINDS row breaks the totality test until routed", " the totality test carries a negative control on a synthetic prefix"]
