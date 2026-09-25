@@ -96,10 +96,21 @@ Coarse fence; the exact touch-set is `/design`'s, and after that `/plan`'s.
   a writer.
 - **The cross-kind dispatch precedent.** `catalog::scan::outbound_for` is
   already "one data-driven match over all `KINDS` rows", dispatching on
-  `kind.prefix` to the owning module. The router is that shape, at command tier.
+  `kind.prefix` to the owning module — including the three shapes the router
+  needs (a top-level kind command; the `PRD`/`SPEC` subtype pair; the record and
+  backlog tails via `from_prefix`). It also carries the
+  `debug_assert!(false, "unrouted KINDS prefix")` fallthrough that `OQ-4` should
+  copy. The router is that shape, at command tier.
 - **The resolution authority.** `kinds::parse_resolvable_ref` (canonical or bare,
   with dangling / unknown-prefix / ambiguous-bare errors) over the 24-row `KINDS`
   table, whose discriminant is `prefix`.
+- **Canonicalisation before delegation is not optional.** Every per-kind `show`
+  parses its *own* prefix and rejects a foreign one — `listing::parse_ref` strips
+  `PREFIX-` and digit-parses the rest, and `spec::resolve_spec_ref` requires a
+  hyphen outright — so a bare id routed on its own fails inside the callee. The
+  contract is `parse_resolvable_ref` → `kinds::canonical_id(prefix, id)` →
+  `<kind>::run_show(canonical)`. `REQ` additionally reaches
+  `requirement::load`, which wants the canonical `REQ-NNN` FK.
 - **The clap seam.** `CommonShowArgs` — `id`, `format`, `json`, `path`.
 - **The family home.** `search` and `inspect` are the existing kind-blind
   top-level read verbs; the router joins them in `explore`.
@@ -108,8 +119,9 @@ Coarse fence; the exact touch-set is `/design`'s, and after that `/plan`'s.
 
 - **R1 — ADR-001 layering / command tangle.** The router reaches ~12 command-tier
   modules. Homed in a **new top-level** module it would add new top-level edges
-  and grow the command tangle, which is ratcheted (`.doctrine/adr/001/layering.toml`).
-  Homed **under `src/commands/`** it adds none: the gate records edges by
+  and grow the command tangle, which is ratcheted at
+  `[tangle_baseline] command = 76` in `.doctrine/adr/001/layering.toml` ("may not
+  grow"). Homed **under `src/commands/`** it adds none: the gate records edges by
   top-level module, and `commands::cli` already imports every one of those kinds.
   The design must state the home; this is a constraint, not a preference.
 - **R2 — the census assertion is intentional churn.** The
