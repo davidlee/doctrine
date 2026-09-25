@@ -4,7 +4,7 @@ uid = "01a0d8cf-9aa6-7ea1-b01b-de88b458f3db"
 recorded_at = "2026-09-25T13:44:39.334422349Z"
 kind = "friction"
 summary = "feedback/design: target/debug/doctrine swapped for a mutant build mid-session"
-detail = "SL-266 RV-388 round 2: target/debug/doctrine (hardlinked, rebuilt 23:38 by another agent, src clean) failed to parse the design snapshot: 'legacy act refused by mutant'. Worked around with CARGO_TARGET_DIR=$CLAUDE_JOB_DIR/target cargo build. A shared in-tree target/debug is not safe to rely on while another agent runs mutation testing against it."
+detail = "SL-266 RV-388 round 2: the shared target/debug/doctrine, rebuilt 23:38 while an SL-264 repair agent worked in the same primary worktree, failed to parse the design snapshot with 'legacy act refused by mutant' (a string in no committed source, so most likely a transient deliberate mutation in that agent's uncommitted tree; src was clean by 23:43). It also broke the external raiser's read. Worked around with CARGO_TARGET_DIR=$CLAUDE_JOB_DIR/target cargo build; a rebuild at 00:00 restored it. Two agents sharing one primary worktree share one binary, so one agent's red-phase build breaks the other's CLI."
 
 [facets.execution]
 schema_version = 1
