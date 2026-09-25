@@ -93,10 +93,15 @@ try to mirror the per-kind parsers, because they do not share one rule —
 `spec::resolve_spec_ref` never uppercases. Mirroring any one of them would refuse
 a ref some other kind's own `show` accepts, and would make the design's central
 equivalence false for that spelling (`RV-384` `F-20`, `F-25`). The equivalence is
-therefore stated against the parsers, not against a case rule: **for every ref a
-kind's own `show` accepts, `doctrine show` emits the same bytes.** Unconditional
-uppercasing is a superset — it also accepts a few refs a case-strict kind
-(`spec`) refuses.
+therefore stated against the parsers, not against a case rule: **for every
+prefixed ref a kind's own `show` accepts, `doctrine show` emits the same bytes.**
+Unconditional uppercasing is a superset — it also accepts a few refs a
+case-strict kind (`spec`) refuses. A bare id is deliberately outside that
+property, because the router resolves it across every kind: `doctrine slice show
+31` reads SL-031 in the slice namespace, while `doctrine show 31` refuses as
+ambiguous whenever more than one kind holds id 031 — the usual case here — where
+the per-kind verb would have accepted it. That refusal is `DEC-297`'s contract,
+not a defect (`RV-384` `F-28`).
 
 ```mermaid
 flowchart TD
@@ -330,10 +335,10 @@ layering edge (`RV-384` `F-8`).
 <!-- doctrine:section sec-7 -->
 ## Verification
 
-- **VT — byte-equivalence.** The property is that for every ref a kind's own
-  `show` accepts, `doctrine show <REF>` emits stdout byte-identical to that
-  kind's own `show` invocation; the test witnesses it with one fixture entity of
-  every numbered prefix, in both `--format table` and `--format json`. This is
+- **VT — byte-equivalence.** The property is that for every prefixed ref a
+  kind's own `show` accepts, `doctrine show <REF>` emits stdout byte-identical to
+  that kind's own `show` invocation; the test witnesses it with one fixture entity
+  of every numbered prefix, in both `--format table` and `--format json`. This is
   the slice's central property; the fidelity contract is only as good as the
   bytes. The
   reference command is the kind's own verb, and there is no `doctrine req show`:

@@ -28,10 +28,11 @@ show RFC-031`.
 Add a top-level, kind-blind `show` verb that resolves a ref to its kind and
 delegates to that kind's existing renderer.
 
-1. **Route, don't re-render.** For every ref a kind's own `show` accepts,
-   `doctrine show <REF>` produces output **byte-identical** to `doctrine <kind>
-   show <REF>`. No new renderer, no normalised cross-kind envelope, no per-kind
-   content change.
+1. **Route, don't re-render.** For every prefixed ref a kind's own `show`
+   accepts, `doctrine show <REF>` produces output **byte-identical** to `doctrine
+   <kind> show <REF>`. A bare id is a router convenience: it resolves only when
+   exactly one kind holds it, and otherwise refuses as ambiguous. No new
+   renderer, no normalised cross-kind envelope, no per-kind content change.
 2. **Resolution rides the existing authority.** Kind resolution uses
    `kinds::parse_resolvable_ref` — the same function `link`, `needs`, `after`,
    `tag`, `supersede` and `facet` already use. Unknown prefix, dangling ref, and
@@ -159,9 +160,9 @@ For `/design` to close.
 
 ## Verification / closure intent
 
-- **VT** — for every ref a kind's own `show` accepts, `doctrine show <REF>`
-  emits stdout byte-identical to `doctrine <kind> show <REF>`; witnessed with one
-  fixture entity of every numbered prefix, in both formats.
+- **VT** — for every prefixed ref a kind's own `show` accepts, `doctrine show
+  <REF>` emits stdout byte-identical to `doctrine <kind> show <REF>`; witnessed
+  with one fixture entity of every numbered prefix, in both formats.
 - **VT** — an unknown prefix, a dangling ref, and an ambiguous bare id each fail
   with the resolution authority's error.
 - **VT** — every `KINDS` row resolves to a routed arm (totality).
