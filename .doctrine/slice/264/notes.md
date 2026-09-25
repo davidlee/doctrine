@@ -109,9 +109,40 @@ verified against source during design.
 - Pre-existing and unrelated: `reserve::tests::vt3_auto_degradation_is_fail_closed_with_explicit_optin`
   fails in this jail via `DOCTRINE_RESERVATION_FALLBACK=1` (`ISS-483`); `src/reserve.rs` untouched.
 
+## PHASE-02 — `blocking` is a node attribute (completed 2026-09-25)
+
+- `InquiryNode`/`NodeMaterial` carry `blocking: Option<bool>`; the wire key `blocking`
+  has two homes (`Finding` create-only, unchanged; `Inquiry` either state, required at
+  creation, `null` refused); a flip emits one `NodeBlockingChanged`; import seeds
+  `blocking: true`. The gate derivation is untouched — the set still derives from the
+  stored legacy declaration until PHASE-04.
+- **Plan deviation (for `/audit`).** The plan's `EX` file list did not name
+  `src/design_run/refusal.rs`, but the refusals are unavoidable: the wire now needs
+  `BlockingJudgementMissing` (creation omitted the judgement) and
+  `BlockingJudgementWithdrawn` (`blocking: null`), built on the existing per-key
+  pattern (`FindingSummaryMissing` et al.). Also touched beyond the list: the
+  `InquiryNode::open` call sites in `fixture.rs`/`delegation.rs` and the contract
+  render in `render/envelope.rs`.
+- **New vocabulary, not just a row.** `Presence` gains a fourth variant,
+  `RequiredAtCreation` — "required where the subject is created, optional on update,
+  `null` refused". This is the gap `RV-385`'s verification pass named ("none of the
+  three expresses the inquiry home"); the plan's `EX-4` said the compiler would force
+  it, and it did. `KeyContract` gained `home: KeyHome` as the single source of the
+  per-home render.
+- **Refusal honesty.** `InertKey.honoured_by` widened from `IdKind` to `Vec<IdKind>` —
+  with two homes, naming one would have been a lie by omission. `contract_check`'s
+  admitted-key list deduped.
+- **Sizing finding (durable).** This phase ran past one worker's 30-minute budget and
+  was cut off *during* its final verification run; the work was complete, compiled and
+  green, and the orchestrator finished verification. Six production modules, a new
+  vocabulary variant, a regenerated golden and ~500 lines of test/fixture churn is more
+  than one worker should charter. Size later phases to roughly half this, or split.
+- Pre-existing and unrelated: `ISS-483`'s `reserve::tests::vt3_auto_degradation_...`
+  remains the only red in the unit suite (the jail's `DOCTRINE_RESERVATION_FALLBACK=1`).
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · PHASE-01 · 37d26a5ff
+fresh-as-of: 2026-09-25 · PHASE-02 · pending-land
 
 ### Produced
 - RV-385 — re-homed RV-386's seven live findings (F-1..F-7) onto the run's pass; commits f491f490e, 3e5b85e00
