@@ -961,3 +961,115 @@ fn batched_acts_and_the_move_are_admitted() {
     // And the next read reports the next edge, not the one just crossed.
     assert_eq!(designed.envelope(&[])["forward"]["to"], json!("drafting"));
 }
+
+// ── the fitness re-measure (SL-264 PHASE-05) ──────────────────────────────
+
+/// The inquiry map's size as `(nodes, needs edges)` — read from the snapshot the
+/// binary wrote, not from the envelope's capped projections. The edge count is
+/// the `needs`-relation out-degree summed over the nodes.
+fn map_shape(designed: &DesignRun) -> (usize, usize) {
+    let map = designed.read().map;
+    let nodes: Vec<_> = map.inquiry.nodes().collect();
+    let edges = nodes.iter().map(|node| node.needs().len()).sum();
+    (nodes.len(), edges)
+}
+
+/// The condition tokens the run's outbound forward edge still owes, in table
+/// order.
+fn forward_unmet_conditions(designed: &DesignRun) -> Vec<String> {
+    designed.envelope(&[])["forward"]["unmet"]
+        .as_array()
+        .expect("the forward edge lists its unmet conditions")
+        .iter()
+        .map(|row| {
+            row["condition"]
+                .as_str()
+                .expect("an unmet row carries a condition token")
+                .to_owned()
+        })
+        .collect()
+}
+
+/// Assert the run's two attested human gates are current on the forward edge.
+fn assert_human_gates_clear(designed: &DesignRun) {
+    let unmet = forward_unmet_conditions(designed);
+    for gate in ["initial-concerns-recorded", "user-accepts-sufficiency"] {
+        assert!(
+            !unmet.iter().any(|condition| condition.as_str() == gate),
+            "`{gate}` is re-faced while it should be current: {unmet:?}"
+        );
+    }
+}
+
+/// `SL-264` PHASE-05 `VA` — the fitness re-measure, landed as a run the audit
+/// re-derives rather than as a number in a hand-back.
+///
+/// `RFC-031`'s bar is *inquiry nodes/edges added after `user-accepts-sufficiency`:
+/// `0` — and each one voids the accepted judgement → `≥ 1`, without voiding it*.
+/// This drives a run through the binary to `reviewing` with both attested
+/// conditions recorded, then adds nodes and reads the gate's verdict.
+///
+/// **The numbers are asserted, so they are the measurement.** The ladder crosses
+/// every edge below `reviewing` over an empty map (it declares no node), so the
+/// map at the sufficiency acceptance was empty and stayed so until the growth
+/// below — which adds two nodes and one `needs` edge, all therefore *after* the
+/// acceptance. The gate re-faces `initial-concerns-recorded` for the blocking
+/// addition alone, and never sufficiency.
+#[test]
+fn map_growth_after_sufficiency_re_faces_only_for_a_blocking_addition() {
+    let designed = ladder_to_reviewing();
+
+    // The baseline: empty at the acceptance, so every node observed later is the
+    // measured quantity.
+    assert_eq!(
+        map_shape(&designed),
+        (0, 0),
+        "the ladder declares no nodes, so the map is empty at the acceptance"
+    );
+
+    // Positive control: before the growth both attested human gates are in good
+    // standing, so their later appearance is the addition's doing, not the
+    // ladder's.
+    assert_human_gates_clear(&designed);
+
+    // (1) A non-blocking addition leaves the effective blocking set unchanged, so
+    // neither gate is re-faced.
+    designed.apply(
+        "non-blocking",
+        &json!({ "declare": [
+            { "subject": "inq-growth-a", "question": "a question that does not block", "blocking": false },
+        ]}),
+    );
+    assert_human_gates_clear(&designed);
+
+    // (2) A blocking addition reaches the user through `initial-concerns-recorded`
+    // (`ReviewedGraph`, the full-set blocking comparison), while sufficiency
+    // (`InquiryMap`, carried keys only) stays current for the same addition.
+    designed.apply(
+        "blocking",
+        &json!({ "declare": [
+            { "subject": "inq-growth-b", "question": "a question the agent judges blocking",
+              "blocking": true, "needs": ["inq-growth-a"] },
+        ]}),
+    );
+    let unmet = forward_unmet_conditions(&designed);
+    assert!(
+        unmet
+            .iter()
+            .any(|condition| condition == "initial-concerns-recorded"),
+        "a new blocking node re-faces the graph review: {unmet:?}"
+    );
+    assert!(
+        !unmet
+            .iter()
+            .any(|condition| condition == "user-accepts-sufficiency"),
+        "sufficiency is not re-faced by an addition: {unmet:?}"
+    );
+
+    // (3) The measured quantity: nodes and edges added after the acceptance.
+    assert_eq!(
+        map_shape(&designed),
+        (2, 1),
+        "RFC-031's quantity: nodes and `needs` edges added after the acceptance"
+    );
+}

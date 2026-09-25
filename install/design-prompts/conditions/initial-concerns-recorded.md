@@ -18,5 +18,6 @@ everything built on the framing has to come apart with it.
 **What is enough.** Show the map as an indented tree: one line per question,
 the blocking ones marked, with any `needs` edges stated. The map has no other
 viewer, so this listing is the user's view of it. Ask: "Anything missing, or
-wrongly marked blocking? Otherwise, 'reviewed'." Declare the blocking set you
-showed and record their review of it in one submission.
+wrongly marked blocking? Otherwise, 'reviewed'." Record their review of that
+listing in one submission — the tree and its marks are the whole of what they
+are confirming, so there is no separate set to declare.
