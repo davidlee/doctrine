@@ -156,5 +156,14 @@ detail = 'Expected (design sec-3, sec-4; invariants 3 and 4): blocking: null is 
 disposition = "fix-now"
 response = "Option 1, per user reply '1.' (2026-09-26): Propose refuses any Sparse null in its declarations (loud refusal replaces the silent TOML drop), and the proposal's declarations are checked at Propose against the same inquiry-home rules a direct apply enforces, so blocking null is refused identically on both paths. Restoring null-clearing through proposals (null-preserving storage) is routed to IMP-483."
 
+[[finding]]
+id = "F-17"
+status = "verified"
+severity = "major"
+title = "[pol-002] shipped surfaces must carry no doctrine-internal ids; the F-16 repair cited IMP-483 in a shipped prompt and a user-facing refusal"
+detail = 'c793fbfc3 added "(IMP-483)" to install/design-prompts/delegation.md (shipped design-run prompt) and to the Refusal::ProposalCannotClear Display text (src/design_run/refusal.rs, rendered to host-project users); tests/e2e_design_delegation.rs a_proposal_carrying_null_is_refused_at_propose pinned the id in the message. POL-002: in a host project IMP-483 resolves silently to the host item of that id. Surfaced by the user from a concurrent POL-002 audit. Orchestrator process gap: the repair brief did not restate POL-002 and the orchestrator diff review missed it. Scan of every SL-264 commit install/ diff for internal ids found only this line.'
+disposition = "fix-now"
+response = "Fixed in 166f69a9f: the prompt and the refusal message state the limitation without the id; the e2e test asserts the behaviour (cannot clear) rather than pinning an id. Repo-internal doc comments keep the citation."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
