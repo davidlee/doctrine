@@ -4990,3 +4990,156 @@ fn adopt_invalidates_evidence_on_changed_sections_only() {
         "sec-2's attestation is bound to content that did not move, so it lives"
     );
 }
+
+// ---------------------------------------------------------------------------
+// SL-264 VT-1/VT-2 — `needs: null` clears through the one set-difference path
+// `needs: []` already uses (design sec-4), closing `ISS-481`.
+// ---------------------------------------------------------------------------
+
+/// A run holding `inq-1`, which needs `inq-2` and `inq-3`: two edges, so a
+/// clearing assertion cannot pass on a single row.
+fn run_with_two_needs_edges() -> DesignSnapshot {
+    let mut snapshot = run_holding(&[]);
+    for raw in ["inq-2", "inq-3"] {
+        snapshot
+            .map
+            .inquiry
+            .insert(InquiryNode::open(
+                id(raw),
+                format!("is {raw} settled?"),
+                Provenance::AgentProposed,
+            ))
+            .expect("the fixture node seats");
+    }
+    snapshot
+        .map
+        .inquiry
+        .insert(
+            InquiryNode::open(id("inq-1"), "what governs this?", Provenance::UserDirected)
+                .needing(id("inq-2"))
+                .needing(id("inq-3")),
+        )
+        .expect("the dependant seats");
+    snapshot
+}
+
+/// Apply one declaration through the pure core over `prior`.
+fn apply_declaration(prior: &DesignSnapshot, json: &str) -> Applied {
+    apply(
+        prior,
+        &ApplyRequest {
+            declare: vec![declared(json)],
+            ..ApplyRequest::bare(SubmissionEnvelope {
+                run_uid: prior.run.uid.clone(),
+                known_revision: prior.run.revision,
+                submission_id: "s1".to_owned(),
+            })
+        },
+        &Crossing::Ordinary,
+        &DerivedInput::default(),
+        "sha256:pay",
+        &Resolution::default(),
+    )
+    .expect("the fixture declaration applies")
+}
+
+/// The `From`/`To` token pair on each `NeedsRemoved` row, in row order.
+fn needs_removed_edges(applied: &Applied) -> Vec<(String, String)> {
+    applied
+        .rows
+        .iter()
+        .filter(|row| row.event == ChangeEvent::NeedsRemoved)
+        .map(|row| {
+            let term = |key| {
+                row.terms
+                    .iter()
+                    .find(|term| term.key() == key)
+                    .expect("the row states the term")
+                    .value()
+                    .to_owned()
+            };
+            (term(PayloadKey::From), term(PayloadKey::To))
+        })
+        .collect()
+}
+
+/// `needs: null` clears the set and emits one `NeedsRemoved` per removed edge,
+/// with the same `From`/`To` terms `needs: []` produces — the two spellings
+/// collapse by construction, so the run's rows cannot tell them apart.
+#[test]
+fn needs_null_clears_and_emits_one_row_per_edge() {
+    let prior = run_with_two_needs_edges();
+    let applied = apply_declaration(&prior, r#"{"subject": "inq-1", "needs": null}"#);
+
+    assert_eq!(
+        needs_removed_edges(&applied),
+        vec![
+            ("inq-1".to_owned(), "inq-2".to_owned()),
+            ("inq-1".to_owned(), "inq-3".to_owned()),
+        ],
+        "one `needs_removed` per removed edge, term for term"
+    );
+    assert!(
+        applied
+            .snapshot
+            .map
+            .inquiry
+            .get(&id("inq-1"))
+            .expect("the node survives the clearing")
+            .needs()
+            .is_empty(),
+        "`needs: null` clears the stored set"
+    );
+}
+
+/// An edge-free `needs: null` records no mutation and emits no rows — the run's
+/// row obligation is for a mutation it *records* (`REQ-478`), and a `null` that
+/// removed nothing removed nothing.
+///
+/// The empty row list alone cannot fail before the fix: a `null` that removes
+/// nothing is the identity under both the bug and the fix, so the edge-free case
+/// is unobservable by construction. The control below is what makes the silence
+/// mean something — the same spelling *is* honoured where there is an edge to
+/// remove, so the no-op's quiet is a no-op and not a key the engine swallowed.
+#[test]
+fn needs_null_on_an_edge_free_node_records_no_mutation() {
+    let mut prior = run_holding(&[]);
+    prior
+        .map
+        .inquiry
+        .insert(InquiryNode::open(
+            id("inq-1"),
+            "what governs this?",
+            Provenance::UserDirected,
+        ))
+        .expect("the fixture node seats");
+
+    let applied = apply_declaration(&prior, r#"{"subject": "inq-1", "needs": null}"#);
+
+    assert!(
+        applied.rows.is_empty(),
+        "an edge-free `null` records no mutation, so it owes no rows: {:?}",
+        applied.rows
+    );
+    assert!(
+        applied
+            .snapshot
+            .map
+            .inquiry
+            .get(&id("inq-1"))
+            .expect("the node survives the no-op")
+            .needs()
+            .is_empty()
+    );
+
+    // The control: the same spelling is honoured where there is an edge to
+    // remove, so the silence above is a genuine no-op rather than the defect.
+    let cleared = apply_declaration(
+        &run_with_two_needs_edges(),
+        r#"{"subject": "inq-1", "needs": null}"#,
+    );
+    assert!(
+        !cleared.rows.is_empty(),
+        "the control: `needs: null` on a node with edges records the removals"
+    );
+}

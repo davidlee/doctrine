@@ -1437,8 +1437,19 @@ fn declare_node(
         _ => {}
     }
 
-    if let Sparse::Value(declared) = declaration.needs_declaration() {
-        let declared: BTreeSet<DesignId> = declared.iter().cloned().collect();
+    // The three sparse states on the node's one collection: omission PERSISTS
+    // the prior edges, `null` clears them, a value replaces them. `null` and an
+    // empty value are one clearing (the same semantics `apply_collection`
+    // states), and both reach the difference below — so the two spellings
+    // collapse to one row set by construction rather than by a second loop
+    // (`SL-264` sec-4, closing `ISS-481`). An edge-free `null` diffs empty and
+    // owes no row: the run records no mutation for it to report (`REQ-478`).
+    let declared_needs: Option<BTreeSet<DesignId>> = match declaration.needs_declaration() {
+        Sparse::Omitted => None,
+        Sparse::Null => Some(BTreeSet::new()),
+        Sparse::Value(values) => Some(values.iter().cloned().collect()),
+    };
+    if let Some(declared) = declared_needs {
         for added in declared.difference(&needs) {
             rows.push(Pending::about(
                 ChangeEvent::NeedsAdded,
