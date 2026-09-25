@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d95e-8f89-7d62-8013-794c870a6a84"
+recorded_at = "2026-09-25T16:20:48.137242011Z"
+kind = "friction"
+summary = "execute/gate: `doctrine check gate` red twice on ISS-331 (cordage scale_cliffs wall-clock) — unrelated to the phase; forced a manual per-leg re-verification"
+detail = "evaluate_scales_near_linearly_in_node_count 3.0x under gate load; passes alone. cargo stops at first failing test binary so doctrine suites did not run inside the gate; had to run cargo test -p doctrine separately."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d952-92fc-7ee3-b914-bcee26020881"
+recorded_at = "2026-09-25T16:07:42.588592953Z"
+kind = "friction"
+summary = "retrieve-memory: `memory retrieve --path` is the project root, not a scope probe; the skill's 'scoped to files' wording invites --path and it errors on repeat"
+detail = "Ran --path src/a --path src/b; clap refused repeated --path. Scope probe is --path-scope. Cost one round-trip."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

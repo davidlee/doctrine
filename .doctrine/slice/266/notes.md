@@ -96,9 +96,53 @@ the implementation review and audit will exercise.
   under the wrong slice directory is now skipped; alias dirs are ignored;
   titles go through `read_record`.
 
+## PHASE-04 — delivery: config, map_changed, relay line, prompt text (2026-09-26)
+
+- Config home: `src/design_run/config.rs` (the plan's VT-3 file), not a
+  crate-level `*_config.rs` — the resolver is pure and design-run-only.
+  `DoctrineToml.design` is `Option<toml::Value>`, raw.
+- The config is resolved inside the shell's `apply()` / `start()`, first thing,
+  not in `run_*` — so no parameter churn across ~30 inner test callers, and a
+  malformed entry refuses before the snapshot is even read.
+- Relay text is owned by `tree.rs` (`relay_line`), which shares one private
+  `command(slice_ref)` with the footer, so `TREE_COMMAND` + slice is spelt once.
+  The gating rule is `design_run::relay(delivery, prior, next, slice_ref)`, called
+  by both verbs. `start` compares against the pre-import run.
+- `slice_ref(slice)` helper in `design.rs` replaced three `canonical_id` spellings.
+- VT-1 (`map_changed_table`) drives each case through `run::apply`. Each `false`
+  case also asserts its write *landed* elsewhere (runbook, cursor, acts), so a
+  no-op cannot pass as "not a map change". Step discharge needs a
+  `derived.gate.runbook` — `one_step_runbook` fixture.
+- VT-2 e2e: `doctrine.toml` is `.doctrine/doctrine.toml` (`common::DOCTRINE_TOML`),
+  not the tree root. The first run of the sidecar/malformed tests wrote it to the
+  root and they went red — which showed the assertions bite. A written adopt
+  needs a materialised (marker-bearing) document first. The `[conduct]` control
+  is `slice status 233 design` (`load_conduct`).
+- Prompt text: SL-264's sentences in the condition are left as they were; only
+  the two listing sentences changed. VA-1's "no other viewer" check has to
+  ignore line breaks, because the phrase spans one in HEAD (a plain grep missed
+  it: 0 in HEAD, a vacuous negative).
+- Gate: every leg green except `cordage` `scale_cliffs`
+  `evaluate_scales_near_linearly_in_node_count`. That is ISS-331's wall-clock
+  false-red under load: it failed in both gate runs and passes on its own.
+  `cargo test -p doctrine` is green.
+- TDD note: `config.rs` was written together with its tests (test-with, not
+  red-first). `map_changed` went red first through a `todo!()`.
+- **VA-1 (attested):** `inquiry.md` *Craft* carries "The user's view of the map
+  is `doctrine design tree`. When a write tells you to show it, paste that
+  output; never substitute a listing of your own." `initial-concerns-recorded.md`
+  *What is enough* carries the sec-5 replacement verbatim. With line breaks
+  ignored, "no other viewer" appears 0× in both files (1× in HEAD before the
+  edit). Neither file orders a paste unconditionally: the only paste is
+  conditioned on "When a write tells you to show it".
+- Per-phase review: discretionary, and skipped. No tripwire fired — no test
+  deleted, nothing waived, every edit inside the sec-6 selectors plus the VT
+  files. `/audit`'s pre-close review covers this delta next.
+- Boundary: `slice record-delta 266 PHASE-04 --start 94fb3870b^ --end 94fb3870b`.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · PHASE-03 completed, gated, VT-1/VT-2 pass, VA-1 attested, RV-392 done · 90744bf89
+fresh-as-of: 2026-09-26 · PHASE-04 completed, VT-1..3 pass, VA-1 attested; gate green bar ISS-331 · 94fb3870b
 
 ### Produced
 
@@ -112,6 +156,8 @@ fresh-as-of: 2026-09-26 · PHASE-03 completed, gated, VT-1/VT-2 pass, VA-1 attes
 - SL-266 PHASE-03 on edge: `3cdceba18` (verb, format, scan, `select_run`,
   titles at `Full`), `6d9bf2db0` (RV-392 fixes); boundary `3cdceba18^..6d9bf2db0`
 - RV-392 (per-phase code review, done, F-1..F-3 fix-now)
+- SL-266 PHASE-04 on edge: `94fb3870b` (`design_run::config`, `map_changed`,
+  `relay`, relay line in `apply` / `start --from-design`, prompt text)
 
 ### Learned
 
@@ -137,9 +183,11 @@ fresh-as-of: 2026-09-26 · PHASE-03 completed, gated, VT-1/VT-2 pass, VA-1 attes
   PHASE-02: `json --full` carries it; no model change.
 - `design.md` sec-3 rule 2 still states the rail-less drop — reconcile to
   DEC-307's amendment.
-- PHASE-04's relay line must reuse `tree::TREE_COMMAND` (already `pub(crate)`
-  since PHASE-03), not re-spell `doctrine design tree` (STD-001).
+- ~~PHASE-04's relay line must reuse `tree::TREE_COMMAND`~~ — done: `relay_line`
+  and the footer share one `command()`.
 - `/reconcile`: design sec-4 does not state that an unreadable slice record, or
   a snapshot naming another slice, skips the run — PHASE-03 decisions to fold in.
-- `src/design_run/tests.rs` is a PHASE-04 `VT-1` test_file and currently reads
-  `UNATTRIBUTABLE` (not modified by this slice yet) — expected, not a gap.
+- ~~`src/design_run/tests.rs` reads `UNATTRIBUTABLE`~~ — PHASE-04 modified it.
+- ISS-331 (`cordage` `scale_cliffs` wall-clock false-red) reds `just gate` under
+  load on this host — twice in PHASE-04. Nothing to do with SL-266, but it will
+  red the close gate too. It passes when run on its own.
