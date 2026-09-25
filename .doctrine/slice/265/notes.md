@@ -110,13 +110,47 @@ and refuses as ambiguous). `RV-384` concluded with `F-1`, `F-2`, `F-5`, `F-13`
 left `answered` for `/plan` (instrument-routed `route:control`); the eight
 sections attested and `design-accepted`. Design run **locked at revision 36**.
 
+## Plan (2026-09-25)
+
+Ready. Four phases authored in `plan.toml`, rationale and sequencing in
+`plan.md`, runtime sheets materialised (`doctrine slice phases 265`).
+
+1. `PHASE-01` — the verb: `src/commands/show.rs` router (`Route`, `route()`,
+   `run_show()`) + `Command::Show` + `explore` family + `guard.rs` Read + census
+   56→57 + `CommonShowArgs::format()`.
+2. `PHASE-02` — fidelity: `tests/e2e_show_equivalence.rs` (one fixture of every
+   numbered prefix, table + json) and `tests/e2e_show_refusals.rs`.
+3. `PHASE-03` — guidance: `install/using-doctrine.md`,
+   `install/routing-process.md`, `doctrine boot`, and the `guardrails_paragraph`
+   test sibling.
+4. `PHASE-04` — governance: `REV` (introduce `FR-006` on `SPEC-013`),
+   `spec req add`, check-bound `coverage record` then `coverage verify 265`,
+   hand-landed spec prose, `revision status done`.
+
+Plan decisions:
+
+- Selectors extended with `install/using-doctrine.md` and
+  `install/routing-process.md` — design-targets the locked design's code-impact
+  table touches but the design-time selector set did not carry.
+- The 24 equivalence fixtures were each confirmed present (`doctrine inspect`)
+  before being named in `PHASE-02` EX-2.
+- Re-grep at plan time: every design path/symbol resolves; line numbers drifted
+  by at most two. No stale premise.
+- `RV-384`'s four instrument-routed findings (`F-1`, `F-2`, `F-5`, `F-13`)
+  transcribed onto phases and verified; the review reads `done` (28/28).
+  `F-6`/`F-17` hold the `SPEC-013` prose off the typed rows — it rides the
+  `revision-NNN.md` companion and is hand-landed.
+- The tracked `.doctrine/using-doctrine.md` is a stale projected copy (ADR-019);
+  `install/using-doctrine.md` is the source, and the legacy copy is out of scope.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · locked (revision 36) · 4b10f91f0
+fresh-as-of: 2026-09-25 · planned (4 phases) · e2b3e23f5
 
 ### Produced
 
-- `SL-265` design locked; slice advanced to `plan`.
+- `SL-265` plan authored (`plan.toml` + `plan.md`) and its runtime sheets
+  materialised; `RV-384` closed `done`.
 
 ### Learned
 
@@ -126,5 +160,5 @@ fresh-as-of: 2026-09-25 · locked (revision 36) · 4b10f91f0
 
 ### Open
 
-- `/plan`: transcribe the `route:control` criteria (`F-1`, `F-2`, `F-5`, `F-13`)
-  onto phases; then implement.
+- `/phase-plan` `PHASE-01`, then `/execute`. `PHASE-01` is the largest phase;
+  its split option is recorded in `plan.md`.
