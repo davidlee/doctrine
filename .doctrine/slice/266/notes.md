@@ -61,6 +61,41 @@ the implementation review and audit will exercise.
   interleave it and ride in conformance's undeclared cell.
 - Header counts partition the map: open excludes derived-blocked.
 
+## PHASE-03 — command surface and run resolution (2026-09-26)
+
+- Titles are read in `project()` whenever `detail == Full`, not only on the tree
+  path — so `prompt --full` / `json --full` stop reporting every cited record
+  as "record not found". `Normal` still reads nothing (sec-2: "filled at `Full`
+  only", sited once).
+- **Phase decision (not stated in sec-4):** a slice record the scan cannot read
+  → the snapshot is *skipped* with that cause, not a candidate — an
+  unverifiable status cannot be claimed "open when scanned" (STD-003). A state
+  dir that is not a number, or holds no `design.toml`, is not a run → ignored.
+- `TREE_COMMAND` widened to `pub(crate)` now: the no-open-run refusal names it.
+  PHASE-04's relay line reuses the same constant.
+- `design tree` is classified `Read` in `commands/guard.rs` (worker mode lets it
+  through), like `show`.
+- Help: `design tree --help` shows only the first paragraph of its doc (the
+  About block keeps one paragraph); the optional-slice difference is carried by
+  the `[SLICE]` arg help instead.
+- `select_run` was written before its tests (test-after, not red-first); a
+  mutation (locked filter → `Reviewing`) turned `select_run_picks_the_newest_open_run`
+  red, so the test bites.
+- **VA-1:** `design --help` lists `tree`; `design show --help` lists the `tree`
+  value — both asserted in `tests/e2e_subcommand_help.rs`. No reference doc or
+  skill enumerates `design` verbs or `--format` values (grep of `install/`,
+  `.agents/skills/`, `plugins/`): the mentions are narrative (`routing-process.md`
+  core process, `handover`'s `--format status`), so nothing else to change.
+- EX-3: no new spelling of the state path. Pre-existing ones (`kinds/mod.rs`
+  `state_dir`, test code) are IMP-349's, out of scope.
+- Real-corpus smoke: `design tree` picked SL-258 of 3 open runs with nothing
+  skipped; `design tree SL-266` is byte-identical to `show --format tree`.
+- Per-phase review RV-392 was mandatory (tripwire: edits outside the declared
+  selectors, `knowledge.rs` / `slice.rs` / `guard.rs`). It found F-1..F-3, all
+  fix-now in `6d9bf2db0` and all verified; the ledger is done. A snapshot filed
+  under the wrong slice directory is now skipped; alias dirs are ignored;
+  titles go through `read_record`.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-09-26 · PHASE-02 completed, gated, VT-1..6 pass, VH-1 accepted · d7f49ae0a

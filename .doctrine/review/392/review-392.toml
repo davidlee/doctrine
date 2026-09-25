@@ -1,0 +1,43 @@
+id    = 392
+slug  = "code-review-review-of-sl-266"
+title = "code-review review of SL-266"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-266"
+phase = "PHASE-03"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Expected the selected run's slice status; observed a different slice's status judged"
+detail = "src/commands/design.rs:2720-2731 derives slice from the state directory; read_candidate at 2758-2765 parses the snapshot but reads slice::status(root, directory_slice) without checking run.run.slice matches it. project at 2528 and tree header/footer use run.run.slice. Reproduced in a temp project: state/slice/233/design.toml with run.slice=234, SL-233 started and SL-234 done yields `SL-234 ...` plus `chosen: the only run open when scanned`. This violates SL-266 DEC-305/PHASE-03 EX-2: the displayed run was not judged against its own slice status, so a terminal slice can be presented as open."
+disposition = "fix-now"
+response = "Fixed in 6d9bf2db0: read_candidate refuses (→ skipped with cause) a snapshot whose run.slice differs from its directory slice, so status is always judged for the rendered run's own slice. Test: e2e design_tree_skips_a_snapshot_filed_under_another_slice (red before, green after)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Expected one candidate per snapshot; observed numeric alias counted twice"
+detail = "src/commands/design.rs:2720-2730 parses any numeric child name to u32, then reconstructs canonical design_snapshot_path(root, slice) instead of reading that child's path; 2732 and select_run at 2685 therefore count the same snapshot twice when both `233/` and `0233/` exist. Reproduced: one valid SL-233 snapshot reports `chosen: the only run open when scanned`; after adding empty `state/slice/0233/`, it reports `chosen: newest of 2 runs open when scanned`. SL-266 design VT-9 and PHASE-03 EX-2 require the count to cover open runs, not duplicate aliases."
+disposition = "fix-now"
+response = "Fixed in 6d9bf2db0: scan admits a child only when it is the directory design_snapshot_path itself names (single-sourced, no re-spelled {:03}); 0233/ is not slice 233's state. Test: e2e design_tree_counts_each_run_once (red before, green after)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected malformed cited record to be disclosed; observed its title presented as found"
+detail = 'src/knowledge.rs:3326-3344 parses a cited record TOML as an untyped table and checks only `title`, so `title = "Looks valid"` with no required id/slug/record_kind/status/created/updated returns Some(title). The normal read_record at src/knowledge.rs:1974-1981 deserializes RawRecordToml (required fields at 663-670) and rejects that same file; reproduced `doctrine knowledge show DEC-001` returning parse error for title-only TOML. record_titles at src/commands/design.rs:2779-2782 maps this partial read to TitleLookup::Found, rendering a valid-looking answer rather than Unreadable(reason). STD-003 requires a required-field degradation in authored corpus to be disclosed.'
+disposition = "fix-now"
+response = "Fixed in 6d9bf2db0: record_title decides absence from the path, then reads through read_record (the canonical validated read), so a title-only or otherwise invalid record is Unreadable(cause). Unit test record_title_tells_found_absent_and_unreadable_apart gains the title-only DEC-004 case and seeds the found case from render_record_toml_seed. Real corpus: design tree SL-266 still resolves every title."
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser.
