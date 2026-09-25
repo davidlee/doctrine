@@ -77,7 +77,7 @@ response = "sec-3 Placement: visited-set walk; absent-parent or cyclic nodes ren
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Deep trees cannot satisfy the width guarantee"
 detail = "SL-266 sec-3 wraps only the right-hand text after a prefix made of one guide per ancestor; it promises no truncation, while VT-5 asserts no output line exceeds width. At sufficient depth or narrow width the prefix alone exceeds width and the fallback indent under the label also exceeds it. The fixed legend and footer can exceed width independently. Define an explicit layout or overflow rule for those cases and exercise deep nesting, narrow widths, wide Unicode labels, legend and footer in VT-5."
@@ -100,11 +100,11 @@ severity = "major"
 title = "Design config errors will break unrelated commands"
 detail = "SL-266 sec-5 adds a closed DesignConfig directly to DoctrineToml and says an unknown map_delivery fails load_doctrine_toml. src/dtoml.rs:23-44 and :89-94 show this is the shared eager parser, called by review, slice, spec, install and dispatch commands, so a typo in a display preference can make unrelated operations fail. Preserve the DEC-309 parse error when design delivery is used, but isolate validation of this area from unrelated consumers; include a regression test that an unrelated command still reads its own config with an invalid design value."
 disposition = "fixed"
-response = "Contest upheld (user agreed; DEC-309 revised). dtoml.rs:52-59 is an explicit counter-precedent. sec-5: DesignConfig.map_delivery is raw Option<String> in the shared parse; DesignConfig::map_delivery() resolves it, called only by design apply/start before writing; unknown value refuses those naming both values. VT-12 asserts an unrelated [conduct] read of the same file still succeeds. sec-8 notes [dispatch] remains eager, out of scope."
+response = "Contest upheld: Option<String> still type-checks in the shared parse. sec-5: DoctrineToml.design is now Option<toml::Value>, so the shared parse checks nothing under [design]; pure resolve_map_delivery (design apply/start only) refuses non-table, unknown key, non-string and unknown string. VT-12 table covers each, plus an unrelated [conduct] read succeeding on the same file. DEC-309 revised."
 
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Imported map changes bypass the relay"
 detail = "SL-266 sec-1 promises a relay after map changes, but sec-5 hooks only design apply via applied_lines. src/design_run/run.rs:1045-1115 seeds inquiry nodes during document import and src/commands/design.rs:1836-1924 sends design adopt through adoption_lines, never applied_lines. A real adoption can replace or grow the map without issuing the default relay instruction. Cover written adopt and start --from-design imports in the delivery contract, while excluding dry runs and no-op adoptions, and test those cases."
@@ -113,7 +113,7 @@ response = "Contest upheld: adopt (run.rs:915-966) re-seats sections only and ne
 
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Default run can change after candidate selection"
 detail = "SL-266 sec-4 selects a candidate from parsed snapshots and mtimes, then tree_turn or envelope_turn reads the chosen snapshot again at src/commands/design.rs:2624-2633. Another writer can lock that run or a slice can become terminal between the scan and second read, yet the header still labels it an open chosen run; equal mtimes also have no stated tie-break. Revalidate stage and authored slice status against the snapshot actually rendered, retry or refuse on drift, and define a deterministic tie-break in the pure selector with tests."
@@ -167,7 +167,7 @@ response = "sec-3: TreeStyle.width is Option<u16>; the pure tree module applies 
 
 [[finding]]
 id = "F-18"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Blocked questions should remain readable, but tree replaces them with need ids"
 detail = "SL-266 sec-3 lines 187-196 specifies blocked right-hand text as only `needs <ids>`, while MapNode still carries the question (sec-2 lines 75-84). For an open node with an unsettled dependency, the tree thus hides the very question the user needs to inspect. PRD-019 REQ-417 requires open design questions as an inspectable decomposition, and sec-1 promises one line per question. DEC-306 contains the same blocked-text choice, so reconcile that decision as well. Render the question plus the blocking ids (on one wrapped line or a continuation), and add a golden asserting both are visible."
@@ -176,12 +176,21 @@ response = "Accepted (user agreed; DEC-306 revised). sec-3: blocked right-hand t
 
 [[finding]]
 id = "F-19"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Adopt --diff can put relay instruction before the end of output"
 detail = "SL-266 sec-5 promises a map-changing written adopt output ends with the relay line, and locates that line in adoption_lines. src/commands/design.rs:1915-1920 calls adoption_lines then appends section_diff_lines when --diff is set. Thus design adopt --diff can print diff blocks after the relay instruction, breaking the explicit final-line contract in DEC-310 and making it easy to miss. Append the relay after optional diff output at the caller, or move diff assembly before the common relay append; add a written adopt --diff test asserting the relay is last."
 disposition = "design-wrong"
 response = "Moot after F-11: adopt no longer emits a relay line. The class (relay not last) is closed for the remaining writers: sec-5 now requires the relay to be the command's last line, appended after any other output; VT-12 asserts last-line position for apply and start --from-design."
+
+[[finding]]
+id = "F-20"
+status = "answered"
+severity = "major"
+title = "Misspelled design delivery key silently selects relay"
+detail = '.doctrine/slice/266/design.md:315-328 defines DesignConfig with #[serde(default)] map_delivery: Option<String> but no unknown-field check, and the resolver defaults an absent field to Relay. A config spelling such as [design] map_delviery = "sidecar" is accepted by derived deserialization as an unknown field, leaves map_delivery absent, and silently enables relay even though the operator requested sidecar (STD-003). Adding deny_unknown_fields to this shared struct would reintroduce the unrelated-reader failure in F-10; keep the raw design table in the shared parse and validate its keys and value type in the design-only resolver. Add a misspelled-key test for a design write and an unrelated reader.'
+disposition = "fixed"
+response = "Accepted, fixed jointly with F-10: the raw [design] value lets the design-only resolver refuse any key other than map_delivery, naming it, instead of defaulting to Relay. VT-12 includes the misspelt-key row for a design write and the unrelated reader."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

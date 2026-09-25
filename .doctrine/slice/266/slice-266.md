@@ -81,8 +81,8 @@ sample-states  (6 answered, 7 open)
 - `src/design_run/` — pure `map_changed(prior, next)`.
 - `src/state.rs` — `design_snapshot_root`.
 - `src/commands/cli.rs` — resolved colour reaches `design::dispatch`.
-- `src/dtoml.rs` — `[design]` config (`DesignConfig`, raw text; resolved
-  lazily by the design writes).
+- `src/dtoml.rs` — `[design]` kept as a raw TOML value; keys, types and
+  values resolved lazily by the design writes.
 - `design apply` / `start` output — relay line, last (DEC-310).
 - `install/design-prompts/inquiry.md`,
   `install/design-prompts/conditions/initial-concerns-recorded.md`.

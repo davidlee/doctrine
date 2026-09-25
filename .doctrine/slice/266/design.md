@@ -306,27 +306,20 @@ Purpose: the only branching logic the verb owns, and where the shell reads.
 <!-- doctrine:section sec-5 -->
 ## Delivery: config, relay line, prompt text
 
-**Config** (DEC-309). `DoctrineToml` gains `design: DesignConfig`
-(`#[serde(default)]`), the per-area pattern `[dispatch]` and `[verification]`
-already follow:
+**Config** (DEC-309). `DoctrineToml` gains `design: Option<toml::Value>`
+(`#[serde(default)]`) — the `[design]` entry kept raw, so the shared parse
+checks nothing about it: not its keys, not their types, not their values.
 
 ```rust
-/// `[design]` as the shared parse reads it: raw text, never validated there.
-#[derive(Debug, Default, Deserialize)]
-pub(crate) struct DesignConfig {
-  #[serde(default)]
-  pub(crate) map_delivery: Option<String>,
-}
-
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MapDelivery { #[default] Relay, Sidecar }
 
-impl DesignConfig {
-  /// The one resolver, called only by the design writes. Absent → `Relay`;
-  /// anything but `MAP_DELIVERY_RELAY` / `MAP_DELIVERY_SIDECAR` → an error
-  /// naming both.
-  pub(crate) fn map_delivery(&self) -> anyhow::Result<MapDelivery>;
-}
+/// The one resolver, called only by the design writes. Absent entry or key →
+/// `Relay`. Refused, each naming what is accepted: `[design]` not a table; a
+/// key other than `MAP_DELIVERY_KEY`; a value that is not a string; a string
+/// other than `MAP_DELIVERY_RELAY` / `MAP_DELIVERY_SIDECAR`.
+pub(crate) fn resolve_map_delivery(design: Option<&toml::Value>)
+  -> anyhow::Result<MapDelivery>;
 ```
 
 ```toml
@@ -336,11 +329,12 @@ map_delivery = "sidecar"   # default "relay"
 
 Validation is lazy, following the `[estimation]` precedent in `dtoml::parse`
 (`dtoml.rs:52-59`): `load_doctrine_toml` is shared by review, slice, spec,
-install and dispatch commands, so it only reads the text, and a bad display
-preference never fails an unrelated command. `design apply` and
-`design start` resolve the value before writing; an unknown value refuses
-them, naming both values — no fallback (STD-003). The two spellings are
-constants beside the enum (STD-001).
+install and dispatch commands, and any well-formed TOML under `[design]` passes
+it, so a bad display preference never fails an unrelated command. `design apply`
+and `design start` resolve it before writing, and every malformation refuses
+them — a wrong type, an unknown value, and a misspelt key, which would
+otherwise leave the key absent and silently select `Relay` (STD-003). The key
+and the two spellings are constants beside the enum (STD-001).
 
 **When the map changed.** The trigger compares state, not rows: a write changed
 the map when `prior.map.inquiry != next.map.inquiry` (`InquiryMap` derives
@@ -371,7 +365,7 @@ for it and it carries no relay line. `materialise` likewise writes only the
 document and its watermark.
 
 Not emitted: `Sidecar`; no map change; a `resumed submission` replay. The shell reads the config once per command
-(`load_doctrine_toml(root)?.design.map_delivery()?`) and passes the value to these pure line
+(`resolve_map_delivery(load_doctrine_toml(root)?.design.as_ref())?`) and passes the value to these pure line
 builders.
 
 **Prompt text** — both edits mode-neutral, so neither asset's digest depends on
@@ -402,8 +396,8 @@ old bytes — intended, and the reason these edits are made once, here.
 | `src/design_run/render/mod.rs` | `pub(crate) mod tree;` |
 | `src/design_run/inquiry.rs` | `InquiryMap::unsettled_needs`; `is_blocked` delegates to it |
 | `src/design_run/mod.rs` (or `run.rs`) | pure `map_changed(prior, next)` |
-| `src/design_run/config.rs` *(or the existing area-config home)* | `DesignConfig` (raw text), `MapDelivery`, the `map_delivery()` resolver and its two spelling constants |
-| `src/dtoml.rs` | `DoctrineToml.design` |
+| `src/design_run/config.rs` *(or the existing area-config home)* | `MapDelivery`, pure `resolve_map_delivery`, the key and value constants |
+| `src/dtoml.rs` | `DoctrineToml.design: Option<toml::Value>` (raw) |
 | `src/state.rs` | `design_snapshot_root`; `design_snapshot_path` joins onto it |
 | `src/commands/cli.rs` | pass the resolved colour to `design::dispatch` |
 | `src/commands/design.rs` | `dispatch(command, color)`; `ShowFormat::Tree`; `DesignCommand::Tree(TreeArgs)`; tree projection at `Full` with titles; `record_titles(root, &run) -> BTreeMap<String, TitleLookup>` via `knowledge::resolve_ref` + the record's TOML; run scan + pure `select_run`; relay line, last, in `applied_lines` and the start report; config read in `run_apply` and `run_start` |
@@ -471,9 +465,11 @@ Every row is a `VT` (by test) unless marked.
   relay line naming the slice, as its last line; a step-discharge apply does
   not; a resumed replay does not; a written adopt does not;
   `start --from-design` with imported nodes does, as its last line. With
-  `map_delivery = "sidecar"` none do. An unknown value refuses `design apply`
-  and `design start` before writing, naming both values, while an unrelated
-  reader of the same `doctrine.toml` (the `[conduct]` load) still succeeds.
+  `map_delivery = "sidecar"` none do. A table over malformed `[design]` entries —
+  unknown string, wrong type (`map_delivery = 42`), misspelt key, `[design]`
+  not a table — each refuses `design apply` and `design start` before writing,
+  naming what is accepted, while an unrelated reader of the same
+  `doctrine.toml` (the `[conduct]` load) still succeeds.
 - **VA-1 — prompt text.** `inquiry.md` and `initial-concerns-recorded.md` carry
   the sec-5 wording; neither claims the map has no other viewer, and neither
   instructs a paste unconditionally.

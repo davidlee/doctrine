@@ -12,7 +12,7 @@ tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 context = "Projects differ on who puts the inquiry map in front of the user: the agent (relay) or the user in a spare pane (sidecar)."
-choice = '[design] map_delivery = "relay" | "sidecar", default relay. Stored as text in the shared doctrine.toml parse and resolved to the closed enum only by the design writes that use it (design apply, design start): an unknown value refuses those commands naming both variants, and never fails an unrelated doctrine.toml reader (the dtoml.rs estimation precedent). Relay: agent pastes design tree output verbatim after map changes. Sidecar: agent does not paste. Either way the relayed or mentioned output names the doctrine design tree command, for discovery.'
+choice = '[design] map_delivery = "relay" | "sidecar", default relay. The shared doctrine.toml parse keeps [design] as a raw TOML value; only the design writes that use it (design apply, design start) resolve it, refusing a wrong type, an unknown value or an unknown key with a message naming what is accepted — so a bad or misspelt entry never fails an unrelated doctrine.toml reader and never silently selects the default (the dtoml.rs estimation precedent; STD-003). Relay: agent pastes design tree output verbatim after map changes. Sidecar: agent does not paste. Either way the relayed or mentioned output names the doctrine design tree command, for discovery.'
 alternatives = ["Default sidecar", "Key named map_view"]
 rationale = "ISS-299 is invisibility by default; a sidecar default reproduces it for users who do not know design tree exists. Verbatim relay is not an agent summary, so PRD-019 success measure holds. map_delivery names what is chosen."
 consequences = []
