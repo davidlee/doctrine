@@ -10,7 +10,8 @@ code review, and any structured finding-tracked dialogue.
 ## CLI
 
 The CLI is the source of truth: `doctrine review --help`. Key verbs: new,
-raise, dispose, verify, contest, withdraw, status, prime, show, list.
+raise, dispose, verify, contest, withdraw, conclude, status, prime, unlock,
+show, list.
 
 ## Lifecycle
 
@@ -27,8 +28,11 @@ resolving findings, with an explicit baton tracking whose turn it is.
 5. **contest** — reject the disposition and hand it back (status returns to
    `contested`; baton flips again).
 6. **withdraw** — retract an `open`/`answered` finding (terminal: `withdrawn`).
+7. **conclude** — declare the pass finished. Idempotent; open findings are
+   fine (the responder disposes them afterwards). A design run's `conducted`
+   disposition is admissible only over a concluded review.
 
-Every finding carries a severity (`blocker | major | minor | cosmetic`) and
+Every finding carries a severity (`blocker | major | minor | nit`) and
 an owner-owned status.
 
 ## Coordination

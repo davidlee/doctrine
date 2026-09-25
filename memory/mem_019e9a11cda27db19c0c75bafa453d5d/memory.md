@@ -33,9 +33,12 @@ Where things live — use this to *locate*. The authoritative layout block is in
   symlink. GITIGNORED, disposable, `rm -rf`able.
 - `.doctrine/governance.md` — user-owned governance pointer, projected into the
   boot snapshot. See [[mem.concept.doctrine.boot-snapshot]].
-- `.doctrine/using-doctrine.md` and `.doctrine/glossary.md` — shipped reference
-  docs (the pull tier). See [[mem.signpost.doctrine.reference-docs]].
-- `install/` — sources copied into `.doctrine` by the installer. See
+- the shipped reference docs — `reference/using-doctrine.md` and
+  `reference/glossary.md` (the pull tier) — published, read with
+  `doctrine library show`, not copied under `.doctrine/`. See
+  [[mem.signpost.doctrine.reference-docs]].
+- `install/` — the shipped source assets the binary embeds and publishes; the
+  installer eagerly projects only the minimal base into `.doctrine/`. See
   [[mem.signpost.doctrine.install]].
 
 What is committed vs disposable is the storage tiers:

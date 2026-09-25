@@ -4,18 +4,23 @@
 
 What it does:
 
-- Copies shipped reference docs into `.doctrine/`: `using-doctrine.md` (how to
-  *operate* doctrine), `glossary.md` (vocabulary and ids), `doctrine.toml.example`
-  (configuration template), and the routing digest.
+- Projects the minimal base into `.doctrine/`: `doctrine.toml` (the config
+  home) and `project-orientation.md` (the onboarding seed), and appends the
+  runtime `.gitignore` entries.
+- **Publishes** the shipped reference docs rather than copying them into the
+  project — read them on demand with `doctrine library show reference/<name>.md`
+  (`using-doctrine.md`, `glossary.md`, `doctrine.toml.example`,
+  `routing-process.md`, …). The eager projection base is deliberately minimal.
 - Wires the session startup hook so the boot snapshot is `@`-imported into your
   agent harness at session start — the mechanism that keeps the routing table,
   core process, and guardrails current.
-- Seeds the `.doctrine/` directory tree with templates and gitignores.
+- With a harness named (`-a claude`, …), installs that harness's integration
+  assets — skills, agents, and hooks. With none named it writes the base alone.
 
 What it does NOT do:
 
 - Create slices, ADRs, or specs — those are authored as you work.
-- Modify your agent harness beyond the `@`-import directive.
+- Materialise the shipped memory corpus — `doctrine memory sync` does that.
 - Require re-installation after updates — `doctrine boot` regenerates the
   snapshot in place.
 

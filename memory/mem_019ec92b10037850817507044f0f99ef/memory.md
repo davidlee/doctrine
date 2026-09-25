@@ -1,7 +1,9 @@
 # Doctrine reference docs
 
-Doctrine ships two reference documents to every installed project under
-`.doctrine/`. They are the durable prose authorities for *how* to operate
+Doctrine ships two reference documents to every project **published**, not
+projected: read them on demand with `doctrine library show reference/<name>.md`
+(ADR-019 — the eager projection base is deliberately minimal, so no copy lands
+on disk). They are the durable prose authorities for *how* to operate
 doctrine and *what* its vocabulary means — separate from the shipped memory
 corpus (which orients via `find`/`retrieve`) and the CLI (which is the source
 of truth for command shapes).
@@ -22,10 +24,10 @@ reference docs** for specific subsystems, same PULL tier and format:
   with the `mem.signpost.doctrine.dispatch` retrieval index for the sharp
   mid-operation traps.
 
-These are shipped reference docs (the pull tier) — they install once and
-stay inert unless the installer is re-run. The boot snapshot and shipped
-memories are separate push surfaces; these docs are the pull surface for
-deliberate lookup.
+These are shipped reference docs (the pull tier) — reachable on demand via
+their published address, never eagerly copied into the project. The boot
+snapshot and shipped memories are separate push surfaces; these docs are the
+pull surface for deliberate lookup.
 
 See [[mem.signpost.doctrine.install]] for the installation path,
 [[mem.concept.doctrine.reading-entities]] for why to read via `show` not raw

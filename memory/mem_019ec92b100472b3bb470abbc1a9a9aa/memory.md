@@ -20,8 +20,9 @@ Key verbs and their roles:
   Idempotent.
 - **after** — append a soft-sequence edge (ordering hint, not a hard block).
   Same target gate as `needs`. Idempotent.
-- **supersede** — record that NEW supersedes OLD (ADR kind only). Flips OLD
-  status to `superseded`. Idempotent.
+- **supersede** — record that NEW supersedes OLD. It covers ADR, POL, STD,
+  ASM, QUE, DEC, CON and EVD; the old record flips to `superseded`, except an
+  ASM/QUE, which flips to `obsolete`. Idempotent.
 - **inspect** — read relations from both directions (authored outbound +
   derived inbound) for a single entity. Use it to understand what an entity
   connects to, not to judge from a raw file.

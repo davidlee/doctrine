@@ -14,7 +14,8 @@ and risks that may become slices but haven't been scoped yet.
 ## Membership test
 
 A record belongs in the backlog, not a knowledge record or an ADR, when it:
-- Has a lifecycle: `open → resolved → closed`.
+- Has a lifecycle: `open → triaged → started → resolved → closed`
+  (`resolved`/`closed` are terminal).
 - Is something someone will *do* (or decide not to do).
 - Is not a standing rule (policy/standard), not a decision (ADR), and not a
   durable observation (memory/knowledge record).

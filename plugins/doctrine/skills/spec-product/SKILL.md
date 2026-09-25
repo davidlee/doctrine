@@ -217,7 +217,7 @@ Each question should explain why it matters or what it blocks.
 
 Prefer:
 
-* “OQ-001 — Should archived specs remain visible in default listings? Blocks list semantics and acceptance tests.”
+* “OQ-1 — Should archived specs remain visible in default listings? Blocks list semantics and acceptance tests.”
 
 Avoid:
 
