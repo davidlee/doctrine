@@ -441,7 +441,9 @@ ConceptMapCommand::New { .. } => Write("concept-map new"),
             crate::commands::design::DesignCommand::Apply(_) => Write("design apply"),
             crate::commands::design::DesignCommand::Adopt(_) => Write("design adopt"),
             crate::commands::design::DesignCommand::Materialise(_) => Write("design materialise"),
+            // SL-266: `tree` is a rendering of the same envelope `show` projects.
             crate::commands::design::DesignCommand::Show(_)
+            | crate::commands::design::DesignCommand::Tree(_)
             | crate::commands::design::DesignCommand::Resume(_)
             | crate::commands::design::DesignCommand::Contract(_) => Read,
         },

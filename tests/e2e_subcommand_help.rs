@@ -111,6 +111,8 @@ fn design_show_help_names_full_as_the_envelope_widening() {
     let (ok, _code, family) = run(&["design", "--help"]);
     assert!(ok, "design --help must exit 0");
     assert!(family.contains("show"), "the family lists `show`: {family}");
+    // SL-266 PHASE-03 `VA-1`: the tree verb and the format value both surface.
+    assert!(family.contains("tree"), "the family lists `tree`: {family}");
     assert!(
         !family.contains("inspect"),
         "design exposes no `inspect`-style verb, so `show` cannot be the wider \
@@ -119,6 +121,10 @@ fn design_show_help_names_full_as_the_envelope_widening() {
 
     let (ok, _code, show) = run(&["design", "show", "--help"]);
     assert!(ok, "design show --help must exit 0");
+    assert!(
+        show.contains("status, tree"),
+        "`--format` lists the `tree` value: {show}"
+    );
     assert!(
         show.contains("--full"),
         "`show`'s help names the widening: {show}"

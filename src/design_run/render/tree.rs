@@ -72,8 +72,9 @@ const TREE_RECORD_UNREADABLE: &str = "unreadable";
 const TREE_UNPLACED_HEADING: &str = "unplaced (parent missing or cyclic):";
 const TREE_HEADER_SEPARATOR: &str = " · ";
 const TREE_LEGEND_SEPARATOR: &str = "·";
-/// The command that reproduces this view, less its slice.
-const TREE_COMMAND: &str = "doctrine design tree";
+/// The command that reproduces this view, less its slice — also named by the
+/// shell wherever it points a reader at the tree (STD-001).
+pub(crate) const TREE_COMMAND: &str = "doctrine design tree";
 
 // ── vocabulary ────────────────────────────────────────────────────────────
 

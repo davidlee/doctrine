@@ -145,10 +145,18 @@ pub(crate) fn phases_dir(project_root: &Path, slice_id: u32) -> PathBuf {
 /// stays private to this module and every caller derives from this helper, so a
 /// second `.doctrine/state/slice` literal cannot appear beside it and drift.
 pub(crate) fn design_snapshot_path(project_root: &Path, slice_id: u32) -> PathBuf {
-    project_root
-        .join(STATE_SLICE_DIR)
+    design_snapshot_root(project_root)
         .join(format!("{slice_id:03}"))
         .join("design.toml")
+}
+
+/// The directory whose `NNN/` children hold every slice's design-run snapshot —
+/// the root `design tree` scans when it names no slice (SL-266 `DEC-305`).
+///
+/// [`design_snapshot_path`] joins onto it, so the scan and the per-slice read
+/// cannot disagree about where runs live.
+pub(crate) fn design_snapshot_root(project_root: &Path) -> PathBuf {
+    project_root.join(STATE_SLICE_DIR)
 }
 
 /// Canonical state path for a slice's design-run checkpoint journal.
@@ -1684,6 +1692,19 @@ pub(crate) fn reconcile_phase_status(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The scan root `design tree` reads is the directory every snapshot path
+    /// descends from, one slice directory down (SL-266 PHASE-03 `EX-3`).
+    #[test]
+    fn design_snapshot_path_descends_from_the_scan_root() {
+        let root = Path::new("/project");
+        let snapshot = design_snapshot_path(root, 7);
+        assert_eq!(
+            snapshot.parent().and_then(Path::parent),
+            Some(design_snapshot_root(root).as_path())
+        );
+        assert!(design_snapshot_root(root).starts_with(root));
+    }
 
     fn plan(ids: &[&str]) -> Plan {
         Plan {

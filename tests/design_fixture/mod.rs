@@ -51,17 +51,7 @@ impl DesignRun {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().to_path_buf();
         std::fs::create_dir_all(root.join(crate::common::SLICE_DIR).join(SLICE_NUMBER)).unwrap();
-        let out = run(&root, &["design", "start", SLICE, "-p", "."]);
-        let uid = out
-            .split_whitespace()
-            .nth(1)
-            .expect("`design start` names the run uid")
-            .to_owned();
-        let snapshot = out
-            .lines()
-            .find_map(|line| line.strip_prefix("snapshot "))
-            .map(|path| root.join(path))
-            .expect("`design start` names the snapshot path");
+        let (uid, snapshot) = start_run(&root, SLICE);
         DesignRun {
             _tmp: tmp,
             root,
@@ -98,6 +88,23 @@ impl DesignRun {
     }
 }
 
+/// `design start` another slice's run in `root`; return its uid and snapshot
+/// path, both learned from the verb's own output.
+pub(crate) fn start_run(root: &Path, slice: &str) -> (String, PathBuf) {
+    let out = run(root, &["design", "start", slice, "-p", "."]);
+    let uid = out
+        .split_whitespace()
+        .nth(1)
+        .expect("`design start` names the run uid")
+        .to_owned();
+    let snapshot = out
+        .lines()
+        .find_map(|line| line.strip_prefix("snapshot "))
+        .map(|path| root.join(path))
+        .expect("`design start` names the snapshot path");
+    (uid, snapshot)
+}
+
 /// Seed the authored slice record a `governance-confirmed` act needs to be
 /// admissible (SL-244 `EX-10`).
 ///
@@ -117,6 +124,11 @@ impl DesignRun {
 /// empty projection), which is all a ladder needs; a fixture whose subject is
 /// the edge set moving writes its own rows.
 pub(crate) fn seed_slice_record(root: &Path, slice_number: &str) {
+    seed_slice_record_as(root, slice_number, "started");
+}
+
+/// [`seed_slice_record`] at a given lifecycle status.
+pub(crate) fn seed_slice_record_as(root: &Path, slice_number: &str, status: &str) {
     let dir = root.join(crate::common::SLICE_DIR).join(slice_number);
     std::fs::create_dir_all(&dir).unwrap();
     let id: u32 = slice_number.parse().expect("the slice number is numeric");
@@ -126,7 +138,7 @@ pub(crate) fn seed_slice_record(root: &Path, slice_number: &str) {
             "id      = {id}\n\
              slug    = \"fixture\"\n\
              title   = \"Fixture\"\n\
-             status  = \"started\"\n\
+             status  = \"{status}\"\n\
              created = \"2026-01-01\"\n\
              updated = \"2026-01-01\"\n"
         ),

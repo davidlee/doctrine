@@ -93,7 +93,10 @@ use crate::design_run::payload_contract::{
     self, ExternContracts, ExternRegion, KeyContract, PAYLOAD_CONTRACT_POINTER, Presence,
     SelectedKeys, SelectorTable, TokenSource, UnknownKeys, WireType,
 };
-use crate::design_run::render::envelope::{self, Detail, OutstandingBySeverity};
+use crate::design_run::render::envelope::{
+    self, Detail, OutstandingBySeverity, RunSelection, SkippedSnapshot, TitleLookup,
+};
+use crate::design_run::render::tree::{self, TREE_COMMAND, TreeStyle};
 use crate::design_run::run::{
     Admission, Applied, Crossing, DerivedInput, ObservedReview, Resolution,
 };
@@ -174,9 +177,14 @@ pub(crate) enum DesignCommand {
     /// Create a design run for a slice.
     Start(StartArgs),
     /// Read the design: the document and its knowledge block by default, or a
-    /// rendering of the run's turn envelope under `--format prompt|json|status`,
+    /// rendering of the run's turn envelope under `--format prompt|json|status|tree`,
     /// where `--full` widens the projection.
     Show(ShowArgs),
+    /// Show the whole inquiry map as a tree, for a human.
+    ///
+    /// `show --format tree`, except that here the slice is optional: without
+    /// one, the newest open run.
+    Tree(TreeArgs),
     // The third push point (SL-251 `sec-6`): the contract's ADDRESS, never its
     // body, at the verb whose payload it describes. `about` feeds the family
     // table above; `long_about` feeds the focused `design apply --help` — and
@@ -200,7 +208,7 @@ pub(crate) enum DesignCommand {
 
 /// Which rendering `design show` emits (DEC-064, DEC-261).
 ///
-/// **Three of the four render the turn envelope; the default renders the design
+/// **Four of the five render the turn envelope; the default renders the design
 /// document.** That asymmetry is the point of DEC-261: `design show SL-NNN` is the
 /// verb an agent reaches for to *read the design*, and before this it answered with
 /// run state. The envelope renderings are unchanged and unrenamed — only which one
@@ -221,6 +229,8 @@ pub(crate) enum ShowFormat {
     Json,
     /// The same envelope, for a human at a terminal.
     Status,
+    /// The whole inquiry map, for a human.
+    Tree,
 }
 
 /// Which rendering of the payload contract to emit.
@@ -260,17 +270,17 @@ pub(crate) struct StartArgs {
 /// projection, and sits on every `Args` struct in this codebase. The refusals are
 /// stated over the rendering rather than over how the rendering was *spelled*, so
 /// they live in [`run_show`] as guards and not as clap `conflicts_with` (which
-/// cannot express "conflicts with three of four values").
+/// cannot express "conflicts with four of five values").
 #[derive(clap::Args, Debug)]
 pub(crate) struct ShowArgs {
     /// The slice, e.g. `SL-233`.
     slice: String,
     /// Project changes since this revision (default: the previous revision).
-    /// Requires `--format prompt|json|status`.
+    /// Requires `--format prompt|json|status|tree`.
     #[arg(long)]
     known_revision: Option<u64>,
     /// Widen the turn envelope's projection: the caps lift and the output may
-    /// scale with the run. Requires `--format prompt|json|status`.
+    /// scale with the run. Requires `--format prompt|json|status|tree`.
     #[arg(long)]
     full: bool,
     /// Compose the design document's inbound knowledge block at this level.
@@ -296,6 +306,21 @@ pub(crate) struct ShowArgs {
     /// Which rendering to emit (default: the design document).
     #[arg(long, value_enum, default_value_t = ShowFormat::default())]
     format: ShowFormat,
+    /// Explicit project root (default: auto-detect).
+    #[arg(short = 'p', long)]
+    path: Option<PathBuf>,
+}
+
+/// Arguments for `design tree`.
+///
+/// **The one difference from `design show --format tree`: the slice is
+/// optional.** Without one, the tree is the newest open run in the state tier,
+/// and the header says how it was chosen (`DEC-305`). `design show` keeps its
+/// required slice — it is the verb agents call, and an agent names its run.
+#[derive(clap::Args, Debug)]
+pub(crate) struct TreeArgs {
+    /// The slice, e.g. `SL-233` (default: the newest open design run).
+    slice: Option<String>,
     /// Explicit project root (default: auto-detect).
     #[arg(short = 'p', long)]
     path: Option<PathBuf>,
@@ -401,11 +426,12 @@ pub(crate) struct ContractArgs {
     format: ContractFormat,
 }
 
-/// Route a design verb.
-pub(crate) fn dispatch(command: DesignCommand) -> Result<()> {
+/// Route a design verb. `color` is the resolved global `--color`.
+pub(crate) fn dispatch(command: DesignCommand, color: bool) -> Result<()> {
     match command {
         DesignCommand::Start(args) => run_start(args),
-        DesignCommand::Show(args) => run_show(args),
+        DesignCommand::Show(args) => run_show(args, color),
+        DesignCommand::Tree(args) => run_tree(args, color),
         DesignCommand::Apply(args) => run_apply(args),
         DesignCommand::Adopt(args) => run_adopt(args),
         DesignCommand::Resume(args) => run_resume(args),
@@ -2487,7 +2513,18 @@ fn baseline(run: &DesignSnapshot, declared: Option<u64>) -> u64 {
 /// The gate's facts are observed here too, through the one builder `apply` uses
 /// (DEC-292), so the envelope's forward edge evaluates what `apply` would. A
 /// read declares no review disposition: the stored act is the one judged.
-fn project(root: &Path, run: &DesignSnapshot, known: u64, detail: Detail) -> Result<TurnEnvelope> {
+///
+/// Record titles are read at [`Detail::Full`] only — the one detail whose
+/// envelope carries the map that cites them (`DEC-303`) — so a `Normal`
+/// projection pays no corpus read. `selection` is `Some` only when the shell
+/// chose the run itself ([`run_tree`] without a slice).
+fn project(
+    root: &Path,
+    run: &DesignSnapshot,
+    known: u64,
+    detail: Detail,
+    selection: Option<RunSelection>,
+) -> Result<TurnEnvelope> {
     let slice = run.run.slice;
     let facts = gate_facts(
         root,
@@ -2497,6 +2534,10 @@ fn project(root: &Path, run: &DesignSnapshot, known: u64, detail: Detail) -> Res
         None,
     )?;
     let slice_ref = crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice);
+    let titles = match detail {
+        Detail::Full => record_titles(root, run),
+        Detail::Normal => BTreeMap::new(),
+    };
     envelope::project(
         run,
         known,
@@ -2504,11 +2545,8 @@ fn project(root: &Path, run: &DesignSnapshot, known: u64, detail: Detail) -> Res
         outstanding_by_severity(root, run)?,
         &facts,
         &slice_ref,
-        // No shell-read titles and no run selection: this projection names its
-        // slice, so nothing chose a run, and a `Normal` projection consults
-        // neither. PHASE-03's tree read fills both.
-        &BTreeMap::new(),
-        None,
+        &titles,
+        selection,
     )
     .map_err(|refused| refusal(&refused))
 }
@@ -2539,15 +2577,15 @@ fn outstanding_by_severity(root: &Path, run: &DesignSnapshot) -> Result<Outstand
     })
 }
 
-fn run_show(mut args: ShowArgs) -> Result<()> {
+fn run_show(mut args: ShowArgs, color: bool) -> Result<()> {
     refuse_off_partition(&args)?;
     let root = resolve_root(args.path.take())?;
     let slice = slice_id(&args.slice)?;
-    // Wildcard-free (the house rule `contract_text` states below): a fifth
+    // Wildcard-free (the house rule `contract_text` states below): a sixth
     // rendering must be a compile error here, not a silently-defaulted one. Each
-    // envelope arm builds the turn through `envelope_turn`, which is what keeps
-    // `read_snapshot` — and its refusal when there is no run — off the document
-    // path entirely.
+    // envelope arm reads the snapshot itself (`envelope_turn`, or the tree arm's
+    // own read at `Detail::Full`), which is what keeps `read_snapshot` — and its
+    // refusal when there is no run — off the document path entirely.
     match args.format {
         ShowFormat::Document => show_document(&root, slice, &args),
         ShowFormat::Prompt => emit(&envelope::prompt(&envelope_turn(&root, slice, &args)?)),
@@ -2558,7 +2596,194 @@ fn run_show(mut args: ShowArgs) -> Result<()> {
                     .context("render the turn envelope as JSON")?,
             ])
         }
+        ShowFormat::Tree => {
+            let run = read_snapshot(&root, slice)?;
+            let known = baseline(&run, args.known_revision);
+            emit(&tree_lines(&root, &run, known, None, color)?)
+        }
     }
+}
+
+/// `design tree [SLICE]`: with a slice, exactly `show SLICE --format tree`;
+/// without one, the newest open run the state tier holds (`DEC-305`).
+fn run_tree(args: TreeArgs, color: bool) -> Result<()> {
+    let root = resolve_root(args.path)?;
+    if let Some(reference) = args.slice {
+        let run = read_snapshot(&root, slice_id(&reference)?)?;
+        let known = baseline(&run, None);
+        return emit(&tree_lines(&root, &run, known, None, color)?);
+    }
+    let scan = scan_runs(&root)?;
+    let Some((run, candidates)) = select_run(scan.candidates) else {
+        anyhow::bail!(no_open_run(&scan.skipped));
+    };
+    let known = baseline(&run, None);
+    let selection = RunSelection {
+        candidates,
+        skipped: scan.skipped,
+    };
+    emit(&tree_lines(&root, &run, known, Some(selection), color)?)
+}
+
+/// The tree both entry paths render: the envelope at [`Detail::Full`], laid out
+/// for this terminal.
+fn tree_lines(
+    root: &Path,
+    run: &DesignSnapshot,
+    known: u64,
+    selection: Option<RunSelection>,
+    color: bool,
+) -> Result<Vec<String>> {
+    let turn = project(root, run, known, Detail::Full, selection)?;
+    let style = TreeStyle {
+        width: crate::tty::stdout_terminal_width(),
+        colour: color,
+    };
+    Ok(tree::render(&turn, style))
+}
+
+/// What `design tree` says when no run is open: which command names one, and
+/// every snapshot the scan could not read — an unreadable run may be the one
+/// the caller wanted (STD-003).
+fn no_open_run(skipped: &[SkippedSnapshot]) -> String {
+    std::iter::once(format!(
+        "no open design run to show — name one: `{TREE_COMMAND} SL-NNN`"
+    ))
+    .chain(
+        skipped
+            .iter()
+            .map(|snapshot| format!("skipped {}: {}", snapshot.path, snapshot.reason)),
+    )
+    .collect::<Vec<_>>()
+    .join("\n")
+}
+
+/// One run the scan read: what [`select_run`] judges it by, and the parsed
+/// snapshot it carries — so the run rendered is the run judged (`DEC-305`).
+struct RunCandidate<T> {
+    slice: u32,
+    stage: Stage,
+    /// The slice's status token, as read during the scan.
+    slice_status: String,
+    mtime: std::time::SystemTime,
+    run: T,
+}
+
+/// Choose the run `design tree` shows with no slice: drop locked runs and runs
+/// of done or abandoned slices; the newest snapshot wins, an mtime tie going to
+/// the higher slice. Returns the winner's payload and how many were open.
+///
+/// Pure over the candidates' fields; the scan is the shell's.
+fn select_run<T>(candidates: Vec<RunCandidate<T>>) -> Option<(T, usize)> {
+    let open: Vec<RunCandidate<T>> = candidates
+        .into_iter()
+        .filter(|candidate| {
+            candidate.stage != Stage::Locked
+                && !crate::lifecycle::is_transition_terminal(&candidate.slice_status)
+        })
+        .collect();
+    let count = open.len();
+    open.into_iter()
+        .max_by_key(|candidate| (candidate.mtime, candidate.slice))
+        .map(|candidate| (candidate.run, count))
+}
+
+/// Every snapshot in the state tier, read once each.
+struct RunScan {
+    candidates: Vec<RunCandidate<DesignSnapshot>>,
+    skipped: Vec<SkippedSnapshot>,
+}
+
+/// Read every slice's snapshot under [`crate::state::design_snapshot_root`].
+///
+/// A child that is not a slice number is not a slice's state, and a slice
+/// state holding no snapshot has no run; neither is a candidate. Anything else
+/// that fails — the snapshot, its mtime, its slice's status — is **skipped with
+/// its cause** rather than dropped: a status the scan could not read cannot be
+/// claimed open. A missing scan root is an empty tier.
+fn scan_runs(root: &Path) -> Result<RunScan> {
+    let scan_root = crate::state::design_snapshot_root(root);
+    let mut scan = RunScan {
+        candidates: Vec::new(),
+        skipped: Vec::new(),
+    };
+    let entries = match std::fs::read_dir(&scan_root) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(scan),
+        Err(error) => {
+            return Err(error).with_context(|| format!("read {}", scan_root.display()));
+        }
+    };
+    let mut slices: Vec<u32> = Vec::new();
+    for entry in entries {
+        let entry = entry.with_context(|| format!("read {}", scan_root.display()))?;
+        if let Some(slice) = entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.parse().ok())
+        {
+            slices.push(slice);
+        }
+    }
+    slices.sort_unstable();
+    for slice in slices {
+        let path = crate::state::design_snapshot_path(root, slice);
+        match read_candidate(root, slice, &path) {
+            Ok(Some(candidate)) => scan.candidates.push(candidate),
+            Ok(None) => {}
+            Err(error) => scan.skipped.push(SkippedSnapshot {
+                path: path
+                    .strip_prefix(root)
+                    .unwrap_or(&path)
+                    .display()
+                    .to_string(),
+                reason: format!("{error:#}"),
+            }),
+        }
+    }
+    Ok(scan)
+}
+
+/// One slice's candidate, or `None` when its state holds no snapshot.
+fn read_candidate(
+    root: &Path,
+    slice: u32,
+    path: &Path,
+) -> Result<Option<RunCandidate<DesignSnapshot>>> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let run = snapshot::parse(&text)?;
+    let mtime = std::fs::metadata(path)?.modified()?;
+    let slice_status = crate::slice::status(root, slice)?;
+    Ok(Some(RunCandidate {
+        slice,
+        stage: run.run.stage,
+        slice_status,
+        mtime,
+        run,
+    }))
+}
+
+/// What the shell found for each record the run's dispositions cite, keyed by
+/// the record id as cited (`DEC-303`). An unreadable record is carried with its
+/// cause, never blanked (STD-003).
+fn record_titles(root: &Path, run: &DesignSnapshot) -> BTreeMap<String, TitleLookup> {
+    run.map
+        .inquiry
+        .nodes()
+        .filter_map(|node| node.disposition()?.record())
+        .map(|record| {
+            let lookup = match crate::knowledge::record_title(root, record) {
+                Ok(Some(title)) => TitleLookup::Found(title),
+                Ok(None) => TitleLookup::NotFound,
+                Err(error) => TitleLookup::Unreadable(format!("{error:#}")),
+            };
+            (record.to_owned(), lookup)
+        })
+        .collect()
 }
 
 /// The flag partition of design §5.2 / `D7`, as four refusals (SL-246 `EX-3`).
@@ -2566,7 +2791,7 @@ fn run_show(mut args: ShowArgs) -> Result<()> {
 /// **Stated over the RENDERING, never over the spelling.** `--json` is legal at
 /// `document` whether `document` was defaulted or written out, so this consults
 /// `args.format`'s *value* and never clap's `ValueSource`; and it is not clap
-/// `conflicts_with`, which cannot express "conflicts with three of four values".
+/// `conflicts_with`, which cannot express "conflicts with four of five values".
 ///
 /// `--path` is absent on purpose. It selects no content and no projection and sits
 /// on every `Args` struct in this codebase, so the partition does not reach it — it
@@ -2635,7 +2860,7 @@ fn envelope_turn(root: &Path, slice: u32, args: &ShowArgs) -> Result<TurnEnvelop
     } else {
         Detail::Normal
     };
-    project(root, &run, known, detail)
+    project(root, &run, known, detail, None)
 }
 
 /// The `document` rendering: the design document, then its knowledge block
@@ -2837,7 +3062,7 @@ fn run_resume(args: ResumeArgs) -> Result<()> {
     }
 
     let known = baseline(&run, args.known_revision);
-    let turn = project(&root, &run, known, Detail::Normal)?;
+    let turn = project(&root, &run, known, Detail::Normal, None)?;
     let mut lines = envelope::resume(&turn);
     lines.extend(fragment_lines(&run, &args.known_fragment));
     lines.extend(fragment_section(&run, &args.known_fragment)?);
@@ -3265,6 +3490,53 @@ mod tests {
     /// window, not the six-step crash points, which are e2e because a crash is
     /// only observable across a process boundary.
     fn no_fault(_: CheckpointStep) {}
+
+    /// A `select_run` candidate whose payload is its own slice number, so a test
+    /// reads the winner straight off the result.
+    fn candidate(slice: u32, stage: Stage, status: &str, mtime_secs: u64) -> RunCandidate<u32> {
+        RunCandidate {
+            slice,
+            stage,
+            slice_status: status.to_owned(),
+            mtime: std::time::UNIX_EPOCH + std::time::Duration::from_secs(mtime_secs),
+            run: slice,
+        }
+    }
+
+    /// SL-266 PHASE-03 `VT-1`: locked runs and done/abandoned slices are never
+    /// chosen; the newest snapshot wins; the count is of open runs only; an
+    /// empty or all-closed tier chooses nothing.
+    #[test]
+    fn select_run_picks_the_newest_open_run() {
+        let chosen = select_run(vec![
+            candidate(1, Stage::Exploring, "started", 10),
+            candidate(2, Stage::Drafting, "design", 20),
+            candidate(3, Stage::Locked, "started", 99),
+            candidate(4, Stage::Exploring, "done", 98),
+            candidate(5, Stage::Exploring, "abandoned", 97),
+        ]);
+        assert_eq!(chosen, Some((2, 2)));
+        assert_eq!(select_run::<u32>(Vec::new()), None);
+        assert_eq!(
+            select_run(vec![candidate(3, Stage::Locked, "started", 1)]),
+            None
+        );
+    }
+
+    /// SL-266 PHASE-03 `VT-1`: an mtime tie goes to the higher slice, whatever
+    /// order the scan produced them in.
+    #[test]
+    fn select_run_breaks_mtime_ties_by_slice() {
+        for order in [[7, 9], [9, 7]] {
+            let chosen = select_run(
+                order
+                    .iter()
+                    .map(|&slice| candidate(slice, Stage::Exploring, "started", 5))
+                    .collect(),
+            );
+            assert_eq!(chosen, Some((9, 2)));
+        }
+    }
 
     /// `SL-251 PHASE-05/VA-1` — print the contract over the **real** extern
     /// table, for a human reading against `render-sample.md` §2.

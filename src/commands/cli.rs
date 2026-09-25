@@ -1949,7 +1949,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Map { command } => crate::commands::map::dispatch(command),
         Command::Onboard => crate::commands::map::run_onboard(),
         Command::Observation { command } => crate::commands::observation::dispatch(command, color),
-        Command::Design { command } => crate::commands::design::dispatch(command),
+        Command::Design { command } => crate::commands::design::dispatch(command, color),
     }
 }
 

@@ -3317,6 +3317,32 @@ pub(crate) fn record_toml_path(root: &Path, kind: RecordKind, id: u32) -> PathBu
     record_dir(root, kind, id).join(format!("{RECORD_STEM}-{id:03}.toml"))
 }
 
+/// The title of the record `reference` names — `None` when no record stands at
+/// its path, an error (with its cause) when the ref or the file cannot be read.
+///
+/// Reads the TOML tier only: a title is all the caller (`design tree`, SL-266
+/// `DEC-303`) renders, so the prose tier and the full validation `read_record`
+/// applies are not paid for.
+pub(crate) fn record_title(root: &Path, reference: &str) -> anyhow::Result<Option<String>> {
+    let (kind, id) = resolve_ref(reference)?;
+    let path = record_toml_path(root, kind, id);
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(error).with_context(|| format!("read {}", path.display()));
+        }
+    };
+    let table: toml::Table = text
+        .parse()
+        .with_context(|| format!("parse {}", path.display()))?;
+    let title = table
+        .get("title")
+        .and_then(toml::Value::as_str)
+        .with_context(|| format!("no string `title` in {}", path.display()))?;
+    Ok(Some(title.to_owned()))
+}
+
 /// Write a record's `.md` prose tier (SL-249, DEC-086 step 5).
 ///
 /// The ONE path to a record's prose (EX-4): `entity::write_body` takes `dir` +
@@ -4476,6 +4502,24 @@ notes = []
             format!("# {}: Test\n", kind.canonical_id(id)),
         )
         .unwrap();
+    }
+
+    /// SL-266 PHASE-03: a cited record's title reads as present, absent, or an
+    /// error carrying its cause — the three the tree renders differently.
+    #[test]
+    fn record_title_tells_found_absent_and_unreadable_apart() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed_record(root, RecordKind::Question, 2, "title = \"Which store?\"\n");
+        seed_record(root, RecordKind::Decision, 3, "title = [\n");
+
+        assert_eq!(
+            record_title(root, "QUE-002").unwrap().as_deref(),
+            Some("Which store?")
+        );
+        assert_eq!(record_title(root, "DEC-009").unwrap(), None);
+        assert!(record_title(root, "DEC-003").is_err());
+        assert!(record_title(root, "not-a-ref").is_err());
     }
 
     #[test]

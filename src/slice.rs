@@ -2361,6 +2361,13 @@ pub(crate) fn relation_edges(
     crate::relation::tier1_edges(&SLICE_KIND, &toml_text)
 }
 
+/// The slice's lifecycle status token, read through the show-path reader — what
+/// `design tree`'s run scan asks of each candidate (SL-266 `DEC-305`).
+pub(crate) fn status(root: &Path, id: u32) -> anyhow::Result<String> {
+    let (doc, _toml_text, _body) = read_slice(&root.join(SLICE_DIR), id)?;
+    Ok(doc.status)
+}
+
 /// The single selector-read seam (SL-180 PHASE-01, EX-3). `None` ⇒ full union
 /// across all intents; `Some(intent)` ⇒ only selectors carrying that intent.
 /// Deduped + sorted. The conformance shell, the design-time dry-run, and
