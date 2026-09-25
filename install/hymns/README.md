@@ -62,7 +62,7 @@ Two sides of one coin, both **single-emit**:
 
 ## Provenance
 
-- `Framework`: shipped with the binary (embedded under `install/hymns/`).
+- `Framework`: shipped with the binary (compile-embedded).
 - `User`: on-disk under `.doctrine/hymns/`.
 
 Precedence key (ascending; last word wins):

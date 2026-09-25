@@ -623,7 +623,7 @@ sibling's `src/**` and `tests/e2e_design_tree.rs` changes were left untouched.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · PHASE-05 · ce3acf501
+fresh-as-of: 2026-09-26 · PHASE-06 · c1acd6da7
 
 ### Produced
 - design locked — SL-267 under run dr-01a0d8ff-b311 (rev 35); `design.md` 9 sections (commits 9750594e4, c17d9229a, 53add8888).
@@ -637,6 +637,7 @@ fresh-as-of: 2026-09-26 · PHASE-05 · ce3acf501
 - gates: `doctrine check gate` exit 0 at PHASE-01 (187f05f91) and PHASE-02 (599dfb5c8); publication validate ok; e2e_claude_install 13/13 both times (PHASE-02's `store_allowlist` byte-unchanged).
 - PHASE-04 done — the accuracy axis (`CHR-080`): 19 claim groups paired with their deciding invocations (9 verified, 10 divergent); **seven** shipped masters + `install/glossary.md` + `spec-product/SKILL.md` corrected against the live CLI. Commits `7e5ec0fd8`, `25c4f0c35`. Both mechanical legs clean with controls. Gates: `check gate` exit 0 (124 suites), `doctor` 51, `publication validate` 98, `e2e_claude_install` 13/13.
 - PHASE-05 done — the sufficiency axis (`IMP-484`): **17 ledger rows** (8 admitted, 1 already-documented, 5 developer-only exclusions, 2 structural judgements, 1 left to `ISS-215`). The 8 admitted gaps landed as sections in four **existing published** docs — `install/using-doctrine.md` ×4 (corpus-health, worklist, facets, config) plus a `supersede` extension of its relating-entities section; `install/model-band.md`; `install/claude-activation.md`; `install/dispatch-mechanics.md`. No new doc, no signpost (`EX-5`/`VA-2`). Commit `682902651`; ledger § PHASE-05 sufficiency ledger. Gates: `check gate` exit 0 (124 suites), `doctor` 51, `publication validate` 98 (unchanged), `e2e_claude_install` 13/13, `verify-vt` **PHASE-05 `VT-1 ✓`** (was `FAIL`).
+- PHASE-06 done — the client-read acceptance test + the `RV-391` `F-7` control. Scratch repo `/tmp/sl267-client-read` (in-tree binary `4f4fbe13…`), 213 delivered artifacts. **F-7 control PASS: all 7 channels flagged their planted id.** The read was **not vacuous** and found **26 further repo-private citation sites in 24 shipped files** across four classes (doc-local `D-N`/`F-N`/`PHASE-NN`; unshipped `mem.*` keys; repo-private paths outside the `src/*.rs|install/*.md` regex; a served-prompt `this repo` referent) — repaired in-phase per `/consult` (2026-09-26). Two PHASE-02/03 ledger claims falsified (see ledger). Gates: `check gate` exit 0 (124 suites), `doctor` 51, `publication validate` 98, `e2e_claude_install` 13/13, `verify-vt` PHASE-06 `VT-2 ✓` / `VT-1` UNATTRIBUTABLE (tests/ untouched).
 
 ### Learned
 - mem.pattern.shipped-corpus.delivery-copy-cannot-cite-its-owner — a shipped delivery copy cannot cite its governance owner; the link runs governance → published address, one way.
@@ -651,6 +652,9 @@ fresh-as-of: 2026-09-26 · PHASE-05 · ce3acf501
 - **CHR-080 is a floor too.** The accuracy item names two instances; the live re-derivation (PHASE-04) found five more divergence classes (`G9`–`G13`) and a knowledge status vocabulary wrong in *four* rows, not two. An accuracy ledger is a whole-corpus exercise; an item's "confirmed instances" are a starting point, never the bound. Durable input for `QUE-227`.
 - **A taught command is a *claim*, and flag existence is not executability.** PHASE-04's `G4` verified that `prompt resolve`'s named flags exist and never **ran** the taught form — which the binary refuses (`--role` is required). Every authored invocation is an accuracy claim; the deciding invocation for one is *executing* it. Durable input for `QUE-227`.
 - **One taught string, three homes.** The band directive lived in `install/model-band.md`, in the `doctrine_onboard` MCP tool output (`src/mcp_server/tools.rs`), and in two `src/boot.rs` boot assertions. A corpus-only sweep cannot repair a string a shipped *tool output* also emits, and correcting the doc alone turns the gate red — check the emitting surfaces, not just the docs.
+- **Every prior phase's locator was incomplete, and PHASE-06's read is what proved it.** The sweep regex set missed four whole classes: doc-local `D-N`/`F-N`/`INV-N` (PHASE-02/03 partially covered) but not `PHASE-NN` prose refs; **unshipped `mem.*` keys** (PHASE-04's dangling leg checked only `[[…]]`); **repo-private paths without the `.rs`/`.md` extension** (`plugins/`, `install/hymns/`, bare `install/`, bare `memory/`); and a served-prompt `this repo` referent. 26 sites across 24 files. The lesson is the one `DEC-314` already states: a grep locates, it does not conclude — and a zero must carry a positive control. Durable input for `QUE-227`.
+- **A ledger row is a claim, and the tree is its evidence.** Two prior-phase rows were falsified by the read: PHASE-02 claimed `doctrine.toml.example:56` was inlined (it was not — the commit never touched the line), and PHASE-03's `EX-2` claimed `grep 'install/hymns'` returned zero (the path survived at `memory/mem_88193c…/memory.md:39`). Both trace to the same regex gap. A per-file verification must re-run the *claimed* grep, not restate the intent.
+- **The acceptance test must run where the private id does NOT resolve.** `doctrine library show` inside the doctrine repo resolves `ADR-007` to doctrine's own record; in `/tmp/sl267-client-read` it resolves to nothing. That is the whole of `F-7`, and it is what made the 26 sites visible.
 
 ### Open
 - QUE-227 — drift-gate seam and the duplicate POL-002 rule (ISS-309 part 2); the only durable defence against re-drift.
@@ -660,7 +664,12 @@ fresh-as-of: 2026-09-26 · PHASE-05 · ce3acf501
 - **Audit flag (PHASE-03 D3)** — five shipped `memory.toml` scope entries name doctrine-private matchers: `memory/` + `doc/memory-spec.md` (`mem_019e9a12560d7972b29124e09f4de704`), `src/` + `doc/entity-model.md` + `doc/relation-index.md` (`mem_019e9a1244d37f72a9b7246d2c976ef7`), `install/hymns/` (`mem_88193c2859d72f043ef83a97a5952a96`). Left `leave`: a scope field is a retrieval matcher, not a citation, and editing one changes behaviour outside axis A. Weigh at audit — this is the one class the sweep *deferred by design*.
 - **Audit flag (PHASE-03 A2)** — the plan's PHASE-03 objective states "11 of the 35 shipped memory masters, and 14 skill files carrying 74 sites". All three numbers were low. Not a scope breach (the selectors cover the whole sub-corpus and `EX-1` says *per candidate*), but the plan's terrain description is now known-inaccurate for the audit's conformance read.
 - **Audit flag (PHASE-04)** — `install/glossary.md`'s kind↔abbreviation table still omits the minted kinds `RV`/`REC`/`RFC`/`CM` and its `folder` column is stale (e.g. ADR). A completeness gap, not a false prefix, so `EX-4` did not reach it and the plan's `EX-3` names only the knowledge-records table. Either a follow-up item or a PHASE-06 read judgement.
-- **Audit flag (PHASE-05 A1/D-1)** — **boundary departure, user-authorised 2026-09-26.** `EX-`/design sec-1 bar `src/**`, but the refused-invocation fix spans two `src/` sites (`src/mcp_server/tools.rs::PROMPT_RESOLVE_MODEL_CMD`; two `src/boot.rs` boot assertions) because they duplicate the string the doc teaches. The departure is **textual, not semantic** — a taught command string and two test substrings, no behaviour change. Weigh at audit; the alternative (doc-only) leaves the `doctrine_onboard` tool teaching a refused command.
+- **Audit flag (PHASE-06 A1/D-1)** — **scope extension, user-authorised 2026-09-26.** The read found 26 repo-private citation sites in 24 shipped files `install/**`+`memory/**`+`plugins/**`; the plan's PHASE-06 was verification-only. Per `/consult` the user chose **repair in-phase**; the sites are inlined/dropped, no behaviour change. The plan text is now known-inaccurate for the audit's conformance read (the sweep was not exhaustive at PHASE-02/03).
+- **Audit flag (PHASE-06 F-1)** — PHASE-02's ledger row `doctrine.toml.example:56 | inline | "the y/N prompt" (was D8)` is **falsified** by `git show 599dfb5c8 -- install/doctrine.toml.example` (the commit never touched line 56).
+- **Audit flag (PHASE-06 F-2)** — PHASE-03's `EX-2` evidence (`grep -n 'spec-023\|SPEC-023\|install/hymns' memory/mem_88193c…/memory.md` → zero) is **falsified**: `install/hymns/` survived at `:39`.
+- **Audit flag (PHASE-06 J-1)** — `install/manifest.toml:9` cites `install/<key>` and `install/doctrine.toml.example:120` names `install/agents/**`/`flake.nix` inside a fully-commented `worker-forbidden-writes` example. Left: the manifest is engine-internal (not a client channel), and the example is the do-not-sweep commented-payload class — recorded as a tension, not swept.
+- **Audit flag (PHASE-06 J-2)** — `install/git-hooks/pre-commit` is a **coordination-tier** asset (`src/dispatch.rs::HOOK_ASSET_KEY`, installed by `dispatch setup` via a worktree-scoped `core.hooksPath`), not installed by a plain client `doctrine install`; its C5 read is therefore the published form plus the dispatch-tier install path (judgement, `A8`).
+- **Audit flag (PHASE-06 J-3)** — the `.toml` `paths`/`globs` scope fields naming doctrine-private matchers (PHASE-03 `D3`) remain untouched, by design.
 
 ## PHASE-05 sufficiency ledger
 
@@ -794,3 +803,149 @@ lands in a committed file.
   attributable once this phase's delta is committed).
 - Renders read through `doctrine library show reference/<name>.md`, never the
   build line — both `VT` keyword sets present in the RENDER.
+
+## PHASE-06 client-read verification and the F-7 control
+
+Evidence for PHASE-06 `EX-1`..`EX-7`, `VT-1`/`VT-2`, `VA-1`/`VA-2` (`design.md`
+sec-6/sec-8, `DEC-314`). **The acceptance test is a client read, not a diff.**
+
+### Environment (`EN-2`, `EX-1`)
+
+- Scratch repo `/tmp/sl267-client-read` — `git init` + `doctrine install -a claude`
+  + `doctrine memory sync` + `doctrine boot`, created with the **in-tree** binary
+  `/workspace/doctrine/target/debug/doctrine` (`sha256
+  4f4fbe134e492259a48bdeaa246138abe33dce4620cf460775279251c27a1347`, v0.44.5).
+  Never the read-only installed copy; never inside this worktree (`EN-2`).
+- Delivered-artifact dump `/tmp/sl267-delivered`: 98 published (C1) + 1 boot (C3)
+  + 15 installed integration (C5) + 62 materialised memory (C6) + 37 installed
+  skills (C7) = **213 artifacts**. Renders (C2) and served prompts (C4) minted on
+  demand.
+- **Method note (`VA-1` attestation).** The mechanical legs (below) and the F-7
+  control were run directly, in this session. The bulk whole-file read of the
+  delivered prose/skills/memory was run through `./scripts/pi-research` (the
+  project's sanctioned read-only scout, per `AGENTS.md`) to preserve session
+  context, and **every reported finding was re-verified mechanically here**
+  before repair; the verdicts in this section are the orchestrator's.
+
+### The seven channels and the F-7 control (`EX-2`, `VA-1`) — PASS
+
+One distinct repo-private id planted per channel in one swept source file;
+`cargo build` + `memory sync` + `install`; the delivered artifact re-read. Every
+planted id was **flagged**. A clean read over a plant would have failed the phase.
+
+| ch | channel | planted in | sentinel | delivered artifact | flagged |
+|---|---|---|---|---|---|
+| C1 | published | `install/using-doctrine.md` | `ADR-007` | `library show reference/using-doctrine.md:277` | ✓ |
+| C2 | rendered | `install/templates/backlog.toml` | `SL-233` | `.doctrine/backlog/improvement/001/backlog-001.toml:24` | ✓ |
+| C3 | boot-assembled | `install/model-band.md` | `ISS-309` | `.doctrine/state/boot.md:313` | ✓ |
+| C4 | served design prompt | `install/design-prompts/inquiry.md` | `RV-391` | `design resume SL-001:89` | ✓ |
+| C5 | installed integration | `install/agents/claude/dispatch-worker.md` | `DEC-311` | `.claude/agents/dispatch-worker.md:92` | ✓ |
+| C6 | materialised memory | `memory/mem_019e9a11b3797af3a8833c67acfa69bf/memory.md` | `IMP-484` | `.doctrine/memory/shipped/…9bf/memory.md:87` | ✓ |
+| C7 | installed skills | `plugins/doctrine/skills/execute/SKILL.md` | `CHR-080` | `.doctrine/skills/execute/SKILL.md:114` | ✓ |
+
+All plants removed; rebuild + re-deliver confirmed **zero** `SL267-CONTROL`
+residue in any delivered artifact and in the source corpus (`EX-3`).
+
+### The repair — the read was not vacuous (`EX-5`, and the phase's real finding)
+
+**The post-sweep corpus was NOT citation-clean.** The client read found **26
+further repo-private citation sites in 24 shipped files** across four classes the
+PHASE-02/03/04 locators could not see. Per the user's `/consult` decision
+(2026-09-26), they were repaired **in-phase** (inlining/dropping the private
+referent, keeping the fact); this extends PHASE-06 beyond its verification-only
+planned terrain — recorded for audit.
+
+Class A — doc-local design/phase ids the prior locators' regex set missed (13 sites):
+`doctrine.toml.example:56` (`D8`), `review-ledger.md:70` (`INV-2`), `:158` (`D10`),
+`templates/adr.toml:16` (`F1`), `templates/standard.md:5` + `policy.md:5`
+(`design D1`), `templates/phase.md:21` (`D5/Q5`), `templates/rec.md:10` (`F7`),
+`templates/members.toml:2` + `requirement.toml:8` + `review.toml:15` +
+`revision.toml:17` (`PHASE-03`), `templates/revision.toml:13` (`PHASE-05`).
+`templates/plan.toml:29` (`PHASE-03/EX-8`) left as a reference-form illustration.
+
+Class B — **unshipped `mem.*` keys cited as authoritative** (5 sites; PHASE-04's
+dangling leg checked only `[[…]]` wikilinks): `dispatch-mechanics.md:314` +
+`skills/close/SKILL.md:139` (`mem.pattern.dispatch.split-lineage-close-conflict-direct-land`,
+a local `.doctrine/memory/items/` key), `harvest.md:57`
+(`mem.pattern.dispatch.import-tripwires`), `boot-footer.md:13` +
+`templates/seed-onboarding.md:4` (`mem.signpost.project.orientation` — the seed
+mechanism retired; install projects `.doctrine/project-orientation.md` now). Also
+corrected `boot-footer.md`'s non-existent `/retrieving-memory` skill name.
+
+Class C — **repo-private source paths outside the `src/*.rs|install/*.md` regex**
+(6 sites): `skills/worktree/SKILL.md:292` (`plugins/`), `skills/plan/SKILL.md:70`
+(`src/plan.rs` + real `Plan::parse`/`PlanPhase` symbols), `install/hymns/README.md:65`
++ `mem_88193c…/memory.md:39` (`install/hymns/`), `mem_019e9a11cda…/memory.md:40`
+(`install/`), `mem_019ec92b100…/memory.md:18` (`memory/`).
+
+Class D — served-prompt private referent (1 site): `design-prompts/exploring.toml:20`
+(`this repo already enforces on PHASE-NN …`).
+
+**Two prior-phase ledger claims were falsified by the read** (audit-relevant):
+1. PHASE-02's row `doctrine.toml.example:56 | inline | "the y/N prompt" (was D8)`
+   — `git show 599dfb5c8 -- install/doctrine.toml.example` proves that commit
+   never touched line 56; `D8` survived.
+2. PHASE-03's `EX-2` evidence (`grep -n 'install/hymns' …` → zero) — the path
+   survives at `mem_88193c…/memory.md:39`, exactly where the row said it was
+   dropped. Root cause, both: the ledger's locator regex matched
+   `install/[…]+\.md` only, so a bare `install/`, `install/hymns/`, `plugins/`
+   or `path/none` token was invisible.
+
+### Per-channel clean read (`EX-3`, `EX-4`, `VA-2`)
+
+Each channel's changed files were read whole through their **delivered** artifact
+(not the source):
+
+- **C1** 13 published docs read via `doctrine library show reference/<name>.md` (via
+  `pi-research`, all re-verified mechanically) — clean after repair.
+- **C2** 16 changed templates read via `library show templates/<name>`; the render
+  path proven by the control (a minted `backlog.toml` carried the plant).
+- **C3** delivered `.doctrine/state/boot.md` read (the two repaired fragments
+  present in the render).
+- **C4** 7 changed design prompts read via `library show design-prompts/<name>`;
+  the serve path proven by `design resume SL-001` carrying the `inquiry.md` plant.
+- **C5** installed `.claude/**`, `.mcp.json`, `CLAUDE.md`, `.doctrine/{doctrine.toml,project-orientation.md}`,
+  `.doctrine/hymns/**` read; `install/git-hooks/pre-commit` is a **coordination-tier**
+  asset installed by `dispatch setup` (a worktree-scoped `core.hooksPath`,
+  `src/dispatch.rs::HOOK_ASSET_KEY`), not by a plain client `install` — recorded
+  as a judgement (`A8`), its published form (`integration/git-hooks/pre-commit`) read via C1.
+- **C6** 17 changed masters read from `.doctrine/memory/shipped/` (byte-identical
+  to the masters); materialisation confirmed by the `memory sync` counter.
+- **C7** 14 changed skills read from the installed tree — clean after repair.
+
+**Repoints (`EX-4`) proven in the scratch repo** with `doctrine library show`:
+`reference/design-run-obligations.md` (5171 B) and `reference/using-doctrine.md`
+(14620 B) both stream.
+
+### Mechanical sweep with positive controls (`EX-5`)
+
+Four passes over the 213-artifact delivered set (and re-run over the source
+corpus), each paired with a known-positive control:
+
+| pass | pattern | delivered result | control |
+|---|---|---|---|
+| A id-prefix | `\b[A-Z]{2,5}-[0-9]{2,3}\b` | only fill-in-the-blank/reference-form/illustration hits | `ADR-0xx` found in `.doctrine/adr/019/adr-019.md` |
+| B paths | `src/`, `install/`, `plugins/`, `doc/`, `memory/`, `publication/`, `tests/`, bare roots | CLEAN (only prose false positives) | `src/relation.rs` found in `.doctrine/slice/267/design.md` |
+| C doc-local | `D-N`/`F-N`/`S-N`/`INV-N`/`C-V`/`Q-N`/`PHASE-NN` | CLEAN | hits in `review-ledger.md`(pre-repair) |
+| D mem keys | `mem.\S+` vs the shipped key set | CLEAN | `mem.signpost.doctrine.dispatch` present in the key set |
+
+No pass is reported as a clean zero without its control (`DEC-314`). Remaining
+pass-A survivors are all do-not-sweep: `glossary.md`'s kind/reference-form tables,
+`routing-process.md`'s form list, `harvest.md`'s fill-in-the-blank block,
+`templates/{design,spec-tech,spec-product,plan}.md` reference-form headers,
+commented payload examples, and the two synthetic `doctrine.toml.example` config
+values (`install/agents/**`, `flake.nix` — commented example, recorded as a tension).
+The `.toml` `paths`/`globs` scope fields remain untouched (PHASE-03 `D3`, deferred by design).
+
+### Verification (`EX-6`, `VT-1`, `VT-2`)
+
+- `doctrine check gate` → **exit 0**, **124 suites** ok, 0 failures, clippy clean.
+- `doctrine doctor` → **51** findings (unchanged).
+- `doctrine publication validate` → **98** ok (unchanged; the two PHASE-01 rows still declared).
+- `cargo test --test e2e_claude_install` → **13/13** (`store_allowlist` byte-unchanged;
+  `git status` shows no `tests/**` change) — `VT-1`'s substantive evidence.
+- `doctrine slice verify-vt 267` → PHASE-06 **`VT-2 ✓ PASS`**;
+  **`VT-1 ≈ UNATTRIBUTABLE`** — keyword present, but `tests/e2e_claude_install.rs`
+  is not in this phase's delta (recorded for audit; the gate run above is the evidence).
+- No golden edited incidentally (`git diff` touches no `tests/**`, no manifest entry count).
+- Final tree: 24 files / 26 citation sites repaired; zero `SL267-CONTROL` residue.

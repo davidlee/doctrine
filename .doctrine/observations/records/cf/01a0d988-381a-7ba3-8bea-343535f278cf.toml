@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d988-381a-7ba3-8bea-343535f278cf"
+recorded_at = "2026-09-25T17:06:18.266530419Z"
+kind = "friction"
+summary = "skill execute: a phase ledger row can restate intent instead of the verified result"
+detail = "Two prior-phase ledger rows were falsified by PHASE-06's read: PHASE-02 claimed doctrine.toml.example:56 was inlined (git show proves the commit never touched the line), and PHASE-03's EX-2 claimed grep 'install/hymns' returned zero (the path survived at memory/mem_88193c.../memory.md:39). A per-file verification row must be produced by re-running the claimed check, not by transcribing what the edit intended."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

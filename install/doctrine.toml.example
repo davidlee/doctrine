@@ -53,7 +53,7 @@
 # # Explicit remote name for reservation coordination (default: auto-detect).
 # remote = "origin"
 # # Accept local allocation when a configured remote is unreachable (non-interactive
-# # equivalent of the D8 y/N prompt). Default false.
+# # equivalent of the y/N prompt). Default false.
 # allow-local-fallback = false
 #
 # [verification]

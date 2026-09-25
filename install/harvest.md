@@ -54,7 +54,7 @@ fresh-as-of: 2026-07-24 · PHASE-03 · a1b2c3d
 - minted: IMP-241 — <one clause>; ISS-102 — <one clause>
 
 ### Learned
-- mem.pattern.dispatch.import-tripwires
+- <memory key> — <one clause>
 - EVD-014 — <one clause>
 
 ### Open

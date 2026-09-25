@@ -67,7 +67,7 @@ the two are close, open the ledger.
 
 Pick the **facet** by *what aspect you interrogate* — the subject's lifecycle
 aspect (e.g. `reconciliation` for a post-implementation audit). The facet always
-names a **lifecycle aspect, never a posture** (INV-2). An adversarial *posture*
+names a **lifecycle aspect, never a posture**. An adversarial *posture*
 (inquisitor, devil's advocate, …) rides `--raiser <label>` — **never** a bespoke
 facet. Same subject, same facet, different raiser label: that is how a posture is
 expressed.
@@ -155,7 +155,7 @@ Then close each finding **terminal**:
 
 - `--note` on `verify` / `contest` is **ephemeral baton chatter** for the log, NOT
   durable rationale — durable justification belongs in the finding's `response` or a
-  new finding (D10).
+  new finding.
 - **Self-review** drives both roles via `--as` (raiser raises / verifies /
   withdraws; responder disposes). The per-review lock and the per-finding `can()`
   gate keep a one- or two-party review correct; `--as` is **cooperative role

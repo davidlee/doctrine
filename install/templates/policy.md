@@ -2,7 +2,7 @@
 
 <!-- Body sections reuse the tuned prior art from spec-driver/supekku
      templates/policy-template.md; its YAML frontmatter is dropped — metadata
-     lives in the sister policy.toml (storage rule / design D1). -->
+     lives in the sister policy.toml (the storage rule). -->
 
 ## Statement
 

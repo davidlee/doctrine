@@ -7,5 +7,5 @@ sister `rec-NNN.toml`; this prose companion carries the rationale for the act.
 
 <!-- Why this reconciliation: what coverage/drift was observed, why this `move`
      (accept | revise | redesign), and what the deltas record. For a `redesign`,
-     the escalation and its grounds — that REC carries no status_deltas (F7).
+     the escalation and its grounds — that REC carries no status_deltas.
      Seeded at `rec new`. -->

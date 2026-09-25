@@ -36,10 +36,9 @@ per-axis; an axis it does not declare keeps its path-derived default.
 
 ## Seal / expose — two sides of one coin, both single-emit
 
-Two roots layer: `install/hymns/` (compile-embedded, the framework superset)
-unioned with `.doctrine/hymns/` (on-disk, user overlay + projected editable
-starters). Provenance is DERIVED from the source root, never stored as a
-flag.
+Two roots layer: the compile-embedded framework superset unioned with
+`.doctrine/hymns/` (on-disk, user overlay + projected editable starters).
+Provenance is DERIVED from the source root, never stored as a flag.
 
 - **Sealed** slot: the framework snippet is authoritative — any
   user-provenance snippet at that slot is dropped BEFORE matching. Framework

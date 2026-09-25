@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d988-3817-7c30-a6db-095470f30f01"
+recorded_at = "2026-09-25T17:06:18.26359482Z"
+kind = "friction"
+summary = "skill phase-plan/execute: each phase's citation locator regex was incomplete"
+detail = "PHASE-02/03/04 each ran a grep-based locator that missed a whole class the next pass found. PHASE-06's client read found 26 further repo-private citation sites in 24 shipped files: doc-local PHASE-NN prose refs, unshipped mem.* keys (PHASE-04's dangling leg checked only [[...]] wikilinks), repo-private paths without a .rs/.md extension (plugins/, install/hymns/, bare install/, bare memory/). The locator is re-derived per phase instead of single-sourced, so each phase pays to rediscover the same gap."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

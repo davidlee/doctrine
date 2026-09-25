@@ -12,5 +12,5 @@ responder = {{responder}}
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = {{target_ref}}
 {{target_phase}}
-# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.

@@ -5,7 +5,7 @@ id = {{id}}
 slug = {{slug}}
 title = {{title}}
 status = "pending"
-kind = "functional"   # default seed; `spec req add --kind` overwrites (PHASE-03)
+kind = "functional"   # default seed; `spec req add --kind` overwrites
 
 # description — the requirement statement (structured, queryable; `show` renders
 # it as the statement line — the storage rule forbids deriving it from prose).

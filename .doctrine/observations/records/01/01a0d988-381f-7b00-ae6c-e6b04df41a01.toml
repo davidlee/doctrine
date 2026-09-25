@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d988-381f-7b00-ae6c-e6b04df41a01"
+recorded_at = "2026-09-25T17:06:18.271838335Z"
+kind = "friction"
+summary = "skill phase-plan: the plan's terrain/count numbers were low three phases running"
+detail = "PHASE-03's plan numbers (11 masters/14 files/74 sites) were all understated and flagged at PHASE-03; PHASE-06 adds that the sweep's site count was understated again by 26. The plan's terrain description is a floor, not a bound, but downstream conformance reads it as a bound."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

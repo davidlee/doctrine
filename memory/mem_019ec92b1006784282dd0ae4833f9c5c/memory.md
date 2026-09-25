@@ -15,7 +15,7 @@ flag is a stale flag.
 Each memory carries structured fields (type, scope, trust, git anchor) in
 `memory.toml` and prose body in `memory.md`, plus a `mem.<key>` symlink alias
 for key-based lookup. Records live under `.doctrine/memory/items/` (local) or
-`memory/` (shipped corpus, via `--global`).
+in the shipped corpus (via `--global`).
 
 ## Verification
 

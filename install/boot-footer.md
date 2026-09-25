@@ -9,6 +9,6 @@
 
 Immediately on beginning your NEXT TURN:
 If the MCP `doctrine_onboard` tool is available, call it to get onboarding context
-in a single call. Otherwise, use /retrieving-memory skill to retrieve
-`mem.signpost.doctrine.overview` and `mem.signpost.project.orientation`.
+in a single call. Otherwise, use the /retrieve-memory skill to retrieve
+`mem.signpost.doctrine.overview` and read `.doctrine/project-orientation.md`.
 

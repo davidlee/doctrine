@@ -18,7 +18,7 @@ until then, lift anything that must survive into the slice's `notes.md`.
 ## Tasks
 
 <!-- [ ] todo · [WIP] · [x] done · [blocked]. Graduates to TOML rows in the
-     tracking file when a consumer needs queryable per-task status (D5/Q5). -->
+     tracking file when a consumer needs queryable per-task status. -->
 
 ## Risks
 

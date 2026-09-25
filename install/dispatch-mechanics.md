@@ -310,9 +310,7 @@ never a trunk payload) — asserts that payload is **already an ancestor** of tr
 **Verified** trunk row to `dispatch/<N>`, mutating no external ref. It is the
 sanctioned replacement for a hand-edited `journal.toml` trunk row. It
 *records*; it never *advances* — landing the payload is a separate, out-of-band
-step (`git merge --no-ff phase/<N>-NN`, or the admitted candidate). Retrieve
-`mem.pattern.dispatch.split-lineage-close-conflict-direct-land` for the full
-recovery.
+step (`git merge --no-ff phase/<N>-NN`, or the admitted candidate).
 
 ## Worker identity is a property of the process, set by the spawn
 

@@ -135,8 +135,7 @@ Inputs:
    ref. Then `slice status <N> done` reads that row and passes. This is the
    sanctioned replacement for a hand-written journal row; land the payload
    out-of-band as `git merge --no-ff phase/<N>-NN` (or
-   the admitted candidate), not `review/<N>`. Deep recovery detail:
-   `doctrine memory show mem.pattern.dispatch.split-lineage-close-conflict-direct-land`.
+   the admitted candidate), not `review/<N>`.
 
 4. **Transition lifecycle:** confirm the slice is in `reconcile` (flip it with
    `doctrine slice status <id> reconcile` if `/audit` didn't), then

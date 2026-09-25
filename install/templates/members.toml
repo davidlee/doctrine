@@ -1,5 +1,5 @@
 # Members — the requirements this spec is woven from.
-# Seeded empty; `spec req add` (PHASE-03) appends rows edit-preservingly:
+# Seeded empty; `spec req add` appends rows edit-preservingly:
 #   [[member]]
 #   requirement = "REQ-001"   # canonical FK into .doctrine/requirement/NNN
 #   label = "FR-001"          # sticky membership label (FR- functional, NF- quality)

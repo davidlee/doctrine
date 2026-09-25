@@ -67,8 +67,8 @@ Inputs:
       ```toml
       { id = "VT-1",
         expects = "round-trip unit: the new fn parses, renders, and re-parses",
-        test_file = "src/plan.rs",
-        keywords = ["Plan::parse", "PlanPhase"],
+        test_file = "src/your_test.rs",
+        keywords = ["your_fn", "your_struct"],
         patterns = ["^\\s*pub fn"],   # optional: stronger line-anchored shape
         waived = false }
       ```

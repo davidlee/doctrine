@@ -10,11 +10,11 @@ tags    = []
 # revise-intent against authored governance/spec truth plus a staged delta payload.
 # Lifecycle (proposed→started→done; abandoned from any non-terminal) is moved by
 # `revision status REV-N <state>`. `approval` is orthogonal — lifecycle transitions
-# are approval-blind; the apply checkpoint (PHASE-05) consults it. The prose
+# are approval-blind; the apply checkpoint consults it. The prose
 # rationale + before/after excerpts live in the sister `revision-NNN.md`.
 
 # change rows — the typed `revises` payload (the touched-entity set; the rows ARE
-# the edges, members.toml precedent). Authored by `revision change add` (PHASE-03),
+# the edges, members.toml precedent). Authored by `revision change add`,
 # NOT by hand and NEVER by `doctrine link`. A fresh `revision new` writes none:
 #   [[change]]
 #   target  = "ADR-006"   # durable peer id (the FK / anchor)

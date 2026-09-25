@@ -37,7 +37,7 @@ Where things live — use this to *locate*. The authoritative layout block is in
   `reference/glossary.md` (the pull tier) — published, read with
   `doctrine library show`, not copied under `.doctrine/`. See
   [[mem.signpost.doctrine.reference-docs]].
-- `install/` — the shipped source assets the binary embeds and publishes; the
+- the shipped source assets — the binary embeds and publishes them; the
   installer eagerly projects only the minimal base into `.doctrine/`. See
   [[mem.signpost.doctrine.install]].
 

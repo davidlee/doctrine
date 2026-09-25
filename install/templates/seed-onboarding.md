@@ -1,7 +1,6 @@
 # Project Orientation
 
-> **Seeded by `doctrine install`. Edit this to fit your project, then run
-> `doctrine memory verify mem.signpost.project.orientation` to attest it.**
+> **Projected by `doctrine install`. Edit this to fit your project.**
 >
 > This is the first thing an agent retrieves when onboarding. Write for an
 > agent audience: concrete, operational, no marketing. One page; point to

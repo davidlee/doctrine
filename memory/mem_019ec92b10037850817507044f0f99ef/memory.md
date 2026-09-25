@@ -2,7 +2,7 @@
 
 Doctrine ships two reference documents to every project **published**, not
 projected: read them on demand with `doctrine library show reference/<name>.md`
-(ADR-019 — the eager projection base is deliberately minimal, so no copy lands
+(the eager projection base is deliberately minimal, so no copy lands
 on disk). They are the durable prose authorities for *how* to operate
 doctrine and *what* its vocabulary means — separate from the shipped memory
 corpus (which orients via `find`/`retrieve`) and the CLI (which is the source

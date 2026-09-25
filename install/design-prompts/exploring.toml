@@ -17,7 +17,7 @@
 # the contract's identity once the override seam lands. Ids are
 # explicit and author-assigned, never positional: if identity were list
 # position, inserting a step at the top would silently repoint every persisted
-# discharge — the rule this repo already enforces on `PHASE-NN` and `EN-/EX-/VT-`.
+# discharge — the same rule the plan's `PHASE-NN` and `EN-/EX-/VT-` ids carry.
 #
 # A discharge binds the digest of the whole step definition (`id`, `text`,
 # `required`, `verify`), so editing any of them makes it stale and it is re-made

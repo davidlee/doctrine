@@ -288,8 +288,8 @@ check-allowlist`.
 - Fork from a dirty tree or hand off a red baseline.
 - Fork a `worker` from the implicit session HEAD instead of `--base <B>` — for a
   worker the session HEAD is not `B`, a divergent base that breaks `S.parent == B`.
-- Author or edit this skill in `.doctrine/skills/` (the gitignored install copy);
-  the source of truth is here under `plugins/`.
+- Author or edit this skill's master; the gitignored `.doctrine/skills/` install copy
+  is overwritten on re-install.
 
 **Always:**
 - Detect before creating; adapt to existing isolation.
