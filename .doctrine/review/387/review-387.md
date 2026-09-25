@@ -159,3 +159,66 @@ raised — this is the record of what changed after):
   `pending → active` REV are unaffected.
 - Close-time bookkeeping stands (regenerate the primary's boot snapshot after
   landing).
+
+## Reconciliation Outcome
+
+### Direct edits applied
+
+- **Selector registry** (`RV-387` `F-1`): `doctrine slice selector add 265
+  '.doctrine/requirement/**' --intent design-target`. The three `REQ-482` paths
+  (slug symlink + toml + md) now report conformant.
+- **`design.md` sec-5** (`RV-387` `F-3`): the closing paragraph states the real
+  reading — the REV + `.doctrine/spec/tech/013/**` deliverable is glob-covered and
+  **conformant**; the requirement subtree carries the new selector; the remaining
+  undeclared paths are the slice's own bookkeeping. Direct edit, out of band on
+  the locked run (`mem.pattern.reconcile.edit-design-out-of-band`).
+- `slice conformance 265` after the writes: 0 undelivered, and undeclared down to
+  `.doctrine/slice/265/coverage.toml` + `slice-265.toml` (`F-2`, aligned).
+
+### REVs completed
+
+- **`REV-063` (`reconcile-sl-265`) — done.** One `status` row targeting
+  `REQ-482`, auto-landed by `revision apply` (`REC-117`): `pending → active`.
+  Covers design sec-5 `EX-6`. Evidence in hand: the check-bound coverage cell
+  re-derives `verified` (`doctrine coverage verify 265`) and the requirement's
+  scope is witnessed by the admitted candidate's VT set. Rationale + reconcile
+  narrative in `revision-063.md`.
+
+### Dispatch landing (close step 3a)
+
+- `main` was promoted from `edge` first (`git fetch . edge:main`) so the landing
+  zone was current. Admitted `close_target` candidate `cand-265-close-001`
+  (`330b247f0` — the no-ff merge of `review/265` `d96f4d8fb` onto trunk).
+- The merge needed **one hand resolution**, in `.doctrine/slice/265/slice-265.toml`:
+  the row `F-1` added sat adjacent to the two rows `review/265` also adds, so git
+  could not auto-resolve a file whose "ours" is a superset. Resolved to ours and
+  adopted via `dispatch candidate ingest` (validated as a faithful `(base, source)`
+  3-way).
+- `dispatch sync --slice 265 --integrate --trunk refs/heads/main` advanced `main`
+  to `330b247f0`. Both post-integrate checks passed: no phantom reverse-diff (the
+  working tree was byte-identical before and after; the dirty files present are
+  another agent's, unchanged), and the journal trunk row equals the trunk ref
+  (`330b247f0` = `330b247f0`).
+- `edge` fast-forwarded to `330b247f0`, so the primary tree carries the audited
+  code, the rebaked `install/` embed, and `REQ-482`.
+
+### Close pre-check
+
+- `doctrine slice verify-vt 265` from the primary tree: **14/14 PASS**.
+- `doctrine check gate`: **green on the landed commit** `330b247f0`, run in a
+  detached worktree at exactly that commit (with the gitignored RustEmbed root
+  `web/map/dist` linked in). The env was normalised to match the operator's
+  `flake.nix` change. Note: the **shared** primary tree's gate was red from a
+  concurrent agent's uncommitted `src/design_run/*` work (E0061 at
+  `run.rs:1568`), unrelated to SL-265 — recorded as observation `01a0d86a…`.
+- Boot snapshot regenerated from the **rebuilt** primary binary (the stale binary
+  had rendered one without `show`); `doctrine boot --check` clean, and the
+  snapshot's guardrail names `doctrine show <REF>` with `show` in `[explore]`.
+
+### Withdrawn / tolerated
+
+- `RV-387` `F-2`: aligned (slice-own bookkeeping files) — no write owed.
+- `RV-387` `F-4`: follow-up → `ISS-483`; its ambient trigger was removed by the
+  operator (`flake.nix` `67df42ec8`). Not a blocker.
+
+Reconcile pass complete; hand off to `/close`.

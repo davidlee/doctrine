@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d86a-0b42-7ea1-a5aa-c75a409d4b1d"
+recorded_at = "2026-09-25T11:53:43.490331332Z"
+kind = "friction"
+summary = "close: a concurrent agent's uncommitted work in the shared primary tree reddens 'doctrine check gate', blocking the close pre-check"
+detail = "The /close pre-check requires a green 'doctrine check gate', but the primary tree is shared by concurrent agents. SL-264's in-flight (uncommitted) edits under src/design_run/ failed the lint leg with E0061 at src/design_run/run.rs:1568 (InquiryNode::open arity) while SL-265's landed code was fine — the binary had compiled cleanly minutes earlier, and the dirty set grew from 6 to 9 files during the check, so the tree is a moving target. Workaround used: run the gate on a detached 'git worktree add --detach <tmp> <landed-OID>' (plus a symlink for the gitignored RustEmbed root web/map/dist), which is green. Skill: close. Consequence: the close pre-check cannot be satisfied in-situ whenever a sibling slice is mid-phase, and the agent must know to isolate — or must trust a possibly-moving target."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

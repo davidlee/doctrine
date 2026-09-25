@@ -4,7 +4,7 @@ version = 1
 id = 482
 slug = "kind-blind-show-resolves-the-refs-kind"
 title = "Kind-blind show resolves the ref's kind"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — the requirement statement (structured, queryable; `show` renders
