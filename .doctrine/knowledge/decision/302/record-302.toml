@@ -1,0 +1,29 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 302
+slug = "blocking-is-a-node-attribute-and-the-blocking-set-is-derived"
+title = "Blocking is a node attribute and the blocking set is derived"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-264. The agent's free-standing blocking-set-declared act carries a list of node ids; it is a second representation of a fact the node itself can hold. The user reviews it beside the map, while initial-concerns-recorded's own guidance already instructs the agent to show the tree with the blocking ones marked. RV-386 F-2 showed the act model's hole: re-declaring an unchanged set over a larger map is free, so a question the agent judges blocking can be omitted and pass unseen."
+choice = "blocking becomes a Sparse(bool) node attribute, required on creation and a member of NodeMaterial. The blocking set derives as open nodes with blocking true. AgentAct::BlockingSetDeclared, ActKind::BlockingSetDeclared and Cause::ConfirmationStale retire. initial-concerns-recorded becomes a single user act whose InquiryMap coverage compares blocking membership over the full set and material over carried keys. A NodeBlockingChanged change event joins the emittable roster. A snapshot whose nodes carry no blocking judgement reads the retired act (read-side fallback)."
+alternatives = ["Keep the act and constrain it to the derived set; rejected: two representations plus an admission consistency check", " and it does not close F-2 because a set act can still omit a node. Narrow the guarantee and ship a set-act guard; rejected: ships throwaway machinery and leaves R4 open by design. Re-face the human on every addition; rejected by DEC-300."]
+rationale = "One representation and one API: the set is exactly the node judgements, and the user's existing review binds nodes and blocking marks together. It closes R4 against the human rather than only the agent, which is what OQ-4's blocking-not-a-warning asked for. DEC-126's kind axis is untouched - no EngineSource and no new derivation rule - because the condition stays Attested and only its coverage projection changes."
+consequences = ["AgentAct::BlockingSetDeclared and ActKind::BlockingSetDeclared retire. Cause::ConfirmationStale retires with its only subject. install/design-payload-contract.md and install/design-run-stages.md regenerate. A stored snapshot with no node-level blocking reads the retired act. NodeBlockingChanged joins the emittable roster and its fixture ladder. DEC-300's mechanism is superseded and its intent kept."]
+decided_by = "user"
+decided_on = "2026-09-25"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)

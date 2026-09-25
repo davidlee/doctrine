@@ -11,27 +11,31 @@ both and re-faced the human gates at `inquiring→drafting`, `drafting→reviewi
 `reviewing→locked`. `DEC-062` says ordinary map maintenance "does not require human
 approval"; the implementation required exactly that.
 
-The behaviour is deliberate, not accidental: `UserAcceptsSufficiency`'s own comment says
-"a re-seeded or materially changed graph must unmake an acceptance given over the old one".
-This design keeps that intent and separates it from a case it was never meant to cover.
+**The invariant.** *An addition is not a change to what was seen; a move or a re-word is* —
+**scoped to what the act covered** (`RV-386` `F-1`). A node added after the act was recorded
+was never part of what the user was shown, so moving or re-wording it later changes nothing
+that act was given over. Only a move, a re-word, or a flipped blocking judgement on a
+**covered** node re-faces the human. Reading `DEC-062`'s "moving" narrowly is `DEC-301`'s
+record; scoping it to covered nodes is this design's addition to it.
 
-**The invariant.** *An addition is not a change to what was seen; a move or a re-word is.*
+The second half is what keeps the growth obligation honest: *a question the agent judges
+blocking is visible to the human the moment it is added.* That is not a property of the
+attestation coverage — it is a property of the blocking set, which this design makes a
+property of the node (`sec-3`).
 
-Three facts make it implementable:
+Three facts make the narrowing implementable:
 
 1. `NodeMaterial` is question, provenance, parent, needs, seq — lifecycle and disposition
    excluded, so settling a question was already exempt, pinned by
-   `node_material_ignores_progress_and_observes_shape`.
-2. The two staleness mechanisms are independent: `CoverageStale` (a coverage diff) and
-   `ConfirmationStale` (the digest link between the user's `graph-reviewed` and the agent's
-   `blocking-set-declared`).
-3. That digest binds the declared **set**, not its coverage — pinned by
-   `stale_conjunct_does_not_satisfy`, which re-declares over a changed map with the same
-   set and asserts that the confirmation link does not move.
+   `node_material_ignores_progress_and_observes_shape`. **`blocking` joins that material**
+   (`sec-3`): a blocking judgement is shape, not progress.
+2. The two staleness mechanisms were independent: `CoverageStale` (a coverage diff) and
+   `ConfirmationStale` (which `sec-3` retires with the act it linked).
+3. Re-declaring an unchanged set is free; declaring a changed one is not.
 
-So the design narrows what the *attested* judgements bind to, and gives the map-moved
-signal its own home: one condition the **agent**, not the user, must satisfy.
-(`DEC-300`, `DEC-301`.)
+So the design narrows what the *attested* judgements bind to, scopes the move rule to
+covered nodes, and moves the blocking set from a free-standing act onto the node.
+(`DEC-300` amended by `DEC-302`, `DEC-301` scoped.)
 
 <!-- doctrine:section sec-2 -->
 ## Narrowing the attested binding
@@ -40,67 +44,86 @@ signal its own home: one condition the **agent**, not the user, must satisfy.
 against `materials()`. `ContentCoverage::diff` reports a joiner, a leaver and a changed
 value alike, because it walks the union of keys.
 
-The change is one arm of one function: for the two attested rows the comparison runs
-**over the keys the act carried**, not the union. A key an act never covered cannot be a
-change to what it covered.
+The change is one arm of one function, and it has two projections:
+
+- **Material, over carried keys.** A key the act never covered cannot be a change to what
+  it covered. A covered node whose material moved is stale; an uncovered node is not.
+- **Blocking membership, over the full set.** The ids whose material says `blocking = true`
+  are compared in full, because a *new* blocking node is exactly the event that must reach
+  the user (`sec-3`). A key absent from the carried map reads as not blocking, so a new
+  non-blocking node is no change.
 
 - **Invisible:** a node added after the act was recorded; a `needs` edge added from a node
   the act did not cover.
 - **Still stale:** a change to any node the act *did* cover — a re-worded question, a
-  re-parent, an added or removed `needs` edge on a covered node — and any leaver among them.
+  re-parent, an added or removed `needs` edge, a flipped blocking judgement — and any
+  leaver among them.
 
-That asymmetry is the point, and it is why "narrow" is not "weaken": the predicate gets
-*sharper*. "This is not the content I was given" replaces "this is not the whole map".
+That asymmetry is the point: the predicate gets *sharper*. "This is not the content I was
+given" replaces "this is not the whole map".
 
-`blocking-inquiries-dispositioned` is untouched. It is derived over the recorded
-dispositions and must keep refusing advance while a declared blocking node is open.
-Nothing here exempts it.
+`blocking-inquiries-dispositioned` is unchanged in *shape* — derived, cumulative, over the
+map's dispositions. Only where its set comes from moves (`sec-3`).
 
 **What still re-faces the human.** A move (re-parent) and a re-word, because both change
-content the user saw — so `DEC-062`'s "moving" is read narrowly rather than amended
-(`DEC-301`). Pinning is traversal state; deferring and pruning are lifecycle. All three were
-already exempt, which is why `DEC-062`'s five operations reduce to one residue.
+content the user saw; a flipped blocking judgement on a covered node, for the same reason;
+and the arrival of a node judged blocking. The first three are `DEC-301`'s narrowed reading,
+now scoped to covered nodes (`RV-386` `F-1`); the fourth is `sec-3`.
 
 <!-- doctrine:section sec-3 -->
-## The growth obligation
+## The blocking set is derived from the node
 
-Narrowing alone opens a hole. `blocking-inquiries-dispositioned` quantifies over the
-**declared** blocking set, and its doc comment records why that is sound today:
+`blocking-set-declared` is a free-standing agent act carrying a list of node ids. It is a
+second representation of a fact the node itself can hold, and the user reviews it *beside*
+the map rather than *in* it — while `initial-concerns-recorded`'s own guidance already tells
+the agent to *"show the map as an indented tree: one line per question, the blocking ones
+marked"*. The act is the inconsistency, not the map (`DEC-302`).
 
-> *It cannot be gated on a set nobody declared: `initial-concerns-recorded` is
-> `Reach::Cumulative` and carries the declaration, so this edge and every edge above it
-> already require one. A declaration whose map has moved goes stale there rather than being
-> silently re-read here.*
+**`blocking` becomes a node attribute.**
 
-The attested row's staleness **was** the mechanism that forced re-declaration. Remove it and
-a question added late can be blocking and unnoticed. So the map-moved obligation gets its
-own condition:
+- `Sparse<bool>` on the node declaration: **required on creation**, optional on update
+  (omission persists, a value replaces). A creation that omits it is refused.
+- It is a member of `NodeMaterial`. A flip on a covered node is a material change and
+  re-faces the user through `sec-2`'s first projection.
+- A flip on an uncovered node moves only the set projection — correct, because the set is
+  what the user is asked about.
+- A flip is a recorded mutation, so it emits one `NodeBlockingChanged` row (`REQ-478`);
+  creation carries its `blocking` inside `NodeCreated` and owes no second row.
 
-**`blocking-set-current`** — `Attested([BlockingSetDeclared(Agent)])`,
-`binding: Coverage::InquiryMap` (the full union comparison), `reach: Cumulative`.
+**The set derives.** `blocking_inquiries_open` stops reading a declaration and filters the
+nodes: `blocking == true` and lifecycle not `Resolved`. `blocking-inquiries-dispositioned`
+keeps its contract (`derived`, `engine(dispositions)`, cumulative) and changes only its
+source.
 
-This is a *split*, not a new kind of thing: the agent's half of `initial-concerns-recorded`
-moves out from under the user's judgement. Three properties follow.
+**The growth obligation closes without a new condition.** `initial-concerns-recorded`
+becomes a single-act rule — `Attested([GraphReviewed(User)])` with `Coverage::InquiryMap`.
+Its second act, the agent's `blocking-set-declared`, and the `confirms` link from the user's
+act to it, retire with the set. What replaces the link is `sec-2`'s second projection:
 
-- **The agent clears it, the user does not.** Add a node and the next edge refuses until the
-  blocking set is declared over the current map. No human act.
-- **Re-declaring an unchanged set is free.** The confirmation digest binds the set, so the
-  same set leaves `ConfirmationStale` silent. This is the escape hatch that makes the
-  obligation affordable, and it is why `DEC-062`'s complaint does not simply move.
-- **A changed set re-shows the delta.** Declaring a genuinely new blocking node moves the
-  digest, `ConfirmationStale` fires, and the user is asked to review exactly what changed.
-  `REQ-425` ("material restructuring is surfaced rather than absorbed silently") is
-  discharged by machinery that already exists.
+- add a node with `blocking: false` → the set is unchanged → nothing re-faces;
+- add a node with `blocking: true` → the set changes → the user's `graph-reviewed` goes
+  stale → the user is asked to see it, tree and blocking marks together.
 
-**A refinement of `DEC-300`'s wording, stated here rather than hidden.** `DEC-300` says a
-*derived* condition; this is an *attested* one. The substance is unchanged — the engine
-notices mechanically, the agent must re-declare, and an unchanged set costs no human act —
-and `DEC-126`'s ledger prefers attested where an act exists. It also avoids a new
-`EngineSource` and a new derivation rule, reusing the coverage machinery already in place.
-Flagged for review rather than assumed.
+So a question the agent judges blocking cannot pass unseen — `SL-264`'s `R4` closed by
+construction rather than by a ninth condition (`RV-386` `F-2`). It closes against the
+**user**, not only the agent, which is what `OQ-4`'s "blocking, not a warning" asked for.
+And `DEC-126`'s kind axis is untouched: the condition stays `Attested`, and no
+`EngineSource` or derivation rule is added.
 
-Naming: `blocking-set-current` parallels `blocking-inquiries-dispositioned`. One says the
-declared set is current; the other says its members are answered.
+**Retired with the act.** `AgentAct::BlockingSetDeclared`; `ActKind::BlockingSetDeclared`;
+and `Cause::ConfirmationStale`, whose only subject was the link between the user's review
+and that act. The payload contract, the generated stage table and the condition guidance
+all follow.
+
+**Compatibility.** A stored snapshot whose nodes carry no `blocking` reads the retired act:
+`blocking_inquiries_open` falls back to the stored `BlockingSetDeclared` declaration when no
+node carries a judgement. Read-side only, no stored shape moves (`DEC-059`). A live run
+leaves the legacy regime the first time a node is declared with a blocking judgement.
+
+**This supersedes `DEC-300`'s mechanism, not its intent.** `DEC-300` narrowed the attested
+rows *and* added a derived condition requiring additions to be re-declared. The narrowing
+stands; the condition is not needed, because the set is derived and the user's coverage
+compares it. Recorded as an amendment to `DEC-300`, with the decision in `DEC-302`.
 
 <!-- doctrine:section sec-4 -->
 ## Honest sparse clearing
@@ -135,57 +158,63 @@ change. The code was the deviation.
 
 | path | what changes |
 |---|---|
-| `src/design_run/gate.rs` | the two attested rows' binding; the new `blocking-set-current` row in the `condition_vocabulary!` table; `coverage_moved` gains the carried-keys arm |
-| `src/design_run/attestation.rs` | `ContentCoverage`: the comparison that ignores joiners, beside `diff` |
-| `src/design_run/submission.rs` | the new row's key-home / state-axis entry, where one is owed |
-| `src/design_run/run.rs` | `declare_node`'s `needs` block: `Sparse::Null` |
-| `src/design_run/tests.rs` | the flipped pin: `stale_conjunct_does_not_satisfy` becomes the VT-1 assertion, and the new criteria land beside it |
-| `install/design-prompts/conditions/blocking-set-current.md` (new) | the condition's mandatory narrative (`SPEC-029`): what the obligation is, and that re-declaring a changed set shows the added or changed blocking questions with their text, as `initial-concerns-recorded` shows the map |
-| `install/design-run-stages.md` | regenerated mirror of the condition table, golden-pinned by the render tests |
+| `src/design_run/inquiry.rs` | `InquiryNode` / `NodeMaterial` gain `blocking`, a sparse node attribute that is a material member |
+| `src/design_run/run.rs` | `declare_node`'s `blocking` arm — refused when absent on creation, persisted on omission, replaced on value — and the `NodeBlockingChanged` row on a flip |
+| `src/design_run/change_log.rs` | `ChangeEvent::NodeBlockingChanged`, emittable and driven by the fixture ladder (`REQ-478`) |
+| `src/design_run/gate.rs` | `coverage_moved`'s `InquiryMap` arm gains the two projections; `initial-concerns-recorded` becomes a single-act rule; `blocking_inquiries_open` derives from the nodes with the legacy-act fallback; `ActKind::BlockingSetDeclared` and `Cause::ConfirmationStale` retire |
+| `src/design_run/submission.rs` | `AgentAct::BlockingSetDeclared` retires |
+| `src/design_run/attestation.rs` | `ContentCoverage`: the carried-keys material comparison plus the full-set blocking comparison, beside `diff` |
+| `src/design_run/admission.rs` | the blocking-set-names-known-nodes fault retires with the act |
+| `src/design_run/tests.rs` | the flipped pin (`stale_conjunct_does_not_satisfy` becomes VT-1), and the new criteria beside it |
+| `src/design_run/payload_contract.rs`, `install/design-payload-contract.md` | the retired act and the new node field |
+| `install/design-prompts/conditions/initial-concerns-recorded.md` | the single-act shape, with no separate set declaration to confirm |
+| `install/design-prompts/conditions/blocking-set-current.md` | **not created** — the condition this design first proposed is dropped |
+| `install/design-run-stages.md` | regenerated mirror of the condition table |
 
-`blocking-set-current` is a new condition, so `prompt.rs`'s per-condition key derivation
-(`design-prompts/conditions/<token>.md`) and the test that every key has an asset make the
-narrative a compile-time-obliged artefact, not an optional one (`RV-386` `F-5`).
-
-The design-target selectors this section commits to: `src/design_run/gate.rs`,
-`src/design_run/attestation.rs`, `src/design_run/run.rs`, `src/design_run/tests.rs`,
-`install/design-prompts/conditions/**`, `install/design-run-stages.md`.
+The design-target selectors this section commits to: `src/design_run/**`,
+`install/design-prompts/conditions/**`, `install/design-payload-contract.md`,
+`install/design-run-stages.md`.
 
 <!-- doctrine:section sec-6 -->
 ## Verification
 
 - **VT-1** — a declaration adding a node after `user-accepts-sufficiency` is attested does
-  **not** void it; `blocking-set-current` reports unmet instead; re-declaring the same set
-  clears it with no user act; and `blocking-inquiries-dispositioned` still reports unsatisfied
-  for an open declared blocking node. The derived half demonstrably not exempted.
+  **not** void it; a node declared `blocking: true` **does** stale `initial-concerns-recorded`
+  (the user is re-faced); a node declared `blocking: false` does not; and
+  `blocking-inquiries-dispositioned` still reports unsatisfied for an open node with
+  `blocking = true`. The derived half demonstrably not exempted.
 - **VT-2** — `needs: null` clears and emits one `NeedsRemoved` per removed edge; `null` on an
-  edge-free node emits no rows and claims no change; `needs: []` behaves identically, which
-  `apply_collection`'s existing equality already guarantees.
+  edge-free node emits no rows and claims no change rows; `needs: []` behaves identically.
 - **VT-3** — the pre-change behaviour is pinned *first*: `stale_conjunct_does_not_satisfy`
   stays green until the change is deliberate, then flips against VT-1 rather than being
   deleted. The same for the contract-block render pins and the regenerated stage table.
-- **VT-4** — a move still re-faces: re-parenting a covered node voids
-  `initial-concerns-recorded`, which is `DEC-301`'s narrowed reading pinned as behaviour.
-- **VA** — on a real run, a node added after sufficiency is accepted does not re-face the
-  human gates; re-measured against `RFC-031`'s fitness measure (nodes and edges added after
+- **VT-4** — a move still re-faces for a **covered** node (re-parenting voids
+  `initial-concerns-recorded`); a node added after the act and then re-parented does **not**
+  re-face, which is `F-1`'s scoping pinned as behaviour rather than left implicit.
+- **VT-5** — a creation omitting `blocking` is refused; a flipped judgement emits exactly one
+  `NodeBlockingChanged` row; and a snapshot whose nodes carry no judgement yields the stored
+  act's set through the legacy fallback.
+- **VA** — on a real run, a non-blocking addition does not re-face the human gates;
+  re-measured against `RFC-031`'s fitness measure (nodes and edges added after
   `user-accepts-sufficiency`).
 
 <!-- doctrine:section sec-7 -->
 ## Risks, residuals and deferred debt
 
 - **Loosening invalidation is a truthfulness change** — `RFC-031` T1's class inverted, where
-  a condition that should have invalidated and did not becomes a silent lie. VT-1's derived
+  a condition that should have invalidated and did not becomes a silent lie. VT-1's blocking
   half and VT-4 are the guards, and they are criteria rather than intentions.
-- **Live snapshots change semantics underneath.** The change is read-side only; no
-  stored shape moves, and `DEC-059` prefers that. Nothing becomes unreadable
-  (`mem.fact.design-run.snapshot-outlives-the-binary`).
-- **`blocking-set-current` is a ninth condition** on a table of eight. `DEC-126`'s ledger is
-  2 derived / 7 attested / 0 claimed today; an attested row keeps that shape, where a derived
-  one would have changed it.
+- **The blocking set changes representation, not just storage.** `AgentAct::BlockingSetDeclared`
+  and `Cause::ConfirmationStale` retire, and the payload contract is published. The
+  compatibility path is read-side: a snapshot whose nodes carry no judgement reads the stored
+  act, so no live run's meaning moves under it (`DEC-059`).
+- **`F-1`'s scoping is a deliberate narrowing.** A node added after the accepting act and
+  then moved or re-worded does not re-face the human. That is the coherent reading: the act
+  was never shown that node. It is pinned by VT-4 so it cannot drift silently.
+- **The condition table loses a row rather than gaining one**, and `blocking-set-current` —
+  the ninth condition the earlier draft proposed — is not built.
 - **Deferred, by name.** Backward cascade (`IMP-386`, gated on `QUE-218`); surfacing the map
-  (`ISS-299`); the derived traversal cursor (`IMP-389` — the cursor went `STALE` twice during
-  this very run, once when its own node resolved, and no verb derives the next); the
-  requirement-tier statement of the map's dynamic mode (`IMP-471`); and whether a
-  traversal-only apply owes a change row (`IDE-057`, observed during this run).
-
+  (`ISS-299`); the derived traversal cursor (`IMP-389`); the requirement-tier statement of the
+  map's dynamic mode (`IMP-471`); and whether a traversal-only apply owes a change row
+  (`IDE-057`).
 

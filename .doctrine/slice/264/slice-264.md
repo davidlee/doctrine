@@ -37,17 +37,24 @@ Both are parked in `RFC-031` T4 as `IMP-469` and `ISS-481`.
 
 ## Scope & Objectives
 
-Two objectives, one substantive and one mechanical:
+Three objectives, two substantive and one mechanical:
 
-1. **A shape change must not void an attested judgement about the map.** Derived
-   coverage must still react to it: `blocking-inquiries-dispositioned` is
-   `derived` and cumulative, and must keep blocking advance when a genuinely new
-   blocking question appears. The two *attested* conditions should not.
-2. **`needs: null` clears**, emitting one `NeedsRemoved` per removed edge —
+1. **A shape change must not void an attested judgement about the map.**
+   Additions must stop re-facing the human, and the guard that removal takes away
+   must be replaced: `blocking-inquiries-dispositioned` is `derived` and
+   cumulative, and must keep blocking advance when a genuinely new blocking
+   question appears.
+2. **The blocking set is a property of the node** (`DEC-302`). `blocking` becomes
+   a node attribute, required when a node is created, and the set derives from it
+   — one representation instead of the free-standing `blocking-set-declared` act.
+   The user's `graph-reviewed` coverage compares blocking membership over the
+   full set, so a node declared blocking moves the user's act and reaches them,
+   and `R4` closes against the human rather than only the agent.
+3. **`needs: null` clears**, emitting one `NeedsRemoved` per removed edge —
    exactly what `needs: []` already does, so the rows machinery needs nothing new.
 
-The first is the work of the slice, and its *shape* is an open design decision
-rather than a foregone conclusion (see `OQ-1`).
+Objectives 1 and 2 are one change: the narrowing is only safe alongside the
+narrowed set, and the derived set is what makes the narrowing's guarantee whole.
 
 ## Non-Goals
 
@@ -101,7 +108,8 @@ rather than a foregone conclusion (see `OQ-1`).
   without blocking*; `DEC-120` supplies the case against the judgement surviving
   silently.
 
-**Settled in the design run, 2026-09-25** — by `DEC-300` and `DEC-301`:
+**Settled in the design run, 2026-09-25** — by `DEC-300` and `DEC-301`; **revised
+under `RV-386`** (`DEC-302`, below):
 
 - `OQ-1` → **both halves, not either.** The two attested rows' map comparison
   narrows to ignore *additions*, **and** a new derived cumulative condition
@@ -117,12 +125,33 @@ rather than a foregone conclusion (see `OQ-1`).
   not left implicit.
 - `OQ-4` → **blocking, not a warning.** A warning nobody is made to see is worth
   nothing (`ISS-299`).
-- `R4` → closed by the derived condition; the guard is preserved deliberately
-  rather than as a side effect.
+- `R4` → closed by the derived condition *(mechanism superseded — see below)*; the
+  guard is preserved deliberately rather than as a side effect.
 - **Governance delta:** `DEC-062`'s *"moving"* is read narrowly — an addition is
-  not a change to what was seen, but a move or a re-word is (`DEC-301`). A
-  `Revision` cannot reach a `DEC`; `REQ-427` was verified not to reach gate
-  attestations, so no REV is owed.
+  not a change to what was seen, but a move or a re-word is (`DEC-301`), **scoped
+to the nodes the accepting act covered** (`RV-386` `F-1`). A `Revision` cannot
+  reach a `DEC`; `REQ-427` was verified not to reach gate attestations, so no REV
+  is owed.
+
+**Revised in adversarial review (`RV-386`, 2026-09-25)** — the shape changed, the
+intent did not:
+
+- `RV-386` `F-2` showed that the derived re-declaration condition does not close
+  `R4`: an unchanged re-declaration over a larger map is free, so a question the
+  agent judges blocking can still be omitted. `DEC-300`'s condition is
+  **superseded** (`DEC-302`); the narrowing it also chose stands.
+- The blocking set stops being a free-standing agent act and becomes a **derived
+  projection of a per-node `blocking` attribute**, required when a node is
+  created. The user's `graph-reviewed` coverage compares blocking membership over
+  the full set, so a node declared blocking moves the user's act and reaches them;
+  a node declared non-blocking is free. `R4` closes by construction, against the
+  human.
+- `blocking-set-declared`, `ActKind::BlockingSetDeclared` and
+  `Cause::ConfirmationStale` retire; a stored snapshot whose nodes carry no
+  judgement reads the retired act (read-side only, `DEC-059`).
+- `RV-386` `F-1` scopes `DEC-301`'s move rule to **covered** nodes: a node added
+  after the accepting act and later moved was never shown, so it does not re-face.
+  Pinned as behaviour rather than left implicit.
 - **R1 — loosening invalidation is a truthfulness change.** `RFC-031` T1 was about
   the exit signal telling the truth; making a condition stop re-deriving is the
   same class of change in the other direction. A condition that *should* have
