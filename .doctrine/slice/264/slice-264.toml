@@ -1,7 +1,7 @@
 id = 264
 slug = "inquiry-map-growth-without-re-attestation"
 title = "Inquiry-map growth without re-attestation"
-status = "audit"
+status = "reconcile"
 created = "2026-09-25"
 updated = "2026-09-25"
 tags = ["area:design-run", "area:gate", "cluster:design-run"]
