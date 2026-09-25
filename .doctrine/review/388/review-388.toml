@@ -12,5 +12,158 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-266"
 
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "Run-selection disclosure has no envelope field"
+detail = "SL-266 sec-3 defines tree::render(envelope, TreeStyle) and sec-4 requires the header to say latest of N open runs or the only open run. MapNode and TurnEnvelope in sec-2 contain no selection provenance or candidate count, and TreeStyle carries only width and colour. The renderer cannot produce this required header from its inputs; adding it in the command shell would make the tree carry a field absent from the canonical envelope, contrary to SPEC-029 REQ-433. Add typed selection metadata to the envelope, supplied by the shell for the slice-free invocation, and test that the tree header derives from it."
+disposition = "fixed"
+response = "sec-2: TurnEnvelope.selection: Option<RunSelection>{candidates, skipped}, supplied by the shell into project(); sec-3 header renders the chosen: line from it. VT-10 covers."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "Question rewording is silently omitted from relay"
+detail = "DEC-310 explicitly includes question rewording among map changes that trigger the relay. SL-266 sec-5 and sec-8 instead accept no relay because rewording emits no row. src/design_run/run.rs:1451-1458 confirms that changing a question emits no ChangeEvent, so is_map_event over applied rows cannot detect it. The user can receive a changed map with no tree in default relay mode. Add an observable question-change event or an explicit old/new map comparison at the apply seam, and verify a reword-only apply relays exactly once."
+disposition = "fixed"
+response = "sec-5: trigger is now state comparison map_changed(prior, next) = prior.map.inquiry != next.map.inquiry (InquiryMap derives PartialEq), which catches rewording (no change row, run.rs:1451-1458). Honours DEC-310 as written. VT-11 table includes reword."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "major"
+title = "Sidecar prompt still orders a tree relay"
+detail = "SL-266 sec-1 and DEC-309 define sidecar as a mode where the agent stays quiet, but sec-5 unconditionally replaces the initial-concerns condition with Show the output of doctrine design tree SL-NNN. install/design-prompts/conditions/initial-concerns-recorded.md is a delivered instruction and has no mode input; changing its wording as proposed still orders a paste in sidecar mode. Keep the condition mode-neutral, or supply the delivery choice through a non-digest-bound turn value and gate the instruction there. Extend VA-1 with a sidecar delivery check."
+disposition = "fixed"
+response = "sec-5: initial-concerns text is now mode-neutral: the user reviews the map as design tree renders it; do not draw your own listing. No paste ordered. VA-1 checks neither asset instructs an unconditional paste."
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "major"
+title = "Full prompt will not render the new map"
+detail = "SL-266 sec-2 promises prompt --full and json --full both gain one entry per map node, but sec-6 only adds TurnEnvelope.map and changes assembly. src/design_run/render/envelope.rs:1448-1545 builds prompt lines field by field and never serializes the envelope; adding a field only changes JSON. Specify a Full-only prompt map block and its implementation in envelope::prompt, and test a nonempty Full prompt as well as Normal output."
+disposition = "fixed"
+response = "sec-2: prompt() gains an explicit Full-only map block (one line per node, sample given); VT-1 asserts it."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "major"
+title = "Unreadable snapshots are reported without identity or cause"
+detail = "SL-266 sec-4 tells run resolution to skip parse failures and append only a count such as 1 unreadable snapshot skipped. STD-003 expressly forbids unnamed skips and requires the entity and reason on the command output. A malformed snapshot can also hide the otherwise newest run while the command appears to select a valid one. Preserve path or slice id and parse or read error for each skipped snapshot, disclose them in the tree result or a visible diagnostic, and test a present malformed snapshot."
+disposition = "fixed"
+response = "sec-2/sec-4: SkippedSnapshot{path, reason} carried in RunSelection.skipped and rendered per snapshot (and in the no-candidate refusal). VT-10 uses a malformed snapshot present in the state tier."
+
+[[finding]]
+id = "F-6"
+status = "answered"
+severity = "major"
+title = "Record title failures are laundered into one placeholder"
+detail = "SL-266 sec-2 maps every missing title lookup to title: None and sec-3 prints (title unavailable). A missing record, unreadable TOML and malformed TOML become indistinguishable, with no reason, although the title is read from authored knowledge data and STD-003 requires naming the failed entity and cause. Carry a structured lookup failure beside the record id in the envelope or refuse the view with an actionable error; verify a present malformed non-DEC record as well as a missing one."
+disposition = "fixed"
+response = "sec-2: TitleLookup {Found, NotFound, Unreadable(reason)}; sec-3 renders each distinctly. VT-3 covers an adopted QUE."
+
+[[finding]]
+id = "F-7"
+status = "answered"
+severity = "major"
+title = "Tree traversal has no policy for malformed map graphs"
+detail = "SL-266 sec-2 promises every node and sec-3 builds a tree from parent links, but its verification has only valid fixture maps. src/design_run/snapshot.rs:693-709 validates schema and version but not inquiry edges, so a hand-edited runtime snapshot can contain an orphan or parent cycle. A roots-only walk silently omits these nodes; naive recursion can loop. Define a visited-node check and an explicit error or disclosed orphan section, and test both a cycle and an absent parent so node counts cannot disagree silently with rendered nodes."
+disposition = "fixed"
+response = "sec-3 Placement: visited-set walk; absent-parent or cyclic nodes render under an unplaced section with parent id; rendered count equals header count. VT-6."
+
+[[finding]]
+id = "F-8"
+status = "answered"
+severity = "major"
+title = "Deep trees cannot satisfy the width guarantee"
+detail = "SL-266 sec-3 wraps only the right-hand text after a prefix made of one guide per ancestor; it promises no truncation, while VT-5 asserts no output line exceeds width. At sufficient depth or narrow width the prefix alone exceeds width and the fallback indent under the label also exceeds it. The fixed legend and footer can exceed width independently. Define an explicit layout or overflow rule for those cases and exercise deep nesting, narrow widths, wide Unicode labels, legend and footer in VT-5."
+disposition = "fixed"
+response = "sec-3: explicit overflow rule — text wraps, drops to an 8-col indent below 24 free cols; unbreakable prefix and footer token may overflow, nothing truncated; legend wraps between entries. VT-7 exercises depth 12 at width 40 and CJK labels."
+
+[[finding]]
+id = "F-9"
+status = "answered"
+severity = "major"
+title = "Global colour value never reaches design rendering"
+detail = "SL-266 sec-3 requires TreeStyle::colour and sec-4 says TreeArgs gets the global --color, but src/commands/cli.rs:1952 calls design::dispatch(command) without its color boolean and src/commands/design.rs:404 takes no color argument. A global clap flag is not present on TreeArgs or ShowArgs. Add src/commands/cli.rs to the impact and thread the resolved global colour into both tree entry paths, with a CLI test for --color always and never."
+disposition = "fixed"
+response = "sec-4/sec-6: design::dispatch gains the resolved colour (as observation::dispatch already does), cli.rs added to impact and selectors. VT-10 checks --color always/never on both entry paths."
+
+[[finding]]
+id = "F-10"
+status = "answered"
+severity = "major"
+title = "Design config errors will break unrelated commands"
+detail = "SL-266 sec-5 adds a closed DesignConfig directly to DoctrineToml and says an unknown map_delivery fails load_doctrine_toml. src/dtoml.rs:23-44 and :89-94 show this is the shared eager parser, called by review, slice, spec, install and dispatch commands, so a typo in a display preference can make unrelated operations fail. Preserve the DEC-309 parse error when design delivery is used, but isolate validation of this area from unrelated consumers; include a regression test that an unrelated command still reads its own config with an invalid design value."
+disposition = "contested"
+response = "The eager whole-file parse is the house pattern, not introduced here: [dispatch] preferred_subprocess_harness (src/dispatch_config.rs:69) is already a closed enum on the same load_doctrine_toml (27 call sites), with identical blast radius. Isolating per-area validation is a house-wide change; sec-8 now names the residual. Open to a backlog item if the user wants one."
+
+[[finding]]
+id = "F-11"
+status = "answered"
+severity = "major"
+title = "Imported map changes bypass the relay"
+detail = "SL-266 sec-1 promises a relay after map changes, but sec-5 hooks only design apply via applied_lines. src/design_run/run.rs:1045-1115 seeds inquiry nodes during document import and src/commands/design.rs:1836-1924 sends design adopt through adoption_lines, never applied_lines. A real adoption can replace or grow the map without issuing the default relay instruction. Cover written adopt and start --from-design imports in the delivery contract, while excluding dry runs and no-op adoptions, and test those cases."
+disposition = "fixed"
+response = "sec-5: relay emitted by applied_lines, adoption_lines (written only) and the start --from-design report, via map_changed; dry runs and no-op adopts excluded. VT-12."
+
+[[finding]]
+id = "F-12"
+status = "answered"
+severity = "major"
+title = "Default run can change after candidate selection"
+detail = "SL-266 sec-4 selects a candidate from parsed snapshots and mtimes, then tree_turn or envelope_turn reads the chosen snapshot again at src/commands/design.rs:2624-2633. Another writer can lock that run or a slice can become terminal between the scan and second read, yet the header still labels it an open chosen run; equal mtimes also have no stated tie-break. Revalidate stage and authored slice status against the snapshot actually rendered, retry or refuse on drift, and define a deterministic tie-break in the pure selector with tests."
+disposition = "fixed"
+response = "sec-4: one read — the parsed snapshot that won selection is the one projected; mtime tie broken by higher slice number in the pure selector (VT-9). Slice status read once at scan; residual stated."
+
+[[finding]]
+id = "F-13"
+status = "answered"
+severity = "minor"
+title = "The tree hides a stale cursor adjustment"
+detail = "SL-266 sec-3 appends cursor using TurnEnvelope.run.cursor but gives no use for run.cursor_stale. src/design_run/render/envelope.rs:916-940 replaces a cursor on a resolved or pruned node with an open ancestor and marks that adjustment stale; the existing prompt renders STALE at :1461-1468. The tree would label the ancestor as cursor without revealing the declared cursor has drifted. Show a stale marker or explanatory line from the envelope and cover it in VT-3."
+disposition = "fixed"
+response = "sec-3: when run.cursor_stale, suffix reads ← cursor (moved up: declared cursor is settled). VT-4 includes a stale cursor."
+
+[[finding]]
+id = "F-14"
+status = "answered"
+severity = "minor"
+title = "Blocked-by list needs a shared derivation seam"
+detail = "SL-266 sec-2 says blocked_by reuses the frontier predicate as one derivation, and sec-6 lists inquiry.rs as read-only. But src/design_run/inquiry.rs:514-527 exposes only is_blocked returning bool; it does not return the unsettled needs ids required by MapNode. The implementer must duplicate the lifecycle filter or change inquiry.rs despite the stated impact. Define a pure unsettled-needs helper in inquiry.rs and have is_blocked and the projection share it; test that the ids and boolean agree."
+disposition = "fixed"
+response = "sec-2/sec-6: InquiryMap::unsettled_needs (pure) is the one derivation; is_blocked delegates; inquiry.rs added to impact. VT-2 checks ids and boolean agree."
+
+[[finding]]
+id = "F-15"
+status = "answered"
+severity = "minor"
+title = "Run scan needs a named state-root seam"
+detail = "SL-266 sec-4 diagrams a direct read_dir of .doctrine/state/slice and sec-6 puts all run-resolution code in commands/design.rs. src/state.rs:33 keeps STATE_SLICE_DIR private and :147-151 exposes only a per-slice snapshot path. Hand-typing the directory in the command duplicates the path literal against STD-001. Add an exported state helper for the snapshot scan root and name it in the code impact, with a path-equivalence check."
+disposition = "fixed"
+response = "sec-4/sec-6: state::design_snapshot_root, onto which design_snapshot_path joins; STATE_SLICE_DIR stays single-sourced."
+
+[[finding]]
+id = "F-16"
+status = "answered"
+severity = "minor"
+title = "Relay verification does not exercise the event roster"
+detail = "SL-266 sec-5 classifies seven ChangeEvent variants as map events, but VT-9 drives only node creation and VT-10 merely requires a wildcard-free match. Those tests can pass if NeedsRemoved, NodeBlockingChanged, NodeReparented, NodeLifecycle or CheckpointDisposed is classified incorrectly or never reaches the apply output. Add a table test for every readable event classification and integration cases for each map mutation path, including replay and no-op controls."
+disposition = "fixed"
+response = "Superseded by F-2 fix: no event roster remains; VT-11 is a table over every mutation kind with non-map controls, VT-12 covers each write path plus replay/no-op/dry-run."
+
+[[finding]]
+id = "F-17"
+status = "answered"
+severity = "minor"
+title = "Piped width constant is private to the wrong module"
+detail = "SL-266 sec-3 says TREE_PIPED_WIDTH is private to render/tree.rs and used by the command shell when stdout is not a terminal. Rust privacy prevents commands/design.rs from naming a private constant in its sibling tree module, so an implementer must duplicate 100 against STD-001 or depart from the design. Expose the named constant to the shell or let the pure tree module choose the fallback from a typed width input."
+disposition = "fixed"
+response = "sec-3: TreeStyle.width is Option<u16>; the pure tree module applies its own TREE_PIPED_WIDTH fallback, so the shell never names it."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -48,8 +48,10 @@ sample-states  (6 answered, 7 open)
    turn envelope projected at `Detail::Full`, which gains the whole map
    (DEC-303); line anatomy, wrapping and marks per DEC-306/307/308.
 3. **Delivery mode config** — `doctrine.toml` `[design] map_delivery =
-   "relay" | "sidecar"`, default `relay` (DEC-309). Relay: a map-changing
-   `design apply` ends with a line telling the agent to show the user the
+   "relay" | "sidecar"`, default `relay` (DEC-309). Relay: any write that
+   changed the map — `design apply`, a written `design adopt`,
+   `design start --from-design`, detected by comparing the map before and
+   after — ends with a line telling the agent to show the user the
    `design tree` output verbatim before ending the turn; sidecar: no line
    (DEC-310). The tree output itself names the `doctrine design tree SL-NNN`
    command.
@@ -75,9 +77,12 @@ sample-states  (6 answered, 7 open)
 - `src/commands/design.rs` — `ShowFormat::Tree`, `tree` verb, run resolution,
   record-title lookup.
 - `src/design_run/render/envelope.rs` — whole-map field at `Detail::Full`.
-- `src/design_run/inquiry.rs` — read-only use of node status / parent / needs.
+- `src/design_run/inquiry.rs` — `unsettled_needs`, the one blocked derivation.
+- `src/design_run/` — pure `map_changed(prior, next)`.
+- `src/state.rs` — `design_snapshot_root`.
+- `src/commands/cli.rs` — resolved colour reaches `design::dispatch`.
 - `src/dtoml.rs` — `[design]` config (`DesignConfig`).
-- `design apply` output path — relay line (DEC-310).
+- `design apply` / `adopt` / `start` output — relay line (DEC-310).
 - `install/design-prompts/inquiry.md`,
   `install/design-prompts/conditions/initial-concerns-recorded.md`.
 - `install/design-payload-contract.md` / reference docs if the read surface is
@@ -89,9 +94,11 @@ sample-states  (6 answered, 7 open)
   complemented, not subsumed (status carries counts only).
 - **A1 (revised)** — the snapshot carries everything except record titles,
   which the command shell reads and passes into the projection (DEC-306).
-- **R1 — concurrent work.** Uncommitted changes across `src/design_run/*` from
-  another agent (e.g. a new `InquiryNode::open` parameter) must land before
-  implementation begins; scoping and design can proceed.
+- **R1 — concurrent work.** SL-264 (per-node `blocking`) lands before
+  implementation begins (user-confirmed); the design assumes its `blocking`
+  field and edits only the listing sentence of `initial-concerns-recorded.md`.
+- **R2 — eager config parse.** A bad `map_delivery` fails every command that
+  loads `doctrine.toml`, as any area table's bad value already does.
 
 ## Verification / closure intent
 
@@ -101,8 +108,11 @@ sample-states  (6 answered, 7 open)
 - Envelope: `Detail::Normal` never carries the map; `Full` carries all nodes.
 - CLI: `design tree` with and without a slice arg; chosen run named in the
   header; parity with `design show --format tree`.
-- Config: relay → a map-changing apply ends with the relay line, a non-map
-  apply does not; sidecar → never; unknown value refused.
+- Config: relay → every map-changing write (apply, written adopt, start
+  --from-design) ends with the relay line; non-map writes, replays, dry runs
+  and no-op adopts do not; sidecar → never; unknown value refused.
+- Robustness: unreadable snapshots and record titles disclosed with cause;
+  orphan/cyclic nodes rendered, never dropped.
 - ISS-299 resolved on close; CHR-065 unblocked.
 
 ## Summary

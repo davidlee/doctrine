@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d8b1-4f39-78a2-ae07-876f99f78294"
+recorded_at = "2026-09-25T13:11:33.9453204Z"
+kind = "friction"
+summary = "[boot; SL-266] boot floor directive's prompt resolve form omits the required --role"
+detail = "Boot snapshot says 'doctrine prompt resolve --band model --model <id>'; the CLI refuses without --role (worker|orchestrator). One refused call; the model band then resolved empty for claude-opus-5-5."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -20,7 +20,7 @@ intent = "design-target"
 
 [[selector]]
 selector = "src/design_run/inquiry.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "install/design-prompts/inquiry.md"
@@ -31,15 +31,27 @@ selector = "install/design-prompts/conditions/initial-concerns-recorded.md"
 intent = "design-target"
 
 [[selector]]
-selector = "src/design_run/change_log.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "src/design_run/config.rs"
 intent = "design-target"
 
 [[selector]]
 selector = "src/dtoml.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/run.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/state.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/cli.rs"
 intent = "design-target"
 
 [[relation]]
