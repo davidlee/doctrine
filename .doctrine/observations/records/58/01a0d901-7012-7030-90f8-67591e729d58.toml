@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d901-7012-7030-90f8-67591e729d58"
+recorded_at = "2026-09-25T14:39:05.234791146Z"
+kind = "friction"
+summary = "worktree: the fork guard demands a clean source tree, but a multi-agent tree is dirty by design and --base HEAD makes the demand unnecessary"
+detail = "SL-266 PHASE-01: doctrine worktree fork's commit-before-spawn guard aborts on any dirty tracked or untracked-non-ignored file, on the premise that the fork must see only committed HEAD. With concurrent agents in one tree that premise is permanently false: at fork time src/design_run/refusal.rs, submission.rs and tests/e2e_design_delegation.rs were mid-edit by another agent. Proceeding with an explicit --base HEAD is exactly the isolation the guard is protecting (the fork is the base commit, the foreign edits are deliberately not carried, and nothing in scope is silently absent) — but nothing in the verb distinguishes 'the tree is dirty with work I need' from 'the tree is dirty with someone else's work', so the agent must reason around a binding guard rather than be told the distinction. Either --base being explicit should relax the guard, or the guard should report WHICH dirty paths it saw so the caller can judge."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d901-7012-73a2-a9a9-da0212351556"
+recorded_at = "2026-09-25T14:39:05.234792226Z"
+kind = "friction"
+summary = "SL-266 design: MapAnswer::Record.form is carried by the read model but read by no rendering"
+detail = "PHASE-01 implemented design sec-2's model verbatim: MapAnswer::Record { form, record, title }. Neither rendering reads form: sec-2's own prompt example spells a resolved node 'record=DEC-310' (no form), and sec-3's tree line anatomy spells it 'REC-NNN <title>' (no form either) — only the Note arm renders its form, as '<form>: <note>'. So the field is live only through the derived Serialize/PartialEq impls, which is the pattern that hides an unread field from dead_code. Either a rendering should distinguish created from adopted records (the tree is the natural place: the user reviews what the run minted versus adopted), or the field should not be on the model. Flagged at PHASE-02, whose renderer is the first consumer that could use it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

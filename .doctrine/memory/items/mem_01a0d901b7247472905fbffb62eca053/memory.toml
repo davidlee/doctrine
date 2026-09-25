@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0d901b7247472905fbffb62eca053"
+memory_key = "mem.pattern.worktree.solo-land-refuses-unclean-shared-tree"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Solo /execute cannot land while another agent's tree is dirty — `land` fails closed on tree-unclean"
+summary = "`worktree land`'s tree-unclean precond is checked first and cannot be satisfied in a tree a concurrent agent is editing, so a green fork stalls at in_progress"
+created = "2026-09-25"
+updated = "2026-09-25"
+
+[scope]
+paths = ["src/worktree/", "src/commands/guard.rs"]
+globs = []
+commands = ["worktree land", "worktree fork", "slice phase"]
+tags = ["worktree", "solo", "multi-agent", "landing", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "af852b0c646eed45f337f6dfa74a90371921c6df"
+ref_name = "refs/heads/edge"
+checkout_state_id = "82efad3866e4816550fdb678c552d54ee5ab84db39a82ebe9171a3c91a8029ab"
+base_commit = "83acf8da2718c1c19948e1d9b3a7be1c4c1a4468"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d901-5d3e-74d3-8194-a171ed2c74af"
+recorded_at = "2026-09-25T14:39:00.414128819Z"
+kind = "friction"
+summary = "solo /execute cannot land a finished phase in a shared tree — worktree land refuses tree-unclean on another agent's uncommitted file"
+detail = "SL-266 PHASE-01: two commits gated green on fork branch slice/SL-266-inquiry-map-tree-view; doctrine worktree land --fork <branch> refused 'land-refused: tree-unclean' because the primary tree held .doctrine/slice/264/slice-264.toml, .doctrine/slice/267/slice-267.toml (modified) and review/390 (untracked) from a concurrently-working agent. The refusal is binding and the remedy it names (a clean tree) is not mine to perform — cleaning would discard another agent's work, which AGENTS forbids. So the phase cannot be flipped to completed: completing it stamps code_end_oid = HEAD, which would record a boundary that does not contain the code. The solo path has no escape hatch equivalent to dispatch's coordination worktree (which owns its own tree). Cost: the phase stalls at in_progress with green work unlandable, and the agent must escalate to the human to serialise landing."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

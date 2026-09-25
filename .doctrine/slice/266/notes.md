@@ -41,22 +41,32 @@ the implementation review and audit will exercise.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · design reviewing (run rev 45) · d805bef48
+fresh-as-of: 2026-09-26 · PHASE-01 implemented on a fork, landing blocked · dc3622ff3
 
 ### Produced
 
-- DEC-303, DEC-304, DEC-305, DEC-306, DEC-307, DEC-308, DEC-309, DEC-310
-- IMP-472 (design watch), IMP-473 (prune/defer reasons)
-- RV-388 (design review ledger)
+- DEC-303..DEC-310 (design decisions); IMP-472, IMP-473; RV-388 (design ledger)
+- SL-266 PHASE-01 code, on `slice/SL-266-inquiry-map-tree-view`: `3ba03030e`
+  (`unsettled_needs` + the `blockers()` sweep), `3e745780f` (the `Full`-only
+  whole-map envelope field + `project`'s `titles`/`selection`)
 
 ### Learned
 
-- Observations recorded (design-run payload friction, pi agents outside jail,
-  boot resolve `--role`): `.doctrine/observations/records/` 03, 94, 97, c6;
-  round 2: 71 (section-body trailing newline), db (shared binary broken by a
-  concurrent agent's red build).
+- Observations (`records/`): 03, 94, 97, c6, 71, db (design-run friction);
+  56 (`MapAnswer::Record.form` unread by either rendering), 58 (the fork guard
+  vs a concurrent-agent tree), af (`land` refuses `tree-unclean`)
+- `mem.pattern.worktree.solo-land-refuses-unclean-shared-tree`
+- `blockers()` held a *second* blocked derivation that no `is_blocked` grep
+  could reach — sweep the shape, not the callee
+  (`mem.pattern.review.sweep-defect-class-not-instance`)
 
 ### Open
 
-- User gates: section-reviewed sec-1..sec-8, review-disposed (RV-388
-  conducted), design-accepted.
+- **PHASE-01 landing blocked** on the primary tree's other-agent dirt
+  (`.doctrine/slice/264/slice-264.toml`, `.../267/slice-267.toml`,
+  `review/390/`). The phase stays `in_progress`; `verify-vt` and the completion
+  boundary wait on it — neither can be satisfied from the fork.
+- Boundary correction almost certainly needed at landing:
+  `slice record-delta 266 PHASE-01 --start dc3622ff3 --end 3e745780f`, because
+  edge moved between the `in_progress` stamp and the merge.
+- `MapAnswer::Record.form` is rendered by neither surface — decide at PHASE-02.
