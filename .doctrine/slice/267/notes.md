@@ -623,7 +623,7 @@ sibling's `src/**` and `tests/e2e_design_tree.rs` changes were left untouched.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · PHASE-04 · 25c4f0c35
+fresh-as-of: 2026-09-26 · PHASE-05 · 682902651
 
 ### Produced
 - design locked — SL-267 under run dr-01a0d8ff-b311 (rev 35); `design.md` 9 sections (commits 9750594e4, c17d9229a, 53add8888).
@@ -636,6 +636,7 @@ fresh-as-of: 2026-09-26 · PHASE-04 · 25c4f0c35
 - ledger corrections: IMP-484 (observation gap re-verified false, swept in the design, the item and slice-267.md); CHR-080 and ISS-309 carried as the accuracy and citation ledgers.
 - gates: `doctrine check gate` exit 0 at PHASE-01 (187f05f91) and PHASE-02 (599dfb5c8); publication validate ok; e2e_claude_install 13/13 both times (PHASE-02's `store_allowlist` byte-unchanged).
 - PHASE-04 done — the accuracy axis (`CHR-080`): 19 claim groups paired with their deciding invocations (9 verified, 10 divergent); **seven** shipped masters + `install/glossary.md` + `spec-product/SKILL.md` corrected against the live CLI. Commits `7e5ec0fd8`, `25c4f0c35`. Both mechanical legs clean with controls. Gates: `check gate` exit 0 (124 suites), `doctor` 51, `publication validate` 98, `e2e_claude_install` 13/13.
+- PHASE-05 done — the sufficiency axis (`IMP-484`): **17 ledger rows** (8 admitted, 1 already-documented, 5 developer-only exclusions, 2 structural judgements, 1 left to `ISS-215`). The 8 admitted gaps landed as sections in four **existing published** docs — `install/using-doctrine.md` ×4 (corpus-health, worklist, facets, config) plus a `supersede` extension of its relating-entities section; `install/model-band.md`; `install/claude-activation.md`; `install/dispatch-mechanics.md`. No new doc, no signpost (`EX-5`/`VA-2`). Commit `682902651`; ledger § PHASE-05 sufficiency ledger. Gates: `check gate` exit 0 (124 suites), `doctor` 51, `publication validate` 98 (unchanged), `e2e_claude_install` 13/13, `verify-vt` **PHASE-05 `VT-1 ✓`** (was `FAIL`).
 
 ### Learned
 - mem.pattern.shipped-corpus.delivery-copy-cannot-cite-its-owner — a shipped delivery copy cannot cite its governance owner; the link runs governance → published address, one way.
@@ -648,6 +649,8 @@ fresh-as-of: 2026-09-26 · PHASE-04 · 25c4f0c35
 - **A doc-local id can be load-bearing as an anchor.** `worktree/SKILL.md` labelled its sections `(D9)` and cross-referenced `[Provisioning](#provisioning-d9)`; dropping the label silently broke the link. A sweep must re-resolve every intra-file `#anchor` it touches — caught by grep, not by the ledger.
 - **A `.toml` scope field is data, not prose.** `paths`/`globs` in a shipped `memory.toml` are matchers against the *client's* tree, so `.doctrine/**` entries are correct and a private entry (`memory/`, `src/`, `doc/*.md`) is a dead matcher — recorded, not swept (D3).
 - **CHR-080 is a floor too.** The accuracy item names two instances; the live re-derivation (PHASE-04) found five more divergence classes (`G9`–`G13`) and a knowledge status vocabulary wrong in *four* rows, not two. An accuracy ledger is a whole-corpus exercise; an item's "confirmed instances" are a starting point, never the bound. Durable input for `QUE-227`.
+- **A taught command is a *claim*, and flag existence is not executability.** PHASE-04's `G4` verified that `prompt resolve`'s named flags exist and never **ran** the taught form — which the binary refuses (`--role` is required). Every authored invocation is an accuracy claim; the deciding invocation for one is *executing* it. Durable input for `QUE-227`.
+- **One taught string, three homes.** The band directive lived in `install/model-band.md`, in the `doctrine_onboard` MCP tool output (`src/mcp_server/tools.rs`), and in two `src/boot.rs` boot assertions. A corpus-only sweep cannot repair a string a shipped *tool output* also emits, and correcting the doc alone turns the gate red — check the emitting surfaces, not just the docs.
 
 ### Open
 - QUE-227 — drift-gate seam and the duplicate POL-002 rule (ISS-309 part 2); the only durable defence against re-drift.
@@ -657,6 +660,7 @@ fresh-as-of: 2026-09-26 · PHASE-04 · 25c4f0c35
 - **Audit flag (PHASE-03 D3)** — five shipped `memory.toml` scope entries name doctrine-private matchers: `memory/` + `doc/memory-spec.md` (`mem_019e9a12560d7972b29124e09f4de704`), `src/` + `doc/entity-model.md` + `doc/relation-index.md` (`mem_019e9a1244d37f72a9b7246d2c976ef7`), `install/hymns/` (`mem_88193c2859d72f043ef83a97a5952a96`). Left `leave`: a scope field is a retrieval matcher, not a citation, and editing one changes behaviour outside axis A. Weigh at audit — this is the one class the sweep *deferred by design*.
 - **Audit flag (PHASE-03 A2)** — the plan's PHASE-03 objective states "11 of the 35 shipped memory masters, and 14 skill files carrying 74 sites". All three numbers were low. Not a scope breach (the selectors cover the whole sub-corpus and `EX-1` says *per candidate*), but the plan's terrain description is now known-inaccurate for the audit's conformance read.
 - **Audit flag (PHASE-04)** — `install/glossary.md`'s kind↔abbreviation table still omits the minted kinds `RV`/`REC`/`RFC`/`CM` and its `folder` column is stale (e.g. ADR). A completeness gap, not a false prefix, so `EX-4` did not reach it and the plan's `EX-3` names only the knowledge-records table. Either a follow-up item or a PHASE-06 read judgement.
+- **Audit flag (PHASE-05 A1/D-1)** — **boundary departure, user-authorised 2026-09-26.** `EX-`/design sec-1 bar `src/**`, but the refused-invocation fix spans two `src/` sites (`src/mcp_server/tools.rs::PROMPT_RESOLVE_MODEL_CMD`; two `src/boot.rs` boot assertions) because they duplicate the string the doc teaches. The departure is **textual, not semantic** — a taught command string and two test substrings, no behaviour change. Weigh at audit; the alternative (doc-only) leaves the `doctrine_onboard` tool teaching a refused command.
 
 ## PHASE-05 sufficiency ledger
 
