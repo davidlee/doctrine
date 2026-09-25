@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d906-950a-7860-95b2-c31bda6064c5"
+recorded_at = "2026-09-25T14:44:42.378218437Z"
+kind = "friction"
+summary = "audit: backlog toml scaffold comment names originates_from for backlog→slice, but link refuses it for ISS"
+detail = "The scaffolded backlog-NNN.toml comment says 'originates_from for backlog→slice provenance'; doctrine link ISS-488 originates_from SL-264 refused: 'ISS may not author originates_from'. One wasted call; fell back to related."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

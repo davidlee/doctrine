@@ -348,20 +348,46 @@ is the mutation or regression each new test was shown to fail against, then reve
   `propose` succeeding. `install/design-prompts/delegation.md` gains one bullet; the payload
   contract states nothing about proposal nulls, so it is unchanged.
 
+## Audit — `RV-390` (2026-09-26)
+
+Reconciliation ledger, 15 findings, all terminal; brief in `review-390.md`.
+
+- **`VA` discharged on a real run** (`F-7`, closes the `RV-389` F-11 deviation above).
+  A scratch copy of this slice's own locked run `dr-01a0d797` (7 nodes, all covered by
+  both attested acts; legacy, unjudged) at `.doctrine/state/audit/replay`, driven by the
+  gate-fresh `./target/debug/doctrine`:
+  (A) add `inq-8` `blocking: false` → both acts current, no `act_invalidated`;
+  (B) add `inq-9` `blocking: true`, `needs: [inq-8]` → `act_invalidated cpa-graph-reviewed`
+  only, sufficiency current;
+  (C) re-parent the uncovered `inq-8` → sufficiency current (`RV-386` F-1 scoping);
+  (D) re-word the covered `inq-2` → `act_invalidated cpa-sufficiency-accepted`.
+  `RFC-031` measure: **2 nodes, 1 edge** added after sufficiency acceptance, no void.
+  The live run was not touched.
+- **Registry repaired** (`F-1`, `F-2`): PHASE-01 recorded from `37d26a5ff`; PHASE-02/03/05
+  narrowed to their own single commit, PHASE-04 to `6db9eb66b^..b91be7168`. Undeclared
+  source paths 12 → 0; the 37 left are `SL-266`'s interleaved `1eeec04d2` `.doctrine/` files.
+- **Fixed in audit** (`0841788fb`): `VT-7`'s test asserts the effective set (`F-8`); a
+  duplicated fixture key removed (`F-9`).
+- `ISS-483`'s reserve red no longer reproduces: `doctrine check gate` exit 0.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · RV-389 code review done · pending-audit
+fresh-as-of: 2026-09-26 · RV-390 audit done · pending-reconcile
 
 ### Produced
 - RV-385 — re-homed RV-386's seven live findings (F-1..F-7) onto the run's pass; commits f491f490e, 3e5b85e00
 - 01a0d83e — friction record: SL-264 as an ISS-322 recurrence after ISS-476
 - RV-389 — pre-audit code review, 18 findings terminal; repairs 00c747b7d, c793fbfc3, 166f69a9f, e58a53f34
+- RV-390 — audit, 15 findings terminal; fix 0841788fb; reconciliation brief in review-390.md
+- 01a0d906 — friction record: backlog scaffold names originates_from, link refuses it for ISS
 
 ### Learned
 - mem_01a0d8fea6887683af86b6aaf2e4b4f2 — Sparse null does not survive a TOML round-trip
+- mem_01a0d907d9797262b61f827857673553 — measure a design-run VA on a scratch copy of a real run
 - mem_01a0d17f827772b096e836f95a2887c4 — pass_stale is a lamp, not a gate; raise on the run's pass RV, never a second
 
 ### Open
 - IMP-474 — KeyContract home duplicates WIRE_KEYS (RV-389 F-5)
 - IMP-483 — stored proposals preserve Sparse null (RV-389 F-16 follow-up)
+- ISS-488 — a question re-word emits no change row (RV-390 F-15)
 - ISS-322 — a run-minted pass cannot bind an externally conducted RV

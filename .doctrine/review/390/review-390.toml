@@ -1,0 +1,151 @@
+id    = 390
+slug  = "reconciliation-review-of-sl-264"
+title = "reconciliation review of SL-264"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-264"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Conformance registry complete for every phase; observed PHASE-01 had no source-delta row (conformance incomplete)"
+detail = "doctrine slice conformance 264 reported 'incomplete — completed phase PHASE-01 has no recorded source-delta row'. Cause disclosed in notes.md: a runtime status re-write cleared PHASE-01's code_start_oid, and the phase-binding capture was skipped on re-completion. PHASE-01's code is exactly one commit, 37d26a5ff (src/design_run/run.rs, src/design_run/tests.rs)."
+disposition = "fix-now"
+response = "Recorded with the safe single-commit mode: doctrine slice record-delta 264 PHASE-01 --commit 37d26a5ff. Real provenance (the phase's one commit), not a hand-written row; conformance is no longer incomplete."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Phase source-delta rows hold only the phase's own patch; observed PHASE-02..05 solo ranges swept in other slices' commits"
+detail = "The solo phase-binding rows were multi-commit ranges on shared edge. PHASE-02's range e6d0ee9c8..d06dd0efb contained SL-265's impl bundle d96f4d8fb and its candidate merge 330b247f0, so conformance reported 12 undeclared source paths (src/commands/show.rs, src/main.rs, src/backlog.rs, install/using-doctrine.md, tests/e2e_show_*.rs, ...) plus ~70 foreign .doctrine paths (SL-265/SL-266 decisions, revisions, observations). None is SL-264's work."
+disposition = "fix-now"
+response = "Re-recorded each phase to its own patch: PHASE-02 --commit a67060fe5 --force, PHASE-03 --commit 24b38cd61 --force, PHASE-05 --commit e37cd62ab --force, PHASE-04 --start 6db9eb66b^ --end b91be7168 (two commits). Undeclared source paths: 12 -> 0. Residual 37 undeclared are all .doctrine paths of SL-266's design commit 1eeec04d2, which landed between PHASE-04's two commits; a row is a contiguous range, so it cannot be excluded without dropping PHASE-04 part 1 or 2. Read as noise."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Every source delta of the slice is attributed; observed the four RV-389 repair commits sit in no registry row"
+detail = "00c747b7d, c793fbfc3, 166f69a9f, e58a53f34 (12 files, +1101/-317) landed after PHASE-05's row and have no phase to be recorded under, so slice conformance never sees them. Paths by inspection (git diff --stat b0b85a7fe HEAD): src/design_run/{admission,attestation,change_log,fixture,gate,inquiry,refusal,run,submission,tests}.rs and tests/e2e_design_delegation.rs, all inside declared design-target selectors; plus install/design-prompts/delegation.md (see the next finding)."
+disposition = "tolerated"
+response = "The registry is keyed by phase and review repairs belong to no phase; inventing a PHASE row for them would misattribute. Every path they touch was checked against the selectors by hand: all inside src/design_run/** and tests/e2e_design_*.rs except install/design-prompts/delegation.md, raised separately as F-4. Accepted: conformance is blind to post-phase repairs; the audit covered them by inspection."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Every path the slice edits is declared; observed install/design-prompts/delegation.md matches no selector"
+detail = "RV-389 F-16's repair (c793fbfc3) added a bullet to install/design-prompts/delegation.md. The selector set declares install/design-prompts/conditions/** only, so the path is undeclared, and design.md sec-5 does not name it."
+disposition = "verified"
+response = "Reconciliation Brief, per-slice: doctrine slice selector add 264 install/design-prompts/delegation.md --intent design-target (load-bearing); design.md sec-5 mirror under F-6."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "Selectors are non-redundant; observed four exact-path design-target selectors subsumed by src/design_run/**"
+detail = "slice selector doctor 264 flags src/design_run/{gate,attestation,run,tests}.rs as redundant (subsumed by src/design_run/**). slice conformance consequently lists all four as 'undelivered' although each was edited and appears in the conformant cell under the glob — a false undelivered signal."
+disposition = "verified"
+response = "Reconciliation Brief, per-slice: doctrine slice selector rm 264 for the four subsumed exact paths; clears the false undelivered cell. No prose mirror owed."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "design.md sec-5 is the design's account of its surface; observed it omits seven edited paths"
+detail = "sec-5's code-impact table does not name src/commands/design.rs, src/design_run/contract_check.rs, delegation.rs, fixture.rs, refusal.rs, render/envelope.rs, nor install/design-prompts/delegation.md. PHASE-02 notes record the refusal.rs/fixture/envelope deviation as unavoidable (BlockingJudgementMissing/Withdrawn, KeyContract home); PHASE-03 added contract_check.rs's legacy enum-token exception; PHASE-05 added the commands/design.rs selector. The table and its closing sentence (which commits the selectors to that set) under-declare."
+disposition = "verified"
+response = "Reconciliation Brief, per-slice direct edit: design.md sec-5 names the seven paths with a one-line reason each (see brief)."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "Design sec-6 VA re-measures on a real run; observed PHASE-05 substituted a synthetic e2e run with an empty covered map (RV-389 F-11)"
+detail = "tests/e2e_design_forward.rs::map_growth_after_sufficiency_re_faces_only_for_a_blocking_addition crosses every edge over an empty map, so every later node is uncovered and RV-386 F-1's covered-node scoping is never exercised on a run. Disclosed in notes.md as a deviation for audit to rule on."
+disposition = "fix-now"
+response = "Re-measured by the audit on a real run: a scratch copy (.doctrine/state/audit/replay, gitignored) of SL-264's own locked run dr-01a0d797 (7 nodes, all covered by graph-reviewed and sufficiency-accepted, legacy unjudged), driven by the gate-fresh ./target/debug/doctrine. (A) add inq-8 blocking:false -> both acts current, no act_invalidated. (B) add inq-9 blocking:true needs inq-8 -> act_invalidated cpa-graph-reviewed only; sufficiency current. (C) re-parent inq-8, uncovered -> sufficiency current (F-1 scoping). (D) re-word covered inq-2 -> act_invalidated cpa-sufficiency-accepted. RFC-031 measure: 2 nodes, 1 edge added after sufficiency acceptance without voiding it. The live run was not touched. Recorded in notes.md."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "VT-7: imported questions are judged blocking AND appear in the effective set; observed the test asserted the judgement only"
+detail = "src/design_run/tests.rs::import_seeds_blocking_true_on_every_seeded_node asserted every seeded node has blocking() == Some(true) but never that the gate's effective set (InquiryMap::open_blockers) contains them, which is the second half of design sec-6 VT-7."
+disposition = "fix-now"
+response = "Assertion added in 0841788fb: open_blockers over an empty legacy set counts both seeded nodes. Strengthening pin; the pre-existing judgement assertion already fails if import seeds anything other than Some(true)."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "nit"
+title = "Fixtures carry each key once; observed a duplicated blocking key in the unknown-key fixture"
+detail = """src/commands/design.rs:3549 declared "blocking":false twice in one object (flagged in PHASE-05 notes). serde reads last-wins so the test still targeted the unknown 'cursror' key, but a duplicated key misleads a reader. Sibling sweep (PCRE back-reference over src/ and tests/, positive control: 1 hit on HEAD's file) found no other instance."""
+disposition = "fix-now"
+response = "Duplicate removed in 0841788fb; unknown-key tests (120) green."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "DEC-126's condition table states the rule in force; observed its initial-concerns-recorded row still reads 'reviewed graph + declared blocking set'"
+detail = "DEC-126 gained an '## Amendment (2026-09-25)' section describing the single-act, per-node-judgement shape (DEC-302), but the table row itself (line 53 of the show output) is unamended, so the table and its amendment disagree. RV-385's verification pass named this as a /reconcile catch (plan.md Notes)."
+disposition = "verified"
+response = "Reconciliation Brief, governance: amend DEC-126's initial-concerns-recorded table row with doctrine knowledge edit. No REV reaches a DEC (DEC-300 consequences)."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "nit"
+title = "design.md sec-6 VT-6 reads as a sentence; observed a garbled clause 'and no a submitted blocking-set-declared is refused'"
+detail = '''The VT-6 bullet contains 'and no\n  a submitted blocking-set-declared is refused (RetiredAct) and the stored set is unchanged (F-16)' — a leftover from an edit. Also named in plan.md Notes for reconciliation.'''
+disposition = "verified"
+response = "Reconciliation Brief, per-slice direct edit: repair design.md sec-6 VT-6's garbled clause."
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "minor"
+title = "Code's cited source table matches the code; observed SL-233 sketches/projection-bounds.md §(d) lists node_created as 'parent id, provenance' and has no node_blocking_changed"
+detail = "src/design_run/change_log.rs:141 calls the closed ChangeEvent vocabulary 'projection-bounds sketch §(d) table'. SL-264 added NodeBlockingChanged and a Blocking term on NodeCreated (RV-389 F-9); the sketch was not updated. Flagged for reconcile in notes.md."
+disposition = "tolerated"
+response = "SL-233 is closed and its sketch is pinned by revision (src/design_run/mod.rs cites 'rev 8'); rewriting it would falsify the design record it is. The live vocabulary is the ChangeEvent enum, held closed by the containment check. Accepted: the sketch is the origin, not the current table."
+
+[[finding]]
+id = "F-13"
+status = "verified"
+severity = "minor"
+title = "Plan criteria are discharged as written; observed three criteria discharged in a qualified form"
+detail = "(a) PHASE-01 VT-2's edge-free no-op is red-impossible alone; discharged by a control-bearing test. (b) PHASE-04's adding_a_blocking_node_stales_the_graph_review and adding_then_resolving_a_blocker_leaves_it_stale were green before the change — guards, not red-to-green. (c) PHASE-03 left blocking-inquiries-dispositioned trivially met until PHASE-04 derived the set. Disclosed in notes.md for audit to read."
+disposition = "aligned"
+response = "Read each as disclosed. (a) The control clause makes VT-2 red before the fix; with RV-389 F-12's needs_empty_and_needs_null_are_one_clearing added, the no-op half is discriminated too. (b) Both are guards on the full-set comparison after the joiner arm's removal; valid as pins. (c) The window closed in PHASE-04: large_run_still_renders lists blocking-inquiries-dispositioned as an over-cap cause, and F-7's replay (B) shows a new blocker reaching the user."
+
+[[finding]]
+id = "F-14"
+status = "verified"
+severity = "minor"
+title = "Closure obligations are owned; observed IMP-469 and ISS-481 still open and RFC-031 T4 carrying no outcome"
+detail = "Slice closure intent: closes IMP-469 and ISS-481, and records the outcome and the DEC-062 reconciliation (DEC-301) on RFC-031 T4. doctrine backlog show: both open. RFC-031 T4 (lines ~152-198) names IMP-469 as pending work."
+disposition = "verified"
+response = "Reconciliation Brief, close-time bookkeeping: resolve IMP-469 and ISS-481 citing SL-264; record the outcome and the DEC-301 reconciliation of DEC-062 on RFC-031 T4, with F-7's measure."
+
+[[finding]]
+id = "F-15"
+status = "verified"
+severity = "minor"
+title = "Every run mutation emits a change row (SL-259, REQ-478); observed re-wording an inquiry's question emits none"
+detail = "Replaying on a copy of SL-264's own run, declaring {subject: inq-2, question: <new>} produced only 'act_invalidated cpa-sufficiency-accepted' — no row names the re-word itself. ChangeEvent (src/design_run/change_log.rs:149) has no question-changed member. Pre-existing vocabulary from SL-233, outside SL-264's surface; SL-264 makes re-words load-bearing (DEC-301: a re-word of a covered node re-faces)."
+disposition = "follow-up"
+response = "Out of SL-264's surface: the vocabulary is SL-233's and it did not change here. Captured as ISS-488 (related SL-264); neighbours IDE-057, ISS-450."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
