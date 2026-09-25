@@ -621,8 +621,9 @@ proceeded; the sibling's tree compiled before `T6`, so the rebuild, gates and
 materialisation ran on the same `HEAD` (`4c95636f9`) with a current binary. The
 sibling's `src/**` and `tests/e2e_design_tree.rs` changes were left untouched.
 
-
-fresh-as-of: 2026-09-26 · PHASE-03 · bfd0d466b
+## Harvest
+<!-- single-copy: updated in place each harvest; ids only, never restated content -->
+fresh-as-of: 2026-09-26 · PHASE-04 · 25c4f0c35
 
 ### Produced
 - design locked — SL-267 under run dr-01a0d8ff-b311 (rev 35); `design.md` 9 sections (commits 9750594e4, c17d9229a, 53add8888).
@@ -634,6 +635,7 @@ fresh-as-of: 2026-09-26 · PHASE-03 · bfd0d466b
 - minted: ADR-024; DEC-311..DEC-316; CHR-081; RV-391; mem.pattern.shipped-corpus.delivery-copy-cannot-cite-its-owner.
 - ledger corrections: IMP-484 (observation gap re-verified false, swept in the design, the item and slice-267.md); CHR-080 and ISS-309 carried as the accuracy and citation ledgers.
 - gates: `doctrine check gate` exit 0 at PHASE-01 (187f05f91) and PHASE-02 (599dfb5c8); publication validate ok; e2e_claude_install 13/13 both times (PHASE-02's `store_allowlist` byte-unchanged).
+- PHASE-04 done — the accuracy axis (`CHR-080`): 19 claim groups paired with their deciding invocations (9 verified, 10 divergent); **seven** shipped masters + `install/glossary.md` + `spec-product/SKILL.md` corrected against the live CLI. Commits `7e5ec0fd8`, `25c4f0c35`. Both mechanical legs clean with controls. Gates: `check gate` exit 0 (124 suites), `doctor` 51, `publication validate` 98, `e2e_claude_install` 13/13.
 
 ### Learned
 - mem.pattern.shipped-corpus.delivery-copy-cannot-cite-its-owner — a shipped delivery copy cannot cite its governance owner; the link runs governance → published address, one way.
@@ -645,6 +647,7 @@ fresh-as-of: 2026-09-26 · PHASE-03 · bfd0d466b
 - **ISS-309 is a floor on three axes, not one.** PHASE-02 found the prefix-set gap; PHASE-03 found the skill corpus has *grown* past the item (14→16 files, 74→~104 sites, 35 `SKILL.md` on disk) **and** that the item omits an entire fourth locator dimension — no-hyphen doc-local design ids (`D1`/`F2`/`S3`/`INV-6`/`C-V`/`§8.1`, ~35 sites across 8 skill files) — **and** that its memory count is 11 where the live grep finds 13 (a private `doc/` path cited as a point of truth is a citation too). All three are appended to `mem.pattern.install.shipped-corpus-citation-grep-prefix-set`.
 - **A doc-local id can be load-bearing as an anchor.** `worktree/SKILL.md` labelled its sections `(D9)` and cross-referenced `[Provisioning](#provisioning-d9)`; dropping the label silently broke the link. A sweep must re-resolve every intra-file `#anchor` it touches — caught by grep, not by the ledger.
 - **A `.toml` scope field is data, not prose.** `paths`/`globs` in a shipped `memory.toml` are matchers against the *client's* tree, so `.doctrine/**` entries are correct and a private entry (`memory/`, `src/`, `doc/*.md`) is a dead matcher — recorded, not swept (D3).
+- **CHR-080 is a floor too.** The accuracy item names two instances; the live re-derivation (PHASE-04) found five more divergence classes (`G9`–`G13`) and a knowledge status vocabulary wrong in *four* rows, not two. An accuracy ledger is a whole-corpus exercise; an item's "confirmed instances" are a starting point, never the bound. Durable input for `QUE-227`.
 
 ### Open
 - QUE-227 — drift-gate seam and the duplicate POL-002 rule (ISS-309 part 2); the only durable defence against re-drift.
@@ -653,3 +656,4 @@ fresh-as-of: 2026-09-26 · PHASE-03 · bfd0d466b
 - **Audit flag (PHASE-02 D3)** — `install/review-ledger.md`'s `design-prompts/reviewing.md` pointer is a *published address* (conforming form 2) but sits inside the e2e `store_allowlist`; left `leave` because conforming it would need an out-of-selector `tests/**` edit. Weigh at audit.
 - **Audit flag (PHASE-03 D3)** — five shipped `memory.toml` scope entries name doctrine-private matchers: `memory/` + `doc/memory-spec.md` (`mem_019e9a12560d7972b29124e09f4de704`), `src/` + `doc/entity-model.md` + `doc/relation-index.md` (`mem_019e9a1244d37f72a9b7246d2c976ef7`), `install/hymns/` (`mem_88193c2859d72f043ef83a97a5952a96`). Left `leave`: a scope field is a retrieval matcher, not a citation, and editing one changes behaviour outside axis A. Weigh at audit — this is the one class the sweep *deferred by design*.
 - **Audit flag (PHASE-03 A2)** — the plan's PHASE-03 objective states "11 of the 35 shipped memory masters, and 14 skill files carrying 74 sites". All three numbers were low. Not a scope breach (the selectors cover the whole sub-corpus and `EX-1` says *per candidate*), but the plan's terrain description is now known-inaccurate for the audit's conformance read.
+- **Audit flag (PHASE-04)** — `install/glossary.md`'s kind↔abbreviation table still omits the minted kinds `RV`/`REC`/`RFC`/`CM` and its `folder` column is stale (e.g. ADR). A completeness gap, not a false prefix, so `EX-4` did not reach it and the plan's `EX-3` names only the knowledge-records table. Either a follow-up item or a PHASE-06 read judgement.
