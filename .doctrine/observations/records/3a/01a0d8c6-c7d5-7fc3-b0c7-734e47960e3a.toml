@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d8c6-c7d5-7fc3-b0c7-734e47960e3a"
+recorded_at = "2026-09-25T13:35:01.077734016Z"
+kind = "friction"
+summary = "code-review: review --raiser is per-review, skill implies per-posture labels within one RV"
+detail = "RV-389 multi-dimension review: /code-review says an adversarial posture rides --raiser <label>, but --raiser is only on review new (one label per RV). Four concurrent dimension passes on one RV had to encode their dimension as a title prefix instead."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

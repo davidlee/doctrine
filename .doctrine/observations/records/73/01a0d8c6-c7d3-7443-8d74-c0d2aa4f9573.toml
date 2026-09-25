@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d8c6-c7d3-7443-8d74-c0d2aa4f9573"
+recorded_at = "2026-09-25T13:35:01.075317331Z"
+kind = "friction"
+summary = "code-review: codex correctness reviewer — doctrine prompt resolve --band model needs --role, boot floor directive omits it"
+detail = "RV-389 SL-264 correctness pass: codex followed the boot snapshot's Model band floor directive (doctrine prompt resolve --band model --model <id>); command refused without --role; rerun with a role succeeded. Boot instruction and CLI disagree."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
