@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d891-4383-7762-aa2b-0ad1af293303"
+recorded_at = "2026-09-25T12:36:33.795663606Z"
+kind = "friction"
+summary = "[design; SL-266] resolving an inquiry node took three refused applies"
+detail = "Installed-binary contract lists dispose/blocking on Declaration with no subject-kind column; 'dispose is inert at inq-' is the only hint that resolution goes through a cp- checkpoint with disposes. The uncommitted payload-contract.md adds the column."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 303
+slug = "full-envelope-carries-the-whole-inquiry-map"
+title = "Full envelope carries the whole inquiry map"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SPEC-029 REQ-433 makes the turn envelope the single read model; a tree view needs every node, and the envelope carries none beyond the frontier, active path and blockers, even at Detail::Full."
+choice = "Detail::Full populates a whole-map field on the envelope (id, question, parent, lifecycle, provenance, derived blocked_by, disposition, creation order). The tree rendering always projects at Full; prompt/json --full also carry the map. Ordinary (Normal) projections never build it."
+alternatives = ["A separate projection flag set only by the tree rendering", "Tree reads the snapshot directly, revising SPEC-029 REQ-433"]
+rationale = "--full already means caps lift and output may scale; the whole map is the uncapped frontier. No second widening knob, and the SL-233 exclusion holds by construction because the ordinary prompt never projects Full."
+consequences = ["prompt --full grows by one line per node (within PRD-019 REQ-424 full-view allowance)", "--full is redundant with --format tree and accepted silently", "ISS-298 remains separate (change-log floor message)"]
+decided_by = "user"
+decided_on = "2026-09-25"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-266"

@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 308
+slug = "inquiry-tree-marks-provenance-blocking-cursor-and-pin"
+title = "Inquiry tree marks provenance, blocking, cursor and pin"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "PRD-019 REQ-425 requires map surfaces to report provenance; initial-concerns-recorded asks for blocking questions marked; the traversal has a cursor and a pin."
+choice = "Per line: lifecycle mark, dimmed provenance letter (u user-directed, a agent-proposed, s shaping-question, i imported-prose), * for blocking (SL-264 per-node judgement or the legacy declared set), then id. Suffix ← cursor / ← pinned (merged when coincident). One legend line at the foot. No changed-since marks; --known-revision accepted silently on tree."
+alternatives = ["Dim agent-proposed ids instead of a provenance letter"]
+rationale = "Dimming vanishes when piped, which would breach REQ-425 in relay mode; a letter survives plain text. The legend makes the tree readable cold."
+consequences = ["changed-since-revision marks deferred"]
+decided_by = "user"
+decided_on = "2026-09-25"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-266"

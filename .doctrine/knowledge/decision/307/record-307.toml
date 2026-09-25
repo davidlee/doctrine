@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 307
+slug = "inquiry-tree-wraps-never-truncates"
+title = "Inquiry tree wraps, never truncates"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Record titles and questions run long (DEC-306); the tree must stay aligned on a terminal and when relayed through chat."
+choice = "The right-hand column wraps with a hanging indent under itself, tree guides continued. Width: tty::stdout_terminal_width() on a terminal; a named fixed default (~100) when piped. Below a named minimum column (~24) the text moves to the next line, indented under the label. No truncation. Colour via the existing --color flag: marks by state, resolved text dimmed; plain when piped. No ASCII fallback (box-drawing is house style)."
+alternatives = ["Truncate with an ellipsis", "Do not wrap when piped"]
+rationale = "Truncation hides the answer the tree exists to show; unwrapped piped output loses alignment when pasted into chat. tty.rs and textwrap (unicode-width) already exist."
+consequences = []
+decided_by = "user"
+decided_on = "2026-09-25"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-266"

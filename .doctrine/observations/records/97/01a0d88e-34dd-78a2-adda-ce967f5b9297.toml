@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d88e-34dd-78a2-adda-ce967f5b9297"
+recorded_at = "2026-09-25T12:33:13.437837013Z"
+kind = "friction"
+summary = "[design; SL-266] Provenance wire shape is an object, not a bare token"
+detail = """Contract prints 'enum Provenance tagging: internal("provenance")' beside Declaration.provenance, so {"provenance":"agent-proposed"} as a bare string is the natural reading; the field needs {"provenance":{"provenance":"agent-proposed"}}. One refused apply."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

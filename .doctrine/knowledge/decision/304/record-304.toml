@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 304
+slug = "tree-read-surface-format-tree-plus-design-tree"
+title = "Tree read surface: --format tree plus design tree"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "The tree needs a CLI surface; design show is the agent-facing read and takes a mandatory slice."
+choice = "ShowFormat gains Tree (--format tree). doctrine design tree [SLICE] is shorthand for design show --format tree, and only it makes the slice optional (run resolution per inq-default-run). Tree follows the envelope-rendering flag partition: --json and --knowledge refused; --full accepted, redundant; --known-revision legal."
+alternatives = ["Slice optional on both show and tree via one resolver"]
+rationale = "design show is what agents call; a required slice keeps them from silently reading the wrong run among several idle ones. Convenience belongs on the human verb."
+consequences = ["design tree is not a pure alias: it adds run resolution, stated in its doc comment"]
+decided_by = "user"
+decided_on = "2026-09-25"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-266"

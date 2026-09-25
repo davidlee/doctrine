@@ -19,7 +19,8 @@ delivery    tree pasted into the chat         user runs `design tree`
 prompt      obligation: show the tree         obligation: stay quiet
 ```
 
-Target rendering (user mockup):
+Reference for feel — a screenshot of *hydra*, a friend's MIT Rust tool built
+from the user's original idea. Not a spec; its vocabulary is not ours:
 
 ```
 sample-states  (6 answered, 7 open)
@@ -33,27 +34,35 @@ sample-states  (6 answered, 7 open)
 
 ## Scope & Objectives
 
-1. **Pure tree renderer** — run snapshot → text tree of the whole map (uncapped).
-   Glyphs: `●` resolved, `○` open, `◐` deferred, `⊘` pruned (with reason),
-   `◌` derived-blocked ("blocked by X"), `← next` at the traversal cursor.
-   Totals header. Right-hand column = resolution/disposition text, truncated to
-   width with `…`. Colour on a TTY only; plain glyphs when piped. Own module
-   under `src/design_run/render/`, not grown into `envelope.rs`.
-2. **Read surface** — `doctrine design show --tree` (or a `--format` value —
-   design to settle) plus alias `doctrine design tree [SL-NNN]`. Slice arg
-   optional: defaults to the active design run; several open → most recently
-   touched, named in the header.
-3. **Delivery mode config** — `doctrine.toml` `[design] map_view = "relay" |
-   "sidecar"` (project default; name and default value for design). Selects the
-   prompt obligation: relay → the agent shows the tree output verbatim after any
-   turn that changes the map; sidecar → no relay obligation.
-4. **Prompt assets** — `inquiry.md` gains the mode-dependent obligation;
-   `initial-concerns-recorded.md` drops "no other viewer" and points at the tree
-   output instead of a hand-built listing.
+1. **Pure tree renderer** — a rendering of the full turn envelope (DEC-303):
+   the whole map, uncapped. Marks `●` resolved, `○` open, `◌` derived-blocked,
+   `◐` deferred, `⊘` pruned; provenance letter; `*` blocking; `← cursor` /
+   `← pinned`; legend line (DEC-306, DEC-308). Right-hand text: question, or
+   `needs <ids>`, or disposition record id + title / note. Wraps with a hanging
+   indent, never truncates; `--color` (DEC-307). Own module under
+   `src/design_run/render/`, not grown into `envelope.rs`.
+2. **Read surface** — `doctrine design show --format tree` plus shorthand
+   `doctrine design tree [SL-NNN]` (DEC-304). The slice is optional on `tree`
+   only: latest non-locked run of a non-terminal slice by snapshot mtime, named
+   and marked chosen in the header (DEC-305). The tree is a rendering of the
+   turn envelope projected at `Detail::Full`, which gains the whole map
+   (DEC-303); line anatomy, wrapping and marks per DEC-306/307/308.
+3. **Delivery mode config** — `doctrine.toml` `[design] map_delivery =
+   "relay" | "sidecar"`, default `relay` (DEC-309). Relay: a map-changing
+   `design apply` ends with a line telling the agent to show the user the
+   `design tree` output verbatim before ending the turn; sidecar: no line
+   (DEC-310). The tree output itself names the `doctrine design tree SL-NNN`
+   command.
+4. **Prompt assets** — `inquiry.md` gains one mode-neutral sentence naming
+   `design tree` as the user's view of the map (fragment digests stay
+   config-independent); `initial-concerns-recorded.md` drops the hand-built
+   listing and "no other viewer" in favour of `design tree` output (DEC-310).
 
 ## Non-Goals
 
-- `doctrine design watch` (repaint-in-place live view) — follow-up.
+- `doctrine design watch` (repaint-in-place live view) — IMP-472.
+- Reasons on pruned/deferred nodes — IMP-473.
+- Changed-since-revision marks on the tree (DEC-308).
 - ISS-298 (`design show --full` widens nothing) — separate issue.
 - Hosting the tree in `doctrine map serve` (the web explorer).
 - Re-measuring map use (CHR-065, which `needs` ISS-299) — runs after this lands.
@@ -63,9 +72,12 @@ sample-states  (6 answered, 7 open)
 ## Affected surface
 
 - `src/design_run/render/` — new tree module; `render/mod.rs` wiring.
-- `src/commands/design.rs` — `--tree` / `tree` verb, optional slice resolution.
+- `src/commands/design.rs` — `ShowFormat::Tree`, `tree` verb, run resolution,
+  record-title lookup.
+- `src/design_run/render/envelope.rs` — whole-map field at `Detail::Full`.
 - `src/design_run/inquiry.rs` — read-only use of node status / parent / needs.
-- config loading for `[design]` in `doctrine.toml`.
+- `src/dtoml.rs` — `[design]` config (`DesignConfig`).
+- `design apply` output path — relay line (DEC-310).
 - `install/design-prompts/inquiry.md`,
   `install/design-prompts/conditions/initial-concerns-recorded.md`.
 - `install/design-payload-contract.md` / reference docs if the read surface is
@@ -73,29 +85,24 @@ sample-states  (6 answered, 7 open)
 
 ## Risks, assumptions, open questions
 
-- **Q1 — conditional prompt content.** Can shipped design-prompt assets vary on
-  project config? If not, a small engine change is needed to select the relay
-  obligation by `map_view`.
-- **Q2 — reconcile with `--format status`.** An existing compact rendering;
-  decide whether the tree complements or subsumes it.
-- **Q3 — "active design run" resolution.** What counts as active (unlocked run?
-  slice in `design` status?) and the tie-break when several are.
-- **Q4 — glyph set and width.** Unicode glyphs vs ASCII fallback; terminal
-  width detection when piped (fixed default).
-- **A1** — the snapshot already carries everything the render needs (status,
-  parent, needs, cursor, disposition text); no model change.
+- Q1–Q4 settled in the design run: DEC-303..DEC-310. `--format status` is
+  complemented, not subsumed (status carries counts only).
+- **A1 (revised)** — the snapshot carries everything except record titles,
+  which the command shell reads and passes into the projection (DEC-306).
 - **R1 — concurrent work.** Uncommitted changes across `src/design_run/*` from
   another agent (e.g. a new `InquiryNode::open` parameter) must land before
   implementation begins; scoping and design can proceed.
 
 ## Verification / closure intent
 
-- Renderer: fixture maps covering every glyph, nesting, cursor, blocked-by,
-  pruned-with-reason, truncation; plain vs colour output.
-- CLI: `design tree` with and without a slice arg; ambiguity tie-break named in
-  the header; parity with `design show --tree`.
-- Config: each `map_view` value yields the right prompt obligation (and none
-  leaks into the other mode).
+- Renderer: fixture maps covering every mark, provenance letter, blocking,
+  nesting, cursor/pin, blocked-by, record titles and notes, wrapping at narrow
+  and piped widths; plain vs colour output.
+- Envelope: `Detail::Normal` never carries the map; `Full` carries all nodes.
+- CLI: `design tree` with and without a slice arg; chosen run named in the
+  header; parity with `design show --format tree`.
+- Config: relay → a map-changing apply ends with the relay line, a non-map
+  apply does not; sidecar → never; unknown value refused.
 - ISS-299 resolved on close; CHR-065 unblocked.
 
 ## Summary
@@ -105,4 +112,5 @@ project-level choice of whether the agent relays it or the user watches it.
 
 ## Follow-Ups
 
-- `doctrine design watch` — live repaint of the tree (backlog item to raise).
+- `doctrine design watch` — IMP-472.
+- Pruned/deferred reasons — IMP-473.

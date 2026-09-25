@@ -12,11 +12,11 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/design_run/render/**"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/design.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/design_run/inquiry.rs"
@@ -24,11 +24,23 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "install/design-prompts/inquiry.md"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "install/design-prompts/conditions/initial-concerns-recorded.md"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/change_log.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/config.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/dtoml.rs"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"

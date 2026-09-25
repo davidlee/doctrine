@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 310
+slug = "relay-instruction-rides-design-apply-output"
+title = "Relay instruction rides design apply output"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Relay mode (DEC-309) needs a per-change instruction to the agent; the inquiry.md fragment is digest-bound and cannot vary with config."
+choice = "When map_delivery = relay and an apply produced map events (node created, lifecycle changed, parent/needs changed, question reworded, checkpoint resolving a node), apply output ends with one line: map changed — before ending this turn, show the user doctrine design tree SL-NNN output verbatim. Sidecar: no line. inquiry.md gains one mode-neutral sentence naming design tree as the user view of the map; initial-concerns-recorded.md replaces the hand-built listing and no-other-viewer claim with design tree output. The tree output itself names the doctrine design tree SL-NNN command."
+alternatives = ["A line in the show --format prompt envelope when the change delta holds map events"]
+rationale = "The write path knows exactly which submission changed the map; the envelope delta defaults to since-previous-revision and misses earlier applies. Apply output is not a read projection, so SPEC-029 REQ-433 is untouched; fragment digests stay config-independent."
+consequences = []
+decided_by = "user"
+decided_on = "2026-09-25"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-266"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d884-fda9-7b43-a130-2020fdf69cc6"
+recorded_at = "2026-09-25T12:23:09.481780953Z"
+kind = "friction"
+summary = "[research; SL-266] pi research agents unusable outside the jail"
+detail = "Primary worktree session (no /workspace) — pi-scout/pi-research have no API keys, so the /research round fell back to in-session threads; the skill's graceful-degradation path worked but spent orchestrator context the agents exist to save."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
