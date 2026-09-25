@@ -14,108 +14,138 @@ ref   = "SL-264"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "[dry] needs: null should ride Sparse::apply_collection; PHASE-01 re-spells its three arms inline"
 detail = "src/design_run/run.rs:1488-1492 (37d26a5ff) hand-rolls Omitted→None / Null→empty / Value→collect, and its own comment (run.rs:1483) cites 'the same semantics apply_collection states'. That helper exists for exactly this: src/design_run/submission.rs:65 Sparse<Vec<T>>::apply_collection(prior) (persist/clear/replace), and it has no production caller. Because an Omitted apply returns the prior unchanged, its diff against needs is empty and emits no row, so the Option wrapper and the 'if let Some' guard are unnecessary too. Suggested shape: let declared: BTreeSet<DesignId> = declaration.needs_declaration().clone().apply_collection(needs.iter().cloned().collect()).into_iter().collect(); then run the two difference loops unconditionally and assign needs = declared. That gives one spelling of the collection contract and removes a parallel implementation of it."
+disposition = "fix-now"
+response = "Replace the hand-rolled three-arm needs match in declare_node with Sparse::apply_collection; drop the Option wrapper. User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "[dry] Coverage→stored-shape correspondence should have one home; ReviewedGraph is threaded through four hand-matched sites"
 detail = "Four places now separately encode which CoveredSet shape a Coverage carries, and the delta adds Coverage::ReviewedGraph to each by hand. (1) src/design_run/admission.rs:76-91 maps shape→Coverage, then adds the special case 'Nodes agrees with InquiryMap|ReviewedGraph'. (2) src/design_run/run.rs:841-850 covered_in builds Nodes for InquiryMap|ReviewedGraph. (3) src/design_run/attestation.rs:603-625 CoveredSet::moved returns 'every current subject' on a shape mismatch. (4) src/design_run/gate.rs:1643-1652 coverage_moved has its own no-carried-map fallback that repeats (3)'s every-subject arms and copies its Artefact comment word for word (attestation.rs:604-606 vs gate.rs:1644-1646). Inside (3), the InquiryMap|ReviewedGraph arm then re-checks 'if coverage == Coverage::ReviewedGraph' (attestation.rs:614), matching the same value twice. Suggested shape: add one Coverage::carried_shape() -> Option<Shape> (None for Artefact/PerSection) for admission and covered_in to read, and have moved take Option<&CoveredSet> so the fail-closed fallback lives only in moved (live_acts keeps its explicit None→live). Give InquiryMap and ReviewedGraph separate arms. The next Coverage variant then costs one edit, not four."
+disposition = "fix-now"
+response = "Single-source the Coverage->carried-shape correspondence (Coverage::carried_shape or equivalent); the fail-closed fallback lives in CoveredSet::moved only; separate InquiryMap/ReviewedGraph arms. User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "[dry] the legacy class should have one test; it has two (is_legacy and 'no contract row'), used interchangeably"
 detail = "src/design_run/attestation.rs:111-121 calls ActKind::is_legacy 'the single source of the class' and says admit_and_record asks it. It does not: admit_and_record (src/design_run/run.rs:793ff) detects legacy as 'rule is None' and refuses RetiredAct on that basis, without calling is_legacy. live_acts (run.rs:2085-2110) uses both: it filters !is_legacy() and then keeps a None=>true arm for requirement_for, which its own comment calls unreachable (run.rs:2083-2084). The two definitions agree only because every_act_kind_is_named_by_exactly_one_contract_row enforces it. The same function also computes ActKind::from(held.act.kind()) twice (run.rs:2108 and 2111). Suggested shape: pick one test. Either admit_and_record branches on record.kind().is_legacy() and treats a None rule as a bug (unreachable, pinned by the test), or is_legacy is defined as gate::requirement_for(self).is_none() and the doc stops calling it independent. In live_acts, compute the kind once and use a single guard."
+disposition = "fix-now"
+response = "One definition of the legacy class: admit_and_record branches on is_legacy (a None rule for a non-legacy kind is unreachable), docs corrected, live_acts computes the kind once with one guard. User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "[dry] 'the marks' should be one set-builder; there are two blocking_marks, and one doc claims the other's caller"
 detail = "src/design_run/inquiry.rs:550-564 InquiryMap::blocking_marks (pub(crate), over InquiryNode) says it is 'the one a ReviewedGraph coverage compares' and that 'the gate and the coverage read this one'. Its only non-test caller is open_blockers (inquiry.rs:575). The ReviewedGraph comparison actually uses a separate private free fn, also named blocking_marks, over BTreeMap<DesignId, NodeMaterial> (src/design_run/attestation.rs:653-673). The per-node judgement is single-sourced (inquiry.rs judged_blocking), but 'the set of marked ids' is built twice under one name, and the doc points readers at the wrong one. Suggested shape: keep one builder over materials (the representation both sides of the coverage comparison need), e.g. a pub(crate) fn in inquiry.rs next to judged_blocking, for attestation to call. open_blockers can then filter nodes by effective_blocking directly, and InquiryMap::blocking_marks either disappears or its doc is corrected."
+disposition = "fix-now"
+response = "One blocking-marks set-builder over materials beside judged_blocking; InquiryMap::blocking_marks removed or its doc corrected. User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "[dry] per-key home should live in one table; KeyContract.home copies Declaration::WIRE_KEYS' home column and is kept in step only by a test"
 detail = "a67060fe5 adds home: Option<KeyHome> to every KeyContract (src/design_run/payload_contract.rs:311). That is 71 'home: None' rows in payload_contract.rs plus one in src/commands/design.rs:1167. Only the DECLARATION block (payload_contract.rs:1410-1513) sets a value, and those values copy the KeyHome column of Declaration::WIRE_KEYS (src/design_run/submission.rs:676ff), the table the engine actually enforces through inert_key. The two are held together only by the_payload_contract_names_every_declaration_keys_home (src/design_run/tests.rs:6197-6231), whose doc says 'Two tables now carry the per-key home'. This is design-sanctioned (design.md:124, 'KeyContract gains the home it applies at'), so it is not a conformance defect. It is still a second source of truth, and it widens a general contract type for one struct's concern. Simpler shape, for follow-up rather than this slice: the DECLARATION renderer reads the home from WIRE_KEYS (key plus row order), leaving KeyContract unchanged. Or generate DECLARATION's key rows from WIRE_KEYS plus a type column. Either way the sync test and the 72 None rows go away."
+disposition = "follow-up"
+response = "Design-sanctioned (design.md sec-5) and extends a pre-existing DECLARATION/WIRE_KEYS duplication; routed to IMP-474 rather than widened into this slice. User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "answered"
 severity = "nit"
 title = "[dry] blocking accessor names should say which reading they give; three near-identical names return three different types"
 detail = "src/design_run/submission.rs:537 Declaration::blocking() -> bool is the finding-home reading (null reads as absent). submission.rs:546 Declaration::blocking_declaration() -> &Sparse<bool> is the raw value the inquiry home reads. src/design_run/inquiry.rs:329 InquiryNode::blocking() -> Option<bool> is the stored judgement. After a67060fe5, Declaration's 'blocking' key serves two homes with opposite null rules, so a bare blocking() on the shared type does not say it is the finding reading. An inquiry-side caller reaching for it would silently get null→false, the ISS-482 behaviour the slice refuses at the inquiry home. Suggested shape: rename Declaration::blocking() to finding_blocks() (its one caller is run.rs:1716, the finding constructor)."
+disposition = "fix-now"
+response = "Rename Declaration::blocking() to finding_blocks(). User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "answered"
 severity = "nit"
 title = "[dry] declare_node should delegate its blocking-judgement resolution to a pure helper; it grew to ~140 lines instead"
 detail = "src/design_run/run.rs:1411-1551. a67060fe5 adds two things to the body: a 4-arm resolution of the judgement plus a 15-line comment (run.rs:1416-1440), and the NodeBlockingChanged row block (about run.rs:1537-1546). Other state-dependent resolution already sits in helpers (created_prior, rebuild). The blocking match is pure (held Option<&InquiryNode> x &Sparse<bool> -> Result<Option<bool>, Refusal>), so it can be tested on its own without building a snapshot. Suggested shape: fn resolve_blocking(held: Option<&InquiryNode>, declared: &Sparse<bool>, id: &DesignId) -> Result<Option<bool>, Refusal>, carrying the four-case comment as its doc. Optionally, a small fn blocking_row(id, from, to) for the flip row."
+disposition = "fix-now"
+response = "Extract declare_node's blocking resolution into a pure resolve_blocking helper carrying the four-case doc. User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "answered"
 severity = "major"
 title = "[conformance] design sec-6 VT-6 expects stored-snapshot parse + variant-deletion negative control + verdict parity; observed none evidenced, PHASE-03 VA-1 cites a suite that reads no snapshots"
 detail = "Design .doctrine/slice/264/design.md:318-329 (VT-6) requires, over a fixture holding a stored blocking-set-declared act: (a) the snapshot PARSES; (b) no condition's verdict differs from the pre-change binary's on read except an addition-only-stale act now reading current; (c) a negative control that deletes the variant and asserts the parse fails. None of the three is evidenced. (a) the only parse evidence is the_payload_contract_admits_legacy_enum_variants (src/design_run/tests.rs:3437), which deserialises an AgentActDeclaration PAYLOAD, not a stored DesignSnapshot; every other legacy test (the_mixed_legacy_map_keeps_every_unjudged_blocker :3588, a_stored_confirmation_stale_verdict_survives_the_retirement :3395, an_unjudged_node_still_blocks_when_the_legacy_set_names_it) constructs the snapshot in-process via cleared() + run.declarations.record, so no serialized snapshot is read (note NodeMaterial/InquiryNode gained serde(default) blocking fields - exactly the change a parse test should cover). (b) no before/after verdict comparison exists anywhere. (c) grep for a negative control finds none. The plan.md criterion mapping (plan.md:84, VT-6 -> PHASE-03 VT-1..4 + PHASE-04 VT-4) silently drops (a)-(c), and PHASE-03 VA-1 (plan.toml) names tests/e2e_design_legacy_corpus.rs as evidence that 'every stored snapshot still parses and keeps its recorded verdict' - but that suite (every_authored_design_in_this_repo_reads_losslessly, :180) sweeps authored design.md PROSE through legacy::read/document::parse; it reads no run snapshot. This is the review brief's R2 invariant ('no stored snapshot becomes unreadable or changes verdict') and design sec-7's DEC-059 claim, so it should be evidenced or explicitly waived at audit, not assumed."
+disposition = "fix-now"
+response = "Add a frozen full-TOML stored snapshot fixture holding a blocking-set-declared act, parsed via snapshot::parse, asserting effective blockers and pre-change verdicts, with a negative control. Resolved together with F-13. User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 [[finding]]
 id = "F-9"
-status = "open"
+status = "answered"
 severity = "major"
 title = "[conformance] design sec-3 says creation carries its blocking judgement inside NodeCreated; observed NodeCreated carries only parent/provenance, so a creation's judgement reaches no change row"
 detail = "Design .doctrine/slice/264/design.md:137-138: 'A flip is a recorded mutation, so it emits one NodeBlockingChanged row (REQ-478); creation carries its blocking inside NodeCreated and owes no second row.' Plan PHASE-02 EX-2 repeats it. Implementation: created_prior (src/design_run/run.rs:1373-1399) pushes only PayloadKey::Parent and PayloadKey::Provenance terms onto the NodeCreated row, and ChangeEvent::payload_terms (src/design_run/change_log.rs:358-361) fixes NodeCreated's schema to exactly those two keys - there is no term for the judgement. declare_node's flip arm (run.rs ~1526) diffs against a prior seeded WITH the declared judgement, so a creation emits no NodeBlockingChanged either. Net: the judgement recorded at creation appears in no row. That is the exact event SL-264 turns on - 'a question the agent judges blocking is visible to the human the moment it is added' (sec-1) - and the change log cannot say whether a new node was born blocking. blocking_flip_emits_one_node_blocking_changed_row (tests.rs:6019) asserts the absence of the second row with the message 'creation carries its judgement inside node_created' but never asserts the term exists, so the claim is untested and false. Either add a judgement term to NodeCreated (roster/schema change) or amend the design and REQ-478 reading at reconcile."
+disposition = "fix-now"
+response = "Fix the code, not the design: NodeCreated gains a blocking judgement label term (unjudged/blocking/non-blocking vocabulary already used by NodeBlockingChanged); payload budget/containment re-checked; test asserts the term. User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 [[finding]]
 id = "F-10"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "[conformance] VT-1's F-13 clause expects change-log/gate agreement 'in each case'; observed the agreement test checks one act (graph-review) over three of the cases"
 detail = "Design .doctrine/slice/264/design.md:298-304 (VT-1): 'The change log agrees with the gate in each case: an ActInvalidated row exactly for the act the gate calls stale, and none for a non-blocking addition (F-13).' The cases VT-1 enumerates include both attested rows (user-accepts-sufficiency AND initial-concerns-recorded) and the F-15 lifecycle cases (resolve a covered blocker -> current; add a blocker then resolve -> stale). the_change_log_agrees_with_the_gate_on_every_case (src/design_run/tests.rs:2719) compares only Condition::InitialConcernsRecorded against ActInvalidated for id cpa-graph, over three declarations (non-blocking add, blocking add, covered re-word). Unasserted: (1) the sufficiency act cpa-suff (fixture.rs:252) - the blocking-addition case is precisely where the two rows diverge (gate: graph-review stale, sufficiency current), so a live_acts that applied ReviewedGraph to every Nodes act would report cpa-suff dead and still pass; grep finds no ActInvalidated assertion on cpa-suff anywhere; (2) the F-15 resolve / add-then-resolve cases, which the gate-side tests (:2605, :2632) drive by direct map mutation, never through apply, so no change-log reading exists for them. The name 'on_every_case' overstates. Extend the closure to assert both act ids and add the two lifecycle cases via declare_over."
+disposition = "fix-now"
+response = "Extend the gate/change-log agreement test to assert the full ActInvalidated subject set for both attested acts, and add the F-15 lifecycle cases (resolve covered blocker; add-then-resolve) driven through apply. Resolved together with F-14. User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 [[finding]]
 id = "F-11"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "[conformance] design VA / PHASE-05 EX-4+VA-2 expect the RFC-031 re-measure 'on a real run', run named; observed a synthetic e2e over a map that was empty at acceptance, not disclosed as a deviation"
 detail = "Design .doctrine/slice/264/design.md:330-332 (VA): 'on a real run, a non-blocking addition does not re-face the human gates; re-measured against RFC-031's fitness measure'. Plan PHASE-05 EX-4 repeats 'on a real run', and VA-2 requires the re-measure 'recorded in the slice notes, with the run it was taken from named'. notes.md PHASE-05 records the measurement as tests/e2e_design_forward.rs::map_growth_after_sufficiency_re_faces_only_for_a_blocking_addition (:1019) and names no run. That test's own doc (:1011-1015) states the ladder 'crosses every edge below reviewing over an empty map', so the accepted CoveredSet::Nodes is EMPTY: every later node is uncovered by construction and the F-1 covered-node scoping - the part of the narrowing a real run exercises - is never in play. The test is good regression evidence, but it is not the VA the design asked for, and the notes present the substitution ('The measurement is a test, not a claim') rather than disclosing it as a deviation from EX-4/VA-2. Either take the re-measure on a real run (e.g. a live run with a non-empty covered map at acceptance) and name it, or record the substitution as a waived/deviated VA at audit."
+disposition = "fix-now"
+response = "Disclose in notes.md that the PHASE-05 re-measure substituted a synthetic e2e run (empty covered map at acceptance, F-1 scoping unexercised) for the real-run VA, as a deviation for /audit to rule on. User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 [[finding]]
 id = "F-12"
-status = "open"
+status = "answered"
 severity = "nit"
 title = "[conformance] design VT-2 expects 'needs: [] behaves identically' to needs: null; observed no test applies [] beside null"
 detail = "Design .doctrine/slice/264/design.md:305-306 (VT-2): 'needs: null clears and emits one NeedsRemoved per removed edge; null on an edge-free node emits no rows...; needs: [] behaves identically.' needs_null_clears_and_emits_one_row_per_edge (src/design_run/tests.rs:5755) asserts the null rows against a literal expected list; its doc claims 'the same From/To terms needs: [] produces' but the test never applies needs: [] to run_with_two_needs_edges() and compares. needs_null_on_an_edge_free_node_records_no_mutation (:5790) likewise has no [] arm. The only needs: [] declaration in the tree (tests/e2e_design_projection.rs:477) is unrelated to this comparison. Cheap to close: apply both spellings to the same prior and assert equal row sets (edge-bearing and edge-free)."
+disposition = "fix-now"
+response = "Add a test applying needs: [] and needs: null to the same priors (edge-bearing and edge-free) asserting equal row sets. User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 [[finding]]
 id = "F-13"
-status = "open"
+status = "answered"
 severity = "major"
 title = "[tests] Stored legacy snapshots must parse; the compatibility tests never parse one"
 detail = "SL-264 design sec-6 VT-6 requires a stored blocking-set-declared snapshot to parse and retain its verdict, including a negative control. src/design_run/tests.rs:3437-3470 (the_payload_contract_admits_legacy_enum_variants) parses only an AgentActDeclaration from JSON; src/design_run/tests.rs:3395-3424 (a_stored_confirmation_stale_verdict_survives_the_retirement) constructs cleared() in memory. PHASE-03 VA-1 in .doctrine/slice/264/plan.toml:98 calls tests/e2e_design_legacy_corpus.rs a snapshot corpus, but its every_authored_design_in_this_repo_reads_losslessly test at tests/e2e_design_legacy_corpus.rs:179-205 reads design.md prose through legacy::read/document::parse, never snapshot::parse. Proof: temporarily changed src/design_run/snapshot.rs:693 to reject text containing blocking-set-declared (present in the real SL-252 snapshot at .doctrine/state/slice/252/design.toml:405); both named unit tests and the cited corpus test still passed (exit 0). Restored source byte-for-byte. Add a frozen full TOML snapshot fixture with the legacy act, parse through snapshot::parse, assert effective blockers and pre-change gate verdicts; make the parser rejection mutant fail that test."
+disposition = "fix-now"
+response = "Same work as F-8: the frozen snapshot fixture must make the parser-rejection mutant fail. User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 [[finding]]
 id = "F-14"
-status = "open"
+status = "answered"
 severity = "major"
 title = "[tests] Gate/change-log agreement must cover sufficiency invalidation; the test checks only graph review"
 detail = "SL-264 design sec-6 VT-1 and PHASE-04 VT-5 require an ActInvalidated row for each act the gate calls stale. src/design_run/tests.rs:2719-2753 (the_change_log_agrees_with_the_gate_on_every_case) checks only InitialConcernsRecorded against cpa-graph; its covered reword case also stales UserAcceptsSufficiency but never checks cpa-suff. src/design_run/tests.rs:2568-2603 (a_covered_flip_stales_both_attested_rows) checks both gate causes but no rows. Proof: temporarily changed src/design_run/run.rs:2100 live_acts to exclude ActKind::SufficiencyAccepted, suppressing its invalidation row while leaving the gate intact; both named tests still passed (exit 0). Restored source byte-for-byte. Assert the complete ActInvalidated subject set against the gate verdicts for both acts, including a covered reword/flip and the non-blocking addition."
+disposition = "fix-now"
+response = "Same work as F-10: the suppressed-sufficiency-row mutant must fail the extended agreement test. User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 [[finding]]
 id = "F-15"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "[tests] Retired-act refusal must preserve stored state; the unchanged-set assertion compares an immutable input to itself"
 detail = "In src/design_run/tests.rs:3315-3354, submitted_legacy_act_is_refused_and_the_stored_set_unchanged clones run.declarations, calls apply(&run, ...), then compares run.declarations to the clone after consuming refused.err(). The production signature at src/design_run/run.rs:329-336 takes prior: &DesignSnapshot and returns Result<Applied, Refusal>, so this assertion cannot fail for a persistence regression: the caller-owned run is immutable, and an Err exposes no candidate snapshot. The RetiredAct refusal assertion is useful, but the claimed unchanged stored set is untested. No mutation is needed for this proof; Rust’s borrow type guarantees the assertion. Exercise a real design apply refusal against a snapshot with a stored legacy declaration, comparing the snapshot bytes and effective blocking set before/after."
+disposition = "fix-now"
+response = "Drop the tautological stored-set-unchanged assertion; the test doc states that apply takes &DesignSnapshot so the type guarantees it; keep the RetiredAct refusal assertion. User assented to the proposed disposition 2026-09-25 (session reply: 'agreed to dispositions')."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
