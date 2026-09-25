@@ -623,7 +623,7 @@ sibling's `src/**` and `tests/e2e_design_tree.rs` changes were left untouched.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · PHASE-05 · 682902651
+fresh-as-of: 2026-09-26 · PHASE-05 · ce3acf501
 
 ### Produced
 - design locked — SL-267 under run dr-01a0d8ff-b311 (rev 35); `design.md` 9 sections (commits 9750594e4, c17d9229a, 53add8888).
