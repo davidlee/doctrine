@@ -173,9 +173,44 @@ verified against source during design.
   wire submission reaches that arm, so `admit_and_record_refuses_a_legacy_kind_with_no_rule`
   pins it directly. `VT-4`'s test name does not match the `retired` cargo filter.
 
+## PHASE-04 — the narrowed predicate and the derived set (completed 2026-09-25)
+
+- **The slice's central behaviour change, landed.** `Coverage::ReviewedGraph` exists and
+  `CoveredSet::moved` now takes the `Coverage` its act's rule names, so `coverage_moved`
+  and `live_acts` cannot disagree about which nodes block. `initial-concerns-recorded`
+  takes `ReviewedGraph` (carried material **plus** the full-set effective-blocking
+  comparison, whatever the lifecycle); `user-accepts-sufficiency` keeps `InquiryMap` over
+  carried keys. **`user-accepts-sufficiency` is now inert for a pure addition** — the
+  design's intent (`sec-2` *Invisible*) and the loosening the slice exists to make.
+- **Both projections were shown to still fire, not assumed.** Material moved on a covered
+  node, a leaver among carried keys, and a new blocking node all still stale; a new
+  non-blocking node and a resolved covered blocker do not; add-then-resolve still stales
+  (`RV-386` F-15's reversal). This matters because loosening invalidation is a truthfulness
+  change — `RFC-031` T1 inverted — so a condition that should still invalidate and no longer
+  does would be a silent lie.
+- **Two of the plan's criteria are guards, not red-to-green transitions.**
+  `adding_a_blocking_node_stales_the_graph_review` and
+  `adding_then_resolving_a_blocker_leaves_it_stale` did **not** fail before the change: the
+  old union walk already staled on a joiner. They pin that `ReviewedGraph`'s full-set
+  comparison still has teeth once the joiner arm is removed. `/audit` should read them as
+  pins, not as evidence of a fixed defect.
+- **`stale_conjunct_does_not_satisfy` was replaced, not deleted, and its pre-flip green was
+  recorded verbatim** (the plan's VA-1). Seven criteria now stand where it did, plus new
+  leaver and covered-flip criteria the plan did not name.
+- **A test had to change because the assertion encoded the superseded behaviour.**
+  `e2e_design_forward`'s `large_run_still_renders` listed `user-accepts-sufficiency` as an
+  over-cap cause; under the narrowing it is current for a pure addition. The entry was
+  dropped and a **positive** assertion added (sufficiency stays current on pure additions) so
+  the narrowing is pinned at e2e altitude rather than merely unasserted.
+- **Sheet/plan VT numbering differs**: the sheet called the pin `VT-3`; plan.toml's `VT-3` is
+  the move criterion. Follow plan.toml — done.
+- Residual: two mark-iterations (over `InquiryNode` and over `NodeMaterial`) share one
+  judgement (`judged_blocking`); a reviewer may want them fused. `live_acts` is no longer
+  rule-free — it looks each act's coverage up via `requirement_for`.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · PHASE-03 · pending-land
+fresh-as-of: 2026-09-25 · PHASE-04 · pending-land
 
 ### Produced
 - RV-385 — re-homed RV-386's seven live findings (F-1..F-7) onto the run's pass; commits f491f490e, 3e5b85e00
