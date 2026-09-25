@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0d942dd1376e1ab4a17377410aeca"
+memory_key = "mem.pattern.install.shipped-corpus-citation-grep-prefix-set"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Shipped-corpus citation greps undercount — the sweep regex needs the full prefix set"
+summary = "IRS-309-class citation greps silently omit CON/EVD/HYP/CPT, FR-/NF- labels and doc-local D-* ids; use a full-prefix regex plus a path pass"
+created = "2026-09-25"
+updated = "2026-09-25"
+
+[scope]
+paths = []
+globs = ["install/**", "memory/**", "plugins/**"]
+commands = []
+tags = ["install", "asset-policy", "citation"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7c0a91109ab79dc7fcf218d38b7aaf184fe7dbb4"
+ref_name = "refs/heads/edge"
+checkout_state_id = "05ef192ecabe3f3e911d3b5690353c3a52e9960d54ef78c43c5ca8e5a7991212"
+base_commit = "1f2a9000f62a383e9fe28d0208ff3b57d1d7313f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
