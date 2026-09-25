@@ -1,0 +1,61 @@
+id    = 393
+slug  = "sl-266-pre-audit-code-review"
+title = "SL-266 pre-audit code review"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "opus-reviewer"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-266"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "minor"
+title = "Expected fn emit to keep its doc comment; observed it prefixed onto map_delivery"
+detail = "src/commands/design.rs:660-672. PHASE-04 (94fb3870b) inserted map_delivery() and slice_ref() between the existing '/// Emit lines without tripping the crate's print_stdout denial.' doc line and 'fn emit'. Rust concatenates consecutive /// lines, so map_delivery's rustdoc now opens with 'Emit lines without tripping the crate's print_stdout denial.' followed by its own two lines, and fn emit (line 672) is undocumented. Visible in the diff hunk '@@ -657,6 +658,17' where the new doc lines follow the old one with no blank/item between. Fix: move the 'Emit lines…' line back above fn emit."
+disposition = "fix-now"
+response = "Moved the 'Emit lines…' doc line back above fn emit (src/commands/design.rs); map_delivery keeps only its own doc."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "nit"
+title = "Expected the new slice_ref() helper to be the one spelling in design.rs; observed five inline canonical_id(SLICE_KIND.prefix, slice) calls remain"
+detail = "PHASE-04 added fn slice_ref(slice) (src/commands/design.rs:668) and notes claim it 'replaced three canonical_id spellings'. The same expression remains inline at design.rs:546, 1100, 1781, 2488 and 2925 (grep 'canonical_id(crate::kinds::SLICE_KIND.prefix'). A helper that half the module ignores is a second spelling, not a single source (STD-001 spirit). Either route the remaining five through slice_ref() or note why not."
+disposition = "fix-now"
+response = "All five inline canonical_id(SLICE_KIND.prefix, slice) calls in design.rs now route through slice_ref(); the helper is the one spelling."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "minor"
+title = "Expected the renderer to consume the typed lifecycle/provenance; observed a string round-trip with unreachable fallbacks and a second spelling of the lifecycle tokens"
+detail = "MapNode.lifecycle / .provenance are &'static str (envelope.rs:359ff, filled from InquiryLifecycle::as_str / Provenance::label in map_nodes, envelope.rs:894-919). tree.rs then parses them back: State::of (tree.rs ~100-112) loops InquiryLifecycle variants comparing as_str() to recover the enum and returns Option; node_lines falls back to rendering the raw lifecycle string as the mark (state.map_or(node.lifecycle, State::mark)); letter() (tree.rs ~170) falls back to the whole provenance label. Both fallbacks are unreachable: the only producer is map_nodes, which emits only closed-vocabulary tokens. Meanwhile State::word (tree.rs ~125-133) hand-spells 'resolved'/'open'/'deferred'/'pruned', the same tokens InquiryLifecycle::as_str owns (inquiry.rs:87-94) — a second spelling STD-001 forbids. The design (sec-2) fixed the field types as &'static str, so this is partly the design's; carrying the enums (serialised to the same tokens via serde) would delete State::of's Option, both dead disclosure branches, and the duplicate words, and make a new lifecycle a compile error in the renderer instead of a silent raw-string mark. At minimum, derive State::word's four lifecycle words from InquiryLifecycle::as_str."
+disposition = "follow-up"
+response = "fix-now part: State::word derives the four lifecycle words from InquiryLifecycle::as_str (tree.rs), so no second spelling (STD-001). The typed-field part changes a type the design (sec-2) fixed and is outside this slice's delivery; captured as IMP-486 (carry the enums on MapNode, serialised to the same tokens)."
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "minor"
+title = "Expected a display preference not to gate design writes on unrelated config; observed design apply/start now refuse on any doctrine.toml shape error"
+detail = "Before 94fb3870b, src/commands/design.rs had no load_doctrine_toml call (git show 94fb3870b^:src/commands/design.rs | grep -c load_doctrine_toml → 0). Now map_delivery() (design.rs:663-665) runs crate::dtoml::load_doctrine_toml(root)? — the full shared DoctrineToml parse — as the first statement of both start() (design.rs ~1636) and apply() (~1846), for every write including sidecar-mode and non-map-changing ones. Reproduced: a tempdir whose .doctrine/doctrine.toml is 'conduct = 42' → 'doctrine design start SL-001 -p <dir>' fails 'Failed to parse …/doctrine.toml … TOML parse error'; the same design start succeeded pre-SL-266. The design (sec-5) made [design] lazy so a bad display preference cannot fail other readers, but the converse coupling is new: a mid-run design apply is now hostage to the shape of every other table ([conduct], [verification], [estimation], [value], [dispatch], [install]). sec-5 does spell the call as load_doctrine_toml(root)?, so this conforms to the letter; the question is whether it is the intended tradeoff. Options: read only the [design] entry (raw toml::Table get) so the design writes depend on nothing else; or accept and record the coupling (design sec-8 residual). Not a blocker — the error is loud and names the file."
+disposition = "fix-now"
+response = "User chose the [design]-only read. New pure dtoml::design_entry (bare toml::Table, removes the design key) + shell load_design_entry; DoctrineToml loses its design field. design start/apply depend on no other table; only TOML syntax errors refuse. Red/green: e2e an_unrelated_malformed_table_does_not_refuse_the_writes; unit design_entry_and_shared_parse_are_independent. Design sec-5 spells load_doctrine_toml(root)? — reconcile must amend sec-5."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "nit"
+title = "Expected the condition's closing sentence to point at the tree; observed 'that listing' now refers back to the listing the agent is told not to draw"
+detail = """install/design-prompts/conditions/initial-concerns-recorded.md, 'What is enough' paragraph (lines 18-23). After the 94fb3870b edit it reads: '…Do not draw your own listing. Ask: "Anything missing, or wrongly marked blocking? Otherwise, 'reviewed'." Record their review of that listing in one submission — the tree and its marks are…'. The nearest antecedent of 'that listing' is now 'your own listing', which the preceding sentence forbids; before the edit it was the hand-built listing the agent had just shown. The next clause ('the tree and its marks') disambiguates, so the harm is small, but this is agent-facing prompt text where antecedent slips cost turns. Design sec-5 kept the rest of the paragraph as SL-264's text, so the fix is one word ('that listing' → 'that tree') and re-stales the same digest this slice already re-staled. Also note the hard line break mid-sentence after 'Anything missing, or' left by the edit (cosmetic)."""
+disposition = "fix-now"
+response = "'that listing' → 'that tree' in conditions/initial-concerns-recorded.md; the mid-sentence hard break is reflowed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

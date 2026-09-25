@@ -543,7 +543,7 @@ fn no_run_here(root: &Path, slice: u32, path: &Path) -> String {
              RECONSTRUCTS a new run from the authored prose and linked knowledge: a new run \
              uid, and weaker than exact resume, which needed the snapshot. No attestation, \
              receipt or gate clearance is inferred — plain resume never reconstructs them",
-            crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice)
+            slice_ref(slice)
         );
     }
     format!("{base} — run `doctrine design start` first")
@@ -657,11 +657,10 @@ fn complete_journal(root: &Path, slice: u32, submission: &str) -> Result<()> {
     store_journal(root, slice, &journal)
 }
 
-/// Emit lines without tripping the crate's `print_stdout` denial.
 /// The `[design] map_delivery` choice, resolved before any write so a malformed
 /// entry refuses the verb rather than silently selecting a default (`DEC-309`).
 fn map_delivery(root: &Path) -> Result<MapDelivery> {
-    resolve_map_delivery(crate::dtoml::load_doctrine_toml(root)?.design.as_ref())
+    resolve_map_delivery(crate::dtoml::load_design_entry(root)?.as_ref())
 }
 
 /// A slice's canonical reference, `SL-NNN`.
@@ -669,6 +668,7 @@ fn slice_ref(slice: u32) -> String {
     crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice)
 }
 
+/// Emit lines without tripping the crate's `print_stdout` denial.
 fn emit(lines: &[String]) -> Result<()> {
     let mut out = std::io::stdout().lock();
     for line in lines {
@@ -1097,7 +1097,7 @@ fn review_pass_plan(slice: u32) -> MintPlan {
         subject: IntentSubject::ReviewPass,
         effect: MintEffect::Create(MintKind::Review(crate::review::NewArgs {
             facet: crate::review::Facet::Design,
-            target: crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice),
+            target: slice_ref(slice),
             phase: None,
             title: None,
             raiser: None,
@@ -1778,7 +1778,7 @@ fn entry_digests(
 /// precisely the case import exists for, and refusing it would make the linked
 /// half of DEC-085 a precondition of the authored half.
 fn shaping_questions(root: &Path, slice: u32) -> Vec<design_run::run::ShapingQuestion> {
-    let target = crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice);
+    let target = slice_ref(slice);
     let Ok(scanned) = crate::catalog::scan::scan_entities(
         root,
         &mut Vec::new(),
@@ -2485,7 +2485,7 @@ fn materialise(root: &Path, slice: u32, pre_write: PreWriteHook<'_>) -> Result<(
              settled, or adopt it with `doctrine design adopt {}`.",
             rendered.as_str(),
             settled.as_ref().map_or("absent", Fingerprint::as_str),
-            crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice),
+            slice_ref(slice),
         );
     }
 
@@ -2922,7 +2922,7 @@ fn envelope_turn(root: &Path, slice: u32, args: &ShowArgs) -> Result<TurnEnvelop
 /// Emitted with `write!`, not [`emit`], which appends a newline per line and would
 /// break `EX-2`'s verbatim contract.
 fn show_document(root: &Path, slice: u32, args: &ShowArgs) -> Result<()> {
-    let canonical = crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice);
+    let canonical = slice_ref(slice);
     let document = crate::slice::design_document(root, slice)?;
     let stale = stale_run_revision(root, slice, &document)?;
     let level = args.knowledge;

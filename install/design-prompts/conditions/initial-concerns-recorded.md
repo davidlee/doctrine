@@ -17,7 +17,7 @@ everything built on the framing has to come apart with it.
 
 **What is enough.** The user reviews the map as `doctrine design tree SL-NNN`
 renders it — it marks the blocking questions and states any `needs` edges. Do
-not draw your own listing. Ask: "Anything missing, or
-wrongly marked blocking? Otherwise, 'reviewed'." Record their review of that
-listing in one submission — the tree and its marks are the whole of what they
+not draw your own listing. Ask: "Anything missing, or wrongly marked
+blocking? Otherwise, 'reviewed'." Record their review of that tree in one
+submission — the tree and its marks are the whole of what they
 are confirming, so there is no separate set to declare.

@@ -4,9 +4,10 @@
 //! One parser owns the whole `doctrine.toml` shape so the file is read once and
 //! split into its sub-configs: the `[conduct]` table ([`crate::conduct`]) and the
 //! `[verification]` table ([`crate::verify`]), plus the `[estimation]` and
-//! `[value]` tables, and the raw `[design]` entry. Every field is `#[serde(default)]`, so an absent table
+//! `[value]` tables. Every field is `#[serde(default)]`, so an absent table
 //! parses to its sub-config's default (tolerant — the conduct precedent). Every
-//! other top-level key is ignored.
+//! other top-level key is ignored. The raw `[design]` entry has its own reader,
+//! [`design_entry`], so the design writes depend on no other table.
 //!
 //! **Layering (ADR-001).** [`parse`] is the pure leaf — owned text in, no IO.
 //! [`load_doctrine_toml`] is the one thin impure shell seam co-located here (read
@@ -45,12 +46,12 @@ pub(crate) struct DoctrineToml {
     /// settings activation scope (SL-152 PHASE-06; SL-250).
     #[serde(default)]
     pub(crate) install: crate::install_config::InstallConfig,
-    /// The `[design]` table, kept RAW so this shared parse checks nothing about
-    /// it — the design writes resolve it through
-    /// [`crate::design_run::config::resolve_map_delivery`] (SL-266 `DEC-309`).
-    #[serde(default)]
-    pub(crate) design: Option<toml::Value>,
 }
+
+/// The `[design]` key of the config table, kept RAW so this shared parse checks
+/// nothing about it — the design writes resolve it through
+/// [`crate::design_run::config::resolve_map_delivery`] (SL-266 `DEC-309`).
+const DESIGN_KEY: &str = "design";
 
 /// Parse a project `doctrine.toml` body into its sub-configs (PURE). The shell
 /// owns the file read; this is the ONLY `doctrine.toml` parser.
@@ -63,6 +64,14 @@ pub(crate) fn parse(text: &str) -> anyhow::Result<DoctrineToml> {
     // need the bounds call `estimate::resolve_confidence` themselves.
     let doc: DoctrineToml = toml::from_str(text)?;
     Ok(doc)
+}
+
+/// The raw `[design]` entry of a `doctrine.toml` body (PURE). Reads the body as
+/// a bare table, so a shape error in any other table cannot refuse the design
+/// writes (RV-393 `F-4`); only malformed TOML syntax does.
+pub(crate) fn design_entry(text: &str) -> anyhow::Result<Option<toml::Value>> {
+    let mut table: toml::Table = text.parse()?;
+    Ok(table.remove(DESIGN_KEY))
 }
 
 /// Parse an entity TOML with canonical-id error context.
@@ -99,6 +108,16 @@ pub(crate) fn load_doctrine_toml(root: &Path) -> anyhow::Result<DoctrineToml> {
     }
 }
 
+/// Read the project `doctrine.toml`'s raw `[design]` entry (IMPURE shell seam).
+/// Absent file -> `None`.
+pub(crate) fn load_design_entry(root: &Path) -> anyhow::Result<Option<toml::Value>> {
+    match read_doctrine_toml_text(root)? {
+        Some(text) => design_entry(&text)
+            .with_context(|| format!("Failed to parse {}", root.join(DOCTRINE_TOML).display())),
+        None => Ok(None),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -121,9 +140,10 @@ mod tests {
     }
 
     /// SL-266 `EX-1`: any well-formed `[design]` passes the shared parse, so a
-    /// bad display preference never fails an unrelated reader.
+    /// bad display preference never fails an unrelated reader — and the design
+    /// entry is read raw, whatever shape the other tables have (RV-393 `F-4`).
     #[test]
-    fn any_well_formed_design_entry_parses() {
+    fn design_entry_and_shared_parse_are_independent() {
         for body in [
             "",
             "design = 42\n",
@@ -131,8 +151,9 @@ mod tests {
             "[design]\nmap_delivry = \"relay\"\n",
             "[design]\nmap_delivery = \"tree\"\n",
         ] {
-            let doc = parse(&format!("{body}[conduct]\n")).unwrap();
-            assert_eq!(doc.design.is_some(), !body.is_empty(), "{body:?} kept raw");
+            parse(&format!("{body}[conduct]\n")).unwrap();
+            let entry = design_entry(&format!("conduct = 42\n{body}")).unwrap();
+            assert_eq!(entry.is_some(), !body.is_empty(), "{body:?} kept raw");
         }
     }
 

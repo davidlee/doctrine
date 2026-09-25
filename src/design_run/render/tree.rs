@@ -126,14 +126,15 @@ impl State {
         }
     }
 
-    /// The word the header counts and the legend explains.
+    /// The word the header counts and the legend explains — the lifecycle's own
+    /// token, bar `blocked`, which is the tree's split of `open` (STD-001).
     const fn word(self) -> &'static str {
         match self {
-            State::Resolved => "resolved",
-            State::Open => "open",
+            State::Resolved => InquiryLifecycle::Resolved.as_str(),
+            State::Open => InquiryLifecycle::Open.as_str(),
             State::Blocked => "blocked",
-            State::Deferred => "deferred",
-            State::Pruned => "pruned",
+            State::Deferred => InquiryLifecycle::Deferred.as_str(),
+            State::Pruned => InquiryLifecycle::Pruned.as_str(),
         }
     }
 

@@ -375,3 +375,24 @@ fn a_malformed_design_entry_refuses_the_writes_before_writing() {
         );
     }
 }
+
+/// RV-393 `F-4`: the design writes read only the `[design]` entry, so a shape
+/// error in an unrelated `doctrine.toml` table does not refuse them.
+#[test]
+fn an_unrelated_malformed_table_does_not_refuse_the_writes() {
+    let unrelated = "conduct = 42\n[design]\nmap_delivery = \"sidecar\"\n";
+    let tmp = legacy_tree(Some(unrelated));
+    let out = start_from_design(tmp.path());
+    assert!(
+        !out.contains("map changed"),
+        "sidecar still honoured: {out}"
+    );
+
+    let fixture = DesignRun::start();
+    write_config(&fixture.root, unrelated);
+    let out = apply(
+        &fixture,
+        &payload(&fixture, "create", &create_node("inq-1")),
+    );
+    assert!(!out.contains("map changed"), "apply: {out}");
+}
