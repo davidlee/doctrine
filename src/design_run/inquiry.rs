@@ -332,18 +332,13 @@ impl InquiryNode {
 
     /// Whether this node's **effective** judgement is blocking (`SL-264` sec-3).
     ///
-    /// The node's own judgement when it holds one, else its membership in the
-    /// stored legacy `blocking-set-declared` set. The fallback is **per node**
-    /// (`RV-386` `F-8`): an unjudged node is blocking exactly when the set the
-    /// run recorded before this attribute existed named it, so a partly-judged
-    /// map keeps every unjudged blocker, and a node leaves the fallback only by
-    /// being judged itself.
-    ///
-    /// Pure, and the legacy set is **passed in** rather than fetched: this leaf
-    /// module takes no dependence on the act that holds the set to answer the
-    /// question (`ADR-001`).
+    /// Routes through [`judged_blocking`], the one expression of the judgement,
+    /// so the derived read and the `ReviewedGraph` coverage cannot disagree about
+    /// which nodes block (`RV-386` F-13). Pure, and the legacy set is **passed
+    /// in** rather than fetched: this leaf module takes no dependence on the act
+    /// that holds the set to answer the question (`ADR-001`).
     pub(crate) fn effective_blocking(&self, legacy: &BTreeSet<DesignId>) -> bool {
-        self.blocking.unwrap_or_else(|| legacy.contains(&self.id))
+        judged_blocking(self.blocking, &self.id, legacy)
     }
 
     /// What this node is made of, for coverage purposes — everything except the
@@ -416,6 +411,35 @@ pub(crate) struct NodeMaterial {
     blocking: Option<bool>,
     #[serde(default)]
     seq: u64,
+}
+
+impl NodeMaterial {
+    /// Whether the node this material describes is **effectively** blocking, at
+    /// the judgement it carried (`SL-264` sec-2, sec-3).
+    ///
+    /// The carried-map sibling of [`InquiryNode::effective_blocking`], reading the
+    /// same judgement so a `ReviewedGraph` coverage compares the act's carried
+    /// blocking membership against the run's current one without a second
+    /// expression of *which nodes block* (`RV-386` F-13).
+    pub(crate) fn effective_blocking(&self, id: &DesignId, legacy: &BTreeSet<DesignId>) -> bool {
+        judged_blocking(self.blocking, id, legacy)
+    }
+}
+
+/// The one **effective** judgement (`SL-264` sec-3): a node's own `Some(bool)`
+/// when it holds one, else its membership in the stored legacy
+/// `blocking-set-declared` set.
+///
+/// The fallback is **per node** (`RV-386` F-8): an unjudged node is blocking
+/// exactly when the set the run recorded before this attribute existed named it,
+/// so a partly-judged map keeps every unjudged blocker, and a node leaves the
+/// fallback only by being judged itself.
+///
+/// One home for the judgement, so its two readers — [`InquiryNode`] and its
+/// [`NodeMaterial`] — cannot disagree about which nodes block (`RV-386` F-13).
+/// Pure, and the legacy set is passed in.
+fn judged_blocking(judgement: Option<bool>, id: &DesignId, legacy: &BTreeSet<DesignId>) -> bool {
+    judgement.unwrap_or_else(|| legacy.contains(id))
 }
 
 /// The inquiry map: nodes plus the two acyclic edge relations over them.

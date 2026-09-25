@@ -699,8 +699,11 @@ fn growing_run() -> DesignRun {
 
     // 300 inquiries, each judged blocking where it is born. The judgements are
     // what make them *blocking* (`SL-264` sec-3): the set is derived from the
-    // nodes, not from a declared act, and the map's growth is what moves
-    // `user-accepts-sufficiency`'s coverage — the one InquiryMap-bound act.
+    // nodes, not from a declared act. The map's growth stales the graph review
+    // (`ReviewedGraph`, the ids whose effective judgement is blocking over the
+    // full set), which `reblock` below re-records — **not** `user-accepts-sufficiency`,
+    // whose `InquiryMap` coverage compares only the keys the act carried, so a pure
+    // addition does not move it (`SL-264` sec-2, *invisible*).
     let nodes: Vec<Value> = (0..300)
         .map(|index| {
             json!({
@@ -789,6 +792,13 @@ fn node(index: u32) -> String {
 /// still renders under the budgeted ceiling, every capped cause says how many it
 /// dropped, and `--full` shows the whole set — no member is lost silently
 /// (`STD-003`).
+///
+/// The run grew by **pure additions** after `user-accepts-sufficiency` was given:
+/// so it stays current (`SL-264` sec-2, *invisible*) and is not one of the
+/// over-cap causes — asserted below, because that is the narrowing this slice
+/// exists to make. The blocking additions do move the graph review, which
+/// `reblock` re-records, and `blocking-inquiries-dispositioned` still reports the
+/// 300 open blockers.
 #[test]
 fn large_run_still_renders() {
     let designed = growing_run();
@@ -801,7 +811,6 @@ fn large_run_still_renders() {
     // bound the fixture never reaches is a bound nobody proved.
     let listed = [
         "blocking-inquiries-dispositioned",
-        "user-accepts-sufficiency",
         "section-attestations-current",
         "review-disposition-attested",
     ];
@@ -817,6 +826,16 @@ fn large_run_still_renders() {
             .any(|cause| cause["omitted"].as_u64().unwrap_or(0) > 0);
         assert!(capped, "`{condition}` exceeds the cause cap: {row}");
     }
+
+    // (1b) The narrowing, pinned at e2e altitude: a pure addition does not
+    // re-face sufficiency. `cleared()`-style flips on a *covered* node are a
+    // different event and are pinned in the unit suite.
+    assert!(
+        !rows
+            .iter()
+            .any(|row| row["condition"] == json!("user-accepts-sufficiency")),
+        "sufficiency is not re-faced by pure additions: {envelope}"
+    );
 
     // (2) The rendered envelope stays under the ceiling the binary compiles.
     let rendered = designed.show(&[]);

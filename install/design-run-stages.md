@@ -49,7 +49,7 @@ edge that names it, a `cumulative` one by every edge above it as well.
 | condition | kind | binding | reach |
 | --- | --- | --- | --- |
 | `governing-context-recorded` | attested | artefact observes(governance-edges) | cumulative |
-| `initial-concerns-recorded` | attested | inquiry-map | cumulative |
+| `initial-concerns-recorded` | attested | reviewed-graph | cumulative |
 | `blocking-inquiries-dispositioned` | derived | engine(dispositions) | cumulative |
 | `user-accepts-sufficiency` | attested | inquiry-map | cumulative |
 | `drafting-readiness-attested` | attested | artefact | edge-local |

@@ -77,9 +77,15 @@ fn coverage_fault(record: RecordedAct<'_>, required: Coverage) -> Option<ActFaul
         CoveredSet::Sections(_) => Coverage::EverySection,
         CoveredSet::Nodes(_) => Coverage::InquiryMap,
     });
+    // `Nodes` is the stored shape for **two** coverages (`SL-264` sec-2):
+    // `InquiryMap` compares it over carried keys, `ReviewedGraph` over carried
+    // keys and the full blocking set. Both are the node shape, so a
+    // `Nodes`-carried record agrees with either; the fault names it `InquiryMap`,
+    // the shape's incumbent spelling.
     let agrees = match required {
         Coverage::Artefact => carried.is_none(),
-        Coverage::EverySection | Coverage::InquiryMap => carried == Some(required),
+        Coverage::EverySection => carried == Some(Coverage::EverySection),
+        Coverage::InquiryMap | Coverage::ReviewedGraph => carried == Some(Coverage::InquiryMap),
         // Carried by no act at all, so no value of a carrying shape corresponds
         // to it — including `None`, which is `Artefact`'s.
         Coverage::PerSection => false,

@@ -843,9 +843,9 @@ fn covered_in(next: &DesignSnapshot, coverage: Coverage) -> Option<CoveredSet> {
         Coverage::EverySection => Some(CoveredSet::Sections(ContentCoverage::of(
             next.sections.fingerprints(),
         ))),
-        Coverage::InquiryMap => Some(CoveredSet::Nodes(ContentCoverage::of(
-            next.map.inquiry.materials(),
-        ))),
+        Coverage::InquiryMap | Coverage::ReviewedGraph => Some(CoveredSet::Nodes(
+            ContentCoverage::of(next.map.inquiry.materials()),
+        )),
         Coverage::Artefact | Coverage::PerSection => None,
     }
 }
@@ -2038,13 +2038,17 @@ const fn outcome_label(claim: DischargeClaim) -> &'static str {
 
 /// Every recorded act still bound to the content it was given over.
 ///
-/// **Deliberately rule-free**, on exactly [`live_reviews`]' stated ground: this
-/// feeds [`invalidation_rows`], which reports the *death of a recorded act*, and
-/// an act whose material has moved is dead whatever rule currently reads it. The
-/// gate's `coverage_moved` asks the other question — does this act discharge
-/// the coverage its rule *now* names — and reads the record through that rule.
-/// Both call [`CoveredSet::moved`], so the comparison itself is single-sourced
-/// and only the framing differs.
+/// **Read through the act's rule**, so it agrees with the gate **by
+/// construction** (`SL-264` sec-2, `RV-386` F-13). This feeds
+/// [`invalidation_rows`], which reports the *death of a recorded act*; the gate's
+/// `coverage_moved` reports the same death as a `CoverageStale`. Both call
+/// [`CoveredSet::moved`] with the [`Coverage`](super::gate::Coverage) the act's
+/// rule names — looked up here from the act's kind via
+/// [`requirement_for`](super::gate::requirement_for) — so this emits
+/// [`ChangeEvent::ActInvalidated`] exactly for the act the gate calls stale, and
+/// **never** for a non-blocking addition the gate keeps current. A reader that
+/// re-derived coverage currency rule-free would report a death the gate never
+/// saw.
 ///
 /// An act carrying no covered map is `Coverage::Artefact`-bound: its own recorded
 /// content cannot move, so it is inert here and never dies of coverage — and
@@ -2067,17 +2071,33 @@ const fn outcome_label(claim: DischargeClaim) -> &'static str {
 /// not a filter that happens to drop a record (`STD-003`): the exclusion is by
 /// kind, named once, and applies to the before set and the after set alike so
 /// the difference is empty.
+///
+/// [`requirement_for`]: super::gate::requirement_for
 pub(super) fn live_acts(snapshot: &DesignSnapshot) -> BTreeSet<(ActKind, DesignId)> {
     let sections = snapshot.sections.fingerprints();
     let nodes = snapshot.map.inquiry.materials();
-    let live = |covered: Option<&CoveredSet>| {
-        covered.is_none_or(|covered| covered.moved(&sections, &nodes).is_empty())
+    let legacy = gate::legacy_blocking_set(snapshot);
+    // The rule's `Coverage`, looked up from the act's kind, is what the shared
+    // predicate compares under — so this reader and the gate's `coverage_moved`
+    // narrow together and cannot disagree about which nodes block (`RV-386`
+    // F-13). `requirement_for` is total over the non-legacy kinds, and a legacy
+    // kind is excluded before this is asked, so its `None` is unreachable here.
+    let live = |kind: ActKind, covered: Option<&CoveredSet>| {
+        let Some(covered) = covered else {
+            return true;
+        };
+        match gate::requirement_for(kind) {
+            Some(rule) => covered
+                .moved(rule.binding.coverage, &sections, &nodes, &legacy)
+                .is_empty(),
+            None => true,
+        }
     };
     snapshot
         .acts
         .acts
         .iter()
-        .filter(|held| !held.act.is_legacy() && live(held.covered.as_ref()))
+        .filter(|held| !held.act.is_legacy() && live(held.act, held.covered.as_ref()))
         .map(|held| (held.act, held.id.clone()))
         .chain(
             snapshot
@@ -2086,7 +2106,7 @@ pub(super) fn live_acts(snapshot: &DesignSnapshot) -> BTreeSet<(ActKind, DesignI
                 .iter()
                 .filter(|held| {
                     let kind = ActKind::from(held.act.kind());
-                    !kind.is_legacy() && live(held.covered.as_ref())
+                    !kind.is_legacy() && live(kind, held.covered.as_ref())
                 })
                 .map(|held| (ActKind::from(held.act.kind()), held.id.clone())),
         )

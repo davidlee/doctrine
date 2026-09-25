@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-use super::gate::ObservedFact;
+use super::gate::{Coverage, ObservedFact};
 use super::ids::{DesignId, Fingerprint};
 use super::inquiry::NodeMaterial;
 
@@ -471,6 +471,23 @@ impl<T: Eq> ContentCoverage<T> {
     pub(crate) fn is_current(&self, current: &BTreeMap<DesignId, T>) -> bool {
         self.diff(current).is_empty()
     }
+
+    /// The subjects this coverage **carried** that have since moved or left — a
+    /// key the coverage never held is not a change to what it covered (`SL-264`
+    /// sec-2).
+    ///
+    /// The narrowed sibling of [`ContentCoverage::diff`]: the same comparison,
+    /// walked over the keys the coverage carried rather than the union. `diff`
+    /// keeps the union walk for the whole-map `is_current` users — the integrated
+    /// review and lock acceptance — which must notice a joiner; an attested row
+    /// that only ever bound its own keys must not.
+    pub(crate) fn moved_among_carried(&self, current: &BTreeMap<DesignId, T>) -> Vec<DesignId> {
+        self.covered
+            .keys()
+            .filter(|subject| self.covered.get(*subject) != current.get(*subject))
+            .cloned()
+            .collect()
+    }
 }
 
 /// A canonical `RV` id, as the run records it (SL-244 `sec-4`).
@@ -554,26 +571,106 @@ pub(crate) enum CoveredSet {
 }
 
 impl CoveredSet {
-    /// The subjects this set no longer matches, compared in its own shape.
+    /// The subjects this set no longer matches, under the [`Coverage`] its act's
+    /// rule names (`SL-264` sec-2).
     ///
-    /// Shape-safe by construction: each arm compares against the current map its
-    /// own variant was built from, so no caller can hand a section set to the
-    /// node comparison. Both readers of coverage currency go through here — the
-    /// gate's rule-driven `coverage_moved` and the change log's rule-free
-    /// [`live_acts`] — so the two frame the question differently and cannot
-    /// disagree about the answer.
+    /// **The narrowing lives here** (`RV-386` F-13). Both readers of coverage
+    /// currency go through this one predicate — the gate's `coverage_moved` and
+    /// the change log's [`live_acts`] — each under the act's rule `Coverage`, so
+    /// they frame the question differently and cannot disagree about the answer.
+    /// The `Coverage` is the rule's, looked up from the act's kind; `self` is the
+    /// shape the act stored, so a caller that hands the wrong shape to the named
+    /// coverage gets a fail-closed answer — every current subject of that
+    /// coverage — rather than a comparison in the wrong map.
+    ///
+    /// - [`Coverage::InquiryMap`] compares carried-keys material: a covered node
+    ///   whose material moved — or left — is stale, an uncovered node is not.
+    /// - [`Coverage::ReviewedGraph`] adds the **full-set** blocking comparison, so
+    ///   a node judged blocking after the act reaches the user whatever its
+    ///   lifecycle (`RV-386` F-6, F-15).
+    /// - [`Coverage::EverySection`] keeps the union walk through
+    ///   [`ContentCoverage::diff`] — a departing or joining section is a
+    ///   difference the acceptance was not given over.
     ///
     /// [`live_acts`]: super::run::live_acts
     pub(crate) fn moved(
         &self,
+        coverage: Coverage,
         sections: &BTreeMap<DesignId, Fingerprint>,
         nodes: &BTreeMap<DesignId, NodeMaterial>,
+        legacy: &BTreeSet<DesignId>,
     ) -> Vec<DesignId> {
-        match self {
-            CoveredSet::Sections(covered) => covered.diff(sections),
-            CoveredSet::Nodes(covered) => covered.diff(nodes),
+        match coverage {
+            // Inert by construction: the act's own recorded content cannot move,
+            // so a row bound this way is invalidated only by its observed
+            // conjunct — which is `governing-context-recorded`'s whole mechanism.
+            Coverage::Artefact => Vec::new(),
+            Coverage::EverySection => match self {
+                CoveredSet::Sections(covered) => covered.diff(sections),
+                CoveredSet::Nodes(_) => sections.keys().cloned().collect(),
+            },
+            Coverage::InquiryMap | Coverage::ReviewedGraph => match self {
+                CoveredSet::Nodes(covered) => {
+                    if coverage == Coverage::ReviewedGraph {
+                        covered.reviewed_graph_moved(nodes, legacy)
+                    } else {
+                        covered.moved_among_carried(nodes)
+                    }
+                }
+                CoveredSet::Sections(_) => nodes.keys().cloned().collect(),
+            },
+            // Carried by no act: the derivation quantifies over the section set
+            // instead, above. A record reaching here accounts for none of it.
+            Coverage::PerSection => sections.keys().cloned().collect(),
         }
     }
+}
+
+impl ContentCoverage<NodeMaterial> {
+    /// The ids an act's carried node coverage no longer matches under
+    /// [`Coverage::ReviewedGraph`] (`SL-264` sec-2): carried-keys material, **and**
+    /// the full-set blocking comparison.
+    ///
+    /// The blocking set is compared in full, **whatever each node's lifecycle**,
+    /// so a blocker added after the act reaches the user even once it is resolved
+    /// before the next edge (`RV-386` F-15) — while lifecycle never enters the
+    /// material, so resolving a covered blocker is not a change.
+    fn reviewed_graph_moved(
+        &self,
+        nodes: &BTreeMap<DesignId, NodeMaterial>,
+        legacy: &BTreeSet<DesignId>,
+    ) -> Vec<DesignId> {
+        let mut moved = self.moved_among_carried(nodes);
+        moved.extend(
+            blocking_marks(&self.covered, legacy)
+                .symmetric_difference(&blocking_marks(nodes, legacy))
+                .map(|id| (*id).clone()),
+        );
+        moved.sort_unstable();
+        moved.dedup();
+        moved
+    }
+}
+
+/// The ids in `materials` whose node is **effectively** blocking (`SL-264`
+/// sec-3).
+///
+/// Read over **both** sides of a [`Coverage::ReviewedGraph`] comparison — the
+/// act's carried covered map and the run's current full map — so a key absent
+/// from the carried map reads as not blocking and a *new* blocking node is the
+/// only thing an addition contributes. The judgement is
+/// [`NodeMaterial::effective_blocking`], the same one the gate's
+/// `blocking_inquiries_open` reads, so the coverage and the gate cannot disagree
+/// about which nodes block (`RV-386` F-13).
+fn blocking_marks<'a>(
+    materials: &'a BTreeMap<DesignId, NodeMaterial>,
+    legacy: &BTreeSet<DesignId>,
+) -> BTreeSet<&'a DesignId> {
+    materials
+        .iter()
+        .filter(|(id, material)| material.effective_blocking(id, legacy))
+        .map(|(id, _)| id)
+        .collect()
 }
 
 /// DEC-125's two arms, given a home. Admissibility is DEC-138's, checked at

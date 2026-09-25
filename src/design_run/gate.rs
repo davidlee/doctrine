@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 
 use super::Stage;
 use super::attestation::{
-    ActKind, ActorClass, AgentAct, AgentActKind, CoveredSet, DisposedPass, RecordedAct,
-    ReviewDisposition, ReviewPolicy, ReviewRef,
+    ActKind, ActorClass, AgentAct, AgentActKind, DisposedPass, RecordedAct, ReviewDisposition,
+    ReviewPolicy, ReviewRef,
 };
 use super::bounds::DESIGN_ID_BYTES;
 use super::ids::{DesignId, Fingerprint};
@@ -96,8 +96,22 @@ pub(crate) enum Coverage {
     /// invalidates.
     EverySection,
     /// The act carries a covered map that must equal every inquiry node's
-    /// current canonical material.
+    /// current canonical material, **over the keys it carried** — a node added
+    /// after the act is not a change to what it covered (`SL-264` sec-2).
     InquiryMap,
+    /// The act carries the same node materials as [`Coverage::InquiryMap`], over
+    /// the keys it carried, **and** the ids whose *effective* judgement is
+    /// blocking (`SL-264` sec-3) are compared over the **full** set, whatever
+    /// their lifecycle.
+    ///
+    /// The second conjunct is what keeps a question the agent judges blocking
+    /// visible to the human the moment it is added: a new blocking node changes
+    /// the marks, so the act that reviewed the graph goes stale and the user is
+    /// re-faced — while a new *non*-blocking node leaves the marks unchanged and
+    /// re-faces nobody (`SL-264` sec-2, `RV-386` F-6). Lifecycle is excluded, so
+    /// resolving a covered blocker is progress rather than a change to what was
+    /// seen (`RV-386` F-15).
+    ReviewedGraph,
     /// Quantified over subjects instead of carried by the act: every current
     /// section must have its OWN live act of the required kind, one per resolved
     /// lane, against that section's current digest.
@@ -122,6 +136,7 @@ impl Coverage {
             Coverage::Artefact => "artefact",
             Coverage::EverySection => "every-section",
             Coverage::InquiryMap => "inquiry-map",
+            Coverage::ReviewedGraph => "reviewed-graph",
             Coverage::PerSection => "per-section",
         }
     }
@@ -584,6 +599,12 @@ condition_vocabulary! {
         /// digest is still read through [`Cause::ConfirmationStale`] rather than
         /// through this row (`SL-264` sec-3, *retired from writing, kept for
         /// reading*). DEC-121's two actors survive; its two acts do not.
+        ///
+        /// `ReviewedGraph`, not `InquiryMap`: the review binds the carried node
+        /// materials **and** the full blocking set, so a question the agent
+        /// judges blocking reaches the user at the edge that adds it, while an
+        /// addition the agent leaves unblocking re-faces no one (`SL-264`
+        /// sec-2, `RV-386` F-6).
         InitialConcernsRecorded = "initial-concerns-recorded" => Contract {
             derivation: DerivationRule::Attested(AttestationRule {
                 acts: &[ActRequirement {
@@ -593,7 +614,7 @@ condition_vocabulary! {
                     disposes_review: false,
                 }],
                 binding: Binding {
-                    coverage: Coverage::InquiryMap,
+                    coverage: Coverage::ReviewedGraph,
                     observed: &[],
                 },
             }),
@@ -1599,41 +1620,37 @@ fn live_act(run: &DesignSnapshot, act: ActKind) -> Option<RecordedAct<'_>> {
 /// The subjects a live act's coverage no longer matches, in the shape its rule
 /// names.
 ///
-/// A map of the wrong shape — or none where one is required — covers **nothing**,
-/// so every current subject has moved. That is not a defensive branch: admission
-/// refuses a mismatched shape on write, so the only route here is a rule that
-/// changed under a stored act, and reading the record through the rule is exactly
-/// how the design retires one.
+/// **Read through [`CoveredSet::moved`]** (`SL-264` sec-2, `RV-386` F-13): the
+/// narrowing that `ReviewedGraph` adds and `InquiryMap` narrows lives in the
+/// shared predicate, so this arm and the change log's [`live_acts`](super::run::live_acts)
+/// — which reads the same predicate under the same rule `Coverage` — cannot
+/// disagree about which nodes block. What remains here is the one case the
+/// predicate cannot express — an act carrying **no** covered map where its rule
+/// names one, which is every current subject of that coverage.
+///
+/// A map of the wrong shape is [`CoveredSet::moved`]'s to fail closed: admission
+/// refuses a mismatched shape on write, so the only route is a rule that changed
+/// under a stored act, and reading the record through the rule is exactly how the
+/// design retires one.
 fn coverage_moved(
     coverage: Coverage,
     record: RecordedAct<'_>,
     run: &DesignSnapshot,
 ) -> Vec<DesignId> {
-    let carried = record.covered();
-    match coverage {
+    let sections = run.sections.fingerprints();
+    let nodes = run.map.inquiry.materials();
+    let legacy = legacy_blocking_set(run);
+    let Some(carried) = record.covered() else {
         // Inert by construction: the act's own recorded content cannot move, so a
         // row bound this way is invalidated only by its observed conjunct — which
         // is `governing-context-recorded`'s whole mechanism.
-        Coverage::Artefact => Vec::new(),
-        Coverage::EverySection => {
-            let current = run.sections.fingerprints();
-            match carried {
-                Some(CoveredSet::Sections(covered)) => covered.diff(&current),
-                _ => current.into_keys().collect(),
-            }
-        }
-        Coverage::InquiryMap => {
-            let current = run.map.inquiry.materials();
-            match carried {
-                Some(CoveredSet::Nodes(covered)) => covered.diff(&current),
-                _ => current.into_keys().collect(),
-            }
-        }
-        // Carried by no act: the derivation quantifies over the section set
-        // instead, above. An act reaching here under a changed rule covers nothing
-        // that rule now names, which is every section it quantifies over.
-        Coverage::PerSection => run.sections.fingerprints().into_keys().collect(),
-    }
+        return match coverage {
+            Coverage::Artefact => Vec::new(),
+            Coverage::EverySection | Coverage::PerSection => sections.into_keys().collect(),
+            Coverage::InquiryMap | Coverage::ReviewedGraph => nodes.into_keys().collect(),
+        };
+    };
+    carried.moved(coverage, &sections, &nodes, &legacy)
 }
 
 /// What a carried disposition must still be, at this crossing.

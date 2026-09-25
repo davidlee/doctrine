@@ -1415,7 +1415,7 @@ fn the_contract_table_classifies_every_condition_as_the_design_says() {
         .1;
     assert_eq!(concerns.acts.len(), 1);
     assert_eq!(concerns.acts[0].act, ActKind::GraphReviewed);
-    assert_eq!(concerns.binding.coverage, Coverage::InquiryMap);
+    assert_eq!(concerns.binding.coverage, Coverage::ReviewedGraph);
 }
 
 /// The remedy is rendered from the rule, and the one row with two ways through
@@ -2465,32 +2465,84 @@ fn missing_conjunct_names_the_missing_act() {
     );
 }
 
-/// `VT-1` — a review given over a map that has since moved, beside a declaration
-/// that has not.
+/// Re-cover `act`'s carried map over the map the run holds **now** — the run
+/// re-reviews, so the act covers the node the criterion is about. The acts in
+/// the fixture are all recorded over the map as it stood then, which is what a
+/// real `graph-reviewed` is too.
+fn recovers_over_current_map(run: &mut DesignSnapshot, act: ActKind) {
+    let materials = ContentCoverage::of(run.map.inquiry.materials());
+    let held = run
+        .acts
+        .acts
+        .iter_mut()
+        .find(|held| held.act == act)
+        .expect("the fixture records an act of this kind");
+    held.covered = Some(CoveredSet::Nodes(materials));
+}
+
+/// Resolve `node` in the map, as a `declare` carrying a disposition would.
+fn resolves(run: &mut DesignSnapshot, node: &DesignId) {
+    let held = run
+        .map
+        .inquiry
+        .nodes()
+        .find(|held| held.id() == node)
+        .expect("the fixture holds the node")
+        .clone();
+    run.map
+        .inquiry
+        .insert(held.resolve(Disposition::Created {
+            record: "DEC-140".to_owned(),
+        }))
+        .expect("resolving closes no cycle");
+}
+
+/// `VT-1` (plan) — a **non-blocking** node added after the review stales neither
+/// attested row.
 ///
-/// The pair is what makes this a test rather than two: the agent re-declares over
-/// the new map, so the only stale half is the user's review of it. A scan for
-/// *someone claimed this* would have found the current declaration and stopped.
+/// The narrowing's whole point (`SL-264` sec-2, `RV-386` F-6): a key the act
+/// never covered cannot be a change to what it covered. Replaces
+/// `stale_conjunct_does_not_satisfy` (`SL-264` VT-3), which was green at PHASE-04
+/// entry and asserted the union behaviour this removes — the joiner voided both
+/// rows and re-faced the human gates `DEC-062` says ordinary map maintenance does
+/// not require.
 #[test]
-fn stale_conjunct_does_not_satisfy() {
+fn adding_a_non_blocking_node_does_not_stale_the_attested_rows() {
+    let (mut run, derived) = cleared();
+    run.map
+        .inquiry
+        .insert(InquiryNode::open(
+            id("inq-3"),
+            "a question the review did not see",
+            Provenance::AgentProposed,
+            Some(false),
+        ))
+        .expect("a fresh node closes no cycle");
+
+    assert_holds(Condition::InitialConcernsRecorded, &run, &derived);
+    assert_holds(Condition::UserAcceptsSufficiency, &run, &derived);
+}
+
+/// `VT-1` (plan) — a **blocking** node added after the review stales the graph
+/// review, and only it.
+///
+/// The user is re-faced because the set the review binds changed, not because the
+/// map grew (`SL-264` sec-2). `user-accepts-sufficiency` stays current: a new
+/// blocking question is `initial-concerns-recorded`'s event, and re-asking *has
+/// enough been asked* would re-face the same person twice (`OQ-3`).
+#[test]
+fn adding_a_blocking_node_stales_the_graph_review() {
     let (mut run, derived) = cleared();
     let late = id("inq-3");
     run.map
         .inquiry
         .insert(InquiryNode::open(
             late.clone(),
-            "what did the graph review not see?",
+            "a question that holds the stage",
             Provenance::AgentProposed,
-            Some(false),
+            Some(true),
         ))
         .expect("a fresh node closes no cycle");
-    // Re-declared over the new map, with the same blocking set — so the claim
-    // digest, and with it the confirmation link, does not move.
-    let mut redeclared = blocking_set_declared("agd-blocking", &[BLOCKING_NODE]);
-    redeclared.covered = Some(CoveredSet::Nodes(ContentCoverage::of(
-        run.map.inquiry.materials(),
-    )));
-    run.declarations.record(redeclared);
 
     assert_eq!(
         causes_of(Condition::InitialConcernsRecorded, &run, &derived),
@@ -2499,6 +2551,249 @@ fn stale_conjunct_does_not_satisfy() {
             moved: vec![late],
         }]
     );
+    assert_holds(Condition::UserAcceptsSufficiency, &run, &derived);
+}
+
+/// `VT-1` (plan) — a flip on a **covered** node is different in kind and stales
+/// **both** attested rows.
+///
+/// The judgement is a member of `NodeMaterial` (`SL-264` sec-3), so flipping it on
+/// a node the act covered changes content each act was given over: the graph
+/// review's carried material and sufficiency's both move. This is the case a
+/// blanket *sufficiency follows additions only* reading would swallow — sufficiency
+/// does not take the blocking **set** projection, but it does see a covered flip,
+/// because a flip is a material change (`SL-264` sec-2, *what still re-faces the
+/// human*).
+#[test]
+fn a_covered_flip_stales_both_attested_rows() {
+    let (run, derived) = cleared();
+    let flipped = declare_over(&run, r#"{"subject": "inq-2", "blocking": true}"#)
+        .expect("a flip on a covered node applies");
+
+    assert_eq!(
+        causes_of(
+            Condition::InitialConcernsRecorded,
+            &flipped.snapshot,
+            &derived
+        ),
+        vec![Cause::CoverageStale {
+            act: ActKind::GraphReviewed,
+            moved: vec![id(OPEN_NODE)],
+        }]
+    );
+    assert_eq!(
+        causes_of(
+            Condition::UserAcceptsSufficiency,
+            &flipped.snapshot,
+            &derived
+        ),
+        vec![Cause::CoverageStale {
+            act: ActKind::SufficiencyAccepted,
+            moved: vec![id(OPEN_NODE)],
+        }]
+    );
+}
+
+/// `VT-2` (plan) — resolving a **covered** blocker leaves the graph review
+/// current (`RV-386` F-15).
+///
+/// Lifecycle is not shape: `NodeMaterial` excludes it on purpose, so answering a
+/// question is progress *through* the graph, not a change *to* it. The node is
+/// blocking and covered; resolving it moves neither the material nor the blocking
+/// marks.
+#[test]
+fn resolving_a_covered_blocker_leaves_the_graph_review_current() {
+    let (mut run, derived) = cleared();
+    let blocker = id("inq-3");
+    run.map
+        .inquiry
+        .insert(InquiryNode::open(
+            blocker.clone(),
+            "a blocker the review saw",
+            Provenance::AgentProposed,
+            Some(true),
+        ))
+        .expect("a fresh node closes no cycle");
+    recovers_over_current_map(&mut run, ActKind::GraphReviewed);
+    assert_holds(Condition::InitialConcernsRecorded, &run, &derived);
+
+    resolves(&mut run, &blocker);
+    assert_holds(Condition::InitialConcernsRecorded, &run, &derived);
+}
+
+/// `VT-2` (plan) — a blocker added after the act and resolved before the next
+/// edge is **still** stale (`RV-386` F-15).
+///
+/// The reversal the design calls out: the review never saw the node, and its
+/// resolution does not restore the set the review *was* given. Reading only open
+/// blockers — filtering resolved nodes out of the comparison — would quietly
+/// revive the act here, which is a silent lie about what the user was shown.
+#[test]
+fn adding_then_resolving_a_blocker_leaves_it_stale() {
+    let (mut run, derived) = cleared();
+    let late = id("inq-3");
+    run.map
+        .inquiry
+        .insert(InquiryNode::open(
+            late.clone(),
+            "a blocker raised after the review",
+            Provenance::AgentProposed,
+            Some(true),
+        ))
+        .expect("a fresh node closes no cycle");
+    resolves(&mut run, &late);
+
+    assert_eq!(
+        causes_of(Condition::InitialConcernsRecorded, &run, &derived),
+        vec![Cause::CoverageStale {
+            act: ActKind::GraphReviewed,
+            moved: vec![late],
+        }]
+    );
+}
+
+/// `VT-3` (plan) — a move re-faces for a **covered** node only (`F-1`'s scoping).
+///
+/// Re-parenting a node the review covered changes content the user saw, so the
+/// review is stale. Re-parenting a node added *after* the review does not: the act
+/// was never shown that node, so its later shape is not a change to what the act
+/// covered — the deliberate narrowing `RV-386` F-1 pins as behaviour.
+#[test]
+fn a_move_re_faces_for_a_covered_node_only() {
+    let (mut run, derived) = cleared();
+    let held = run
+        .map
+        .inquiry
+        .nodes()
+        .find(|node| node.id() == &id(OPEN_NODE))
+        .expect("the fixture holds the node")
+        .clone();
+    run.map
+        .inquiry
+        .insert(held.with_parent(id(BLOCKING_NODE)))
+        .expect("the fixture's nodes are acyclic");
+    assert_eq!(
+        causes_of(Condition::InitialConcernsRecorded, &run, &derived),
+        vec![Cause::CoverageStale {
+            act: ActKind::GraphReviewed,
+            moved: vec![id(OPEN_NODE)],
+        }],
+        "a covered move re-faces"
+    );
+
+    let (mut run, derived) = cleared();
+    let late = id("inq-3");
+    run.map
+        .inquiry
+        .insert(InquiryNode::open(
+            late.clone(),
+            "a node the review never saw",
+            Provenance::AgentProposed,
+            Some(false),
+        ))
+        .expect("a fresh node closes no cycle");
+    let held = run
+        .map
+        .inquiry
+        .nodes()
+        .find(|node| node.id() == &late)
+        .expect("the node was just added")
+        .clone();
+    run.map
+        .inquiry
+        .insert(held.with_parent(id(OPEN_NODE)))
+        .expect("re-parenting closes no cycle");
+    assert_holds(Condition::InitialConcernsRecorded, &run, &derived);
+}
+
+/// `VT-5` (plan) — the change log agrees with the gate on every case (`RV-386`
+/// F-13).
+///
+/// The change log's `live_acts` and the gate's `coverage_moved` both read coverage
+/// currency through `CoveredSet::moved` with the act's rule `Coverage`, so an
+/// `ActInvalidated` row for the user's `graph-reviewed` appears **exactly** when
+/// the gate calls it stale — never for a non-blocking addition the gate keeps
+/// current, and always for the blocking one. A reader that re-derived currency
+/// rule-free, or walked the union, would disagree with the gate here.
+#[test]
+fn the_change_log_agrees_with_the_gate_on_every_case() {
+    let agrees = |json: &str| {
+        let (run, derived) = cleared();
+        let applied = declare_over(&run, json).expect("the declaration applies");
+        let staled = satisfied(
+            Condition::InitialConcernsRecorded,
+            &applied.snapshot,
+            &derived.gate,
+        )
+        .is_err();
+        let reported = subjects(&applied, ChangeEvent::ActInvalidated).contains(&id("cpa-graph"));
+        assert_eq!(
+            staled, reported,
+            "the gate says stale={staled}; the change log reports the graph review \
+             dead={reported} for {json}"
+        );
+        staled
+    };
+
+    assert!(
+        !agrees(
+            r#"{"subject": "inq-3", "question": "a question the review did not see", "blocking": false}"#
+        ),
+        "a non-blocking addition leaves both rows current and reports nothing"
+    );
+    assert!(
+        agrees(
+            r#"{"subject": "inq-3", "question": "a question that holds the stage", "blocking": true}"#
+        ),
+        "a new blocking node stales the review and is reported dead"
+    );
+    assert!(
+        agrees(r#"{"subject": "inq-2", "question": "a re-worded question"}"#),
+        "a material move on a covered node stales the review and is reported dead"
+    );
+}
+
+/// `VT-1`/`VT-2` (plan) — the carried-keys projection keeps the **leaver** arm,
+/// for both coverages (`SL-264` sec-2).
+///
+/// The narrowing drops only the *joiner* from `ContentCoverage::diff`'s three
+/// cases; a covered node that left is as much a change to what the act was given
+/// over as one that moved. Exercised at the predicate every reader shares, since
+/// removal is not a run event the map exposes — and over both `InquiryMap` and
+/// `ReviewedGraph`, because the blocking projection is additive, not a
+/// replacement.
+#[test]
+fn a_carried_node_that_leaves_is_still_stale() {
+    let map = |raws: &[&str]| {
+        map_of(
+            raws.iter()
+                .map(|raw| {
+                    InquiryNode::open(
+                        id(raw),
+                        format!("question {raw}"),
+                        Provenance::AgentProposed,
+                        Some(false),
+                    )
+                })
+                .collect(),
+        )
+    };
+    let held = map(&["inq-1", "inq-2"]);
+    let covered = CoveredSet::Nodes(ContentCoverage::of(held.materials()));
+    let after = map(&["inq-2"]);
+
+    for coverage in [Coverage::InquiryMap, Coverage::ReviewedGraph] {
+        assert_eq!(
+            covered.moved(
+                coverage,
+                &BTreeMap::new(),
+                &after.materials(),
+                &BTreeSet::new(),
+            ),
+            vec![id("inq-1")],
+            "a carried node that left is stale under {coverage:?}"
+        );
+    }
 }
 
 /// `VT-2` — a departing section is a failure for one coverage and not the other,
@@ -3065,13 +3360,15 @@ fn submitted_legacy_act_is_refused_and_the_stored_set_unchanged() {
 /// after set alike, so the set difference is empty and nothing reports an act
 /// dead whose currency nothing reads (`RV-386` F-17, `STD-003`). The control is
 /// the user's `graph-reviewed`, which IS currency-read and does die when the map
-/// moves: the exclusion discriminates by kind, not by coverage.
+/// moves: the exclusion discriminates by kind, not by coverage. The edit adds a
+/// **blocking** node, because after the sweep a non-blocking addition is no longer
+/// a move the graph review sees (`SL-264` sec-2, `RV-386` F-6).
 #[test]
 fn a_map_edit_emits_no_row_for_a_legacy_act() {
     let (run, _derived) = cleared();
     let edit = declare_over(
         &run,
-        r#"{"subject": "inq-3", "question": "what did the review not see?", "blocking": false}"#,
+        r#"{"subject": "inq-3", "question": "what did the review not see?", "blocking": true}"#,
     )
     .expect("a new node with a judgement applies");
 
@@ -5345,7 +5642,13 @@ fn adopt_invalidates_evidence_on_changed_sections_only() {
     );
     // One act covering BOTH sections, and one attestation per section. The act's
     // coverage moved with sec-1, so it dies; `att-2` covered content that did not.
-    let mut act = checkpoint_act("cpa-1", ActKind::SectionReviewed, "both sections were read");
+    // A whole-map act (`user-acceptance-attested`'s `EverySection` shape) rather
+    // than a `section-reviewed` checkpoint, because the change log now reads an
+    // act's currency through its **rule's** `Coverage` (`SL-264` sec-2):
+    // `section-reviewed`'s rule is `PerSection`, carried by no act, so a
+    // checkpoint of that kind carrying a section map is a shape admission refuses
+    // and nothing about which a currency can be read.
+    let mut act = checkpoint_act("cpa-1", ActKind::DesignAccepted, "both sections were read");
     act.covered = Some(CoveredSet::Sections(ContentCoverage::of(
         prior.sections.fingerprints(),
     )));
@@ -5808,14 +6111,24 @@ fn a_blocking_flip_moves_the_carried_material() {
     let covered = carried(&before);
     assert!(
         covered
-            .moved(&BTreeMap::new(), &before.materials())
+            .moved(
+                Coverage::InquiryMap,
+                &BTreeMap::new(),
+                &before.materials(),
+                &BTreeSet::new(),
+            )
             .is_empty(),
         "nothing moved while nothing moved"
     );
 
     let flipped = map_of(vec![judged(Some(true))]);
     assert_eq!(
-        covered.moved(&BTreeMap::new(), &flipped.materials()),
+        covered.moved(
+            Coverage::InquiryMap,
+            &BTreeMap::new(),
+            &flipped.materials(),
+            &BTreeSet::new(),
+        ),
         vec![id("inq-1")],
         "a flipped judgement is a change to what the node is made of"
     );
@@ -5825,7 +6138,12 @@ fn a_blocking_flip_moves_the_carried_material() {
     })]);
     assert!(
         covered
-            .moved(&BTreeMap::new(), &answered.materials())
+            .moved(
+                Coverage::InquiryMap,
+                &BTreeMap::new(),
+                &answered.materials(),
+                &BTreeSet::new(),
+            )
             .is_empty(),
         "and answering the question is still progress through the graph, not a \
          change to it"
