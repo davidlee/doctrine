@@ -1,5 +1,17 @@
 # ISS-483: reserve VT-3 test is not env-isolated: the jail's DOCTRINE_RESERVATION_FALLBACK=1 turns check gate red
 
+**Correction (2026-09-25, same day).** The ambient trigger was removed by the
+operator: `flake.nix` no longer exports `DOCTRINE_RESERVATION_FALLBACK` (commit
+`67df42ec8`). In this repo the variable was never load-bearing anyway — the
+committed `.doctrine/doctrine.toml` sets `[reservation] reach = "local"` with
+`allow-local-fallback = true`, so id-reserving verbs never contact a remote;
+probed by creating a backlog item with the variable unset (succeeded). The gate
+is therefore green in a fresh jail. **What remains** is the hermeticity defect
+below: the suite reddens whenever the variable *is* set, and that variable is the
+documented opt-in for `auto` plus a configured-but-unreachable remote. Impact is
+downgraded from "red for every jailed agent" to "red for an operator who sets
+the opt-in".
+
 Observed while auditing SL-265 (`doctrine check gate` on the admitted candidate
 surface, 2026-09-25): the suite is 4608 passed / 1 failed. The sole failure is
 `reserve::tests::vt3_auto_degradation_is_fail_closed_with_explicit_optin`,

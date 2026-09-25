@@ -126,7 +126,9 @@ Standing risks and accepted tradeoffs:
 ### Not reconcile's — owners already exist
 
 - **`F-4`** → `ISS-483` (backlog issue; reserve-suite env isolation). Nothing to
-  write here.
+  write here — and see the post-audit correction below: the ambient trigger has
+  since been removed, so the gate reads green and only the hermeticity defect
+  remains.
 - **`F-2`** → aligned; no write owed.
 - **`CHR-078`** already owns the out-of-scope guidance sweep (canon/walkthrough
   skills, `authority-model.md`, shipped memories).
@@ -139,3 +141,21 @@ Standing risks and accepted tradeoffs:
 - Observations already recorded this session: `01a0d851…` (coord-teardown phantom
   staged deletion), `01a0d84a…` (`coverage record` never populates
   `touched_paths`).
+
+## Post-audit Correction (operator action, 2026-09-25)
+
+`F-4` was raised on a live ambient condition — the jail exporting
+`DOCTRINE_RESERVATION_FALLBACK=1`. The operator has since removed that export from
+`flake.nix` (`67df42ec8`), and it was never load-bearing: the committed
+`.doctrine/doctrine.toml` reserves locally (`[reservation] reach = "local"`,
+`allow-local-fallback = true`), verified by running an id-reserving verb with the
+variable unset. Effect on this ledger (the findings are append-only and stay as
+raised — this is the record of what changed after):
+
+- `F-4`'s observed failure no longer reproduces; a fresh-jail `doctrine check
+  gate` is green. The disposition stands (`follow-up` → `ISS-483`), whose scope is
+  now the suite's hermeticity alone, not a red gate.
+- Nothing else in the brief moves: `F-1`/`F-3` (reconcile) and the `REQ-482`
+  `pending → active` REV are unaffected.
+- Close-time bookkeeping stands (regenerate the primary's boot snapshot after
+  landing).

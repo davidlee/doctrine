@@ -244,10 +244,14 @@ fresh-as-of: 2026-09-25 · audit (RV-387) · d9e2a9a2b
   evidence; running `doctrine boot` then `doctrine boot --check` in the candidate
   worktree reconstructs it (clean, guardrail carries `doctrine show <REF>`).
 - **The `reserve` VT-3 failure is ambient-env leakage, not a slice defect.** The
-  jail exports `DOCTRINE_RESERVATION_FALLBACK=1`; the test asserts fail-closed
-  *without* opt-in, so `check gate` is red in the jail (`src/reserve.rs` is
+  jail exported `DOCTRINE_RESERVATION_FALLBACK=1`; the test asserts fail-closed
+  *without* opt-in, so `check gate` was red in the jail (`src/reserve.rs` is
   untouched `main..edge`; `reserve::tests` is 19/19 green with the var unset).
-  `ISS-483`.
+  The operator removed the export from `flake.nix` (`67df42ec8`) the same day, so
+  the ambient trigger is gone; the residual is test hermeticity. Repository
+  config (`.doctrine/doctrine.toml`: `[reservation] reach = "local"` +
+  `allow-local-fallback = true`) means id-reserving verbs never contacted a
+  remote — the removed variable was never load-bearing here. `ISS-483`.
 
 ### Open
 
@@ -257,6 +261,8 @@ fresh-as-of: 2026-09-25 · audit (RV-387) · d9e2a9a2b
   `REQ-482` `pending → active` by a `REV` carrying a `status` row (SL-256
   `REV-055` precedent). The slice advances `audit → reconcile`; `verify-vt 265` is
   14/14 PASS on the admitted candidate; `REV-062` is `done`.
-- `ISS-483` — reserve-suite env isolation (`F-4`); out of this slice.
+- `ISS-483` — reserve-suite env isolation (`F-4`); out of this slice. The
+  ambient trigger was removed from `flake.nix`; what stays open is the suite's
+  hermeticity (it reddens if the documented opt-in is set).
 - Close-time: regenerate the primary's `.doctrine/state/boot.md` after the code
   lands and the primary binary is rebuilt (runtime state — an act, not a diff).
