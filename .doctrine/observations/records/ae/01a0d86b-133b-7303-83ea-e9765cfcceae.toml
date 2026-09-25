@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d86b-133b-7303-83ea-e9765cfcceae"
+recorded_at = "2026-09-25T11:54:51.067586703Z"
+kind = "friction"
+summary = "dispatch status prescribes 'refresh-base then re-prepare' for a slice that is already closed"
+detail = "After a dispatched slice reached 'done' and its code landed on trunk, 'doctrine dispatch status --slice 265' still ends with: next: trunk advanced past the prepared base — run 'dispatch refresh-base --slice 265' then re-prepare. Both acts are pointless (and refresh-base needs a live coordination worktree, already removed): the funnel is complete and the slice is closed. 'dispatch next' correctly reports all-reaped, so the two verbs disagree about what a finished slice should hear. Skill: close. Consequence: a next agent reading the funnel rollup is invited to re-prepare reviewable refs for a done slice."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
