@@ -1175,29 +1175,20 @@ fn blockers(run: &DesignSnapshot, detail: Detail) -> (Vec<BlockerEntry>, usize) 
     let entries = ranked
         .into_iter()
         .take(cap)
-        .filter_map(|(degree, _, id)| {
-            let node = map.get(&id)?;
-            let unsettled: Vec<String> = node
-                .needs()
-                .iter()
-                .filter(|need| {
-                    map.get(need).is_some_and(|target| {
-                        matches!(
-                            target.lifecycle(),
-                            InquiryLifecycle::Open | InquiryLifecycle::Deferred
-                        )
-                    })
-                })
-                .map(DesignId::to_string)
-                .collect();
-            Some(BlockerEntry {
-                id: id.to_string(),
-                reason: elide(
-                    &format!("needs {}", unsettled.join(", ")),
-                    detail.prose(ENVELOPE_REASON_BYTES),
+        .map(|(degree, _, id)| BlockerEntry {
+            id: id.to_string(),
+            reason: elide(
+                &format!(
+                    "needs {}",
+                    map.unsettled_needs(&id)
+                        .into_iter()
+                        .map(DesignId::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ),
-                needs_in_degree: degree.0,
-            })
+                detail.prose(ENVELOPE_REASON_BYTES),
+            ),
+            needs_in_degree: degree.0,
         })
         .collect();
     (entries, omitted)
