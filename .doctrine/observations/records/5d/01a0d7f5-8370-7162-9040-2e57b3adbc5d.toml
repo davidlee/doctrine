@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d7f5-8370-7162-9040-2e57b3adbc5d"
+recorded_at = "2026-09-25T09:46:26.544780231Z"
+kind = "friction"
+summary = "Review/design: the doctrine MCP server went unavailable mid-session during a review-disposition batch"
+detail = """Eight earlier MCP calls in this same session succeeded (memory record/edit). The nine-call disposition batch then returned server_backoff for every call ('Server "doctrine" not available (last failed 0s ago)'). .mcp.json launches the server via ${DOCTRINE_BIN:-doctrine}, and DOCTRINE_BIN points at the coord tree's ./target/debug/doctrine — which concurrent agents' cargo builds overwrite in place. So a batch that could have been one request fell back to nine CLI invocations. Cost is not correctness (the CLI is the same engine) but it silently removes the batch surface exactly when a multi-item sweep is being driven."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
