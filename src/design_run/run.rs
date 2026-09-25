@@ -35,7 +35,7 @@ use super::attestation::{
     RecoveryIntent, ReviewDisposition, ReviewPass, ReviewRef, Reviewer,
 };
 use super::bounds::DESIGN_ID_BYTES;
-use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm};
+use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm, judgement_label};
 use super::delegation::{Delegation, DelegationState, Proposal};
 use super::gate;
 use super::gate::{ActRule, Coverage, ObservedFact, ObservedFacts};
@@ -1059,12 +1059,18 @@ pub(crate) fn import(
     for question in shaping {
         seed_node(
             next,
+            // Import seeds the judgement **visible**, never free: an open question
+            // the engine found for the agent is conservatively blocking until the
+            // agent says otherwise, so the omission defaults to a state the user
+            // can see. It costs nothing here — import precedes every user act, so
+            // no act covers the node yet (`SL-264` sec-3).
             InquiryNode::open(
                 mint_inquiry_id(next)?,
                 question.question.clone(),
                 Provenance::ShapingQuestion {
                     record: question.record.clone(),
                 },
+                Some(true),
             ),
         )?;
         cited.insert(question.record.as_str());
@@ -1087,6 +1093,9 @@ pub(crate) fn import(
             };
             seed_node(
                 next,
+                // The same conservative judgement as the shaping questions above:
+                // an imported open question is visible until the agent flips it,
+                // and the flip is a recorded mutation the user sees.
                 InquiryNode::open(
                     mint_inquiry_id(next)?,
                     entry.question.to_owned(),
@@ -1096,6 +1105,7 @@ pub(crate) fn import(
                         label: entry.label.to_owned(),
                         fingerprint: fingerprint.clone(),
                     },
+                    Some(true),
                 ),
             )?;
         }
@@ -1358,6 +1368,7 @@ pub(super) fn declare(
 fn created_prior(
     next: &mut DesignSnapshot,
     declaration: &Declaration,
+    blocking: Option<bool>,
 ) -> Result<(InquiryNode, Pending), Refusal> {
     let id = declaration.subject();
     let question = match declaration.question_declaration() {
@@ -1368,8 +1379,8 @@ fn created_prior(
         .provenance()
         .cloned()
         .unwrap_or(Provenance::AgentProposed);
-    let mut node =
-        InquiryNode::open(id.clone(), question, provenance.clone()).sequenced(next.map.claim_seq());
+    let mut node = InquiryNode::open(id.clone(), question, provenance.clone(), blocking)
+        .sequenced(next.map.claim_seq());
     let mut terms = Vec::new();
     if let Sparse::Value(parent) = declaration.parent_declaration() {
         node = node.with_parent(parent.clone());
@@ -1397,10 +1408,35 @@ fn declare_node(
     declaration: &Declaration,
 ) -> Result<Vec<Pending>, Refusal> {
     let id = declaration.subject();
-    let (existing, mut rows) = if let Some(existing) = next.map.inquiry.get(id).cloned() {
+    let held = next.map.inquiry.get(id).cloned();
+    // The blocking judgement, resolved **before any row** and before the node is
+    // rebuilt, because it is the one field of this declaration whose omission is
+    // state-dependent. Four cases, and each is a different answer:
+    //
+    // - a value replaces, in either state;
+    // - `null` is refused in either state — a judgement can be changed but not
+    //   withdrawn, and reading `null` as the omission below is `SL-259`'s disease;
+    // - an omission on a held node persists, **including a held `None`**: an
+    //   unjudged legacy node leaves the stored legacy set only by being judged
+    //   itself, so a map edit that says nothing about the judgement must not
+    //   quietly judge the node;
+    // - an omission on a NEW node is refused. This is the obligation the wire-key
+    //   table deliberately does not carry: that table says where a key is
+    //   honoured, never when it is owed.
+    let blocking = match (held.as_ref(), declaration.blocking_declaration()) {
+        (_, Sparse::Value(judged)) => Some(*judged),
+        (_, Sparse::Null) => {
+            return Err(Refusal::BlockingJudgementWithdrawn { id: id.clone() });
+        }
+        (Some(existing), Sparse::Omitted) => existing.blocking(),
+        (None, Sparse::Omitted) => {
+            return Err(Refusal::BlockingJudgementMissing { id: id.clone() });
+        }
+    };
+    let (existing, mut rows) = if let Some(existing) = held {
         (existing, Vec::new())
     } else {
-        let (seeded, created) = created_prior(next, declaration)?;
+        let (seeded, created) = created_prior(next, declaration, blocking)?;
         (seeded, vec![created])
     };
     let mut parent = existing.parent().cloned();
@@ -1487,7 +1523,24 @@ fn declare_node(
         lifecycle = declared;
     }
 
-    let rebuilt = rebuild(&existing, &question, parent, needs, lifecycle)?;
+    // A flip is a recorded mutation, so it owes a row (`REQ-478`). **A creation
+    // owes none**, and not by a branch: `created_prior` seeds the prior *with* the
+    // declared judgement, so a node that has just come into being holds exactly
+    // what the declaration asked for and diffs empty here — the same "one
+    // row-producing path over two priors" shape every other arm of this function
+    // has (`DEC-248`).
+    if blocking != existing.blocking() {
+        rows.push(Pending::about(
+            ChangeEvent::NodeBlockingChanged,
+            id,
+            vec![
+                PayloadTerm::label(PayloadKey::From, judgement_label(existing.blocking()))?,
+                PayloadTerm::label(PayloadKey::To, judgement_label(blocking))?,
+            ],
+        )?);
+    }
+
+    let rebuilt = rebuild(&existing, &question, parent, needs, lifecycle, blocking)?;
     next.map.inquiry.insert(rebuilt)?;
     Ok(rows)
 }
@@ -1503,11 +1556,13 @@ fn rebuild(
     parent: Option<DesignId>,
     needs: BTreeSet<DesignId>,
     lifecycle: InquiryLifecycle,
+    blocking: Option<bool>,
 ) -> Result<InquiryNode, Refusal> {
     let mut node = InquiryNode::open(
         existing.id().clone(),
         question,
         existing.provenance().clone(),
+        blocking,
     )
     .sequenced(existing.seq());
     if let Some(parent) = parent {
@@ -2199,6 +2254,7 @@ mod tests {
                 id("inq-1"),
                 "what governs this?",
                 Provenance::UserDirected,
+                Some(false),
             ))
             .expect("the fixture node seats");
         snapshot
@@ -2344,9 +2400,9 @@ mod tests {
     fn a_covered_map_holds_what_the_batch_left_behind() {
         let prior = run_with_a_map();
         let request = ApplyRequest {
-            declare: vec![
-                Declaration::about(id("inq-2")).question(Sparse::Value("and this one?".to_owned())),
-            ],
+            declare: vec![declared(
+                r#"{"subject": "inq-2", "question": "and this one?", "blocking": false}"#,
+            )],
             checkpoint_act: Some(checkpoint(ActKind::SufficiencyAccepted, "enough asked")),
             ..payload(&prior)
         };
@@ -2585,9 +2641,11 @@ mod tests {
             &ApplyRequest {
                 declare: vec![
                     declared(
-                        r#"{"subject": "inq-2", "question": "and this?", "needs": ["inq-1"]}"#,
+                        r#"{"subject": "inq-2", "question": "and this?", "needs": ["inq-1"], "blocking": false}"#,
                     ),
-                    declared(r#"{"subject": "inq-3", "question": "the control?"}"#),
+                    declared(
+                        r#"{"subject": "inq-3", "question": "the control?", "blocking": false}"#,
+                    ),
                 ],
                 ..payload(&prior)
             },
@@ -2655,7 +2713,7 @@ mod tests {
             &prior,
             &ApplyRequest {
                 declare: vec![declared(
-                    r#"{"subject": "inq-2", "question": "under what?", "parent": "inq-1"}"#,
+                    r#"{"subject": "inq-2", "question": "under what?", "parent": "inq-1", "blocking": false}"#,
                 )],
                 ..payload(&prior)
             },
@@ -2709,7 +2767,7 @@ mod tests {
             &prior,
             &ApplyRequest {
                 declare: vec![declared(
-                    r#"{"subject": "inq-2", "question": "later?", "lifecycle": "deferred"}"#,
+                    r#"{"subject": "inq-2", "question": "later?", "lifecycle": "deferred", "blocking": false}"#,
                 )],
                 ..payload(&prior)
             },

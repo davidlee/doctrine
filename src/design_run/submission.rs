@@ -165,10 +165,21 @@ pub(crate) struct Declaration {
     /// What a `fnd-` subject's finding says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     summary: Option<String>,
-    /// Whether a finding holds the lock gate open. Absent means non-blocking —
-    /// a finding blocks only when it is *said* to (design R2/R12).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    blocking: Option<bool>,
+    /// Whether the subject's blocking judgement is asserted, and what it is.
+    ///
+    /// **One key, two homes** (`SL-264` sec-3, `RV-386` `F-9`): a `fnd-` finding
+    /// reads it where the finding is created, absent meaning non-blocking, and an
+    /// `inq-` node reads it in either state — required where the node is born,
+    /// persisting on omission, replaced by a value.
+    ///
+    /// `Sparse<bool>` and deliberately **not** `Option<bool>`: absence and `null`
+    /// have to stay distinct through parsing, because they mean different things
+    /// at the inquiry home (`null` is refused — a judgement can be changed but
+    /// not withdrawn) and the same thing at the finding home (`null` reads as
+    /// absence, `ISS-482`). An `Option` collapses the two at the wire, which is
+    /// the distinction this field exists to carry.
+    #[serde(default, skip_serializing_if = "Sparse::is_omitted")]
+    blocking: Sparse<bool>,
     /// How a finding was disposed. Its presence, with content, is what
     /// `blocking-findings-disposed` reads.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -436,7 +447,7 @@ impl Declaration {
             reviewer: None,
             concerns: None,
             summary: None,
-            blocking: None,
+            blocking: Sparse::Omitted,
             resolution: None,
             disposes: None,
             dispose: None,
@@ -519,8 +530,21 @@ impl Declaration {
     }
 
     /// Whether this finding blocks the lock gate, defaulting to non-blocking.
-    pub(crate) fn blocking(&self) -> bool {
-        self.blocking.unwrap_or(false)
+    ///
+    /// The **finding** home's reading, and deliberately the one it has always
+    /// had: `null` reads exactly as absence does. That sibling of the inquiry
+    /// home's refusal is `ISS-482`, out of this slice's scope.
+    pub(crate) const fn blocking(&self) -> bool {
+        matches!(self.blocking, Sparse::Value(true))
+    }
+
+    /// The asserted blocking judgement, as the wire spells it.
+    ///
+    /// The **inquiry** home reads this one: it is the only accessor that can
+    /// tell absence from `null`, which is the distinction `declare_node`'s
+    /// refusal is built on.
+    pub(crate) const fn blocking_declaration(&self) -> &Sparse<bool> {
+        &self.blocking
     }
 
     /// How this finding was disposed.
@@ -649,7 +673,7 @@ impl Declaration {
     /// `resolved_record` is absent because it carries `#[serde(skip)]` and is
     /// therefore not a wire key — excluded by construction rather than by an
     /// exception list (`EX-3`).
-    pub(crate) const WIRE_KEYS: [WireKey; 15] = [
+    pub(crate) const WIRE_KEYS: [WireKey; 16] = [
         (
             KEY_SUBJECT,
             KeyHome::Universal,
@@ -720,7 +744,19 @@ impl Declaration {
             KEY_BLOCKING,
             KeyHome::At(IdKind::Finding),
             KeyWhen::Only(SubjectState::Absent),
-            |declared| declared.blocking.is_some(),
+            |declared| !declared.blocking.is_omitted(),
+        ),
+        // The same key at its **second** home (`SL-264` sec-3): a node's judgement
+        // is read where the node is created AND where it is updated, which is what
+        // makes `Inquiry` × `EitherState` one row rather than two. That it is
+        // *required* where a node is born is the engine's obligation
+        // (`declare_node`), not this table's: the state axis says where a key is
+        // honoured, never when it is owed.
+        (
+            KEY_BLOCKING,
+            KeyHome::At(IdKind::Inquiry),
+            KeyWhen::EitherState,
+            |declared| !declared.blocking.is_omitted(),
         ),
         (
             KEY_RESOLUTION,
@@ -758,6 +794,12 @@ impl Declaration {
     ///
     /// Scoped to the **kind** axis (`DEC-183`). A key honoured at this kind but
     /// ignored in this subject's *state* is `ISS-327`, not this.
+    ///
+    /// **Refused only where no row names the subject's kind** (`SL-264` sec-3): a
+    /// key may have more than one home, and a kind one of its rows names is a
+    /// kind the key is honoured at. The remedy therefore names **every** home, in
+    /// table order — naming one of two would be true and still mislead a caller
+    /// into moving the key to the home that happened to be tabled first.
     pub(crate) fn inert_key(&self) -> Option<Refusal> {
         let kind = self.subject.kind();
         if !kind.declarable() {
@@ -765,17 +807,51 @@ impl Declaration {
         }
         Declaration::WIRE_KEYS
             .iter()
-            .find_map(|&(key, home, _, carried)| match home {
-                KeyHome::At(honoured_by) if honoured_by != kind && carried(self) => {
-                    Some(Refusal::InertKey {
-                        subject: self.subject.clone(),
-                        key,
-                        honoured_by,
-                        remedy: remedy(key, kind),
-                    })
+            .find_map(|&(key, home, _, carried)| {
+                let KeyHome::At(honoured_by) = home else {
+                    return None;
+                };
+                if honoured_by == kind || !carried(self) || Declaration::honoured_at(key, kind) {
+                    return None;
                 }
-                KeyHome::Universal | KeyHome::At(_) => None,
+                Some(Refusal::InertKey {
+                    subject: self.subject.clone(),
+                    key,
+                    honoured_by: Declaration::homes(key),
+                    remedy: remedy(key, kind),
+                })
             })
+    }
+
+    /// Whether any row names `kind` as a home for `key` — the kind axis's whole
+    /// rule now that a key may have more than one home.
+    ///
+    /// Read off the same table the axis walks, so a second home cannot be added
+    /// to one reader and forgotten by the other (STD-001).
+    fn honoured_at(key: &str, kind: IdKind) -> bool {
+        Declaration::WIRE_KEYS.iter().any(|&(tabled, home, ..)| {
+            tabled == key
+                && match home {
+                    KeyHome::Universal => true,
+                    KeyHome::At(honoured_by) => honoured_by == kind,
+                }
+        })
+    }
+
+    /// Every kind that honours `key`, in table order.
+    ///
+    /// Non-empty wherever [`Declaration::inert_key`] raises the refusal: it only
+    /// fires on a row carrying `KeyHome::At`, and that row is in the list.
+    /// [`KeyHome::Universal`] is deliberately not represented — a key inert at
+    /// none is never refused by this axis, so the refusal has no name to give it.
+    fn homes(key: &str) -> Vec<IdKind> {
+        Declaration::WIRE_KEYS
+            .iter()
+            .filter_map(|&(tabled, home, ..)| match home {
+                KeyHome::At(honoured_by) if tabled == key => Some(honoured_by),
+                KeyHome::At(_) | KeyHome::Universal => None,
+            })
+            .collect()
     }
 
     /// The first key this declaration carries that is inert in its subject's
@@ -843,7 +919,7 @@ impl Declaration {
             reviewer: Some(Reviewer::Human),
             concerns: Some(DesignId::parse("sec-0").expect("a literal id")),
             summary: Some("a finding".to_owned()),
-            blocking: Some(true),
+            blocking: Sparse::Value(true),
             resolution: Some("disposed".to_owned()),
             disposes: Some(DesignId::parse("inq-0").expect("a literal id")),
             dispose: Some(Dispose::Unresolved {
@@ -878,7 +954,7 @@ impl Declaration {
             reviewer: Some(Reviewer::Human),
             concerns: Some(DesignId::parse("sec-0").expect("a literal id")),
             summary: Some("a finding".to_owned()),
-            blocking: Some(true),
+            blocking: Sparse::Value(true),
             resolution: Some("disposed".to_owned()),
             disposes: Some(DesignId::parse("inq-0").expect("a literal id")),
             dispose: Some(Dispose::Unresolved {

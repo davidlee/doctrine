@@ -369,7 +369,7 @@ fn hand_edit_between_applies_is_refused_at_entry() {
 
     let before = fixture.bytes();
     let error = fixture.refuse(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("after-edit")
     ));
     assert!(error.contains("edited outside this run"), "{error}");
@@ -388,7 +388,7 @@ fn edit_after_final_comparison_is_caught_by_next_entry_check() {
     // An apply that completes: its pre-write comparison passed and the rename
     // landed.
     fixture.apply(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("landed")
     ));
     assert_eq!(fixture.revision(), baseline + 1, "the first apply landed");
@@ -398,7 +398,7 @@ fn edit_after_final_comparison_is_caught_by_next_entry_check() {
     std::fs::write(fixture.doc(), b"landed after the comparison\n").unwrap();
 
     let error = fixture.refuse(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-2\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-2\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("next")
     ));
     assert!(error.contains("edited outside this run"), "{error}");
@@ -454,7 +454,7 @@ fn a_foreign_write_after_materialises_rename_is_not_certified() {
     // moved to Doctrine's render, the ordinary entry check now sees the divergence.
     // Self-certification had defeated DEC-092's next-entry promise outright.
     let next = fixture.refuse(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-9\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-9\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("next")
     ));
     assert!(next.contains("edited outside this run"), "{next}");
@@ -478,7 +478,7 @@ fn adopt_crosses_divergence_and_rebaselines_alone() {
 
     // Ordinary mutation is refused at exactly this divergence.
     let error = fixture.refuse(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("ordinary")
     ));
     assert!(error.contains("edited outside this run"), "{error}");
@@ -566,7 +566,7 @@ fn divergence_refusal_names_design_adopt() {
     .unwrap();
 
     let error = fixture.refuse(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("ordinary")
     ));
 
@@ -595,7 +595,7 @@ fn absent_design_md_is_cold_before_first_materialise_divergent_after() {
     // Divergent: the same absence, after Doctrine has left bytes there.
     std::fs::remove_file(fixture.doc()).unwrap();
     let error = fixture.refuse(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("after")
     ));
     assert!(error.contains("edited outside this run"), "{error}");
@@ -645,7 +645,7 @@ fn unknown_schema_version_is_refused_with_a_useful_message() {
 fn snapshot_toml_round_trips_deterministically() {
     let fixture = materialised("first draft");
     fixture.apply(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"why\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"why\",\"blocking\":false}}]}}",
         fixture.envelope("one")
     ));
     let stored = std::fs::read_to_string(&fixture.snapshot).unwrap();
@@ -665,17 +665,17 @@ fn snapshot_toml_round_trips_deterministically() {
 fn stale_known_revision_is_refused_with_a_conflict_report() {
     let fixture = Fixture::start();
     fixture.apply(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("one")
     ));
     fixture.apply(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-2\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-2\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("two")
     ));
     let before = fixture.bytes();
 
     let error = fixture.refuse(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-3\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-3\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope_at(2, "stale")
     ));
     assert!(error.contains("conflict"), "{error}");
@@ -698,8 +698,8 @@ fn validation_failure_leaves_the_snapshot_byte_identical() {
     // The second declaration names an unknown parent — the first is lawful, so a
     // half-applied batch would be visible.
     let error = fixture.refuse(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}},\
-         {{\"subject\":\"inq-2\",\"question\":\"q\",\"parent\":\"inq-404\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}},\
+         {{\"subject\":\"inq-2\",\"question\":\"q\",\"blocking\":false,\"parent\":\"inq-404\"}}]}}",
         fixture.envelope("invalid")
     ));
     assert!(error.contains("unknown node"), "{error}");
@@ -712,7 +712,7 @@ fn validation_failure_leaves_the_snapshot_byte_identical() {
 fn reused_submission_id_with_changed_payload_is_refused() {
     let fixture = Fixture::start();
     let first = format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("sub-1")
     );
     fixture.apply(&first);
@@ -726,7 +726,7 @@ fn reused_submission_id_with_changed_payload_is_refused() {
     // Different bytes under the same id is a different submission wearing a
     // used name.
     let error = fixture.refuse(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-2\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-2\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope_at(1, "sub-1")
     ));
     assert!(
@@ -797,14 +797,14 @@ fn change_log_floor_is_recorded_not_inferred() {
     // above it — so the oldest surviving row says nothing about where coverage
     // begins, which is exactly where inference breaks.
     fixture.apply(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-early\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-early\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("material")
     ));
     for step in 0..40 {
         fixture.empty_apply(&format!("quiet{step}"));
     }
     fixture.apply(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-late\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-late\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("late")
     ));
 
@@ -873,16 +873,16 @@ fn known_revision_below_floor_is_unavailable_not_empty() {
 fn within_revision_index_is_candidate_order_not_submission_order() {
     let forward = Fixture::start();
     forward.apply(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-a\",\"question\":\"q\"}},\
-         {{\"subject\":\"inq-b\",\"question\":\"q\"}},\
-         {{\"subject\":\"inq-c\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-a\",\"question\":\"q\",\"blocking\":false}},\
+         {{\"subject\":\"inq-b\",\"question\":\"q\",\"blocking\":false}},\
+         {{\"subject\":\"inq-c\",\"question\":\"q\",\"blocking\":false}}]}}",
         forward.envelope("one")
     ));
     let reversed = Fixture::start();
     reversed.apply(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-c\",\"question\":\"q\"}},\
-         {{\"subject\":\"inq-b\",\"question\":\"q\"}},\
-         {{\"subject\":\"inq-a\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-c\",\"question\":\"q\",\"blocking\":false}},\
+         {{\"subject\":\"inq-b\",\"question\":\"q\",\"blocking\":false}},\
+         {{\"subject\":\"inq-a\",\"question\":\"q\",\"blocking\":false}}]}}",
         reversed.envelope("one")
     ));
 
@@ -964,9 +964,9 @@ fn every_event_fixture() -> Fixture {
     fixture.apply(&section(FIRST_SECTION_BODY, "sec"));
     // node_created ×3
     fixture.apply(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}},\
-         {{\"subject\":\"inq-2\",\"question\":\"q\"}},\
-         {{\"subject\":\"inq-3\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}},\
+         {{\"subject\":\"inq-2\",\"question\":\"q\",\"blocking\":false}},\
+         {{\"subject\":\"inq-3\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("nodes")
     ));
     // node_reparented + needs_added
@@ -979,6 +979,14 @@ fn every_event_fixture() -> Fixture {
     fixture.apply(&format!(
         "{{{},\"declare\":[{{\"subject\":\"inq-3\",\"needs\":[]}}]}}",
         fixture.envelope("unneed")
+    ));
+    // node_blocking_changed (`SL-264` sec-3). A second declaration against a node
+    // the batch above already created, because the judgement is node state rather
+    // than a recorded act: this row comes from the declaration that *flips* one,
+    // and the creation owes none.
+    fixture.apply(&format!(
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"blocking\":true}}]}}",
+        fixture.envelope("block")
     ));
     // review_attested
     fixture.apply(&format!(
@@ -1500,7 +1508,7 @@ fn retention_evicts_oldest_revisions_and_advances_the_floor() {
     let fixture = Fixture::start();
     for step in 0..40 {
         fixture.apply(&format!(
-            "{{{},\"declare\":[{{\"subject\":\"inq-{step}\",\"question\":\"q\"}}]}}",
+            "{{{},\"declare\":[{{\"subject\":\"inq-{step}\",\"question\":\"q\",\"blocking\":false}}]}}",
             fixture.envelope(&format!("s{step}"))
         ));
     }
@@ -1643,8 +1651,8 @@ fn distinct_ids_sharing_a_long_prefix_render_distinguishably() {
 
     let fixture = Fixture::start();
     fixture.apply(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"{first}\",\"question\":\"q\"}},\
-         {{\"subject\":\"{second}\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"{first}\",\"question\":\"q\",\"blocking\":false}},\
+         {{\"subject\":\"{second}\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("both")
     ));
 
@@ -2032,8 +2040,8 @@ fn declare_refuses_removed_title_wire_field() {
 fn declare_refuses_removed_annotation_wire_fields() {
     let fixture = Fixture::start();
     fixture.apply(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}},\
-         {{\"subject\":\"inq-2\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}},\
+         {{\"subject\":\"inq-2\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("seed")
     ));
     let before = fixture.bytes();
@@ -2095,8 +2103,8 @@ fn declare_refuses_removed_annotation_wire_fields() {
 fn checkpoint_annotation_spelling_is_refused() {
     let fixture = Fixture::start();
     fixture.apply(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}},\
-         {{\"subject\":\"inq-2\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}},\
+         {{\"subject\":\"inq-2\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("seed")
     ));
 
@@ -2321,8 +2329,8 @@ fn section_title_keeps_internal_whitespace_runs() {
 fn checkpoint_adopt_validates_target_before_recording() {
     let fixture = Fixture::start();
     fixture.apply(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}},\
-         {{\"subject\":\"inq-2\",\"question\":\"q\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}},\
+         {{\"subject\":\"inq-2\",\"question\":\"q\",\"blocking\":false}}]}}",
         fixture.envelope("seed")
     ));
     let before = fixture.bytes();

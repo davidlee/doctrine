@@ -137,13 +137,14 @@ fn large_run() -> DesignRun {
     // The root, then a chain of twelve — deeper than ENVELOPE_ACTIVE_PATH_DEPTH.
     let mut declare: Vec<Value> = vec![json!({
         "subject": node(0),
-        "question": "the root question",
+        "question": "the root question", "blocking": false,
         "provenance": {"provenance": "user-directed"},
     })];
     for step in 1..=12_u32 {
         declare.push(json!({
             "subject": node(step),
             "question": if step == 12 { HOSTILE.to_owned() } else { format!("chain step {step}") },
+            "blocking": false,
             "parent": node(step - 1),
         }));
     }
@@ -154,6 +155,7 @@ fn large_run() -> DesignRun {
         declare.push(json!({
             "subject": node(index),
             "question": format!("fan {index} {HOSTILE}"),
+            "blocking": false,
             "parent": node(12),
             "provenance": {"provenance": if index % 2 == 0 { "user-directed" } else { "agent-proposed" }},
         }));
@@ -164,6 +166,7 @@ fn large_run() -> DesignRun {
         declare.push(json!({
             "subject": node(index),
             "question": format!("distant {index}"),
+            "blocking": false,
             "parent": node(0),
         }));
     }
@@ -175,6 +178,7 @@ fn large_run() -> DesignRun {
             json!({
                 "subject": node(index),
                 "question": format!("blocked {index}"),
+                "blocking": false,
                 "parent": node(0),
                 "needs": [node(0)],
             })
@@ -255,11 +259,13 @@ fn large_run() -> DesignRun {
 /// frontier — over a map that is nine nodes rather than hundreds.
 fn neighbourhood_twin() -> DesignRun {
     let fixture = DesignRun::start();
-    let mut declare: Vec<Value> = vec![json!({"subject": node(0), "question": "root"})];
+    let mut declare: Vec<Value> =
+        vec![json!({"subject": node(0), "question": "root", "blocking": false})];
     for index in 1..=8_u32 {
         declare.push(json!({
             "subject": node(index),
             "question": format!("twin {index}"),
+            "blocking": false,
             "parent": node(0),
         }));
     }
@@ -365,8 +371,8 @@ fn show_full_may_scale_but_normal_show_does_not() {
     small.apply(
         "seed",
         json!({ "declare": [
-            {"subject": node(0), "question": "root"},
-            {"subject": node(1), "question": "one", "parent": node(0)},
+            {"subject": node(0), "question": "root", "blocking": false},
+            {"subject": node(1), "question": "one", "blocking": false, "parent": node(0)},
         ] }),
     );
     let small_full = small.envelope(&["--full"]);
@@ -421,10 +427,10 @@ fn omitted_key_persists_null_clears_scalar_empty_clears_collection() {
     fixture.apply(
         "seed",
         json!({ "declare": [
-            {"subject": node(0), "question": "root"},
-            {"subject": node(1), "question": "the original question", "parent": node(0)},
-            {"subject": node(2), "question": "needed", "parent": node(0)},
-            {"subject": node(3), "question": "child", "parent": node(1), "needs": [node(2)]},
+            {"subject": node(0), "question": "root", "blocking": false},
+            {"subject": node(1), "question": "the original question", "blocking": false, "parent": node(0)},
+            {"subject": node(2), "question": "needed", "blocking": false, "parent": node(0)},
+            {"subject": node(3), "question": "child", "blocking": false, "parent": node(1), "needs": [node(2)]},
         ] }),
     );
     fixture.apply(
@@ -450,7 +456,7 @@ fn omitted_key_persists_null_clears_scalar_empty_clears_collection() {
         "sparse",
         json!({ "declare": [
             {"subject": node(3), "parent": null},
-            {"subject": node(1), "question": "a restated question"},
+            {"subject": node(1), "question": "a restated question", "blocking": false},
         ] }),
     );
     let after = fixture.envelope(&["--full"]);
@@ -492,8 +498,8 @@ fn duplicate_subject_in_one_batch_is_refused() {
     let error = fixture.refuse(
         "duplicate",
         json!({ "declare": [
-            {"subject": node(1), "question": "first"},
-            {"subject": node(1), "question": "second"},
+            {"subject": node(1), "question": "first", "blocking": false},
+            {"subject": node(1), "question": "second", "blocking": false},
         ] }),
     );
     assert!(error.contains("duplicate subject"), "{error}");
@@ -509,16 +515,16 @@ fn validation_failure_leaves_state_byte_identical() {
     let fixture = DesignRun::start();
     fixture.apply(
         "seed",
-        json!({ "declare": [{"subject": node(0), "question": "root"}] }),
+        json!({ "declare": [{"subject": node(0), "question": "root", "blocking": false}] }),
     );
     let before = fixture.bytes();
 
     let error = fixture.refuse(
         "invalid",
         json!({ "declare": [
-            {"subject": node(1), "question": "lawful", "parent": node(0)},
-            {"subject": node(2), "question": "lawful too", "parent": node(0)},
-            {"subject": node(3), "question": "unlawful", "parent": "inq-9999"},
+            {"subject": node(1), "question": "lawful", "blocking": false, "parent": node(0)},
+            {"subject": node(2), "question": "lawful too", "blocking": false, "parent": node(0)},
+            {"subject": node(3), "question": "unlawful", "blocking": false, "parent": "inq-9999"},
         ] }),
     );
     assert!(error.contains("unknown node"), "{error}");
@@ -532,7 +538,7 @@ fn validation_failure_leaves_state_byte_identical() {
     let error = fixture.refuse(
         "invalid-pin",
         json!({
-            "declare": [{"subject": node(1), "question": "lawful", "parent": node(0)}],
+            "declare": [{"subject": node(1), "question": "lawful", "blocking": false, "parent": node(0)}],
             "traversal": {"pin": "inq-9999"},
         }),
     );
@@ -548,13 +554,13 @@ fn pin_defer_prune_and_posture_are_user_directed_declarations() {
     fixture.apply(
         "seed",
         json!({ "declare": [
-            {"subject": node(0), "question": "root", "provenance": {"provenance": "user-directed"}},
-            {"subject": node(1), "question": "kept", "parent": node(0),
+            {"subject": node(0), "question": "root", "blocking": false, "provenance": {"provenance": "user-directed"}},
+            {"subject": node(1), "question": "kept", "blocking": false, "parent": node(0),
              "provenance": {"provenance": "user-directed"}},
-            {"subject": node(2), "question": "to defer", "parent": node(0)},
-            {"subject": node(3), "question": "to prune", "parent": node(0)},
-            {"subject": node(4), "question": "sibling", "parent": node(0)},
-            {"subject": node(5), "question": "child of one", "parent": node(1)},
+            {"subject": node(2), "question": "to defer", "blocking": false, "parent": node(0)},
+            {"subject": node(3), "question": "to prune", "blocking": false, "parent": node(0)},
+            {"subject": node(4), "question": "sibling", "blocking": false, "parent": node(0)},
+            {"subject": node(5), "question": "child of one", "blocking": false, "parent": node(1)},
         ] }),
     );
 

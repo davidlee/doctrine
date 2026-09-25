@@ -177,9 +177,13 @@ impl Fixture {
     }
 
     /// Declare one open inquiry node.
+    ///
+    /// `blocking: false` because a judgement is owed where a node is born
+    /// (`SL-264` sec-3), and this suite's subject is the checkpoint protocol.
     fn raise(&self, node: &str, submission: &str) {
         self.apply(&format!(
-            "{{{},\"declare\":[{{\"subject\":\"{node}\",\"question\":\"q\"}}]}}",
+            "{{{},\"declare\":[{{\"subject\":\"{node}\",\"question\":\"q\",\
+             \"blocking\":false}}]}}",
             self.envelope(submission)
         ));
     }

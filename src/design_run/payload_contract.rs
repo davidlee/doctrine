@@ -39,7 +39,7 @@ use super::ids::IdKind;
 use super::inquiry::{InquiryLifecycle, Provenance};
 #[cfg(test)]
 use super::submission::CreateRecord;
-use super::submission::{DelegationAct, DischargeClaim, Dispose, WireFacetValue};
+use super::submission::{DelegationAct, DischargeClaim, Dispose, KeyHome, WireFacetValue};
 use super::traversal::{Authority, Posture};
 
 // ---------------------------------------------------------------------------
@@ -295,6 +295,20 @@ payload_variants! { WireFacetValue untagged { List, Text } }
 pub(crate) struct KeyContract {
     /// The key as a caller spells it.
     pub(crate) key: &'static str,
+    /// Where the key is honoured, **where that is a subject kind** — `None` for
+    /// every row outside [`DECLARATION`], whose keys are addressed by the type
+    /// they sit in rather than by the kind of a subject id.
+    ///
+    /// The reason this is a row and not a derivation: one key may have more than
+    /// one home, and only the home decides which of its rows applies. `blocking`
+    /// is the live case (`SL-264` sec-3) — a finding's judgement is read where the
+    /// finding is created, an inquiry's in either state — so a rendering that
+    /// could not say *where* would show one unqualified row for two rules.
+    ///
+    /// The single source of the per-home rendering: the presence's parenthetical
+    /// deliberately says nothing about the home, because a second spelling of it
+    /// would be free to disagree with this one (STD-001).
+    pub(crate) home: Option<KeyHome>,
     /// What may be sent under it.
     pub(crate) ty: WireType,
     /// Whether it may be omitted, and what omission means.
@@ -467,12 +481,13 @@ pub(crate) enum Tagging {
     Untagged,
 }
 
-/// Whether a key may be omitted, and what omission means. **Three states, not
-/// two.**
+/// Whether a key may be omitted, and what omission means. **Four states.**
 ///
 /// `Sparse<T>` is the run's editing idiom and it is invisible from a type
 /// signature: omitting `parent` persists the existing value, sending `null`
-/// clears it.
+/// clears it. A key that is **owed where its subject is born** and optional
+/// afterwards is a fourth reading again, and folding it into any of the three
+/// below would state something false — see [`Presence::RequiredAtCreation`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Presence {
     /// It must be sent.
@@ -481,6 +496,22 @@ pub(crate) enum Presence {
     Optional,
     /// Absent means *persist*; `null` means *clear*.
     Sparse,
+    /// **Required where the subject is created, optional on update; `null` is
+    /// refused in either state** (`SL-264` sec-3, `RV-386` `F-9`).
+    ///
+    /// The fourth state, and none of the three above can say it. [`Required`] is
+    /// state-blind — it would demand the key on every redeclaration, which is the
+    /// opposite of what omission means here. [`Optional`] is state-blind the other
+    /// way and would let a subject be born unjudged. [`Sparse`] is the closest and
+    /// still wrong: it reads `null` as *clear*, and this key's whole point is that
+    /// a judgement can be changed but **not withdrawn**, so reading a stated
+    /// `null` as the omission beside it is the defect (a success that changes
+    /// nothing) the row exists to close.
+    ///
+    /// [`Required`]: Presence::Required
+    /// [`Optional`]: Presence::Optional
+    /// [`Sparse`]: Presence::Sparse
+    RequiredAtCreation,
 }
 
 /// What happens to a key a struct's contract does not list — the honest
@@ -867,6 +898,7 @@ pub(crate) static PROVENANCE: TypeContract = TypeContract {
                 token: Some("shaping-question"),
                 payload: VariantPayload::Keys(&[KeyContract {
                     key: "record",
+                    home: None,
                     ty: WireType::Text,
                     presence: Presence::Required,
                 }]),
@@ -876,21 +908,25 @@ pub(crate) static PROVENANCE: TypeContract = TypeContract {
                 payload: VariantPayload::Keys(&[
                     KeyContract {
                         key: "section",
+                        home: None,
                         ty: WireType::Id(&[IdKind::Section]),
                         presence: Presence::Required,
                     },
                     KeyContract {
                         key: "line",
+                        home: None,
                         ty: WireType::Integer,
                         presence: Presence::Required,
                     },
                     KeyContract {
                         key: "label",
+                        home: None,
                         ty: WireType::Text,
                         presence: Presence::Required,
                     },
                     KeyContract {
                         key: "fingerprint",
+                        home: None,
                         ty: WireType::Text,
                         presence: Presence::Required,
                     },
@@ -911,6 +947,7 @@ pub(crate) static REVIEW_DISPOSITION: TypeContract = TypeContract {
                 token: Some("conducted"),
                 payload: VariantPayload::Keys(&[KeyContract {
                     key: "review",
+                    home: None,
                     ty: WireType::Text,
                     presence: Presence::Required,
                 }]),
@@ -919,6 +956,7 @@ pub(crate) static REVIEW_DISPOSITION: TypeContract = TypeContract {
                 token: Some("waived"),
                 payload: VariantPayload::Keys(&[KeyContract {
                     key: "reason",
+                    home: None,
                     ty: WireType::Text,
                     presence: Presence::Required,
                 }]),
@@ -939,6 +977,7 @@ pub(crate) static AGENT_ACT: TypeContract = TypeContract {
                 token: Some("blocking-set-declared"),
                 payload: VariantPayload::Keys(&[KeyContract {
                     key: "blocking",
+                    home: None,
                     ty: WireType::Seq(&WireType::Id(&[IdKind::Inquiry])),
                     presence: Presence::Required,
                 }]),
@@ -964,11 +1003,13 @@ pub(crate) static DELEGATION_ACT: TypeContract = TypeContract {
                 payload: VariantPayload::Keys(&[
                     KeyContract {
                         key: "id",
+                        home: None,
                         ty: WireType::Id(&[IdKind::Delegation]),
                         presence: Presence::Required,
                     },
                     KeyContract {
                         key: "obligation",
+                        home: None,
                         ty: WireType::Id(&[IdKind::Inquiry]),
                         presence: Presence::Required,
                     },
@@ -979,21 +1020,25 @@ pub(crate) static DELEGATION_ACT: TypeContract = TypeContract {
                 payload: VariantPayload::Keys(&[
                     KeyContract {
                         key: "id",
+                        home: None,
                         ty: WireType::Id(&[IdKind::Delegation]),
                         presence: Presence::Required,
                     },
                     KeyContract {
                         key: "by",
+                        home: None,
                         ty: WireType::Text,
                         presence: Presence::Required,
                     },
                     KeyContract {
                         key: "summary",
+                        home: None,
                         ty: WireType::Text,
                         presence: Presence::Required,
                     },
                     KeyContract {
                         key: "declare",
+                        home: None,
                         ty: WireType::Seq(&WireType::Named(&DECLARATION)),
                         presence: Presence::Optional,
                     },
@@ -1003,6 +1048,7 @@ pub(crate) static DELEGATION_ACT: TypeContract = TypeContract {
                 token: Some("accept"),
                 payload: VariantPayload::Keys(&[KeyContract {
                     key: "id",
+                    home: None,
                     ty: WireType::Id(&[IdKind::Delegation]),
                     presence: Presence::Required,
                 }]),
@@ -1012,11 +1058,13 @@ pub(crate) static DELEGATION_ACT: TypeContract = TypeContract {
                 payload: VariantPayload::Keys(&[
                     KeyContract {
                         key: "id",
+                        home: None,
                         ty: WireType::Id(&[IdKind::Delegation]),
                         presence: Presence::Required,
                     },
                     KeyContract {
                         key: "reason",
+                        home: None,
                         ty: WireType::Text,
                         presence: Presence::Required,
                     },
@@ -1042,6 +1090,7 @@ pub(crate) static DISPOSE: TypeContract = TypeContract {
                 token: Some("adopt"),
                 payload: VariantPayload::Keys(&[KeyContract {
                     key: "record",
+                    home: None,
                     ty: WireType::Text,
                     presence: Presence::Required,
                 }]),
@@ -1050,6 +1099,7 @@ pub(crate) static DISPOSE: TypeContract = TypeContract {
                 token: Some("unresolved"),
                 payload: VariantPayload::Keys(&[KeyContract {
                     key: "note",
+                    home: None,
                     ty: WireType::Text,
                     presence: Presence::Required,
                 }]),
@@ -1058,6 +1108,7 @@ pub(crate) static DISPOSE: TypeContract = TypeContract {
                 token: Some("non-durable"),
                 payload: VariantPayload::Keys(&[KeyContract {
                     key: "note",
+                    home: None,
                     ty: WireType::Text,
                     presence: Presence::Required,
                 }]),
@@ -1095,11 +1146,13 @@ pub(crate) static ACCEPTANCE_DECLARATION: TypeContract = TypeContract {
         keys: &[
             KeyContract {
                 key: "basis",
+                home: None,
                 ty: WireType::Text,
                 presence: Presence::Required,
             },
             KeyContract {
                 key: "turn",
+                home: None,
                 ty: WireType::Text,
                 presence: Presence::Optional,
             },
@@ -1115,11 +1168,13 @@ pub(crate) static STAGE_DECLARATION: TypeContract = TypeContract {
         keys: &[
             KeyContract {
                 key: "to",
+                home: None,
                 ty: WireType::Named(&STAGE),
                 presence: Presence::Required,
             },
             KeyContract {
                 key: "reason",
+                home: None,
                 ty: WireType::Text,
                 presence: Presence::Optional,
             },
@@ -1139,16 +1194,19 @@ pub(crate) static DISCHARGE_DECLARATION: TypeContract = TypeContract {
         keys: &[
             KeyContract {
                 key: "step",
+                home: None,
                 ty: WireType::Text,
                 presence: Presence::Required,
             },
             KeyContract {
                 key: "outcome",
+                home: None,
                 ty: WireType::Named(&DISCHARGE_CLAIM),
                 presence: Presence::Required,
             },
             KeyContract {
                 key: "reason",
+                home: None,
                 ty: WireType::Text,
                 presence: Presence::Optional,
             },
@@ -1165,21 +1223,25 @@ pub(crate) static TRAVERSAL_DECLARATION: TypeContract = TypeContract {
         keys: &[
             KeyContract {
                 key: "pin",
+                home: None,
                 ty: WireType::Id(&[IdKind::Inquiry]),
                 presence: Presence::Sparse,
             },
             KeyContract {
                 key: "cursor",
+                home: None,
                 ty: WireType::Id(&[IdKind::Inquiry]),
                 presence: Presence::Sparse,
             },
             KeyContract {
                 key: "posture",
+                home: None,
                 ty: WireType::Named(&POSTURE),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "authority",
+                home: None,
                 ty: WireType::Named(&AUTHORITY),
                 presence: Presence::Optional,
             },
@@ -1203,26 +1265,31 @@ pub(crate) static CREATE_RECORD: TypeContract = TypeContract {
         keys: &[
             KeyContract {
                 key: "kind",
+                home: None,
                 ty: WireType::Token(TokenSource::Extern(ExternRegion::KnowledgeRecord)),
                 presence: Presence::Required,
             },
             KeyContract {
                 key: "title",
+                home: None,
                 ty: WireType::Text,
                 presence: Presence::Required,
             },
             KeyContract {
                 key: "slug",
+                home: None,
                 ty: WireType::Text,
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "body",
+                home: None,
                 ty: WireType::Text,
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "facet",
+                home: None,
                 ty: WireType::Map {
                     key: MapKey::Extern {
                         region: ExternRegion::KnowledgeRecord,
@@ -1234,6 +1301,7 @@ pub(crate) static CREATE_RECORD: TypeContract = TypeContract {
             },
             KeyContract {
                 key: "acceptance",
+                home: None,
                 ty: WireType::Named(&ACCEPTANCE_DECLARATION),
                 presence: Presence::Optional,
             },
@@ -1253,11 +1321,13 @@ pub(crate) static REVIEW_POLICY_DECLARATION: TypeContract = TypeContract {
         keys: &[
             KeyContract {
                 key: "policy",
+                home: None,
                 ty: WireType::Named(&REVIEW_POLICY),
                 presence: Presence::Required,
             },
             KeyContract {
                 key: "acceptance",
+                home: None,
                 ty: WireType::Named(&ACCEPTANCE_DECLARATION),
                 presence: Presence::Required,
             },
@@ -1275,16 +1345,19 @@ pub(crate) static CHECKPOINT_ACT_DECLARATION: TypeContract = TypeContract {
         keys: &[
             KeyContract {
                 key: "act",
+                home: None,
                 ty: WireType::Named(&ACT_KIND),
                 presence: Presence::Required,
             },
             KeyContract {
                 key: "acceptance",
+                home: None,
                 ty: WireType::Named(&ACCEPTANCE_DECLARATION),
                 presence: Presence::Required,
             },
             KeyContract {
                 key: "disposition",
+                home: None,
                 ty: WireType::Named(&REVIEW_DISPOSITION),
                 presence: Presence::Optional,
             },
@@ -1301,16 +1374,19 @@ pub(crate) static AGENT_ACT_DECLARATION: TypeContract = TypeContract {
         keys: &[
             KeyContract {
                 key: "act",
+                home: None,
                 ty: WireType::Named(&AGENT_ACT),
                 presence: Presence::Required,
             },
             KeyContract {
                 key: "basis",
+                home: None,
                 ty: WireType::Text,
                 presence: Presence::Required,
             },
             KeyContract {
                 key: "turn",
+                home: None,
                 ty: WireType::Text,
                 presence: Presence::Optional,
             },
@@ -1336,6 +1412,7 @@ pub(crate) static DECLARATION: TypeContract = TypeContract {
         keys: &[
             KeyContract {
                 key: "subject",
+                home: Some(KeyHome::Universal),
                 ty: WireType::Id(&[
                     IdKind::Inquiry,
                     IdKind::Section,
@@ -1347,71 +1424,98 @@ pub(crate) static DECLARATION: TypeContract = TypeContract {
             },
             KeyContract {
                 key: "question",
+                home: Some(KeyHome::At(IdKind::Inquiry)),
                 ty: WireType::Text,
                 presence: Presence::Sparse,
             },
             KeyContract {
                 key: "needs",
+                home: Some(KeyHome::At(IdKind::Inquiry)),
                 ty: WireType::Seq(&WireType::Id(&[IdKind::Inquiry])),
                 presence: Presence::Sparse,
             },
             KeyContract {
                 key: "parent",
+                home: Some(KeyHome::At(IdKind::Inquiry)),
                 ty: WireType::Id(&[IdKind::Inquiry]),
                 presence: Presence::Sparse,
             },
             KeyContract {
                 key: "provenance",
+                home: Some(KeyHome::At(IdKind::Inquiry)),
                 ty: WireType::Named(&PROVENANCE),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "lifecycle",
+                home: Some(KeyHome::At(IdKind::Inquiry)),
                 ty: WireType::Named(&INQUIRY_LIFECYCLE),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "body",
+                home: Some(KeyHome::At(IdKind::Section)),
                 ty: WireType::Text,
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "attests",
+                home: Some(KeyHome::At(IdKind::Attestation)),
                 ty: WireType::Id(&[IdKind::Section]),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "reviewer",
+                home: Some(KeyHome::At(IdKind::Attestation)),
                 ty: WireType::Named(&REVIEWER),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "concerns",
+                home: Some(KeyHome::At(IdKind::Finding)),
                 ty: WireType::Id(&[IdKind::Section]),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "summary",
+                home: Some(KeyHome::At(IdKind::Finding)),
                 ty: WireType::Text,
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "blocking",
+                home: Some(KeyHome::At(IdKind::Finding)),
                 ty: WireType::Boolean,
                 presence: Presence::Optional,
             },
+            // The **second home** of the same key (`SL-264` sec-3, `RV-386`
+            // `F-9`): a row rather than a wider first one, because the two differ
+            // in their state rule — a node's judgement is owed where the node is
+            // born and optional afterwards, where the finding's is simply
+            // create-only. A caller reading the two rows side by side can see that
+            // one key means two things, which is exactly what the single
+            // unqualified `optional` row could not state.
+            KeyContract {
+                key: "blocking",
+                home: Some(KeyHome::At(IdKind::Inquiry)),
+                ty: WireType::Boolean,
+                presence: Presence::RequiredAtCreation,
+            },
             KeyContract {
                 key: "resolution",
+                home: Some(KeyHome::At(IdKind::Finding)),
                 ty: WireType::Text,
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "disposes",
+                home: Some(KeyHome::At(IdKind::Checkpoint)),
                 ty: WireType::Id(&[IdKind::Inquiry]),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "dispose",
+                home: Some(KeyHome::At(IdKind::Checkpoint)),
                 ty: WireType::Named(&DISPOSE),
                 presence: Presence::Optional,
             },
@@ -1441,61 +1545,73 @@ pub(crate) static PAYLOAD: TypeContract = TypeContract {
         keys: &[
             KeyContract {
                 key: "run_uid",
+                home: None,
                 ty: WireType::Text,
                 presence: Presence::Required,
             },
             KeyContract {
                 key: "known_revision",
+                home: None,
                 ty: WireType::Integer,
                 presence: Presence::Required,
             },
             KeyContract {
                 key: "submission_id",
+                home: None,
                 ty: WireType::Text,
                 presence: Presence::Required,
             },
             KeyContract {
                 key: "traversal",
+                home: None,
                 ty: WireType::Named(&TRAVERSAL_DECLARATION),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "stage",
+                home: None,
                 ty: WireType::Named(&STAGE_DECLARATION),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "acceptance",
+                home: None,
                 ty: WireType::Named(&ACCEPTANCE_DECLARATION),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "declare",
+                home: None,
                 ty: WireType::Seq(&WireType::Named(&DECLARATION)),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "delegation",
+                home: None,
                 ty: WireType::Named(&DELEGATION_ACT),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "discharge",
+                home: None,
                 ty: WireType::Named(&DISCHARGE_DECLARATION),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "review_policy",
+                home: None,
                 ty: WireType::Named(&REVIEW_POLICY_DECLARATION),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "checkpoint_act",
+                home: None,
                 ty: WireType::Named(&CHECKPOINT_ACT_DECLARATION),
                 presence: Presence::Optional,
             },
             KeyContract {
                 key: "agent_declaration",
+                home: None,
                 ty: WireType::Named(&AGENT_ACT_DECLARATION),
                 presence: Presence::Optional,
             },
@@ -1692,13 +1808,27 @@ fn visit_wire(
 
 // --- The model's own vocabulary, spelled once each (STD-001) -----------------
 
-/// How a key's presence is spelled. **Three states, not two** — `sparse` is not
-/// `optional` (`sec-2`).
+/// How a key's presence is spelled. **Four states** — `sparse` is not
+/// `optional`, and `required-at-creation` is neither.
 const fn presence_token(presence: Presence) -> &'static str {
     match presence {
         Presence::Required => "required",
         Presence::Optional => "optional",
         Presence::Sparse => "sparse",
+        Presence::RequiredAtCreation => "required-at-creation",
+    }
+}
+
+/// How a key's home is spelled — the kind of subject it is honoured at, in the
+/// same prefix vocabulary every id in this contract uses.
+///
+/// [`KeyHome::Universal`] renders as [`ANY_KIND`] rather than as a list of the
+/// five admissible kinds: the key is carried by *every* declaration, and the type
+/// column beside it already spells which ids a caller may address.
+const fn home_token(home: KeyHome) -> &'static str {
+    match home {
+        KeyHome::Universal => ANY_KIND,
+        KeyHome::At(kind) => kind.prefix(),
     }
 }
 
@@ -1790,14 +1920,23 @@ fn json_map_key(key: MapKey) -> Value {
 }
 
 fn json_key(row: &KeyContract) -> Value {
-    object([
-        ("key", Value::String(row.key.to_owned())),
-        ("type", json_wire(&row.ty)),
-        (
-            "presence",
-            Value::String(presence_token(row.presence).to_owned()),
-        ),
-    ])
+    let mut pairs = Map::new();
+    pairs.insert("key".to_owned(), Value::String(row.key.to_owned()));
+    pairs.insert("type".to_owned(), json_wire(&row.ty));
+    pairs.insert(
+        "presence".to_owned(),
+        Value::String(presence_token(row.presence).to_owned()),
+    );
+    // Only where there is one, and never as `null`: a key addressed by the type
+    // it sits in has no home to report, and a machine consumer reading `null`
+    // would have to know that `any kind` is not its meaning.
+    if let Some(home) = row.home {
+        pairs.insert(
+            "home".to_owned(),
+            Value::String(home_token(home).to_owned()),
+        );
+    }
+    Value::Object(pairs)
 }
 
 /// Tagging carried **as tagging style** rather than encoded structurally — one
@@ -1980,6 +2119,11 @@ const BARE_STRING: &str = "BARE STRING";
 /// something false (`sec-2`).
 const NO_TOKEN: &str = "‹no token›";
 
+/// What [`KeyContract::home`] renders as for a key carried by every declaration
+/// — a token rather than an empty cell, so a row that has a home always says
+/// which one and a reader cannot mistake "any kind" for "no column".
+const ANY_KIND: &str = "any";
+
 /// What a selector token that opens no keys renders as. An empty key list emits
 /// no rows at all, and no rows is indistinguishable from a row that failed to
 /// render — so the emptiness is stated.
@@ -2004,6 +2148,7 @@ const fn presence_note(presence: Presence) -> &'static str {
         // Required and Optional mean what they say and need no gloss.
         Presence::Required | Presence::Optional => "",
         Presence::Sparse => "(omit persists · null clears)",
+        Presence::RequiredAtCreation => "(required on creation · omit persists · null refused)",
     }
 }
 
@@ -2056,10 +2201,18 @@ fn prompt_map_key(key: MapKey) -> String {
     }
 }
 
-/// One key row: name, type, presence, and the presence's fixed parenthetical.
-fn key_line(row: &KeyContract, key_width: usize, type_width: usize) -> String {
+/// One key row: name, type, the kind it is honoured at (where it has one),
+/// presence, and the presence's fixed parenthetical.
+///
+/// The home column **drops out of a block whose keys have no home** — every struct
+/// outside [`DECLARATION`] — rather than being repeated empty down ten blocks that
+/// have nothing to say in it. One shape for the rows that answer the question.
+fn key_line(row: &KeyContract, key_width: usize, type_width: usize, home_width: usize) -> String {
+    let home = row.home.map_or(String::new(), |home| {
+        format!("{:<home_width$}{GAP}", home_token(home))
+    });
     let line = format!(
-        "{key:<key_width$}{GAP}{ty:<type_width$}{GAP}{presence}{GAP} {note}",
+        "{key:<key_width$}{GAP}{ty:<type_width$}{GAP}{home}{presence}{GAP} {note}",
         key = row.key,
         ty = prompt_wire(&row.ty),
         presence = presence_token(row.presence),
@@ -2068,17 +2221,24 @@ fn key_line(row: &KeyContract, key_width: usize, type_width: usize) -> String {
     line.trim_end().to_owned()
 }
 
-/// The widest key name and rendered type across a key list — column widths are
-/// computed per block, so a wide row in one block does not pad every other, and
-/// the type column stops at [`TYPE_COLUMN_CAP`].
-fn key_widths<'a>(rows: impl Iterator<Item = &'a KeyContract>) -> (usize, usize) {
-    let (key, ty) = rows.fold((0, 0), |(key, ty), row| {
+/// The widest key name, rendered type and home across a key list — column widths
+/// are computed per block, so a wide row in one block does not pad every other,
+/// and the type column stops at [`TYPE_COLUMN_CAP`].
+///
+/// The home width is **zero where no row in the block has a home**, which is what
+/// drops that column from every block that does not need it.
+fn key_widths<'a>(rows: impl Iterator<Item = &'a KeyContract>) -> (usize, usize, usize) {
+    let ((key, ty), home) = rows.fold(((0, 0), 0), |((key, ty), home), row| {
+        let row_home = row.home.map_or(0, |each| home_token(each).chars().count());
         (
-            key.max(row.key.chars().count()),
-            ty.max(prompt_wire(&row.ty).chars().count()),
+            (
+                key.max(row.key.chars().count()),
+                ty.max(prompt_wire(&row.ty).chars().count()),
+            ),
+            home.max(row_home),
         )
     });
-    (key, ty.min(TYPE_COLUMN_CAP))
+    (key, ty.min(TYPE_COLUMN_CAP), home)
 }
 
 /// A struct block: the header, then one line per key in declaration order —
@@ -2099,10 +2259,10 @@ fn struct_block(
         token = unknown_keys_token(unknown_keys),
         note = unknown_keys_note(unknown_keys),
     )];
-    let (key_width, type_width) = key_widths(keys.iter());
+    let (key_width, type_width, home_width) = key_widths(keys.iter());
     lines.extend(
         keys.iter()
-            .map(|row| format!("{GAP}{}", key_line(row, key_width, type_width))),
+            .map(|row| format!("{GAP}{}", key_line(row, key_width, type_width, home_width))),
     );
     lines.extend(
         retired_from(retired, contract)
@@ -2156,10 +2316,11 @@ fn variant_payload_lines(
     bare: bool,
     key_width: usize,
     type_width: usize,
+    home_width: usize,
 ) -> Vec<String> {
     let keys = |rows: &[KeyContract]| -> Vec<String> {
         rows.iter()
-            .map(|row| key_line(row, key_width, type_width))
+            .map(|row| key_line(row, key_width, type_width, home_width))
             .collect()
     };
     match (tagging, payload) {
@@ -2228,7 +2389,7 @@ fn enum_block(
         .map(|variant| variant.token.unwrap_or(NO_TOKEN).chars().count())
         .max()
         .unwrap_or_default();
-    let (key_width, type_width) =
+    let (key_width, type_width, home_width) =
         key_widths(variants.iter().flat_map(|variant| match variant.payload {
             VariantPayload::Keys(rows) => rows.iter(),
             VariantPayload::Absent | VariantPayload::Inlines(_) | VariantPayload::Shape(_) => {
@@ -2238,7 +2399,14 @@ fn enum_block(
 
     for variant in variants {
         let token = variant.token.unwrap_or(NO_TOKEN);
-        let payload = variant_payload_lines(tagging, variant.payload, bare, key_width, type_width);
+        let payload = variant_payload_lines(
+            tagging,
+            variant.payload,
+            bare,
+            key_width,
+            type_width,
+            home_width,
+        );
         if payload.is_empty() {
             lines.push(format!("{GAP}{token}"));
             continue;
@@ -2283,7 +2451,8 @@ fn region_block(table: &SelectorTable) -> Vec<String> {
         .map(|row| row.token.chars().count())
         .max()
         .unwrap_or_default();
-    let (key_width, type_width) = key_widths(table.rows.iter().flat_map(|row| row.keys.iter()));
+    let (key_width, type_width, home_width) =
+        key_widths(table.rows.iter().flat_map(|row| row.keys.iter()));
 
     for row in &table.rows {
         if row.keys.is_empty() {
@@ -2298,7 +2467,7 @@ fn region_block(table: &SelectorTable) -> Vec<String> {
             lines.push(
                 format!(
                     "{GAP}{column:<token_width$}{GAP}{}",
-                    key_line(key, key_width, type_width)
+                    key_line(key, key_width, type_width, home_width)
                 )
                 .trim_end()
                 .to_owned(),
@@ -2386,6 +2555,10 @@ it may be omitted and what omission means, and what happens to a key this
 contract does not list. Where a variant's payload sits is a function of the
 enum's tagging and that variant's payload together, so the rendering states it
 per variant rather than per type.
+
+Where a key is honoured at a **kind of subject** rather than wherever its type
+sits, the kind is named beside it, and one key may appear once per kind with a
+rule of its own — `blocking` is one such key.
 ";
 
 /// The fence the rendering sits in, opened and closed.
@@ -3166,11 +3339,13 @@ mod tests {
             keys: &[
                 KeyContract {
                     key: "kind",
+                    home: None,
                     ty: WireType::Token(TokenSource::Extern(ExternRegion::KnowledgeRecord)),
                     presence: Presence::Required,
                 },
                 KeyContract {
                     key: "facet",
+                    home: None,
                     ty: WireType::Map {
                         key: MapKey::Extern {
                             region: ExternRegion::KnowledgeRecord,
@@ -3216,6 +3391,7 @@ mod tests {
                     token: Some("adopt"),
                     payload: VariantPayload::Keys(&[KeyContract {
                         key: "record",
+                        home: None,
                         ty: WireType::Text,
                         presence: Presence::Required,
                     }]),
@@ -3235,6 +3411,7 @@ mod tests {
                     token: Some("blocking-set-declared"),
                     payload: VariantPayload::Keys(&[KeyContract {
                         key: "blocking",
+                        home: None,
                         ty: WireType::Seq(&WireType::Id(&[IdKind::Inquiry])),
                         presence: Presence::Required,
                     }]),
@@ -3255,26 +3432,31 @@ mod tests {
             keys: &[
                 KeyContract {
                     key: "run_uid",
+                    home: None,
                     ty: WireType::Text,
                     presence: Presence::Required,
                 },
                 KeyContract {
                     key: "known_revision",
+                    home: None,
                     ty: WireType::Integer,
                     presence: Presence::Required,
                 },
                 KeyContract {
                     key: "locked",
+                    home: None,
                     ty: WireType::Boolean,
                     presence: Presence::Optional,
                 },
                 KeyContract {
                     key: "parent",
+                    home: None,
                     ty: WireType::Id(&[IdKind::Inquiry]),
                     presence: Presence::Sparse,
                 },
                 KeyContract {
                     key: "sections",
+                    home: None,
                     ty: WireType::Map {
                         key: MapKey::Of(&WireType::Id(&[IdKind::Section])),
                         value: &WireType::Text,
@@ -3283,16 +3465,19 @@ mod tests {
                 },
                 KeyContract {
                     key: "outcome",
+                    home: None,
                     ty: WireType::Token(TokenSource::Fixed(&["attested", "skipped"])),
                     presence: Presence::Optional,
                 },
                 KeyContract {
                     key: "dispose",
+                    home: None,
                     ty: WireType::Named(&EXEMPLAR_DISPOSE),
                     presence: Presence::Optional,
                 },
                 KeyContract {
                     key: "act",
+                    home: None,
                     ty: WireType::Named(&EXEMPLAR_AGENT_ACT),
                     presence: Presence::Optional,
                 },
@@ -3523,11 +3708,13 @@ mod tests {
                         keys: vec![
                             KeyContract {
                                 key: "claim",
+                                home: None,
                                 ty: WireType::Text,
                                 presence: Presence::Optional,
                             },
                             KeyContract {
                                 key: "confidence",
+                                home: None,
                                 ty: WireType::Token(TokenSource::Fixed(&["low", "medium", "high"])),
                                 presence: Presence::Optional,
                             },
@@ -4189,6 +4376,7 @@ mod tests {
                     token: "assumption",
                     keys: vec![KeyContract {
                         key: "confidence",
+                        home: None,
                         ty: WireType::Token(TokenSource::Fixed(&["low", "medium", "high"])),
                         presence: Presence::Optional,
                     }],

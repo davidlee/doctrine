@@ -264,6 +264,7 @@ mod tests {
             id("inq-1"),
             "does it need a transport?",
             Provenance::AgentProposed,
+            Some(false),
         )
         .sequenced(1);
         let mut map = InquiryMap::default();
@@ -296,6 +297,7 @@ mod tests {
                 id("inq-1"),
                 "a different question",
                 Provenance::AgentProposed,
+                Some(false),
             )
             .sequenced(1),
         )

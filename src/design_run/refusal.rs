@@ -334,6 +334,25 @@ pub(crate) enum Refusal {
     /// step id is dot-separated and author-assigned, and `DesignId::parse`
     /// admits neither the dots nor an unprefixed body.
     DischargeReasonMissing { step: String },
+    /// A subject's blocking judgement was omitted where the wire requires one —
+    /// the node is being **created** (`SL-264` sec-3, `RV-386` `F-9`).
+    ///
+    /// A creation is refused rather than defaulted, and refuses where the node is
+    /// born rather than in a table: the wire-key table says where a key is
+    /// honoured, never when it is owed. The obligation is not decoration — an
+    /// unjudged node is one the marks cannot read, and a default would make the
+    /// engine's choice look like the agent's.
+    BlockingJudgementMissing { id: DesignId },
+    /// A blocking judgement arrived as `null` — in either state (`SL-264` sec-3).
+    ///
+    /// Distinct from [`Refusal::BlockingJudgementMissing`] because it is a
+    /// different mistake with a different remedy: this caller said something, and
+    /// what they said is that the judgement should stop being. A judgement can be
+    /// **changed** — send the other value — but not withdrawn, because the marks
+    /// are what the user reviews; a node that silently left the blocking set by
+    /// being `null` would be `SL-259`'s disease (success reported, nothing moved)
+    /// one layer up.
+    BlockingJudgementWithdrawn { id: DesignId },
     /// A forward edge carries a runbook and it is not fully discharged
     /// (`EX-8`).
     ///
@@ -492,7 +511,19 @@ pub(crate) enum Refusal {
     InertKey {
         subject: DesignId,
         key: &'static str,
-        honoured_by: IdKind,
+        /// The **kinds** at which the key is honoured, in wire-key table order
+        /// (`SL-264` sec-3).
+        ///
+        /// A list rather than one kind, because one key may have more than one
+        /// home — `blocking` is admitted at an `inq-` node in either state and at
+        /// a newly created `fnd-` finding — and a refusal naming one of two is
+        /// true and still misleads: a caller told only the first would move the
+        /// key to the wrong home.
+        ///
+        /// Never empty. The kind axis fires only on a row carrying
+        /// [`super::submission::KeyHome::At`], and that row's kind is in the list;
+        /// a key inert at no kind is never refused by that axis at all.
+        honoured_by: Vec<IdKind>,
         /// The key the caller wanted, where their intent is unambiguous
         /// (`SL-249` `EX-2`). `None` where no remedy is derivable and guessing
         /// one would send them somewhere worse than the honouring kind.
@@ -838,6 +869,20 @@ impl fmt::Display for Refusal {
             Refusal::FindingSubjectMissing { id } => {
                 write!(f, "finding {id} names no section this run holds")
             }
+            // The remedy is the point, and it differs from the withdrawal
+            // below's: this caller said nothing, so the missing half is named.
+            Refusal::BlockingJudgementMissing { id } => write!(
+                f,
+                "{id} is created with no `blocking` judgement — state one at creation; \
+                 a question the agent judges blocking must reach the user the moment it is \
+                 added, so the judgement is owed where the node is born"
+            ),
+            Refusal::BlockingJudgementWithdrawn { id } => write!(
+                f,
+                "{id} sends `blocking: null` — a judgement can be changed, by sending the \
+                 other value, but not withdrawn; omit the key to leave the held judgement \
+                 as it is"
+            ),
             Refusal::AttestationSubjectMissing { id } => {
                 write!(f, "attestation {id} names no section this run holds")
             }
@@ -934,10 +979,14 @@ impl fmt::Display for Refusal {
             } => {
                 write!(
                     f,
-                    "`{key}` is inert at {subject} — a `{}` subject; it is honoured for `{}` \
+                    "`{key}` is inert at {subject} — a `{}` subject; it is honoured for {} \
                      subjects",
                     subject.kind().prefix(),
-                    honoured_by.prefix()
+                    honoured_by
+                        .iter()
+                        .map(|kind| format!("`{}`", kind.prefix()))
+                        .collect::<Vec<_>>()
+                        .join(" and ")
                 )?;
                 match remedy {
                     Some(instead) => write!(f, ". To carry it here, use `{instead}`"),

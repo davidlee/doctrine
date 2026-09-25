@@ -209,6 +209,19 @@ pub(crate) struct InquiryNode {
     disposition: Option<Disposition>,
     parent: Option<DesignId>,
     needs: BTreeSet<DesignId>,
+    /// Whether this question blocks the run (`SL-264` sec-3).
+    ///
+    /// **A shape fact, not progress** — it is a member of [`NodeMaterial`], so a
+    /// flip on a covered node re-faces the human through the coverage comparison.
+    /// The judgement is a property of the node rather than of a free-standing act
+    /// because the user reviews it *in* the map, not beside it.
+    ///
+    /// `None` means **unjudged**, readable by design rather than by accident: an
+    /// omission is refused where a node is created, so only a node that predates
+    /// this change can hold it, and its effective judgement still falls back to
+    /// the stored legacy declaration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    blocking: Option<bool>,
     /// Creation order, assigned from the snapshot's own counter
     /// ([`super::snapshot::MapGroup::claim_seq`]).
     ///
@@ -225,7 +238,19 @@ impl InquiryNode {
     /// A new open node, unsequenced. [`InquiryNode::sequenced`] places it in
     /// creation order; a node that never receives one sorts first, which is the
     /// honest reading of "raised before the counter existed".
-    pub(crate) fn open(id: DesignId, question: impl Into<String>, provenance: Provenance) -> Self {
+    ///
+    /// The judgement is a **parameter and not a builder**, so no creation path
+    /// can omit it by construction (`SL-264` sec-3, `RV-386` `F-10`): a defaulted
+    /// field would let a new door into the map be born unjudged, which is the
+    /// omission the wire refuses. [`Option`] rather than `bool` because a node
+    /// that predates the attribute is legitimately unjudged, and reconstruction
+    /// ([`super::run`]'s `rebuild`) carries that state forward.
+    pub(crate) fn open(
+        id: DesignId,
+        question: impl Into<String>,
+        provenance: Provenance,
+        blocking: Option<bool>,
+    ) -> Self {
         InquiryNode {
             id,
             question: question.into(),
@@ -234,6 +259,7 @@ impl InquiryNode {
             disposition: None,
             parent: None,
             needs: BTreeSet::new(),
+            blocking,
             seq: 0,
         }
     }
@@ -299,6 +325,11 @@ impl InquiryNode {
         &self.needs
     }
 
+    /// The stored blocking judgement, or `None` where the node predates it.
+    pub(crate) const fn blocking(&self) -> Option<bool> {
+        self.blocking
+    }
+
     /// What this node is made of, for coverage purposes — everything except the
     /// two fields [`NodeMaterial`] excludes and the `id` the map keys on.
     fn material(&self) -> NodeMaterial {
@@ -307,6 +338,7 @@ impl InquiryNode {
             provenance: self.provenance.clone(),
             parent: self.parent.clone(),
             needs: self.needs.clone(),
+            blocking: self.blocking,
             seq: self.seq,
         }
     }
@@ -361,6 +393,11 @@ pub(crate) struct NodeMaterial {
     parent: Option<DesignId>,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     needs: BTreeSet<DesignId>,
+    /// The blocking judgement is material, deliberately (`SL-264` sec-3): the
+    /// user reviews the blocking marks *within* the graph, so a flipped judgement
+    /// is a change to what they were shown rather than progress through it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    blocking: Option<bool>,
     #[serde(default)]
     seq: u64,
 }

@@ -1163,6 +1163,11 @@ pub(crate) fn extern_contracts() -> ExternContracts {
                 .iter()
                 .map(|field| KeyContract {
                     key: field.name,
+                    // A facet field is addressed by its record kind's selector,
+                    // not by the kind of a subject id: this table is reached
+                    // through `CreateRecord.facet`, whose keys are chosen by a
+                    // sibling's *value* rather than by any id's prefix.
+                    home: None,
                     ty: match field.shape {
                         FieldShape::Text => WireType::Text,
                         FieldShape::List => WireType::Seq(&WireType::Text),
@@ -3541,7 +3546,7 @@ mod tests {
         // `Declaration` DOES carry `deny_unknown_fields` — serde would have
         // caught this one unaided.
         let attributed = format!(
-            "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"cursror\":\"inq-1\"}}]}}",
+            "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false,\"blocking\":false,\"cursror\":\"inq-1\"}}]}}",
             envelope(root, slice, 1, "sub-1")
         );
         let error = apply(root, slice, &attributed, &|| {}, &no_fault)
@@ -3614,7 +3619,7 @@ mod tests {
 
         let before = std::fs::read(&snapshot_path).unwrap();
         let payload = format!(
-            "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+            "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
             envelope(root, slice, 1, "sub-1")
         );
 
@@ -3665,7 +3670,7 @@ mod tests {
             root,
             slice,
             &format!(
-                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
                 envelope(root, slice, 1, "sub-seed")
             ),
             &|| {},
@@ -3721,7 +3726,7 @@ mod tests {
             root,
             slice,
             &format!(
-                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
                 envelope(root, slice, 1, "sub-seed")
             ),
             &|| {},
@@ -3767,7 +3772,7 @@ mod tests {
             root,
             slice,
             &format!(
-                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
                 envelope(root, slice, 1, "sub-seed")
             ),
             &|| {},
@@ -4247,7 +4252,7 @@ mod tests {
             root,
             slice,
             &format!(
-                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
                 envelope(root, slice, 1, "sub-seed")
             ),
             &|| {},
@@ -4350,8 +4355,8 @@ mod tests {
             root,
             slice,
             &format!(
-                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q1\"}},\
-                 {{\"subject\":\"inq-2\",\"question\":\"q2\"}}]}}",
+                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q1\",\"blocking\":false}},\
+                 {{\"subject\":\"inq-2\",\"question\":\"q2\",\"blocking\":false}}]}}",
                 envelope(root, slice, 1, "sub-seed")
             ),
             &|| {},
@@ -4543,7 +4548,7 @@ mod tests {
             root,
             slice,
             &format!(
-                "{{{},\"declare\":[{{\"subject\":\"inq-2\",\"question\":\"q\"}}]}}",
+                "{{{},\"declare\":[{{\"subject\":\"inq-2\",\"question\":\"q\",\"blocking\":false}}]}}",
                 envelope(root, slice, 2, "sub-0")
             ),
             &|| {},
@@ -4574,7 +4579,7 @@ mod tests {
             root,
             slice,
             &format!(
-                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
                 envelope(root, slice, 1, "sub-seed")
             ),
             &|| {},
@@ -4626,7 +4631,7 @@ mod tests {
             root,
             slice,
             &format!(
-                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
                 envelope(root, slice, 1, "sub-seed")
             ),
             &|| {},

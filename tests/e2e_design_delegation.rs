@@ -105,7 +105,7 @@ const WRITER_ACTS: [(&str, fn() -> Value); 8] = [
     ("acceptance", || json!({"basis": "the delegate says so"})),
     (
         "declare",
-        || json!([{"subject": PROPOSED_NODE, "question": "declared, not proposed"}]),
+        || json!([{"subject": PROPOSED_NODE, "question": "declared, not proposed", "blocking": false}]),
     ),
     ("traversal", || json!({"posture": Posture::Depth})),
     (
@@ -196,7 +196,7 @@ impl Fixture {
             "seed-map",
             &json!({"declare": [
                 {"subject": SECTION_SPINE, "body": spine_body()},
-                {"subject": OBLIGATION, "question": "does delegation need a transport in v1?"},
+                {"subject": OBLIGATION, "question": "does delegation need a transport in v1?", "blocking": false},
             ]}),
         ));
         fixture.apply(&fixture.payload(
@@ -250,7 +250,7 @@ impl Fixture {
             "summary": PROPOSAL_SUMMARY,
             "declare": [{
                 "subject": PROPOSED_NODE,
-                "question": "is the write broker separable from the authority model?",
+                "question": "is the write broker separable from the authority model?", "blocking": false,
                 "parent": OBLIGATION,
             }],
         }})
@@ -584,7 +584,7 @@ fn accepted_proposal_retains_its_attribution() {
     // Later coordinator activity does not rewrite it either.
     fixture.apply(&fixture.payload(
         "carry-on",
-        &json!({"declare": [{"subject": "inq-3", "question": "and then?"}]}),
+        &json!({"declare": [{"subject": "inq-3", "question": "and then?", "blocking": false}]}),
     ));
     assert_eq!(
         fixture

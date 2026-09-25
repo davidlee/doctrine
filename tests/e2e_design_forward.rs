@@ -716,6 +716,10 @@ fn growing_run() -> DesignRun {
             json!({
                 "subject": node(index),
                 "question": format!("blocking question {index}"),
+                // Judged where each node is born as well as declared in the set
+                // below: a judgement is owed at creation (`SL-264` sec-3), and
+                // this fixture's nodes are the blocking ones by construction.
+                "blocking": true,
             })
         })
         .collect();

@@ -187,11 +187,19 @@ pub(super) fn cleared() -> (DesignSnapshot, DerivedInput) {
     // Two nodes, one declared blocking and disposed, one open and undeclared.
     // The second is the control that keeps the engine row about the *declared*
     // set rather than about every question on the map.
+    //
+    // Each carries the judgement the declaration below gives it, so the fixture
+    // is consistent about its own blocking set under both representations: the
+    // stored act names `inq-1`, and `inq-1` says so itself (`SL-264` sec-3). An
+    // unjudged node would read the same to today's engine — the set still derives
+    // from the act — but would model a run predating the attribute, which is not
+    // what this fixture is for.
     for (raw, resolved) in [(BLOCKING_NODE, true), (OPEN_NODE, false)] {
         let node = InquiryNode::open(
             id(raw),
             format!("is {raw} settled?"),
             Provenance::AgentProposed,
+            Some(resolved),
         );
         let node = if resolved {
             node.resolve(Disposition::RetainedUnresolved {

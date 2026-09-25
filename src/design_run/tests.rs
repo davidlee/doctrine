@@ -24,7 +24,7 @@ use super::attestation::{
     IntentSubject, RecordedAct, RecoveryIntent, ReviewDisposition, ReviewPolicy, ReviewRef,
     Reviewer,
 };
-use super::change_log::{ChangeEvent, PayloadKey, PayloadTerm, ValueKind};
+use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm, ValueKind};
 use super::fixture::{
     BLOCKING_NODE, OPEN_NODE, PASS, SECTION_A, SECTION_B, attest, blocking_set_declared,
     checkpoint_act, cleared, declared, drafting_ready, id, pass_over, run_holding, section,
@@ -49,8 +49,8 @@ use super::payload_contract::{
 use super::prompt::contract_block;
 use super::refusal::{ActFault, Refusal};
 use super::run::{
-    Applied, AuthoredSection, Crossing, DerivedInput, GateFacts, ObservedReview, Resolution, apply,
-    declare, live_reviews, subject_state,
+    Applied, AuthoredSection, Crossing, DerivedInput, GateFacts, ObservedReview, Resolution,
+    ShapingQuestion, apply, declare, import, live_reviews, subject_state,
 };
 use super::runbook::{RunbookKey, RunbookStanding};
 use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup, DesignSnapshot, Finding};
@@ -331,15 +331,22 @@ fn parent_and_needs_cycles_are_refused() {
 
     // Parent relation: a → b → a.
     let mut map = InquiryMap::default();
-    map.insert(InquiryNode::open(a.clone(), "a?", Provenance::UserDirected))
-        .expect("root");
+    map.insert(InquiryNode::open(
+        a.clone(),
+        "a?",
+        Provenance::UserDirected,
+        Some(false),
+    ))
+    .expect("root");
     map.insert(
-        InquiryNode::open(b.clone(), "b?", Provenance::AgentProposed).with_parent(a.clone()),
+        InquiryNode::open(b.clone(), "b?", Provenance::AgentProposed, Some(false))
+            .with_parent(a.clone()),
     )
     .expect("child");
     assert_eq!(
         map.insert(
-            InquiryNode::open(a.clone(), "a?", Provenance::UserDirected).with_parent(b.clone())
+            InquiryNode::open(a.clone(), "a?", Provenance::UserDirected, Some(false))
+                .with_parent(b.clone())
         ),
         // The refusal names the edge that *closes* the cycle, which is the one
         // reached last on the walk, not the one just submitted.
@@ -354,14 +361,23 @@ fn parent_and_needs_cycles_are_refused() {
     // `needs` relation: the same cycle through the other edge kind.
     let mut needs_map = InquiryMap::default();
     needs_map
-        .insert(InquiryNode::open(a.clone(), "a?", Provenance::UserDirected))
+        .insert(InquiryNode::open(
+            a.clone(),
+            "a?",
+            Provenance::UserDirected,
+            Some(false),
+        ))
         .expect("root");
     needs_map
-        .insert(InquiryNode::open(b.clone(), "b?", Provenance::AgentProposed).needing(a.clone()))
+        .insert(
+            InquiryNode::open(b.clone(), "b?", Provenance::AgentProposed, Some(false))
+                .needing(a.clone()),
+        )
         .expect("dependant");
     assert_eq!(
         needs_map.insert(
-            InquiryNode::open(a.clone(), "a?", Provenance::UserDirected).needing(b.clone())
+            InquiryNode::open(a.clone(), "a?", Provenance::UserDirected, Some(false))
+                .needing(b.clone())
         ),
         Err(Refusal::CyclicEdge { from: b, to: a })
     );
@@ -371,17 +387,27 @@ fn parent_and_needs_cycles_are_refused() {
     let (d, e, f, g) = (id("inq-d"), id("inq-e"), id("inq-f"), id("inq-g"));
     let mut diamond = InquiryMap::default();
     diamond
-        .insert(InquiryNode::open(g.clone(), "g?", Provenance::UserDirected))
+        .insert(InquiryNode::open(
+            g.clone(),
+            "g?",
+            Provenance::UserDirected,
+            Some(false),
+        ))
         .expect("sink");
     diamond
-        .insert(InquiryNode::open(e.clone(), "e?", Provenance::UserDirected).needing(g.clone()))
+        .insert(
+            InquiryNode::open(e.clone(), "e?", Provenance::UserDirected, Some(false))
+                .needing(g.clone()),
+        )
         .expect("left");
     diamond
-        .insert(InquiryNode::open(f.clone(), "f?", Provenance::UserDirected).needing(g))
+        .insert(
+            InquiryNode::open(f.clone(), "f?", Provenance::UserDirected, Some(false)).needing(g),
+        )
         .expect("right");
     assert_eq!(
         diamond.insert(
-            InquiryNode::open(d.clone(), "d?", Provenance::UserDirected)
+            InquiryNode::open(d.clone(), "d?", Provenance::UserDirected, Some(false))
                 .needing(e)
                 .needing(f)
         ),
@@ -398,11 +424,17 @@ fn blocked_is_derived_not_stored() {
         blocker.clone(),
         "settle me first",
         Provenance::UserDirected,
+        Some(false),
     ))
     .expect("blocker");
     map.insert(
-        InquiryNode::open(waiting.clone(), "depends", Provenance::AgentProposed)
-            .needing(blocker.clone()),
+        InquiryNode::open(
+            waiting.clone(),
+            "depends",
+            Provenance::AgentProposed,
+            Some(false),
+        )
+        .needing(blocker.clone()),
     )
     .expect("dependant");
 
@@ -430,7 +462,12 @@ fn blocked_is_derived_not_stored() {
 #[test]
 fn resolved_node_without_disposition_is_refused() {
     let node_id = id("inq-1");
-    let node = InquiryNode::open(node_id.clone(), "why?", Provenance::UserDirected);
+    let node = InquiryNode::open(
+        node_id.clone(),
+        "why?",
+        Provenance::UserDirected,
+        Some(false),
+    );
 
     // The lifecycle-only route cannot reach `resolved`.
     assert_eq!(
@@ -588,6 +625,7 @@ fn node_material_ignores_progress_and_observes_shape() {
             id("inq-1"),
             "does the gate need a contract?",
             Provenance::UserDirected,
+            Some(false),
         )
         .sequenced(0)
     };
@@ -596,6 +634,7 @@ fn node_material_ignores_progress_and_observes_shape() {
             id("inq-2"),
             "what does a refusal owe its reader?",
             Provenance::AgentProposed,
+            Some(false),
         )
         .sequenced(1)
         .with_parent(id("inq-1"))
@@ -605,6 +644,7 @@ fn node_material_ignores_progress_and_observes_shape() {
             id("inq-3"),
             "where does the material live?",
             Provenance::AgentProposed,
+            Some(false),
         )
         .sequenced(2)
     };
@@ -634,6 +674,7 @@ fn node_material_ignores_progress_and_observes_shape() {
             id("inq-2"),
             "what does a refusal owe its reader, exactly?",
             Provenance::AgentProposed,
+            Some(false),
         )
         .sequenced(1)
         .with_parent(id("inq-1")),
@@ -649,6 +690,7 @@ fn node_material_ignores_progress_and_observes_shape() {
             id("inq-2"),
             "what does a refusal owe its reader?",
             Provenance::AgentProposed,
+            Some(false),
         )
         .sequenced(1)
         .with_parent(id("inq-3")),
@@ -660,7 +702,13 @@ fn node_material_ignores_progress_and_observes_shape() {
         root(),
         child(),
         sibling(),
-        InquiryNode::open(id("inq-4"), "and who reads it?", Provenance::UserDirected).sequenced(3),
+        InquiryNode::open(
+            id("inq-4"),
+            "and who reads it?",
+            Provenance::UserDirected,
+            Some(false),
+        )
+        .sequenced(3),
     ])
     .materials();
     assert_eq!(coverage.diff(&joined), vec![id("inq-4")], "a node arrived");
@@ -2201,6 +2249,7 @@ fn a_blocking_set_naming_nodes_outside_its_coverage_is_refused() {
         id("inq-1"),
         "the one on the map?",
         Provenance::UserDirected,
+        Some(false),
     )]);
     let mut declared = blocking_set_declared("agd-1", &["inq-1", "inq-9"]);
     declared.covered = Some(CoveredSet::Nodes(ContentCoverage::of(map.materials())));
@@ -2453,6 +2502,7 @@ fn stale_conjunct_does_not_satisfy() {
             late.clone(),
             "what did the graph review not see?",
             Provenance::AgentProposed,
+            Some(false),
         ))
         .expect("a fresh node closes no cycle");
     // Re-declared over the new map, with the same blocking set — so the claim
@@ -2561,6 +2611,7 @@ fn progress_does_not_invalidate_but_shape_does() {
             open.clone(),
             "is inq-2 settled, exactly?",
             Provenance::AgentProposed,
+            Some(false),
         ))
         .expect("re-wording closes no cycle");
 
@@ -2946,6 +2997,7 @@ fn coverage_does_not_move_the_declaration_fingerprint() {
             open.clone(),
             "is inq-2 settled, exactly?",
             Provenance::AgentProposed,
+            Some(false),
         ))
         .expect("re-wording closes no cycle");
 
@@ -3046,7 +3098,7 @@ fn a_checkpoint_subject_carrying_section_prose_is_refused_naming_the_key_it_want
         Refusal::InertKey {
             subject: id("cp-4"),
             key: "body",
-            honoured_by: IdKind::Section,
+            honoured_by: vec![IdKind::Section],
             remedy: Some("dispose.create.body"),
         }
     );
@@ -3091,6 +3143,7 @@ fn universe(state: SubjectState, kind: IdKind) -> (DesignSnapshot, DerivedInput)
             id(COMPANION_NODE),
             "a companion",
             Provenance::AgentProposed,
+            Some(false),
         ))
         .expect("the companion node seats");
     if state == SubjectState::Held {
@@ -3119,6 +3172,7 @@ fn seat_subject(snapshot: &mut DesignSnapshot, kind: IdKind) {
                     id("inq-1"),
                     "the subject",
                     Provenance::AgentProposed,
+                    Some(false),
                 ))
                 .expect("the held subject seats");
         }
@@ -3171,9 +3225,16 @@ fn wire_value(key: &str) -> Option<&'static str> {
 /// the base for a cell is this set **minus the key under test** — which is how a
 /// required key's own cell gets a base that is refused, so that supplying the key
 /// is observable as the difference between a refusal and an application.
+///
+/// `blocking` joined the inquiry row when `SL-264` made a judgement an obligation
+/// at creation. Every cell at that kind now needs it in the base, or the cell
+/// would measure the missing judgement instead of the key under test — see
+/// [`no_wire_key_is_accepted_and_ignored_at_any_subject_kind`], where a base
+/// refused for *this* reason would let an honoured key read as refused rather than
+/// as effectful.
 fn companions(kind: IdKind) -> &'static [&'static str] {
     match kind {
-        IdKind::Inquiry => &[],
+        IdKind::Inquiry => &["blocking"],
         IdKind::Section => &["body"],
         IdKind::Attestation => &["attests"],
         IdKind::Finding => &["summary", "concerns"],
@@ -5008,6 +5069,7 @@ fn run_with_two_needs_edges() -> DesignSnapshot {
                 id(raw),
                 format!("is {raw} settled?"),
                 Provenance::AgentProposed,
+                Some(false),
             ))
             .expect("the fixture node seats");
     }
@@ -5015,9 +5077,14 @@ fn run_with_two_needs_edges() -> DesignSnapshot {
         .map
         .inquiry
         .insert(
-            InquiryNode::open(id("inq-1"), "what governs this?", Provenance::UserDirected)
-                .needing(id("inq-2"))
-                .needing(id("inq-3")),
+            InquiryNode::open(
+                id("inq-1"),
+                "what governs this?",
+                Provenance::UserDirected,
+                Some(false),
+            )
+            .needing(id("inq-2"))
+            .needing(id("inq-3")),
         )
         .expect("the dependant seats");
     snapshot
@@ -5111,6 +5178,7 @@ fn needs_null_on_an_edge_free_node_records_no_mutation() {
             id("inq-1"),
             "what governs this?",
             Provenance::UserDirected,
+            Some(false),
         ))
         .expect("the fixture node seats");
 
@@ -5141,5 +5209,391 @@ fn needs_null_on_an_edge_free_node_records_no_mutation() {
     assert!(
         !cleared.rows.is_empty(),
         "the control: `needs: null` on a node with edges records the removals"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// SL-264 PHASE-02 — `blocking` is a node attribute with two wire homes
+// (design sec-3; `RV-386` `F-9`, `F-10`).
+// ---------------------------------------------------------------------------
+
+/// The pure core's answer to one declaration over `prior` — the refusal as well
+/// as the application, which [`apply_declaration`] above `expect`s away.
+///
+/// One constructor for every criterion below, so the four differ in the payload
+/// they send and nothing else.
+fn declare_over(prior: &DesignSnapshot, json: &str) -> Result<Applied, Refusal> {
+    apply(
+        prior,
+        &ApplyRequest {
+            declare: vec![declared(json)],
+            ..ApplyRequest::bare(SubmissionEnvelope {
+                run_uid: prior.run.uid.clone(),
+                known_revision: prior.run.revision,
+                submission_id: "s1".to_owned(),
+            })
+        },
+        &Crossing::Ordinary,
+        &DerivedInput::default(),
+        "sha256:pay",
+        &Resolution::default(),
+    )
+}
+
+/// The `From`/`To` term pair on `applied`'s first row of `event`.
+fn from_and_to(applied: &Applied, event: ChangeEvent) -> (String, String) {
+    let row = applied
+        .rows
+        .iter()
+        .find(|row| row.event == event)
+        .expect("the row the criterion is about");
+    let term = |key| {
+        row.terms
+            .iter()
+            .find(|term| term.key() == key)
+            .expect("the row states the term")
+            .value()
+            .to_owned()
+    };
+    (term(PayloadKey::From), term(PayloadKey::To))
+}
+
+/// `VT-1` — a judgement is required where a node is born, `null` is refused in
+/// **either** state, and an omission on an update persists what the node holds.
+///
+/// Driven through the JSON payload path rather than a constructed
+/// [`Declaration`] (`F-9`): the distinction under test — absent versus `null` —
+/// is exactly the one serde collapses into `None` for an `Option<bool>`, so a
+/// test that built the value itself would be testing the field's Rust type
+/// rather than the wire's. `Sparse<bool>` is what keeps them distinct, and this
+/// is the criterion that can see the difference.
+#[test]
+fn blocking_is_required_at_creation_and_refused_as_null() {
+    let prior = run_holding(&[]);
+
+    assert_eq!(
+        declare_over(&prior, r#"{"subject": "inq-1", "question": "why?"}"#)
+            .expect_err("a node born without a judgement is refused"),
+        Refusal::BlockingJudgementMissing { id: id("inq-1") },
+        "the omission is refused, never defaulted — the engine does not choose \
+         a judgement on the caller's behalf"
+    );
+    assert_eq!(
+        declare_over(
+            &prior,
+            r#"{"subject": "inq-1", "question": "why?", "blocking": null}"#
+        )
+        .expect_err("`null` is not a judgement"),
+        Refusal::BlockingJudgementWithdrawn { id: id("inq-1") },
+        "`null` at creation is refused as a withdrawal rather than read as the \
+         omission above (SL-259's disease)"
+    );
+
+    let judged = declare_over(
+        &prior,
+        r#"{"subject": "inq-1", "question": "why?", "blocking": true}"#,
+    )
+    .expect("a creation stating a judgement applies")
+    .snapshot;
+    assert_eq!(
+        judged
+            .map
+            .inquiry
+            .get(&id("inq-1"))
+            .expect("the node was created")
+            .blocking(),
+        Some(true),
+        "the judgement the creation stated is the one the node holds"
+    );
+
+    assert_eq!(
+        declare_over(&judged, r#"{"subject": "inq-1", "blocking": null}"#)
+            .expect_err("a held judgement cannot be withdrawn either"),
+        Refusal::BlockingJudgementWithdrawn { id: id("inq-1") },
+        "a judgement can be changed but not withdrawn, in either state"
+    );
+
+    let persisted = declare_over(
+        &judged,
+        r#"{"subject": "inq-1", "question": "why, exactly?"}"#,
+    )
+    .expect("an update that says nothing about the judgement applies")
+    .snapshot;
+    assert_eq!(
+        persisted
+            .map
+            .inquiry
+            .get(&id("inq-1"))
+            .expect("the node survives the update")
+            .blocking(),
+        Some(true),
+        "omission on an update persists the judgement the node already holds"
+    );
+    assert_eq!(
+        persisted
+            .map
+            .inquiry
+            .get(&id("inq-1"))
+            .expect("the node survives the update")
+            .question(),
+        "why, exactly?",
+        "and the update it did carry landed, so the persistence above is not a \
+         declaration the engine dropped whole"
+    );
+}
+
+/// `VT-3` — the key is admitted at an inquiry in **either** state and stays
+/// create-only at a finding, which is the home `ISS-327` pinned.
+///
+/// The three cells are one criterion because the claim is the contrast: one key
+/// with two homes, each row pairing a kind with its own state rule. A table that
+/// merely widened the finding row would pass the first cell and fail the third.
+#[test]
+fn blocking_key_is_admitted_at_an_inquiry_and_still_create_only_at_a_finding() {
+    let prior = run_holding(&[]);
+
+    let created = declare_over(
+        &prior,
+        r#"{"subject": "inq-1", "question": "why?", "blocking": false}"#,
+    )
+    .expect("`blocking` is honoured where an inquiry is created")
+    .snapshot;
+    assert!(
+        declare_over(&created, r#"{"subject": "inq-1", "blocking": true}"#).is_ok(),
+        "and where a held inquiry is updated — the inquiry home is the `EitherState` row"
+    );
+
+    // The finding home is untouched: create-only, and the state axis still owns
+    // the complaint when a held finding is corrected (`DEC-246`).
+    let (with_finding, _) = universe(SubjectState::Held, IdKind::Finding);
+    assert_eq!(
+        declare_over(&with_finding, r#"{"subject": "fnd-1", "blocking": true}"#)
+            .expect_err("the finding home keeps its create-only rule"),
+        Refusal::InertAtState {
+            subject: id("fnd-1"),
+            key: "blocking",
+            honoured_when: SubjectState::Absent,
+        }
+    );
+
+    // And a kind no row names is still refused by the kind axis — naming both
+    // homes, in table order, so a second row cannot leave the remedy incomplete.
+    assert_eq!(
+        declare_over(&prior, r#"{"subject": "sec-1", "blocking": true}"#)
+            .expect_err("`blocking` means nothing on a section"),
+        Refusal::InertKey {
+            subject: id("sec-1"),
+            key: "blocking",
+            honoured_by: vec![IdKind::Finding, IdKind::Inquiry],
+            remedy: None,
+        }
+    );
+}
+
+/// `VT-2` — a flip emits exactly one `NodeBlockingChanged` row, carrying the two
+/// judgements, and a redeclaration that states the same judgement emits none.
+///
+/// The creation row is the row that is *absent*, deliberately: `REQ-478` obliges
+/// a row for a mutation the run records, and a creation records its judgement
+/// inside `node_created` — a second row would say the new node changed what it
+/// was born with.
+#[test]
+fn blocking_flip_emits_one_node_blocking_changed_row() {
+    let prior = run_holding(&[]);
+    let created = apply_declaration(
+        &prior,
+        r#"{"subject": "inq-1", "question": "why?", "blocking": false}"#,
+    );
+    assert!(
+        created
+            .rows
+            .iter()
+            .all(|row| row.event != ChangeEvent::NodeBlockingChanged),
+        "creation carries its judgement inside `node_created`: {:?}",
+        created.rows
+    );
+
+    let flipped = apply_declaration(
+        &created.snapshot,
+        r#"{"subject": "inq-1", "blocking": true}"#,
+    );
+    let rows: Vec<&ChangeRow> = flipped
+        .rows
+        .iter()
+        .filter(|row| row.event == ChangeEvent::NodeBlockingChanged)
+        .collect();
+    assert_eq!(rows.len(), 1, "exactly one row for one flip");
+    assert_eq!(
+        rows[0].subject.clone(),
+        Some(id("inq-1")),
+        "the row is about the node whose judgement moved"
+    );
+    assert_eq!(
+        from_and_to(&flipped, ChangeEvent::NodeBlockingChanged),
+        ("non-blocking".to_owned(), "blocking".to_owned()),
+        "both judgements are on the row, so a reader does not have to fetch the \
+         run to learn which way it moved"
+    );
+    assert_eq!(
+        flipped
+            .snapshot
+            .map
+            .inquiry
+            .get(&id("inq-1"))
+            .expect("the node survives the flip")
+            .blocking(),
+        Some(true),
+        "a value replaces the held judgement"
+    );
+
+    let unchanged = apply_declaration(
+        &flipped.snapshot,
+        r#"{"subject": "inq-1", "blocking": true}"#,
+    );
+    assert!(
+        unchanged.rows.is_empty(),
+        "redeclaring the judgement it already holds records no mutation: {:?}",
+        unchanged.rows
+    );
+}
+
+/// `EX-1` — `blocking` is a member of the carried material, so a flipped
+/// judgement on a node an act covered **is** a change to what that act was given
+/// over.
+///
+/// **The coverage is read back out of its serialised form, never held in the
+/// hand.** In production the carried material is a *deserialised* one — an act's
+/// `covered` map comes out of the snapshot — so an in-process comparison would
+/// pass whatever the field's serde form happens to be and would guard the claim
+/// not at all. That is also what gives this criterion its force: the field is in
+/// `material()` from the moment it exists, so it cannot stage a natural red, and
+/// the control is the serde form (`skip_serializing` in place of
+/// `skip_serializing_if`), which this test is the thing that notices.
+///
+/// The lifecycle arm is the control in the other direction, in the same test so a
+/// [`NodeMaterial`] that carried *everything* could not pass it.
+#[test]
+fn a_blocking_flip_moves_the_carried_material() {
+    let judged = |judgement: Option<bool>| {
+        InquiryNode::open(
+            id("inq-1"),
+            "does it block?",
+            Provenance::UserDirected,
+            judgement,
+        )
+        .sequenced(0)
+    };
+    let carried = |map: &InquiryMap| -> CoveredSet {
+        let covered = CoveredSet::Nodes(ContentCoverage::of(map.materials()));
+        serde_json::from_value(serde_json::to_value(&covered).expect("a coverage serialises"))
+            .expect("a coverage reads back")
+    };
+
+    let before = map_of(vec![judged(Some(false))]);
+    let covered = carried(&before);
+    assert!(
+        covered
+            .moved(&BTreeMap::new(), &before.materials())
+            .is_empty(),
+        "nothing moved while nothing moved"
+    );
+
+    let flipped = map_of(vec![judged(Some(true))]);
+    assert_eq!(
+        covered.moved(&BTreeMap::new(), &flipped.materials()),
+        vec![id("inq-1")],
+        "a flipped judgement is a change to what the node is made of"
+    );
+
+    let answered = map_of(vec![judged(Some(false)).resolve(Disposition::Created {
+        record: "DEC-140".to_owned(),
+    })]);
+    assert!(
+        covered
+            .moved(&BTreeMap::new(), &answered.materials())
+            .is_empty(),
+        "and answering the question is still progress through the graph, not a \
+         change to it"
+    );
+}
+
+/// `VT-4` — every creation path judges (`RV-386` `F-10`): `design start
+/// --from-design` seeds its shaping questions and its imported open-question
+/// prose `blocking: true`.
+///
+/// Import precedes every user act, so no act can cover the seeded node and the
+/// conservative default costs nothing — while an omission here would silently
+/// default every question the *engine* found to *free*. Both seeded paths are
+/// asserted, in one test, because the claim is about the paths and not about one
+/// of them: a second seeding route added without a judgement would show up here
+/// as an unjudged node rather than as green.
+#[test]
+fn import_seeds_blocking_true_on_every_seeded_node() {
+    let document = "## Open Questions\n\n- **OQ-1:** does the import judge?\n";
+    let regions: Vec<(super::legacy::Region<'_>, Fingerprint)> = super::legacy::read(document)
+        .expect("the fixture document decomposes")
+        .into_iter()
+        .map(|region| (region, Fingerprint::new("sha256:section")))
+        .collect();
+    let digests = BTreeMap::from([(3, Fingerprint::new("sha256:headline"))]);
+    let shaping = vec![ShapingQuestion {
+        record: "QUE-1".to_owned(),
+        question: "which shape does the question take?".to_owned(),
+    }];
+
+    let mut run = DesignSnapshot::new("dr-test", 233, None);
+    import(&mut run, &regions, &shaping, &digests).expect("the fixture imports");
+
+    let seeded: Vec<(Option<bool>, &Provenance)> = run
+        .map
+        .inquiry
+        .nodes()
+        .map(|node| (node.blocking(), node.provenance()))
+        .collect();
+    assert_eq!(
+        seeded.len(),
+        2,
+        "the fixture seeds one shaping question and one imported entry: {seeded:?}"
+    );
+    assert!(
+        seeded.iter().all(|(judged, _)| *judged == Some(true)),
+        "every import path seeds the judgement visible, never free: {seeded:?}"
+    );
+}
+
+/// The payload contract names the same kind for a `Declaration` key as the
+/// wire-key table that *refuses* on it.
+///
+/// Two tables now carry the per-key home — [`Declaration::WIRE_KEYS`], which is
+/// exercised behaviourally, and [`DECLARATION`], which is what a caller reads —
+/// and only the first can be measured. A set comparison, so a home added on one
+/// side and forgotten on the other, or a row dropped, fails here rather than
+/// shipping a contract that describes a payload the engine does not accept.
+#[test]
+fn the_payload_contract_names_every_declaration_keys_home() {
+    let TypeForm::Struct { keys, .. } = DECLARATION.form else {
+        panic!("a declaration is a struct");
+    };
+    let home_of = |home: KeyHome| match home {
+        KeyHome::At(kind) => Some(kind),
+        // `Universal` is the addressing key: carried by every declaration, and
+        // inert at no kind — so it has no home to name on either side.
+        KeyHome::Universal => None,
+    };
+
+    let declared: BTreeSet<(&str, Option<IdKind>)> = keys
+        .iter()
+        .map(|key| (key.key, key.home.map(home_of).unwrap_or(None)))
+        .collect();
+    let tabled: BTreeSet<(&str, Option<IdKind>)> = Declaration::WIRE_KEYS
+        .iter()
+        .map(|&(key, home, ..)| (key, home_of(home)))
+        .collect();
+
+    assert_eq!(declared, tabled, "the contract and the table disagree");
+    assert_eq!(
+        keys.iter().filter(|key| key.key == "blocking").count(),
+        2,
+        "`blocking` is one key with two homes, each row stating its own"
     );
 }

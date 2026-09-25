@@ -384,7 +384,7 @@ fn hand_edit_then_readopt_preserves_run_map_cursor_receipts() {
         &json!({
             "declare": [
                 { "subject": "sec-1", "body": "## Draft\n\nas Doctrine wrote it\n" },
-                { "subject": "inq-1", "question": "what is the boundary?" },
+                { "subject": "inq-1", "question": "what is the boundary?", "blocking": false },
             ],
             "traversal": { "cursor": "inq-1" },
         }),

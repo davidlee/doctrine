@@ -1954,8 +1954,13 @@ mod tests {
         run.map
             .inquiry
             .insert(
-                InquiryNode::open(root.clone(), "the root question", Provenance::UserDirected)
-                    .sequenced(seq),
+                InquiryNode::open(
+                    root.clone(),
+                    "the root question",
+                    Provenance::UserDirected,
+                    Some(false),
+                )
+                .sequenced(seq),
             )
             .unwrap();
         for index in 0..count {
@@ -1964,9 +1969,14 @@ mod tests {
             run.map
                 .inquiry
                 .insert(
-                    InquiryNode::open(id, format!("question {index}"), Provenance::AgentProposed)
-                        .sequenced(seq)
-                        .with_parent(root.clone()),
+                    InquiryNode::open(
+                        id,
+                        format!("question {index}"),
+                        Provenance::AgentProposed,
+                        Some(false),
+                    )
+                    .sequenced(seq)
+                    .with_parent(root.clone()),
                 )
                 .unwrap();
         }

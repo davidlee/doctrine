@@ -118,7 +118,11 @@ fn walk_keys(
                 at: child(at, name),
                 type_name: owner.name.to_owned(),
                 key: name.to_owned(),
-                admitted: keys.iter().map(|row| row.key.to_owned()).collect(),
+                // **Deduplicated**, because one key may have more than one row:
+                // `blocking` is admitted at two kinds with a rule each (`SL-264`
+                // sec-3), and the admitted list is a set of keys a caller may
+                // send — naming one twice would read as two admissible keys.
+                admitted: admitted_keys(keys),
             });
         }
     }
@@ -279,6 +283,21 @@ fn walk_map(
         walk_wire(item_value, *item, retired, &child(at, name))?;
     }
     Ok(())
+}
+
+/// Every key a type's contract admits, in contract order and **once each**.
+///
+/// A key with more than one home has a row per home, so the rows are not the set
+/// a caller reads: the refusal's remedy lists what they may send, and a key named
+/// twice there would claim two admissible spellings of one key.
+fn admitted_keys(keys: &[KeyContract]) -> Vec<String> {
+    let mut admitted: Vec<String> = Vec::with_capacity(keys.len());
+    for key in keys {
+        if !admitted.iter().any(|held| held == key.key) {
+            admitted.push(key.key.to_owned());
+        }
+    }
+    admitted
 }
 
 /// One step down the dotted path a refusal reports.

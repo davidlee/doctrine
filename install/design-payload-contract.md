@@ -11,6 +11,10 @@ contract does not list. Where a variant's payload sits is a function of the
 enum's tagging and that variant's payload together, so the rendering states it
 per variant rather than per type.
 
+Where a key is honoured at a **kind of subject** rather than wherever its type
+sits, the kind is named beside it, and one key may appear once per kind with a
+rule of its own — `blocking` is one such key.
+
 ```text
 payload ApplyRequest  unknown-keys: refused   (a misspelt key is refused)
   run_uid            text                      required
@@ -42,21 +46,22 @@ type AcceptanceDeclaration  unknown-keys: refused   (a misspelt key is refused)
   turn   text  optional
 
 type Declaration  unknown-keys: refused   (a misspelt key is refused)
-  subject     id(inq-|sec-|att-|fnd-|cp-)  required
-  question    text                         sparse   (omit persists · null clears)
-  needs       [id(inq-)]                   sparse   (omit persists · null clears)
-  parent      id(inq-)                     sparse   (omit persists · null clears)
-  provenance  Provenance                   optional
-  lifecycle   InquiryLifecycle             optional
-  body        text                         optional
-  attests     id(sec-)                     optional
-  reviewer    Reviewer                     optional
-  concerns    id(sec-)                     optional
-  summary     text                         optional
-  blocking    boolean                      optional
-  resolution  text                         optional
-  disposes    id(inq-)                     optional
-  dispose     Dispose                      optional
+  subject     id(inq-|sec-|att-|fnd-|cp-)  any   required
+  question    text                         inq-  sparse   (omit persists · null clears)
+  needs       [id(inq-)]                   inq-  sparse   (omit persists · null clears)
+  parent      id(inq-)                     inq-  sparse   (omit persists · null clears)
+  provenance  Provenance                   inq-  optional
+  lifecycle   InquiryLifecycle             inq-  optional
+  body        text                         sec-  optional
+  attests     id(sec-)                     att-  optional
+  reviewer    Reviewer                     att-  optional
+  concerns    id(sec-)                     fnd-  optional
+  summary     text                         fnd-  optional
+  blocking    boolean                      fnd-  optional
+  blocking    boolean                      inq-  required-at-creation   (required on creation · omit persists · null refused)
+  resolution  text                         fnd-  optional
+  disposes    id(inq-)                     cp-   optional
+  dispose     Dispose                      cp-   optional
 
 type CreateRecord  unknown-keys: refused   (a misspelt key is refused)
   kind        knowledge::RecordKind                     required

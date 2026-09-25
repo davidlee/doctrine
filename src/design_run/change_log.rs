@@ -37,6 +37,32 @@ use super::refusal::Refusal;
 /// a **retired** token, so there is no live `as_str` arm for it to disagree with.
 const LEGACY_ACT_INVALIDATED: &str = "evidence_invalidated";
 
+/// The three labels a [`ChangeEvent::NodeBlockingChanged`] row renders its two
+/// terms from — a closed three-member vocabulary, because a node's stored
+/// judgement has three states and the row has to be able to say each of them
+/// (STD-001: named here rather than spelled at the row's construction site).
+///
+/// Three rather than two is the whole reason the terms are `label`s: a legacy
+/// node carries *no* judgement, so a row reporting `unjudged → non-blocking` is
+/// a true reading of a real mutation, and rendering it as `blocking →
+/// non-blocking` (the complement of the new value) would report a flip that did
+/// not happen.
+const JUDGEMENT_UNJUDGED: &str = "unjudged";
+const JUDGEMENT_BLOCKING: &str = "blocking";
+const JUDGEMENT_NON_BLOCKING: &str = "non-blocking";
+
+/// The label for a node's stored blocking judgement, as its row renders it.
+///
+/// `None` is **unjudged** — the state only a node preexisting the attribute can
+/// hold (`SL-264` sec-3).
+pub(crate) const fn judgement_label(blocking: Option<bool>) -> &'static str {
+    match blocking {
+        None => JUDGEMENT_UNJUDGED,
+        Some(true) => JUDGEMENT_BLOCKING,
+        Some(false) => JUDGEMENT_NON_BLOCKING,
+    }
+}
+
 /// The widest member of a closed vocabulary, at compile time.
 const fn widest(rest: &[ChangeEvent]) -> usize {
     match rest {
@@ -124,6 +150,18 @@ pub(crate) enum ChangeEvent {
     NodeCreated,
     NodeLifecycle,
     NodeReparented,
+    /// A node's blocking judgement moved (`SL-264` sec-3, `REQ-478`).
+    ///
+    /// Emitted by the **declaration** that flips it, and by nothing else: the
+    /// judgement is node state rather than a recorded act, so there is no
+    /// free-standing declaration whose recording this mirrors. A creation carries
+    /// its judgement inside [`ChangeEvent::NodeCreated`] and owes no second row —
+    /// the node did not change what it was born with.
+    ///
+    /// The row carries both judgements changed, because it is self-contained by
+    /// construction (a snapshot keeps no history to diff) and *which way* the mark
+    /// moved is what the next reader of the feed is asking.
+    NodeBlockingChanged,
     NeedsAdded,
     NeedsRemoved,
     StageMoved,
@@ -203,10 +241,11 @@ impl ChangeEvent {
     /// within the payload budget, so the widest-name assert and the containment
     /// check both quantify over this roster rather than over what a writer may
     /// still produce ([`ChangeEvent::EMITTABLE`], `sec-2`).
-    pub(crate) const READABLE: [ChangeEvent; 23] = [
+    pub(crate) const READABLE: [ChangeEvent; 24] = [
         ChangeEvent::NodeCreated,
         ChangeEvent::NodeLifecycle,
         ChangeEvent::NodeReparented,
+        ChangeEvent::NodeBlockingChanged,
         ChangeEvent::NeedsAdded,
         ChangeEvent::NeedsRemoved,
         ChangeEvent::StageMoved,
@@ -242,10 +281,11 @@ impl ChangeEvent {
     /// Written out rather than derived from `READABLE`: a const-block copy trips
     /// `clippy::indexing_slicing`, and the subset assert is what holds the two
     /// declarations together.
-    pub(crate) const EMITTABLE: [ChangeEvent; 22] = [
+    pub(crate) const EMITTABLE: [ChangeEvent; 23] = [
         ChangeEvent::NodeCreated,
         ChangeEvent::NodeLifecycle,
         ChangeEvent::NodeReparented,
+        ChangeEvent::NodeBlockingChanged,
         ChangeEvent::NeedsAdded,
         ChangeEvent::NeedsRemoved,
         ChangeEvent::StageMoved,
@@ -282,6 +322,7 @@ impl ChangeEvent {
             ChangeEvent::NodeCreated => "node_created",
             ChangeEvent::NodeLifecycle => "node_lifecycle",
             ChangeEvent::NodeReparented => "node_reparented",
+            ChangeEvent::NodeBlockingChanged => "node_blocking_changed",
             ChangeEvent::NeedsAdded => "needs_added",
             ChangeEvent::NeedsRemoved => "needs_removed",
             ChangeEvent::StageMoved => "stage_moved",
@@ -318,7 +359,13 @@ impl ChangeEvent {
                 (PayloadKey::Parent, ValueKind::Token),
                 (PayloadKey::Provenance, ValueKind::Label),
             ],
-            ChangeEvent::NodeLifecycle => &[
+            // Both judgements, as labels: the vocabulary is closed and has three
+            // members (`unjudged` / `blocking` / `non-blocking`), which is what
+            // makes a label the honest kind. A single term would have to be read
+            // as the complement of the held value, and it is not one — a node that
+            // predates the attribute moves from *unjudged*, which has no
+            // complement to render.
+            ChangeEvent::NodeLifecycle | ChangeEvent::NodeBlockingChanged => &[
                 (PayloadKey::From, ValueKind::Label),
                 (PayloadKey::To, ValueKind::Label),
             ],
