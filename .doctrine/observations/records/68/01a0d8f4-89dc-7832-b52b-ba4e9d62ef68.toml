@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d8f4-89dc-7832-b52b-ba4e9d62ef68"
+recorded_at = "2026-09-25T14:24:59.868126309Z"
+kind = "friction"
+summary = "slice: the shipped-corpus citation defect reappeared in concurrent work while the audit documenting it was in flight"
+detail = "Scoping SL-267 (shipped-corpus conformance), I found SL-264's in-flight uncommitted diff to install/design-prompts/delegation.md adding a line that cites IMP-483. install/design-prompts/ is a shipped, published asset: in a client repo IMP-483 resolves to that client's own IMP-483, silently, with no dangling-link signal. The agent is citing its own originating item in good faith and has no signal the citation is wrong there. This is a live instance of the exact class ISS-309 enumerates (the citation was introduced while the ledger enumerating that class was being written), and it is the strongest available evidence for ISS-309 part 2: a written rule and a fully-enumerated defect list did not prevent the next occurrence. Note the citation lives in another agent's uncommitted work, so it is a snapshot, not a landed fact."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

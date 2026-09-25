@@ -40,10 +40,12 @@ outside the stated scope, which is why the original sample missed it.
 
 ### Raw totals (verified)
 
-Sites: `install/` 140, `memory/` 24, both 164. Of those, **59 are `ADR-`**. The
-raw counts include the illustration classes ruled out below, so they are an
-upper bound, not a violation count — the inventories that follow are the real
-ledger.
+Sites: `install/` 141, `memory/` 24 — the audited pair; plus `plugins/` 74 when
+the skills were brought into scope (see below). Of the `install/`+`memory/` 165,
+**59 are `ADR-`**. The raw counts include the illustration classes ruled out
+below, so they are an upper bound, not a violation count — the inventories that
+follow are the real ledger. Per-file figures are *citation lines* as grepped, not
+a partition of the site total.
 
 ### `install/` — published reference docs
 
@@ -106,7 +108,24 @@ unresolvable — it is resolvable to the *wrong* client entity.
   + `ADR-004` in `review.toml:4,12`; `SPEC-002` in `rec.md:3`; `SPEC-002 F7/D7`
   and the internal plan term `(Slice B)` in `rec.toml:4,12`; `ADR-013` in
   `revision.toml:9`, `revision.md:3`, `review.md:3`.
-- `manifest.toml` `56` cites `install/using-doctrine.md`.
+- `manifest.toml` — `5` `SL-227`; `35` `SL-018`; `47` `SL-231`; `56` the path
+  `install/using-doctrine.md`; `62` `SL-233`, `PRD-019`, `SPEC-023`.
+
+### `install/` — config and scaffolding assets
+
+Two of the highest-severity sites in the whole corpus are here, because they are
+not prose *about* a concept — they are shipped config files a client reads
+directly and edits.
+
+- **`doctrine.toml`** — `3` `ISS-055`; `11` `ADR-009 §2`. This is a *projected
+  base backing*: it lands at `.doctrine/doctrine.toml` in every client repo, so
+  the client's own config file ships doctrine-private ids in its comments.
+- **`doctrine.toml.example`** — `5` `ISS-055`; `9` `SL-028` + `ADR-009 §2`; `36`
+  `ADR-003 §8`; `48` `SL-148`; `83` `SL-108`; `89` `SL-166`; `100` `SL-198`;
+  `113` `SL-254`. Here each id is doing real work — it is often the only thing
+  naming *why* a knob exists — so inlining the fact matters more than deleting
+  the id.
+- `design-prompts/delegation.md` `19` — `IMP-483`.
 
 **The hard case — `sketches/thin-adapter.md`.** Its only real home is
 `.doctrine/slice/233/sketches/thin-adapter.md`. There is no correct client-repo
@@ -138,6 +157,26 @@ inlined.
   directed to a document that does not exist in their repo and told it is
   authoritative.
 
+### Scope extension 2 — `plugins/` (the skills)
+
+Not in the original sweep. Brought in when scoping SL-267, on this evidence:
+
+- **74 sites across 14 skill files** — comparable to `install/` + `memory/`
+  combined, and on the most context-resident shipped surface of the three, so
+  excluding it would fix the corpus agents read least and skip the one they read
+  most.
+- **All genuine, none illustrations** — and in places worse than a collision.
+  `spec-product/SKILL.md` `150-151,208,229` instructs the reader to mirror
+  `PRD-001` as "the canonical shape", which in a client repo is *the client's
+  own PRD-001*. `spec-tech/SKILL.md` `56-61` teaches the C4-level spec taxonomy
+  by pointing at doctrine's own `SPEC-003`/`SPEC-004`/`SPEC-005`. Misinstruction,
+  not merely an unresolvable reference.
+- **Already governed, and violating the rule.**
+  `mem.pattern.doctrine.shipped-skill-platform-independence` (glob `plugins/**`)
+  bans exactly this, in writing. So this sub-corpus is a *rule known to exist and
+  broken anyway* — the strongest evidence available for part 2 of the fix, since
+  the rule's presence demonstrably did not prevent the drift.
+
 ### Not violations — do not sweep these up
 
 The sweep must be surgical. Three classes look like hits and are correct:
@@ -163,9 +202,22 @@ The sweep must be surgical. Three classes look like hits and are correct:
 
 `mem_019f176f71537d…` already needed an in-body disclaimer to stop its citations
 misleading a client — someone hit this defect before it was written down, and
-patched the symptom. It recurred elsewhere regardless. That is the case for
-part 2 of the fix below: a defect invisible to the author writing it will be
-re-introduced by the next author, however well the existing instances are swept.
+patched the symptom. It recurred elsewhere regardless.
+
+It then recurred *during this audit*: while the ledger above was being written, a
+concurrent in-flight edit to `install/design-prompts/delegation.md` introduced a
+fresh `IMP-483` citation into that shipped asset — in good faith, citing the
+author's own originating item, with no signal available to them that the citation
+is wrong in a client repo. Recorded as observation
+`01a0d8f4-89dc-7832-b52b-ba4e9d62ef68`; it lived in another agent's uncommitted
+work, so that record is a snapshot rather than a landed fact.
+
+That is the case for part 2 of the fix below, and it is the strongest evidence
+available for it: a written POL-002 rule for a sibling sub-corpus, a fully
+enumerated defect list, and an audit still in progress did none of the work of
+preventing the next occurrence. A defect invisible to the author writing it will
+be re-introduced by the next author, however well the existing instances are
+swept.
 
 ### Asymmetry worth not relying on
 
