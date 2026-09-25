@@ -26,7 +26,11 @@ pub(crate) struct TreeStyle {
 const TREE_PIPED_WIDTH: usize = 100;
 /// Below this many free columns beside its prefix, node text drops a line.
 const TREE_MIN_TEXT_COLS: usize = 24;
-/// The fixed indent dropped node text starts at, rails not drawn.
+/// Dropped node text keeps its rails while this many columns remain beside
+/// them; below it, the text falls back to [`TREE_DROP_INDENT`].
+const TREE_MIN_DROP_COLS: usize = 16;
+/// The fixed indent dropped node text falls back to, rails not drawn — the
+/// deep-and-narrow case, where the rails alone would fill the line.
 const TREE_DROP_INDENT: usize = 8;
 /// Columns between a node's id and its text.
 const TREE_ID_GAP: usize = 2;
@@ -192,7 +196,7 @@ pub(crate) fn render(envelope: &TurnEnvelope, style: TreeStyle) -> Vec<String> {
             lines.extend(layout.node_lines(&Row::unplaced(node)));
         }
     }
-    lines.extend(legend(width));
+    lines.extend(legend(width, style.colour));
     lines.push(footer(envelope));
     lines
 }
@@ -252,33 +256,51 @@ fn header(envelope: &TurnEnvelope, width: usize) -> Vec<String> {
 
 /// The legend, built from the same constants the nodes render with, broken
 /// only between entries.
-fn legend(width: usize) -> Vec<String> {
+fn legend(width: usize, colour: bool) -> Vec<String> {
+    let letter_style = Style::new().dimmed();
+    // (plain, painted): packed by the plain width, emitted painted.
     let entries = State::ALL
         .into_iter()
-        .map(|state| format!("{} {}", state.mark(), state.word()))
-        .chain([format!(
-            "{TREE_LEGEND_SEPARATOR} {TREE_BLOCKING_MARK} blocking"
+        .map(|state| {
+            let word = state.word();
+            (
+                format!("{} {word}", state.mark()),
+                format!("{} {word}", paint(colour, state.mark(), state.style())),
+            )
+        })
+        .chain([(
+            format!("{TREE_LEGEND_SEPARATOR} {TREE_BLOCKING_MARK} blocking"),
+            format!("{TREE_LEGEND_SEPARATOR} {TREE_BLOCKING_MARK} blocking"),
         )])
         .chain(
             TREE_PROVENANCES
                 .iter()
                 .enumerate()
-                .map(|(at, (_, letter, word))| match at {
-                    0 => format!("{TREE_LEGEND_SEPARATOR} {letter} {word}"),
-                    _ => format!("{letter} {word}"),
+                .map(|(at, (_, letter, word))| {
+                    let lead = if at == 0 {
+                        format!("{TREE_LEGEND_SEPARATOR} ")
+                    } else {
+                        String::new()
+                    };
+                    (
+                        format!("{lead}{letter} {word}"),
+                        format!("{lead}{} {word}", paint(colour, letter, letter_style)),
+                    )
                 }),
         );
-    let mut lines: Vec<String> = Vec::new();
-    for entry in entries {
+    let mut lines: Vec<(usize, String)> = Vec::new();
+    for (plain, painted) in entries {
+        let entry_width = display_width(&plain);
         match lines.last_mut() {
-            Some(line) if display_width(line) + 1 + display_width(&entry) <= width => {
+            Some((line_width, line)) if *line_width + 1 + entry_width <= width => {
+                *line_width += 1 + entry_width;
                 line.push(' ');
-                line.push_str(&entry);
+                line.push_str(&painted);
             }
-            _ => lines.push(entry),
+            _ => lines.push((entry_width, painted)),
         }
     }
-    lines
+    lines.into_iter().map(|(_, line)| line).collect()
 }
 
 /// Fill `text` to `width` between words, never splitting one.
@@ -305,6 +327,17 @@ struct Row<'a> {
 }
 
 impl<'a> Row<'a> {
+    /// The rails this node's own continuation lines draw: its ancestors', then
+    /// its own sibling rail.
+    fn own_rails(&self) -> String {
+        let own = match self.branch {
+            Some(true) => TREE_NO_RAIL,
+            Some(false) => TREE_RAIL,
+            None => "",
+        };
+        [self.rails.as_str(), own].concat()
+    }
+
     fn unplaced(node: &'a MapNode) -> Self {
         Row {
             node,
@@ -420,9 +453,25 @@ impl Layout<'_> {
         };
 
         let free = self.width.saturating_sub(prefix_width);
+        let own_rails = row.own_rails();
         if free < TREE_MIN_TEXT_COLS {
-            let indent = " ".repeat(TREE_DROP_INDENT);
-            let wrapped = wrap(&text, self.width.saturating_sub(TREE_DROP_INDENT));
+            // One level in, under the node's own rails (sec-3 rule 2, as amended
+            // at VH-1); the bare indent only where the rails would fill the line.
+            let railed = [
+                own_rails.as_str(),
+                if row.has_children {
+                    TREE_RAIL
+                } else {
+                    TREE_NO_RAIL
+                },
+            ]
+            .concat();
+            let indent = if self.width.saturating_sub(display_width(&railed)) < TREE_MIN_DROP_COLS {
+                " ".repeat(TREE_DROP_INDENT)
+            } else {
+                railed
+            };
+            let wrapped = wrap(&text, self.width.saturating_sub(display_width(&indent)));
             return std::iter::once(prefix.trim_end().to_owned())
                 .chain(
                     self.paint_text(&wrapped, body_style, suffix.is_some())
@@ -432,21 +481,13 @@ impl Layout<'_> {
                 .collect();
         }
         let continuation = format!(
-            "{}{}{:<fill$}",
-            row.rails,
-            match row.branch {
-                Some(true) => TREE_NO_RAIL,
-                Some(false) => TREE_RAIL,
-                None => "",
-            },
+            "{own_rails}{:<fill$}",
             if row.has_children {
                 TREE_CHILD_RAIL
             } else {
                 ""
             },
-            fill = prefix_width
-                - display_width(&row.rails)
-                - row.branch.map_or(0, |_| display_width(TREE_RAIL)),
+            fill = prefix_width - display_width(&own_rails),
         );
         let wrapped = wrap(&text, free);
         self.paint_text(&wrapped, body_style, suffix.is_some())
@@ -528,14 +569,18 @@ impl Layout<'_> {
             .collect()
     }
 
-    /// Apply `style` when colour is on; plain text otherwise. Colour is
-    /// additive — no state is colour-only (`DEC-307`).
     fn paint(&self, text: &str, style: Style) -> String {
-        if self.colour && !text.is_empty() {
-            text.style(style).to_string()
-        } else {
-            text.to_owned()
-        }
+        paint(self.colour, text, style)
+    }
+}
+
+/// Apply `style` when colour is on; plain text otherwise. Colour is additive —
+/// no state is colour-only (`DEC-307`).
+fn paint(colour: bool, text: &str, style: Style) -> String {
+    if colour && !text.is_empty() {
+        text.style(style).to_string()
+    } else {
+        text.to_owned()
     }
 }
 
@@ -556,7 +601,10 @@ mod tests {
         Detail, MapAnswer, MapNode, OutstandingBySeverity, PinnedSlot, RunSelection,
         SkippedSnapshot, TitleLookup, TurnEnvelope, project,
     };
-    use super::{TREE_BLOCKING_MARK, TREE_DROP_INDENT, TREE_MIN_TEXT_COLS, TreeStyle, render};
+    use super::{
+        TREE_BLOCKING_MARK, TREE_DROP_INDENT, TREE_MIN_DROP_COLS, TREE_MIN_TEXT_COLS, TreeStyle,
+        render,
+    };
 
     const PLAIN: TreeStyle = TreeStyle {
         width: None,
@@ -962,23 +1010,36 @@ doctrine design tree SL-266";
         }
         assert_eq!(words(&text.join(" ")), words(long), "no word lost");
 
-        // Below `TREE_MIN_TEXT_COLS` free columns the text drops to the indent.
-        let lines = render(&envelope(vec![open("inq-x", None, long)]), at(40));
+        // Below `TREE_MIN_TEXT_COLS` free columns the text drops a line and
+        // keeps its rails: one level in, a child rail when it has children.
+        let lines = render(
+            &envelope(vec![
+                open("inq-x", None, long),
+                open("inq-y", Some("inq-x"), "kid?"),
+                open("inq-z", None, "last?"),
+            ]),
+            at(40),
+        );
         let node = lines
             .iter()
             .position(|line| line.ends_with(" inq-x"))
             .expect("a prefix-only node line");
         assert!(40 - display_width(&lines[node]) - 2 < TREE_MIN_TEXT_COLS);
-        let indent = " ".repeat(TREE_DROP_INDENT);
+        let rails = "│   │   ";
         let dropped: Vec<&String> = lines[node + 1..]
             .iter()
-            .take_while(|line| line.starts_with(&indent))
+            .take_while(|line| line.starts_with(rails))
+            .filter(|line| !line.contains(" inq-y"))
             .collect();
+        assert!(
+            dropped.len() > 1,
+            "the text wraps under its rails: {lines:#?}"
+        );
         for line in &dropped {
-            assert!(!line[TREE_DROP_INDENT..].starts_with(' '), "{line:?}");
+            assert!(!line[rails.len()..].starts_with(' '), "{line:?}");
             assert!(display_width(line) <= 40, "{line:?}");
         }
-        let dropped: Vec<&str> = dropped.iter().map(|line| line.trim()).collect();
+        let dropped: Vec<&str> = dropped.iter().map(|line| &line[rails.len()..]).collect();
         assert_eq!(words(&dropped.join(" ")), words(long));
 
         // Depth 12 at width 40: the prefix overflows, no text is lost.
@@ -999,6 +1060,9 @@ doctrine design tree SL-266";
             .position(|line| line.ends_with(" inq-d12"))
             .expect("the deepest node");
         assert!(display_width(&lines[deepest]) > 40, "its prefix overflows");
+        // Its rails leave fewer than `TREE_MIN_DROP_COLS`: the bare indent.
+        assert!(40 < 13 * display_width("│   ") + TREE_MIN_DROP_COLS);
+        let indent = " ".repeat(TREE_DROP_INDENT);
         let tail: Vec<&str> = lines[deepest + 1..]
             .iter()
             .take_while(|line| line.starts_with(&indent))
@@ -1096,6 +1160,24 @@ doctrine design tree SL-266";
             assert!(coloured.iter().any(|line| line.contains('\u{1b}')));
             let stripped: Vec<String> = coloured.iter().map(|line| strip_ansi(line)).collect();
             assert_eq!(stripped, plain, "at {width:?}");
+            let start = coloured
+                .iter()
+                .position(|line| strip_ansi(line).starts_with(super::TREE_MARK_RESOLVED))
+                .expect("a legend");
+            let legend = coloured[start..coloured.len() - 1].join(" ");
+            for glyph in [
+                super::paint(
+                    true,
+                    super::TREE_MARK_RESOLVED,
+                    super::State::Resolved.style(),
+                ),
+                super::paint(true, super::TREE_MARK_OPEN, super::State::Open.style()),
+            ] {
+                assert!(
+                    legend.contains(&glyph),
+                    "the legend paints its marks: {legend:?}"
+                );
+            }
         }
     }
 
