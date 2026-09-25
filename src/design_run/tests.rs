@@ -5176,6 +5176,26 @@ fn sparse_keys_are_exactly_the_keys_that_serialise_to_null() {
     );
 }
 
+/// `RV-389` F-16 — [`Declaration::nulled_keys`] reports every sparse key the
+/// contract declares, so a sparse field added later cannot slip a `null` into a
+/// stored proposal unrefused.
+#[test]
+fn every_sparse_key_is_reported_when_null() {
+    let TypeForm::Struct { keys, .. } = DECLARATION.form else {
+        panic!("a declaration is described by a struct form");
+    };
+    let sparse: BTreeSet<&str> = keys
+        .iter()
+        .filter(|key| key.presence == Presence::Sparse)
+        .map(|key| key.key)
+        .collect();
+    let reported: BTreeSet<&str> = Declaration::sparse_nulled(id("inq-1"))
+        .nulled_keys()
+        .into_iter()
+        .collect();
+    assert_eq!(reported, sparse);
+}
+
 /// `sec-8` pin 3's second half — the read-path removal probe over the ten
 /// contract-bearing fixtures.
 #[test]

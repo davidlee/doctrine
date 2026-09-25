@@ -54,6 +54,11 @@ impl<T> Sparse<T> {
     pub(crate) const fn is_omitted(&self) -> bool {
         matches!(self, Sparse::Omitted)
     }
+
+    /// Whether the key was present and `null`.
+    pub(crate) const fn is_null(&self) -> bool {
+        matches!(self, Sparse::Null)
+    }
 }
 
 impl<T> Sparse<Vec<T>> {
@@ -821,6 +826,26 @@ impl Declaration {
                     remedy: remedy(key, kind),
                 })
             })
+    }
+
+    /// Every sparse key this declaration sends as `null`, in wire order.
+    ///
+    /// A stored declaration cannot hold them: [`Sparse`] serialises `Null` as
+    /// none, TOML drops the key, and it reads back as [`Sparse::Omitted`] — so a
+    /// declaration that is stored rather than applied (a delegated proposal) is
+    /// refused on these rather than quietly changed in meaning (`RV-389` F-16,
+    /// `IMP-483`). Pinned to the contract's sparse key set by
+    /// `every_sparse_key_is_reported_when_null`.
+    pub(crate) fn nulled_keys(&self) -> Vec<&'static str> {
+        [
+            (KEY_QUESTION, self.question.is_null()),
+            (KEY_NEEDS, self.needs.is_null()),
+            (KEY_PARENT, self.parent.is_null()),
+            (KEY_BLOCKING, self.blocking.is_null()),
+        ]
+        .into_iter()
+        .filter_map(|(key, nulled)| nulled.then_some(key))
+        .collect()
     }
 
     /// Whether any row names `kind` as a home for `key` — the kind axis's whole

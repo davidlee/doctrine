@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d8ed-673b-7f40-a2c9-5ea68e900dc0"
+recorded_at = "2026-09-25T14:17:12.251207849Z"
+kind = "friction"
+summary = "code-review: building a pre-change binary for verdict parity needs web/map/dist grafted into a git archive export"
+detail = "RV-389 SL-264: both the repair worker and the round-2 reviewer built the tree at 37d26a5ff^ out-of-repo to compare legacy-snapshot verdicts; git archive omits the untracked embedded web/map/dist, so the build fails until it is copied in manually. Also: cargo test --bin doctrine needs_ matches unrelated tests without the design_run::tests:: prefix."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1195,6 +1195,7 @@ fn delegate(
             ..
         } => {
             let held = held_delegation(next, id)?;
+            rehearse_proposal(next, declare)?;
             let obligation = held.obligation().clone();
             next.delegation
                 .upsert(held.proposed(Proposal::of(by, summary, declare.clone())));
@@ -1257,6 +1258,41 @@ fn delegate(
                 Vec::new(),
             ))
         }
+    }
+}
+
+/// Refuse at `propose` what `accept` would refuse or silently drop (`RV-389`
+/// F-16) — without applying anything.
+///
+/// Two checks, in this order. First the proposal is rehearsed over a scratch
+/// copy of the map through the direct path's own seams — [`Batch::validate`] and
+/// [`declare_node`] — so an inquiry-home rule (`blocking` owed at creation,
+/// never withdrawn) refuses here exactly as a direct apply refuses it. Then any
+/// sparse `null` the direct path would honour is refused, because a stored
+/// proposal cannot hold one ([`Declaration::nulled_keys`]).
+///
+/// **Inquiry subjects only** are rehearsed through `declare`. The other kinds
+/// need what only the shell supplies at the applying submission — a checkpoint's
+/// minted record, a section body's digest — so rehearsing them here would refuse
+/// lawful proposals; `accept` still applies them through the full path.
+fn rehearse_proposal(next: &DesignSnapshot, declarations: &[Declaration]) -> Result<(), Refusal> {
+    let mut scratch = next.clone();
+    for (_, declaration) in
+        Batch::of(declarations.to_vec()).validate(|subject| subject_state(next, subject))?
+    {
+        if declaration.subject().kind() == IdKind::Inquiry {
+            declare_node(&mut scratch, &declaration)?;
+        }
+    }
+    match declarations
+        .iter()
+        .find_map(|declared| Some((declared.subject(), *declared.nulled_keys().first()?)))
+    {
+        Some((subject, key)) => Err(Refusal::ProposalCannotClear {
+            subject: subject.clone(),
+            key,
+        }),
+        None => Ok(()),
     }
 }
 

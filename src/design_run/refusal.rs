@@ -442,6 +442,17 @@ pub(crate) enum Refusal {
         obligation: DesignId,
         exported_at: u64,
     },
+    /// A delegated proposal sends a sparse key as `null` (`RV-389` F-16).
+    ///
+    /// A proposal is stored and replayed at `accept`, and the store cannot hold a
+    /// `null`: it reads back as an omission, so the clear would be accepted and
+    /// silently dropped. Refused at `propose` until the store can carry it
+    /// (`IMP-483`). `key` is the first such key, on [`Refusal::InertKey`]'s
+    /// first-not-every rule.
+    ProposalCannotClear {
+        subject: DesignId,
+        key: &'static str,
+    },
     /// A recorded act does not correspond to the rule it is written against
     /// (design `sec-4`).
     ///
@@ -941,6 +952,12 @@ impl fmt::Display for Refusal {
                  at revision {exported_at} — the proposal stays recorded and unapplied, and \
                  is never rebased onto content it did not answer; re-export the obligation \
                  to delegate it as it stands now"
+            ),
+            Refusal::ProposalCannotClear { subject, key } => write!(
+                f,
+                "a delegated proposal sends `{key}: null` at {subject} — a proposal cannot \
+                 clear a field yet (IMP-483): omit the key, or let the coordinator clear it \
+                 by a direct declaration"
             ),
             Refusal::ActAdmissionInvalid { act, causes } => write!(
                 f,

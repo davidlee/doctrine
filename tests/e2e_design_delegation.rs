@@ -235,17 +235,11 @@ impl Fixture {
     /// The delegate's proposal: its attribution, its prose result, and the one map
     /// change it proposes.
     fn proposal(&self) -> Value {
-        json!({"delegation": {
-            "act": "propose",
-            "id": DELEGATION,
-            "by": DELEGATE,
-            "summary": PROPOSAL_SUMMARY,
-            "declare": [{
-                "subject": PROPOSED_NODE,
-                "question": "is the write broker separable from the authority model?", "blocking": false,
-                "parent": OBLIGATION,
-            }],
-        }})
+        proposing(&json!([{
+            "subject": PROPOSED_NODE,
+            "question": "is the write broker separable from the authority model?", "blocking": false,
+            "parent": OBLIGATION,
+        }]))
     }
 
     /// The parsed snapshot.
@@ -312,6 +306,18 @@ impl Fixture {
             &["design", "apply", SLICE, "-p", ".", "--input", body],
         )
     }
+}
+
+/// The delegate's proposal body — attribution, prose result, and `declare` as
+/// the map changes it proposes.
+fn proposing(declare: &Value) -> Value {
+    json!({"delegation": {
+        "act": "propose",
+        "id": DELEGATION,
+        "by": DELEGATE,
+        "summary": PROPOSAL_SUMMARY,
+        "declare": declare,
+    }})
 }
 
 /// The spine section's body, which must open with its own heading.
@@ -623,5 +629,98 @@ fn the_ladder_records_the_acts_its_crossings_will_owe() {
         declared.is_empty(),
         "`blocking-set-declared` is retired from writing (`SL-264` sec-3), so the \
          ladder records no declaration here — the user's `graph-reviewed` stands alone"
+    );
+}
+
+// ── RV-389 F-16: a proposal is checked where it is made ────────────────────
+
+/// A stored proposal cannot carry `null` (TOML drops it, and it reads back as an
+/// omission), so every sparse `null` is refused at `propose` rather than
+/// silently dropped at `accept` (`IMP-483` restores the clearing).
+///
+/// `blocking: null` is refused as the direct apply refuses it — the proposal is
+/// rehearsed against the same inquiry-home rules first — and the three nulls a
+/// direct apply honours are refused as a proposal's limitation. Each refusal
+/// stores nothing: the assignment stays outstanding and the obligation's edge
+/// survives.
+#[test]
+fn a_proposal_carrying_null_is_refused_at_propose() {
+    let fixture = Fixture::inquiring();
+    fixture.apply(&fixture.payload(
+        "seed-edge",
+        &json!({"declare": [
+            {"subject": "inq-3", "question": "what does it depend on?", "blocking": false},
+        ]}),
+    ));
+    fixture.apply(&fixture.payload(
+        "seed-need",
+        &json!({"declare": [{"subject": OBLIGATION, "needs": ["inq-3"], "parent": "inq-3"}]}),
+    ));
+    fixture.export();
+    let before = fixture.revision();
+
+    for (key, says) in [
+        ("blocking", "not withdrawn"),
+        ("question", "IMP-483"),
+        ("needs", "IMP-483"),
+        ("parent", "IMP-483"),
+    ] {
+        let stderr = fixture.refuse(&fixture.payload(
+            &format!("propose-null-{key}"),
+            &proposing(&json!([{"subject": OBLIGATION, key: null}])),
+        ));
+        assert!(
+            stderr.contains(key) && stderr.contains(says),
+            "`{key}: null` in a proposal must be refused naming the key, got: {stderr}"
+        );
+        assert_eq!(
+            fixture.revision(),
+            before,
+            "a refused proposal writes nothing"
+        );
+        assert!(
+            fixture.delegation().proposal().is_none(),
+            "a refused proposal is not stored"
+        );
+    }
+    let obligation = fixture
+        .read()
+        .map
+        .inquiry
+        .nodes()
+        .find(|node| node.id().as_str() == OBLIGATION)
+        .cloned()
+        .expect("the obligation is held");
+    assert!(
+        obligation
+            .needs()
+            .iter()
+            .any(|need| need.as_str() == "inq-3"),
+        "the obligation's edge survives a refused `needs: null`"
+    );
+}
+
+/// A proposal creating a node owes its blocking judgement at `propose`, exactly
+/// as a direct creation does — not a refusal first met at `accept`.
+#[test]
+fn a_proposal_creating_an_unjudged_inquiry_is_refused_at_propose() {
+    let fixture = Fixture::inquiring();
+    fixture.export();
+
+    let stderr = fixture.refuse(&fixture.payload(
+        "propose-unjudged",
+        &proposing(&json!([{
+            "subject": PROPOSED_NODE,
+            "question": "judged by nobody",
+            "parent": OBLIGATION,
+        }])),
+    ));
+    assert!(
+        stderr.contains(PROPOSED_NODE) && stderr.contains("no `blocking` judgement"),
+        "the refusal is the direct apply's, got: {stderr}"
+    );
+    assert!(
+        fixture.delegation().proposal().is_none(),
+        "a refused proposal is not stored"
     );
 }

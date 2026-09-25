@@ -14,3 +14,6 @@ Hand one bounded obligation out; stay the sole writer.
 - A proposal payload carrying a stage change, a declaration, evidence, an
   acceptance, an authored adoption or a traversal is refused, naming the key it
   objected to. Delegates contribute answers, not run-level writes.
+- A proposal's declarations are checked when proposed, against the rules a
+  direct declaration meets — a new node still owes its `blocking` judgement. A
+  proposal cannot clear a field yet: any `null` in it is refused (IMP-483).

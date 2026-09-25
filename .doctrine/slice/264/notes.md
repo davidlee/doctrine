@@ -333,6 +333,20 @@ is the mutation or regression each new test was shown to fail against, then reve
 - **F-7** — `run.rs::resolve_blocking`, pure, carrying the four-case doc; unit test
   `a_blocking_judgement_resolves_per_case`.
 - **F-11** — the deviation above.
+- **F-16** (round 2, option 1) — `run.rs::rehearse_proposal`, called from `delegate`'s
+  `Propose` arm before the proposal is stored: rehearses the declarations over a scratch
+  snapshot through the direct path's own `Batch::validate` + `declare_node` (so `blocking`
+  missing at creation / `null` refuses exactly as a direct apply does), then refuses any
+  remaining sparse `null` with new `Refusal::ProposalCannotClear { subject, key }` (names
+  IMP-483). `Declaration::nulled_keys` + `Sparse::is_null`; pinned to the contract's sparse
+  key set by `tests.rs::every_sparse_key_is_reported_when_null`. Only `inq-` subjects are
+  rehearsed through `declare` — `cp-` needs a shell-minted record and `sec-` a body digest,
+  so rehearsing them would refuse lawful proposals; `accept` still runs the full path. Stored
+  encoding untouched (IMP-483). Red: e2e `a_proposal_carrying_null_is_refused_at_propose`
+  (`blocking`/`question`/`needs`/`parent` null; revision unchanged, no proposal stored, edge
+  kept) and `a_proposal_creating_an_unjudged_inquiry_is_refused_at_propose` both failed on
+  `propose` succeeding. `install/design-prompts/delegation.md` gains one bullet; the payload
+  contract states nothing about proposal nulls, so it is unchanged.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
