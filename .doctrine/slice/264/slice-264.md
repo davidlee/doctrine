@@ -69,20 +69,27 @@ derived set, and the derived set is what makes the narrowing's guarantee whole.
 - **`ISS-450`** (a `needs` edge declared at node *creation* emitted no row). It is
   the create branch; this is the update branch's `null` arm. Two distinct tests,
   and keeping them distinct is the point.
-- **Migrating or re-attesting existing runs.** Seventeen live snapshots keep
-  whatever their receipts already say.
+- **Migrating or re-attesting existing runs.** Stored snapshots are not rewritten;
+  they are read per node through the legacy fallback (design `sec-3`), and keep
+  whatever their receipts already say except where the slice intends otherwise.
 
 ## Affected surface
 
-- `src/design_run/gate.rs` — requirement coverage: the `Coverage::InquiryMap`
-  rows and `coverage_moved`, the comparison that decides invalidation
-- `src/design_run/inquiry.rs` — `NodeMaterial`, `materials()`, the shape/progress
-  split
-- `src/design_run/run.rs` — `declare_node`'s `needs` block
-- `src/design_run/submission.rs` — the key-home / state axes, if a new key is
-  minted
-- `install/design-run-stages.md` — the shipped edge/condition/reach table, if a
-  binding or reach changes
+Authoritative list: design `sec-5`. In summary:
+
+- `src/design_run/gate.rs` — the `InquiryMap` / new `ReviewedGraph` coverages,
+  `initial-concerns-recorded` as a single act, `blocking_inquiries_open` over
+  effective node judgements
+- `src/design_run/attestation.rs` — `CoveredSet::moved` parameterised by
+  `Coverage`; the legacy act variants kept read-only
+- `src/design_run/inquiry.rs` — `blocking` on the node and in `NodeMaterial`
+- `src/design_run/run.rs` — `declare_node`'s `needs` and `blocking` arms, import
+  seeding, `live_acts`
+- `src/design_run/submission.rs` — the two-home `blocking` key; the retired
+  `blocking-set-declared` key
+- `src/design_run/admission.rs`, `change_log.rs`, `payload_contract.rs`
+- `install/design-payload-contract.md`, `install/design-run-stages.md`,
+  `install/design-prompts/conditions/initial-concerns-recorded.md`
 - design-run unit and e2e suites
 
 ## Risks, assumptions, open questions
@@ -117,10 +124,10 @@ under `RV-386`** (`DEC-302`, below):
   (`DEC-300`). Narrowing alone was rejected: the derived blocking check quantifies
   over the *declared* set and relies on the map-moved staleness, so a newly-added
   blocking question could pass.
-- `OQ-2` → the two mechanisms stay distinct. `CoverageStale` is what narrows;
-  `ConfirmationStale` continues to carry the delta, which is exactly why
-  re-declaring an unchanged set is free and re-declaring a changed one re-shows
-  it.
+- `OQ-2` → the two mechanisms stay distinct. `CoverageStale` is what narrows.
+  *(Revised under `RV-386`: with the set derived from the nodes there is no
+  declaration left to confirm, so `ConfirmationStale` survives only as a frozen
+  read of links stored before the change.)*
 - `OQ-3` → the acceptance **survives** a change of shape. Recorded in `DEC-300`,
   not left implicit.
 - `OQ-4` → **blocking, not a warning.** A warning nobody is made to see is worth
@@ -151,13 +158,20 @@ intent did not:
   judgement reads the retired act (read-side only, `DEC-059`).
 - `RV-386` `F-1` scopes `DEC-301`'s move rule to **covered** nodes: a node added
   after the accepting act and later moved was never shown, so it does not re-face.
-  Pinned as behaviour rather than left implicit.
+  Recorded as an amendment to `DEC-301` itself and pinned by `VT-4`.
+- **Second pass (`RV-386` `F-6`–`F-14`).** The two attested rows split coverage:
+  sufficiency compares covered material only; initial concerns (`ReviewedGraph`)
+  also compares the full blocking set. The legacy act stays in its enums so
+  stored snapshots parse, and the fallback is per node, so a partly-judged run
+  keeps its unjudged blockers. `blocking` is one key with two homes; import seeds
+  `blocking: true`; the change log reads the gate's predicate. `DEC-121`'s
+  two-act letter is amended explicitly — both actors' judgements remain.
 - **R1 — loosening invalidation is a truthfulness change.** `RFC-031` T1 was about
   the exit signal telling the truth; making a condition stop re-deriving is the
   same class of change in the other direction. A condition that *should* have
   invalidated and did not is a silent lie, so the derived half must be shown to
   still fire (see `VT-1`).
-- **R2 — seventeen live snapshots change semantics underneath.** Bound by
+- **R2 — live snapshots change semantics underneath.** Bound by
   `mem.fact.design-run.snapshot-outlives-the-binary`. This must not make a stored
   snapshot unreadable; a reading-side change is preferred to a stored-shape change.
 - **R3 — the `needs: null` fix is mechanical and low-risk.** No stored snapshot can
@@ -180,17 +194,27 @@ intent did not:
 
 ## Verification / closure intent
 
-- **VT-1**: a declaration adding a node (a shape change) after
-  `user-accepts-sufficiency` is attested does **not** void it — while
-  `blocking-inquiries-dispositioned` still reports unsatisfied for every
-  **declared** blocking node, and a newly-added *blocking* node still cannot pass
-  unblocked (`R4`). The derived half must be demonstrably *not* exempted.
+The criteria are design `sec-6` `VT-1`–`VT-7`; the slice holds their intent:
+
+- **VT-1**: a declaration adding a node after `user-accepts-sufficiency` is
+  attested does **not** void it, blocking or not; a node judged `blocking: true`
+  stales `initial-concerns-recorded` and re-faces the user; and
+  `blocking-inquiries-dispositioned` still reports unsatisfied for every open node
+  whose effective judgement is blocking (`R4`). The derived half must be
+  demonstrably *not* exempted, and the change log must agree with the gate.
 - **VT-2**: a declaration supplying `needs: null` clears the set and emits one
   `NeedsRemoved` per removed edge; `null` on a node with no edges is a no-op *with
   no rows* — absence of change is not failure to report.
 - **VT-3**: the pre-change behaviour is pinned first. The suite asserting that a
   shape change voids the cumulative conditions stays green until the change is
   deliberate, then flips against a named criterion rather than being deleted.
+- **VT-4**: a move re-faces for a covered node and not for a node added after
+  the act.
+- **VT-5**: `blocking` is required at creation, `null` is refused, a flip emits
+  one `NodeBlockingChanged`, and the key keeps its finding home unchanged.
+- **VT-6**: a stored snapshot holding the legacy act parses, and its unjudged
+  blockers survive a partly-judged map (with a negative control).
+- **VT-7**: every creation path, import included, records a judgement.
 - **VA**: on a real run, a node added late does not re-face the human gates —
   re-measured against `RFC-031`'s new fitness measure (nodes/edges added after
   `user-accepts-sufficiency`).

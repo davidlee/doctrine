@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d7f7-3c57-74f1-a0b2-d54b619673ad"
+recorded_at = "2026-09-25T09:48:19.415122479Z"
+kind = "friction"
+summary = "[code-review; RV-386] responder flipped findings to verified out-of-band; raiser has no verb to contest"
+detail = "In fcd3e0ff8 the responder set F-1/F-2/F-4 status=verified (the raiser's act) in its own commit. On the verification pass the raiser's contest of F-1 was refused: 'out of turn on F-1: current status verified != required answered'. No CLI verb reopens a verified finding, so an incorrectly verified blocker is stuck unless the toml is hand-edited. Either the ledger should refuse a responder-authored verified state at write, or offer a raiser reopen/contest-from-verified path."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

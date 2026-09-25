@@ -32,7 +32,7 @@ response = "Verified at admission.rs:164-181 (existence only) and gate.rs:1543-1
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "No-op needs clearing still advances the revision"
 detail = "SL-264 design.md:120-124 and 152-154 requires edge-free needs:null to emit no rows and invent no revision. In src/design_run/run.rs:347-349 apply unconditionally increments revision before declarations; src/design_run/run.rs:1440-1463 emits no NeedsRemoved when the existing set is empty; src/design_run/run.rs:544-565 nevertheless records a receipt and returns the incremented snapshot. src/commands/design.rs:2146-2173 persists that snapshot on the ordinary apply path. Thus wiring Null to the existing clearing arm yields a successful zero-row apply with revision N+1; VT-2 as written requires an additional no-effect rule outside the stated needs wiring."
@@ -50,12 +50,93 @@ response = "Verified: DEC-300 chooses a derived growth condition; the design spe
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "New condition has no specified contract prose or delta display"
 detail = "SL-264 design.md:90-93 says a changed blocking set re-shows exactly what changed, yet its code-impact list at :129-143 adds only the generated stage-table mirror, not the mandatory condition narrative asset. SPEC-029 requires one narrative per condition; src/design_run/prompt.rs:264-280 derives a design-prompts/conditions/<token>.md key per condition and src/commands/design.rs:4793-4820 tests that every key has an asset. The current initial-concerns guidance at install/design-prompts/conditions/initial-concerns-recorded.md:18-22 is where the map/tree and blocking marks are shown; splitting the agent obligation into blocking-set-current needs its own instructions. In code, ConfirmationStale at src/design_run/gate.rs:1164-1169 carries only act/declaration kinds, and NodeCreated at src/design_run/run.rs:1358-1382 omits question text, so neither existing cause nor row delivers the claimed exact delta. A changed set can require assent without showing the changed question unless the design specifies that projection."
 disposition = "accepted — fixed in sec-5"
 response = "sec-5 now adds install/design-prompts/conditions/blocking-set-current.md to the code impact and the design-target selectors, and states that prompt.rs per-condition key derivation plus the every-key-has-an-asset test make the narrative compelled. The delta-display obligation lands in that narrative: re-declaring a changed set shows the added or changed blocking questions with their text, as initial-concerns-recorded shows the map."
+
+[[finding]]
+id = "F-6"
+status = "answered"
+severity = "blocker"
+title = "Full blocking-membership comparison contradicts sufficiency survival"
+detail = "SL-264 design.md:47-54 applies the full-set blocking-membership comparison to both InquiryMap-bound attested rows; gate.rs:585-605 and :620-634 show both initial-concerns-recorded and user-accepts-sufficiency use InquiryMap with cumulative reach. Adding inq-2 with blocking:true after both acts changes the full true-id set, so both acts stale. Yet design.md:181-185 VT-1 requires an added node after sufficiency to leave user-accepts-sufficiency current. The specified shared comparison cannot satisfy VT-1 for that concrete addition; the human sufficiency gate re-faces on the growth the slice is meant to exempt."
+disposition = "accepted — fixed in sec-2, sec-6"
+response = "Verified: gate.rs:602 and :629 bind both rows to Coverage::InquiryMap, so one comparison cannot both stale concerns and spare sufficiency on a blocking addition. sec-2 splits coverage by rule: user-accepts-sufficiency keeps InquiryMap (material over carried keys); initial-concerns-recorded takes a new Coverage::ReviewedGraph (that plus full-set effective blocking membership). Stored shape is unchanged (CoveredSet::Nodes for both). Rationale: the cumulative concerns row already re-faces the user at every edge sufficiency guards, and blocking-inquiries-dispositioned holds the edge until the question is answered. A flip on a covered node still stales both, stated. VT-1 now asserts sufficiency survives both a blocking and a non-blocking addition."
+
+[[finding]]
+id = "F-7"
+status = "answered"
+severity = "blocker"
+title = "Retiring the stored blocking-set variant makes existing runs unreadable"
+detail = "SL-264 design.md:113-120 retires AgentAct::BlockingSetDeclared and says a legacy snapshot reads that stored act. src/design_run/attestation.rs:671-683 derives Deserialize on AgentAct and defines BlockingSetDeclared as its variant; src/commands/design.rs:485-488 parses the whole snapshot through snapshot::parse. Inspection of .doctrine/state/slice/*/design.toml finds the blocking-set-declared variant in 20 of 22 live snapshots, including .doctrine/state/slice/264/design.toml. Removing the variant from the serde enum means parse fails before blocking_inquiries_open can execute the promised fallback. Cause::ConfirmationStale is error-only per gate.rs:1125-1126 and is not this risk."
+disposition = "accepted — fixed in sec-3, sec-6"
+response = "Verified: attestation.rs:671-683 derives Deserialize on AgentAct; 21 of 22 stored snapshots carry the act. sec-3 now retires the act from writing only: the key leaves the parser and payload contract, while AgentAct::BlockingSetDeclared and ActKind::BlockingSetDeclared stay as legacy read-only variants. Self-attack found a sibling: reading only ReviewedGraph would turn a stored graph-reviewed that was already ConfirmationStale current, so the confirms digest remains a carried-driven, frozen read and Cause::ConfirmationStale stays to report it. VT-6 pins the parse with a negative control (variant deleted => parse fails)."
+
+[[finding]]
+id = "F-8"
+status = "answered"
+severity = "blocker"
+title = "First new judgement drops unresolved legacy blockers"
+detail = "SL-264 design.md:118-121 says fallback reads the stored BlockingSetDeclared act only when no node carries a blocking judgement, and exits that regime on the first judged node. .doctrine/state/slice/252/design.toml has no node-level blocking fields and its stored set names open inq-5 and inq-11. Declare a new node blocking:false (or re-declare any existing node blocking:false): the fallback turns off, while those two legacy nodes remain without a judgement. The proposed gate.rs blocking_inquiries_open filter in design.md:93-96 now omits them and can report satisfied despite two unresolved blockers. VT-5 at design.md:194-196 tests only the all-legacy fallback and cannot catch the mixed regime."
+disposition = "accepted — fixed in sec-3, sec-6"
+response = "Verified against SL-252's snapshot shape. The fallback is now per node: effective judgement = the node's own Some(bool), else membership in the stored legacy set. A legacy node leaves the fallback only by being judged itself, so a partly-judged run keeps every unjudged legacy blocker. blocking_inquiries_open and ReviewedGraph read the same effective set. VT-6 tests the mixed regime explicitly (judge another node false; legacy blockers still open)."
+
+[[finding]]
+id = "F-9"
+status = "answered"
+severity = "major"
+title = "Node blocking key has two incompatible declaration homes"
+detail = "SL-264 design.md:84-90 requires Sparse<bool> blocking on inquiry creation and update. src/design_run/submission.rs:168-171,521-524 already uses the same Declaration.blocking key as Option<bool> for findings, defaulting absent to false; submission.rs:720-724 assigns KEY_BLOCKING only to IdKind::Finding at SubjectState::Absent, and :766-778 rejects the key at any other kind. src/design_run/payload_contract.rs:1398-1402 and doctrine design contract render it optional. The design code-impact row at design.md:165 only says submission changes because an act retires and does not specify the dual-home/state contract. As written, an inquiry with blocking:true is refused, while making the single row Inquiry would reject or stop guarding finding declarations; the sparse-on-update and finding-create semantics need an explicit shared-key rule."
+disposition = "accepted — fixed in sec-3, sec-5"
+response = "Verified: submission.rs:720-724 homes KEY_BLOCKING at Finding only, and inert_key's find_map (submission.rs:766-778) refuses any carried key whose single home differs. sec-3 specifies one key with two homes, each row pairing kind and state rule (Finding x Only(Absent) unchanged; Inquiry x EitherState, required at Absent); the kind axis refuses only when no row names the subject's kind; design contract renders both. null is refused at the inquiry home. The finding home's null-reads-as-absent is the same class, outside scope, captured as follow-up. VT-5 covers both homes."
+
+[[finding]]
+id = "F-10"
+status = "answered"
+severity = "major"
+title = "Imported question seeding bypasses required blocking judgement"
+detail = "SL-264 design.md:84-85 requires blocking on node creation and refuses omission, but design.md:161-176 limits creation handling to declare_node and does not assign a judgement to import. src/design_run/run.rs:1058-1101 creates shaping-question and imported-prose nodes with InquiryNode::open and seed_node, and :1133-1137 inserts them directly, bypassing declare_node at :1395-1405. A design start --from-design with an open question therefore creates a node without the required field, or a blanket constructor requirement breaks import. The design neither specifies the import judgement nor a separate compatibility rule, and VT-5 at :194-196 exercises only declaration creation."
+disposition = "accepted — fixed in sec-3, sec-6"
+response = "Verified: run.rs:1058-1101 seeds shaping and imported-prose questions via InquiryNode::open/seed_node, bypassing declare_node. sec-3: import seeds blocking true (omission defaults to visible; import precedes every user act so it costs nothing), and InquiryNode's constructors take the judgement as a parameter so no creation path can omit it by construction. VT-7 pins it."
+
+[[finding]]
+id = "F-11"
+status = "answered"
+severity = "major"
+title = "Slice scope and verification still describe the retired set-act design"
+detail = "SL-264 slice-264.md:72-86 still says seventeen live snapshots keep their receipts and lists only the older affected surfaces, omitting attestation.rs, admission.rs, change_log.rs, payload_contract.rs and the condition narrative that design.md:161-176 now changes. slice-264.md:183-187 VT-1 still quantifies over DECLARED blocking nodes, while design.md:93-105 removes the declaration and design.md:181-196 adds VT-4/VT-5 absent from slice closure intent. Following the slice-level acceptance text can pass a declared-set test without checking node attributes, legacy fallback, or the new key, so it does not verify the expanded objective."
+disposition = "accepted — fixed in slice-264.md"
+response = "Verified. slice-264.md: Non-Goals drop the snapshot census and state the per-node read; Affected surface now summarises and defers to design sec-5; OQ-2's settled bullet is revised; a second-pass bullet records F-6..F-14; the closure intent restates VT-1 over effective judgements and adds VT-4..VT-7, deferring to design sec-6 as the authoritative list."
+
+[[finding]]
+id = "F-12"
+status = "answered"
+severity = "major"
+title = "Decision amendment remains internally unsettled"
+detail = "doctrine knowledge show DEC-302 reports status proposed although its facet says decided_by user and SL-264 design.md:123-126 cites it as the decision amending accepted DEC-300. DEC-300 record-300.toml:15 appends an amendment dropping the ninth condition, but its still-active consequences at :18 require a ninth condition and regenerated table. doctrine knowledge show DEC-301 remains accepted and unqualified that re-parenting a node is a deliberate re-attestation event, while design.md:14-19 exempts a moved uncovered node. These accepted/proposed records give conflicting instructions for the same implementation; the design-only scope cannot settle the conflict."
+disposition = "accepted — DEC-302 amended; accepted-record amendments await the user's assent"
+response = "Verified. DEC-302 (proposed) is amended to the repaired mechanism and its comma-split alternatives repaired. Still owed, and not recorded without the user's assent: accept DEC-302; amend DEC-301 to scope the move/re-word rule to nodes the accepting act covered (also resolves F-1's contest); correct DEC-300's consequences (no ninth condition). The design now states these as amendments to the records, not readings."
+
+[[finding]]
+id = "F-13"
+status = "answered"
+severity = "major"
+title = "Change log still invalidates acts that the gate keeps current"
+detail = "SL-264 design.md:47-54 and :103-105 says a non-blocking added node leaves graph-reviewed current. src/design_run/run.rs:1988-2008 computes live_acts for change rows through CoveredSet::moved; src/design_run/attestation.rs:555-563 implements that by ContentCoverage::diff, whose union-key walk at :432-440 reports every added node. run.rs:2059-2071 then emits ActInvalidated for graph-reviewed and sufficiency-accepted on the non-blocking addition, even if gate.rs coverage_moved is narrowed as design.md:164 specifies. The run reports that a human act died while its cumulative gate still accepts it; design.md:162 and :166 do not assign the live_acts read to the new predicate."
+disposition = "accepted — fixed in sec-2, sec-5, sec-6"
+response = "Verified: run.rs:1988-2008 live_acts reads CoveredSet::moved, whose Nodes arm is the union-key diff (attestation.rs:432-440). sec-2 moves the narrowing into the shared predicate: CoveredSet::moved takes the Coverage the act's rule names, so live_acts and coverage_moved cannot disagree; the union-key diff stays for the whole-map is_current users. VT-1 asserts ActInvalidated rows match the gate's verdict, including none for a non-blocking addition."
+
+[[finding]]
+id = "F-14"
+status = "answered"
+severity = "major"
+title = "Single-act concerns rule contradicts accepted DEC-121"
+detail = "doctrine knowledge show DEC-121 is accepted and its record-121.md:44-47 explicitly says initial concerns are two acts, the user reviewing the graph and the agent declaring which questions are settleable without asking. SL-264 design.md:98-101 changes initial-concerns-recorded to Attested([GraphReviewed(User)]) and retires the agent act; design.md:123-126 amends DEC-300 but leaves DEC-121 untouched. The proposed condition therefore implements one act where an accepted decision requires two. Node attributes may carry the same judgement, but the decision's two-actor act requirement is not amended or reconciled."
+disposition = "accepted — design reconciled; DEC-121 amendment awaits the user's assent"
+response = "Verified: DEC-121 says initial concerns are two acts. sec-3 now states the departure: both actors' judgements remain (the agent's per node at creation/redeclaration, the user's graph-reviewed binding it via ReviewedGraph), but the agent's half is node state, so the rule is one act. DEC-121's two-act rationale (a refusal can name the missing half) is met by refusing an unjudged node at declaration. DEC-121 and DEC-126's table row are to be amended explicitly, pending the user's assent."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
