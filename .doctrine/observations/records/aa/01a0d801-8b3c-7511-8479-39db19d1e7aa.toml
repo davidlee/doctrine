@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d801-8b3c-7511-8479-39db19d1e7aa"
+recorded_at = "2026-09-25T09:59:34.972177949Z"
+kind = "friction"
+summary = "Design-repair path is not surfaced by the reviewing turn: design.md must be hand-edited then design adopt'ed, but the adopting step appears only in the design contract payload"
+detail = "Answering RV-384 findings required repairing design.md. The reviewing fragment (design resume) and the design skill both describe mutations via design apply and authored prose via design materialise; neither names the hand-edit + adopt path. The only signposts were design adopt --help ('the sole lawful crossing of a document edited outside this run') and a retired-key hint buried in doctrine design contract. An agent that edits design.md and skips adopt leaves the run baseline stale, and the lock's section attestations then bind content the reviewer did not see."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

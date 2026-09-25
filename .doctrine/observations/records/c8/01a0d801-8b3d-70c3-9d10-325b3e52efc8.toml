@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d801-8b3d-70c3-9d10-325b3e52efc8"
+recorded_at = "2026-09-25T09:59:34.973172373Z"
+kind = "friction"
+summary = "review show has two response shapes: the CLI --json nests findings under review.finding (singular) while the MCP tool returns Showed.findings"
+detail = "Reading a disposition back to check it landed, I scripted the CLI doctrine review show RV-384 --json and expected Showed.findings (the MCP tool's shape); the CLI emits {kind, review, body} with review.finding. Two round trips to discover the key. Same read, two envelopes."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
