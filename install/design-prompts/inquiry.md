@@ -47,6 +47,8 @@ has accepted your summary.
   it. Declare late arrivals when they land: a question you are holding but have
   not declared is invisible to the user whose acceptance the run is about to ask
   for, and to every reader after them.
+- The user's view of the map is `doctrine design tree`. When a write tells you
+  to show it, paste that output; never substitute a listing of your own.
 
 ## What the machine will reject
 

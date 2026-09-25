@@ -15,9 +15,9 @@ A thin discharge produces a design that proceeds on a framing nobody
 challenged. That is the most expensive class of error to find late, because
 everything built on the framing has to come apart with it.
 
-**What is enough.** Show the map as an indented tree: one line per question,
-the blocking ones marked, with any `needs` edges stated. The map has no other
-viewer, so this listing is the user's view of it. Ask: "Anything missing, or
+**What is enough.** The user reviews the map as `doctrine design tree SL-NNN`
+renders it — it marks the blocking questions and states any `needs` edges. Do
+not draw your own listing. Ask: "Anything missing, or
 wrongly marked blocking? Otherwise, 'reviewed'." Record their review of that
 listing in one submission — the tree and its marks are the whole of what they
 are confirming, so there is no separate set to declare.

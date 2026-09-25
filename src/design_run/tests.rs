@@ -25,6 +25,7 @@ use super::attestation::{
     Reviewer,
 };
 use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm, ValueKind};
+use super::config::MapDelivery;
 use super::contract_check::refuse_unknown_keys;
 use super::fixture::{
     BLOCKING_NODE, LEGACY_SNAPSHOT, OPEN_NODE, PASS, SECTION_A, SECTION_B, attest,
@@ -53,9 +54,9 @@ use super::prompt::contract_block;
 use super::refusal::{ActFault, Refusal};
 use super::run::{
     Applied, AuthoredSection, Crossing, DerivedInput, GateFacts, ObservedReview, Resolution,
-    ShapingQuestion, apply, declare, import, live_reviews, subject_state,
+    RunbookFacts, ShapingQuestion, apply, declare, import, live_reviews, subject_state,
 };
-use super::runbook::{RunbookKey, RunbookStanding};
+use super::runbook::{Runbook, RunbookKey, RunbookStanding};
 use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup, DesignSnapshot, Finding, parse};
 use super::submission::{
     AcceptanceDeclaration, AgentActDeclaration, ApplyRequest, Batch, CheckpointActDeclaration,
@@ -6447,5 +6448,195 @@ fn the_payload_contract_names_every_declaration_keys_home() {
         keys.iter().filter(|key| key.key == "blocking").count(),
         2,
         "`blocking` is one key with two homes, each row stating its own"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// SL-266 VT-1 — `map_changed` (design `VT-11`, sec-5 *When the map changed*).
+// ---------------------------------------------------------------------------
+
+/// Apply one payload body (the envelope merged in) over `prior` through the
+/// pure core, with `derived` as the observed facts.
+fn apply_body(prior: &DesignSnapshot, derived: &DerivedInput, body: Value) -> DesignSnapshot {
+    let mut payload = serde_json::json!({
+        "run_uid": prior.run.uid,
+        "known_revision": prior.run.revision,
+        "submission_id": "s-map",
+    });
+    let object = payload.as_object_mut().expect("the envelope is an object");
+    for (key, value) in body.as_object().expect("the body is an object") {
+        object.insert(key.clone(), value.clone());
+    }
+    let request: ApplyRequest = serde_json::from_value(payload).expect("a well-formed request");
+    apply(
+        prior,
+        &request,
+        &Crossing::Ordinary,
+        derived,
+        "sha256:pay",
+        &Resolution::default(),
+    )
+    .unwrap_or_else(|refused| panic!("{body} applies: {refused:?}"))
+    .snapshot
+}
+
+/// The one step of [`one_step_runbook`].
+const MAP_STEP: &str = "check.only";
+
+/// A one-step, check-free runbook guarding `key`'s edge, as the shell would
+/// observe it. The digest is a stand-in: admission only compares it.
+fn one_step_runbook(key: RunbookKey) -> RunbookFacts {
+    let book = Runbook::parse(
+        key,
+        &format!("mode = \"sequence\"\n\n[[step]]\nid = \"{MAP_STEP}\"\ntext = \"Do it.\"\n"),
+    )
+    .expect("the fixture runbook parses");
+    let digests = [(MAP_STEP.to_owned(), "d-only".to_owned())].into();
+    RunbookFacts { key, book, digests }
+}
+
+/// Every mutation kind of the map counts; nothing outside it does. Each case
+/// is one real submission through [`apply`], so the table proves the rule
+/// against what the engine writes, not against a hand-edited snapshot.
+#[test]
+fn map_changed_table() {
+    use serde_json::json;
+    let (base, mut derived) = cleared();
+    derived.gate.runbook = Some(one_step_runbook(RunbookKey::Reviewing));
+    let open = OPEN_NODE;
+    let settled = BLOCKING_NODE;
+    let with_needs = apply_body(
+        &base,
+        &derived,
+        json!({"declare": [{"subject": open, "needs": [settled]}]}),
+    );
+
+    // A `false` case proves nothing unless its write landed somewhere else, so
+    // each carries what it moved; the map cases' own `true` is their control.
+    type Landed = fn(&DesignSnapshot, &DesignSnapshot) -> bool;
+    let map: Landed = |prior, next| super::map_changed(prior, next);
+    let runbook: Landed = |prior, next| prior.runbook != next.runbook;
+    let cursor: Landed = |prior, next| prior.map.cursor != next.map.cursor;
+    let acts: Landed = |prior, next| prior.acts != next.acts;
+    let nothing: Landed = |_, _| true;
+    let cases: [(&str, &DesignSnapshot, Value, bool, Landed); 12] = [
+        (
+            "create",
+            &base,
+            json!({"declare": [{"subject": "inq-9", "question": "new?", "blocking": false}]}),
+            true,
+            map,
+        ),
+        (
+            "lifecycle",
+            &base,
+            json!({"declare": [{"subject": open, "lifecycle": "deferred"}]}),
+            true,
+            map,
+        ),
+        (
+            "reparent",
+            &base,
+            json!({"declare": [{"subject": open, "parent": settled}]}),
+            true,
+            map,
+        ),
+        (
+            "needs add",
+            &base,
+            json!({"declare": [{"subject": open, "needs": [settled]}]}),
+            true,
+            map,
+        ),
+        (
+            "needs remove",
+            &with_needs,
+            json!({"declare": [{"subject": open, "needs": []}]}),
+            true,
+            map,
+        ),
+        (
+            "blocking flip",
+            &base,
+            json!({"declare": [{"subject": open, "blocking": true}]}),
+            true,
+            map,
+        ),
+        (
+            "reword",
+            &base,
+            json!({"declare": [{"subject": open, "question": "reworded?"}]}),
+            true,
+            map,
+        ),
+        (
+            "checkpoint resolve",
+            &base,
+            json!({"declare": [{"subject": "cp-9", "disposes": open,
+                "dispose": {"form": "non-durable", "note": "moot"}}]}),
+            true,
+            map,
+        ),
+        (
+            "step discharge",
+            &base,
+            json!({"discharge": {"step": MAP_STEP, "outcome": "attested"}}),
+            false,
+            runbook,
+        ),
+        (
+            "traversal only",
+            &base,
+            json!({"traversal": {"cursor": open}}),
+            false,
+            cursor,
+        ),
+        (
+            "acceptance only",
+            &base,
+            json!({"acceptance": {"basis": "the user accepts the design"}}),
+            false,
+            acts,
+        ),
+        (
+            "identical redeclaration",
+            &base,
+            json!({"declare": [{"subject": open, "question": format!("is {open} settled?"),
+                "blocking": false}]}),
+            false,
+            nothing,
+        ),
+    ];
+    for (kind, prior, body, expected, landed) in cases {
+        let next = apply_body(prior, &derived, body);
+        assert!(landed(prior, &next), "{kind}: the write landed");
+        assert_eq!(super::map_changed(prior, &next), expected, "{kind}");
+    }
+}
+
+/// `DEC-310`: the line is owed only in relay mode, and only by a map change.
+#[test]
+fn relay_is_owed_only_in_relay_mode_on_a_map_change() {
+    let (prior, derived) = cleared();
+    let changed = apply_body(
+        &prior,
+        &derived,
+        serde_json::json!({"declare": [{"subject": OPEN_NODE, "question": "reworded?"}]}),
+    );
+    let line = super::render::tree::relay_line("SL-266");
+    for (delivery, next, expected) in [
+        (MapDelivery::Relay, &changed, Some(line.clone())),
+        (MapDelivery::Relay, &prior, None),
+        (MapDelivery::Sidecar, &changed, None),
+    ] {
+        assert_eq!(
+            super::relay(delivery, &prior, next, "SL-266"),
+            expected,
+            "{delivery:?}"
+        );
+    }
+    assert!(
+        line.ends_with("`doctrine design tree SL-266` verbatim"),
+        "the line names the slice's tree: {line}"
     );
 }

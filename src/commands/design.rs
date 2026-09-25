@@ -85,6 +85,7 @@ use crate::design_run::attestation::{
     AcceptanceAttestation, ActKind, IntentState, IntentSubject, RecoveryIntent, ReviewDisposition,
     ReviewRef,
 };
+use crate::design_run::config::{MapDelivery, resolve_map_delivery};
 use crate::design_run::delegation::Delegation;
 use crate::design_run::document::{AuthoredState, divergence_refusal, observe_watermark};
 use crate::design_run::gate::ObservedFact;
@@ -657,6 +658,17 @@ fn complete_journal(root: &Path, slice: u32, submission: &str) -> Result<()> {
 }
 
 /// Emit lines without tripping the crate's `print_stdout` denial.
+/// The `[design] map_delivery` choice, resolved before any write so a malformed
+/// entry refuses the verb rather than silently selecting a default (`DEC-309`).
+fn map_delivery(root: &Path) -> Result<MapDelivery> {
+    resolve_map_delivery(crate::dtoml::load_doctrine_toml(root)?.design.as_ref())
+}
+
+/// A slice's canonical reference, `SL-NNN`.
+fn slice_ref(slice: u32) -> String {
+    crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice)
+}
+
 fn emit(lines: &[String]) -> Result<()> {
     let mut out = std::io::stdout().lock();
     for line in lines {
@@ -683,7 +695,7 @@ fn refuse_authored_divergence(
     slice: u32,
 ) -> Result<()> {
     let state = observe_watermark(run, observed);
-    let slice_ref = crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice);
+    let slice_ref = slice_ref(slice);
     if let Some(sentence) = divergence_refusal(&state, &slice_ref) {
         anyhow::bail!("{sentence}");
     }
@@ -1621,6 +1633,7 @@ fn run_start(args: StartArgs) -> Result<()> {
 /// Create the run. One active run per slice in v1, so an existing snapshot is a
 /// refusal rather than a silent replacement.
 fn start(root: &Path, slice: u32, from_design: bool, pre_write: PreWriteHook<'_>) -> Result<()> {
+    let delivery = map_delivery(root)?;
     let path = crate::state::design_snapshot_path(root, slice);
     if path.exists() {
         anyhow::bail!(
@@ -1646,6 +1659,7 @@ fn start(root: &Path, slice: u32, from_design: bool, pre_write: PreWriteHook<'_>
     let uid = [RUN_UID_PREFIX, &uuid::Uuid::now_v7().to_string()].concat();
     let mut run = DesignSnapshot::new(uid.clone(), slice, observed.clone());
     run.authored.materialised = observed.is_some();
+    let empty = run.clone();
 
     // The import itself. It is refusable, and it is refused here — before
     // `pre_write`, so a document import cannot read leaves no run behind at all.
@@ -1681,6 +1695,7 @@ fn start(root: &Path, slice: u32, from_design: bool, pre_write: PreWriteHook<'_>
              clearance is inferred from authored prose"
         ));
     }
+    lines.extend(design_run::relay(delivery, &empty, &run, &slice_ref(slice)));
     emit(&lines)
 }
 
@@ -1828,6 +1843,7 @@ fn apply(
     pre_write: PreWriteHook<'_>,
     fault: FaultHook<'_>,
 ) -> Result<()> {
+    let delivery = map_delivery(root)?;
     let prior = read_snapshot(root, slice)?;
     let request = parse_payload(payload)?;
     let digest = crate::git::sha256(payload.as_bytes());
@@ -1846,9 +1862,9 @@ fn apply(
              the run does not advance",
             request.envelope.submission_id
         )]),
-        PipelineOutcome::Candidate(applied) | PipelineOutcome::Written(applied) => {
-            emit(&applied_lines(&prior, &request, &applied))
-        }
+        PipelineOutcome::Candidate(applied) | PipelineOutcome::Written(applied) => emit(
+            &applied_lines(&prior, &request, &applied, delivery, &slice_ref(slice)),
+        ),
     }
 }
 
@@ -2206,9 +2222,15 @@ fn apply_pipeline(
 }
 
 /// The report a wire submission prints: the revision and stage it reached, the
-/// lock disclosure when it took the lock, the delegation's assignments, then
-/// its change rows.
-fn applied_lines(prior: &DesignSnapshot, request: &ApplyRequest, applied: &Applied) -> Vec<String> {
+/// lock disclosure when it took the lock, the delegation's assignments, its
+/// change rows, then — last — the relay line when it owes one (`DEC-310`).
+fn applied_lines(
+    prior: &DesignSnapshot,
+    request: &ApplyRequest,
+    applied: &Applied,
+    delivery: MapDelivery,
+    slice_ref: &str,
+) -> Vec<String> {
     let mut lines = vec![format!(
         "revision {} stage {}",
         applied.snapshot.run.revision,
@@ -2227,6 +2249,12 @@ fn applied_lines(prior: &DesignSnapshot, request: &ApplyRequest, applied: &Appli
         request.delegation.as_ref(),
     ));
     lines.extend(applied.rows.iter().map(design_run::render::render_row));
+    lines.extend(design_run::relay(
+        delivery,
+        prior,
+        &applied.snapshot,
+        slice_ref,
+    ));
     lines
 }
 
@@ -2533,7 +2561,7 @@ fn project(
         read_authored_fingerprint(root, slice)?,
         None,
     )?;
-    let slice_ref = crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice);
+    let slice_ref = slice_ref(slice);
     let titles = match detail {
         Detail::Full => record_titles(root, run),
         Detail::Normal => BTreeMap::new(),
@@ -2765,7 +2793,6 @@ fn read_candidate(
     };
     let run = snapshot::parse(&text)?;
     // The status judged must be the rendered run's own slice's (RV-392 `F-1`).
-    let slice_ref = |n| crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, n);
     anyhow::ensure!(
         run.run.slice == slice,
         "the snapshot is filed under {} but names {}",

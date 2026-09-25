@@ -4,7 +4,7 @@
 //! One parser owns the whole `doctrine.toml` shape so the file is read once and
 //! split into its sub-configs: the `[conduct]` table ([`crate::conduct`]) and the
 //! `[verification]` table ([`crate::verify`]), plus the `[estimation]` and
-//! `[value]` tables. Every field is `#[serde(default)]`, so an absent table
+//! `[value]` tables, and the raw `[design]` entry. Every field is `#[serde(default)]`, so an absent table
 //! parses to its sub-config's default (tolerant — the conduct precedent). Every
 //! other top-level key is ignored.
 //!
@@ -45,6 +45,11 @@ pub(crate) struct DoctrineToml {
     /// settings activation scope (SL-152 PHASE-06; SL-250).
     #[serde(default)]
     pub(crate) install: crate::install_config::InstallConfig,
+    /// The `[design]` table, kept RAW so this shared parse checks nothing about
+    /// it — the design writes resolve it through
+    /// [`crate::design_run::config::resolve_map_delivery`] (SL-266 `DEC-309`).
+    #[serde(default)]
+    pub(crate) design: Option<toml::Value>,
 }
 
 /// Parse a project `doctrine.toml` body into its sub-configs (PURE). The shell
@@ -113,6 +118,22 @@ mod tests {
             crate::dispatch_config::DispatchConfig::default()
         );
         assert_eq!(doc.install, crate::install_config::InstallConfig::default());
+    }
+
+    /// SL-266 `EX-1`: any well-formed `[design]` passes the shared parse, so a
+    /// bad display preference never fails an unrelated reader.
+    #[test]
+    fn any_well_formed_design_entry_parses() {
+        for body in [
+            "",
+            "design = 42\n",
+            "[design]\nmap_delivery = 42\n",
+            "[design]\nmap_delivry = \"relay\"\n",
+            "[design]\nmap_delivery = \"tree\"\n",
+        ] {
+            let doc = parse(&format!("{body}[conduct]\n")).unwrap();
+            assert_eq!(doc.design.is_some(), !body.is_empty(), "{body:?} kept raw");
+        }
     }
 
     #[test]

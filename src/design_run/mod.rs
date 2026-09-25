@@ -78,6 +78,7 @@ pub(crate) mod artifact;
 pub(crate) mod attestation;
 pub(crate) mod bounds;
 pub(crate) mod change_log;
+pub(crate) mod config;
 pub(crate) mod contract_check;
 pub(crate) mod delegation;
 pub(crate) mod document;
@@ -116,6 +117,29 @@ mod tests;
 pub(crate) use render::envelope::TurnEnvelope;
 
 use serde::{Deserialize, Serialize};
+
+/// Whether a write changed the inquiry map (SL-266 sec-5): a comparison of
+/// state, not of change rows, so a reworded question — which emits no row —
+/// counts, and traversal (cursor, pin, posture), which lives outside
+/// [`inquiry::InquiryMap`], does not.
+pub(crate) fn map_changed(
+    prior: &snapshot::DesignSnapshot,
+    next: &snapshot::DesignSnapshot,
+) -> bool {
+    prior.map.inquiry != next.map.inquiry
+}
+
+/// The relay line a write prints last, if it owes one: relay mode and a changed
+/// map (SL-266 `DEC-310`). One rule for every map-writing verb.
+pub(crate) fn relay(
+    delivery: config::MapDelivery,
+    prior: &snapshot::DesignSnapshot,
+    next: &snapshot::DesignSnapshot,
+    slice_ref: &str,
+) -> Option<String> {
+    (delivery == config::MapDelivery::Relay && map_changed(prior, next))
+        .then(|| render::tree::relay_line(slice_ref))
+}
 
 /// The five coarse stages of a design run (design §5.4).
 ///

@@ -210,7 +210,20 @@ pub(crate) fn render(envelope: &TurnEnvelope, style: TreeStyle) -> Vec<String> {
 /// The command that reproduces this view — the footer, so a verbatim relay
 /// teaches the user the command (`DEC-309`).
 fn footer(envelope: &TurnEnvelope) -> String {
-    format!("{TREE_COMMAND} {}", envelope.slice_ref)
+    command(&envelope.slice_ref)
+}
+
+/// The line a map-changing write prints last in relay mode (`DEC-310`).
+pub(crate) fn relay_line(slice_ref: &str) -> String {
+    format!(
+        "map changed — before ending this turn, show the user the output of `{}` verbatim",
+        command(slice_ref)
+    )
+}
+
+/// The command that renders `slice_ref`'s tree.
+fn command(slice_ref: &str) -> String {
+    format!("{TREE_COMMAND} {slice_ref}")
 }
 
 /// The header counts and, when the shell chose the run, how (`DEC-305`).
