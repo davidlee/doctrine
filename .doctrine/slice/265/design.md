@@ -83,15 +83,20 @@ The router accepts the 24 numbered prefixes in `kinds::KINDS` and nothing else
 are separate address spaces with their own verbs; including them would be a
 second route with a different argument shape, not a table row.
 
-**Case.** The router accepts the canonical `PREFIX-NNN` form and the bare `NNN`
-form, and it accepts an all-lowercase prefix for the same reason the per-kind
-parsers do: `listing::parse_ref` strips the prefix in exactly two literal cases —
-`PREFIX-` or its lowercase spelling — and deliberately **not** case-insensitively,
-so `dec-031` resolves while `Dec-031` is refused. The router mirrors that rule
-rather than inventing a third one: a ref whose prefix is wholly lowercase is
-uppercased before resolution, and mixed case stays refused. Without this the
-design's own equivalence would be false in the spelling a human is most likely to
-type (`RV-384` `F-20`).
+**Case.** The router accepts the canonical `PREFIX-NNN` form, the bare `NNN`
+form, and any casing of the prefix: it ASCII-uppercases the prefix before
+resolution, so `dec-031`, `Dec-031` and `DEC-031` all resolve. It does **not**
+try to mirror the per-kind parsers, because they do not share one rule —
+`listing::parse_ref` strips exactly `PREFIX-` or its all-lowercase spelling (so
+`dec-031` resolves and `Dec-031` does not), `knowledge::resolve_ref` and
+`backlog::parse_ref` uppercase the prefix and so ignore case entirely, and
+`spec::resolve_spec_ref` never uppercases. Mirroring any one of them would refuse
+a ref some other kind's own `show` accepts, and would make the design's central
+equivalence false for that spelling (`RV-384` `F-20`, `F-25`). The equivalence is
+therefore stated against the parsers, not against a case rule: **for every ref a
+kind's own `show` accepts, `doctrine show` emits the same bytes.** Unconditional
+uppercasing is a superset — it also accepts a few refs a case-strict kind
+(`spec`) refuses.
 
 ```mermaid
 flowchart TD
@@ -325,10 +330,12 @@ layering edge (`RV-384` `F-8`).
 <!-- doctrine:section sec-7 -->
 ## Verification
 
-- **VT — byte-equivalence.** For one fixture entity of every numbered prefix,
-  `doctrine show <REF>` emits stdout byte-identical to that kind's own `show`
-  invocation, in both `--format table` and `--format json`. This is the slice's
-  central property; the fidelity contract is only as good as the bytes. The
+- **VT — byte-equivalence.** The property is that for every ref a kind's own
+  `show` accepts, `doctrine show <REF>` emits stdout byte-identical to that
+  kind's own `show` invocation; the test witnesses it with one fixture entity of
+  every numbered prefix, in both `--format table` and `--format json`. This is
+  the slice's central property; the fidelity contract is only as good as the
+  bytes. The
   reference command is the kind's own verb, and there is no `doctrine req show`:
   `REQ` compares against `doctrine spec req show`; `PRD`/`SPEC` against
   `doctrine spec show`; the seven record prefixes against `doctrine knowledge
@@ -338,9 +345,7 @@ layering edge (`RV-384` `F-8`).
   yields a routed arm, plus a negative control asserting a synthetic unrouted
   prefix returns `None`.
 - **VT — refusals.** An unknown prefix, a dangling ref and an ambiguous bare id
-  each fail with `kinds::parse_resolvable_ref`'s error, unchanged; and a
-  mixed-case prefix (`Dec-031`) is refused where its all-lowercase spelling
-  resolves, per `sec-2`'s case rule.
+  each fail with `kinds::parse_resolvable_ref`'s error, unchanged.
 - **VT — the new requirement.** The governance phase records a check-bound
   coverage cell and re-derives it with `coverage verify 265`; the exit is the
   cell reading `Verified`.
@@ -356,20 +361,21 @@ layering edge (`RV-384` `F-8`).
   `Verified`.
 - **VA — guidance names the router.** `install/using-doctrine.md`'s verb table
   and `install/routing-process.md`'s guardrail name `doctrine show`, and the
-  regenerated boot snapshot carries the guardrail with the router named. Note the
-  guardrail's sentence is **not** covered by
+  regenerated boot snapshot carries the guardrail with the router named. The
+  guardrail's sentence is **not** covered today by
   `every_command_named_by_core_process_is_accepted_by_the_binary`, which parses
   the *core-process* paragraph and executes each invocation it finds there; the
-  `<kind> show` line sits in the **Guardrails** sentence, so naming the router
-  there is unguarded. The phase should either extend that test to the guardrail
-  paragraph or record that it is knowingly unguarded.
+  `<kind> show` line sits in the **Guardrails** sentence. The phase therefore
+  extends that test with a `guardrails_paragraph` sibling to its
+  `core_process_paragraph`, so the router the guardrail names is executed rather
+  than left knowingly unguarded (`RV-384` `F-27`).
 
-The equivalence test needs one entity per prefix; the corpus supplies one (the
-review checked every prefix has a fixture). The plan names them and the test
-enumerates them by group. **Both sides are stdout from the same binary, invoked
-twice** — the reference is the kind's own verb, not a stored golden, so there are
-no copied bytes to age and the test compares this build against itself, reading
-the repo corpus it is run in (`RV-384` `F-21`).
+The equivalence test needs one entity per prefix; the corpus supplies one, and
+the plan names them while the test enumerates them by group. **Both sides are
+stdout from the same binary, invoked twice** — the reference is the kind's own
+verb, not a stored golden, so there are no copied bytes to age and the test
+compares this build against itself, reading the repo corpus it is run in
+(`RV-384` `F-21`).
 
 <!-- doctrine:section sec-8 -->
 ## Risks and residuals
@@ -385,9 +391,8 @@ the repo corpus it is run in (`RV-384` `F-21`).
   it takes its own arm onto `spec::run_req_show`.
 - **`R4` — goldens.** Boot-map/help goldens pin member presence and the
   leaf-no-subline rule, not a full list; the boot snapshot is regenerated.
-- **`A1` — every numbered prefix has a working `show` today.** The review probed
-  every prefix; the totality unit test surfaces a counterexample if that stops
-  holding.
+- **`A1` — every numbered prefix has a working `show` today.** The totality unit
+  test and the equivalence VT surface a counterexample if that stops holding.
 - **Not a residual — `SPEC-013`'s existing members.** Its eight active
   requirements read `Indeterminate` today (`coverage show SPEC-013`), and
   `REQ-113`'s closure gate does **not** block on them. The gate's set is built
@@ -400,10 +405,6 @@ the repo corpus it is run in (`RV-384` `F-21`).
 - **Residual — `CommonShowArgs` unification.** Seven kinds still hand-declare the
   `--format`/`--json`/`--path` triple. Collapsing them onto the flatten is a
   companion change (`REQ-199`'s precedent), deliberately not absorbed here.
-- **Residual — mixed case stays refused.** The all-lowercase prefix is normalised
-  in the router (`sec-2`), mirroring `listing::parse_ref`'s two-literal-case rule.
-  Mixed case is deliberately not normalised: `Dec-031` is refused where `dec-031`
-  resolves, which is the per-kind parsers' behaviour too.
 - **Residual — the guidance sweep.** The canon and walkthrough skills,
   `authority-model.md`, and the shipped memories still prescribe the per-kind
   form; filed as `CHR-078` (`RV-384` `F-18`).

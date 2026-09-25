@@ -148,7 +148,7 @@ response = "Integrated. Prose repaired."
 
 [[finding]]
 id = "F-16"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Negative control panics: debug_assert!(false) sits inside route()"
 detail = 'sec-3 item 1 puts the outbound_for-style debug_assert!(false) inside route(prefix) -> Option<Route>; item 3 and sec-7 add a negative control asserting route(synthetic) returns None. cargo test builds with debug_assertions on, so that assertion panics instead of observing None: the verification as designed cannot pass. outbound_for (src/catalog/scan.rs:69) can carry the assert because it is not itself probed with an unrouted prefix. DEC-298 carries the same contradiction ("wildcard arm that debug_assert!(false) and returns the unknown-ref error" on a fn returning Option). Repair: route() is a pure lookup with no assert; if the loud-failure is wanted, it lives at the dispatch site on None. The unit test already pins totality, so dropping the assert is also sound.'
@@ -157,7 +157,7 @@ response = "Fixed. route() carries no assertion: it is a pure lookup whose fallt
 
 [[finding]]
 id = "F-17"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Governance phase never lands the SPEC-013 prose or closes the REV"
 detail = 'sec-5 routes the SPEC-013 prose change through the revision-NNN.md companion, which ADR-013 surfaces for manual landing, but no act in the sequence performs that landing: steps are revision new, change add, approve, apply, spec req add, coverage record/verify. The prose must change: spec-013.md § Uniform command grammar states "A top-level Command enum names each entity kind", which a top-level show falsifies, and the § Responsibilities paragraph mirrors the structured responsibilities list in spec-013.toml, which needs a matching entry. No CLI verb edits either (spec edit covers descent/parent only), so it is a hand-edit. The REV lifecycle (proposed→started→done, revision status) is also never advanced; ADR-013 says done requires every row landed. sec-7 "VA — governance landed" checks the REQ and the REV companion, not the spec prose. Repair: add the hand-edit of spec-013.md (grammar section + responsibilities) and spec-013.toml responsibilities, then revision status REV-NNN done; extend the VA to check the SPEC-013 prose names the router.'
@@ -166,7 +166,7 @@ response = """Fixed. sec-5 gains step 4: the hand-edit of spec-013.md's "Uniform
 
 [[finding]]
 id = "F-18"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Shipped guidance keeps prescribing <kind> show; the fix does not reach agents"
 detail = "The design rests its value on dissolving the RFC-011 failure, but every agent-facing source still instructs the per-kind form: install/using-doctrine.md:22 (verb table) and :138; install/routing-process.md:58 (inlined into every boot snapshot as a guardrail); install/authority-model.md:22; the canon and walkthrough skills; three shipped memories. sec-1 Boundary excludes docs and sec-8 names no residual or follow-up for this. An agent following the boot guardrail never uses doctrine show, so the RFC-011 failure mode persists. Repair: bring at least the using-doctrine verb table and the routing-process guardrail into scope (the latter moves the boot snapshot, which sec-4 already regenerates), or name the guidance sweep as an explicit follow-up with the tradeoff stated."
@@ -175,7 +175,7 @@ response = "Fixed in part; the residue is followed up. IN SCOPE: install/using-d
 
 [[finding]]
 id = "F-19"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Route::Knowledge(RecordKind) and Route::Backlog(ItemKind) carry dead payloads"
 detail = "knowledge::run_show and backlog::run_show take (path, reference, format) and re-resolve the prefix themselves (knowledge::resolve_ref, backlog parse_ref; src/knowledge.rs:2730, src/backlog.rs:2001). The payload is never read, the same defect F-9 fixed for Route::Spec. A never-read tuple-variant field is a dead_code warning under the zero-warning gate. Repair: unit variants Knowledge and Backlog; route() still classifies via RecordKind::from_prefix / backlog::kind_from_prefix (single-sourced, not a prefix list). Update the sec-2 table and the sec-3 variant list."
@@ -189,11 +189,11 @@ severity = "minor"
 title = "The equivalence claim is unconditional but the router accepts fewer refs"
 detail = "sec-1 states doctrine show REF ≡ doctrine <kind> show REF. Every per-kind parser accepts a lowercase prefix (listing::parse_ref strips PREFIX- or prefix-; knowledge::resolve_ref uppercases), but parse_canonical_ref looks up the prefix verbatim, so doctrine show dec-031 refuses with unknown kind prefix while doctrine knowledge show dec-031 succeeds. Repair: either state the domain (the equivalence holds over canonical-case refs; the router refuses others with the resolver error) or uppercase the prefix before resolving. Stating it is cheaper; either way sec-1 and DEC-295 should not claim unconditional equivalence."
 disposition = "fix-now"
-response = "Fixed rather than merely documented. The router mirrors listing::parse_ref's rule exactly: a ref whose prefix is wholly lowercase is uppercased before resolution, so `show dec-031` resolves; mixed case stays refused, as it is for the per-kind parsers, whose strip is deliberately two literal cases rather than case-insensitive. Without this the design's own equivalence would be false in the spelling a human is most likely to type - which matters given the human read path is the leading intent. sec-2 states the rule, sec-7 adds the mixed-case refusal to the VT list, and sec-8 records that mixed case remains refused."
+response = "The contest is right: the earlier repair rested on a false premise. F-25 is the rework. The router ASCII-uppercases the prefix unconditionally instead of mirroring listing::parse_ref's two-literal-case rule, so it accepts every ref any kind's own show accepts (a superset, plus a few a strict kind refuses). sec-2, sec-7, sec-8 and DEC-295 now state the property over that domain, and the mixed-case refusal VT and the sec-8 mixed-case residual are dropped."
 
 [[finding]]
 id = "F-21"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Equivalence fixture source is unspecified"
 detail = 'sec-7 says the corpus supplies one entity per prefix and "the review checked every prefix has a fixture". Which corpus is not stated: the e2e convention is hand-seeded tempdir corpora, with tests/common repo_root reserved for the few goldens that read the real tree. The live tree is the cheap and sound choice here because the property is relative (two outputs of one binary over one tree, not a golden), but the design must say so and how ids are chosen (one pinned id per prefix vs discovered). The review-history clause is not verification. Repair: state the fixture source and selection rule.'
@@ -202,7 +202,7 @@ response = "Fixed. sec-7's byte-equivalence criterion now states its source: bot
 
 [[finding]]
 id = "F-22"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The REQ-113 residual is answerable now, and is not a risk"
 detail = "sec-8 leaves open whether the closure gate sweeps all of SPEC-013 members (eight read Indeterminate). Source answers it: gate_requirement_set (src/slice.rs, used by undischarged_drift) is the slice-local covered requirements plus [gate].extra_reqs plus requirements named in owned REC status_deltas. It does not enumerate the owning spec members. The eight existing Indeterminate members never enter SL-265s gate set. Repair: replace the residual with that fact; it removes a scope contingency from /plan."
@@ -216,16 +216,43 @@ severity = "minor"
 title = "DEC-296 and DEC-298 still cite ALL_KINDS after F-1"
 detail = 'The F-1 amendment reached DEC-298s choice facet only. DEC-298 title ("plus an ALL_KINDS test") and body ("covers all 24 ALL_KINDS rows ... a test asserts every ALL_KINDS row routes") contradict it; DEC-296 choice and body define the address scope as kinds::ALL_KINDS. The design (sec-2, sec-3) says KINDS. Repair: amend both records to KINDS.'
 disposition = "fix-now"
-response = "Fixed. DEC-296's choice and DEC-298's title and choice now say KINDS. DEC-298 retains one mention of ALL_KINDS, inside the amendment note that explains why iterating it would not have pinned routing - that is the rejected alternative, not the rule."
+response = "The contest is right: the facets were amended, the bodies were not. Both bodies are now rewritten; F-26 isolates the residue and its disposition names the new text."
 
 [[finding]]
 id = "F-24"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "route() should match on kinds prefix constants, not literals"
 detail = "STD-001 (no magic strings) is listed as constraining in the notes, and kinds already exports named prefix consts (kinds::SL, kinds::ADR, … used by ALL_KINDS). outbound_for, the precedent the design mirrors, matches on string literals. The design should say route() matches on the kinds constants (const patterns are valid in a &str match), so the precedent is not copied with its defect."
 disposition = "fix-now"
 response = "Fixed. route() matches on the named prefix constants kinds already exports (kinds::SL, kinds::ADR, ...) rather than string literals, per STD-001. Recorded in sec-3 that outbound_for - the precedent route() is modelled on - matches literals, so it is the pattern not to copy; sweeping outbound_for itself is a sibling outside this slice and is not silently expanded into."
+
+[[finding]]
+id = "F-25"
+status = "answered"
+severity = "major"
+title = "F-20 repair: the case rule rests on a false premise and its VT contradicts the equivalence"
+detail = "sec-2 says the per-kind parsers share listing::parse_ref two-literal-case rule and the router mirrors it; sec-7 adds a VT that Dec-031 is refused; sec-8 says mixed-case refusal is the per-kind parsers behaviour too. The parsers disagree. knowledge::resolve_ref (src/knowledge.rs:1937) and backlog parse_ref (src/backlog.rs:1656) uppercase the prefix, so they are fully case-insensitive: doctrine knowledge show Dec-031 succeeds, and the designed router refuses it. That breaks the central equivalence for 12 of 24 prefixes, and the new VT asserts the break. In the other direction, spec::resolve_spec_ref (src/spec.rs:1232) is case-sensitive, so doctrine spec show spec-013 refuses while the router accepts it. Only the listing::parse_ref kinds (slice, governance spine, rec, review, revision, concept-map) follow the two-literal rule. Repair (simpler than the current rule): ASCII-uppercase the prefix unconditionally before resolving. The router then accepts every ref any kind accepts, plus a few a strict kind refuses. State the property as: for every ref the kind own show accepts, the output is byte-identical. Drop the mixed-case refusal VT and the sec-8 residual."
+disposition = "route:owner-fix fixed"
+response = "Two accounts of one fact disagreed: the design's claim that every per-kind parser shares listing::parse_ref's two-literal-case rule, and the parsers' actual behaviour. The false generalisation goes; the parsers survive as the owner of the equivalence, and the router stops trying to mirror any one of them. Verified in source: listing::parse_ref strips exactly PREFIX- or its all-lowercase spelling, so dec-031 resolves and Dec-031 does not; knowledge::resolve_ref (src/knowledge.rs) and backlog::parse_ref (src/backlog.rs) uppercase the prefix, so they ignore case entirely; spec::resolve_spec_ref (src/spec.rs) never uppercases. The router now ASCII-uppercases the prefix unconditionally before resolution, so dec-031, Dec-031 and DEC-031 all resolve, and the property is stated as: for every ref a kind's own show accepts, doctrine show emits the same bytes - a superset, since it also accepts a few refs a case-strict kind (spec) refuses. Swept: sec-2's Case paragraph, sec-7's byte-equivalence VT (domain stated), the mixed-case refusal VT (dropped), sec-8's mixed-case residual (dropped) and A1's review-history clause, and DEC-295's body. slice-265.md's objective 1 and equivalence VT carry the same domain."
+
+[[finding]]
+id = "F-26"
+status = "answered"
+severity = "minor"
+title = "F-23 repair incomplete: DEC-296 and DEC-298 bodies still say ALL_KINDS and debug_assert"
+detail = 'The facets were amended; the prose bodies were not. DEC-296 body: "The router accepts the 24 numbered canonical prefixes in kinds::ALL_KINDS." DEC-298 body: "covers all 24 ALL_KINDS rows with a debug_assert!(false) wildcard ... a test asserts every ALL_KINDS row routes", which now contradicts both F-1 and F-16. The F-23 response said only the amendment note retains ALL_KINDS; doctrine knowledge show shows otherwise. DEC-298 slug still reads plus-an-all-kinds-test (identity, fine to leave). Repair: rewrite both body paragraphs.'
+disposition = "fix-now"
+response = "The contest is correct: only the facets were amended. Both prose bodies are now rewritten. DEC-296's body names kinds::KINDS. DEC-298's body drops the ALL_KINDS rows and the debug_assert!(false) wildcard: it now reads as a pure route(prefix) -> Option<Route> naming every KINDS row, matching on the named prefix constants, falling through to None with no assertion, a compiler-exhaustive match Route, and a KINDS-iterating test with a synthetic negative control. DEC-298's slug (plus-an-all-kinds-test) is identity and left as-is."
+
+[[finding]]
+id = "F-27"
+status = "answered"
+severity = "nit"
+title = "Two soft spots left in sec-7"
+detail = 'The equivalence paragraph keeps "(the review checked every prefix has a fixture)", which is review history, not verification; the new same-binary sentence makes it redundant. And the guidance VA hands the phase a choice ("either extend that test to the guardrail paragraph or record that it is knowingly unguarded"). The design should make that call; extending the parser from the core-process paragraph to the Guardrails sentence is small, and an unguarded command name in every boot snapshot is the failure mode the test exists to stop.'
+disposition = "fix-now"
+response = "Both soft spots are closed and the design now decides. The equivalence paragraph drops the review-history clause (the review checked every prefix has a fixture) - the same-binary sentence already states the fixture source and selection. For the guardrail, sec-7's guidance VA now has the phase extend every_command_named_by_core_process_is_accepted_by_the_binary with a guardrails_paragraph sibling to its core_process_paragraph, so the router named in the boot guardrail is executed rather than recorded as knowingly unguarded."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

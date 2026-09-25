@@ -28,9 +28,10 @@ show RFC-031`.
 Add a top-level, kind-blind `show` verb that resolves a ref to its kind and
 delegates to that kind's existing renderer.
 
-1. **Route, don't re-render.** `doctrine show <REF>` produces output
-   **byte-identical** to `doctrine <kind> show <REF>`. No new renderer, no
-   normalised cross-kind envelope, no per-kind content change.
+1. **Route, don't re-render.** For every ref a kind's own `show` accepts,
+   `doctrine show <REF>` produces output **byte-identical** to `doctrine <kind>
+   show <REF>`. No new renderer, no normalised cross-kind envelope, no per-kind
+   content change.
 2. **Resolution rides the existing authority.** Kind resolution uses
    `kinds::parse_resolvable_ref` — the same function `link`, `needs`, `after`,
    `tag`, `supersede` and `facet` already use. Unknown prefix, dangling ref, and
@@ -98,9 +99,11 @@ Coarse fence; the exact touch-set is `/design`'s, and after that `/plan`'s.
   already "one data-driven match over all `KINDS` rows", dispatching on
   `kind.prefix` to the owning module — including the three shapes the router
   needs (a top-level kind command; the `PRD`/`SPEC` subtype pair; the record and
-  backlog tails via `from_prefix`). It also carries the
-  `debug_assert!(false, "unrouted KINDS prefix")` fallthrough that `OQ-4` should
-  copy. The router is that shape, at command tier.
+  backlog tails via `from_prefix`). It carries a
+  `debug_assert!(false, "unrouted KINDS prefix")` fallthrough that the router
+  deliberately does **not** copy (`OQ-4` closed): a router probed with an
+  unrouted prefix must return, not panic, so the refusal lives at the dispatch
+  site. The router is that shape, at command tier.
 - **The resolution authority.** `kinds::parse_resolvable_ref` (canonical or bare,
   with dangling / unknown-prefix / ambiguous-bare errors) over the 24-row `KINDS`
   table, whose discriminant is `prefix`.
@@ -117,13 +120,14 @@ Coarse fence; the exact touch-set is `/design`'s, and after that `/plan`'s.
 
 ## Risks & assumptions
 
-- **R1 — ADR-001 layering / command tangle.** The router reaches ~12 command-tier
-  modules. Homed in a **new top-level** module it would add new top-level edges
-  and grow the command tangle, which is ratcheted at
+- **R1 — ADR-001 layering.** The router reaches ~12 command-tier modules. A new
+  top-level module (`src/show.rs`) would need a `layering.toml` tier row and trip
+  the gate's `Unclassified` finding. The command tangle is ratcheted at
   `[tangle_baseline] command = 76` in `.doctrine/adr/001/layering.toml` ("may not
-  grow"). Homed **under `src/commands/`** it adds none: the gate records edges by
-  top-level module, and `commands::cli` already imports every one of those kinds.
-  The design must state the home; this is a constraint, not a preference.
+  grow"), but a new file under `src/commands/` adds no edge the gate counts — its
+  edges are recorded by top-level module, and `commands::cli` already imports
+  every kind module. The design must state the home; this is a constraint, not a
+  preference.
 - **R2 — the census assertion is intentional churn.** The
   `families_partition_the_visible_command_tree` test asserts the visible command
   count (56 today) and that every visible command sits in exactly one family.
@@ -155,8 +159,9 @@ For `/design` to close.
 
 ## Verification / closure intent
 
-- **VT** — for one fixture entity of every numbered prefix, `doctrine show <REF>`
-  emits stdout byte-identical to `doctrine <kind> show <REF>`, in both formats.
+- **VT** — for every ref a kind's own `show` accepts, `doctrine show <REF>`
+  emits stdout byte-identical to `doctrine <kind> show <REF>`; witnessed with one
+  fixture entity of every numbered prefix, in both formats.
 - **VT** — an unknown prefix, a dangling ref, and an ambiguous bare id each fail
   with the resolution authority's error.
 - **VT** — every `KINDS` row resolves to a routed arm (totality).
