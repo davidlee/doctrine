@@ -23,13 +23,10 @@ sharp edges. Two tiers, by access pattern:
 
 ## Notes
 
-Shipped orientation master (ADR-002 global class, ADR-005 tiering: signposts
+Shipped orientation master (the global class; tiering: signposts
 route, reference docs explain). The detailed trap memories are being promoted
-from project-local to shipped reference tier incrementally (CHR-036) — until
+from project-local to shipped reference tier incrementally — until
 then, some live only in the originating repo's local corpus.
 
-Related shipped decisions: ADR-006 (worktree posture), ADR-008 (jail
-isolation), ADR-011 (harness-agnostic spawn), ADR-012 (integration topology).
-
-See [[mem.signpost.doctrine.dispatch-claude-arm-wrong-base]] for the claude-arm
-wrong-base trap under shared-clone contention.
+Related shipped postures: worktree isolation, jail confinement,
+harness-agnostic spawn, and integration topology.

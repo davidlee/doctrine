@@ -69,7 +69,6 @@ exposed starter's override of its framework origin is delivered by
 self-`replaces` (the expose mechanism above), NOT by winning this tiebreak —
 there is no "user always wins at equal specificity" rule.
 
-Point of truth: `.doctrine/spec/tech/023/spec-023.md` (SPEC-023, "Prompt
-cascade") for the full engine contract, and `install/hymns/README.md` /
+Point of truth: `reference/model-band.md` for the full cascade contract, and
 `.doctrine/hymns/README.md` for the authoring quick-reference this memory
 summarises.

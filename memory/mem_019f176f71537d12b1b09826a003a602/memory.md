@@ -7,7 +7,7 @@ its scanned coverage composite (verdict `Divergent`/`Indeterminate`, not
 coverage** at reconcile will trip this at close.
 
 Discharge each flagged requirement with an `accept` REC owned by the closing
-slice. The predicate (`src/slice.rs` `rec_discharges`) demands ALL THREE:
+slice. The predicate demands ALL THREE:
 
 - **(a)** `move = "accept"`.
 - **(b)** a `[[status_delta]]` naming the requirement whose `to` equals the
@@ -32,8 +32,7 @@ Discharge is the step that *follows* the integrate step at close: once the
 admitted `close_target` has been landed on the trunk (`dispatch sync --integrate`),
 discharge clears the residual drift the integration exposed.
 
-Worked example — an illustration from Doctrine's own development (the ids below
-are historical, not a live cross-reference into your repo): SL-165 modified
-REQ-316 (via REV-014) and attested REQ-317; close needed REC-093 and REC-094,
-each carrying a same-value `active→active` delta and two evidence_refs — a cell
-from SL-064 plus the SL-165 cell.
+Worked example — historical, not a live cross-reference into your repo: one slice
+modified a requirement (via a revision) and attested another; close needed two
+reconciliation records, each carrying a same-value `active→active` delta and two
+evidence_refs — a cell from the originating slice plus that slice's own cell.

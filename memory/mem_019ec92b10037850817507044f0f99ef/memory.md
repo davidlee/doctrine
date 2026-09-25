@@ -22,7 +22,7 @@ reference docs** for specific subsystems, same PULL tier and format:
   with the `mem.signpost.doctrine.dispatch` retrieval index for the sharp
   mid-operation traps.
 
-These are shipped reference docs (ADR-005 PULL tier) — they install once and
+These are shipped reference docs (the pull tier) — they install once and
 stay inert unless the installer is re-run. The boot snapshot and shipped
 memories are separate push surfaces; these docs are the pull surface for
 deliberate lookup.

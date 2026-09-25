@@ -18,7 +18,7 @@ follow the skills that own each step.
 - **Execute one phase, TDD.** `/execute` flips the phase `in_progress`, builds it
   red → green → REFACTOR, ends green, flips `completed`. See [[mem.pattern.doctrine.tdd-loop]].
 - **Audit, reconcile, close.** `/audit` reconciles evidence against the design via
-  a review ledger (RV kind). `/close` requires a reconciliation gate (ADR-009
+  a review ledger (the RV kind). `/close` requires a reconciliation gate (the
   closure seam): audit → reconcile → done. Resolves blockers and drift before
   landing the final commit. See [[mem.signpost.doctrine.audit]].
 

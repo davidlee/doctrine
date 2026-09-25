@@ -23,9 +23,9 @@ Two habits the model exists to support:
   or reusable workflow, record it before it's lost to context — `/record-memory`
   (wraps `doctrine memory record`), which captures scope + git anchor.
 
-Point of truth: `doc/memory-spec.md` (the umbrella — entity shape, capture +
-provenance, scope-aware retrieval, reserved seams) and the `doctrine memory
---help` surface. See [[mem.concept.doctrine.routing-gate]] for when retrieval is part
+Point of truth: the `doctrine memory --help` surface for the capture, scope and
+retrieval verbs this model describes. See
+[[mem.concept.doctrine.routing-gate]] for when retrieval is part
 of the gate, [[mem.pattern.doctrine.conventions]] for the "durable knowledge
 lives in doctrine's memory, not the model's head" rule, and
 [[mem.signpost.doctrine.recording-memories]] for the capture-retrieve cycle.

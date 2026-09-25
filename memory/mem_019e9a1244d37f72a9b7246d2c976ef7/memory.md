@@ -9,7 +9,7 @@ What the engine gives every entity:
 
 - **Identity + a claim seam** — a stable uid minted once, plus the
   born-frame/claim mechanism that records where an entity came from. The impure
-  capture lives behind a thin seam (`src/git.rs`); the pure layer never touches
+  capture lives behind a thin seam; the pure layer never touches
   clock, rng, git, or disk directly (the date/uid pattern).
 - **Relations and edges** — typed references between entities live in the small
   sister TOMLs (e.g. `slice-nnn.toml`), never in prose bodies, so a registry can
@@ -23,9 +23,8 @@ What the engine gives every entity:
 Don't build a parallel implementation for a new entity type — ride the existing
 seam and look for duplication first.
 
-Point of truth: `doc/entity-model.md` (the consolidation direction and the one
-storage rule everywhere) and `doc/relation-index.md` (why relations stay in
-typed sister files and a cache is deferred). The code lives under `src/`. See
+Point of truth: `reference/using-doctrine.md` for the one storage rule and the
+TOML/MD split every entity rides. See
 [[mem.signpost.doctrine.file-map]] for the layout and [[mem.pattern.doctrine.conventions]]
 for the pure/imperative split and no-parallel-implementation rules. For the
 relation-authoring surface, see [[mem.signpost.doctrine.relating-entities]].

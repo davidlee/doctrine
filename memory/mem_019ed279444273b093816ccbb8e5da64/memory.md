@@ -1,7 +1,7 @@
 # Doctrine review ledger (RV kind)
 
 The review ledger is a **first-class entity** for structured adversarial
-review (ADR-007). It is turn-based: two parties alternate between raising and
+review. It is turn-based: two parties alternate between raising and
 resolving findings, with an explicit baton that tracks whose turn it is.
 
 The RV kind is the substrate for audit reconciliation, design review,

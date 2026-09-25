@@ -10,7 +10,7 @@ route → slice → design → plan → phase-plan → execute → audit → clo
 ```
 
 The audit phase has its own skill (`/audit`) and its own artifact: the
-**review ledger** (RV kind, ADR-007).
+**review ledger** (the RV kind).
 
 ## The review ledger (RV kind)
 
@@ -25,7 +25,7 @@ Key verbs:
 - `doctrine review verify` — confirm a resolution.
 - `doctrine review contest` — challenge a resolution.
 
-The close gate (D-C9b) refuses `→reconcile`/`→done` while an RV targeting the
+The close gate refuses `→reconcile`/`→done` while an RV targeting the
 slice carries an unresolved blocker.
 
 ## Audit vs code review

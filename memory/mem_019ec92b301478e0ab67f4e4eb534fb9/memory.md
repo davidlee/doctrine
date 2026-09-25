@@ -1,6 +1,6 @@
 # Doctrine revisions
 
-Revisions (REV kind, ADR-013) are the change-axis for governance documents —
+Revisions (the **REV kind**) are the change-axis for governance documents —
 they track what changed, why, and what the before/after states are.
 
 ## When to use a revision

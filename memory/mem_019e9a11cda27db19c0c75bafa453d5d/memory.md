@@ -16,7 +16,7 @@ Where things live — use this to *locate*. The authoritative layout block is in
 - `.doctrine/review/nnn/` — adversarial review ledgers (RV kind): `review-nnn.{toml,md}`.
   See [[mem.signpost.doctrine.review]].
 - `.doctrine/rec/nnn/` — reconciliation records (REC kind): `rec-nnn.{toml,md}`.
-- `.doctrine/revision/nnn/` — revision change-axis records (REV kind, ADR-013):
+- `.doctrine/revision/nnn/` — revision change-axis records (the REV kind):
   `revision-nnn.{toml,md}`. See [[mem.signpost.doctrine.revisions]].
 - `.doctrine/policy/nnn/` — governance policies (standing rules):
   `policy-nnn.{toml,md}`. See [[mem.signpost.doctrine.policies-standards]].
@@ -34,7 +34,7 @@ Where things live — use this to *locate*. The authoritative layout block is in
 - `.doctrine/governance.md` — user-owned governance pointer, projected into the
   boot snapshot. See [[mem.concept.doctrine.boot-snapshot]].
 - `.doctrine/using-doctrine.md` and `.doctrine/glossary.md` — shipped reference
-  docs (ADR-005 PULL tier). See [[mem.signpost.doctrine.reference-docs]].
+  docs (the pull tier). See [[mem.signpost.doctrine.reference-docs]].
 - `install/` — sources copied into `.doctrine` by the installer. See
   [[mem.signpost.doctrine.install]].
 

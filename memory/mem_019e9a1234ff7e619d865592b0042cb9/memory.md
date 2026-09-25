@@ -22,9 +22,9 @@ Progress — which phase is `in_progress`, what is blocked — lives only in the
 runtime state tree under `.doctrine/state/`. If you are editing an authored file
 to record status, you are in the wrong tier.
 
-Point of truth: the `## storage model (the storage rule)` section of the repo's
-`CLAUDE.md`, and `doc/entity-model.md` (`## The storage rule`), which generalises
-it across every entity type. See [[mem.fact.doctrine.storage-tiers]] for the tier
+Point of truth: `reference/using-doctrine.md` ("Storage tiers — what goes where"),
+which generalises this rule across every entity type. See
+[[mem.fact.doctrine.storage-tiers]] for the tier
 cheat-sheet, [[mem.concept.doctrine.entity-engine]] for the engine that enforces the
 TOML/MD split, and [[mem.signpost.doctrine.file-map]] to locate the directories.
 For the reading consequence of this rule, see
