@@ -49,9 +49,16 @@ the implementation review and audit will exercise.
 - `MapAnswer::Record.form` stays on the model: the locked anatomy prints
   `REC-NNN <title>` for both forms, and `form` is carried by `json --full`
   serialisation — a live reader, so no model change.
-- **Gap: the envelope has no canonical slice ref** for the header/footer; the
-  leaf cannot format ids. Placeholder formats `SL-{:03}` from `run.slice`;
-  choice put to the user (envelope field, serialised or skipped).
+- **Gap closed: the envelope had no canonical slice ref** for the header/footer
+  (the leaf cannot format ids). User chose option 1: `TurnEnvelope.slice_ref`,
+  filled from `project()`'s shell-formatted argument (DEC-292), serialised — an
+  additive json key, version unchanged (DEC-291). `tests/e2e_design_show_golden.rs`
+  gains the key (outside the declared affected surface; shows as undeclared).
+- VH-1 verdict: "legible", after three amendments (rails on dropped text; legend
+  marks/letters coloured; cursor suffix open-cyan bold, `pinned` magenta) —
+  all recorded on DEC-307.
+- Boundary tightened to `a51c614bb^..c47451f1a`; SL-267/SL-264 commits
+  interleave it and ride in conformance's undeclared cell.
 - Header counts partition the map: open excludes derived-blocked.
 
 ## Harvest
@@ -80,6 +87,9 @@ fresh-as-of: 2026-09-26 · PHASE-01 landed, gated, verified · 3e55c758b
 
 ### Open
 
-- `MapAnswer::Record.form` is rendered by neither surface — decide at PHASE-02.
+- ~~`MapAnswer::Record.form` rendered by neither surface~~ — settled at
+  PHASE-02: `json --full` carries it; no model change.
+- PHASE-04's relay line must reuse the tree's `TREE_COMMAND` (widen to
+  `pub(crate)`), not re-spell `doctrine design tree` (STD-001).
 - `src/design_run/tests.rs` is a PHASE-04 `VT-1` test_file and currently reads
   `UNATTRIBUTABLE` (not modified by this slice yet) — expected, not a gap.
