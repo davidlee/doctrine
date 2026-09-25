@@ -162,7 +162,7 @@ selector commit).
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · PHASE-02 landed (99f3ad4fd) · 2/4 phases
+fresh-as-of: 2026-09-25 · PHASE-03 landed (8868d76a0) · 3/4 phases
 
 ### Produced
 
@@ -175,6 +175,11 @@ fresh-as-of: 2026-09-25 · PHASE-02 landed (99f3ad4fd) · 2/4 phases
 - `PHASE-02` (`99f3ad4fd`): `tests/e2e_show_equivalence.rs` (24 prefixes ×
   `--format table|json`, both sides the same binary) and
   `tests/e2e_show_refusals.rs` (unknown prefix / dangling ref / ambiguous bare id).
+- `PHASE-03` (`8868d76a0`): `install/using-doctrine.md` (verb table + read-entity
+  paragraph) and `install/routing-process.md` (Guardrails) name `doctrine show
+  <REF>`; `tests/e2e_claude_install.rs` gains `guardrails_paragraph` + the
+  anti-vacuity-guarded execution test. Declared `tests/e2e_claude_install.rs` a
+  selector (`6bc730dd8`).
 
 ### Learned
 
@@ -197,11 +202,25 @@ fresh-as-of: 2026-09-25 · PHASE-02 landed (99f3ad4fd) · 2/4 phases
 - All 24 numbered prefixes are **byte-identical** to their kind's own `show` in
   both formats — the PHASE-01 delegation table is faithful; PHASE-02 needed no
   router repair.
+- **A rust-embed asset edit does not move the primary's derived snapshot until
+  the primary's binary carries it.** `cargo` re-bakes the `install/` embed, but
+  the primary binary is built from `edge`, which lacks the not-yet-integrated
+  PHASE-01 code — regenerating the primary's `boot.md` there would advertise
+  `doctrine show` for a verb that binary refuses. EX-4 is evidenced on the coord
+  tree; the primary snapshot refreshes at integrate/close.
+- **PHASE-04 is an orchestrator phase, not a dispatch phase.** Its whole
+  deliverable (a `REV`, `SPEC-013` prose, a coverage cell) is authored
+  `.doctrine/` state — which a confined worker cannot write and the import belt
+  rejects. It must be driven directly in a writable tree (the coord tree has the
+  PHASE-02 test to bind the coverage check).
 
 ### Open
 
-- `/phase-plan` `PHASE-03` (guidance: `install/using-doctrine.md`,
-  `install/routing-process.md`, `doctrine boot`, the `guardrails_paragraph` test),
-  then `PHASE-04` (governance: `REV` + `FR-006` + check-bound coverage +
-  `spec-013` prose). Order between them is free; both depend only on PHASE-01/02,
-  which have landed.
+- `PHASE-04` (governance) — the one phase left. Orchestrator-driven, in the
+  **coord tree** (`dispatch/265` carries the PHASE-01 code + the PHASE-02 test the
+  coverage check binds): `revision new` → one `introduce FR-006 on SPEC-013` row
+  → `revision approve`/`apply` → `spec req add` → check-bound `coverage record`
+  then `coverage verify 265` (exit on the `Verified` cell) → hand-land
+  `spec-013.md` § *Uniform command grammar* + § *Responsibilities* and
+  `spec-013.toml`'s `responsibilities` → `revision status … done`. Then
+  `dispatch sync --prepare-review` and `/audit`.

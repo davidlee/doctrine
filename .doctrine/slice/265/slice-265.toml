@@ -58,6 +58,10 @@ intent = "design-target"
 selector = "src/commands/mod.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "tests/e2e_claude_install.rs"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"
