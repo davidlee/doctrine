@@ -98,7 +98,7 @@ the implementation review and audit will exercise.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · PHASE-02 completed, gated, VT-1..6 pass, VH-1 accepted · d7f49ae0a
+fresh-as-of: 2026-09-26 · PHASE-03 completed, gated, VT-1/VT-2 pass, VA-1 attested, RV-392 done · 90744bf89
 
 ### Produced
 
@@ -109,6 +109,9 @@ fresh-as-of: 2026-09-26 · PHASE-02 completed, gated, VT-1..6 pass, VH-1 accepte
 - SL-266 PHASE-02 on edge: `a51c614bb`, `d4c6f8ba9`, `78d8e0b44`, `c47451f1a`
   (renderer; VH-1 amendments; `TurnEnvelope.slice_ref`); DEC-307 amended
   (`4362c2516`, `cf02f2735`)
+- SL-266 PHASE-03 on edge: `3cdceba18` (verb, format, scan, `select_run`,
+  titles at `Full`), `6d9bf2db0` (RV-392 fixes); boundary `3cdceba18^..6d9bf2db0`
+- RV-392 (per-phase code review, done, F-1..F-3 fix-now)
 
 ### Learned
 
@@ -126,6 +129,7 @@ fresh-as-of: 2026-09-26 · PHASE-02 completed, gated, VT-1..6 pass, VH-1 accepte
   (envelope lacked a canonical slice ref)
 - `mem.pattern.design-run.leaf-rule-binds-tests` bit: no `crate::` in
   `design_run` tests either (strip-ansi spelled locally in `tree.rs`)
+- `mem.pattern.state.dir-scan-canonical-name-and-embedded-id` (RV-392 F-1/F-2)
 
 ### Open
 
@@ -133,7 +137,9 @@ fresh-as-of: 2026-09-26 · PHASE-02 completed, gated, VT-1..6 pass, VH-1 accepte
   PHASE-02: `json --full` carries it; no model change.
 - `design.md` sec-3 rule 2 still states the rail-less drop — reconcile to
   DEC-307's amendment.
-- PHASE-04's relay line must reuse the tree's `TREE_COMMAND` (widen to
-  `pub(crate)`), not re-spell `doctrine design tree` (STD-001).
+- PHASE-04's relay line must reuse `tree::TREE_COMMAND` (already `pub(crate)`
+  since PHASE-03), not re-spell `doctrine design tree` (STD-001).
+- `/reconcile`: design sec-4 does not state that an unreadable slice record, or
+  a snapshot naming another slice, skips the run — PHASE-03 decisions to fold in.
 - `src/design_run/tests.rs` is a PHASE-04 `VT-1` test_file and currently reads
   `UNATTRIBUTABLE` (not modified by this slice yet) — expected, not a gap.
