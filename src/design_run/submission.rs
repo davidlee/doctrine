@@ -534,7 +534,7 @@ impl Declaration {
     /// The **finding** home's reading, and deliberately the one it has always
     /// had: `null` reads exactly as absence does. That sibling of the inquiry
     /// home's refusal is `ISS-482`, out of this slice's scope.
-    pub(crate) const fn blocking(&self) -> bool {
+    pub(crate) const fn finding_blocks(&self) -> bool {
         matches!(self.blocking, Sparse::Value(true))
     }
 

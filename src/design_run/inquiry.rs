@@ -442,6 +442,29 @@ fn judged_blocking(judgement: Option<bool>, id: &DesignId, legacy: &BTreeSet<Des
     judgement.unwrap_or_else(|| legacy.contains(id))
 }
 
+/// The **marks**: the ids in `materials` whose node is effectively blocking,
+/// whatever its lifecycle (`SL-264` sec-3) — the set the user reviews.
+///
+/// The one builder of the set (`RV-389` F-4), over materials because that is the
+/// representation both sides of a [`Coverage::ReviewedGraph`] comparison hold —
+/// the act's carried covered map and the run's current full map — so a key
+/// absent from the carried map reads as not blocking and a *new* blocking node is
+/// the only thing an addition contributes. Each member is [`judged_blocking`]'s,
+/// the judgement the gate's open-blocker read also takes, so the coverage and the
+/// gate cannot disagree about which nodes block (`RV-386` F-13).
+///
+/// [`Coverage::ReviewedGraph`]: super::gate::Coverage::ReviewedGraph
+pub(crate) fn blocking_marks<'a>(
+    materials: &'a BTreeMap<DesignId, NodeMaterial>,
+    legacy: &BTreeSet<DesignId>,
+) -> BTreeSet<&'a DesignId> {
+    materials
+        .iter()
+        .filter(|(id, material)| material.effective_blocking(id, legacy))
+        .map(|(id, _)| id)
+        .collect()
+}
+
 /// The inquiry map: nodes plus the two acyclic edge relations over them.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct InquiryMap {
@@ -547,24 +570,9 @@ impl InquiryMap {
             .filter(|node| self.is_blocked(node.id()))
     }
 
-    /// The **marks**: every node whose effective judgement is blocking, whatever
-    /// its lifecycle (`SL-264` sec-3).
-    ///
-    /// The set the user reviews and the one a `ReviewedGraph` coverage compares.
-    /// The sibling of [`InquiryMap::open_blockers`], differing only in lifecycle,
-    /// so the gate and the coverage read this one judgement and cannot disagree
-    /// about which nodes block (`RV-386` `F-13`).
-    pub(crate) fn blocking_marks<'a>(
-        &'a self,
-        legacy: &'a BTreeSet<DesignId>,
-    ) -> impl Iterator<Item = &'a InquiryNode> {
-        self.nodes
-            .values()
-            .filter(move |node| node.effective_blocking(legacy))
-    }
-
-    /// The **open blockers**: the marks whose lifecycle is not `Resolved` — the
-    /// inquiries the run still owes a disposition (`SL-264` sec-3).
+    /// The **open blockers**: the nodes whose effective judgement is blocking and
+    /// whose lifecycle is not `Resolved` — the inquiries the run still owes a
+    /// disposition (`SL-264` sec-3).
     ///
     /// `Resolved` is the only lifecycle that can carry a [`Disposition`]
     /// (DEC-062), so *has a disposition* and *is resolved* are one question.
@@ -572,8 +580,9 @@ impl InquiryMap {
         &'a self,
         legacy: &'a BTreeSet<DesignId>,
     ) -> impl Iterator<Item = &'a InquiryNode> {
-        self.blocking_marks(legacy)
-            .filter(|node| node.lifecycle() != InquiryLifecycle::Resolved)
+        self.nodes.values().filter(move |node| {
+            node.effective_blocking(legacy) && node.lifecycle() != InquiryLifecycle::Resolved
+        })
     }
 
     /// The first cycle reachable from `start` through either relation, as the

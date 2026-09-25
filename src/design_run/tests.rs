@@ -27,8 +27,9 @@ use super::attestation::{
 use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm, ValueKind};
 use super::contract_check::refuse_unknown_keys;
 use super::fixture::{
-    BLOCKING_NODE, OPEN_NODE, PASS, SECTION_A, SECTION_B, attest, blocking_set_declared,
-    checkpoint_act, cleared, declared, drafting_ready, id, pass_over, run_holding, section,
+    BLOCKING_NODE, LEGACY_SNAPSHOT, OPEN_NODE, PASS, SECTION_A, SECTION_B, attest,
+    blocking_set_declared, checkpoint_act, cleared, declared, drafting_ready, id, pass_over,
+    run_holding, section,
 };
 use super::gate::{
     ActRequirement, ActRule, Advance, AttestationRule, Binding, CONTRACTS, Cause, Condition,
@@ -55,7 +56,7 @@ use super::run::{
     ShapingQuestion, apply, declare, import, live_reviews, subject_state,
 };
 use super::runbook::{RunbookKey, RunbookStanding};
-use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup, DesignSnapshot, Finding};
+use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup, DesignSnapshot, Finding, parse};
 use super::submission::{
     AcceptanceDeclaration, AgentActDeclaration, ApplyRequest, Batch, CheckpointActDeclaration,
     CreateRecord, Declaration, DischargeDeclaration, KeyHome, KeyWhen, ReviewPolicyDeclaration,
@@ -2707,49 +2708,100 @@ fn a_move_re_faces_for_a_covered_node_only() {
 }
 
 /// `VT-5` (plan) — the change log agrees with the gate on every case (`RV-386`
-/// F-13).
+/// F-13; `RV-389` F-10, F-14).
 ///
 /// The change log's `live_acts` and the gate's `coverage_moved` both read coverage
-/// currency through `CoveredSet::moved` with the act's rule `Coverage`, so an
-/// `ActInvalidated` row for the user's `graph-reviewed` appears **exactly** when
-/// the gate calls it stale — never for a non-blocking addition the gate keeps
-/// current, and always for the blocking one. A reader that re-derived currency
-/// rule-free, or walked the union, would disagree with the gate here.
+/// currency through `CoveredSet::moved` with the act's rule `Coverage`, so the
+/// `ActInvalidated` rows a sequence of declarations emits name **exactly** the
+/// attested acts the gate then calls stale — over both of them, because the
+/// blocking addition is precisely where they diverge (`graph-reviewed` stale,
+/// `user-accepts-sufficiency` current). Every case is driven through `apply`,
+/// the lifecycle ones included (`F-15`): a reader that re-derived currency
+/// rule-free, walked the union, or dropped one act's row would disagree here.
 #[test]
 fn the_change_log_agrees_with_the_gate_on_every_case() {
-    let agrees = |json: &str| {
-        let (run, derived) = cleared();
-        let applied = declare_over(&run, json).expect("the declaration applies");
-        let staled = satisfied(
-            Condition::InitialConcernsRecorded,
-            &applied.snapshot,
-            &derived.gate,
-        )
-        .is_err();
-        let reported = subjects(&applied, ChangeEvent::ActInvalidated).contains(&id("cpa-graph"));
+    // The attested rows `cleared` records, each with the act its row names.
+    let attested = [
+        (Condition::InitialConcernsRecorded, "cpa-graph"),
+        (Condition::UserAcceptsSufficiency, "cpa-suff"),
+    ];
+    // Apply `declarations` in turn over `run`; assert the acts reported dead
+    // across them are the acts the gate calls stale after them, and return those.
+    let agreed = |mut run: DesignSnapshot, derived: &DerivedInput, declarations: &[&str]| {
+        let mut reported = BTreeSet::new();
+        for json in declarations {
+            let applied = declare_over(&run, json).expect("the declaration applies");
+            reported.extend(subjects(&applied, ChangeEvent::ActInvalidated));
+            run = applied.snapshot;
+        }
+        let staled: BTreeSet<DesignId> = attested
+            .iter()
+            .filter(|(condition, _)| satisfied(*condition, &run, &derived.gate).is_err())
+            .map(|(_, act)| id(act))
+            .collect();
         assert_eq!(
             staled, reported,
-            "the gate says stale={staled}; the change log reports the graph review \
-             dead={reported} for {json}"
+            "the gate calls {staled:?} stale; the change log reports {reported:?} dead for \
+             {declarations:?}"
         );
         staled
     };
+    let over_cleared = |declarations: &[&str]| {
+        let (run, derived) = cleared();
+        agreed(run, &derived, declarations)
+    };
+    let acts = |raws: &[&str]| raws.iter().map(|raw| id(raw)).collect::<BTreeSet<_>>();
+    const ADD_BLOCKER: &str =
+        r#"{"subject": "inq-3", "question": "a question that holds the stage", "blocking": true}"#;
+    const RESOLVE_BLOCKER: &str = r#"{"subject": "cp-1", "disposes": "inq-3", "dispose": {"form": "unresolved", "note": "retained"}}"#;
 
-    assert!(
-        !agrees(
+    assert_eq!(
+        over_cleared(&[
             r#"{"subject": "inq-3", "question": "a question the review did not see", "blocking": false}"#
-        ),
+        ]),
+        acts(&[]),
         "a non-blocking addition leaves both rows current and reports nothing"
     );
-    assert!(
-        agrees(
-            r#"{"subject": "inq-3", "question": "a question that holds the stage", "blocking": true}"#
-        ),
-        "a new blocking node stales the review and is reported dead"
+    assert_eq!(
+        over_cleared(&[ADD_BLOCKER]),
+        acts(&["cpa-graph"]),
+        "a new blocking node stales the review alone, and only it is reported dead"
     );
-    assert!(
-        agrees(r#"{"subject": "inq-2", "question": "a re-worded question"}"#),
-        "a material move on a covered node stales the review and is reported dead"
+    assert_eq!(
+        over_cleared(&[r#"{"subject": "inq-2", "question": "a re-worded question"}"#]),
+        acts(&["cpa-graph", "cpa-suff"]),
+        "a material move on a covered node stales both rows and reports both dead"
+    );
+    assert_eq!(
+        over_cleared(&[r#"{"subject": "inq-2", "blocking": true}"#]),
+        acts(&["cpa-graph", "cpa-suff"]),
+        "a covered flip stales both rows and reports both dead"
+    );
+    assert_eq!(
+        over_cleared(&[ADD_BLOCKER, RESOLVE_BLOCKER]),
+        acts(&["cpa-graph"]),
+        "a blocker added after the act and resolved before the next edge stays stale"
+    );
+
+    // Resolving a blocker the acts *covered* is progress, not a change: a prior
+    // whose acts were given over an open blocker, then its disposition.
+    let (mut run, derived) = cleared();
+    run.map
+        .inquiry
+        .insert(InquiryNode::open(
+            id("inq-3"),
+            "a blocker the review saw",
+            Provenance::AgentProposed,
+            Some(true),
+        ))
+        .expect("a fresh node closes no cycle");
+    for act in [ActKind::GraphReviewed, ActKind::SufficiencyAccepted] {
+        recovers_over_current_map(&mut run, act);
+    }
+    assert_eq!(
+        agreed(run, &derived, &[RESOLVE_BLOCKER]),
+        acts(&[]),
+        "resolving a covered blocker leaves both rows current and reports nothing"
     );
 }
 
@@ -2784,7 +2836,8 @@ fn a_carried_node_that_leaves_is_still_stale() {
 
     for coverage in [Coverage::InquiryMap, Coverage::ReviewedGraph] {
         assert_eq!(
-            covered.moved(
+            CoveredSet::moved(
+                Some(&covered),
                 coverage,
                 &BTreeMap::new(),
                 &after.materials(),
@@ -3303,18 +3356,20 @@ fn coverage_does_not_move_the_declaration_fingerprint() {
 // (design sec-3; `RV-386` F-7, F-16, F-17).
 // ---------------------------------------------------------------------------
 
-/// `VT-1` — a submitted legacy act is refused and the stored set is left
-/// standing.
+/// `VT-1` — a submitted legacy act is refused, naming the retired kind.
 ///
 /// The class lands before the label leaves the wire (`RV-386` F-16): without the
 /// refusal a submitted `blocking-set-declared` replaces the stored legacy set
 /// and moves the effective judgement of every node that holds none of its own.
 /// The refusal names the kind, so the caller learns which act is retired rather
 /// than only that something was.
+///
+/// That the stored set is left standing is **not** asserted here, because no
+/// assertion could fail: `apply` takes the prior as `&DesignSnapshot` and a
+/// refusal returns no candidate, so the type guarantees it (`RV-389` F-15).
 #[test]
-fn submitted_legacy_act_is_refused_and_the_stored_set_unchanged() {
+fn submitted_legacy_act_is_refused() {
     let (run, _derived) = cleared();
-    let before = run.declarations.declarations.clone();
 
     let refused = apply(
         &run,
@@ -3347,10 +3402,6 @@ fn submitted_legacy_act_is_refused_and_the_stored_set_unchanged() {
             kind: ActKind::BlockingSetDeclared,
         }),
         "a legacy act is retired from writing, and the refusal names it"
-    );
-    assert_eq!(
-        run.declarations.declarations, before,
-        "the stored legacy set is unchanged"
     );
 }
 
@@ -3467,6 +3518,104 @@ fn the_payload_contract_admits_legacy_enum_variants() {
     assert!(
         refuse_unknown_keys(&wire).is_ok(),
         "the legacy token reaches the core rather than being refused as a key"
+    );
+}
+
+/// `VT-6` — a **stored** legacy snapshot parses, keeps its blockers, and keeps
+/// every pre-change verdict but the one the slice changes (`RV-389` F-8, F-13).
+///
+/// Read through `snapshot::parse` from frozen text ([`LEGACY_SNAPSHOT`]), not
+/// built in-process, because the risk is in the bytes a pre-change binary wrote:
+/// nodes with no `blocking`, and a `blocking-set-declared` act a deleted variant
+/// could no longer name.
+///
+/// The pre-change verdicts were taken by parsing the same text with the binary
+/// at `37d26a5ff^` and asking `satisfied` of every condition, with `cleared`'s
+/// derived facts. They differ from today's in exactly one place: sufficiency was
+/// stale by the `inq-3` addition alone and now reads current, which is the
+/// slice's intended change. `graph-reviewed` was stale by the addition **and** a
+/// `ConfirmationStale`, and stays stale on the second alone.
+///
+/// Negative control, taken by hand: a parser refusing the legacy act fails this
+/// test at the parse. The in-test control below is the variant deleted from the
+/// text's side — a token no variant names — and it must refuse.
+#[test]
+fn a_stored_legacy_snapshot_parses_and_keeps_its_pre_change_verdicts() {
+    let run = parse(LEGACY_SNAPSHOT).expect("a stored legacy snapshot parses");
+    let (_, derived) = cleared();
+
+    let pre_change_holds = [
+        (Condition::GoverningContextRecorded, true),
+        (Condition::InitialConcernsRecorded, false),
+        (Condition::BlockingInquiriesDispositioned, false),
+        (Condition::UserAcceptsSufficiency, false),
+        (Condition::DraftingReadinessAttested, true),
+        (Condition::MaterialisationCurrent, true),
+        (Condition::SectionAttestationsCurrent, true),
+        (Condition::ReviewDispositionAttested, true),
+        (Condition::UserAcceptanceAttested, true),
+    ];
+    assert_eq!(
+        pre_change_holds.map(|(condition, _)| condition),
+        Condition::ALL,
+        "the table covers every condition"
+    );
+    for (condition, held) in pre_change_holds {
+        let holds = satisfied(condition, &run, &derived.gate).is_ok();
+        let expected = held || condition == Condition::UserAcceptsSufficiency;
+        assert_eq!(
+            holds,
+            expected,
+            "`{}` reads holds={holds}; the pre-change binary read holds={held}",
+            condition.as_str()
+        );
+    }
+    assert_eq!(
+        causes_of(Condition::InitialConcernsRecorded, &run, &derived),
+        vec![Cause::ConfirmationStale {
+            act: ActKind::GraphReviewed,
+            declaration: AgentActKind::BlockingSetDeclared,
+        }],
+        "the stored confirmation verdict stays; the addition no longer stales it"
+    );
+
+    // With no node judged, the effective set is the stored act's.
+    let legacy = legacy_blocking_set(&run);
+    let effective: BTreeSet<DesignId> = run
+        .map
+        .inquiry
+        .nodes()
+        .filter(|node| node.effective_blocking(&legacy))
+        .map(|node| node.id().clone())
+        .collect();
+    assert_eq!(legacy, BTreeSet::from([id("inq-1"), id("inq-4")]));
+    assert_eq!(
+        effective, legacy,
+        "the effective set equals the stored act's"
+    );
+
+    // The mixed regime: judging one *other* node leaves every unjudged legacy
+    // blocker open, and the map edit reports no death for the legacy act.
+    let judged = declare_over(&run, r#"{"subject": "inq-2", "blocking": false}"#)
+        .expect("judging a legacy node applies");
+    assert_eq!(
+        causes_of(
+            Condition::BlockingInquiriesDispositioned,
+            &judged.snapshot,
+            &derived
+        ),
+        vec![Cause::InquiriesOpen {
+            nodes: vec![id("inq-4")],
+        }]
+    );
+    assert!(
+        !subjects(&judged, ChangeEvent::ActInvalidated).contains(&id("agd-blocking")),
+        "no row for the legacy act"
+    );
+
+    assert!(
+        parse(&LEGACY_SNAPSHOT.replace("blocking-set-declared", "blocking-set-retired")).is_err(),
+        "the control: a snapshot naming an act no variant spells does not parse"
     );
 }
 
@@ -5708,6 +5857,22 @@ fn run_with_two_needs_edges() -> DesignSnapshot {
     snapshot
 }
 
+/// A run holding `inq-1` alone, with no edge for a clearing to remove.
+fn run_with_an_edge_free_node() -> DesignSnapshot {
+    let mut snapshot = run_holding(&[]);
+    snapshot
+        .map
+        .inquiry
+        .insert(InquiryNode::open(
+            id("inq-1"),
+            "what governs this?",
+            Provenance::UserDirected,
+            Some(false),
+        ))
+        .expect("the fixture node seats");
+    snapshot
+}
+
 /// Apply one declaration through the pure core over `prior`.
 fn apply_declaration(prior: &DesignSnapshot, json: &str) -> Applied {
     apply(
@@ -5788,19 +5953,10 @@ fn needs_null_clears_and_emits_one_row_per_edge() {
 /// remove, so the no-op's quiet is a no-op and not a key the engine swallowed.
 #[test]
 fn needs_null_on_an_edge_free_node_records_no_mutation() {
-    let mut prior = run_holding(&[]);
-    prior
-        .map
-        .inquiry
-        .insert(InquiryNode::open(
-            id("inq-1"),
-            "what governs this?",
-            Provenance::UserDirected,
-            Some(false),
-        ))
-        .expect("the fixture node seats");
-
-    let applied = apply_declaration(&prior, r#"{"subject": "inq-1", "needs": null}"#);
+    let applied = apply_declaration(
+        &run_with_an_edge_free_node(),
+        r#"{"subject": "inq-1", "needs": null}"#,
+    );
 
     assert!(
         applied.rows.is_empty(),
@@ -5828,6 +5984,27 @@ fn needs_null_on_an_edge_free_node_records_no_mutation() {
         !cleared.rows.is_empty(),
         "the control: `needs: null` on a node with edges records the removals"
     );
+}
+
+/// `VT-2` — `needs: []` behaves identically to `needs: null` (`RV-389` F-12): over
+/// the same prior, edge-bearing and edge-free, the two clearing spellings emit
+/// the same rows and store the same node.
+#[test]
+fn needs_empty_and_needs_null_are_one_clearing() {
+    for prior in [run_with_two_needs_edges(), run_with_an_edge_free_node()] {
+        let [null, empty] = ["null", "[]"].map(|needs| {
+            apply_declaration(
+                &prior,
+                &format!(r#"{{"subject": "inq-1", "needs": {needs}}}"#),
+            )
+        });
+        assert_eq!(null.rows, empty.rows, "one row set for both spellings");
+        assert_eq!(
+            null.snapshot.map.inquiry.get(&id("inq-1")),
+            empty.snapshot.map.inquiry.get(&id("inq-1")),
+            "and one stored node"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -6011,16 +6188,30 @@ fn blocking_key_is_admitted_at_an_inquiry_and_still_create_only_at_a_finding() {
 /// `VT-2` — a flip emits exactly one `NodeBlockingChanged` row, carrying the two
 /// judgements, and a redeclaration that states the same judgement emits none.
 ///
-/// The creation row is the row that is *absent*, deliberately: `REQ-478` obliges
-/// a row for a mutation the run records, and a creation records its judgement
-/// inside `node_created` — a second row would say the new node changed what it
-/// was born with.
+/// The creation's `node_blocking_changed` row is the row that is *absent*,
+/// deliberately: `REQ-478` obliges a row for a mutation the run records, and a
+/// creation records its judgement inside `node_created` — which is asserted, so
+/// the change log can say whether a new node was born blocking (`RV-389` F-9). A
+/// second row would say the new node changed what it was born with.
 #[test]
 fn blocking_flip_emits_one_node_blocking_changed_row() {
     let prior = run_holding(&[]);
     let created = apply_declaration(
         &prior,
         r#"{"subject": "inq-1", "question": "why?", "blocking": false}"#,
+    );
+    let judgements: Vec<(&str, ValueKind)> = created
+        .rows
+        .iter()
+        .filter(|row| row.event == ChangeEvent::NodeCreated)
+        .flat_map(|row| &row.terms)
+        .filter(|term| term.key() == PayloadKey::Blocking)
+        .map(|term| (term.value(), term.kind()))
+        .collect();
+    assert_eq!(
+        judgements,
+        vec![("non-blocking", ValueKind::Label)],
+        "the creation row states the judgement the node was born with"
     );
     assert!(
         created
@@ -6110,20 +6301,21 @@ fn a_blocking_flip_moves_the_carried_material() {
     let before = map_of(vec![judged(Some(false))]);
     let covered = carried(&before);
     assert!(
-        covered
-            .moved(
-                Coverage::InquiryMap,
-                &BTreeMap::new(),
-                &before.materials(),
-                &BTreeSet::new(),
-            )
-            .is_empty(),
+        CoveredSet::moved(
+            Some(&covered),
+            Coverage::InquiryMap,
+            &BTreeMap::new(),
+            &before.materials(),
+            &BTreeSet::new(),
+        )
+        .is_empty(),
         "nothing moved while nothing moved"
     );
 
     let flipped = map_of(vec![judged(Some(true))]);
     assert_eq!(
-        covered.moved(
+        CoveredSet::moved(
+            Some(&covered),
             Coverage::InquiryMap,
             &BTreeMap::new(),
             &flipped.materials(),
@@ -6137,14 +6329,14 @@ fn a_blocking_flip_moves_the_carried_material() {
         record: "DEC-140".to_owned(),
     })]);
     assert!(
-        covered
-            .moved(
-                Coverage::InquiryMap,
-                &BTreeMap::new(),
-                &answered.materials(),
-                &BTreeSet::new(),
-            )
-            .is_empty(),
+        CoveredSet::moved(
+            Some(&covered),
+            Coverage::InquiryMap,
+            &BTreeMap::new(),
+            &answered.materials(),
+            &BTreeSet::new(),
+        )
+        .is_empty(),
         "and answering the question is still progress through the graph, not a \
          change to it"
     );

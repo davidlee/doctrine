@@ -372,3 +372,300 @@ pub(super) fn widest_causes(condition: Condition, members: usize) -> Vec<Cause> 
             .collect(),
     }
 }
+
+/// A **stored** snapshot that predates the blocking judgement, frozen as text
+/// (`SL-264` sec-6 VT-6, `RV-389` F-8/F-13).
+///
+/// Written once by [`cleared`]'s shape serialised with every node **unjudged**,
+/// then frozen, so it is the bytes a pre-change binary wrote rather than a value
+/// today's types build: no node carries `blocking`, the `blocking-set-declared`
+/// act names `inq-1` and `inq-4`, and the change log holds the legacy act's
+/// `act_recorded` row and a `node_created` row in its two-term shape. `inq-3` joined
+/// after the acts, so both map-bound acts were stale by an addition alone before
+/// the change; `cpa-graph` also confirms a digest the stored declaration no longer
+/// carries (`ConfirmationStale`). Never regenerate it from today's serialiser:
+/// the point is that it was not written by it.
+pub(super) const LEGACY_SNAPSHOT: &str = r##"schema = "doctrine.design-run"
+version = 1
+
+[run]
+uid = "dr-test"
+slice = 233
+revision = 1
+stage = "reviewing"
+review_policy = "human-only"
+
+[receipts]
+floor = 1
+receipt = []
+
+[map]
+next_seq = 4
+
+[map.inquiry.nodes.inq-1]
+id = "inq-1"
+question = "is inq-1 settled?"
+lifecycle = "resolved"
+needs = []
+seq = 0
+
+[map.inquiry.nodes.inq-1.provenance]
+provenance = "agent-proposed"
+
+[map.inquiry.nodes.inq-1.disposition]
+disposition = "retained-unresolved"
+note = "settled by fiat, for the fixture"
+
+[map.inquiry.nodes.inq-2]
+id = "inq-2"
+question = "is inq-2 settled?"
+lifecycle = "open"
+needs = []
+seq = 1
+
+[map.inquiry.nodes.inq-2.provenance]
+provenance = "agent-proposed"
+
+[map.inquiry.nodes.inq-3]
+id = "inq-3"
+question = "is inq-3 settled?"
+lifecycle = "open"
+needs = []
+seq = 3
+
+[map.inquiry.nodes.inq-3.provenance]
+provenance = "agent-proposed"
+
+[map.inquiry.nodes.inq-4]
+id = "inq-4"
+question = "is inq-4 settled?"
+lifecycle = "open"
+needs = []
+seq = 2
+
+[map.inquiry.nodes.inq-4.provenance]
+provenance = "agent-proposed"
+
+[map.cursor]
+
+[map.posture]
+posture = "breadth"
+authority = "agent-proposed"
+
+[[sections.section]]
+id = "sec-a"
+title = "sec-a"
+body = """
+## sec-a
+"""
+fingerprint = "sha256:a"
+seq = 0
+
+[[sections.section]]
+id = "sec-b"
+title = "sec-b"
+body = """
+## sec-b
+"""
+fingerprint = "sha256:b"
+seq = 0
+
+[review]
+finding = []
+
+[[review.attestation]]
+id = "att-0"
+subject = "sec-a"
+fingerprint = "sha256:a"
+reviewer = "human"
+
+[[review.attestation]]
+id = "att-1"
+subject = "sec-b"
+fingerprint = "sha256:b"
+reviewer = "human"
+
+[review.pass]
+review = "RV-244"
+
+[review.pass.covered.covered]
+sec-a = "sha256:a"
+sec-b = "sha256:b"
+
+[[acts.act]]
+id = "cpa-gov"
+act = "governance-confirmed"
+
+[acts.act.acceptance]
+authority = "user"
+basis = "the sweep found these"
+digest = "sha256:accepted"
+
+[acts.act.observed]
+governance-edges = "sha256:edges"
+
+[[acts.act]]
+id = "cpa-graph"
+act = "graph-reviewed"
+confirms = "sha256:agd-blocking-relisted"
+
+[acts.act.acceptance]
+authority = "user"
+basis = "the blocking set is right"
+digest = "sha256:accepted"
+
+[acts.act.covered.nodes.covered.inq-1]
+question = "is inq-1 settled?"
+seq = 0
+
+[acts.act.covered.nodes.covered.inq-1.provenance]
+provenance = "agent-proposed"
+
+[acts.act.covered.nodes.covered.inq-2]
+question = "is inq-2 settled?"
+seq = 1
+
+[acts.act.covered.nodes.covered.inq-2.provenance]
+provenance = "agent-proposed"
+
+[acts.act.covered.nodes.covered.inq-4]
+question = "is inq-4 settled?"
+seq = 2
+
+[acts.act.covered.nodes.covered.inq-4.provenance]
+provenance = "agent-proposed"
+
+[[acts.act]]
+id = "cpa-suff"
+act = "sufficiency-accepted"
+
+[acts.act.acceptance]
+authority = "user"
+basis = "enough to draft"
+digest = "sha256:accepted"
+
+[acts.act.covered.nodes.covered.inq-1]
+question = "is inq-1 settled?"
+seq = 0
+
+[acts.act.covered.nodes.covered.inq-1.provenance]
+provenance = "agent-proposed"
+
+[acts.act.covered.nodes.covered.inq-2]
+question = "is inq-2 settled?"
+seq = 1
+
+[acts.act.covered.nodes.covered.inq-2.provenance]
+provenance = "agent-proposed"
+
+[acts.act.covered.nodes.covered.inq-4]
+question = "is inq-4 settled?"
+seq = 2
+
+[acts.act.covered.nodes.covered.inq-4.provenance]
+provenance = "agent-proposed"
+
+[[acts.act]]
+id = "cpa-disp"
+act = "review-disposed"
+
+[acts.act.acceptance]
+authority = "user"
+basis = "the pass is answered"
+digest = "sha256:accepted"
+
+[acts.act.disposition]
+pass = "RV-244"
+
+[acts.act.disposition.disposition.waived]
+reason = "no adversarial pass is available"
+
+[[acts.act]]
+id = "cpa-accept"
+act = "design-accepted"
+
+[acts.act.acceptance]
+authority = "user"
+basis = "the design is right"
+digest = "sha256:accepted"
+
+[acts.act.covered.sections.covered]
+sec-a = "sha256:a"
+sec-b = "sha256:b"
+
+[[declarations.declaration]]
+id = "agd-blocking"
+basis = "fixture declaration agd-blocking"
+fingerprint = "sha256:agd-blocking"
+
+[declarations.declaration.act.blocking-set-declared]
+blocking = ["inq-1", "inq-4"]
+
+[declarations.declaration.covered.nodes.covered.inq-1]
+question = "is inq-1 settled?"
+seq = 0
+
+[declarations.declaration.covered.nodes.covered.inq-1.provenance]
+provenance = "agent-proposed"
+
+[declarations.declaration.covered.nodes.covered.inq-2]
+question = "is inq-2 settled?"
+seq = 1
+
+[declarations.declaration.covered.nodes.covered.inq-2.provenance]
+provenance = "agent-proposed"
+
+[declarations.declaration.covered.nodes.covered.inq-4]
+question = "is inq-4 settled?"
+seq = 2
+
+[declarations.declaration.covered.nodes.covered.inq-4.provenance]
+provenance = "agent-proposed"
+
+[[declarations.declaration]]
+id = "agd-ready"
+act = "drafting-ready"
+basis = "fixture declaration agd-ready"
+fingerprint = "sha256:agd-ready"
+
+[delegation]
+delegation = []
+
+[fragments]
+fragment = []
+
+[runbook]
+discharge = []
+
+[checkpoint]
+intent = []
+
+[authored]
+watermark = "sha256:authored"
+materialised = true
+
+[change_log]
+floor = 1
+
+[[change_log.row]]
+revision = 1
+index = 0
+event = "node_created"
+subject = "inq-3"
+
+[[change_log.row.term]]
+key = "provenance"
+kind = "label"
+value = "agent-proposed"
+
+[[change_log.row]]
+revision = 1
+index = 1
+event = "act_recorded"
+subject = "agd-blocking"
+
+[[change_log.row.term]]
+key = "act"
+kind = "token"
+value = "blocking-set-declared"
+"##;

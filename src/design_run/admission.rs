@@ -26,7 +26,9 @@
 
 use std::collections::BTreeSet;
 
-use super::attestation::{AgentActKind, CoveredSet, DisposedPass, RecordedAct, ReviewDisposition};
+use super::attestation::{
+    AgentActKind, CoveredSet, CoveredShape, DisposedPass, RecordedAct, ReviewDisposition,
+};
 use super::gate::{ActRule, Coverage, ObservedFact};
 use super::refusal::{ActFault, Refusal};
 use super::run::ObservedReview;
@@ -73,23 +75,14 @@ fn coverage_fault(record: RecordedAct<'_>, required: Coverage) -> Option<ActFaul
             carried: None,
         });
     }
-    let carried = record.covered().map(|covered| match *covered {
-        CoveredSet::Sections(_) => Coverage::EverySection,
-        CoveredSet::Nodes(_) => Coverage::InquiryMap,
-    });
-    // `Nodes` is the stored shape for **two** coverages (`SL-264` sec-2):
-    // `InquiryMap` compares it over carried keys, `ReviewedGraph` over carried
-    // keys and the full blocking set. Both are the node shape, so a
-    // `Nodes`-carried record agrees with either; the fault names it `InquiryMap`,
-    // the shape's incumbent spelling.
-    let agrees = match required {
-        Coverage::Artefact => carried.is_none(),
-        Coverage::EverySection => carried == Some(Coverage::EverySection),
-        Coverage::InquiryMap | Coverage::ReviewedGraph => carried == Some(Coverage::InquiryMap),
-        // Carried by no act at all, so no value of a carrying shape corresponds
-        // to it — including `None`, which is `Artefact`'s.
-        Coverage::PerSection => false,
-    };
+    // The shape the record carries against the one its coverage names
+    // ([`Coverage::carried_shape`]); a mismatch is named by the carried shape's
+    // incumbent coverage.
+    let carried = record.covered().map(CoveredSet::shape);
+    // `PerSection` is carried by no act at all, so no value of a carrying shape
+    // corresponds to it — including `None`, which is `Artefact`'s.
+    let agrees = required != Coverage::PerSection && carried == required.carried_shape();
+    let carried = carried.map(CoveredShape::incumbent);
     (!agrees).then_some(ActFault::CoverageMismatch { required, carried })
 }
 

@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 
 use super::Stage;
 use super::attestation::{
-    ActKind, ActorClass, AgentAct, AgentActKind, DisposedPass, RecordedAct, ReviewDisposition,
-    ReviewPolicy, ReviewRef,
+    ActKind, ActorClass, AgentAct, AgentActKind, CoveredSet, CoveredShape, DisposedPass,
+    RecordedAct, ReviewDisposition, ReviewPolicy, ReviewRef,
 };
 use super::bounds::DESIGN_ID_BYTES;
 use super::ids::{DesignId, Fingerprint};
@@ -127,6 +127,23 @@ pub(crate) enum Coverage {
 }
 
 impl Coverage {
+    /// The stored shape an act bound to this coverage carries, or `None` where it
+    /// carries no map — the one statement of that correspondence, which admission
+    /// checks and construction fills (`RV-389` F-2).
+    ///
+    /// `Nodes` is the shape for **two** coverages (`SL-264` sec-2): `InquiryMap`
+    /// compares it over carried keys, `ReviewedGraph` over carried keys and the
+    /// full blocking set. `Artefact` is an **absent** coverage rather than an
+    /// empty one; `PerSection` is a quantification the derivation performs over
+    /// the section set, carried by no act.
+    pub(crate) const fn carried_shape(self) -> Option<CoveredShape> {
+        match self {
+            Coverage::EverySection => Some(CoveredShape::Sections),
+            Coverage::InquiryMap | Coverage::ReviewedGraph => Some(CoveredShape::Nodes),
+            Coverage::Artefact | Coverage::PerSection => None,
+        }
+    }
+
     /// The kebab token this coverage is spelled with everywhere — the refusal
     /// text and its serde form (STD-001). It agrees with the serde rename by
     /// construction of the test that compares them, which is
@@ -770,9 +787,10 @@ pub(crate) struct ActRule {
 /// **No non-legacy [`ActKind`] is left unnamed: every one is named by exactly
 /// one row, and every legacy kind** ([`ActKind::is_legacy`]) **by none** — which
 /// is `every_act_kind_is_named_by_exactly_one_contract_row`'s to prove, not this
-/// signature's to claim. The `None` a legacy kind earns is the answer
-/// [`super::run::admit_and_record`] refuses a new record of it on, rather than
-/// the unchecked store a missing rule used to be.
+/// signature's to claim. A legacy kind's `None` agrees with the class
+/// [`super::run::admit_and_record`] refuses a new record of it by, and a `None`
+/// for any other kind fails closed on the same refusal rather than the unchecked
+/// store a missing rule used to be.
 pub(crate) fn requirement_for(act: ActKind) -> Option<ActRule> {
     CONTRACTS
         .iter()
@@ -1554,17 +1572,18 @@ fn act_causes(
 /// stored legacy `blocking-set-declared` set — resolved **per node**, so a
 /// partly-judged run keeps every unjudged blocker (`RV-386` `F-8`). The two
 /// reads are one judgement differing only in lifecycle:
-/// [`InquiryMap::blocking_marks`] is every node whose effective judgement is
-/// blocking whatever its lifecycle, and this read is the marks not yet
-/// `Resolved` ([`InquiryMap::open_blockers`]). One judgement, so the gate and
-/// the coverage cannot disagree about which nodes block (`RV-386` `F-13`).
+/// [`blocking_marks`] is every node whose effective judgement is blocking
+/// whatever its lifecycle — the set a `ReviewedGraph` coverage compares — and
+/// this read is those not yet `Resolved` ([`InquiryMap::open_blockers`]). One
+/// judgement, so the gate and the coverage cannot disagree about which nodes
+/// block (`RV-386` `F-13`).
 ///
 /// **Disposed** is `resolved`, which is the only lifecycle that can carry a
 /// [`Disposition`](super::inquiry::Disposition) — DEC-062 makes resolution
 /// without one unrepresentable, so *has a disposition* and *is resolved* are one
 /// question.
 ///
-/// [`InquiryMap::blocking_marks`]: super::inquiry::InquiryMap::blocking_marks
+/// [`blocking_marks`]: super::inquiry::blocking_marks
 /// [`InquiryMap::open_blockers`]: super::inquiry::InquiryMap::open_blockers
 fn blocking_inquiries_open(run: &DesignSnapshot) -> Vec<DesignId> {
     let legacy = legacy_blocking_set(run);
@@ -1624,33 +1643,24 @@ fn live_act(run: &DesignSnapshot, act: ActKind) -> Option<RecordedAct<'_>> {
 /// narrowing that `ReviewedGraph` adds and `InquiryMap` narrows lives in the
 /// shared predicate, so this arm and the change log's [`live_acts`](super::run::live_acts)
 /// — which reads the same predicate under the same rule `Coverage` — cannot
-/// disagree about which nodes block. What remains here is the one case the
-/// predicate cannot express — an act carrying **no** covered map where its rule
-/// names one, which is every current subject of that coverage.
+/// disagree about which nodes block.
 ///
-/// A map of the wrong shape is [`CoveredSet::moved`]'s to fail closed: admission
-/// refuses a mismatched shape on write, so the only route is a rule that changed
-/// under a stored act, and reading the record through the rule is exactly how the
-/// design retires one.
+/// A map missing or of the wrong shape is [`CoveredSet::moved`]'s to fail
+/// closed: admission refuses a mismatched shape on write, so the only route is a
+/// rule that changed under a stored act, and reading the record through the rule
+/// is exactly how the design retires one.
 fn coverage_moved(
     coverage: Coverage,
     record: RecordedAct<'_>,
     run: &DesignSnapshot,
 ) -> Vec<DesignId> {
-    let sections = run.sections.fingerprints();
-    let nodes = run.map.inquiry.materials();
-    let legacy = legacy_blocking_set(run);
-    let Some(carried) = record.covered() else {
-        // Inert by construction: the act's own recorded content cannot move, so a
-        // row bound this way is invalidated only by its observed conjunct — which
-        // is `governing-context-recorded`'s whole mechanism.
-        return match coverage {
-            Coverage::Artefact => Vec::new(),
-            Coverage::EverySection | Coverage::PerSection => sections.into_keys().collect(),
-            Coverage::InquiryMap | Coverage::ReviewedGraph => nodes.into_keys().collect(),
-        };
-    };
-    carried.moved(coverage, &sections, &nodes, &legacy)
+    CoveredSet::moved(
+        record.covered(),
+        coverage,
+        &run.sections.fingerprints(),
+        &run.map.inquiry.materials(),
+        &legacy_blocking_set(run),
+    )
 }
 
 /// What a carried disposition must still be, at this crossing.

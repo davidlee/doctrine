@@ -355,9 +355,14 @@ impl ChangeEvent {
     /// applies to prove the budget holds for every member.
     pub(crate) const fn payload_terms(self) -> &'static [(PayloadKey, ValueKind)] {
         match self {
+            // The judgement the node is born with rides its creation row, in the
+            // `NodeBlockingChanged` vocabulary, so a creation owes no second row
+            // and the log can still say a new node was born blocking (`SL-264`
+            // sec-3, `RV-389` F-9).
             ChangeEvent::NodeCreated => &[
                 (PayloadKey::Parent, ValueKind::Token),
                 (PayloadKey::Provenance, ValueKind::Label),
+                (PayloadKey::Blocking, ValueKind::Label),
             ],
             // Both judgements, as labels: the vocabulary is closed and has three
             // members (`unjudged` / `blocking` / `non-blocking`), which is what
@@ -590,6 +595,8 @@ pub(crate) enum PayloadKey {
     Step,
     /// What the discharge concluded.
     Outcome,
+    /// The blocking judgement a node was created with (`SL-264` sec-3).
+    Blocking,
 }
 
 impl PayloadKey {
@@ -614,6 +621,7 @@ impl PayloadKey {
             PayloadKey::Outcome => "outcome",
             PayloadKey::Disposition => "disposition",
             PayloadKey::By => "by",
+            PayloadKey::Blocking => "blocking",
         }
     }
 }

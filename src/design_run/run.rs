@@ -31,8 +31,8 @@ use super::Stage;
 use super::admission::admit_act;
 use super::attestation::{
     AcceptanceAttestation, ActKind, AgentActKind, AgentDeclaration, Attestation, CheckpointAct,
-    ContentCoverage, CoveredSet, DisposedPass, IntentState, IntentSubject, RecordedAct,
-    RecoveryIntent, ReviewDisposition, ReviewPass, ReviewRef, Reviewer,
+    ContentCoverage, CoveredSet, CoveredShape, DisposedPass, IntentState, IntentSubject,
+    RecordedAct, RecoveryIntent, ReviewDisposition, ReviewPass, ReviewRef, Reviewer,
 };
 use super::bounds::DESIGN_ID_BYTES;
 use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm, judgement_label};
@@ -782,24 +782,23 @@ impl ActRecord {
 /// **Admission precedes storage.** A refused record leaves the snapshot
 /// untouched, exactly as the two former `admit_against` call sites did.
 ///
-/// The rule's `None` arm used to be unreachable and stored the record unchecked.
-/// It is now the arm a **legacy** kind lands on (`ActKind::is_legacy`: a kind
-/// that stays readable but has no rule), so it **refuses** rather than stores:
-/// a record written against no rule is required by no condition and could never
-/// be read, and a submitted `blocking-set-declared` would otherwise replace the
-/// stored legacy set and move the effective judgement of every unjudged node
-/// (`RV-386` F-16). `every_act_kind_is_named_by_exactly_one_contract_row` is what
-/// says no *non-legacy* kind reaches this arm.
+/// A **legacy** kind ([`ActKind::is_legacy`], the one definition of the class:
+/// a kind that stays readable but has no rule) is **refused** rather than
+/// stored: a record written against no rule is required by no condition and
+/// could never be read, and a submitted `blocking-set-declared` would otherwise
+/// replace the stored legacy set and move the effective judgement of every
+/// unjudged node (`RV-386` F-16). A `None` rule for any *other* kind is
+/// unreachable — `every_act_kind_is_named_by_exactly_one_contract_row` pins it —
+/// and fails closed on the same refusal rather than storing unchecked.
 fn admit_and_record(
     next: &mut DesignSnapshot,
     record: ActRecord,
     rule: Option<ActRule>,
     derived: &DerivedInput,
 ) -> Result<Vec<Pending>, Refusal> {
-    let Some(rule) = rule else {
-        return Err(Refusal::RetiredAct {
-            kind: record.kind(),
-        });
+    let kind = record.kind();
+    let (false, Some(rule)) = (kind.is_legacy(), rule) else {
+        return Err(Refusal::RetiredAct { kind });
     };
     admit_act(
         record.admission_view(),
@@ -839,15 +838,12 @@ fn act_id(prefix: IdKind, act: ActKind) -> Result<DesignId, Refusal> {
 /// derivation performs over the section set — so there is nothing to fill and
 /// admission refuses the record, which keeps that answer with its one owner.
 fn covered_in(next: &DesignSnapshot, coverage: Coverage) -> Option<CoveredSet> {
-    match coverage {
-        Coverage::EverySection => Some(CoveredSet::Sections(ContentCoverage::of(
-            next.sections.fingerprints(),
-        ))),
-        Coverage::InquiryMap | Coverage::ReviewedGraph => Some(CoveredSet::Nodes(
-            ContentCoverage::of(next.map.inquiry.materials()),
-        )),
-        Coverage::Artefact | Coverage::PerSection => None,
-    }
+    coverage.carried_shape().map(|shape| match shape {
+        CoveredShape::Sections => {
+            CoveredSet::Sections(ContentCoverage::of(next.sections.fingerprints()))
+        }
+        CoveredShape::Nodes => CoveredSet::Nodes(ContentCoverage::of(next.map.inquiry.materials())),
+    })
 }
 
 /// Each fact the rule names, at the fingerprint the shell observed it at.
@@ -1362,8 +1358,8 @@ pub(super) fn declare(
 }
 
 /// The prior a NEW node is diffed against: the node its `NodeCreated` row
-/// describes — opened at the declared question and provenance, under the
-/// declared parent — paired with that row.
+/// describes — opened at the declared question, provenance and blocking
+/// judgement, under the declared parent — paired with that row.
 ///
 /// Seeding the parent rather than leaving it empty is what keeps the shared diff
 /// from emitting a `NodeReparented` row for a node that was never parented
@@ -1395,6 +1391,10 @@ fn created_prior(
         PayloadKey::Provenance,
         provenance.label(),
     )?);
+    terms.push(PayloadTerm::label(
+        PayloadKey::Blocking,
+        judgement_label(blocking),
+    )?);
     Ok((node, Pending::about(ChangeEvent::NodeCreated, id, terms)?))
 }
 
@@ -1414,30 +1414,9 @@ fn declare_node(
 ) -> Result<Vec<Pending>, Refusal> {
     let id = declaration.subject();
     let held = next.map.inquiry.get(id).cloned();
-    // The blocking judgement, resolved **before any row** and before the node is
-    // rebuilt, because it is the one field of this declaration whose omission is
-    // state-dependent. Four cases, and each is a different answer:
-    //
-    // - a value replaces, in either state;
-    // - `null` is refused in either state — a judgement can be changed but not
-    //   withdrawn, and reading `null` as the omission below is `SL-259`'s disease;
-    // - an omission on a held node persists, **including a held `None`**: an
-    //   unjudged legacy node leaves the stored legacy set only by being judged
-    //   itself, so a map edit that says nothing about the judgement must not
-    //   quietly judge the node;
-    // - an omission on a NEW node is refused. This is the obligation the wire-key
-    //   table deliberately does not carry: that table says where a key is
-    //   honoured, never when it is owed.
-    let blocking = match (held.as_ref(), declaration.blocking_declaration()) {
-        (_, Sparse::Value(judged)) => Some(*judged),
-        (_, Sparse::Null) => {
-            return Err(Refusal::BlockingJudgementWithdrawn { id: id.clone() });
-        }
-        (Some(existing), Sparse::Omitted) => existing.blocking(),
-        (None, Sparse::Omitted) => {
-            return Err(Refusal::BlockingJudgementMissing { id: id.clone() });
-        }
-    };
+    // Resolved **before any row** and before the node is rebuilt: the one field
+    // of this declaration whose omission is state-dependent.
+    let blocking = resolve_blocking(held.as_ref(), *declaration.blocking_declaration(), id)?;
     let (existing, mut rows) = if let Some(existing) = held {
         (existing, Vec::new())
     } else {
@@ -1445,7 +1424,6 @@ fn declare_node(
         (seeded, vec![created])
     };
     let mut parent = existing.parent().cloned();
-    let mut needs: BTreeSet<DesignId> = existing.needs().clone();
     let mut lifecycle = existing.lifecycle();
     // The three sparse states, on the one prose scalar a node carries: omission
     // PERSISTS the prior question, `null` clears it, a value replaces it. A
@@ -1478,40 +1456,38 @@ fn declare_node(
         _ => {}
     }
 
-    // The three sparse states on the node's one collection: omission PERSISTS
-    // the prior edges, `null` clears them, a value replaces them. `null` and an
-    // empty value are one clearing (the same semantics `apply_collection`
-    // states), and both reach the difference below — so the two spellings
-    // collapse to one row set by construction rather than by a second loop
-    // (`SL-264` sec-4, closing `ISS-481`). An edge-free `null` diffs empty and
-    // owes no row: the run records no mutation for it to report (`REQ-478`).
-    let declared_needs: Option<BTreeSet<DesignId>> = match declaration.needs_declaration() {
-        Sparse::Omitted => None,
-        Sparse::Null => Some(BTreeSet::new()),
-        Sparse::Value(values) => Some(values.iter().cloned().collect()),
-    };
-    if let Some(declared) = declared_needs {
-        for added in declared.difference(&needs) {
-            rows.push(Pending::about(
-                ChangeEvent::NeedsAdded,
-                id,
-                vec![
-                    PayloadTerm::token(PayloadKey::From, id.as_str())?,
-                    PayloadTerm::token(PayloadKey::To, added.as_str())?,
-                ],
-            )?);
-        }
-        for removed in needs.difference(&declared) {
-            rows.push(Pending::about(
-                ChangeEvent::NeedsRemoved,
-                id,
-                vec![
-                    PayloadTerm::token(PayloadKey::From, id.as_str())?,
-                    PayloadTerm::token(PayloadKey::To, removed.as_str())?,
-                ],
-            )?);
-        }
-        needs = declared;
+    // The three sparse states on the node's one collection, through the one
+    // spelling of the collection contract (`Sparse::apply_collection`): omission
+    // PERSISTS the prior edges, `null` and an empty value both clear, a value
+    // replaces. An omission hands the prior back, so it diffs empty and owes no
+    // row — as does an edge-free `null`: the run records no mutation for it to
+    // report (`REQ-478`). The two clearing spellings therefore collapse to one
+    // row set by construction (`SL-264` sec-4, closing `ISS-481`).
+    let needs: BTreeSet<DesignId> = declaration
+        .needs_declaration()
+        .clone()
+        .apply_collection(existing.needs().iter().cloned().collect())
+        .into_iter()
+        .collect();
+    for added in needs.difference(existing.needs()) {
+        rows.push(Pending::about(
+            ChangeEvent::NeedsAdded,
+            id,
+            vec![
+                PayloadTerm::token(PayloadKey::From, id.as_str())?,
+                PayloadTerm::token(PayloadKey::To, added.as_str())?,
+            ],
+        )?);
+    }
+    for removed in existing.needs().difference(&needs) {
+        rows.push(Pending::about(
+            ChangeEvent::NeedsRemoved,
+            id,
+            vec![
+                PayloadTerm::token(PayloadKey::From, id.as_str())?,
+                PayloadTerm::token(PayloadKey::To, removed.as_str())?,
+            ],
+        )?);
     }
 
     if let Some(declared) = declaration.lifecycle()
@@ -1530,10 +1506,10 @@ fn declare_node(
 
     // A flip is a recorded mutation, so it owes a row (`REQ-478`). **A creation
     // owes none**, and not by a branch: `created_prior` seeds the prior *with* the
-    // declared judgement, so a node that has just come into being holds exactly
-    // what the declaration asked for and diffs empty here — the same "one
-    // row-producing path over two priors" shape every other arm of this function
-    // has (`DEC-248`).
+    // declared judgement (and states it on the `NodeCreated` row), so a node that
+    // has just come into being holds exactly what the declaration asked for and
+    // diffs empty here — the same "one row-producing path over two priors" shape
+    // every other arm of this function has (`DEC-248`).
     if blocking != existing.blocking() {
         rows.push(Pending::about(
             ChangeEvent::NodeBlockingChanged,
@@ -1548,6 +1524,35 @@ fn declare_node(
     let rebuilt = rebuild(&existing, &question, parent, needs, lifecycle, blocking)?;
     next.map.inquiry.insert(rebuilt)?;
     Ok(rows)
+}
+
+/// The blocking judgement a declaration leaves a node holding, given the node it
+/// holds now (`None` for a new one) — pure, so each case is testable without a
+/// snapshot (`RV-389` F-7).
+///
+/// Four cases, and each is a different answer:
+///
+/// - a value replaces, in either state;
+/// - `null` is refused in either state — a judgement can be changed but not
+///   withdrawn, and reading `null` as an omission is `SL-259`'s disease;
+/// - an omission on a held node persists, **including a held `None`**: an
+///   unjudged legacy node leaves the stored legacy set only by being judged
+///   itself, so a map edit that says nothing about the judgement must not
+///   quietly judge the node;
+/// - an omission on a NEW node is refused. This is the obligation the wire-key
+///   table deliberately does not carry: that table says where a key is
+///   honoured, never when it is owed.
+fn resolve_blocking(
+    held: Option<&InquiryNode>,
+    declared: Sparse<bool>,
+    id: &DesignId,
+) -> Result<Option<bool>, Refusal> {
+    match (held, declared) {
+        (_, Sparse::Value(judged)) => Ok(Some(judged)),
+        (_, Sparse::Null) => Err(Refusal::BlockingJudgementWithdrawn { id: id.clone() }),
+        (Some(existing), Sparse::Omitted) => Ok(existing.blocking()),
+        (None, Sparse::Omitted) => Err(Refusal::BlockingJudgementMissing { id: id.clone() }),
+    }
 }
 
 /// Rebuild a node with a new edge set and lifecycle.
@@ -1713,7 +1718,7 @@ fn declare_finding(
         id: id.clone(),
         subject: section.clone(),
         summary: summary.to_owned(),
-        blocking: declaration.blocking(),
+        blocking: declaration.finding_blocks(),
         resolution: declaration.resolution().map(str::to_owned),
     });
     Ok(vec![Pending::about(
@@ -2080,36 +2085,34 @@ pub(super) fn live_acts(snapshot: &DesignSnapshot) -> BTreeSet<(ActKind, DesignI
     // The rule's `Coverage`, looked up from the act's kind, is what the shared
     // predicate compares under — so this reader and the gate's `coverage_moved`
     // narrow together and cannot disagree about which nodes block (`RV-386`
-    // F-13). `requirement_for` is total over the non-legacy kinds, and a legacy
-    // kind is excluded before this is asked, so its `None` is unreachable here.
+    // F-13). A legacy kind is excluded first; past that guard `requirement_for`
+    // is total, and an act carrying no map (an `Artefact` rule) is live.
     let live = |kind: ActKind, covered: Option<&CoveredSet>| {
-        let Some(covered) = covered else {
-            return true;
-        };
-        match gate::requirement_for(kind) {
-            Some(rule) => covered
-                .moved(rule.binding.coverage, &sections, &nodes, &legacy)
-                .is_empty(),
-            None => true,
-        }
+        !kind.is_legacy()
+            && match (gate::requirement_for(kind), covered) {
+                (Some(rule), Some(_)) => {
+                    CoveredSet::moved(covered, rule.binding.coverage, &sections, &nodes, &legacy)
+                        .is_empty()
+                }
+                _ => true,
+            }
     };
-    snapshot
+    let checkpoint = snapshot
         .acts
         .acts
         .iter()
-        .filter(|held| !held.act.is_legacy() && live(held.act, held.covered.as_ref()))
-        .map(|held| (held.act, held.id.clone()))
-        .chain(
-            snapshot
-                .declarations
-                .declarations
-                .iter()
-                .filter(|held| {
-                    let kind = ActKind::from(held.act.kind());
-                    !kind.is_legacy() && live(kind, held.covered.as_ref())
-                })
-                .map(|held| (ActKind::from(held.act.kind()), held.id.clone())),
+        .map(|held| (held.act, &held.id, held.covered.as_ref()));
+    let declared = snapshot.declarations.declarations.iter().map(|held| {
+        (
+            ActKind::from(held.act.kind()),
+            &held.id,
+            held.covered.as_ref(),
         )
+    });
+    checkpoint
+        .chain(declared)
+        .filter(|(kind, _, covered)| live(*kind, *covered))
+        .map(|(kind, id, _)| (kind, id.clone()))
         .collect()
 }
 
@@ -2201,6 +2204,46 @@ mod tests {
     /// A well-formed id, or a failure naming the bad literal.
     fn id(raw: &str) -> DesignId {
         DesignId::parse(raw).expect("test fixture id must be well-formed")
+    }
+
+    /// `resolve_blocking`'s four cases, each a different answer (`RV-389` F-7):
+    /// a value replaces and `null` is refused in either state; an omission
+    /// persists a held judgement — a held `None` included — and is refused on a
+    /// new node.
+    #[test]
+    fn a_blocking_judgement_resolves_per_case() {
+        let subject = id("inq-1");
+        let held = |judgement| {
+            InquiryNode::open(subject.clone(), "q", Provenance::AgentProposed, judgement)
+        };
+        let unjudged = held(None);
+        let judged = held(Some(true));
+        for node in [None, Some(&unjudged), Some(&judged)] {
+            assert_eq!(
+                resolve_blocking(node, Sparse::Value(false), &subject),
+                Ok(Some(false))
+            );
+            assert_eq!(
+                resolve_blocking(node, Sparse::Null, &subject),
+                Err(Refusal::BlockingJudgementWithdrawn {
+                    id: subject.clone()
+                })
+            );
+        }
+        assert_eq!(
+            resolve_blocking(Some(&unjudged), Sparse::Omitted, &subject),
+            Ok(None)
+        );
+        assert_eq!(
+            resolve_blocking(Some(&judged), Sparse::Omitted, &subject),
+            Ok(Some(true))
+        );
+        assert_eq!(
+            resolve_blocking(None, Sparse::Omitted, &subject),
+            Err(Refusal::BlockingJudgementMissing {
+                id: subject.clone()
+            })
+        );
     }
 
     /// A run holding one section, at revision 1.

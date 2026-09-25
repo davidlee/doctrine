@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use super::gate::{Coverage, ObservedFact};
 use super::ids::{DesignId, Fingerprint};
-use super::inquiry::NodeMaterial;
+use super::inquiry::{NodeMaterial, blocking_marks};
 
 /// Who reviewed a section (DEC-073, DEC-074).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -570,18 +570,47 @@ pub(crate) enum CoveredSet {
     Nodes(ContentCoverage<NodeMaterial>),
 }
 
+/// Which of [`CoveredSet`]'s two shapes a covered map takes — what a
+/// [`Coverage`] names through [`Coverage::carried_shape`], and what a stored set
+/// reports through [`CoveredSet::shape`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CoveredShape {
+    Sections,
+    Nodes,
+}
+
+impl CoveredShape {
+    /// The coverage that shape's refusal text names it by — `Nodes` is the stored
+    /// shape for two coverages, and is spelled by the incumbent, `InquiryMap`.
+    pub(crate) const fn incumbent(self) -> Coverage {
+        match self {
+            CoveredShape::Sections => Coverage::EverySection,
+            CoveredShape::Nodes => Coverage::InquiryMap,
+        }
+    }
+}
+
 impl CoveredSet {
-    /// The subjects this set no longer matches, under the [`Coverage`] its act's
-    /// rule names (`SL-264` sec-2).
+    /// Which shape this set is.
+    pub(crate) const fn shape(&self) -> CoveredShape {
+        match self {
+            CoveredSet::Sections(_) => CoveredShape::Sections,
+            CoveredSet::Nodes(_) => CoveredShape::Nodes,
+        }
+    }
+
+    /// The subjects a `carried` set no longer matches, under the [`Coverage`] its
+    /// act's rule names (`SL-264` sec-2).
     ///
     /// **The narrowing lives here** (`RV-386` F-13). Both readers of coverage
     /// currency go through this one predicate — the gate's `coverage_moved` and
     /// the change log's [`live_acts`] — each under the act's rule `Coverage`, so
     /// they frame the question differently and cannot disagree about the answer.
-    /// The `Coverage` is the rule's, looked up from the act's kind; `self` is the
-    /// shape the act stored, so a caller that hands the wrong shape to the named
-    /// coverage gets a fail-closed answer — every current subject of that
-    /// coverage — rather than a comparison in the wrong map.
+    /// The `Coverage` is the rule's, looked up from the act's kind; `carried` is
+    /// what the act stored. **The fail-closed fallback has this one home**
+    /// (`RV-389` F-2): a carried map absent, or of a shape the coverage does not
+    /// name, is every current subject of that coverage rather than a comparison
+    /// in the wrong map.
     ///
     /// - [`Coverage::InquiryMap`] compares carried-keys material: a covered node
     ///   whose material moved — or left — is stale, an uncovered node is not.
@@ -594,34 +623,32 @@ impl CoveredSet {
     ///
     /// [`live_acts`]: super::run::live_acts
     pub(crate) fn moved(
-        &self,
+        carried: Option<&CoveredSet>,
         coverage: Coverage,
         sections: &BTreeMap<DesignId, Fingerprint>,
         nodes: &BTreeMap<DesignId, NodeMaterial>,
         legacy: &BTreeSet<DesignId>,
     ) -> Vec<DesignId> {
-        match coverage {
+        match (coverage, carried) {
             // Inert by construction: the act's own recorded content cannot move,
             // so a row bound this way is invalidated only by its observed
             // conjunct — which is `governing-context-recorded`'s whole mechanism.
-            Coverage::Artefact => Vec::new(),
-            Coverage::EverySection => match self {
-                CoveredSet::Sections(covered) => covered.diff(sections),
-                CoveredSet::Nodes(_) => sections.keys().cloned().collect(),
-            },
-            Coverage::InquiryMap | Coverage::ReviewedGraph => match self {
-                CoveredSet::Nodes(covered) => {
-                    if coverage == Coverage::ReviewedGraph {
-                        covered.reviewed_graph_moved(nodes, legacy)
-                    } else {
-                        covered.moved_among_carried(nodes)
-                    }
-                }
-                CoveredSet::Sections(_) => nodes.keys().cloned().collect(),
-            },
-            // Carried by no act: the derivation quantifies over the section set
-            // instead, above. A record reaching here accounts for none of it.
-            Coverage::PerSection => sections.keys().cloned().collect(),
+            (Coverage::Artefact, _) => Vec::new(),
+            (Coverage::EverySection, Some(CoveredSet::Sections(covered))) => covered.diff(sections),
+            (Coverage::InquiryMap, Some(CoveredSet::Nodes(covered))) => {
+                covered.moved_among_carried(nodes)
+            }
+            (Coverage::ReviewedGraph, Some(CoveredSet::Nodes(covered))) => {
+                covered.reviewed_graph_moved(nodes, legacy)
+            }
+            // Fail closed. `PerSection` is carried by no act — the derivation
+            // quantifies over the section set instead — so a record reaching here
+            // accounts for none of it; every other arm is a map missing or of the
+            // wrong shape.
+            (Coverage::EverySection | Coverage::PerSection, _) => {
+                sections.keys().cloned().collect()
+            }
+            (Coverage::InquiryMap | Coverage::ReviewedGraph, _) => nodes.keys().cloned().collect(),
         }
     }
 }
@@ -650,27 +677,6 @@ impl ContentCoverage<NodeMaterial> {
         moved.dedup();
         moved
     }
-}
-
-/// The ids in `materials` whose node is **effectively** blocking (`SL-264`
-/// sec-3).
-///
-/// Read over **both** sides of a [`Coverage::ReviewedGraph`] comparison — the
-/// act's carried covered map and the run's current full map — so a key absent
-/// from the carried map reads as not blocking and a *new* blocking node is the
-/// only thing an addition contributes. The judgement is
-/// [`NodeMaterial::effective_blocking`], the same one the gate's
-/// `blocking_inquiries_open` reads, so the coverage and the gate cannot disagree
-/// about which nodes block (`RV-386` F-13).
-fn blocking_marks<'a>(
-    materials: &'a BTreeMap<DesignId, NodeMaterial>,
-    legacy: &BTreeSet<DesignId>,
-) -> BTreeSet<&'a DesignId> {
-    materials
-        .iter()
-        .filter(|(id, material)| material.effective_blocking(id, legacy))
-        .map(|(id, _)| id)
-        .collect()
 }
 
 /// DEC-125's two arms, given a home. Admissibility is DEC-138's, checked at
