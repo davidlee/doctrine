@@ -93,10 +93,14 @@ verified against source during design.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-25 · reviewing · 3e5b85e00
 
 ### Produced
+- RV-385 — re-homed RV-386's seven live findings (F-1..F-7) onto the run's pass; commits f491f490e, 3e5b85e00
+- 01a0d83e — friction record: SL-264 as an ISS-322 recurrence after ISS-476
 
 ### Learned
+- mem_01a0d17f827772b096e836f95a2887c4 — pass_stale is a lamp, not a gate; raise on the run's pass RV, never a second
 
 ### Open
+- ISS-322 — a run-minted pass cannot bind an externally conducted RV
