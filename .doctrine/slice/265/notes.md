@@ -112,7 +112,7 @@ sections attested and `design-accepted`. Design run **locked at revision 36**.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · locked (revision 36) · 73895ec9d
+fresh-as-of: 2026-09-25 · locked (revision 36) · 4b10f91f0
 
 ### Produced
 
