@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d8fb-4303-78b0-8617-6da5d2ec0a6a"
+recorded_at = "2026-09-25T14:32:20.483401484Z"
+kind = "friction"
+summary = "code-review: e2e_design_delegation probes need a copied test file; review show does not list findings compactly"
+detail = "RV-389 r2-f16: Fixture in tests/e2e_design_delegation.rs is private, so probing multi-declaration proposals meant copying the whole file to a throwaway tests/*.rs (the original had another agent's uncommitted edits). doctrine review show RV-389 printed prose without a findings index; grep of review-389.toml was needed to see F-17 already covered IMP-483."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

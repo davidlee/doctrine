@@ -350,14 +350,18 @@ is the mutation or regression each new test was shown to fail against, then reve
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-25 · PHASE-05 complete · pending-land
+fresh-as-of: 2026-09-26 · RV-389 code review done · pending-audit
 
 ### Produced
 - RV-385 — re-homed RV-386's seven live findings (F-1..F-7) onto the run's pass; commits f491f490e, 3e5b85e00
 - 01a0d83e — friction record: SL-264 as an ISS-322 recurrence after ISS-476
+- RV-389 — pre-audit code review, 18 findings terminal; repairs 00c747b7d, c793fbfc3, 166f69a9f, e58a53f34
 
 ### Learned
+- mem_01a0d8fea6887683af86b6aaf2e4b4f2 — Sparse null does not survive a TOML round-trip
 - mem_01a0d17f827772b096e836f95a2887c4 — pass_stale is a lamp, not a gate; raise on the run's pass RV, never a second
 
 ### Open
+- IMP-474 — KeyContract home duplicates WIRE_KEYS (RV-389 F-5)
+- IMP-483 — stored proposals preserve Sparse null (RV-389 F-16 follow-up)
 - ISS-322 — a run-minted pass cannot bind an externally conducted RV

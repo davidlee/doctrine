@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0d8fea6887683af86b6aaf2e4b4f2"
+memory_key = "mem.fact.design-run.sparse-null-lost-in-toml"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Sparse null does not survive a TOML round-trip"
+summary = "A stored Declaration loses every Sparse::Null: it serialises as none, TOML drops the key, and it reads back as Omitted (persist)"
+created = "2026-09-25"
+updated = "2026-09-25"
+
+[scope]
+paths = ["src/design_run/submission.rs", "src/design_run/run.rs"]
+globs = []
+commands = []
+tags = ["area:design-run"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "554a6705226b52dd439562afff004d4100dd213c"
+ref_name = "refs/heads/edge"
+checkout_state_id = "cafcf9ef0430319f40950cfb083c2b7e4361b47910651c0fc62240f9b181c2cc"
+base_commit = "e58a53f3407e009fddfe919013104c1ea9d14125"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-389"
+
