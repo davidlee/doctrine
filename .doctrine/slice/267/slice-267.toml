@@ -52,6 +52,18 @@ label = "references"
 role = "originates_from"
 target = "IMP-484"
 
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "gates every per-site sweep decision"
+target = "QUE-226"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the deferred drift-gate slice's design question"
+target = "QUE-227"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload
