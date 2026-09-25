@@ -143,9 +143,10 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "the regenerated condition table binds `initial-concerns-recorded` to `reviewed-graph`", test_file = "install/design-run-stages.md", keywords = ["reviewed-graph"], waived = false },
-  { id = "VT-2", expects = "every condition in the vocabulary still has exactly one prompt asset key", test_file = "src/design_run/prompt.rs", keywords = ["fn every_condition_has_a_distinct_key_under_the_conditions_prefix"], waived = false },
+  { id = "VT-2", expects = "the condition's own prompt states the single-act shape: the tree and its marks are what the user confirms, with no separate set to declare", test_file = "install/design-prompts/conditions/initial-concerns-recorded.md", keywords = ["there is no separate set to declare"], waived = false },
   { id = "VA-1", text = "`doctrine check gate` green, `cargo test --test architecture_layering` green, the design e2e suites green." },
   { id = "VA-2", text = "The RFC-031 fitness re-measure is recorded in the slice notes, with the run it was taken from named." },
+  { id = "VA-3", text = "The prompt store stays complete after the prose edit: `cargo test --bin doctrine every_condition_has_a_distinct_key_under_the_conditions_prefix` green, nine condition prompts and none for the designed-and-dropped `blocking-set-current`. Agent-verified rather than `VT` because the test lives in `src/design_run/prompt.rs`, which no phase of this slice modifies — a `VT` mandate there could not be attributed (IMP-209)." },
 ]
 specs        = []
 requirements = []
