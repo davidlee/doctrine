@@ -1,0 +1,151 @@
+# Implementation plan for SL-264 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-264"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order. Ids are PHASE-NN (zero-padded), immutable, never reused. Criterion
+# ids are local to their phase: EN-1 entry, EX-1 exit, VT-n test, VA-n agent,
+# VH-n human. Every VT row carries the structured mandate (test_file + keywords);
+# without it verify-vt reports UNCHECKABLE and the S3 gate is inert (IMP-209).
+
+[[phase]]
+id        = "PHASE-01"
+name      = "`needs: null` clears the set"
+objective = "Wire `Sparse::Null` into `declare_node`'s `needs` arm so `needs: null` clears the set exactly as `needs: []` does, emitting one `NeedsRemoved` per removed edge and nothing at all for a no-op — closing `ISS-481` (design sec-4; slice Objective 3). The semantics already exist in `Sparse::apply_collection`; this is wiring plus the tests that pin it, and it is deliberately first because it is independent of every other phase."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (run dr-01a0d797-a2cd-7841-96b5-b90b1f546a86, revision 38, `forward none`) and `RV-385` concluded. Design sec-4's premises re-grepped at plan time: `Sparse`, `Sparse::apply_collection` and `declare_node`'s `needs` block all resolve (`src/design_run/submission.rs`, `src/design_run/run.rs`)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`declare_node`'s `needs` arm matches `Sparse::Null` alongside `Sparse::Value`, clearing through the same set-difference path `[]` already uses (`apply_collection`). No new `ChangeEvent` token, no new roster row — the rows machinery needs nothing new." },
+  { id = "EX-2", text = "`needs: null` on a node with edges emits one `NeedsRemoved` per removed edge, with the `From`/`To` terms `[]` already produces; the two spellings collapse to the same row set by construction, not by convention." },
+  { id = "EX-3", text = "`needs: null` on an edge-free node records no mutation and emits no rows — the run's row obligation is for a mutation it *records* (`REQ-478`), so a no-op claims no rows. A real clearing advances the revision through the existing CAS (`REQ-429`/`REQ-430`); the phase claims no frozen-revision rule." },
+  { id = "EX-4", text = "Two criteria land in `src/design_run/tests.rs`: `needs_null_clears_and_emits_one_row_per_edge` and `needs_null_on_an_edge_free_node_records_no_mutation`. The existing `sparse_omission_null_and_empty_collection_differ` stays green unchanged (it pins `apply_collection`, not `declare_node`'s use of it)." },
+  { id = "EX-5", text = "No other behaviour moves: the phase's diff touches `src/design_run/run.rs` and `src/design_run/tests.rs` only — no gate, coverage, wire-key or contract code." },
+]
+verification = [
+  { id = "VT-1", expects = "`needs: null` clears with one row per removed edge", test_file = "src/design_run/tests.rs", keywords = ["fn needs_null_clears_and_emits_one_row_per_edge", "NeedsRemoved"], waived = false },
+  { id = "VT-2", expects = "an edge-free `null` records no mutation and emits no rows", test_file = "src/design_run/tests.rs", keywords = ["fn needs_null_on_an_edge_free_node_records_no_mutation"], waived = false },
+  { id = "VA-1", text = "The clearing advances the run revision and the no-op does not; the phase touches no gate, coverage, wire-key or contract code." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "`blocking` is a node attribute with two wire homes"
+objective = "Make the blocking judgement a property of the node: `blocking: Option<bool>` on `InquiryNode` and a member of `NodeMaterial`, required on the wire at creation and refused as `null`, persisted on omission, replaced by a value, with exactly one `NodeBlockingChanged` row per flip; `blocking` becomes one wire key with two homes (`Finding` create-only, `Inquiry` either-state); import seeds `blocking: true` (design sec-3; slice Objective 2; `RV-386` F-9, F-10). The set still derives from the stored legacy declaration — that moves in PHASE-04, so this phase changes the attribute and the wire, not the gate."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete. Design sec-3's premises re-grepped at plan time: `NodeMaterial` is question/provenance/parent/needs/seq (`src/design_run/inquiry.rs`); `KEY_BLOCKING` is assigned only to `IdKind::Finding` at `SubjectState::Absent` and rejected at any other kind; `KeyHome`/`KeyWhen` name the wire axes (`src/design_run/submission.rs`); `Presence` has only `Required`/`Optional`/`Sparse` (`src/design_run/payload_contract.rs`)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`InquiryNode` and `NodeMaterial` gain `blocking: Option<bool>` (`serde(default, skip_serializing_if = \"Option::is_none\")`), and it is a member of `NodeMaterial` so a flip on a covered node is a material change. `InquiryNode`'s constructors take the judgement as a parameter, so no creation path can omit it by construction rather than by a check. `None` means unjudged, and only a node that predates this change can hold it." },
+  { id = "EX-2", text = "`declare_node`'s `blocking` arm parses `Sparse<bool>`: absent at creation is refused, `null` is refused in either state (a judgement can be changed but not withdrawn), omission on update persists the prior judgement, a value replaces it. A flip emits exactly one `NodeBlockingChanged`; creation carries its judgement inside `NodeCreated` and owes no second row (`REQ-478`)." },
+  { id = "EX-3", text = "`ChangeEvent::NodeBlockingChanged` exists with its kebab token, is emittable, and is driven by the fixture ladder (`src/design_run/change_log.rs`)." },
+  { id = "EX-4", text = "The wire-key table admits a key with more than one home: `blocking` is `Finding` × `Only(Absent)` (unchanged) and `Inquiry` × `EitherState`, required at `Absent`. `inert_key` and the state axis honour every home; the kind axis refuses only when **no** row for the key names the subject's kind. `KeyContract` carries the home it applies at." },
+  { id = "EX-5", text = "Every `seed_node` caller passes `blocking: true` — `design start --from-design`'s shaping questions and imported open-question prose. An omission defaults to *visible*, never to *free*; import precedes every user act, so no act covers the node yet." },
+  { id = "EX-6", text = "`design contract --format prompt` renders `blocking` once per home rather than one unqualified optional key. `install/design-payload-contract.md` is regenerated deliberately with the ignored `regen_payload_contract_writes_the_shipped_file` test, and `the_published_payload_contract_matches_the_renderer` is green." },
+  { id = "EX-7", text = "Criteria land in `src/design_run/tests.rs`: `blocking_is_required_at_creation_and_refused_as_null`, `blocking_flip_emits_one_node_blocking_changed_row`, `blocking_key_is_admitted_at_an_inquiry_and_still_create_only_at_a_finding`, `import_seeds_blocking_true_on_every_seeded_node`." },
+  { id = "EX-8", text = "Every existing node-declaring fixture supplies `blocking`, because it is required at creation: the payload fixtures in `src/commands/design.rs`'s test module and any `tests/` envelope builders. The phase's diff therefore spans the fixtures that declare nodes; no production path acquires a default judgement." },
+]
+verification = [
+  { id = "VT-1", expects = "`blocking` required at creation, refused as `null` in either state, persisted on omission", test_file = "src/design_run/tests.rs", keywords = ["fn blocking_is_required_at_creation_and_refused_as_null"], waived = false },
+  { id = "VT-2", expects = "a flipped judgement emits exactly one `NodeBlockingChanged`", test_file = "src/design_run/tests.rs", keywords = ["fn blocking_flip_emits_one_node_blocking_changed_row", "NodeBlockingChanged"], waived = false },
+  { id = "VT-3", expects = "the two-home key is admitted at an inquiry in either state and stays create-only at a finding", test_file = "src/design_run/tests.rs", keywords = ["fn blocking_key_is_admitted_at_an_inquiry_and_still_create_only_at_a_finding"], waived = false },
+  { id = "VT-4", expects = "every import path records `blocking: true`", test_file = "src/design_run/tests.rs", keywords = ["fn import_seeds_blocking_true_on_every_seeded_node"], waived = false },
+  { id = "VA-1", text = "The published payload contract shows one `blocking` row per home and no unqualified optional row; the golden is regenerated with the ignored regen test, never hand-edited." },
+  { id = "VA-2", text = "The derivation is untouched: `blocking_inquiries_open` still reads the stored declaration at this phase, pinned as an unchanged reading rather than a promise." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Legacy act kinds are a named, read-only class"
+objective = "Name the legacy act kinds and state each reader's policy for them, so `blocking-set-declared` can stop being writable without making `admit_and_record`'s `None` arm reachable and without `live_acts` looking up a rule that does not exist (design sec-3, *Retired from writing, kept for reading* and *Legacy act kinds are a named class*; `RV-386` F-7, F-16, F-17). The class is a prerequisite for retiring the key, so both land together."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete. `every_act_kind_is_named_by_exactly_one_contract_row` is green at entry, and `requirement_for` returns `None` for a ruleless kind (`src/design_run/gate.rs`); `run.rs`'s `admit_and_record` stores a record whose rule is absent." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`ActKind::is_legacy()` names `BlockingSetDeclared`. The contract-row invariant is restated with its exception: every **non-legacy** kind is named by exactly one contract row, every **legacy** kind by none." },
+  { id = "EX-2", text = "`admit_and_record`'s `None` arm stops being \"unreachable\" and refuses a legacy kind as `Refusal::RetiredAct`, naming the kind. A submitted `blocking-set-declared` is refused and the stored set is left unchanged." },
+  { id = "EX-3", text = "`live_acts` excludes legacy kinds explicitly, in both the before and the after set. Nothing reads a legacy act's currency: the fallback reads its content whether current or not, so it can neither die nor be reported dead — a stated rule, not a skipped record (`STD-003`)." },
+  { id = "EX-4", text = "The `blocking-set-declared` key leaves the wire-key table and the parser, and the admission fault that checked its node ids retires with it. `contract_check`'s enum-token check carries an explicit legacy exception rather than silently advertising a writable act." },
+  { id = "EX-5", text = "`AgentAct::BlockingSetDeclared` and `ActKind::BlockingSetDeclared` stay in their enums, documented *legacy, read-only* — deleting either fails the parse of stored snapshots before any fallback runs. A stored `graph-reviewed`'s `confirms` digest is still compared against the stored declaration, so a `Cause::ConfirmationStale` verdict is preserved; the comparison is frozen at upgrade and can only preserve a verdict, never create one." },
+  { id = "EX-6", text = "`install/design-payload-contract.md` is regenerated again for the retired act. Criteria land in `src/design_run/tests.rs`: `submitted_legacy_act_is_refused_and_the_stored_set_unchanged`, `a_map_edit_emits_no_row_for_a_legacy_act`, `the_payload_contract_admits_legacy_enum_variants`, `a_stored_confirmation_stale_verdict_survives_the_retirement`. The tests that submit a `blocking-set-declared` today flip to asserting the refusal." },
+  { id = "EX-7", text = "`stale_conjunct_does_not_satisfy` still passes at this phase's exit. Its setup re-declared the blocking set to isolate `CoverageStale`, which is no longer writable, so the setup is re-based onto a stored legacy fixture **without changing its assertion** — the pin must survive to PHASE-04, which flips it. Deleting or weakening it here would lose the design's VT-3 pin." },
+]
+verification = [
+  { id = "VT-1", expects = "a submitted legacy act is refused and the stored set is unchanged", test_file = "src/design_run/tests.rs", keywords = ["fn submitted_legacy_act_is_refused_and_the_stored_set_unchanged", "RetiredAct"], waived = false },
+  { id = "VT-2", expects = "a map edit emits no row for the legacy act", test_file = "src/design_run/tests.rs", keywords = ["fn a_map_edit_emits_no_row_for_a_legacy_act"], waived = false },
+  { id = "VT-3", expects = "the contract admits legacy enum variants without advertising them as writable", test_file = "src/design_run/tests.rs", keywords = ["fn the_payload_contract_admits_legacy_enum_variants"], waived = false },
+  { id = "VT-4", expects = "a stored `ConfirmationStale` verdict survives the retirement", test_file = "src/design_run/tests.rs", keywords = ["fn a_stored_confirmation_stale_verdict_survives_the_retirement", "ConfirmationStale"], waived = false },
+  { id = "VA-1", text = "The legacy snapshot corpus suite (`tests/e2e_design_legacy_corpus.rs`) passes unchanged — every stored snapshot still parses and keeps its recorded verdict." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "The narrowed predicate and the derived set"
+objective = "Land the two halves that must move together or not at all: `Coverage::ReviewedGraph` with `CoveredSet::moved` parameterised by the `Coverage` an act's rule names, and the blocking set derived from one per-node effective judgement read as two sets — the marks (any lifecycle) and the open blockers (not `Resolved`) (design sec-1, sec-2, sec-3; slice Objective 1; `RV-386` F-1, F-2, F-3, F-4, F-6, F-8, F-13, F-15). Either half alone lapses the `R4` guard, because the derived row's correctness depends on the attested row's map-moved staleness."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete, so no new declaration can move the legacy set, and `stale_conjunct_does_not_satisfy` is green at entry, re-based onto a stored legacy fixture. The two attested rows currently read `Coverage::InquiryMap`, `Reach::Cumulative`, and `initial-concerns-recorded` carries `confirms: Some(BlockingSetDeclared)` (`src/design_run/gate.rs`). This entrance is the design's VT-3 pin: observed green immediately before the flip." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`Coverage::ReviewedGraph` is added with its kebab token, and `CoveredSet::moved` takes the `Coverage` the act's rule names, so `coverage_moved` and the change log's `live_acts` agree by construction and cannot disagree about which nodes block. A union-key `diff` stays for `is_current`'s whole-map users (the integrated review and lock acceptance)." },
+  { id = "EX-2", text = "`initial-concerns-recorded` becomes a single-act rule (`Attested([GraphReviewed(User)])`) over `ReviewedGraph`. Its `confirms` requirement and its `blocking-set-declared` act retire from the rule; a stored `confirms` digest is still read (PHASE-03). `user-accepts-sufficiency` keeps `InquiryMap` over carried keys." },
+  { id = "EX-3", text = "One effective-judgement function: a node's own `Some(bool)`, else its membership in the stored legacy set — resolved **per node**, so a partly-judged run keeps every unjudged legacy blocker. Read-side only; no stored shape moves (`DEC-059`)." },
+  { id = "EX-4", text = "Two reads over that one judgement. *The marks* — every node whose effective judgement is blocking, whatever its lifecycle — are what `ReviewedGraph` compares, so a new blocking node reaches the user and resolving a covered blocker does not stale the act. *The open blockers* — marks not `Resolved` — are what `blocking_inquiries_open` returns. `blocking-inquiries-dispositioned` keeps `derived` / `engine(dispositions)` / `Cumulative`, changing only its source." },
+  { id = "EX-5", text = "`stale_conjunct_does_not_satisfy` is **replaced** by the VT-1 criteria rather than deleted (`RV-386` F-15). `install/design-run-stages.md` is regenerated deliberately with the ignored `regen_artifact_writes_the_shipped_file` test, and `rendered_artifact_matches_the_embedded_bytes` is green: nine rows, `initial-concerns-recorded` now bound to `reviewed-graph`, and no `blocking-set-current` row." },
+  { id = "EX-6", text = "Criteria land in `src/design_run/tests.rs`: `adding_a_non_blocking_node_does_not_stale_the_attested_rows`, `adding_a_blocking_node_stales_the_graph_review`, `resolving_a_covered_blocker_leaves_the_graph_review_current`, `adding_then_resolving_a_blocker_leaves_it_stale`, `a_move_re_faces_for_a_covered_node_only`, `the_change_log_agrees_with_the_gate_on_every_case`, `the_mixed_legacy_map_keeps_every_unjudged_blocker`." },
+]
+verification = [
+  { id = "VT-1", expects = "an addition does not stale the attested rows, but a new blocking node does", test_file = "src/design_run/tests.rs", keywords = ["fn adding_a_non_blocking_node_does_not_stale_the_attested_rows", "fn adding_a_blocking_node_stales_the_graph_review"], waived = false },
+  { id = "VT-2", expects = "lifecycle is not shape: resolving a covered blocker leaves the act current; add-then-resolve leaves it stale", test_file = "src/design_run/tests.rs", keywords = ["fn resolving_a_covered_blocker_leaves_the_graph_review_current", "fn adding_then_resolving_a_blocker_leaves_it_stale"], waived = false },
+  { id = "VT-3", expects = "a move re-faces for a covered node only", test_file = "src/design_run/tests.rs", keywords = ["fn a_move_re_faces_for_a_covered_node_only"], waived = false },
+  { id = "VT-4", expects = "a partly-judged legacy map keeps every unjudged blocker", test_file = "src/design_run/tests.rs", keywords = ["fn the_mixed_legacy_map_keeps_every_unjudged_blocker"], waived = false },
+  { id = "VT-5", expects = "the change log agrees with the gate in every case", test_file = "src/design_run/tests.rs", keywords = ["fn the_change_log_agrees_with_the_gate_on_every_case"], waived = false },
+  { id = "VA-1", text = "VT-3 process: `stale_conjunct_does_not_satisfy` was observed green immediately before the flip and its replacement is a named criterion, not a deletion (record in the phase notes)." },
+  { id = "VA-2", text = "`blocking-inquiries-dispositioned` still reports unsatisfied for every open node whose effective judgement is blocking — the derived half demonstrably not exempted." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Prose mirrors, whole-slice integration and the fitness re-measure"
+objective = "Bring the condition's own prompt prose current, verify the slice whole, and re-measure the property that motivated it (design sec-3, sec-6 VA, sec-7; slice closure intent). The generated goldens are regenerated inside the phases that invalidate them; this phase closes what remains — the authored prompt prose, the full gate, and the on-a-real-run measurement."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete: the derived set and the narrowed predicate are in place, and both `install/design-run-stages.md` and `install/design-payload-contract.md` are regenerated and green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`install/design-prompts/conditions/initial-concerns-recorded.md` states the single-act shape — show the map as an indented tree with the blocking ones marked, and record the review of it in one submission — with no separate blocking-set declaration to confirm. No prompt file is minted for `blocking-set-current`, the condition the design dropped; every condition in the vocabulary still has its prompt and every prompt a condition." },
+  { id = "EX-2", text = "`doctrine check gate` is green (format, clippy at zero warnings, the fleet suites), `cargo test --test architecture_layering` passes, and the design e2e suites (`tests/e2e_design_*.rs`) pass." },
+  { id = "EX-3", text = "The slice's selectors still name the surface the plan touched — `src/design_run/**`, `install/design-prompts/conditions/**`, `install/design-payload-contract.md`, `install/design-run-stages.md` — and no changed path escaped them." },
+  { id = "EX-4", text = "VA: on a real run, a node added with `blocking: false` after `user-accepts-sufficiency` does not re-face the human gates, while a node added `blocking: true` does. Re-measured against `RFC-031`'s fitness measure (nodes and edges added after `user-accepts-sufficiency`) and recorded in the slice notes." },
+  { id = "EX-5", text = "Any probe that shows behaviour the design did not claim is reported, not absorbed; a substantive design problem re-enters `/design` rather than being settled here." },
+]
+verification = [
+  { id = "VT-1", expects = "the regenerated condition table binds `initial-concerns-recorded` to `reviewed-graph`", test_file = "install/design-run-stages.md", keywords = ["reviewed-graph"], waived = false },
+  { id = "VT-2", expects = "every condition in the vocabulary still has exactly one prompt asset key", test_file = "src/design_run/prompt.rs", keywords = ["fn every_condition_has_a_distinct_key_under_the_conditions_prefix"], waived = false },
+  { id = "VA-1", text = "`doctrine check gate` green, `cargo test --test architecture_layering` green, the design e2e suites green." },
+  { id = "VA-2", text = "The RFC-031 fitness re-measure is recorded in the slice notes, with the run it was taken from named." },
+]
+specs        = []
+requirements = []
