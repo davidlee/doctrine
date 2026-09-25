@@ -8,13 +8,14 @@ title = "design review of SL-264"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+concluded = true
 
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-264"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Node blocking key has two incompatible declaration homes"
 detail = """
@@ -29,7 +30,7 @@ Both points verified: payload_contract.rs:1398-1402 has one unqualified KeyContr
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Slice scope and verification still describe the retired set-act design"
 detail = """
@@ -44,7 +45,7 @@ Verified at slice-264.md:156-158 and :184-190. The first-pass bullet is correcte
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Decision amendment remains internally unsettled"
 detail = """
@@ -59,7 +60,7 @@ Verified: record-300.md and record-301.md summary prose still stated the pre-ame
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Resolved blockers make ReviewedGraph stale and can revive an unseen addition"
 detail = """
@@ -74,7 +75,7 @@ Verified: gate.rs:1536-1559 drops a node from the open set on resolution while N
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Legacy blocking-set act remains writable after its rule retires"
 detail = """
@@ -89,7 +90,7 @@ Verified: run.rs:785-807 admit_and_record skips admission when requirement_for r
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Rule-based live_acts lookup has no coverage for stored legacy declarations"
 detail = """
@@ -104,7 +105,7 @@ Verified: requirement_for (gate.rs:758-772) returns None for a ruleless kind and
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The claimed condition-row loss conflicts with the generated table"
 detail = """
