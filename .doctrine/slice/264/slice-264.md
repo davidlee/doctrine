@@ -95,6 +95,11 @@ rather than a foregone conclusion (see `OQ-1`).
   set that has since changed, so re-asking is honest. The position recorded in
   `RFC-031` (2026-09-25, at the operator's direction) is that it survives.
   `/design` either adopts that or records why not — it may not leave it implicit.
+- **OQ-4 — blocking, or warning?** If the design keeps a "map moved ⇒ the
+  blocking set is re-declared" obligation (`R4`), is that obligation blocking or
+  a warning? `DEC-101` supplies the precedent for a stale discharge that *warns
+  without blocking*; `DEC-120` supplies the case against the judgement surviving
+  silently.
 - **R1 — loosening invalidation is a truthfulness change.** `RFC-031` T1 was about
   the exit signal telling the truth; making a condition stop re-deriving is the
   same class of change in the other direction. A condition that *should* have
@@ -110,13 +115,24 @@ rather than a foregone conclusion (see `OQ-1`).
   `cursor unset`, and the map's largest, most-connected instances are the runs that
   kept adding to it during inquiry. Growth is permitted and exercised; the
   disincentive is cost, not refusal.
+- **R4 — the guard is coupled** *(found in the pre-design research round, and it
+  narrows `OQ-1`)*. `blocking-inquiries-dispositioned` quantifies over the
+  **declared** blocking set, and its own doc comment says a declaration whose map
+  has moved *"goes stale there rather than being silently re-read here"*
+  (`src/design_run/gate.rs`, above `blocking_inquiries_open`). So the derived
+  row's correctness **depends on** the attested rows' map-moved staleness.
+  Narrowing the binding without preserving a "map moved ⇒ the set is re-declared"
+  path would let a newly-added blocking node go unblocked — the defect `VT-1`
+  exists to catch. This is why `OQ-1(A)` alone is unsafe and `OQ-1(B)` is the
+  likely answer. Evidence: `research/research.md` cross-thread finding 1.
 
 ## Verification / closure intent
 
 - **VT-1**: a declaration adding a node (a shape change) after
   `user-accepts-sufficiency` is attested does **not** void it — while
-  `blocking-inquiries-dispositioned` still reports unsatisfied for every open
-  blocking node. The derived half must be demonstrably *not* exempted.
+  `blocking-inquiries-dispositioned` still reports unsatisfied for every
+  **declared** blocking node, and a newly-added *blocking* node still cannot pass
+  unblocked (`R4`). The derived half must be demonstrably *not* exempted.
 - **VT-2**: a declaration supplying `needs: null` clears the set and emits one
   `NeedsRemoved` per removed edge; `null` on a node with no edges is a no-op *with
   no rows* — absence of change is not failure to report.
