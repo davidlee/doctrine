@@ -159,7 +159,6 @@ enum ReviewPolicy  tagging: bare
 enum ActKind  tagging: bare
   governance-confirmed
   graph-reviewed
-  blocking-set-declared
   sufficiency-accepted
   drafting-ready
   section-reviewed
@@ -170,9 +169,8 @@ enum ReviewDisposition  tagging: external   payload nests UNDER the token
   conducted  { review  text  required }
   waived     { reason  text  required }
 
-enum AgentAct  tagging: external   payload nests UNDER the token
-  blocking-set-declared  { blocking  [id(inq-)]  required }
-  drafting-ready         — a BARE STRING, not an object
+enum AgentAct  tagging: bare
+  drafting-ready
 
 extern knowledge::RecordKind  unknown-keys: refused   (a misspelt key is refused)
   Each token below is one admissible value; the rows under it are the keys it opens.

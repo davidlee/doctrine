@@ -782,25 +782,30 @@ impl ActRecord {
 /// **Admission precedes storage.** A refused record leaves the snapshot
 /// untouched, exactly as the two former `admit_against` call sites did.
 ///
-/// The rule's `None` arm is unreachable rather than a case, and
-/// `every_act_kind_is_named_by_exactly_one_contract_row` is what says so: an act
-/// no contract row names is required by no condition, so there is no requirement
-/// for the record to correspond to and no gate that could ever read it. The
-/// engine slots are filled off the same `Option`, so such a record carries none of
-/// them.
+/// The rule's `None` arm used to be unreachable and stored the record unchecked.
+/// It is now the arm a **legacy** kind lands on (`ActKind::is_legacy`: a kind
+/// that stays readable but has no rule), so it **refuses** rather than stores:
+/// a record written against no rule is required by no condition and could never
+/// be read, and a submitted `blocking-set-declared` would otherwise replace the
+/// stored legacy set and move the effective judgement of every unjudged node
+/// (`RV-386` F-16). `every_act_kind_is_named_by_exactly_one_contract_row` is what
+/// says no *non-legacy* kind reaches this arm.
 fn admit_and_record(
     next: &mut DesignSnapshot,
     record: ActRecord,
     rule: Option<ActRule>,
     derived: &DerivedInput,
 ) -> Result<Vec<Pending>, Refusal> {
-    if let Some(rule) = rule {
-        admit_act(
-            record.admission_view(),
-            rule,
-            derived.gate.observed_review.as_ref(),
-        )?;
-    }
+    let Some(rule) = rule else {
+        return Err(Refusal::RetiredAct {
+            kind: record.kind(),
+        });
+    };
+    admit_act(
+        record.admission_view(),
+        rule,
+        derived.gate.observed_review.as_ref(),
+    )?;
     let id = record.id().clone();
     let act = PayloadTerm::token(PayloadKey::Act, record.kind().as_str())?;
     let recorded = Pending::about(ChangeEvent::ActRecorded, &id, vec![act.clone()])?;
@@ -2051,6 +2056,17 @@ const fn outcome_label(claim: DischargeClaim) -> &'static str {
 /// that an act "leaves the set by being replaced" stood here until `ISS-367`
 /// showed it never had; [`admit_and_record`] owns that row now, at the store
 /// that knows a replacement happened.
+///
+/// **Legacy kinds are excluded, deliberately and in both sets** (`SL-264` sec-3,
+/// `RV-386` F-17). A legacy act ([`ActKind::is_legacy`]) is one nothing reads
+/// the *currency* of: the fallback that still consumes its content
+/// ([`super::gate`]'s `blocking_inquiries_open`) reads it whether it is current
+/// or not. So a legacy act can neither die nor be reported dead, and letting it
+/// into this set would make a map edit delete it here and report an
+/// [`ChangeEvent::ActInvalidated`] the run never performed. It is a stated rule,
+/// not a filter that happens to drop a record (`STD-003`): the exclusion is by
+/// kind, named once, and applies to the before set and the after set alike so
+/// the difference is empty.
 pub(super) fn live_acts(snapshot: &DesignSnapshot) -> BTreeSet<(ActKind, DesignId)> {
     let sections = snapshot.sections.fingerprints();
     let nodes = snapshot.map.inquiry.materials();
@@ -2061,14 +2077,17 @@ pub(super) fn live_acts(snapshot: &DesignSnapshot) -> BTreeSet<(ActKind, DesignI
         .acts
         .acts
         .iter()
-        .filter(|held| live(held.covered.as_ref()))
+        .filter(|held| !held.act.is_legacy() && live(held.covered.as_ref()))
         .map(|held| (held.act, held.id.clone()))
         .chain(
             snapshot
                 .declarations
                 .declarations
                 .iter()
-                .filter(|held| live(held.covered.as_ref()))
+                .filter(|held| {
+                    let kind = ActKind::from(held.act.kind());
+                    !kind.is_legacy() && live(held.covered.as_ref())
+                })
                 .map(|held| (ActKind::from(held.act.kind()), held.id.clone())),
         )
         .collect()
@@ -2151,7 +2170,7 @@ fn invalidation_rows(
 
 #[cfg(test)]
 mod tests {
-    use super::super::attestation::{AgentAct, ReviewDisposition};
+    use super::super::attestation::{AgentAct, AgentDeclaration, ReviewDisposition};
     use super::super::fixture::declared;
     use super::super::refusal::ActFault;
     use super::super::submission::{
@@ -2290,16 +2309,17 @@ mod tests {
         }
     }
 
-    /// The one-submission case: an agent declares and the user confirms, in one
-    /// batch, with no caller-computed digest anywhere.
+    /// The one-submission case, now a **refusal**: a legacy declaration is
+    /// refused at the declaration step, before the checkpoint act beside it is
+    /// recorded.
     ///
-    /// This is what the build order buys. The declaration is constructed and
-    /// fingerprinted at step 4 *before* the act that confirms it, so `confirms`
-    /// can be filled from the record the engine has just written — the caller
-    /// never names a digest, and could not, since the claim it would have to hash
-    /// is the engine's own encoding.
+    /// This is what the build order buys here. The declaration is constructed and
+    /// fingerprinted at step 4 *before* the act that would have confirmed it, and
+    /// that step is where `SL-264` sec-3's refusal fires — so a batch naming a
+    /// retired act stores nothing at all, not a half-applied act the declaration
+    /// failed to precede.
     #[test]
-    fn a_declaration_and_the_act_confirming_it_arrive_in_one_submission() {
+    fn a_legacy_declaration_is_refused_before_its_confirming_act() {
         let prior = run_with_a_map();
         let request = ApplyRequest {
             agent_declaration: Some(declaring(
@@ -2312,31 +2332,53 @@ mod tests {
             ..payload(&prior)
         };
 
-        let applied = apply(
-            &prior,
-            &request,
-            &Crossing::Ordinary,
-            &derived_claiming("sha256:claim"),
-            "sha256:pay",
-            &Resolution::default(),
-        )
-        .expect("a declaration and its confirmation are one submission");
-
-        let [declared] = applied.snapshot.declarations.declarations.as_slice() else {
-            panic!("the batch records one declaration");
-        };
-        let [act] = applied.snapshot.acts.acts.as_slice() else {
-            panic!("the batch records one act");
-        };
         assert_eq!(
-            act.confirms.as_ref(),
-            Some(&declared.fingerprint),
-            "the act confirms the declaration this batch wrote"
+            apply(
+                &prior,
+                &request,
+                &Crossing::Ordinary,
+                &derived_claiming("sha256:claim"),
+                "sha256:pay",
+                &Resolution::default(),
+            ),
+            Err(Refusal::RetiredAct {
+                kind: ActKind::BlockingSetDeclared,
+            }),
+            "a submitted legacy declaration is refused, naming its kind"
+        );
+    }
+
+    /// `SL-264` sec-3 — the rule-less arm refuses a legacy kind **directly**.
+    ///
+    /// With the `blocking-set-declared` key gone from the wire no submission
+    /// reaches this arm, so the guard is pinned where it lives: a legacy record
+    /// handed to `admit_and_record` against no rule is refused, naming its kind,
+    /// instead of stored unchecked (`RV-386` F-16). The stored set is what a
+    /// wrong admission would have moved.
+    #[test]
+    fn admit_and_record_refuses_a_legacy_kind_with_no_rule() {
+        let mut run = run_with_a_map();
+        let before = run.declarations.declarations.clone();
+        let record = ActRecord::Agent(AgentDeclaration {
+            id: id("agd-blocking"),
+            act: AgentAct::BlockingSetDeclared {
+                blocking: [id("inq-1")].into(),
+            },
+            basis: "these block drafting".to_owned(),
+            turn: None,
+            covered: None,
+            fingerprint: Fingerprint::new("sha256:claim"),
+        });
+        assert_eq!(
+            admit_and_record(&mut run, record, None, &DerivedInput::default()).err(),
+            Some(Refusal::RetiredAct {
+                kind: ActKind::BlockingSetDeclared,
+            }),
+            "a legacy kind with no rule is refused, not stored"
         );
         assert_eq!(
-            declared.fingerprint,
-            Fingerprint::new("sha256:claim"),
-            "the claim digest is the shell's, not a caller's"
+            run.declarations.declarations, before,
+            "the refusal precedes the store, so the stored set is unchanged"
         );
     }
 
@@ -2877,16 +2919,16 @@ mod tests {
     /// case is what let one of them go unrepaired while the other was fixed
     /// (`RV-365` `F-1`), and a test that cannot fail for one store alone cannot
     /// report that.
+    ///
+    /// `DraftingReady` is the act, not `BlockingSetDeclared`: `SL-264` sec-3
+    /// retires the blocking set from writing, and `DraftingReady` is the one
+    /// agent declaration a run still records. The behaviour under test is the
+    /// store's replacement-by-kind, which is act-agnostic.
     #[test]
     fn a_same_kind_agent_declaration_replacement_emits_its_invalidation() {
         let prior = run_with_a_map();
         let request = ApplyRequest {
-            agent_declaration: Some(declaring(
-                AgentAct::BlockingSetDeclared {
-                    blocking: [id("inq-1")].into(),
-                },
-                "these block drafting",
-            )),
+            agent_declaration: Some(declaring(AgentAct::DraftingReady, "the draft is ready")),
             ..payload(&prior)
         };
         let once = apply(

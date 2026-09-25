@@ -1258,15 +1258,15 @@ impl AgentActDeclaration {
     /// `payload_contract::AGENT_ACT_DECLARATION`. No value may be one its own
     /// `skip_serializing_if` would drop, or the key leaves the wire and the
     /// key-set equality passes on a smaller set.
+    ///
+    /// `DraftingReady` is the act, not `BlockingSetDeclared`: `SL-264` sec-3
+    /// retires the blocking set from writing, and `DraftingReady` is the one
+    /// agent act that stays writable.
     #[cfg(test)]
     pub(super) fn fully_populated() -> AgentActDeclaration {
         AgentActDeclaration {
-            act: AgentAct::BlockingSetDeclared {
-                blocking: std::collections::BTreeSet::from([
-                    DesignId::parse("inq-0").expect("a literal id")
-                ]),
-            },
-            basis: "these three gate the draft".to_owned(),
+            act: AgentAct::DraftingReady,
+            basis: "the draft is ready".to_owned(),
             turn: Some("turn-7".to_owned()),
         }
     }

@@ -25,6 +25,7 @@ use super::attestation::{
     Reviewer,
 };
 use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm, ValueKind};
+use super::contract_check::refuse_unknown_keys;
 use super::fixture::{
     BLOCKING_NODE, OPEN_NODE, PASS, SECTION_A, SECTION_B, attest, blocking_set_declared,
     checkpoint_act, cleared, declared, drafting_ready, id, pass_over, run_holding, section,
@@ -40,11 +41,12 @@ use super::inquiry::{
     Disposition, InquiryLifecycle, InquiryMap, InquiryNode, NodeMaterial, Provenance,
 };
 use super::payload_contract::{
-    ACCEPTANCE_DECLARATION, AGENT_ACT_DECLARATION, CHECKPOINT_ACT_DECLARATION, CREATE_RECORD,
-    DECLARATION, DISCHARGE_DECLARATION, Fields, KeyContract, MapKey, PAYLOAD, Placement, Presence,
-    RETIRED_KEYS, REVIEW_POLICY_DECLARATION, RetiredKey, STAGE, STAGE_DECLARATION,
-    TRAVERSAL_DECLARATION, Tagging, TokenSource, TypeContract, TypeForm, UnknownKeys,
-    VariantContract, VariantPayload, WireType, claims, closure_types, place, required_keys,
+    ACCEPTANCE_DECLARATION, ACT_KIND, AGENT_ACT, AGENT_ACT_DECLARATION, CHECKPOINT_ACT_DECLARATION,
+    CREATE_RECORD, DECLARATION, DISCHARGE_DECLARATION, Fields, KeyContract, MapKey, PAYLOAD,
+    Placement, Presence, RETIRED_KEYS, REVIEW_POLICY_DECLARATION, RetiredKey, STAGE,
+    STAGE_DECLARATION, TRAVERSAL_DECLARATION, Tagging, TokenSource, TypeContract, TypeForm,
+    UnknownKeys, VariantContract, VariantPayload, VariantSample, WireType, claims, closure_types,
+    is_legacy_token, place, required_keys,
 };
 use super::prompt::contract_block;
 use super::refusal::{ActFault, Refusal};
@@ -1349,10 +1351,12 @@ fn the_contract_table_classifies_every_condition_as_the_design_says() {
         );
     }
 
-    // The three slots the `EX-4` const assertion polices, each named by exactly
-    // one row. The assertion proves no row names a slot its record shape lacks;
-    // this proves the rows that SHOULD name one still do — the complement, which
-    // a const predicate over an empty set would also satisfy.
+    // The `EX-4` const assertion polices the slots a record shape cannot hold.
+    // This proves the rows that SHOULD name a slot still do — the complement,
+    // which a const predicate over an empty set would also satisfy. `confirms`
+    // is no longer among them: `SL-264` sec-3 retires the link from the rule
+    // (`initial-concerns-recorded` names none), so a stored digest is read
+    // through `Cause::ConfirmationStale` rather than through a row.
     let rules: Vec<(Condition, &AttestationRule)> = CONTRACTS
         .iter()
         .filter_map(|(condition, contract)| match &contract.derivation {
@@ -1374,8 +1378,9 @@ fn the_contract_table_classifies_every_condition_as_the_design_says() {
         vec![Condition::ReviewDispositionAttested]
     );
     assert_eq!(
-        named(|act, _| act.confirms == Some(AgentActKind::BlockingSetDeclared)),
-        vec![Condition::InitialConcernsRecorded]
+        named(|act, _| act.confirms.is_some()),
+        Vec::<Condition>::new(),
+        "no row names a confirmation any more — the `confirms` link left the rule"
     );
     assert_eq!(
         named(|_, rule| rule
@@ -1400,13 +1405,16 @@ fn the_contract_table_classifies_every_condition_as_the_design_says() {
         vec![Condition::SectionAttestationsCurrent]
     );
 
-    // DEC-121's two-act conjunction is two acts, and stays two.
+    // DEC-121's two actors survive in one act: the review is the single
+    // requirement, and the retired `blocking-set-declared` half no longer names
+    // a row (SL-264 sec-3).
     let concerns = rules
         .iter()
         .find(|(condition, _)| *condition == Condition::InitialConcernsRecorded)
         .expect("the row exists")
         .1;
-    assert_eq!(concerns.acts.len(), 2);
+    assert_eq!(concerns.acts.len(), 1);
+    assert_eq!(concerns.acts[0].act, ActKind::GraphReviewed);
     assert_eq!(concerns.binding.coverage, Coverage::InquiryMap);
 }
 
@@ -1441,14 +1449,13 @@ fn the_remedy_renders_from_the_rule_including_the_row_with_two_arms() {
         "the user performs `sufficiency-accepted` (you record it on their assent)"
     );
 
-    // Two acts by two actors, still one way through — and the confirmation is
-    // rendered, because the ordering is part of what must be done.
-    let concerns = remedy(Condition::InitialConcernsRecorded);
-    assert!(
-        concerns.contains("naming the current `blocking-set-declared`"),
-        "the confirmation rides the remedy: {concerns}"
+    // The one-act row names the actor and the act's own token — and, for a user
+    // act, who records it (IMP-467): the user assents, the agent submits. The
+    // retired `blocking-set-declared` confirmation no longer appears.
+    assert_eq!(
+        remedy(Condition::InitialConcernsRecorded),
+        "the user performs `graph-reviewed` (you record it on their assent)"
     );
-    assert!(concerns.contains("the agent performs `blocking-set-declared`"));
 
     // The lane-resolved row does not pretend to know the lanes.
     let sections = remedy(Condition::SectionAttestationsCurrent);
@@ -1457,8 +1464,6 @@ fn the_remedy_renders_from_the_rule_including_the_row_with_two_arms() {
         sections.contains("(you record the human lane's on the user's assent)"),
         "{sections}"
     );
-    // An agent act needs no recording note: the agent is the actor.
-    assert!(!concerns.contains("the agent performs `blocking-set-declared` ("));
 
     // The ninth row: two doors, and the remedy says so.
     let disposition = remedy(Condition::ReviewDispositionAttested);
@@ -2037,27 +2042,26 @@ fn an_observed_map_that_is_not_its_rules_fact_list_is_refused() {
     );
 }
 
-/// Correspondence row 3: a confirmation is present exactly when the rule names a
-/// declaration.
+/// Correspondence row 3: a carried confirmation is refused where no rule names
+/// one — and `SL-264` sec-3 leaves every rule naming none.
 ///
-/// The absent direction is what keeps DEC-121's ordering — *the agent declares,
-/// the user confirms* — from being droppable: a `graph-reviewed` that confirms
-/// nothing would correspond to its rule perfectly if presence were not required.
+/// The link `DEC-121` drew — *the agent declares, the user confirms* — left the
+/// rule with the `blocking-set-declared` act, and its digest is now read only as
+/// a frozen legacy read ([`Cause::ConfirmationStale`]). So the one direction left
+/// here is the refusal: a newly recorded act may not carry a confirming digest,
+/// which is what keeps the frozen read from ever *creating* a confirmation.
 #[test]
-fn a_confirmation_is_required_exactly_where_its_rule_names_a_declaration() {
+fn a_confirmation_is_refused_where_no_rule_names_one() {
     let mut unconfirmed = checkpoint_act("cpa-1", ActKind::GraphReviewed, "steered the graph");
     unconfirmed.covered = Some(covered_nodes());
-    assert_eq!(
-        faults(
+    assert!(
+        admit_act(
             RecordedAct::Checkpoint(&unconfirmed),
             rule_for(ActKind::GraphReviewed),
-            None,
-            ActKind::GraphReviewed
-        ),
-        vec![ActFault::Confirmation {
-            expected: Some(AgentActKind::BlockingSetDeclared),
-            carried: false,
-        }]
+            None
+        )
+        .is_ok(),
+        "a fresh `graph-reviewed` carries no confirmation and corresponds exactly"
     );
 
     let mut gratuitous = checkpoint_act("cpa-2", ActKind::SufficiencyAccepted, "enough asked");
@@ -2242,42 +2246,6 @@ fn a_waiver_with_a_blank_reason_is_refused() {
     );
 }
 
-/// A declared blocking set names nodes of the map it was declared over.
-#[test]
-fn a_blocking_set_naming_nodes_outside_its_coverage_is_refused() {
-    let map = map_of(vec![InquiryNode::open(
-        id("inq-1"),
-        "the one on the map?",
-        Provenance::UserDirected,
-        Some(false),
-    )]);
-    let mut declared = blocking_set_declared("agd-1", &["inq-1", "inq-9"]);
-    declared.covered = Some(CoveredSet::Nodes(ContentCoverage::of(map.materials())));
-    assert_eq!(
-        faults(
-            RecordedAct::Agent(&declared),
-            rule_for(ActKind::BlockingSetDeclared),
-            None,
-            ActKind::BlockingSetDeclared
-        ),
-        vec![ActFault::BlockingSetUnknownNodes {
-            nodes: vec![id("inq-9")],
-        }]
-    );
-
-    let held = blocking_set_declared("agd-2", &["inq-1"]);
-    let mut held = held;
-    held.covered = Some(CoveredSet::Nodes(ContentCoverage::of(map.materials())));
-    assert!(
-        admit_act(
-            RecordedAct::Agent(&held),
-            rule_for(ActKind::BlockingSetDeclared),
-            None
-        )
-        .is_ok()
-    );
-}
-
 /// **Every** way an act failed its rule, never the first.
 ///
 /// The control this buys is a round-trip: an agent that fixes the coverage and
@@ -2309,15 +2277,17 @@ fn an_act_failing_twice_reports_twice() {
     );
 }
 
-/// `requirement_for` is a **total** function of the generated table, and this is
-/// what says so.
+/// `requirement_for` is a **total** function over the non-legacy vocabulary, and
+/// this is what says so.
 ///
 /// The signature returns `Option` because a search over data cannot be total to
-/// the type system. What makes the `None` arm unreachable is this: every act in
-/// the closed vocabulary is named by exactly one contract row. An act named by
-/// none would be an unrequireable act; one named by two would make *which rule*
-/// ambiguous with nothing to break the tie, and `requirement_for` would silently
-/// answer with whichever row came first.
+/// the type system. What makes the `None` arm unreachable for a non-legacy act is
+/// this: every **non-legacy** act in the closed vocabulary is named by exactly one
+/// contract row, and every **legacy** kind ([`ActKind::is_legacy`], `SL-264`
+/// sec-3) by none — it stays readable with no rule. An act named by none would be
+/// an unrequireable act; one named by two would make *which rule* ambiguous with
+/// nothing to break the tie, and `requirement_for` would silently answer with
+/// whichever row came first.
 #[test]
 fn every_act_kind_is_named_by_exactly_one_contract_row() {
     for act in ActKind::ALL {
@@ -2331,13 +2301,27 @@ fn every_act_kind_is_named_by_exactly_one_contract_row() {
             })
             .map(|(condition, _)| condition.as_str())
             .collect();
-        assert_eq!(naming.len(), 1, "`{}` is named by {naming:?}", act.as_str());
-        assert_eq!(
-            requirement_for(act).map(|rule| rule.required.act),
-            Some(act),
-            "`{}` resolves to its own requirement",
-            act.as_str()
-        );
+        if act.is_legacy() {
+            assert!(
+                naming.is_empty(),
+                "legacy `{}` is named by no contract row, and this one names it from {naming:?}",
+                act.as_str()
+            );
+            assert_eq!(
+                requirement_for(act),
+                None,
+                "legacy `{}` resolves to no rule",
+                act.as_str()
+            );
+        } else {
+            assert_eq!(naming.len(), 1, "`{}` is named by {naming:?}", act.as_str());
+            assert_eq!(
+                requirement_for(act).map(|rule| rule.required.act),
+                Some(act),
+                "`{}` resolves to its own requirement",
+                act.as_str()
+            );
+        }
     }
 }
 
@@ -2458,12 +2442,13 @@ fn wrong_actor_does_not_satisfy() {
     assert!(run.sections.find(&id(SECTION_B)).is_some());
 }
 
-/// `VT-1` — a conjunction that loses one half says which half.
+/// `VT-1` — a lost confirmation says which declaration went missing.
 ///
-/// DEC-121 makes `initial-concerns-recorded` two acts by two actors precisely so
-/// a refusal can name the missing one. Both causes are asserted, in order: the
-/// user's review now confirms a declaration that is not there, and the agent's
-/// declaration is missing outright.
+/// DEC-121 made `initial-concerns-recorded` two acts by two actors precisely so a
+/// refusal can name the missing one. `SL-264` sec-3 retires the agent's act from
+/// the rule, but the user's review still carries the digest of the declaration it
+/// confirmed: with the declaration gone, that carried digest matches nothing and
+/// the one cause is the stale confirmation, naming `BlockingSetDeclared`.
 #[test]
 fn missing_conjunct_names_the_missing_act() {
     let (mut run, derived) = cleared();
@@ -2473,16 +2458,10 @@ fn missing_conjunct_names_the_missing_act() {
 
     assert_eq!(
         causes_of(Condition::InitialConcernsRecorded, &run, &derived),
-        vec![
-            Cause::ConfirmationStale {
-                act: ActKind::GraphReviewed,
-                declaration: AgentActKind::BlockingSetDeclared,
-            },
-            Cause::ActMissing {
-                act: ActKind::BlockingSetDeclared,
-                lanes: vec![ActorClass::Agent],
-            },
-        ]
+        vec![Cause::ConfirmationStale {
+            act: ActKind::GraphReviewed,
+            declaration: AgentActKind::BlockingSetDeclared,
+        }]
     );
 }
 
@@ -3009,23 +2988,188 @@ fn coverage_does_not_move_the_declaration_fingerprint() {
     let causes = causes_of(Condition::InitialConcernsRecorded, &run, &derived);
     assert_eq!(
         causes,
-        vec![
-            Cause::CoverageStale {
-                act: ActKind::GraphReviewed,
-                moved: vec![open.clone()],
-            },
-            Cause::CoverageStale {
-                act: ActKind::BlockingSetDeclared,
-                moved: vec![open],
-            },
-        ],
-        "both acts were given over the map, so both lost their coverage"
+        vec![Cause::CoverageStale {
+            act: ActKind::GraphReviewed,
+            moved: vec![open],
+        }],
+        "the review was given over the map, so it lost its coverage — and the \
+         legacy declaration, named by no rule, is not a conjunct any more"
     );
     assert!(
         !causes
             .iter()
             .any(|cause| matches!(*cause, Cause::ConfirmationStale { .. })),
         "and `confirms` still matches, because nothing about the claim moved"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// SL-264 PHASE-03 — legacy act kinds are a named, read-only class
+// (design sec-3; `RV-386` F-7, F-16, F-17).
+// ---------------------------------------------------------------------------
+
+/// `VT-1` — a submitted legacy act is refused and the stored set is left
+/// standing.
+///
+/// The class lands before the label leaves the wire (`RV-386` F-16): without the
+/// refusal a submitted `blocking-set-declared` replaces the stored legacy set
+/// and moves the effective judgement of every node that holds none of its own.
+/// The refusal names the kind, so the caller learns which act is retired rather
+/// than only that something was.
+#[test]
+fn submitted_legacy_act_is_refused_and_the_stored_set_unchanged() {
+    let (run, _derived) = cleared();
+    let before = run.declarations.declarations.clone();
+
+    let refused = apply(
+        &run,
+        &ApplyRequest {
+            agent_declaration: Some(AgentActDeclaration {
+                act: AgentAct::BlockingSetDeclared {
+                    blocking: BTreeSet::from([id(OPEN_NODE)]),
+                },
+                basis: "a second look says this one blocks".to_owned(),
+                turn: None,
+            }),
+            ..ApplyRequest::bare(SubmissionEnvelope {
+                run_uid: run.run.uid.clone(),
+                known_revision: run.run.revision,
+                submission_id: "s1".to_owned(),
+            })
+        },
+        &Crossing::Ordinary,
+        &DerivedInput {
+            declaration_fingerprint: Some(Fingerprint::new("sha256:claimed")),
+            ..DerivedInput::default()
+        },
+        "sha256:pay",
+        &Resolution::default(),
+    );
+
+    assert_eq!(
+        refused.err(),
+        Some(Refusal::RetiredAct {
+            kind: ActKind::BlockingSetDeclared,
+        }),
+        "a legacy act is retired from writing, and the refusal names it"
+    );
+    assert_eq!(
+        run.declarations.declarations, before,
+        "the stored legacy set is unchanged"
+    );
+}
+
+/// `VT-2` — a map edit emits no row for the legacy act.
+///
+/// `live_acts` excludes legacy kinds by stated policy, in the before set and the
+/// after set alike, so the set difference is empty and nothing reports an act
+/// dead whose currency nothing reads (`RV-386` F-17, `STD-003`). The control is
+/// the user's `graph-reviewed`, which IS currency-read and does die when the map
+/// moves: the exclusion discriminates by kind, not by coverage.
+#[test]
+fn a_map_edit_emits_no_row_for_a_legacy_act() {
+    let (run, _derived) = cleared();
+    let edit = declare_over(
+        &run,
+        r#"{"subject": "inq-3", "question": "what did the review not see?", "blocking": false}"#,
+    )
+    .expect("a new node with a judgement applies");
+
+    let invalidated = subjects(&edit, ChangeEvent::ActInvalidated);
+    assert!(
+        !invalidated.contains(&id("agd-blocking")),
+        "no row for the legacy declaration: {invalidated:?}"
+    );
+    assert!(
+        invalidated.contains(&id("cpa-graph")),
+        "the control: the user's map-bound review does die: {invalidated:?}"
+    );
+}
+
+/// `VT-4` — a stored `ConfirmationStale` verdict survives the retirement.
+///
+/// The `confirms` link left the rule with the legacy act, but not the read: a
+/// stored `graph-reviewed` carries the digest of the declaration it confirmed,
+/// and when that no longer names the stored declaration the act reads stale. The
+/// comparison is carried-driven and **frozen at upgrade** — with no declaration
+/// writable, nothing can create a fresh verdict — so the very write that is
+/// refused leaves it standing.
+#[test]
+fn a_stored_confirmation_stale_verdict_survives_the_retirement() {
+    let (mut run, derived) = cleared();
+    // A stored snapshot in which the agent changed the set after the user's
+    // review: the carried digest no longer names the stored declaration.
+    let mut relisted = blocking_set_declared("agd-blocking", &[BLOCKING_NODE, OPEN_NODE]);
+    relisted.covered = Some(CoveredSet::Nodes(ContentCoverage::of(
+        run.map.inquiry.materials(),
+    )));
+    relisted.fingerprint = Fingerprint::new("sha256:agd-blocking-relisted");
+    run.declarations.record(relisted);
+
+    let stale = || causes_of(Condition::InitialConcernsRecorded, &run, &derived);
+    assert_eq!(
+        stale(),
+        vec![Cause::ConfirmationStale {
+            act: ActKind::GraphReviewed,
+            declaration: AgentActKind::BlockingSetDeclared,
+        }],
+        "the carried digest no longer names the stored declaration"
+    );
+
+    // The control: the same run with the digest naming the stored declaration
+    // holds, so the verdict above is the carried comparison and not a rule that
+    // fails every review now that its `confirms` slot retired.
+    let (matched, matched_derived) = cleared();
+    assert_holds(
+        Condition::InitialConcernsRecorded,
+        &matched,
+        &matched_derived,
+    );
+}
+
+/// `VT-3` — the contract admits legacy enum variants without advertising them.
+///
+/// `SL-264` sec-3 retires the `blocking-set-declared` token from the published
+/// contract: neither `ActKind` nor `AgentAct` lists it any more, so `design
+/// contract` no longer advertises a writable act. But the Rust variant stays —
+/// `AgentAct` derives `Deserialize` and the snapshot is parsed whole — so a
+/// payload carrying the token still parses, and the key walk **admits** it to the
+/// core, which refuses it as [`Refusal::RetiredAct`], rather than refusing it as a
+/// mistyped key and naming the wrong fault.
+#[test]
+fn the_payload_contract_admits_legacy_enum_variants() {
+    for contract in [&ACT_KIND, &AGENT_ACT] {
+        let TypeForm::Enum { variants, .. } = contract.form else {
+            panic!("{} is described as an enum", contract.name);
+        };
+        assert!(
+            !variants
+                .iter()
+                .any(|variant| variant.token == Some("blocking-set-declared")),
+            "{} no longer advertises the retired act",
+            contract.name
+        );
+    }
+
+    let legacy: AgentActDeclaration = serde_json::from_value(serde_json::json!({
+        "act": {"blocking-set-declared": {"blocking": ["inq-1"]}},
+        "basis": "these block drafting",
+    }))
+    .expect("the variant stays so a stored snapshot parses");
+    assert_eq!(legacy.act.kind(), AgentActKind::BlockingSetDeclared);
+
+    let request = ApplyRequest {
+        agent_declaration: Some(legacy),
+        ..ApplyRequest::bare(SubmissionEnvelope {
+            run_uid: "dr-test".to_owned(),
+            known_revision: 1,
+            submission_id: "s1".to_owned(),
+        })
+    };
+    let wire = serde_json::to_value(&request).expect("a payload serialises");
+    assert!(
+        refuse_unknown_keys(&wire).is_ok(),
+        "the legacy token reaches the core rather than being refused as a key"
     );
 }
 
@@ -4231,10 +4375,36 @@ fn coverage_union(request: &ApplyRequest) -> Vec<(Value, TypeContract)> {
     ];
     for claim in claims() {
         for sample in claim.samples {
+            // A **legacy** variant keeps its Rust variant so a stored snapshot
+            // parses, but its contract row retired (`SL-264` sec-3), so there is
+            // no declared variant to descend into. Its read path is pinned by
+            // pin 4 instead.
+            if sample_token(claim.tagging, &sample).is_some_and(|token| is_legacy_token(&token)) {
+                continue;
+            }
             roots.push((sample.value, *claim.contract));
         }
     }
     roots
+}
+
+/// The token a sample puts on the wire, read the way [`place`] does but without
+/// the declared row — enough to tell a **legacy** variant (one whose contract row
+/// retired, `SL-264` sec-3) from one that was never declared at all.
+fn sample_token(tagging: Tagging, sample: &VariantSample) -> Option<String> {
+    match tagging {
+        Tagging::External => match &sample.value {
+            Value::String(token) => Some(token.clone()),
+            Value::Object(map) => map.keys().next().cloned(),
+            _ => None,
+        },
+        Tagging::Internal(tag) => sample
+            .value
+            .get(tag)
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
+        Tagging::Untagged => None,
+    }
 }
 
 /// Run the descent over a union and report **what it arrived at**, with whatever

@@ -233,23 +233,18 @@ impl Fixture {
                 "the governing artefacts are the ones found",
             )}),
         ));
-        // DEC-121's two acts by two actors, in one submission — `T6`'s build
-        // order: the declaration is constructed and fingerprinted before the act
-        // that confirms it, so no caller computes a digest.
+        // `SL-264` sec-3: `initial-concerns-recorded` is now the user's
+        // `graph-reviewed` alone — the agent's `blocking-set-declared` act is
+        // retired from writing, so the ladder no longer submits one.
         //
-        // The blocking set is **empty**, and that is a claim rather than a gap:
-        // this suite declares no inquiries at all, because its subject is the
+        // This suite declares no inquiries at all, because its subject is the
         // FOURTH boundary. An empty inquiry map is an observable fact — it stays
         // empty for the run's whole life, since `fnd-1` is a review finding and
-        // findings are not nodes — so the coverage these two acts carry is still
+        // findings are not nodes — so the coverage this act carries is still
         // current at the lock.
         fixture.apply(&fixture.payload(
             "graph",
             &json!({
-                "agent_declaration": design_act::agent_declaration(
-                    AgentAct::BlockingSetDeclared { blocking: BTreeSet::new() },
-                    "nothing blocks: this run interrogates no questions",
-                ),
                 "checkpoint_act": design_act::checkpoint_act(
                     ActKind::GraphReviewed,
                     "the empty blocking set is right",
@@ -1152,12 +1147,10 @@ fn the_ladder_records_an_act_at_every_edge_it_crosses() {
         .collect();
     assert_eq!(
         declared,
-        BTreeSet::from([
-            AgentActKind::BlockingSetDeclared,
-            AgentActKind::DraftingReady,
-        ]),
-        "and the two the agent authors — the one a `GraphReviewed` confirms, and \
-         the drafting judgement that stands alone"
+        BTreeSet::from([AgentActKind::DraftingReady]),
+        "and the one the agent still authors — `blocking-set-declared` is a \
+         legacy act no longer written (`SL-264` sec-3), so only the drafting \
+         judgement stands"
     );
 
     let disposed = held

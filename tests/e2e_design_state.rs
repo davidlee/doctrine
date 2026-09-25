@@ -997,10 +997,9 @@ fn every_event_fixture() -> Fixture {
     // `initial-concerns-recorded`, and the evaluator derives both from the acts
     // rather than reading the claims above. Two submissions because
     // `ApplyRequest` holds one checkpoint act at a time and this crossing owes
-    // two; the pair that does fit in one is the declaration and the act that
-    // confirms it. An EMPTY blocking set, which is the truth here — this fixture
-    // interrogates none of the three questions it declares — and it keeps the
-    // next crossing's condition out of a fixture whose subject is change rows.
+    // two. `initial-concerns-recorded` is the user's `graph-reviewed` alone
+    // since `SL-264` sec-3 retired the agent's `blocking-set-declared` act from
+    // writing.
     fixture.apply(&fixture.payload(
         "governance",
         &json!({"checkpoint_act": design_act::checkpoint_act(
@@ -1011,10 +1010,6 @@ fn every_event_fixture() -> Fixture {
     fixture.apply(&fixture.payload(
         "graph",
         &json!({
-            "agent_declaration": design_act::agent_declaration(
-                AgentAct::BlockingSetDeclared { blocking: BTreeSet::new() },
-                "nothing blocks: this run interrogates no questions",
-            ),
             "checkpoint_act": design_act::checkpoint_act(
                 ActKind::GraphReviewed,
                 "the empty blocking set is right",

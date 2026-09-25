@@ -78,7 +78,7 @@ forward exploring→inquiring blocked
   runbook outstanding explore.memory
   runbook outstanding explore.triage
   unmet governing-context-recorded: no live `governance-confirmed` from user → the user performs `governance-confirmed` (you record it on their assent)
-  unmet initial-concerns-recorded: no live `graph-reviewed` from user, no live `blocking-set-declared` from agent → the user performs `graph-reviewed` (you record it on their assent), naming the current `blocking-set-declared`; the agent performs `blocking-set-declared`
+  unmet initial-concerns-recorded: no live `graph-reviewed` from user → the user performs `graph-reviewed` (you record it on their assent)
 frontier
 blockers
 sections
@@ -191,20 +191,9 @@ const PRIOR_JSON: &str = r#"{
               }
             },
             "omitted": 0
-          },
-          {
-            "cause": {
-              "act-missing": {
-                "act": "blocking-set-declared",
-                "lanes": [
-                  "agent"
-                ]
-              }
-            },
-            "omitted": 0
           }
         ],
-        "remedy": "the user performs `graph-reviewed` (you record it on their assent), naming the current `blocking-set-declared`; the agent performs `blocking-set-declared`"
+        "remedy": "the user performs `graph-reviewed` (you record it on their assent)"
       }
     ],
     "unchecked": [],

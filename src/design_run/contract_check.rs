@@ -140,6 +140,13 @@ fn walk_keys(
 /// restates it. **No matching variant is not a refusal from here** (`A3`): an
 /// unrecognised token is serde's complaint, and answering it with an
 /// unknown-*key* refusal would be a refusal firing for the wrong reason.
+///
+/// That is also the **explicit legacy exception** `SL-264` sec-3 needs: a
+/// *legacy* variant (`ActKind::is_legacy`) keeps its Rust variant so a stored
+/// snapshot parses and so a caller can still send it, but its contract row has
+/// retired — so the walk admits it here and the pure core refuses it as
+/// `Refusal::RetiredAct`, which names the right fault. Refusing it as an unknown
+/// key would name a mistyped key instead.
 fn walk_enum(
     value: &Value,
     contract: &'static TypeContract,

@@ -64,7 +64,7 @@ What each condition requires of you. A refusal names the conditions that failed;
 these are the acts that clear them.
 
 - `governing-context-recorded` — the user performs `governance-confirmed` (you record it on their assent)
-- `initial-concerns-recorded` — the user performs `graph-reviewed` (you record it on their assent), naming the current `blocking-set-declared`; the agent performs `blocking-set-declared`
+- `initial-concerns-recorded` — the user performs `graph-reviewed` (you record it on their assent)
 - `blocking-inquiries-dispositioned` — dispose every blocking inquiry on the map
 - `user-accepts-sufficiency` — the user performs `sufficiency-accepted` (you record it on their assent)
 - `drafting-readiness-attested` — the agent performs `drafting-ready`

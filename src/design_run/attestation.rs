@@ -48,6 +48,14 @@ pub(crate) enum ActKind {
     /// The user reviews and steers the seeded inquiry graph (DEC-121).
     GraphReviewed,
     /// The agent declares which questions it considers blocking (DEC-121).
+    ///
+    /// **Legacy, read-only** (`SL-264` sec-3: *retired from writing, kept for
+    /// reading*). The variant stays because `AgentAct` derives `Deserialize`
+    /// and the snapshot is parsed whole — deleting it would fail the parse of
+    /// every stored snapshot before any fallback ran. No contract row requires
+    /// it, [`ActKind::is_legacy`] names it, and a submitted one is refused as
+    /// [`Refusal::RetiredAct`](super::refusal::Refusal::RetiredAct). The
+    /// judgement it carried lives on the node itself.
     BlockingSetDeclared,
     /// The user accepts that interrogation is sufficient.
     SufficiencyAccepted,
@@ -99,6 +107,20 @@ impl ActKind {
         ActKind::ReviewDisposed,
         ActKind::DesignAccepted,
     ];
+
+    /// Whether this kind is **legacy** — readable, and writable by no rule
+    /// (`SL-264` sec-3, *legacy act kinds are a named class*).
+    ///
+    /// The single source of the class: every reader that must treat legacy acts
+    /// differently (`admit_and_record`'s refusal, `live_acts`' exclusion) asks
+    /// this predicate rather than re-spelling *is this legacy?* at its own call
+    /// site. A legacy kind's stored records stay parsed and readable — a run
+    /// predating the change keeps its recorded judgement — but no contract row
+    /// names it, so [`super::gate::requirement_for`] returns `None` for it and a
+    /// new record of it is refused rather than stored against no rule.
+    pub(crate) const fn is_legacy(self) -> bool {
+        matches!(self, ActKind::BlockingSetDeclared)
+    }
 
     /// The kebab token this act is spelled with everywhere — the stored value,
     /// the rendered remedy, the refusal text (STD-001). It agrees with the serde
@@ -440,16 +462,6 @@ impl<T: Eq> ContentCoverage<T> {
             .collect()
     }
 
-    /// Whether `subject` was one of the subjects covered.
-    ///
-    /// Membership only, and deliberately a different question from
-    /// [`ContentCoverage::diff`]'s: a blocking set names nodes that must have
-    /// been **on** the map it was declared over, and says nothing about whether
-    /// their material has moved since.
-    pub(crate) fn covers(&self, subject: &DesignId) -> bool {
-        self.covered.contains_key(subject)
-    }
-
     /// Whether every covered subject still carries what it was covered at — and
     /// nothing has joined or left.
     ///
@@ -673,7 +685,15 @@ pub(crate) struct CheckpointAct {
 pub(crate) enum AgentAct {
     /// The inquiries the agent considers blocking — DEC-121's artefact, and the
     /// thing the user's `GraphReviewed` confirms. Every id must be a node of the
-    /// covered map; an id outside it is refused at admission.
+    /// covered map; an id outside it was refused at admission.
+    ///
+    /// **Legacy, read-only** (`SL-264` sec-3). The variant stays so a stored
+    /// snapshot parses and its set stays readable; a new one cannot be recorded
+    /// ([`ActKind::is_legacy`], [`Refusal::RetiredAct`]). A stored
+    /// `BlockingSetDeclared` still supplies the effective judgement of every
+    /// node that holds none of its own.
+    ///
+    /// [`Refusal::RetiredAct`]: super::refusal::Refusal::RetiredAct
     BlockingSetDeclared {
         /// The blocking node ids.
         blocking: BTreeSet<DesignId>,

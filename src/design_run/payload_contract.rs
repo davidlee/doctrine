@@ -709,7 +709,11 @@ pub(crate) static STAGE: TypeContract = TypeContract {
     },
 };
 
-/// `ActKind` — the eight checkpoint acts, each a bare string.
+/// `ActKind` — the checkpoint acts, each a bare string.
+///
+/// `blocking-set-declared` is **absent** (`SL-264` sec-3): the variant stays in
+/// the enum so stored snapshots parse, but the token is no longer a writable act
+/// the contract advertises. `is_legacy_token` is what the checks read to say so.
 pub(crate) static ACT_KIND: TypeContract = TypeContract {
     name: ActKind::TYPE_NAME,
     form: TypeForm::Enum {
@@ -721,10 +725,6 @@ pub(crate) static ACT_KIND: TypeContract = TypeContract {
             },
             VariantContract {
                 token: Some("graph-reviewed"),
-                payload: VariantPayload::Absent,
-            },
-            VariantContract {
-                token: Some("blocking-set-declared"),
                 payload: VariantPayload::Absent,
             },
             VariantContract {
@@ -965,28 +965,23 @@ pub(crate) static REVIEW_DISPOSITION: TypeContract = TypeContract {
     },
 };
 
-/// `AgentAct` — the live **mixed** case: externally tagged, one variant nesting
-/// under its token and the other a bare string. The asymmetry is per-variant,
-/// which is why it is read off `payload` rather than off `tagging`.
+/// `AgentAct` — externally tagged, and now **uniform**: its one live variant is
+/// a bare string. The mixed shape it used to carry (one variant nesting under its
+/// token, one bare) is still a shape the model can state, and the renderer is
+/// still pinned on it by the test's own exemplar.
+///
+/// `blocking-set-declared` is **absent** (`SL-264` sec-3): the variant stays so a
+/// stored snapshot parses, but the act is no longer writable and the `blocking`
+/// key it carried leaves with it. `is_legacy_token` is what the checks read to
+/// say so.
 pub(crate) static AGENT_ACT: TypeContract = TypeContract {
     name: AgentAct::TYPE_NAME,
     form: TypeForm::Enum {
         tagging: Tagging::External,
-        variants: &[
-            VariantContract {
-                token: Some("blocking-set-declared"),
-                payload: VariantPayload::Keys(&[KeyContract {
-                    key: "blocking",
-                    home: None,
-                    ty: WireType::Seq(&WireType::Id(&[IdKind::Inquiry])),
-                    presence: Presence::Required,
-                }]),
-            },
-            VariantContract {
-                token: Some("drafting-ready"),
-                payload: VariantPayload::Absent,
-            },
-        ],
+        variants: &[VariantContract {
+            token: Some("drafting-ready"),
+            payload: VariantPayload::Absent,
+        }],
     },
 };
 
@@ -2710,6 +2705,18 @@ impl<'a> Placement<'a> {
     }
 }
 
+/// `token` names a **legacy** enum variant (`SL-264` sec-3) — one whose Rust
+/// variant stays so a stored snapshot parses, but whose contract row has
+/// retired. The class has one home ([`ActKind::is_legacy`]), and this reads it
+/// rather than a second token list, so the checks below can except a legacy
+/// sample instead of advertising a writable act.
+#[cfg(test)]
+pub(super) fn is_legacy_token(token: &str) -> bool {
+    ActKind::ALL
+        .iter()
+        .any(|act| act.as_str() == token && act.is_legacy())
+}
+
 /// Pin 3's alone, and so still `#[cfg(test)]`: promoting it with the two readers
 /// above would ship a method nothing in production calls, which the blanket
 /// `expect(dead_code)` would hide rather than report.
@@ -3284,12 +3291,22 @@ mod tests {
 
             for sample in &claim.samples {
                 let token = serde_token(claim.type_name, claim.tagging, sample);
-                let variant = variants
+                let Some(variant) = variants
                     .iter()
                     .find(|variant| variant.token == Some(token.as_str()))
-                    .unwrap_or_else(|| {
-                        panic!("{}: no variant declares {token:?}", claim.type_name)
-                    });
+                else {
+                    // A **legacy** variant's contract row has retired (`SL-264`
+                    // sec-3), so there is no payload left to probe. The token
+                    // still serialises, which is the whole point of keeping the
+                    // Rust variant — and the assertion below keeps a genuinely
+                    // undeclared token from passing as one.
+                    assert!(
+                        is_legacy_token(&token),
+                        "{}: no variant declares {token:?}",
+                        claim.type_name
+                    );
+                    continue;
+                };
 
                 let placement = place(claim.contract.name, tagging, variant.payload, &sample.value)
                     .unwrap_or_else(|fault| panic!("{fault}"));
@@ -4178,9 +4195,19 @@ mod tests {
         );
 
         // 2. Externally tagged, and *mixed*: one variant nests under its token,
-        //    the other is the bare string `"drafting-ready"` — not
-        //    `{"drafting-ready":{}}`, which is discarded in silence.
-        let agent_act = block(&lines, "enum AgentAct ");
+        //    the other is a bare string — not `{"…":{}}`, which is discarded in
+        //    silence. `AgentAct` was the closure's one mixed enum until `SL-264`
+        //    sec-3 retired its nesting variant from the contract, so the mixed
+        //    case is rendered from the test's own exemplar — the same contract
+        //    the census walks — and the live enum is checked below it.
+        let TypeForm::Enum {
+            tagging: exemplar_tagging,
+            variants: exemplar_variants,
+        } = EXEMPLAR_AGENT_ACT.form
+        else {
+            panic!("the mixed exemplar is an enum");
+        };
+        let agent_act = super::enum_block(&EXEMPLAR_AGENT_ACT, exemplar_tagging, exemplar_variants);
         let agent_text = agent_act.join("\n");
         assert!(agent_text.contains("tagging: external"), "{agent_text}");
         assert!(agent_text.contains("UNDER the token"), "{agent_text}");
@@ -4197,6 +4224,21 @@ mod tests {
         assert!(
             !bare.contains('{'),
             "a bare string is not an object: {bare}"
+        );
+
+        // The live `AgentAct` is uniform now, so it renders as a bare list.
+        let live = block(&lines, "enum AgentAct ");
+        assert!(
+            live.iter().any(|line| line.contains("drafting-ready")),
+            "the one live agent act renders: {}",
+            live.join("\n")
+        );
+        assert!(
+            !live
+                .iter()
+                .any(|line| line.contains("blocking-set-declared")),
+            "the retired act is not advertised: {}",
+            live.join("\n")
         );
 
         // 3. Untagged: the token column is struck out, and no Rust variant name

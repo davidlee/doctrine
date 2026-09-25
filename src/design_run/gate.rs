@@ -578,26 +578,21 @@ condition_vocabulary! {
             reach: Reach::Cumulative,
             prose: "governing-context-recorded",
         },
-        /// Two acts by two actors, in an order: the agent declares its blocking
-        /// set and the user reviews the graph, confirming that declaration.
-        /// DEC-121 is explicit that this is two acts and not one, so the rule is
-        /// a conjunction and a refusal can name which half is missing.
+        /// The user reviews the graph, and the blocking judgement on each node
+        /// is what the review binds. `SL-264` sec-3 retires the agent's separate
+        /// `blocking-set-declared` act and the `confirms` link to it from the
+        /// rule: the judgement is node state now, and a *stored* act's carried
+        /// digest is still read through [`Cause::ConfirmationStale`] rather than
+        /// through this row (`SL-264` sec-3, *retired from writing, kept for
+        /// reading*). DEC-121's two actors survive; its two acts do not.
         InitialConcernsRecorded = "initial-concerns-recorded" => Contract {
             derivation: DerivationRule::Attested(AttestationRule {
-                acts: &[
-                    ActRequirement {
-                        act: ActKind::GraphReviewed,
-                        actor: RequiredActor::Fixed(ActorClass::User),
-                        confirms: Some(AgentActKind::BlockingSetDeclared),
-                        disposes_review: false,
-                    },
-                    ActRequirement {
-                        act: ActKind::BlockingSetDeclared,
-                        actor: RequiredActor::Fixed(ActorClass::Agent),
-                        confirms: None,
-                        disposes_review: false,
-                    },
-                ],
+                acts: &[ActRequirement {
+                    act: ActKind::GraphReviewed,
+                    actor: RequiredActor::Fixed(ActorClass::User),
+                    confirms: None,
+                    disposes_review: false,
+                }],
                 binding: Binding {
                     coverage: Coverage::InquiryMap,
                     observed: &[],
@@ -751,10 +746,13 @@ pub(crate) struct ActRule {
 /// the covered map is filled in) resolve an act this way, and this is the only
 /// route.
 ///
-/// `Option` because a search over data cannot be total to the type system. Every
-/// [`ActKind`] is in fact named by exactly one row — which is
-/// `every_act_kind_is_named_by_exactly_one_contract_row`'s to prove, not this
-/// signature's to claim.
+/// `Option` because a search over data cannot be total to the type system.
+/// **No non-legacy [`ActKind`] is left unnamed: every one is named by exactly
+/// one row, and every legacy kind** ([`ActKind::is_legacy`]) **by none** — which
+/// is `every_act_kind_is_named_by_exactly_one_contract_row`'s to prove, not this
+/// signature's to claim. The `None` a legacy kind earns is the answer
+/// [`super::run::admit_and_record`] refuses a new record of it on, rather than
+/// the unchecked store a missing rule used to be.
 pub(crate) fn requirement_for(act: ActKind) -> Option<ActRule> {
     CONTRACTS
         .iter()
@@ -1498,19 +1496,30 @@ fn act_causes(
             causes.push(Cause::ObservedStale { act, fact: *fact });
         }
     }
-    if let Some(declaration) = required.confirms {
-        let live = run
+    // The `confirms` link is **carried, not read off the rule** (`SL-264`
+    // sec-3, *retired from writing, kept for reading*). The act names the digest
+    // of the declaration it confirmed, and that digest — not the rule's retired
+    // `confirms` slot — is what is compared, so a stored link survives the slot
+    // leaving the rule. The comparison is **frozen at upgrade**: no new
+    // declaration can be recorded, an act recorded after the change carries no
+    // digest and never reaches here, and so the read can only preserve a verdict,
+    // never create one.
+    //
+    // A stored digest names the declaration the retired rule named —
+    // `initial-concerns-recorded`'s `BlockingSetDeclared`, the only confirmation
+    // a checkpoint act has ever held — so a digest matching no stored declaration
+    // is reported against the legacy blocking set.
+    if let Some(named) = record.confirms() {
+        let held = run
             .declarations
             .declarations
             .iter()
-            .find(|held| held.act.kind() == declaration);
-        // One way: the act names the declaration's claim digest, so a declaration
-        // made or edited after the confirmation carries a different one and the
-        // link breaks. Coverage answers whether the material moved; this answers
-        // whether this is the claim the user was shown.
-        if !matches!((record.confirms(), live), (Some(named), Some(live)) if *named == live.fingerprint)
-        {
-            causes.push(Cause::ConfirmationStale { act, declaration });
+            .any(|declaration| &declaration.fingerprint == named);
+        if !held {
+            causes.push(Cause::ConfirmationStale {
+                act,
+                declaration: AgentActKind::BlockingSetDeclared,
+            });
         }
     }
     if let Some(disposed) = record.disposition() {

@@ -26,12 +26,8 @@
 
 use std::collections::BTreeSet;
 
-use super::attestation::{
-    AgentAct, AgentActKind, AgentDeclaration, CoveredSet, DisposedPass, RecordedAct,
-    ReviewDisposition,
-};
+use super::attestation::{AgentActKind, CoveredSet, DisposedPass, RecordedAct, ReviewDisposition};
 use super::gate::{ActRule, Coverage, ObservedFact};
-use super::ids::DesignId;
 use super::refusal::{ActFault, Refusal};
 use super::run::ObservedReview;
 
@@ -54,9 +50,6 @@ pub(crate) fn admit_act(
     causes.extend(disposition_fault(disposed, rule.required.disposes_review));
     if let Some(disposed) = disposed {
         disposition_faults(disposed, observed, &mut causes);
-    }
-    if let RecordedAct::Agent(declaration) = record {
-        causes.extend(blocking_set_fault(declaration));
     }
     if causes.is_empty() {
         Ok(())
@@ -159,24 +152,4 @@ fn disposition_faults(
             }
         }
     }
-}
-
-/// A declared blocking set names nodes of the map it was declared over.
-///
-/// Checked only where a node map is actually carried: where it is not, the
-/// coverage row has already reported that the shape is wrong, and listing every
-/// declared node beside it would bury that answer under a consequence of it.
-fn blocking_set_fault(declaration: &AgentDeclaration) -> Option<ActFault> {
-    let AgentAct::BlockingSetDeclared { ref blocking } = declaration.act else {
-        return None;
-    };
-    let Some(CoveredSet::Nodes(covered)) = declaration.covered.as_ref() else {
-        return None;
-    };
-    let nodes: Vec<DesignId> = blocking
-        .iter()
-        .filter(|node| !covered.covers(node))
-        .cloned()
-        .collect();
-    (!nodes.is_empty()).then_some(ActFault::BlockingSetUnknownNodes { nodes })
 }

@@ -69,8 +69,6 @@ pub(crate) enum ActFault {
     PassNotConcluded { review: ReviewRef },
     /// A `Waived` arm whose reason is empty or whitespace.
     WaiverReasonMissing,
-    /// A blocking set naming nodes outside the map it was declared over.
-    BlockingSetUnknownNodes { nodes: Vec<DesignId> },
 }
 
 impl fmt::Display for ActFault {
@@ -136,15 +134,6 @@ impl fmt::Display for ActFault {
             ),
             ActFault::WaiverReasonMissing => f.write_str(
                 "a waiver states why the pass was declined, and this one states nothing",
-            ),
-            ActFault::BlockingSetUnknownNodes { nodes } => write!(
-                f,
-                "it declares nodes the map it was declared over does not hold: {}",
-                nodes
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ")
             ),
         }
     }
@@ -467,6 +456,19 @@ pub(crate) enum Refusal {
     /// than the first: an agent that repairs one slot and resubmits should not
     /// discover the rest one round-trip at a time.
     ActAdmissionInvalid { act: ActKind, causes: Vec<ActFault> },
+    /// A **legacy** act kind was submitted for recording (`SL-264` sec-3). The
+    /// variant still deserialises and every stored record of it stays readable,
+    /// but the kind has no rule, so a new record would be a write against
+    /// nothing — and, for `blocking-set-declared`, a write that moves the
+    /// effective judgement of every node that holds none of its own.
+    ///
+    /// Carries the kind: the wire refuses a retired *key*, and this refuses a
+    /// retired *act*, so the caller is told which one — the
+    /// [`Refusal::RetiredPayloadKey`] distinction, on the admission axis.
+    RetiredAct {
+        /// The legacy act whose recording was refused.
+        kind: ActKind,
+    },
     /// A disposition arrived while the run is on **no review pass**.
     ///
     /// Refused at construction rather than reported as a fault, because it is not
@@ -949,6 +951,12 @@ impl fmt::Display for Refusal {
                     .map(ToString::to_string)
                     .collect::<Vec<_>>()
                     .join("; ")
+            ),
+            Refusal::RetiredAct { kind } => write!(
+                f,
+                "`{}` is a retired act: a run reads it but no longer records it, so a new \
+                 one is refused rather than stored against no rule (`SL-264` sec-3)",
+                kind.as_str()
             ),
             Refusal::ReviewPassAbsent => write!(
                 f,

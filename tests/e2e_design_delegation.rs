@@ -53,7 +53,6 @@ mod design_run;
 use design_run::Stage;
 use design_run::attestation::{ActKind, AgentAct, AgentActKind, ReviewPolicy};
 use design_run::delegation::{Delegation, DelegationState};
-use design_run::ids::DesignId;
 use design_run::inquiry::DispositionForm;
 use design_run::snapshot::{self, DesignSnapshot};
 use design_run::submission::ApplyRequest;
@@ -208,19 +207,12 @@ impl Fixture {
                 ),
             }),
         ));
-        // DEC-121's two acts by two actors, in one submission — which is what
-        // `T6`'s build order buys: the declaration is constructed and
-        // fingerprinted before the act that confirms it, so no caller computes a
-        // digest.
+        // `SL-264` sec-3: `initial-concerns-recorded` is the user's
+        // `graph-reviewed` alone — the agent's `blocking-set-declared` act is
+        // retired from writing, so the ladder no longer submits one.
         fixture.apply(&fixture.payload(
             "graph",
             &json!({
-                "agent_declaration": design_act::agent_declaration(
-                    AgentAct::BlockingSetDeclared {
-                        blocking: [DesignId::parse(OBLIGATION).unwrap()].into(),
-                    },
-                    "the obligation blocks drafting until it is settled",
-                ),
                 "checkpoint_act": design_act::checkpoint_act(
                     ActKind::GraphReviewed,
                     "the blocking set is right",
@@ -627,19 +619,9 @@ fn the_ladder_records_the_acts_its_crossings_will_owe() {
         .iter()
         .map(|declaration| declaration.act.kind())
         .collect();
-    assert_eq!(
-        declared,
-        vec![AgentActKind::BlockingSetDeclared],
-        "and the declaration the user's `GraphReviewed` confirms"
-    );
     assert!(
-        held.declarations.declarations.iter().all(|declaration| {
-            held.acts
-                .acts
-                .iter()
-                .any(|act| act.confirms.as_ref() == Some(&declaration.fingerprint))
-        }),
-        "the confirmation link is live: the act carries the digest of the record the \
-         engine wrote in the same submission, with no caller-computed digest anywhere"
+        declared.is_empty(),
+        "`blocking-set-declared` is retired from writing (`SL-264` sec-3), so the \
+         ladder records no declaration here — the user's `graph-reviewed` stands alone"
     );
 }

@@ -21,7 +21,6 @@
 )]
 
 use serde_json::{Value, json};
-use std::collections::BTreeSet;
 
 mod common;
 mod design_act;
@@ -40,7 +39,6 @@ mod design_run;
 
 use design_fixture::{DesignRun, SLICE, fail, run};
 use design_run::attestation::{ActKind, AgentAct, ReviewDisposition};
-use design_run::ids::DesignId;
 use design_run::render::under_test as caps;
 use design_run::runbook::{Runbook, RunbookKey};
 use design_run::snapshot::{self, DesignSnapshot, Receipt};
@@ -208,10 +206,6 @@ fn crossable_exploring(designed: &DesignRun) {
     designed.apply(
         "graph",
         &json!({
-            "agent_declaration": design_act::agent_declaration(
-                AgentAct::BlockingSetDeclared { blocking: BTreeSet::new() },
-                "nothing blocks: this run interrogates no questions",
-            ),
             "checkpoint_act": design_act::checkpoint_act(
                 ActKind::GraphReviewed,
                 "the empty blocking set is right",
@@ -664,10 +658,6 @@ fn ladder_to_reviewing() -> DesignRun {
     designed.apply(
         "graph",
         &json!({
-            "agent_declaration": design_act::agent_declaration(
-                AgentAct::BlockingSetDeclared { blocking: BTreeSet::new() },
-                "nothing blocks at first: the map is not yet drawn",
-            ),
             "checkpoint_act": design_act::checkpoint_act(
                 ActKind::GraphReviewed,
                 "the empty blocking set is right",
@@ -724,16 +714,9 @@ fn growing_run() -> DesignRun {
         })
         .collect();
     designed.apply("growth", &json!({ "declare": nodes }));
-    let blocking: BTreeSet<DesignId> = (0..300)
-        .map(|index| DesignId::parse(&node(index)).unwrap())
-        .collect();
     designed.apply(
         "reblock",
         &json!({
-            "agent_declaration": design_act::agent_declaration(
-                AgentAct::BlockingSetDeclared { blocking },
-                "every question on the map holds the stage",
-            ),
             "checkpoint_act": design_act::checkpoint_act(
                 ActKind::GraphReviewed,
                 "the grown blocking set is right",
@@ -816,8 +799,12 @@ fn large_run_still_renders() {
 
     // (1) Every list cause is present and over its cap before projection — a
     // bound the fixture never reaches is a bound nobody proved.
+    //
+    // `blocking-inquiries-dispositioned` is not here: `SL-264` sec-3 retires the
+    // writable blocking set before PHASE-04 derives the set from the node's own
+    // `blocking` attribute, so no run produced by a submission has an open
+    // blocker at this phase and the row is trivially met. PHASE-04 restores it.
     let listed = [
-        "blocking-inquiries-dispositioned",
         "user-accepts-sufficiency",
         "section-attestations-current",
         "review-disposition-attested",
@@ -856,10 +843,7 @@ fn large_run_still_renders() {
             "`{condition}` names what the cap dropped: {line}"
         );
     }
-    assert!(
-        rendered.contains("(+295 more)"),
-        "300 inquiries capped at 5"
-    );
+    assert!(rendered.contains("(+295 more)"), "300 sections capped at 5");
     assert!(rendered.contains("(+45 more)"), "50 blockers capped at 5");
 
     // (4) `--full` is uncapped, so the whole set is reachable.
@@ -875,17 +859,12 @@ fn large_run_still_renders() {
     );
     let inquiries = full_rows
         .iter()
-        .find(|row| row["condition"] == json!("blocking-inquiries-dispositioned"))
-        .expect("the inquiries row");
-    let nodes = inquiries["causes"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find_map(|cause| cause["cause"].get("inquiries-open"))
-        .expect("an `InquiriesOpen` cause")["nodes"]
-        .as_array()
-        .expect("node ids");
-    assert_eq!(nodes.len(), 300, "every blocking inquiry is listed");
+        .find(|row| row["condition"] == json!("blocking-inquiries-dispositioned"));
+    assert!(
+        inquiries.is_none(),
+        "no open blocker exists at this phase, so the inquiries row is met \
+         (PHASE-04 derives it from the node attribute)"
+    );
 
     // (5) `EX-4` — the cause cap's derivation, measured against this real run.
     // `ENVELOPE_CAUSE_MEMBERS`' provenance claims a capped cause stays small
@@ -940,14 +919,10 @@ fn batched_acts_and_the_move_are_admitted() {
         "the read names the condition the batch will satisfy: {before}"
     );
 
-    // Both acts AND the move, in one submission.
+    // The act AND the move, in one submission.
     designed.apply(
         "batched",
         &json!({
-            "agent_declaration": design_act::agent_declaration(
-                AgentAct::BlockingSetDeclared { blocking: BTreeSet::new() },
-                "nothing blocks: this run interrogates no questions",
-            ),
             "checkpoint_act": design_act::checkpoint_act(
                 ActKind::GraphReviewed,
                 "the empty blocking set is right",
