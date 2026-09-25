@@ -1,0 +1,53 @@
+id    = 391
+slug  = "design-review-of-sl-267"
+title = "design review of SL-267"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+concluded = true
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-267"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Verification has no concrete evidence artefact or bound"
+detail = 'sec-8 states the evidence is "the replacement resolving" but defines no artefact that captures it and no bound on the ~239-site read. As written the pass is unbounded and unreviewable: a reader cannot tell which sites were classified, what disposition each took, or which replacement was verified. Name the evidence artefact (a per-site disposition ledger: site to class to disposition to resolution, plus a per-corpus read record for the published / materialised / installed copies) and bound the read (mechanical locate, then per-site disposition and one whole-file read per corpus file).'
+disposition = "route:review fix-now"
+response = 'sec-8 revised (rev 24, materialised rev 25): added "The evidence artefact and the bound" - a per-site disposition ledger in notes.md (file:line | class | disposition | resolution), repoints proven to resolve via doctrine library show, and the read bounded to one whole-file read per changed corpus file per channel.'
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Sufficiency destinations underspecified"
+detail = 'sec-6 Axis C says each IMP-484 gap "gains shipped orientation at its ADR-005 tier" but names no destination and no decision rule. IMP-484 lists at least six surfaces; without a placement rule the phase cannot know whether a gap becomes a signpost, a section of a reference doc, or a boot line. Add the placement procedure (e.g. corpus-health group to a reference doc; observation to a shipped signpost/reference; reports/config/facets to reference orientation) and record each kept-out surface with its reason.'
+disposition = "route:review fix-now"
+response = "sec-6 revised: added the ADR-005 placement-procedure table - corpus-health group to a PULL reference doc; observation to a shipped signpost plus a reference section; reports/config/facets to reference sections; supersede/serve-mcp/worktree to the owning domain doc; developer-only recorded out of scope with reason."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "POL-002 textual gap left unaddressed"
+detail = "Research T1 records that POL-002's prohibitions are mechanism-worded and a shipped prose citation is outside its text, so the corpus is enforced against by interpretation; it names POL-002 as a revision candidate. sec-3 notes the gap but the design mints only an ADR and never states whether POL-002 is revised, left as-is, or explicitly relies on the ADR. State the disposition."
+disposition = "fix-now"
+response = "sec-5 revised: POL-002's textual gap is now dispositioned explicitly - left unrevised, with the new ADR (DEC-312) supplying the content-facet rule as a descendant; a POL-002 revision is named as the escalation if the drift gate finds the descendant insufficient."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "New design-run rationale doc may duplicate existing design-run docs"
+detail = "sec-5 adds install/design-run-obligations.md for the thin-adapter reasoning. The design-run already ships reference/design-run-stages.md (generated) and the design-prompt fragments. State why a new doc rather than an existing home, to satisfy the no-parallel-implementation rule."
+disposition = "fix-now"
+response = "sec-5 revised: rationale for a new doc recorded - reference/design-run-stages.md is generated and golden-pinned to the gate tables, the design-prompt fragments are runtime runbooks, so a new reference/design-run-obligations.md is the only ADR-005 PULL-tier home that forks neither."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

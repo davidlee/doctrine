@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 311
+slug = "shipped-claims-ground-on-inline-prose-or-a-published-address-never-a-repo-private-id"
+title = "Shipped claims ground on inline prose or a published address, never a repo-private id"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-267 answers QUE-226: per-site the sweep must decide inline / drop / repoint, which is undecidable until the permissible grounding is fixed. The shipped corpus cites this repo's per-repo-sequential ids, which resolve to the client's unrelated records with no error."
+choice = "Permit inline prose standing alone, or a published reference/<name>.md address; forbid repo-private ids and paths entirely; reject a widened vocabulary."
+alternatives = []
+rationale = "It settles the majority of sites cheaply (one-clause rationale -> inline), gives the hard cases a destination (mint a published reference doc), and avoids new citation syntax because option 3 collapses into the published-address option."
+consequences = ["The per-site disposition taxonomy is inline | drop | repoint, with repoint targeting a published address.", "The rule is project-global and is recorded as an ADR descending from ADR-005/ADR-019.", "Verification is that the replacement resolves in a client repo, never that the old id is absent."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-267"

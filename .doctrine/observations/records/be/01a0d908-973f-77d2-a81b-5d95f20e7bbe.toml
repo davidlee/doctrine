@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d908-973f-77d2-a81b-5d95f20e7bbe"
+recorded_at = "2026-09-25T14:46:54.015978096Z"
+kind = "friction"
+summary = "library tree renders a [template] asset under a reference/ group, but its address is templates/<name>"
+detail = "Using the design skill, I located the slice design template via 'doctrine library tree', which showed 'design.md [template] Slice design template' grouped beneath a 'reference/' heading. I tried 'doctrine library show reference/design.md' and it refused (unknown published entry); the working address was templates/design.md. Cost: one failed lookup plus a guess about the address form."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

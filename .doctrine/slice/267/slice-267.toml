@@ -1,7 +1,7 @@
 id = 267
 slug = "shipped-corpus-conformance"
 title = "Shipped-corpus conformance"
-status = "proposed"
+status = "design"
 created = "2026-09-25"
 updated = "2026-09-25"
 tags = ["area:install", "area:memory", "area:skills", "asset-policy"]
@@ -12,18 +12,26 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "install/**"
-intent = "scope-relevant"
+intent = "design-target"
 note = "the three shipped sub-corpora; no src/** in scope"
 
 [[selector]]
 selector = "memory/**"
-intent = "scope-relevant"
+intent = "design-target"
 note = "the three shipped sub-corpora; no src/** in scope"
 
 [[selector]]
 selector = "plugins/**"
-intent = "scope-relevant"
+intent = "design-target"
 note = "the three shipped sub-corpora; no src/** in scope"
+
+[[selector]]
+selector = ".doctrine/adr/**"
+intent = "design-target"
+
+[[selector]]
+selector = "publication/manifest.toml"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"

@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 313
+slug = "hard-case-rationale-publish-design-run-obligations-inline-per-knob-whys"
+title = "Hard-case rationale: publish design-run obligations, inline per-knob whys"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "ISS-309 names the hard case: sketches/thin-adapter.md has no correct client-repo spelling, and its reasoning is load-bearing for two inquiring runbook steps. The install/doctrine.toml.example ids do real work naming why a knob exists."
+choice = "Publish the design-run obligation rationale as a published reference doc (runbook cites the published address); inline the per-knob why as comments in install/doctrine.toml.example."
+alternatives = []
+rationale = "ADR-005 PULL tier: a durable design explanation belongs at a published, reachable address; a config comment justification belongs on the knob it explains."
+consequences = ["A new published reference doc enters install/ and publication/manifest.toml.", "The design-prompts store-name allowlist test (tests/e2e_claude_install.rs) must be respected when pointing at the published doc.", "No remaining citation of sketches/thin-adapter.md in shipped prose."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-267"

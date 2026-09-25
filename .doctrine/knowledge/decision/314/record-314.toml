@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 314
+slug = "sweep-verification-the-replacement-resolves-per-channel-never-a-grep-zero"
+title = "Sweep verification: the replacement resolves per channel, never a grep-zero"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "T2 established that every existing scanner is scoped away from install/, memory/ and plugins/. T1/CT6 and mem.pattern.doctrine.reseat-renumbers-does-not-retarget record the trap: an absent id is a claim about the search, not about the reader being served."
+choice = "Per-channel client-read test whose evidence is the replacement resolving; grep only to locate and to detect re-drift."
+alternatives = []
+rationale = "The deliverable is the reader being correctly served, not the deletion. Corpus gates stay green whether or not the prose is fixed, so the slice must carry its own proof."
+consequences = ["Verification evidence is recorded per axis (citation, accuracy, sufficiency).", "A post-sweep grep needs a positive control to be meaningful.", "The deferred drift gate (ISS-309 part 2) is the only durable defence; this slice does not build it."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-267"

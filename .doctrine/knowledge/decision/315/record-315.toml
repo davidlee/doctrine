@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 315
+slug = "sufficiency-disposition-every-imp-484-gap-orientation-by-adr-005-tier-no-signpost-per-verb"
+title = "Sufficiency: disposition every IMP-484 gap, orientation by ADR-005 tier, no signpost-per-verb"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "IMP-484 confirms gaps in the corpus-health group, observation (sharpest - the boot tells every agent to record friction while no shipped doc explains the ledger), the reports group, config, and the facets group, plus structural gaps (skill-map thinness, boot index reaches signposts only)."
+choice = "Disposition every gap; place orientation by ADR-005 tier; refuse a signpost-per-verb; record the developer-only exclusions."
+alternatives = []
+rationale = "The gap is never an error - an agent simply runs doctrine worse - so it is closed only by deliberate shipped orientation at the right tier."
+consequences = ["Sufficiency is judged gap-by-gap, not by a diff.", "New shipped orientation enters the PULL or PUSH tier, never as duplicated --help prose.", "The judgement on developer-only surfaces is durable."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-267"

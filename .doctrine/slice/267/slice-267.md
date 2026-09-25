@@ -43,7 +43,7 @@ canonical shape", which in a client repo is the client's own PRD-001. It is also
 most context-resident shipped surface. A POL-002 rule already scopes to `plugins/**`
 (`mem.pattern.doctrine.shipped-skill-platform-independence`), so this sub-corpus is a
 known rule being violated — evidence for the drift-gate follow-up, not a reason to
-exclude it.
+exclude it. **Confirmed in-scope by the user on 2026-09-26.**
 
 ## Scope & Objectives
 
@@ -60,6 +60,11 @@ exclude it.
 
 3. **Sufficiency.** Disposition every gap in IMP-484 — each either gains shipped
    orientation, or is explicitly recorded as correctly out of scope with its reason.
+
+4. **Governance.** Record the permissible-grounding rule settled in design (`DEC-311`)
+   as a new ADR descending from ADR-005 / ADR-019, and deliver the rule in the shipped
+   corpus so future authoring is bound by it. The ADR and the one new published
+   reference doc the hard cases need are deliverables of this slice.
 
 **Verification / closure intent.** Done is judged by a client-repo read test, not by
 a diff: read each published reference doc, shipped memory, and skill as an agent with

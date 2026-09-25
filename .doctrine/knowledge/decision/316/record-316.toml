@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 316
+slug = "accuracy-whole-corpus-claim-vs-cli-pass-not-only-the-confirmed-instances"
+title = "Accuracy: whole-corpus claim-vs-CLI pass, not only the confirmed instances"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "CHR-080 confirms stale claims in mem.signpost.doctrine.knowledge (six kinds not seven, wrong defaults, settle missing, ungrammatical EVD-1 example) and a missing concept/CPT row in install/glossary.md, and states the pass must cover the whole corpus."
+choice = "Whole-corpus claim-vs-CLI verification, method per CHR-080; mechanical legs first."
+alternatives = []
+rationale = "An author writing shipped prose has --help and source to hand, so a claim is true when written and drifts invisibly; only a full pass plus the check catches it."
+consequences = ["Every shipped behavioural claim carries a verification disposition.", "The pass is bounded by the corpus, not by the known-bad list.", "Confirmed instances are fixed transitively by the sweep."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-267"

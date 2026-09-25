@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 312
+slug = "the-shipped-corpus-grounding-rule-is-recorded-as-a-new-adr-descending-from-adr-005adr-019"
+title = "The shipped-corpus grounding rule is recorded as a new ADR descending from ADR-005/ADR-019"
+record_kind = "decision"
+status = "proposed"
+created = "2026-09-25"
+updated = "2026-09-25"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-267 scope Follow-Ups: if the permissible grounding is a project-global decision it belongs in an ADR descending ADR-005/ADR-019, not in slice prose. DEC-311 fixes the rule; this decides its durable altitude."
+choice = "Mint a new ADR descending from ADR-005/ADR-019, authored within SL-267; do not settle for a DEC plus backlog deferral or for no ADR."
+alternatives = []
+rationale = "A corpus-wide invariant binding future shipped assets is architectural governance, not slice-local design; ADR-005/019 are its parents; a DEC cannot bind future authors."
+consequences = ["The ADR is a deliverable of this slice.", "The grounding rule ships through boot/reference/skills (tier 3), with the ADR as its governance record.", "The deferred drift gate (ISS-309 part 2) inherits a settled predicate."]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-267"
