@@ -40,7 +40,7 @@ Inputs:
     (refuses to clobber existing files). The tool reads these but never rewrites
     them — hand-edit freely.
 
-    **Routed findings from the design review (provisional — RFC-026 P10 trial).**
+    **Routed findings from the design review (provisional).**
     Before authoring phases, open the slice's design-review RV and read every
     finding whose disposition begins `route:demonstrate`, `route:probe` or
     `route:control`. Each is an obligation deliberately not repaired in prose. Its
@@ -48,8 +48,7 @@ Inputs:
     sketch into an entry or exit criterion citing `RV-NNN F-n` inline in the
     criterion text, on the earliest phase that satisfies the constraint. An
     untranscribed routed blocker cannot honestly be verified, and an unverified
-    blocker refuses the slice close. Nothing validates the transcription; see
-    `CON-006`.
+    blocker refuses the slice close. Nothing validates the transcription.
 
 4.  Author `plan.toml` — one `[[phase]]` per ordered phase:
     - `id` is `PHASE-NN` (zero-padded), **immutable** and never reused — edits
@@ -61,9 +60,9 @@ Inputs:
       criterion, so it is still checked downstream rather than silently skipped.
       These ids are local to the phase and equally immutable.
     - **Structured VT mandate (NON-NEGOTIABLE).** Every `VT-n` row MUST carry
-      at minimum `test_file` + `keywords` so the S3 gate has signal. Without
-      them `verify-vt` reports `UNCHECKABLE` — the gate is inert project-wide
-      (IMP-209). Write the mandate in the TOML row, not prose:
+      at minimum `test_file` + `keywords` so the VT gate has signal. Without
+      them `verify-vt` reports `UNCHECKABLE` — the gate is inert project-wide.
+      Write the mandate in the TOML row, not prose:
 
       ```toml
       { id = "VT-1",
@@ -82,13 +81,13 @@ Inputs:
         lands, not a future file.
       - `keywords` — raw substrings that MUST appear in that file after the
         phase lands. They are the proportionate floor: plain substring match
-        over the raw source (POL-002 — no comment/string stripping).
+        over the raw source (no comment/string stripping).
       - `patterns` (optional) — line-anchored regex for a stronger
         language-agnostic shape assertion. The author owns the regex.
       - `waived` — escape valve with a mandatory `waived_reason`.
 
       `doctrine slice verify-vt <id>` gates every VT mandate at dispatch
-      conclude/handover (S6), not at audit. A `test_file` with no keywords
+      conclude/handover, not at audit. A `test_file` with no keywords
       passes vacuously — the keyword floor is what gives the gate teeth, not
       the file alone.
     - `specs` / `requirements` stay empty in v1 (no registry yet). When a slice

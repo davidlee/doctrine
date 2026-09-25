@@ -147,8 +147,8 @@ entity — do not try to `spec req add` them.
 
 Do not bury a functional or quality obligation in a narrative paragraph either: if
 something must be implemented, tested, or enforced as behaviour or a quality bar,
-promote it to a requirement entity, not a prose sentence. PRD-001 (`spec show
-PRD-001`) is the canonical shape to mirror.
+promote it to a requirement entity, not a prose sentence. Mirror the canonical
+shape of **your own repo's** product spec (`spec show <PRD-ID>`).
 
 ### 5. Success Measures
 
@@ -205,7 +205,7 @@ Verification prose should still address:
 * observability and validation/review obligations
 
 If an obligation cannot be verified, rewrite the requirement entity or record an
-open question. See PRD-001 §7 for the canonical prose shape.
+open question. Mirror the canonical prose shape of your own repo's product spec.
 
 ### 8. Open Questions
 
@@ -226,7 +226,8 @@ Avoid:
 ## Structural Doctrine
 
 Doctrine manages specs as first-class entities. A product spec is **three
-coordinated writes** — see PRD-001 (`spec show PRD-001`) for the canonical shape:
+coordinated writes** — see your own repo's product spec (`spec show <PRD-ID>`) for
+the canonical shape:
 
 1. **Identity TOML** (`spec-NNN.toml`): `schema`, `version`, `id`, `slug`,
    `title`, `status = "draft"`, `kind = "product"`, an open-vocabulary `category`,

@@ -5,13 +5,13 @@ description: Use when running a value-elicitation session — surfacing and aski
 
 # Elicit
 
-You are the **curator** half of the queue/curator split (RFC-019). The engine
+You are the **curator** half of the queue/curator split. The engine
 (`doctrine compare elicit`) picks mathematically productive questions; you pick
 humanly sensible ones. Curate — filter, reframe, sequence, translate. Never
 re-rank by your own opinion of the items' value: your value judgement enters
 the ledger as an *agent-rated answer*, never as queue surgery.
 
-The queue is read-only (D18); the comparison ledger is the durable state. The
+The queue is read-only; the comparison ledger is the durable state. The
 CLI is the source of truth for flags: `doctrine compare --help`.
 
 ## Fetch

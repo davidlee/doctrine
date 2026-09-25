@@ -37,17 +37,17 @@ Inputs:
    * **Withdrawn** — finding withdrawn in the RV with rationale.
    * **Tolerated** — finding tolerated in the RV with rationale.
    * **Escalated to design** — slice transitioned back to `design` via the
-     ADR-009 §1 back-edge (`reconcile → design`).
+     design back-edge (`reconcile → design`).
    Additionally:
    * Every per-slice direct-edit item is applied to `design.md` /
      `slice-NNN.md` and recorded in the `## Reconciliation Outcome`.
    * The RV ledger is resolved (`done · await=none`). **A zero-finding review
     is terminal for close purposes whatever its derived status string says —
-    the absence of unresolved blockers is what gates the transition (ADR-007
-    D-C9b), never the status string (D7: a display summary, never a gate).
-    The string itself is unsettled for the empty ledger — D-C8 fixes it at
-    `active`, the engine currently answers `done`, and `ISS-314` tracks the
-    gap. Do not raise a token finding to force it terminal.**
+    the absence of unresolved blockers is what gates the transition, never the
+    status string (a display summary, never a gate).
+    The string itself is unsettled for the empty ledger — the intended value
+    is `active`, the engine currently answers `done`, and the gap is tracked
+    upstream. Do not raise a token finding to force it terminal.**
    * The reconcile outcome is recorded (REV rationale and/or RV
      `## Reconciliation Outcome`).
    No free-floating "rejected" disposition is permitted — every finding
@@ -91,7 +91,7 @@ Inputs:
    **only** place `--integrate` runs — never at `/dispatch` conclude, only here,
    post-audit.
 
-   **Verify (tree-true, ISS-030).** After `--integrate --trunk`, both checks
+   **Verify (tree-true).** After `--integrate --trunk`, both checks
    below must pass — do **not** proceed to step 4 unless they do:
    ```bash
    # (a) No phantom reverse-diff: the tracked working tree matches HEAD. A nonzero
@@ -105,10 +105,11 @@ Inputs:
      --trunk "$trunk")
    git diff --quiet "$planned" "$trunk"
    ```
-   (a) is the ISS-030 detector — the **whole tracked tree**, not path-limited (a
-   phantom reverse-diff can span any file the slice projected, not just `src/`).
+   (a) is the phantom-reverse-diff detector — the **whole tracked tree**, not
+   path-limited (a phantom reverse-diff can span any file the slice projected,
+   not just `src/`).
    (b) reads the trunk row's `planned_new_oid` from the committed `dispatch/<N>`
-   journal — a tree-read, stable from this checkout (SL-121) — and diffs it against
+   journal — a tree-read, stable from this checkout — and diffs it against
    the resolved trunk delivery ref (`doctrine dispatch deliver-to`, default
    `refs/heads/main`); a difference means trunk does not hold the projected tip, so
    integration did not land.
@@ -129,11 +130,11 @@ Inputs:
 
    It resolves the earned trunk payload (phase-chain tip, or the admitted
    `close_target` when a candidate workflow is active — **never** `review/<N>`, a
-   review surface SPEC-022 forbids as a trunk payload), asserts it is **already an
+   review surface that is forbidden as a trunk payload), asserts it is **already an
    ancestor** of trunk, and commits a single **Verified** trunk row — mutating no
    ref. Then `slice status <N> done` reads that row and passes. This is the
-   sanctioned replacement for the SL-190 hand-written journal row (SL-211 /
-   IMP-236); land the payload out-of-band as `git merge --no-ff phase/<N>-NN` (or
+   sanctioned replacement for a hand-written journal row; land the payload
+   out-of-band as `git merge --no-ff phase/<N>-NN` (or
    the admitted candidate), not `review/<N>`. Deep recovery detail:
    `doctrine memory show mem.pattern.dispatch.split-lineage-close-conflict-direct-land`.
 

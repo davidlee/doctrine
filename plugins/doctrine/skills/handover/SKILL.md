@@ -112,8 +112,8 @@ For a phase:
       hand-forward) and the slice `notes.md` `## Harvest` section for the
       produced / learned / open ids.
 - [ ] Confirm the next phase's scope from `plan.toml` (EX/VT are authoritative).
-- [ ] **At a dispatch conclude (SL-170 S6):** embed the `slice verify-vt <id>` VT
-      summary block **and** a one-line S1 regression status (from the verify
+- [ ] **At a dispatch conclude:** embed the `slice verify-vt <id>` VT
+      summary block **and** a one-line regression status (from the verify
       beat's `check regression diff`) in the packet — surfacing any
       `UNCHECKABLE` / `WAIVED` / `Fail` gap at handover, not at audit.
 - [ ] Emit the sections below into `handover.md`

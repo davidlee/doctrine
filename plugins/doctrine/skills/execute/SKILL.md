@@ -29,7 +29,7 @@ Inputs:
    - flip the phase to `in_progress` with `doctrine slice phase` (see
      `using-doctrine.md`). **This auto-records the conformance boundary** — the
      handler stamps `code_start_oid = HEAD` into the phase sheet. No extra call;
-     the binding rides the transition you already issue (design D5). (It self-skips
+     the binding rides the transition you already issue. (It self-skips
      in a dispatch coordination context, where the funnel beat is the recorder
      instead.)
 5. Implement phase tasks in small coherent units, **TDD red/green/refactor**
@@ -40,7 +40,7 @@ Inputs:
    future retrieval, run `/record-memory` before moving on.
 8. Lint as you go (`cargo clippy`, zero warnings) and keep the tree buildable.
 9. Follow the repo's commit policy: frequent, small conventional commits scoped
-   with the slice id (e.g. `feat(SL-009): …`). Bias toward a clean tree; don't
+   with the slice id (e.g. `feat(SL-NNN): …`). Bias toward a clean tree; don't
    let `.doctrine/**` workflow edits drift in a stale uncommitted pile.
 10. If `/preflight` or implementation reveals unresolved design ambiguity,
     unexpected obstacles, tradeoffs, or policy ambiguity, stop and `/consult`
@@ -56,7 +56,7 @@ Inputs:
 13. When exit criteria (`EX-`) and verification (`VT-`, plus any agent/human
     `VA-`/`VH-` modes) are satisfied, flip the
     phase to `completed` with `doctrine slice phase`. **This closes the conformance
-    boundary** — the handler captures `code_end_oid = HEAD`, applies the F-6
+    boundary** — the handler captures `code_end_oid = HEAD`, applies the
     ancestor/non-merge guard, and upserts the phase's row into the slice's
     arm-neutral registry. Deterministic, on the critical path — **not** a
     "remember to also record" step; `slice record-delta` is only the manual
@@ -79,8 +79,8 @@ When isolation is requested, before implementing (i.e. before step 5) invoke
 - `mode = solo`, `allow_work_in_place = true` (solo MAY degrade to in-tree on
   sandbox denial);
 - `branch = slice/SL-NNN-slug` (the slice id is in scope — e.g.
-  `slice/SL-029-dispatch-worktree-creation`), worktree dir keyed by the durable id
-  (`.worktrees/SL-029`).
+  `slice/SL-NNN-<slug>`), worktree dir keyed by the durable id
+  (`.worktrees/SL-NNN`).
 
 `/worktree` handles detection, the creation ladder (`doctrine worktree fork`),
 provisioning, the spawn guards, and the green baseline; the **fork branch it
@@ -103,7 +103,7 @@ doctrine worktree gc   --fork slice/SL-NNN-slug   # reap the spent fork once the
 
 `land` preserves the multi-commit TDD history via `git merge --no-ff` (it cannot
 express a squash); `gc` deletes only after the two-leg landed oracle certifies the
-fork (§8.1) — both fail closed with a distinct token, never auto-merge.
+fork — both fail closed with a distinct token, never auto-merge.
 
 ## Outcomes
 

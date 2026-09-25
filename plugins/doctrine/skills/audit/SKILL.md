@@ -8,7 +8,7 @@ description: Use after a slice's phases are implemented, when the task is now ev
 You are running the reconciliation loop: does the work match its design and
 governance, and is every gap consciously dispositioned before reconciliation?
 
-The audit stage runs on a **review ledger** — the RV kind (`RV-NNN`, ADR-007). The
+The audit stage runs on a **review ledger** — the RV kind (`RV-NNN`). The
 shared ledger mechanics (open + prime, raise, dispose + resolve, the severity and
 disposition vocab, synthesis, the close-gate, the parent-tree caveat) live in
 `review-ledger.md` — **read it; this skill does not repeat the verbs.** 
@@ -24,7 +24,7 @@ findings before close" is enforced by the binary
 > evidence refs (R2); audit/repair runs against the **candidate interaction
 > branch** published by `doctrine dispatch candidate create` (see `doctrine
 > dispatch candidate status`). Record which surface you reviewed in the ledger
-> `## Brief` (F-2), and link the admitting RV via `doctrine dispatch candidate
+> `## Brief`, and link the admitting RV via `doctrine dispatch candidate
 > admit --review RV-NNN`.
 
 Inputs:
@@ -60,8 +60,7 @@ interrogates. Posture, if any, rides `--raiser`, never a new facet (`review-ledg
 
 **Self-audit (the usual case).** When you are both reviewer and author, drive both
 roles with `--as <role>` — the raiser raises/verifies/withdraws, the responder
-disposes. This is cooperative role assertion, not a security boundary (ADR-007;
-`review-ledger.md` §4).
+disposes. This is cooperative role assertion, not a security boundary (`review-ledger.md` §4).
 
 **Disposition convention (audit-specific).** Audit's permitted dispositions are:
 `aligned` (observation correct, no change needed), `fix-now` (code fix within
@@ -81,7 +80,7 @@ not mutate a finding to `fixed`/`remediated`.
    slice to). Verbs and flags: `review-ledger.md` §1–§2. Loose notes are
    insufficient for closure-grade work — findings belong in the ledger.
 
-   The old `domain_map`/`prime` seeding is **gone** (RFC-004 / SL-147): the
+   The old `domain_map`/`prime` seeding is **gone**: the
    hand-authored area map was a dead authoring tax. The mechanical drift signal now
    comes from `slice conformance` (step 2), computed from recorded source-deltas —
    no curation.
@@ -102,7 +101,7 @@ not mutate a finding to `fixed`/`remediated`.
      Conformance is **necessary, not sufficient**: it says *where to look*, never
      *whether it passes*. Treat undeclared/undelivered as leads to disposition, not
      auto-findings. If it reports `unavailable` (empty registry) or `incomplete`
-     (a completed phase carries no row — the F-2 backstop), that gap is itself a
+     (a completed phase carries no row), that gap is itself a
      finding: the registry was not recorded as phases landed; bootstrap with
      `doctrine slice record-delta <id> PHASE-NN --start <oid> --end <oid>` or note
      the partial coverage — never read a partial registry as clean.
@@ -122,7 +121,7 @@ not mutate a finding to `fixed`/`remediated`.
 5. **Write the reconciliation brief.** Append a dedicated `## Reconciliation Brief`
    section to `review-NNN.md` — separate from `## Synthesis`. This is the
    structured handoff from audit to `/reconcile`, mapping every spec/governance
-   finding to its target and the intended write surface (D3):
+   finding to its target and the intended write surface:
 
    ```markdown
    ## Reconciliation Brief
@@ -132,8 +131,8 @@ not mutate a finding to `fixed`/`remediated`.
      update prose to match implementation.
 
    ### Governance/spec (REV)
-   - ADR-006 §D5: branch-point staleness description is wrong → REV modify
-   - REQ-077: cordage scale target verified at 50k nodes → REV status active
+   - ADR-NNN: branch-point staleness description is wrong → REV modify
+   - REQ-NNN: cordage scale target verified at 50k nodes → REV status active
    ```
 
    Build the brief from every non-aligned, non-tolerated finding that touches
@@ -141,7 +140,7 @@ not mutate a finding to `fixed`/`remediated`.
    governance/spec REV). Each entry cites the finding id and describes the exact
    change needed.
 
-   **Brief-surface guardrails (D3).** `/reconcile` writes exactly two surfaces —
+   **Brief-surface guardrails.** `/reconcile` writes exactly two surfaces —
    per-slice artefacts (`design.md`, `slice-NNN.md`) by direct edit, and
    governance/spec by REV. Name a surface the writer skill will actually touch, or
    the brief stalls at reconcile:
@@ -164,7 +163,7 @@ not mutate a finding to `fixed`/`remediated`.
    hand off directly to `/close` — reconcile is the sole writer of reconciled
    truth; close only confirms the outcome. Record the lifecycle move:
    `doctrine slice status <id> reconcile` (bare number) — the binary refuses it
-   while a blocker is unresolved (D-C9b).
+   while a blocker is unresolved.
 
 ## Outcomes
 

@@ -20,7 +20,7 @@ sequence) · `system` (subsystem map + pointers, not a spec) · `concept` (stabl
 mental model / terminology) · `signpost` ("start here" navigation) · `thread`
 (short-lived working set, expires fast).
 
-⚠ **A `thread` is hidden from `find`/`retrieve` until verified** (SL-008 D6, §5).
+⚠ **A `thread` is hidden from `find`/`retrieve` until verified**.
 If you want a working loop to resurface by scope, prefer a durable type
 (`pattern`/`system`/`concept`) — or record the `thread` and `verify` it on a
 clean tree. An unverified thread shows only in `list`/`show`, never in scope
@@ -102,8 +102,8 @@ Stamps `verified_sha` against the working tree (refuses a dirty tree — no fals
 attestation). Unattested memories read as lower trust.
 
 **Threads require this to surface at all.** `thread_expiry` drops any `thread`
-that is not `verified` AND `reviewed` within 14 days from `find`/`retrieve`
-(SL-008 D6). `record` always writes `unverified`, so a fresh thread is invisible
+that is not `verified` AND `reviewed` within 14 days from `find`/`retrieve`.
+`record` always writes `unverified`, so a fresh thread is invisible
 to scope ranking until you `verify` it — and `verify` refuses a dirty tree, so
 attest from a clean tree. Other types are never gated this way.
 

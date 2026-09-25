@@ -37,28 +37,28 @@ TOML, gated by `spec validate`):
   this capability realises.
 - `parent` — a single parent, acyclic containment (the C4 decomposition).
 - **Containment is never a peer edge.** `parent` is never expressed as an
-  `interactions` edge, and an `interactions` edge is never containment (PRD-012
-  principle) — decomposition and peer `uses`/`calls` are distinct axes.
+  `interactions` edge, and an `interactions` edge is never containment as a
+  matter of principle — decomposition and peer `uses`/`calls` are distinct axes.
 
 **C4 altitude.** Hand-authored specs normally stop at the container/component
 level; code-level (C4 level 4) specs are exceptional, authored only when a unit of
 mechanism genuinely needs that resolution.
 
 **Posture is dual.** A tech spec may be **retrospective** (the shipped *how*) or
-**forward-intent** (SPEC-001/SPEC-002 style, describing an unbuilt engine) — both
+**forward-intent** (describing an unbuilt engine) — both
 are legal, provided *planned* stays distinguishable from *verified*. Requirements
 are `REQ-NNN` entities at status `pending`; there are no coverage tables and no
 status derivation — observed coverage is reconciled, never inferred from the spec.
 
-**The exemplar trio** locks the three canonical shapes — read them with `spec show`
-before authoring:
+**Three canonical shapes.** The `context`/`container`/`component` kinds each have
+one locked shape — read a spec of that kind with `spec show` before authoring:
 
-- **SPEC-003** (`context`) — the whole-system synthesis: anchor-free, no `parent`,
+- **`context`** — the whole-system synthesis: anchor-free, no `parent`,
   no `descends_from`; names the containers and their composition, never restating
   any one container's mechanism.
-- **SPEC-004** (`container`) — `parent` only, no descent: a mechanism container
+- **`container`** — `parent` only, no descent: a mechanism container
   whose children carry the per-capability descent.
-- **SPEC-005** (`component`) — `parent` + `descends_from`: the thin (not anaemic)
+- **`component`** — `parent` + `descends_from`: the thin (not anaemic)
   capability shape — kind-specific contracts only, shared mechanism cited via the
   parent, never restated.
 

@@ -6,11 +6,11 @@ description: Use after /audit resolved the RV ledger and wrote the reconciliatio
 # Reconcile
 
 You are the **sole explicit writer** of reconciled truth — the writer half of the
-`audit → reconcile → close` seam (ADR-003 §7; ADR-009 §1). Audit identifies what
+`audit → reconcile → close` seam. Audit identifies what
 changed and assembles the reconciliation brief; you consume it, write the changes,
 and record what was done. Close confirms the outcome before the terminal transition.
 
-You write to **two surfaces** with different mechanisms (D2):
+You write to **two surfaces** with different mechanisms:
 
 | Surface | Mechanism |
 |---|---|
@@ -33,11 +33,11 @@ reconciliation brief, not guessed.
 > prose edit alone (§6 is only the mirror; `slice conformance` reads the registry
 > in `slice-NNN.toml`). Edit prose only, and conformance stays red.
 
-> **No CLI verb surface.** `doctrine slice reconcile` is not built yet (deferred,
-> ADR-003 §11). You drive existing verbs (`doctrine revision *`, direct file edits)
+> **No CLI verb surface.** `doctrine slice reconcile` is not built yet (deferred).
+> You drive existing verbs (`doctrine revision *`, direct file edits)
 > as manual discipline — same posture as `/audit` today.
 
-> **Inspect, don't re-audit (D9).** You inspect target artefacts to validate
+> **Inspect, don't re-audit.** You inspect target artefacts to validate
 > applicability, locate edit points, and detect drift since audit — but you do not
 > perform new issue discovery. If you discover a *new* gap not in the brief, do not
 > open a new finding here; hand it back to `/audit` or raise it with `/consult`.
@@ -48,7 +48,7 @@ Inputs:
 - the **RV ledger** — `review-NNN.toml` (finding status) + `review-NNN.md` (the
   review markdown, carrying the reconciliation brief)
 - the **`## Reconciliation Brief`** section within `review-NNN.md` — the structured
-  handoff from audit (D3). It maps findings to target artefacts, split into
+  handoff from audit. It maps findings to target artefacts, split into
   per-slice (direct edit) and governance/spec (REV) items. Its shape:
 
   ```markdown
@@ -58,8 +58,8 @@ Inputs:
   - design.md §3: the eviction model changed … update prose
 
   ### Governance/spec (REV)
-  - ADR-006 §D5: branch-point staleness description is wrong → REV modify
-  - REQ-077: cordage scale target verified at 50k nodes → REV status active
+  - ADR-NNN: branch-point staleness description is wrong → REV modify
+  - REQ-NNN: cordage scale target verified at 50k nodes → REV status active
   ```
 
 The brief lives in a dedicated section, separate from `## Synthesis` (the audit's
@@ -172,11 +172,11 @@ Write the reconciliation rationale into `revision-NNN.md` — what changed, why,
 a link back to the RV finding that drove it. Example:
 
 ```markdown
-## Reconcile narrative (SL-080)
+## Reconcile narrative
 
-- [RV-042 finding F3]: ADR-006 §D5 branch-point staleness description was wrong.
-  Updated to match the CAS row semantics from SL-056.
-- [RV-042 finding F5]: REQ-077 verified at 50k nodes. Status moved to `active`.
+- [RV-NNN finding F-3]: the branch-point staleness description was wrong.
+  Updated to match the CAS row semantics from the coordination slice.
+- [RV-NNN finding F-5]: the scale requirement verified at 50k nodes. Status moved to `active`.
 ```
 
 #### 4e. Split rule
@@ -196,7 +196,7 @@ doctrine revision apply REV-N
 ```
 
 - `approve` records the orthogonal approval — `apply` refuses without it
-  (invoker-blind: a solo dev self-approves; ADR-009).
+  (invoker-blind: a solo dev self-approves).
 - `apply` auto-lands `status` rows and surfaces `modify` / `create` / `introduce` /
   `move` / `retire` / `prose` rows for manual landing. A pre-flight from-guard
   aborts the whole apply if any target moved since the change was drafted — if this
@@ -221,14 +221,14 @@ Outcome` section to `review-NNN.md`:
 ## Reconciliation Outcome
 
 ### Direct edits applied
-- design.md §3: updated eviction model prose → matches implementation (RV-042 F2)
+- design.md §3: updated eviction model prose → matches implementation (finding F-2)
 
 ### REVs completed
-- REV-011 (`reconcile-sl-080`): done — ADR-006 §D5 amended, REQ-077 → active
-  (covers RV-042 F3, F5). Rationale in revision-011.md.
+- REV-NNN (`reconcile-<slug>`): done — the staleness description amended, REQ-NNN → active
+  (covers findings F-3, F-5). Rationale in revision-nnn.md.
 
 ### Withdrawn / tolerated
-- RV-042 F4: tolerated — drift in error message wording; rationale in finding disposition.
+- Finding F-4: tolerated — drift in error message wording; rationale in finding disposition.
 ```
 
 ### 7. Escalation gate
@@ -241,7 +241,7 @@ escalate back to design:
 doctrine slice status <id> design
 ```
 
-This is the ADR-009 §1 back-edge: `reconcile → design`. Describe the inadequacy in
+This is the design back-edge: `reconcile → design`. Describe the inadequacy in
 a note (the `--note` flag), and what the design needs to resolve. Do not improvise
 a fix that the governing design does not support.
 

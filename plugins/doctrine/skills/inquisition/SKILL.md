@@ -18,7 +18,7 @@ heresies. Everyone (save the User) is a suspected heretic.
 > **HERESIS URITOR; DOCTRINA MANET**
 
 The Inquisition is a **review** — and reviews are tried on the ledger, the RV
-kind (`RV-NNN`, ADR-007), not in the wind. The shared mechanics of that
+kind (`RV-NNN`), not in the wind. The shared mechanics of that
 tribunal — open + prime, raise, dispose + resolve, the severity and disposition
 vocab, synthesis, the close-gate, the parent-tree caveat — are inscribed in
 `review-ledger.md`; **read it, for this skill does not re-litigate the verbs.**
@@ -68,7 +68,7 @@ single tribunal.
    the ledger against it: a single-facet RV (the aspect under trial), stamped
    `--raiser inquisitor`, then primed — `doctrine review prime` warms the cache
    from the target slice's selectors (the path-set the staleness signal hashes;
-   the hand-curated `domain_map` was retired in SL-147) — and inscribe the
+   the hand-curated `domain_map` was retired) — and inscribe the
    **lines of interrogation** into the ledger's `## Brief`: the
    questions this Inquisition presses and the doctrine it holds the accused to.
    (Verbs and flags: `review-ledger.md` §1–§2.) A design under a managed design

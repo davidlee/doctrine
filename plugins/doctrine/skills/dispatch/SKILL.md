@@ -12,15 +12,15 @@ workers."
 ## The outer loop
 1. `dispatch setup --slice <N> --dir <path>` — create/resume coordination worktree.
    Under a Claude harness `--dir` MUST resolve inside the project root (convention
-   `.dispatch/SL-<n>`); an outside-root dir fails closed (ISS-031). Other harnesses
-   keep their enforced outside-root isolation (ADR-008).
+   `.dispatch/SL-<n>`); an outside-root dir fails closed. Other harnesses
+   keep their enforced outside-root isolation.
 2. Commit the orchestrator's own authored writes (slice status, memory, audit)
-   with `dispatch commit --slice N -m <msg> -- <path>…` (pathspec-mandatory,
-   ISS-234-guarded), never a raw `git commit`.
+   with `dispatch commit --slice N -m <msg> -- <path>…` (pathspec-mandatory),
+   never a raw `git commit`.
 3. `dispatch plan-next --slice <N>` — find next actionable phase(s); plan parallel batches when file-disjoint
 4. Spawn worker(s) via [`/dispatch-spawn`](../dispatch-spawn/SKILL.md) — one
    confined subprocess path for every harness (default to the `pi` harness until
-   `preferred-subprocess-harness` selection is wired — IMP-101).
+   `preferred-subprocess-harness` selection is wired).
 5. Land each phase yourself — import, commit, record the boundary, verify, flip
    the phase to `completed`, reap the fork (below)
 6. Conclude: `slice verify-vt <id>` (VT gate, coord tree) → on green
@@ -42,12 +42,12 @@ base would either inherit the red (and be halted at import for a defect it did n
 cause) or launder it. Run this exactly once per batch here on the hot path (the
 only other prove run is the post-import gate below — do not double-run).
 
-Capture `B = git rev-parse HEAD` pre-spawn, then capture the S1 regression
+Capture `B = git rev-parse HEAD` pre-spawn, then capture the regression
 baseline on the coord tree at `B`:
 ```
 doctrine check regression capture --base "$B"     # suite @ B; no-op on cache hit
 ```
-**INV-1 — normalise filter state before BOTH this capture and the verify diff**:
+**Normalise filter state before BOTH this capture and the verify diff**:
 confirm `DOCTRINE_WORKER` is unset in your own environment and force a real
 rebuild, so capture and diff run an identical suite invocation + test selection.
 Same tree alone is insufficient — a leaked `DOCTRINE_WORKER` changes which tests
@@ -122,12 +122,12 @@ and do not re-drive around it — a refusal is a defect or a halt, never a detou
   non-committing and runs the **reject-and-halt prove gate** in-process
   (`doctrine check prove` on the post-import tree): an unformatted OR lint-red
   delta HALTS the import (staged, NOT committed) and is reported — never
-  auto-fixed (ADR-012 sole-writer: land-or-reject, never rewrite). A red here is
+  auto-fixed (sole-writer posture: land-or-reject, never rewrite). A red here is
   a WORKER-delta defect, distinct from the pre-spawn BASE defect above.
 - **The registry write.** After the code commit, `doctrine slice record-delta
   <SL> PHASE-NN --commit <S>` writes the commit-scoped `[S^,S]` row into the
   primary-tree conformance registry (the symmetric ledger derive is deferred —
-  D6/IMP-171; mechanics in `/dispatch-spawn`). Not a "remember to also record"
+  mechanics in `/dispatch-spawn`). Not a "remember to also record"
   hand-step: the Conclude beat's completeness gate halts if a landed phase is
   missing its row (below).
 - **Per-phase review.** Between `import` and `conclude`, weigh a review of the
@@ -154,26 +154,26 @@ manual resolve in the coord tree — never auto-merged.
 
 ## Conclude
 When all phases land, run the conclude cadence **in the coord tree, before it is
-removed** (SL-170 S3/S6): `slice verify-vt <id>` → on green
+removed**: `slice verify-vt <id>` → on green
 `dispatch sync --prepare-review` → remove coordination worktree directory (KEEP
 the refs) → `slice status <id> audit` → `/audit` from parent/root. Stage-2
 integrate is `/close`'s job, post-audit — never land code pre-audit.
 
-`slice verify-vt <id>` is the **VT existence/shape gate** (S3): it reads the coord
+`slice verify-vt <id>` is the **VT existence/shape gate**: it reads the coord
 tree's `plan.toml` and checks every `VT`-mode criterion's mandated `test_file` +
 `keywords`. A `Fail` exits non-zero and **HALTS handover** — do not prepare-review
 past it; `/consult` → revise-or-waive the authored plan (never self-relax a
 mandate), then re-run. `Uncheckable` / `Waived` are visible but non-halting. The
 fs reader suffices here because the orchestrator (sole writer) has committed any
 mid-dispatch waiver onto `dispatch/<slice>`, so the coord working tree == the
-committed graph `prepare-review` projects (INV-6).
+committed graph `prepare-review` projects.
 
-**Embed at handover (S6):** carry the `verify-vt` VT summary block **and** a
-one-line S1 regression status (lifted from the verify beat's `check regression
+**Embed at handover:** carry the `verify-vt` VT summary block **and** a
+one-line regression status (lifted from the verify beat's `check regression
 diff`) into the conclude output and the `/handover` packet — so a gap (incl.
 `UNCHECKABLE` / `WAIVED`, rendered distinctly) is visible at handover, not at audit.
 
-`prepare-review` is the **enforced** conformance beat (ISS-052): before projecting
+`prepare-review` is the **enforced** conformance beat: before projecting
 refs it commits the boundaries ledger, **derives** registry rows from that committed
 ledger (every ledger row is upserted into the primary registry — arm-neutral), then
 runs a completeness **gate** that `bail!`s if any completed phase lacks a row. So

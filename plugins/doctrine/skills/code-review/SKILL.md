@@ -89,7 +89,7 @@ escalates per-phase review to required even for an above-the-bar model:
 ## This review runs on the ledger
 
 A flaying nobody can find later was a waste of breath. Closure-grade critique
-lands on the **RV review ledger** — the RV kind (`RV-NNN`, ADR-007) — so each
+lands on the **RV review ledger** — the RV kind (`RV-NNN`) — so each
 finding outlives the conversation as an append-only, field-owned, queryable raise
 instead of evaporating into chat scrollback. The shared ledger mechanics (subject
 and target ladder, open + prime, raise, dispose + resolve, severity and
@@ -123,7 +123,7 @@ findings can be queried, gated, and handed off:
 - The **code/diff is the evidence, not the subject.** When the locus is a backlog
   item (or any non-code entity), the item is the RV's *locus* and the concrete code
   evidence — file, line, the offending construct — lives in each finding's
-  `--detail` (`review-ledger.md` §1; design §5.5). Never include any secrets,
+  `--detail` (`review-ledger.md` §1). Never include any secrets,
   credentials or API keys directly in the ledger.
 
 ## Process
@@ -133,7 +133,7 @@ findings can be queried, gated, and handed off:
    - Read relevant governing artifacts, memories, etc.
    - Open + prime the RV: `doctrine review prime` warms the cache from the target
      slice's selectors (the path-set the staleness signal hashes; the hand-curated
-     `domain_map` was retired in SL-147), then seed the ledger's `## Brief` with
+     `domain_map` was retired), then seed the ledger's `## Brief` with
      your lines of attack (`review-ledger.md` §2).
 2. **High-level review**
    - Architecture
