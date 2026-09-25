@@ -21,10 +21,12 @@ three separable ways:
    describes six kinds where the CLI mints seven, names wrong default statuses,
    omits `settle`, and its own syntax example would be refused; `glossary.md` has
    no `concept` row.
-3. **Surfaces with no shipped orientation.** The corpus instructs actions it
-   never documents — the sharpest being friction observation, which the shipped
-   boot snapshot tells every agent to record while no shipped doc explains the
-   ledger.
+3. **Surfaces with no shipped orientation.** The corpus mentions actions it
+   never explains — the corpus-health group (`doctor`, `validate`, `check`,
+   `publication`), the reports group, `config`, and the facets group. (The
+   observation surface, once named as the sharpest gap, is in fact documented —
+   `install/using-doctrine.md:68-105`; `IMP-484`'s claim is re-verified and
+   corrected in sec-6.)
 
 **Why one change and not three.** All three rest on one question — what may a
 shipped claim be grounded on, and at which tier — so one answer settles them
@@ -57,8 +59,11 @@ The defect is structural, not textual: entity ids are per-repo sequential, so
 `DEC-127` already generalised the rule for `install/` ("no shipped asset may cite
 a repo-private artefact"); two tier-5 memories each cover one sub-corpus
 (`mem.pattern.doctrine.shipped-skill-platform-independence`, `plugins/**`;
-`mem.pattern.doctrine.shipped-master-body-scrub`, memory bodies). Neither reaches
-`install/` reference docs or shipped memory prose.
+`mem.pattern.doctrine.shipped-master-body-scrub`, shipped memory bodies). The
+first reaches only `plugins/`; the second is a body-scrub rule for promoting a
+master, so it reaches shipped memory prose but is not a citation rule. Neither
+reaches `install/` reference docs, and there is no single corpus-wide citation
+rule.
 
 ```mermaid
 flowchart LR
@@ -154,16 +159,27 @@ client-unresolvable); `PRD-004`/`SPEC-007`; `PRD-002`/`SPEC-006`.
 <!-- doctrine:section sec-5 -->
 ## The grounding rule and its delivery
 
-**The rule (`DEC-311`).** A shipped asset (`install/`, `memory/`, `plugins/`) may
-ground a claim on either:
+**The rule (`DEC-311`, widened at pass 2).** A shipped asset (`install/`,
+`memory/`, `plugins/`) may ground a claim on **any address a client can
+resolve**:
 
-1. **prose that stands without a reference** — inline the fact; or
+1. **prose that stands without a reference** — inline the fact;
 2. **a published logical address** — `reference/<name>.md`, resolvable in every
-   client via `doctrine library show` (`ADR-019`, `PRD-017`).
+   client via `doctrine library show` (`ADR-019`, `PRD-017`);
+3. **a shipped memory key** — `[[mem.<key>]]`, present in the shipped corpus;
+4. **a skill name** — the shipped skills are invoked by name (`/audit`);
+5. **a CLI verb** — `doctrine <verb> ...`; the CLI is the source of truth for
+   shapes (`ADR-005`);
+6. **an in-corpus relative path** — admissible **only where the target is
+   installed next to the citing file**, such as a skill linking to its own
+   `references/` sibling. A published `install/` document has no file on disk in
+   a client (`ADR-019`), so a relative link from it reaches nothing and is
+   forbidden.
 
-A **repo-private entity id or file path is never permissible, at any tier.** A
-widened vocabulary is rejected: any durable referent a client needs is either
-inlined or published, so a third form adds syntax without adding reach.
+A **repo-private entity id or repo-private source/spec path is never
+permissible, at any tier.** The earlier blanket rejection of a "widened
+vocabulary" is struck: the forms above are not a new citation syntax, they are
+the resolution seams a client already has.
 
 **Disposition classes:**
 
@@ -190,9 +206,15 @@ flowchart TD
 ```
 
 **The governance home (`DEC-312`).** A new ADR descending from `ADR-005` and
-`ADR-019`, recording the rule and its rationale: *"Shipped-corpus grounding:
-inline prose or a published address, never a repo-private id."* Authored in this
-slice.
+`ADR-019`, recording the rule and its rationale: *"Shipped-corpus grounding: any
+address a client can resolve, never a repo-private id or path."* Authored in this
+slice. It is the rule's **single governance owner**: `DEC-127` is related as the
+`install/`-scoped precedent rather than superseded (its separate decision about
+shipping the published surface is preserved), and the shipped authoring doc is a
+linked delivery copy, not a second rule. The two local memories that also state
+parts of the rule live under `.doctrine/memory/items/`, a corpus the slice's
+non-goals exclude; consolidating them is a **recorded follow-up**, so touching
+them is not unscoped work.
 
 **Shipped delivery (`ADR-023`, `ADR-005`).** A new published reference doc,
 `install/shipped-corpus-authoring.md` → `reference/shipped-corpus-authoring.md`,
@@ -227,6 +249,14 @@ new ADR (`DEC-312`) supplies the content-facet rule as a descendant, and editing
 scope is intentionally mechanism-level. If the drift gate (`ISS-309` part 2)
 finds the descendant rule insufficient, a `POL-002` revision is the escalation —
 recorded here so the non-action is a judgement, not an omission.
+
+**Maintainer-note headers are a named class.** Five published docs open with a
+comment like `Edit the source in install/…` and cite `ADR-005`. They are shipped
+but aimed at doctrine maintainers, not clients. They are classified: either strip
+the repo-private id and express the source location as the published corpus path
+(name the doc, not the source tree), or keep the note with references admitted
+only to the published corpus itself. The class is named so it is governed, not
+left as an accidental sixth citation form.
 <!-- doctrine:section sec-6 -->
 ## The sweep: three axes, three channels
 
@@ -240,12 +270,19 @@ that decides it — `doctrine <verb> --help` for shapes, live `list` output plus
 mismatches. Two mechanical legs run first: dangling `[[mem.*]]` wikilinks; any id
 whose prefix the CLI does not mint.
 
-**Axis C — sufficiency (`IMP-484`).** Disposition every gap: the corpus-health
-group (`doctor`, `validate`, `check`, `publication`), `observation`, the reports
-group, `config`, the facets group, and `supersede`/`serve --mcp`/`worktree`. Each
-gains shipped orientation at its `ADR-005` tier or an explicit justified
-exclusion. Developer-only surfaces (`reseat`, `export`, `prompt`, `reservation`,
-`verify`, `catalog`) are recorded out of scope. A signpost per verb is refused.
+**Axis C — sufficiency (`IMP-484`).** Re-verify every gap against the corpus
+before trusting it: `IMP-484`'s observation gap is **false** — the ledger is
+documented at `install/using-doctrine.md:68-105`, and the "Instrumentation"
+instruction it quotes is this repo's own `.doctrine/governance.md` surfaced into
+the boot snapshot, not shipped text. Observation therefore needs no new
+orientation. The remaining surfaces — the corpus-health group, the reports group,
+`config`, the facets group, `supersede`/`serve --mcp`/`worktree` — each gain
+shipped orientation at the right `ADR-005` tier or an explicit justified
+exclusion, re-checked against the CLI and the corpus rather than the item's text.
+`prompt` is **not** developer-only: the shipped band directive
+(`install/model-band.md:8`) tells every client agent to run `doctrine prompt
+resolve`. Developer-only surfaces (`reseat`, `export`, `reservation`, `verify`,
+`catalog`) are recorded out of scope. A signpost per verb is refused.
 
 **Placement procedure for a dispositioned gap (`ADR-005` tier).** A gap gains
 exactly one home, chosen by the tier that serves the reader:
@@ -253,19 +290,31 @@ exactly one home, chosen by the tier that serves the reader:
 | gap | destination |
 |---|---|
 | corpus-health group (`doctor`, `validate`, `check`, `publication`) | a section of a PULL reference doc, pointed-at from boot or a skill |
-| `observation` | a shipped memory signpost (orientation) plus a reference section; the boot already instructs the action |
 | reports group (`status`, `next`, `blockers`, `survey`, `explain`, `findings`) | a reference-doc section |
 | `config`, the facets group | a reference-doc section |
+| `prompt` (client-facing — the band directive invokes `doctrine prompt resolve`) | a reference-doc section for the shipped band mechanism |
 | `supersede`, `serve --mcp`, `worktree` | extend the existing domain reference doc that owns the surface, else a section |
-| developer-only (`reseat`, `export`, `prompt`, `reservation`, `verify`, `catalog`) | recorded out of scope, with the reason |
+| developer-only (`reseat`, `export`, `reservation`, `verify`, `catalog`) | recorded out of scope, with the reason |
+
+`observation` is absent from the table because it is already documented (above),
+not a dispositioned gap.
 
 No new signpost per verb: a signpost is minted only where memory orientation is
 the right tier, never as a table of contents for the CLI.
 
-**Three channels, three reach tests.** `install/` is verified by reading the
-*published* copy via `doctrine library show`; `memory/` by reading the
-*materialised* `.doctrine/memory/shipped/` copy; `plugins/` by reading the
-*installed* skill copy. The source tree is not the artifact the reader sees.
+**Channels and reach tests.** `install/` reaches a client by more than one seam,
+so each needs its own check; the source tree is never the artifact the reader
+sees.
+
+| channel | how it reaches the client | check |
+|---|---|---|
+| published docs, templates, prompts | `doctrine library show <address>` (no file on disk, `ADR-019`) | address resolves; prose stands without an id |
+| rendered entity scaffolds | substituted into the client's own entity files at create/edit (`src/adr.rs:209` renders embedded templates) | the rendered output carries no doctrine-private id |
+| boot-assembled fragments (`model-band.md`, boot footer) | inlined into the client boot snapshot | the assembled snapshot's citations resolve |
+| design-run prompts (`design-prompts/*`) | served during a client design run | served text carries no doctrine-private id |
+| installed integration assets (`agents/**`, `git-hooks/*`, manifest backings) | written to a stable client path by `doctrine install` | installed file carries no doctrine-private id |
+| shipped memory corpus | materialised into `.doctrine/memory/shipped/` | materialised body resolves |
+| skills (`plugins/**`) | installed skill tree | installed skill text resolves |
 
 **Ordering.** Per changed file where possible, so each commit is coherent and no
 file is touched twice; mechanical legs before the prose pass.
@@ -291,6 +340,10 @@ file is touched twice; mechanical legs before the prose pass.
 <!-- doctrine:section sec-8 -->
 ## Verification
 
+- **Environment.** The client-read test runs in a **scratch repo** (`git init`
+  plus `doctrine install`), never in this worktree: inside doctrine, `ADR-007`
+  resolves to doctrine's own record, which is exactly the false pass the test
+  exists to catch. One check per channel (sec-6).
 - **Citation conformance.** Per-channel client-read test. Evidence is the
   replacement resolving: for each swept site, the disposition plus, for a
   repoint, the published address that resolves via
@@ -336,4 +389,6 @@ dispositions, corrected claims, dispositioned gaps) are the closure artefact.
 | R7 | Scope creep into the drift gate | The gate is a non-goal; the slice delivers the rule and the sweep only. |
 
 **Residuals:** `QUE-227` (gate seam + duplicate rule) stays open; `ISS-215` (boot
-index) and `CHR-036` are untouched.
+index) and `CHR-036` are untouched. The consolidation of the two local memories
+that partly restate the grounding rule (`.doctrine/memory/items/`) is a recorded
+follow-up, excluded here because local-memory health is a non-goal corpus (F-9).

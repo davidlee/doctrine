@@ -3,7 +3,7 @@ version = 1
 
 id = 311
 slug = "shipped-claims-ground-on-inline-prose-or-a-published-address-never-a-repo-private-id"
-title = "Shipped claims ground on inline prose or a published address, never a repo-private id"
+title = "Shipped claims ground on any client-resolvable address, never a repo-private id or path"
 record_kind = "decision"
 status = "proposed"
 created = "2026-09-25"
@@ -12,10 +12,10 @@ tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 context = "SL-267 answers QUE-226: per-site the sweep must decide inline / drop / repoint, which is undecidable until the permissible grounding is fixed. The shipped corpus cites this repo's per-repo-sequential ids, which resolve to the client's unrelated records with no error."
-choice = "Permit inline prose standing alone, or a published reference/<name>.md address; forbid repo-private ids and paths entirely; reject a widened vocabulary."
+choice = "Permit any address a client can resolve: inline prose; a published reference/<name>.md address; a shipped memory key; a skill name; a CLI verb; and an in-corpus relative path only where the target is installed beside the citing file. Forbid repo-private ids and source/spec paths at every tier."
 alternatives = []
-rationale = "It settles the majority of sites cheaply (one-clause rationale -> inline), gives the hard cases a destination (mint a published reference doc), and avoids new citation syntax because option 3 collapses into the published-address option."
-consequences = ["The per-site disposition taxonomy is inline | drop | repoint, with repoint targeting a published address.", "The rule is project-global and is recorded as an ADR descending from ADR-005/ADR-019.", "Verification is that the replacement resolves in a client repo, never that the old id is absent."]
+rationale = "The corpus already uses shipped memory keys and skill names heavily (149 [[mem.*]] links, 272 code-span slash-skill references), so a rule naming only prose and published addresses is silent on the forms the corpus mostly uses. Enumerating the resolution seams closes that hole without inventing a new citation syntax; the earlier blanket rejection of a widened vocabulary is struck."
+consequences = ["The per-site disposition taxonomy is inline | drop | repoint | publish | leave", " with repoint targeting a published address or another client-resolvable form.", " The rule's single governance owner is the new ADR descending from ADR-005/ADR-019; DEC-127 is related as the install/-scoped precedent", " not superseded.", " Consolidating the two local memories that restate part of the rule is a recorded out-of-scope follow-up (local-memory health is a non-goal corpus).", " Verification is that the replacement resolves in a client repo", " never that the old id is absent."]
 decided_by   = ""
 decided_on   = ""
 

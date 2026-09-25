@@ -51,59 +51,75 @@ response = "sec-5 revised: rationale for a new doc recorded - reference/design-r
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Grounding rule admits only inline prose or reference/<name>.md; the corpus's own shipped memory keys and skill names are outlawed"
 detail = "Expected: DEC-311 (sec-5) enumerates every client-resolvable referent form. Observed: it permits exactly two forms and explicitly rejects 'a widened vocabulary', yet the shipped corpus carries 149 [[mem.*]] wikilinks (grep over memory/ plugins/ install/) and 117 backtick skill references such as /audit, /design — both resolve in every client (shipped memories materialise into .doctrine/memory/shipped/; skills install). DEC-311's body is silent on both. sec-6 Axis B simultaneously treats only *dangling* [[mem.*]] links as defects, implying the live ones are fine — the design contradicts its own rule. Consequence: the ADR (DEC-312) would bind future authoring to a rule the corpus violates ~266 times by design, and a faithful sweep would strip the navigation mesh. Penance: widen the rule to 'a client-resolvable address' and enumerate the forms — published reference/<name>.md, shipped memory key, shipped skill name, doctrine CLI verb — then amend DEC-311 and sec-5."
+disposition = "route:review fix-now"
+response = "Rule widened in sec-5 and re-recorded on DEC-311: six admissible forms (inline prose; published reference/<name>.md; shipped memory key; skill name; CLI verb; in-corpus relative path, admissible only where the target is installed beside the citing file, per ADR-019). The sentence rejecting a widened vocabulary is struck from both. Counts verified: 149 [[mem.*]] links, 272 slash-skill code-span references."
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Observation 'gap' is false: using-doctrine.md already orients it; the placement table would duplicate that section"
 detail = "Expected: sec-1 item 3 and sec-6's placement row for observation rest on a true gap. Observed: install/using-doctrine.md:68-105 ('Capturing friction — observations', since 6e834a6fd, 2026-07-28 — before the audit) covers what it is for, the capture verb, the per-context interface table, fork-local refusal, and 'Records are authored by default' — every item IMP-484 says is missing; IMP-484 claims 'One table row ... is the entire coverage'. Further, IMP-484/sec-1 say the *shipped boot snapshot's* Instrumentation section instructs every agent; that section is this repo's CLAUDE.md, not a shipped install/ fragment (no hit in install/). Minting 'a shipped memory signpost plus a reference section' is a parallel implementation. Penance: re-verify each IMP-484 gap against the corpus before placement; dispose observation as already-oriented (or a pointer from boot at most); correct sec-1, sec-6 and IMP-484."
+disposition = "route:owner-fix fix-now"
+response = "sec-6 Axis C re-verifies IMP-484 before trusting it: the observation gap is false (using-doctrine.md:68-105 documents the ledger; the quoted Instrumentation text is .doctrine/governance.md surfaced into the boot snapshot, not shipped). Observation removed from the gap list and the placement table; every remaining gap is to be re-checked against the corpus, not the item text. sec-1 point 3 corrected."
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Client-read test is run inside the doctrine repo, where repo-private ids silently resolve — the exact failure it must detect"
 detail = "Expected: sec-8 / slice closure intent read the corpus 'as an agent with no doctrine corpus'. Observed: the verification reads via doctrine library show and the materialised/installed copies, but names no environment; run from this repo, ADR-007 resolves to doctrine's own ADR-007, so a leftover citation reads as correct — the silent-resolution defect sec-1 describes. Penance: perform the read test in a scratch client (git init + doctrine install in a temp dir, memory sync), where any surviving repo-private id visibly resolves to nothing or the wrong thing; record that environment in the evidence artefact."
+disposition = "route:control fix-now"
+response = "sec-8 gains an Environment bullet: the client-read test runs in a scratch repo (git init + doctrine install), never in this worktree, because an in-repo run is the incorrect candidate the check must reject - inside doctrine ADR-007 resolves to doctrine's own record. One check per channel."
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "answered"
 severity = "major"
 title = "install/ reaches clients through more channels than 'published'; only library show is reach-tested"
 detail = "Expected: sec-6 'three channels, three reach tests' covers every seam by which install/ text reaches a client reader. Observed: install/manifest.toml projects only three backings, but install/templates/** are rendered into every entity a client mints (src/adr.rs:209, src/concept_map.rs:266 via asset_text), install/model-band.md / routing-process.md / boot-footer.md are composed into the client's boot snapshot, install/design-prompts/** are served in design-run turn envelopes, and install/agents/** + git-hooks are installed. sec-7 sweeps all of them; sec-6/sec-8 verify only the published copy. Penance: map each swept install/ path to its actual channel and name the read that proves it (mint an entity from each swept template; regenerate boot; render a design-run turn; read installed agents/hook) in the scratch-client test."
+disposition = "route:owner-fix fix-now"
+response = "sec-6 replaces the three-channel claim with an enumerated channel table and one reach check each: published docs (library show); rendered entity scaffolds (src/adr.rs:209); boot-assembled fragments; design-run prompts; installed integration assets; materialised memory; installed skills."
 
 [[finding]]
 id = "F-9"
-status = "open"
+status = "answered"
 severity = "major"
 title = "'One rule, one home' is contradicted by the design's own delivery: ADR + restating reference doc + DEC-127 + two memories"
 detail = "Expected: sec-4 'the rule is recorded once, as an ADR; the corpus carries pointers, not restatements', and sec-3 'do not mint a third POL-002 rule'. Observed: sec-5 has reference/shipped-corpus-authoring.md 'state the rule and the disposition procedure' — a restatement, necessarily so, because by the rule itself the shipped corpus cannot point at the new ADR's repo-private id. DEC-127 (the same rule for install/) and mem.pattern.doctrine.shipped-skill-platform-independence / shipped-master-body-scrub persist, with no stated relation to the new ADR (supersede? refine?). Result: five statements of one rule. Penance: state the ADR's relation to DEC-127 (supersedes) and to the two memories (retire or repoint in this slice, since their bodies are in memory/**/.doctrine scope), and replace the principle with the honest one: the ADR governs the repo, the published doc is the sole shipped statement."
+disposition = "route:owner-fix fix-now"
+response = "sec-5 names the new ADR the rule's single governance owner; DEC-127 is related as the install/-scoped precedent, not superseded (its published-surface shipping decision is preserved). The shipped authoring doc is a linked delivery copy. The two local memories under .doctrine/memory/items/ are recorded as an out-of-scope follow-up (sec-9), since local-memory health is a non-goal corpus; no selector widening."
 
 [[finding]]
 id = "F-10"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "'prompt' classed developer-only, but the shipped boot instructs every agent to run doctrine prompt resolve"
 detail = "Expected: sec-6's developer-only list contains surfaces no client agent is told to use. Observed: install/model-band.md:8 (composed into every client boot) directs 'doctrine prompt resolve --band model --model <id>' as a floor directive. Penance: move prompt (at least resolve) out of the developer-only row; the boot fragment may already suffice as orientation — record that disposition."
+disposition = "fix-now"
+response = "sec-6 moves prompt out of developer-only and into the placement table as a client-facing surface: the shipped band directive (install/model-band.md:8) invokes doctrine prompt resolve. Developer-only is now reseat, export, reservation, verify, catalog."
 
 [[finding]]
 id = "F-11"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "sec-2 says neither POL-002 memory reaches shipped memory prose; shipped-master-body-scrub does"
 detail = "Expected: sec-2's current-state claims are true. Observed: mem.pattern.doctrine.shipped-master-body-scrub states a promoted master's body must be scrubbed of ISS-/SL-/REC-/REQ- ids — precisely shipped memory prose. The true gap is install/ reference docs only. Penance: correct sec-2."
+disposition = "fix-now"
+response = "sec-2 corrected: shipped-master-body-scrub is a body-scrub rule for promoting a master, so it reaches shipped memory prose but is not a citation rule; neither memory reaches install/ reference docs, and there is no single corpus-wide citation rule."
 
 [[finding]]
 id = "F-12"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "No disposition class for maintainer-directed text in shipped files"
 detail = "Expected: sec-5's classes cover every site kind in ISS-309. Observed: five published docs open with '<!-- Shipped reference (ADR-005 PULL tier). Edit the source in install/<file>.md -->' (claude-activation, harvest, using-doctrine, review-ledger, dispatch-mechanics) — addressed to doctrine maintainers, and published verbatim (visible in library show output). The procedure would 'drop' it, losing the maintainer pointer; 'leave' violates the rule. Penance: add a class (e.g. maintainer note: keep the path-free instruction, drop the ids; or move to a non-published location) and apply it uniformly."
+disposition = "fix-now"
+response = "sec-5 names the maintainer-note class: the five Edit the source in install/... headers citing ADR-005 are shipped but aimed at maintainers; strip the repo-private id and express the source as the published corpus path, or keep the note with references admitted only to the published corpus. The class is named so it is governed."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
