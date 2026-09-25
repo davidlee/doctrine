@@ -242,22 +242,26 @@ Evidence for PHASE-02 `EX-1`/`EX-2` (`design.md` sec-8: one row per candidate,
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · PHASE-01 · 187f05f91
+fresh-as-of: 2026-09-26 · PHASE-02 · 599dfb5c8
 
 ### Produced
 - design locked — SL-267 under run dr-01a0d8ff-b311 (rev 35); `design.md` 9 sections (commits 9750594e4, c17d9229a, 53add8888).
 - plan authored — 6 phases, rule-first; runtime sheets materialised (commit e4fa00d7a).
 - PHASE-01 done — the rule and its two published homes: ADR-024 (accepted; `related` ADR-005/ADR-019; DEC-127 carries the reverse `concerns` edge), `reference/shipped-corpus-authoring.md`, `reference/design-run-obligations.md`, and their two `publication/manifest.toml` rows (commit 187f05f91).
+- PHASE-02 done — the `install/` sweep: 33 files, every repo-private id/path inlined, dropped or repointed; the `inquiring.toml` repoint to `reference/design-run-obligations.md`; the `doctrine.toml.example` per-knob whys inlined; the `routing-process.md` boot pointer + worked example. Disposition ledger + evidence in this file (commit 599dfb5c8).
 - minted: ADR-024; DEC-311..DEC-316; CHR-081; RV-391; mem.pattern.shipped-corpus.delivery-copy-cannot-cite-its-owner.
 - ledger corrections: IMP-484 (observation gap re-verified false, swept in the design, the item and slice-267.md); CHR-080 and ISS-309 carried as the accuracy and citation ledgers.
-- gates: `doctrine check gate` green at 187f05f91; publication 32/32; e2e_claude_install 13/13.
+- gates: `doctrine check gate` exit 0 at PHASE-01 (187f05f91) and PHASE-02 (599dfb5c8); publication validate ok; e2e_claude_install 13/13 both times (PHASE-02's `store_allowlist` byte-unchanged).
 
 ### Learned
 - mem.pattern.shipped-corpus.delivery-copy-cannot-cite-its-owner — a shipped delivery copy cannot cite its governance owner; the link runs governance → published address, one way.
 - mem.pattern.design-run.review-disposition-route-and-vocab — a severe finding's disposition needs route *and* vocab; the tool accepts the route alone.
 - observation 01a0d908-973f — `library tree` groups a template under a `reference/` heading but its address is `templates/<name>`.
+- **ISS-309's id regex is incomplete** — it omits `CON`/`EVD`/`HYP`/`CPT`, `FR-`/`NF-` membership labels, and doc-local `D-*` design ids. The `install/` site count was under-stated; PHASE-02 swept five further live sites (ledger § "Additions"). Durable input for `ISS-309` part 2 / `QUE-227`.
+- **The maintainer-note header has a settled fix** — name the doc's own published address, keep "published, not projected", drop the repo-private id and the `install/<file>.md` source path (five docs rewritten to the PHASE-01 doc shape).
 
 ### Open
 - QUE-227 — drift-gate seam and the duplicate POL-002 rule (ISS-309 part 2); the only durable defence against re-drift.
 - CHR-081 — consolidate the two local memories restating the grounding rule (out of scope; local-memory health is a non-goal corpus).
 - ISS-215 — boot-index defect; CHR-036 — distilling project-local memories (both out of scope).
+- **Audit flag (PHASE-02 D3)** — `install/review-ledger.md`'s `design-prompts/reviewing.md` pointer is a *published address* (conforming form 2) but sits inside the e2e `store_allowlist`; left `leave` because conforming it would need an out-of-selector `tests/**` edit. Weigh at audit.
