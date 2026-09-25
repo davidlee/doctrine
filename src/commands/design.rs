@@ -70,6 +70,7 @@
 //! because the formulation promising nothing was written invites a cleanup path
 //! that deletes authored knowledge, which the creation protocol forbids.
 
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -2503,6 +2504,11 @@ fn project(root: &Path, run: &DesignSnapshot, known: u64, detail: Detail) -> Res
         outstanding_by_severity(root, run)?,
         &facts,
         &slice_ref,
+        // No shell-read titles and no run selection: this projection names its
+        // slice, so nothing chose a run, and a `Normal` projection consults
+        // neither. PHASE-03's tree read fills both.
+        &BTreeMap::new(),
+        None,
     )
     .map_err(|refused| refusal(&refused))
 }

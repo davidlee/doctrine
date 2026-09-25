@@ -45,7 +45,9 @@ use super::super::Stage;
 use super::super::attestation::ActKind;
 use super::super::change_log::StoredRow;
 use super::super::document::{AuthoredState, divergence_refusal, observe_watermark};
-use super::super::gate::{Advance, CappedCause, Condition, Unmet, forward_unmet, unmet_line};
+use super::super::gate::{
+    Advance, CappedCause, Condition, Unmet, forward_unmet, legacy_blocking_set, unmet_line,
+};
 use super::super::ids::DesignId;
 use super::super::inquiry::{Disposition, InquiryLifecycle, InquiryNode};
 use super::super::payload_contract::PAYLOAD_CONTRACT_POINTER;
@@ -346,6 +348,84 @@ impl Omitted {
     }
 }
 
+/// One node of the whole inquiry map, as the turn envelope carries it at
+/// [`Detail::Full`] (`SL-266` `DEC-303`).
+///
+/// The tree rendering builds its shape from `parent`; siblings keep the order
+/// [`TurnEnvelope::map`] carries, which is creation order. Every field is the
+/// node's own or a derivation of it — the read model carries no fact the map
+/// does not (`SPEC-029` `REQ-433`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct MapNode {
+    pub(crate) id: String,
+    pub(crate) parent: Option<String>,
+    pub(crate) question: String,
+    /// [`InquiryLifecycle::as_str`] — the kebab token, not the enum.
+    pub(crate) lifecycle: &'static str,
+    /// [`Provenance::label`].
+    pub(crate) provenance: &'static str,
+    /// The **effective** judgement (`SL-264` sec-3), never the stored `Option`:
+    /// a node that predates the attribute reads through the legacy declaration.
+    pub(crate) blocking: bool,
+    /// The `needs` targets that are not yet settled — [`InquiryMap::unsettled_needs`]'s
+    /// output, in id order.
+    pub(crate) blocked_by: Vec<String>,
+    /// `Some` exactly for a `resolved` node, the only lifecycle that carries a
+    /// [`Disposition`] (`DEC-062`).
+    pub(crate) answer: Option<MapAnswer>,
+}
+
+/// How a resolved node was disposed, with whatever the shell could learn about
+/// the record its disposition names (`DEC-303`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum MapAnswer {
+    /// [`Disposition::Created`] or [`Disposition::Adopted`]; `form` is the
+    /// kebab token `DispositionForm::as_str` spells, so a reader can tell a
+    /// record this run minted from one it adopted.
+    Record {
+        form: &'static str,
+        record: String,
+        title: TitleLookup,
+    },
+    /// [`Disposition::RetainedUnresolved`] or [`Disposition::NonDurable`] — a
+    /// resolution that deliberately names no record.
+    Note { form: &'static str, note: String },
+}
+
+/// What the shell found when it read a cited record's title (`DEC-303`).
+///
+/// A title the shell could not read is **carried with its cause**, never
+/// collapsed to a blank (`STD-003`); the pure layer cannot tell absence from
+/// unreadability, so the shell says which.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) enum TitleLookup {
+    Found(String),
+    /// No record at the resolved path.
+    NotFound,
+    /// A read or parse error, verbatim.
+    Unreadable(String),
+}
+
+/// How the shell chose the run when the caller named no slice (`DEC-305`).
+///
+/// The **disclosure** half of run resolution: `STD-003` forbids choosing
+/// silently, and the pure layer cannot read the state tier to find out how many
+/// candidates there were.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct RunSelection {
+    pub(crate) candidates: usize,
+    pub(crate) skipped: Vec<SkippedSnapshot>,
+}
+
+/// One snapshot the run scan could not read, and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct SkippedSnapshot {
+    pub(crate) path: String,
+    /// The verbatim read or parse error (`STD-003`).
+    pub(crate) reason: String,
+}
+
 /// The canonical read model: everything one turn needs, and nothing that scales
 /// with the run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -437,6 +517,24 @@ pub(crate) struct TurnEnvelope {
     pub(crate) contract_pointer: &'static str,
     pub(crate) omitted: Omitted,
     pub(crate) truncated: bool,
+    /// Every inquiry node, in creation order (`seq`) — `Detail::Full` only.
+    ///
+    /// Empty at [`Detail::Normal`] by construction, which is what keeps
+    /// `SL-233`'s exclusion true without a new rule: the ordinary agent prompt
+    /// projects at `Normal` and so cannot carry the whole map (`DEC-303`).
+    ///
+    /// **Uncapped**, because it exists only where the caps are lifted — the
+    /// eviction ladder never sees it, so it has no rung and no `Omitted`
+    /// entry. Skipped from the serialised form when empty, so `json` at `Normal`
+    /// and the ordinary `prompt` are byte-identical to before this field
+    /// existed.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) map: Vec<MapNode>,
+    /// What the shell found when it resolved the run itself (`DEC-305`); `None`
+    /// when the caller named the slice. A disclosure about the read, not a
+    /// change to what was read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) selection: Option<RunSelection>,
 }
 
 /// The run's single outbound forward edge and what it still needs, in the order
@@ -554,6 +652,17 @@ impl UnmetRow {
 /// `facts` and `slice_ref` are shell-observed on the same grounds (DEC-292):
 /// the forward edge evaluates the gate over the facts `apply` would, and the
 /// divergence row names the slice by the canonical id this leaf cannot render.
+///
+/// `titles` and `selection` are shell-observed on the same grounds:
+/// `titles` is what the shell found when it read the records this run's
+/// dispositions cite, keyed by record id, and is consulted only at
+/// [`Detail::Full`]; `selection` is how the shell chose the run when the caller
+/// named no slice. Both are arguments rather than fields injected afterwards,
+/// for [`TurnEnvelope::outstanding`]'s reason.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the shell-observed inputs are separate by design (DEC-292); bundling them would invent an aggregate the callers do not hold"
+)]
 pub(crate) fn project(
     run: &DesignSnapshot,
     known_revision: u64,
@@ -561,6 +670,8 @@ pub(crate) fn project(
     outstanding: OutstandingBySeverity,
     facts: &GateFacts,
     slice_ref: &str,
+    titles: &BTreeMap<String, TitleLookup>,
+    selection: Option<RunSelection>,
 ) -> Result<TurnEnvelope, Refusal> {
     project_within(
         run,
@@ -569,6 +680,8 @@ pub(crate) fn project(
         outstanding,
         facts,
         slice_ref,
+        titles,
+        selection,
         ENVELOPE_NORMAL_BUDGET_BYTES,
     )
 }
@@ -578,6 +691,10 @@ pub(crate) fn project(
 /// The parameter exists so the eviction ladder and its terminal rule are
 /// *reachable in a test* without retuning the shipped constant: a bound whose
 /// enforcement has never been observed firing is a bound nobody has checked.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "[`project`]'s arguments plus the test-reachable ceiling"
+)]
 pub(crate) fn project_within(
     run: &DesignSnapshot,
     known_revision: u64,
@@ -585,9 +702,20 @@ pub(crate) fn project_within(
     outstanding: OutstandingBySeverity,
     facts: &GateFacts,
     slice_ref: &str,
+    titles: &BTreeMap<String, TitleLookup>,
+    selection: Option<RunSelection>,
     budget: usize,
 ) -> Result<TurnEnvelope, Refusal> {
-    let mut envelope = assemble(run, known_revision, detail, outstanding, facts, slice_ref);
+    let mut envelope = assemble(
+        run,
+        known_revision,
+        detail,
+        outstanding,
+        facts,
+        slice_ref,
+        titles,
+        selection,
+    );
     if detail == Detail::Full {
         return Ok(envelope);
     }
@@ -656,6 +784,10 @@ fn evict_one(envelope: &mut TurnEnvelope) -> bool {
 }
 
 /// Build the envelope with every per-field cap applied, before the ladder runs.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "[`project_within`]'s arguments, minus the ceiling it has already applied"
+)]
 fn assemble(
     run: &DesignSnapshot,
     known_revision: u64,
@@ -663,6 +795,8 @@ fn assemble(
     outstanding: OutstandingBySeverity,
     facts: &GateFacts,
     slice_ref: &str,
+    titles: &BTreeMap<String, TitleLookup>,
+    selection: Option<RunSelection>,
 ) -> TurnEnvelope {
     let (cursor, cursor_stale) = effective_cursor(run);
     let candidates = frontier_candidates(run, cursor.as_ref());
@@ -734,6 +868,67 @@ fn assemble(
         contract_pointer: PAYLOAD_CONTRACT_POINTER,
         truncated: omitted.any(),
         omitted,
+        // The whole map is a `Full` projection only (DEC-303). `Normal` is the
+        // budgeted rendering the agent's turn carries, and the map is exactly
+        // what `SL-233` excluded from it.
+        map: if detail == Detail::Full {
+            map_nodes(run, titles)
+        } else {
+            Vec::new()
+        },
+        selection,
+    }
+}
+
+/// The whole inquiry map at [`Detail::Full`], in creation order (`seq`).
+///
+/// Order is the snapshot's own counter rather than the map's iteration order:
+/// the tree's siblings must read in the order they were raised, and a `BTreeMap`
+/// keyed by id cannot supply that.
+fn map_nodes(run: &DesignSnapshot, titles: &BTreeMap<String, TitleLookup>) -> Vec<MapNode> {
+    let inquiry = &run.map.inquiry;
+    let legacy = legacy_blocking_set(run);
+    let mut nodes: Vec<&InquiryNode> = inquiry.nodes().collect();
+    nodes.sort_by_key(|node| node.seq());
+    nodes
+        .into_iter()
+        .map(|node| MapNode {
+            id: node.id().to_string(),
+            parent: node.parent().map(DesignId::to_string),
+            question: node.question().to_owned(),
+            lifecycle: node.lifecycle().as_str(),
+            provenance: node.provenance().label(),
+            blocking: node.effective_blocking(&legacy),
+            blocked_by: inquiry
+                .unsettled_needs(node.id())
+                .into_iter()
+                .map(DesignId::to_string)
+                .collect(),
+            answer: node
+                .disposition()
+                .map(|disposition| map_answer(disposition, titles)),
+        })
+        .collect()
+}
+
+/// One disposition as the read model carries it.
+///
+/// A record the shell did not look up reads as [`TitleLookup::NotFound`] —
+/// absence, and never a blank pretending to be a title.
+fn map_answer(disposition: &Disposition, titles: &BTreeMap<String, TitleLookup>) -> MapAnswer {
+    let form = disposition.form().as_str();
+    match disposition {
+        Disposition::Created { record } | Disposition::Adopted { record } => MapAnswer::Record {
+            form,
+            record: record.clone(),
+            title: titles.get(record).cloned().unwrap_or(TitleLookup::NotFound),
+        },
+        Disposition::RetainedUnresolved { note } | Disposition::NonDurable { note } => {
+            MapAnswer::Note {
+                form,
+                note: note.clone(),
+            }
+        }
     }
 }
 
@@ -1434,6 +1629,50 @@ fn outstanding_line(outstanding: &OutstandingBySeverity) -> String {
     )
 }
 
+/// `prompt`'s label for [`TurnEnvelope::map`]. One spelling, shared by the
+/// renderer and the tests that read it back (`STD-001`).
+const MAP_LABEL: &str = "map";
+
+/// One node of the whole-map block.
+///
+/// `parent`, the lifecycle and the provenance always render; `blocking`, the
+/// unsettled `needs` and the disposition answer appear only when they hold. The
+/// question is last, after an em dash, so a reader scanning the right-hand side
+/// reaches *what* before *why* (`SL-266` sec-2).
+fn map_line(node: &MapNode) -> String {
+    let mut line = format!(
+        "  {} parent={} {} {}",
+        node.id,
+        node.parent.as_deref().unwrap_or("-"),
+        node.lifecycle,
+        node.provenance
+    );
+    if node.blocking {
+        line.push_str(" blocking");
+    }
+    if !node.blocked_by.is_empty() {
+        line.push_str(" needs-open=");
+        line.push_str(&node.blocked_by.join(","));
+    }
+    if let Some(answer) = &node.answer {
+        line.push(' ');
+        line.push_str(&answer_text(answer));
+    }
+    line.push_str(" — ");
+    line.push_str(&node.question);
+    line
+}
+
+/// A disposition answer, as the map block spells it: the record id it names, or
+/// the form and note of a resolution that names none. The two are disjoint
+/// because a disposition is one or the other, never both.
+fn answer_text(answer: &MapAnswer) -> String {
+    match answer {
+        MapAnswer::Record { record, .. } => format!("record={record}"),
+        MapAnswer::Note { form, note } => format!("{form}: {note}"),
+    }
+}
+
 /// The budgeted rendering — `design show --format prompt`, the projection that
 /// enters an agent's context and the only one R1 is about.
 pub(crate) fn prompt(envelope: &TurnEnvelope) -> Vec<String> {
@@ -1502,6 +1741,13 @@ pub(crate) fn prompt(envelope: &TurnEnvelope) -> Vec<String> {
     lines.push(format!("blockers{}", more(envelope.omitted.blockers)));
     for entry in &envelope.blockers {
         lines.push(format!("  {} — {}", entry.id, entry.reason));
+    }
+    // The whole map, and the one line of `prompt` that is `Full`-only. Emitted
+    // only when it holds something: at `Normal` the field is empty by
+    // construction, so an ordinary turn pays nothing for it (DEC-303).
+    if !envelope.map.is_empty() {
+        lines.push(MAP_LABEL.to_owned());
+        lines.extend(envelope.map.iter().map(map_line));
     }
     lines.push(format!("sections{}", more(envelope.omitted.sections)));
     for row in &envelope.sections {
@@ -1810,13 +2056,15 @@ fn more(omitted: usize) -> String {
     reason = "test code — the repo's panic-avoidance denials target production paths"
 )]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::{
-        BlockerEntry, CursorStep, Divergence, DurableRef, Forward, FrontierEntry, PathEntry,
-        RunbookAhead, SectionRow, UnmetRow,
+        BlockerEntry, CursorStep, Divergence, DurableRef, Forward, FrontierEntry, MapAnswer,
+        PathEntry, RunSelection, RunbookAhead, SectionRow, SkippedSnapshot, TitleLookup, UnmetRow,
     };
     use super::{
-        ChangeDelta, Detail, ENVELOPE_NORMAL_BUDGET_BYTES, OutstandingBySeverity, TurnEnvelope,
-        project, project_within, prompt, rendered_bytes, resume, status,
+        ChangeDelta, Detail, ENVELOPE_NORMAL_BUDGET_BYTES, MAP_LABEL, OutstandingBySeverity,
+        TurnEnvelope, project, project_within, prompt, rendered_bytes, resume, status,
     };
     use crate::design_run::document::{AuthoredState, divergence_refusal, observe_watermark};
     use crate::design_run::fixture::widest_causes;
@@ -1842,6 +2090,8 @@ mod tests {
             outstanding,
             &GateFacts::default(),
             SLICE_REF,
+            &BTreeMap::new(),
+            None,
         )
     }
 
@@ -1858,6 +2108,8 @@ mod tests {
             outstanding,
             &GateFacts::default(),
             SLICE_REF,
+            &BTreeMap::new(),
+            None,
             budget,
         )
     }
@@ -1879,7 +2131,7 @@ mod tests {
     };
     use crate::design_run::gate::{Advance, advance};
     use crate::design_run::ids::DesignId;
-    use crate::design_run::inquiry::{InquiryNode, Provenance};
+    use crate::design_run::inquiry::{Disposition, InquiryLifecycle, InquiryNode, Provenance};
     use crate::design_run::prompt::contract_block;
     use crate::design_run::refusal::Refusal;
     use crate::design_run::runbook::RunbookStanding;
@@ -2441,6 +2693,8 @@ text = "Do the second thing."
             NOTHING_OUTSTANDING,
             facts,
             SLICE_REF,
+            &BTreeMap::new(),
+            None,
         )
         .unwrap();
         let lines = prompt(&envelope);
@@ -2463,6 +2717,8 @@ text = "Do the second thing."
             NOTHING_OUTSTANDING,
             &facts,
             SLICE_REF,
+            &BTreeMap::new(),
+            None,
         )
         .unwrap();
         assert_eq!(envelope.forward, None);
@@ -2796,6 +3052,385 @@ text = "Do the second thing."
         assert!(
             matches!(refused, Refusal::EnvelopeIrreducible { .. }),
             "{refused:?}"
+        );
+    }
+
+    /// Insert a node, claiming its creation-order `seq` from the run's own
+    /// counter — the same route admission takes.
+    fn place(run: &mut DesignSnapshot, node: InquiryNode) {
+        let seq = run.map.claim_seq();
+        run.map
+            .inquiry
+            .insert(node.sequenced(seq))
+            .expect("a well-formed node inserts");
+    }
+
+    /// Project `run` at `detail` with a shell-read title set — the tree read's
+    /// input, and at `Normal` a no-op (`EX-3`).
+    fn turn_at(
+        run: &DesignSnapshot,
+        detail: Detail,
+        titles: &BTreeMap<String, TitleLookup>,
+    ) -> TurnEnvelope {
+        project(
+            run,
+            0,
+            detail,
+            NOTHING_OUTSTANDING,
+            &GateFacts::default(),
+            SLICE_REF,
+            titles,
+            None,
+        )
+        .expect("the fixture run projects")
+    }
+
+    /// A run carrying a node of every lifecycle, every disposition form, and one
+    /// blocked waiter — the whole-map projection's fixture.
+    ///
+    /// Creation order is deliberately **not** id order: `inq-zeta` is raised
+    /// first and `inq-alpha` second, so a projection that fell back on the
+    /// `BTreeMap`'s key order would render the map in the wrong order and fail.
+    fn map_run() -> DesignSnapshot {
+        let mut run = DesignSnapshot::new("dr-test", 266, None);
+        let id = |raw: &str| DesignId::parse(raw).expect("a fixture id is well-formed");
+        let zeta = id("inq-zeta");
+        let child = |raw: &str, question: &str, provenance: Provenance, zeta: &DesignId| {
+            InquiryNode::open(id(raw), question, provenance, Some(false)).with_parent(zeta.clone())
+        };
+
+        place(
+            &mut run,
+            InquiryNode::open(
+                zeta.clone(),
+                "does the whole map project?",
+                Provenance::UserDirected,
+                Some(true),
+            ),
+        );
+        place(
+            &mut run,
+            child(
+                "inq-alpha",
+                "which record answers it?",
+                Provenance::AgentProposed,
+                &zeta,
+            )
+            .resolve(Disposition::Created {
+                record: "DEC-310".to_owned(),
+            }),
+        );
+        place(
+            &mut run,
+            child(
+                "inq-adopted",
+                "adopted from a shaping question?",
+                Provenance::ShapingQuestion {
+                    record: "QUE-7".to_owned(),
+                },
+                &zeta,
+            )
+            .resolve(Disposition::Adopted {
+                record: "QUE-7".to_owned(),
+            }),
+        );
+        place(
+            &mut run,
+            child(
+                "inq-note",
+                "not worth a record?",
+                Provenance::AgentProposed,
+                &zeta,
+            )
+            .resolve(Disposition::NonDurable {
+                note: "said in the chat".to_owned(),
+            }),
+        );
+        place(
+            &mut run,
+            child(
+                "inq-retained",
+                "left unresolved on purpose?",
+                Provenance::UserDirected,
+                &zeta,
+            )
+            .resolve(Disposition::RetainedUnresolved {
+                note: "revisit after launch".to_owned(),
+            }),
+        );
+        place(
+            &mut run,
+            child(
+                "inq-missing",
+                "whose record is gone?",
+                Provenance::AgentProposed,
+                &zeta,
+            )
+            .resolve(Disposition::Created {
+                record: "DEC-999".to_owned(),
+            }),
+        );
+        place(
+            &mut run,
+            child(
+                "inq-unreadable",
+                "whose record will not read?",
+                Provenance::AgentProposed,
+                &zeta,
+            )
+            .resolve(Disposition::Created {
+                record: "DEC-998".to_owned(),
+            }),
+        );
+        place(
+            &mut run,
+            child("inq-deferred", "later?", Provenance::AgentProposed, &zeta)
+                .transition(InquiryLifecycle::Deferred)
+                .expect("deferred is not `resolved`"),
+        );
+        place(
+            &mut run,
+            InquiryNode::open(
+                id("inq-waiter"),
+                "what holds me?",
+                Provenance::AgentProposed,
+                Some(false),
+            )
+            .needing(zeta.clone()),
+        );
+        place(
+            &mut run,
+            child("inq-pruned", "dropped?", Provenance::AgentProposed, &zeta)
+                .transition(InquiryLifecycle::Pruned)
+                .expect("pruned is not `resolved`"),
+        );
+        run
+    }
+
+    /// What the shell found when it read the fixture's cited records.
+    fn map_titles() -> BTreeMap<String, TitleLookup> {
+        BTreeMap::from([
+            (
+                "DEC-310".to_owned(),
+                TitleLookup::Found("Relay instruction rides design apply output".to_owned()),
+            ),
+            (
+                "QUE-7".to_owned(),
+                TitleLookup::Found("Which cache key does the resolver use?".to_owned()),
+            ),
+            ("DEC-999".to_owned(), TitleLookup::NotFound),
+            (
+                "DEC-998".to_owned(),
+                TitleLookup::Unreadable("permission denied".to_owned()),
+            ),
+        ])
+    }
+
+    /// `VT-1` — the whole map reaches the envelope at `Full` and nothing at
+    /// `Normal`, in creation order, one `prompt` line per node.
+    #[test]
+    fn map_is_full_only() {
+        let run = map_run();
+        let titles = map_titles();
+
+        let normal = turn_at(&run, Detail::Normal, &titles);
+        assert!(normal.map.is_empty(), "`Normal` carries no whole map");
+        assert!(normal.selection.is_none());
+        assert!(
+            !prompt(&normal)
+                .iter()
+                .any(|line| line.as_str() == MAP_LABEL),
+            "and renders no `map` block"
+        );
+        let json = serde_json::to_value(&normal).expect("the envelope serialises");
+        assert!(
+            json.get("map").is_none() && json.get("selection").is_none(),
+            "an empty map and an absent selection leave the serialised form: {json}"
+        );
+
+        let full = turn_at(&run, Detail::Full, &titles);
+        assert_eq!(
+            full.map.len(),
+            full.totals.nodes,
+            "every node, none dropped"
+        );
+        let ids: Vec<&str> = full.map.iter().map(|node| node.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            [
+                "inq-zeta",
+                "inq-alpha",
+                "inq-adopted",
+                "inq-note",
+                "inq-retained",
+                "inq-missing",
+                "inq-unreadable",
+                "inq-deferred",
+                "inq-waiter",
+                "inq-pruned",
+            ],
+            "creation order (`seq`), which is not the map's key order"
+        );
+        let node = |id: &str| {
+            full.map
+                .iter()
+                .find(|node| node.id == id)
+                .expect("a fixture node")
+        };
+        assert_eq!(node("inq-waiter").blocked_by, ["inq-zeta"]);
+        assert!(
+            node("inq-zeta").blocking,
+            "the effective judgement, not the stored option"
+        );
+        assert!(node("inq-zeta").blocked_by.is_empty());
+
+        let lines = prompt(&full);
+        let start = lines
+            .iter()
+            .position(|line| line.as_str() == MAP_LABEL)
+            .expect("a map block at `Full`");
+        let block: Vec<&String> = lines
+            .iter()
+            .skip(start + 1)
+            .take_while(|line| line.starts_with("  "))
+            .collect();
+        assert_eq!(block.len(), full.map.len(), "one line per node");
+        for (line, node) in block.iter().zip(&full.map) {
+            assert!(
+                line.starts_with(&format!("  {}", node.id)),
+                "the line names its node, in map order: {line}"
+            );
+        }
+        assert!(
+            block
+                .iter()
+                .any(|line| line.contains("needs-open=inq-zeta")),
+            "a blocked node names what holds it"
+        );
+        assert!(
+            block.iter().any(|line| line.contains("record=DEC-310")),
+            "a resolved node names its record"
+        );
+    }
+
+    /// `VT-3` — a resolved node carries its disposition, the shell's title
+    /// lookup (all three arms, including a non-`DEC` record) and, for a note, its
+    /// note.
+    #[test]
+    fn map_answers_carry_record_and_title_lookup() {
+        let run = map_run();
+        let full = turn_at(&run, Detail::Full, &map_titles());
+        let answer = |id: &str| {
+            full.map
+                .iter()
+                .find(|node| node.id == id)
+                .expect("a fixture node")
+                .answer
+                .clone()
+        };
+        assert_eq!(
+            answer("inq-alpha"),
+            Some(MapAnswer::Record {
+                form: "create",
+                record: "DEC-310".to_owned(),
+                title: TitleLookup::Found("Relay instruction rides design apply output".to_owned()),
+            })
+        );
+        assert_eq!(
+            answer("inq-adopted"),
+            Some(MapAnswer::Record {
+                form: "adopt",
+                record: "QUE-7".to_owned(),
+                title: TitleLookup::Found("Which cache key does the resolver use?".to_owned()),
+            }),
+            "a non-`DEC` record reads through the same arm"
+        );
+        assert_eq!(
+            answer("inq-missing"),
+            Some(MapAnswer::Record {
+                form: "create",
+                record: "DEC-999".to_owned(),
+                title: TitleLookup::NotFound,
+            })
+        );
+        assert_eq!(
+            answer("inq-unreadable"),
+            Some(MapAnswer::Record {
+                form: "create",
+                record: "DEC-998".to_owned(),
+                title: TitleLookup::Unreadable("permission denied".to_owned()),
+            }),
+            "a title the shell could not read carries its cause, never a blank (STD-003)"
+        );
+        assert_eq!(
+            answer("inq-note"),
+            Some(MapAnswer::Note {
+                form: "non-durable",
+                note: "said in the chat".to_owned(),
+            })
+        );
+        assert_eq!(
+            answer("inq-retained"),
+            Some(MapAnswer::Note {
+                form: "unresolved",
+                note: "revisit after launch".to_owned(),
+            })
+        );
+        for open in ["inq-zeta", "inq-deferred", "inq-waiter", "inq-pruned"] {
+            assert_eq!(answer(open), None, "{open} is not `resolved`");
+        }
+
+        // A record the shell never looked up is disclosed as absent rather than
+        // silently blanked — the state PHASE-03's reader fills.
+        let unread = turn_at(&run, Detail::Full, &BTreeMap::new());
+        assert_eq!(
+            unread
+                .map
+                .iter()
+                .find(|node| node.id == "inq-alpha")
+                .expect("a fixture node")
+                .answer,
+            Some(MapAnswer::Record {
+                form: "create",
+                record: "DEC-310".to_owned(),
+                title: TitleLookup::NotFound,
+            })
+        );
+    }
+
+    /// `EX-2` — the shell's run selection rides the envelope as given, and a
+    /// skipped snapshot is carried with its reason (`STD-003`).
+    #[test]
+    fn the_shells_run_selection_rides_the_envelope() {
+        let run = map_run();
+        let selection = RunSelection {
+            candidates: 3,
+            skipped: vec![SkippedSnapshot {
+                path: ".doctrine/state/slice/247/design.toml".to_owned(),
+                reason: "unreadable: expected a table".to_owned(),
+            }],
+        };
+        let projected = project(
+            &run,
+            0,
+            Detail::Full,
+            NOTHING_OUTSTANDING,
+            &GateFacts::default(),
+            SLICE_REF,
+            &map_titles(),
+            Some(selection.clone()),
+        )
+        .expect("the fixture run projects");
+        assert_eq!(projected.selection, Some(selection));
+        assert_eq!(
+            projected.map,
+            turn_at(&run, Detail::Full, &map_titles()).map,
+            "the selection is a disclosure, not a different projection"
+        );
+        let json = serde_json::to_value(&projected).expect("the envelope serialises");
+        assert!(
+            json.get("selection").is_some(),
+            "and it reaches the JSON form"
         );
     }
 }
