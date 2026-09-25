@@ -773,6 +773,17 @@ The four edited published docs name only verbs that exist; the core-process and
 guardrails command-acceptance tests parse the boot fragments
 (`install/routing-process.md`), which this phase did not touch, and stay green.
 
+### `VA-1` attestation (by agent — no test can carry it)
+
+Each admitted section was read back **through its render** (`doctrine library show
+reference/<name>.md`) as a client agent would meet it. All four
+`using-doctrine.md` sections and the three domain-doc sections name verbs and the
+discipline each carries; none reproduces a flag table. The corpus-health section
+is reachable — boot's Reference-docs paragraph names `using-doctrine.md`, and
+`model-band.md` is itself a boot fragment. Recorded here because a `VA` over
+runtime state leaves no artefact an audit can re-derive unless the attestation
+lands in a committed file.
+
 ### Verification
 
 - `doctrine check gate` → **exit 0**, 124 suites ok, zero failures.
