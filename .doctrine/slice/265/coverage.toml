@@ -1,0 +1,16 @@
+[[entry]]
+slice = "SL-265"
+requirement = "REQ-482"
+contributing_change = "SL-265"
+mode = "VT"
+status = "verified"
+git_anchor = "8868d76a072a9f1bf48a2742e33d89cacdefacc4"
+touched_paths = ["src/commands/show.rs", "src/commands/cli.rs", "src/commands/guard.rs", "src/main.rs"]
+
+[entry.check]
+command = ["cargo", "test", "--test", "e2e_show_equivalence"]
+
+[entry.check.matcher]
+source = "stdout"
+pattern = 'show_matches_the_kind_verb_in_table \.\.\. ok'
+regex = true

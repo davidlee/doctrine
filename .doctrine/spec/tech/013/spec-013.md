@@ -22,7 +22,8 @@ machinery they delegate into.
 ## Responsibilities
 
 Mirrors the structured `responsibilities` list: impose the uniform
-`<kind> <verb>` grammar; own the kind-blind read spine; carry the shared
+`<kind> <verb>` grammar; own the kind-blind read spine — the `list` spine and
+the top-level `show` router; carry the shared
 `CommonListArgs` flatten; own the `--columns` projection model; fix the
 canonical id form; and pin the surface with the conformance matrix and
 black-box goldens.
@@ -34,9 +35,12 @@ names each entity kind (`Slice`, `Memory`, `Adr`, `Policy`, `Standard`, `Spec`,
 `Backlog`, …), each delegating to a per-kind subcommand enum (`AdrCommand`,
 `PolicyCommand`, …). The verbs within are the shared set — `new`, `list`,
 `show`, `paths`, and (for lifecycle kinds) `status` — so the invocation shape is
-identical across kinds: `doctrine <kind> <verb>`. A `show` reassembles one
-entity's metadata, relationships, and prose body; a `list` enumerates the
-corpus. The grammar is the predictability contract; the engine seam each verb
+identical across kinds: `doctrine <kind> <verb>`. Alongside that per-kind
+grammar, one **kind-blind** read verb is top-level: `doctrine show <REF>`
+resolves a canonical ref to its kind (the prefix names the kind) and delegates to
+that kind's own `show`, so a reader need not restate a kind the id already
+carries. A `show` reassembles one entity's metadata, relationships, and prose
+body; a `list` enumerates the corpus. The grammar is the predictability contract; the engine seam each verb
 crosses to materialise or read an entity is the parent container's, used here
 unchanged.
 

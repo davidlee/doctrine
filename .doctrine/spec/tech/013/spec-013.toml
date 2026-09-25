@@ -17,6 +17,7 @@ responsibilities = [
   "Own the `--columns` projection model: a pre-materialised `Column<R>` (header + non-capturing fn cell extractor), `select_columns` validating requested names against the available set and honouring requested order, rendered by `render_columns` over `render_table`; rejected on `memory list`, never silently ignored.",
   "Fix the canonical id form (`canonical_id`: prefix + zero-padded-to-three) as the single id-form authority for numbered prefixed kinds, with memory conformant-by-exception and SPEC-028 observations governed by their own bare UUID identity.",
   "Pin the surface byte-exact: the behavioural parse-conformance matrix proves all seven spine kinds parse every shared flag, and per-verb black-box goldens plus the cross-verb column-model net guard the rendered table/JSON output.",
+  "Own the top-level kind-blind `show` router: `doctrine show <REF>` resolves a canonical ref to its kind (the prefix names the kind) and delegates to that kind's own `show`, emitting stdout byte-identical to the per-kind invocation — the `show` sibling of the kind-blind `list` spine.",
 ]
 
 [[source]]

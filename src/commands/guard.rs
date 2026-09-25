@@ -333,6 +333,7 @@ ConceptMapCommand::New { .. } => Write("concept-map new"),
         Command::Catalog { .. }
         | Command::Graph { .. }
         | Command::Search { .. }
+        | Command::Show { .. }
         | Command::Relation { .. }
         | Command::Validate { .. }
         // publication validate reads the embedded manifest + emits to a sink;
