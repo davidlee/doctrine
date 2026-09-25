@@ -41,14 +41,14 @@ the implementation review and audit will exercise.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · PHASE-01 implemented on a fork, landing blocked · dc3622ff3
+fresh-as-of: 2026-09-26 · PHASE-01 landed, gated, verified · 3e55c758b
 
 ### Produced
 
 - DEC-303..DEC-310 (design decisions); IMP-472, IMP-473; RV-388 (design ledger)
-- SL-266 PHASE-01 code, on `slice/SL-266-inquiry-map-tree-view`: `3ba03030e`
-  (`unsettled_needs` + the `blockers()` sweep), `3e745780f` (the `Full`-only
-  whole-map envelope field + `project`'s `titles`/`selection`)
+- SL-266 PHASE-01, landed as `3e55c758b` (merge of `3ba03030e` — `unsettled_needs`
+  + the `blockers()` sweep — and `3e745780f` — the `Full`-only whole-map envelope
+  field with `project`'s `titles`/`selection`)
 
 ### Learned
 
@@ -59,14 +59,12 @@ fresh-as-of: 2026-09-26 · PHASE-01 implemented on a fork, landing blocked · dc
 - `blockers()` held a *second* blocked derivation that no `is_blocked` grep
   could reach — sweep the shape, not the callee
   (`mem.pattern.review.sweep-defect-class-not-instance`)
+- A solo phase's boundary is never auto-recorded: `land`'s merge commit is
+  rejected as `code_end` (non-merge required), so `slice record-delta` is the
+  *normal* route for solo, not an escape hatch.
 
 ### Open
 
-- **PHASE-01 landing blocked** on the primary tree's other-agent dirt
-  (`.doctrine/slice/264/slice-264.toml`, `.../267/slice-267.toml`,
-  `review/390/`). The phase stays `in_progress`; `verify-vt` and the completion
-  boundary wait on it — neither can be satisfied from the fork.
-- Boundary correction almost certainly needed at landing:
-  `slice record-delta 266 PHASE-01 --start dc3622ff3 --end 3e745780f`, because
-  edge moved between the `in_progress` stamp and the merge.
 - `MapAnswer::Record.form` is rendered by neither surface — decide at PHASE-02.
+- `src/design_run/tests.rs` is a PHASE-04 `VT-1` test_file and currently reads
+  `UNATTRIBUTABLE` (not modified by this slice yet) — expected, not a gap.
