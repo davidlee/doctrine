@@ -35,6 +35,7 @@ The CLI is the source of truth for exact flags: `doctrine backlog --help`
 | transition status | `doctrine backlog edit <ID> --status <STATUS> [--resolution <R>]` |
 | add/remove tags | `doctrine backlog tag <ID> <tag> … [--remove <tag>]` (adds positional; `--remove`/`-d` repeatable) |
 | record a hard dep | `doctrine backlog needs <ID> <DEP-ID> [<DEP-ID> …]` |
+| retract a hard dep | `doctrine backlog needs <ID> <DEP-ID> --remove` (one dep) |
 | record soft ordering | `doctrine backlog after <ID> <PREDECESSOR-ID>` |
 
 

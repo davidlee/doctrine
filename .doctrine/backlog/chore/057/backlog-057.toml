@@ -5,10 +5,10 @@ id = 57
 slug = "retract-a-needs-edge"
 title = "Retract a needs edge"
 kind = "chore"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-08-07"
-updated = "2026-08-07"
+updated = "2026-09-26"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
@@ -25,3 +25,7 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "references"
 role = "originates_from"
 target = "ISS-314"
+
+[[relation]]
+label = "related"
+target = "SL-238"

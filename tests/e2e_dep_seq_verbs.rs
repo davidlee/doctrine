@@ -736,6 +736,58 @@ fn backlog_needs_refuses_an_inadmissible_target_kind() {
     );
 }
 
+/// CHR-057 — `backlog needs --remove` retracts one hard prerequisite through the
+/// kind-neutral `needs --remove` operation, symmetric with `backlog after --remove`.
+/// Black-box for the same reason as `VT-2`: only a CLI run exercises `cli.rs`'s fill.
+#[test]
+fn backlog_needs_remove_retracts_one_prerequisite() {
+    let t = tmp();
+    let root = t.path();
+    new_issue(root, "Dependent", "dependent"); // ISS-001
+    new_issue(root, "Stale prereq", "stale-prereq"); // ISS-002
+    new_issue(root, "Live prereq", "live-prereq"); // ISS-003
+    let add = run(root, &["backlog", "needs", "ISS-001", "ISS-002", "ISS-003"]);
+    assert!(add.status.success(), "append: {}", stderr(&add));
+
+    // More than one prerequisite with --remove is refused whole: nothing written.
+    let many = run(
+        root,
+        &[
+            "backlog", "needs", "ISS-001", "ISS-002", "ISS-003", "--remove",
+        ],
+    );
+    assert!(!many.status.success(), "multi-target remove refused");
+    let iss1 = fs::read_to_string(backlog_toml(root, "issue", 1)).unwrap();
+    assert!(
+        iss1.contains("ISS-002") && iss1.contains("ISS-003"),
+        "the refused remove wrote nothing: {iss1}"
+    );
+
+    let rm = run(
+        root,
+        &["backlog", "needs", "ISS-001", "ISS-002", "--remove"],
+    );
+    assert!(rm.status.success(), "remove: {}", stderr(&rm));
+    assert_eq!(stdout(&rm), "ISS-001 needs ISS-002 removed (1 edge)\n");
+    let iss1 = fs::read_to_string(backlog_toml(root, "issue", 1)).unwrap();
+    assert!(
+        !iss1.contains("ISS-002") && iss1.contains("ISS-003"),
+        "only the named edge is gone: {iss1}"
+    );
+
+    // An absent edge is an error, never a silent no-op.
+    let again = run(
+        root,
+        &["backlog", "needs", "ISS-001", "ISS-002", "--remove"],
+    );
+    assert!(!again.status.success(), "absent edge refused");
+    assert!(
+        stderr(&again).contains("ISS-001 has no needs edge to ISS-002"),
+        "names the missing edge: {}",
+        stderr(&again)
+    );
+}
+
 #[test]
 fn after_append_still_works() {
     let t = tmp();

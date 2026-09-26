@@ -1745,6 +1745,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 edge: crate::commands::dep_seq::run_after_edge,
                 remove: crate::commands::dep_seq::run_after_remove,
                 prune: crate::commands::dep_seq::run_after_prune,
+                needs_remove: crate::commands::dep_seq::run_needs_remove,
                 admit_target: crate::commands::dep_seq::ensure_admissible_dep_target,
             },
         ),

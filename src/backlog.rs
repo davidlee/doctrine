@@ -137,15 +137,21 @@ pub(crate) enum BacklogCommand {
 
     /// Append hard prerequisites to an item's `needs` axis — kind auto-detected from
     /// the prefix. Validates every ref exists, then refuses a closing dependency
-    /// cycle (naming the members; nothing written).
+    /// cycle (naming the members; nothing written). `--remove` retracts one.
     Needs {
         /// The dependent item ref (e.g. ISS-007); the prefix selects the kind.
         #[arg(value_name = "DEPENDENT")]
         id: String,
 
-        /// One or more prerequisite refs the item must wait on.
+        /// One or more prerequisite refs the item must wait on (exactly one with
+        /// --remove).
         #[arg(required = true, value_name = "PREREQUISITE")]
         prereqs: Vec<String>,
+
+        /// Remove the needs edge instead of appending. Gates the dependent only, so
+        /// a prerequisite that no longer resolves is still clearable.
+        #[arg(long)]
+        remove: bool,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -245,8 +251,8 @@ pub(crate) enum BacklogCommand {
 /// that argument is an upper bound ("only edges with rank ≤ N are removed"), so a
 /// rankless pointer would silently widen every backlog-scoped delete. `rank == 0` is
 /// already the callee's "unset" sentinel, so an `Option` would invent a distinction
-/// no consumer reads. `run_needs_remove` is deliberately not a member — the `needs`
-/// array carries no rank, and the struct's `remove` serves the `after` leg only.
+/// no consumer reads. The `needs` array carries no rank, so its removal is a
+/// separate rankless member rather than a reuse of `remove` (CHR-057).
 pub(crate) struct DepSeqOps {
     /// `after <SRC> <TGT> [--rank N]` — append one soft-sequence edge.
     pub edge: fn(Option<PathBuf>, &str, &str, i32) -> anyhow::Result<()>,
@@ -254,6 +260,8 @@ pub(crate) struct DepSeqOps {
     pub remove: fn(Option<PathBuf>, &str, &str, i32) -> anyhow::Result<()>,
     /// `after <SRC> --prune` — probe every target and drop the dangling edges.
     pub prune: fn(Option<PathBuf>, &str) -> anyhow::Result<()>,
+    /// `needs <SRC> <TGT> --remove` — clear the hard prerequisite edge to TGT.
+    pub needs_remove: fn(Option<PathBuf>, &str, &str) -> anyhow::Result<()>,
     /// The admissible-target gate `backlog needs` was missing. It is
     /// `commands::dep_seq`'s, built from that module's `is_work_like` and rendering a
     /// message that reads `knowledge::RecordKind::ALL`; re-authoring it here would be
@@ -300,7 +308,18 @@ pub(crate) fn dispatch(cmd: BacklogCommand, color: bool, ops: &DepSeqOps) -> any
             resolution,
             path,
         } => run_edit(path, &id, status, resolution),
-        BacklogCommand::Needs { id, prereqs, path } => run_needs(path, &id, &prereqs, ops),
+        BacklogCommand::Needs {
+            id,
+            prereqs,
+            remove: true,
+            path,
+        } => run_needs_remove(path, &id, &prereqs, ops),
+        BacklogCommand::Needs {
+            id,
+            prereqs,
+            remove: false,
+            path,
+        } => run_needs(path, &id, &prereqs, ops),
         BacklogCommand::After {
             id,
             to,
@@ -2295,6 +2314,25 @@ pub(crate) fn run_needs(
         prereqs.join(", ")
     )?;
     Ok(())
+}
+
+/// `doctrine backlog needs <ITEM> <PREREQ> --remove` — retract one hard
+/// prerequisite (CHR-057). The source gate keeps the verb backlog-scoped, as in
+/// [`run_after`]; the routed operation canonicalises the target and bails when no
+/// edge matched. Exactly one prerequisite: a multi-target remove failing midway
+/// would leave a partial write, and both sibling removals take one target.
+pub(crate) fn run_needs_remove(
+    path: Option<PathBuf>,
+    reference: &str,
+    prereqs: &[String],
+    ops: &DepSeqOps,
+) -> anyhow::Result<()> {
+    let [prereq] = prereqs else {
+        anyhow::bail!("`backlog needs --remove` takes exactly one prerequisite");
+    };
+    let root = crate::root::find(path.clone(), &crate::root::default_markers())?;
+    let source = require_item(&root, reference)?;
+    (ops.needs_remove)(path, &source.0.canonical_id(source.1), prereq)
 }
 
 /// `doctrine backlog after <ITEM> <TO> [--rank N] [--remove] [--prune]` — append
@@ -5109,6 +5147,7 @@ tags = []
             edge: crate::commands::dep_seq::run_after_edge,
             remove: crate::commands::dep_seq::run_after_remove,
             prune: crate::commands::dep_seq::run_after_prune,
+            needs_remove: crate::commands::dep_seq::run_needs_remove,
             admit_target: crate::commands::dep_seq::ensure_admissible_dep_target,
         }
     }

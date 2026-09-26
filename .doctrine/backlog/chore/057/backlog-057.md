@@ -39,3 +39,16 @@ Do not over-build it — the append-only reading is a genuine option, not the
 obvious answer.
 
 Related: `IMP-392`, `ISS-314`, `ADR-017`, `SL-048`.
+
+## Resolution (2026-09-26)
+
+Already delivered by `SL-238` PHASE-06: `doctrine needs <SRC> <TGT> --remove`
+retracts a `needs` edge on any work-like source, gating the source only so a
+dangling target is still clearable, and bails on a no-op match. It took the
+delete reading, not append-only discharge; git carries the history. `after`
+already had `--remove`; `triggers` is a glob rider, not an edge.
+
+This item added the one missing symmetry: `doctrine backlog needs <ITEM>
+<PREREQ> --remove`, routed through the same operation as `backlog after
+--remove` (exactly one prerequisite). It was then used to retract `ISS-314
+needs IMP-392` (RFC-032 step 0a).
