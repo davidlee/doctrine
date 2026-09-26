@@ -398,6 +398,15 @@ pub(crate) enum ReviewOutput {
         canonical: String,
         tracked_paths: Vec<String>,
         tracked_count: usize,
+        /// D11: why prime tracked nothing (non-slice target, or zero selectors).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        degraded: Option<String>,
+        /// D11 / RV-396 F-6: a degraded prime removed an earlier cache.toml.
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        cleared: bool,
+        /// ISS-059: literal selectors excluded as non-files (directory or symlink).
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        skipped: Vec<String>,
     },
     Status {
         canonical: String,
@@ -509,10 +518,27 @@ pub(crate) fn print_review(out: &ReviewOutput) -> String {
             canonical,
             tracked_paths: _,
             tracked_count,
+            degraded,
+            cleared,
+            skipped,
         } => {
-            format!(
-                "{canonical} primed — {tracked_count} tracked path(s) from the target slice's selectors\n"
-            )
+            let mut rendered = if let Some(reason) = degraded {
+                format!("{canonical} {}{reason}\n", prime::PRIMED_NOTHING_PREFIX)
+            } else {
+                format!(
+                    "{canonical} primed — {tracked_count} tracked path(s) from the target slice's selectors\n"
+                )
+            };
+            if *cleared {
+                rendered.push_str(prime::REMOVED_PREVIOUS_CACHE);
+                rendered.push('\n');
+            }
+            for sel in skipped {
+                rendered.push_str(prime::SKIPPED_NON_FILE_SELECTOR_PREFIX);
+                rendered.push_str(sel);
+                rendered.push('\n');
+            }
+            rendered
         }
         ReviewOutput::Unlocked {
             canonical,

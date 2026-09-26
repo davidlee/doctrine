@@ -519,7 +519,7 @@ fn plant_slice_target(root: &Path, id: u32) {
 /// Plant a slice carrying `[[selector]]` entries (every entry `design-target`,
 /// intent-agnostic for prime which unions all intents). The slice md body is
 /// planted too — `read_slice` reads both tiers.
-fn plant_slice_with_selectors(root: &Path, id: u32, selectors: &[&str]) {
+pub(super) fn plant_slice_with_selectors(root: &Path, id: u32, selectors: &[&str]) {
     let name = format!("{id:03}");
     let dir = root.join(".doctrine/slice").join(&name);
     std::fs::create_dir_all(&dir).unwrap();
@@ -691,7 +691,7 @@ fn derived_status_reads_findings_not_a_stored_status() {
 
 // -- run_new end-to-end (VT-2: dangling ref refused at creation) ----------
 
-fn new_args(facet: Facet, target: &str) -> NewArgs {
+pub(super) fn new_args(facet: Facet, target: &str) -> NewArgs {
     NewArgs {
         facet,
         target: target.to_owned(),
@@ -890,7 +890,7 @@ fn facet_parse_accepts_the_seven_and_rejects_drift() {
 /// Stand up a fresh RV (id 1) targeting a planted SL-001, in a tempdir whose
 /// root is not a git tree (the fork guard's `is_linked_worktree` returns Err
 /// ⇒ treated not-a-fork ⇒ proceeds). Returns the root.
-fn fixture_rv() -> tempfile::TempDir {
+pub(super) fn fixture_rv() -> tempfile::TempDir {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     plant_slice_target(root, 1);
@@ -3440,7 +3440,10 @@ fn plant_tracked(root: &Path, rel: &str, body: &str) {
 /// Stand up a git-backed RV (id 1) → SL-001, with the slice carrying the given
 /// selectors and the listed files committed (so `git ls-files` sees them for
 /// glob expansion). Returns the tempdir; root = `tmp.path()`.
-fn git_fixture_rv_with_selectors(selectors: &[&str], files: &[(&str, &str)]) -> tempfile::TempDir {
+pub(super) fn git_fixture_rv_with_selectors(
+    selectors: &[&str],
+    files: &[(&str, &str)],
+) -> tempfile::TempDir {
     use std::process::Command;
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
@@ -3622,59 +3625,6 @@ fn vt1_literal_selector_passes_through_and_absence_is_stale() {
         CacheVerdict::Stale(paths) => assert_eq!(paths, vec!["src/state.rs".to_owned()]),
         CacheVerdict::Current => panic!("absent tracked path must be stale (R1)"),
     }
-}
-
-/// VT-2 (a): a non-slice RV target (a phase or backlog ref) cannot source
-/// selectors — `run_prime` bails with a NAMED message and writes nothing.
-#[test]
-fn vt2_prime_bails_named_on_a_non_slice_target() {
-    let tmp = tempfile::tempdir().unwrap();
-    let root = tmp.path();
-    // Plant a backlog target dir so `review new` resolves the ref, then mint an
-    // RV against it (a non-slice target).
-    let dir = root.join(".doctrine/backlog/issue/007");
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("backlog-007.toml"), "id = 7\n").unwrap();
-    run_new(
-        Some(root.to_path_buf()),
-        &new_args(Facet::Design, "ISS-007"),
-    )
-    .unwrap();
-
-    let err = run_prime(
-        Some(root.to_path_buf()),
-        &PrimeArgs {
-            reference: "RV-001".to_owned(),
-        },
-    )
-    .unwrap_err();
-    let msg = format!("{err:#}");
-    assert!(
-        msg.contains("not a slice reference") || msg.contains("needs a slice target"),
-        "named non-slice failure: {msg}"
-    );
-    assert!(read_cache(root, 1).unwrap().is_none(), "nothing written");
-}
-
-/// VT-2 (b): a slice with ZERO selectors gives prime no path-set — `run_prime`
-/// bails with a NAMED message and writes nothing.
-#[test]
-fn vt2_prime_bails_named_on_a_slice_with_no_selectors() {
-    let tmp = fixture_rv(); // SL-001 has no selectors.
-    let root = tmp.path();
-    let err = run_prime(
-        Some(root.to_path_buf()),
-        &PrimeArgs {
-            reference: "RV-001".to_owned(),
-        },
-    )
-    .unwrap_err();
-    let msg = format!("{err:#}");
-    assert!(
-        msg.contains("no selectors"),
-        "named zero-selector failure: {msg}"
-    );
-    assert!(read_cache(root, 1).unwrap().is_none(), "nothing written");
 }
 
 /// `prime` rebuilds `[hashes]` from the resolved fileset — the baseline is the

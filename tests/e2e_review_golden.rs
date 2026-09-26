@@ -2681,9 +2681,9 @@ fn prime_and_status_cache_current_then_stale() {
 }
 
 #[test]
-fn prime_refuses_non_slice_target() {
-    // X4: the review's `[target].ref` is an ADR, not a slice — no selectors to
-    // prime from.
+fn prime_degrades_on_non_slice_target() {
+    // X4 (D11, IMP-259): the review's `[target].ref` is an ADR, not a slice —
+    // no selectors to prime from. Prime DEGRADES rather than erroring.
     let dir = tmp();
     seed_adr(dir.path(), 1);
     seed_review(
@@ -2694,16 +2694,18 @@ fn prime_refuses_non_slice_target() {
     );
 
     let out = run(dir.path(), &["prime", "1"]);
-    assert!(!out.status.success());
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stderr(&out), "");
     assert_eq!(
-        stderr(&out),
-        "Error: review prime needs a slice target: RV-001 targets `ADR-001`, which is not a slice reference (no selectors to prime from)\n\nCaused by:\n    0: not a slice reference: `ADR-001` (expected `SL-007` or `7`)\n    1: invalid digit found in string\n"
+        stdout(&out),
+        "RV-001 primed nothing: target `ADR-001` is not a slice reference (no selectors to prime from)\n"
     );
 }
 
 #[test]
-fn prime_refuses_zero_selector_slice() {
-    // X5: the target slice declares no `[[selector]]` rows at all.
+fn prime_degrades_on_zero_selector_slice() {
+    // X5 (D11): the target slice declares no `[[selector]]` rows at all.
+    // Prime DEGRADES rather than erroring.
     let dir = tmp();
     seed_slice(dir.path(), 1, &[]);
     seed_review(
@@ -2714,18 +2716,19 @@ fn prime_refuses_zero_selector_slice() {
     );
 
     let out = run(dir.path(), &["prime", "1"]);
-    assert!(!out.status.success());
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stderr(&out), "");
     assert_eq!(
-        stderr(&out),
-        "Error: slice SL-001 declares no selectors — review prime has no path-set to track (add `[[selector]]` entries to the slice)\n"
+        stdout(&out),
+        "RV-001 primed nothing: slice SL-001 declares no selectors\n"
     );
 }
 
 #[test]
-fn prime_refuses_directory_selector() {
-    // X7 (ISS-059, D11 changes this later): a literal selector naming a
-    // directory is passed straight through to hashing and fails there.
-    // Deterministic and path-free, so it is pinned rather than carved out.
+fn prime_skips_directory_selector() {
+    // X7 (D11, ISS-059): a literal selector naming a directory is excluded
+    // from the hashed fileset (never followed) and reported as skipped,
+    // rather than passed straight through to hashing where it used to fail.
     let dir = tmp();
     seed_slice(dir.path(), 1, &["src"]);
     seed_review(
@@ -2738,10 +2741,54 @@ fn prime_refuses_directory_selector() {
     fs::write(dir.path().join("src/a.rs"), "hi\n").unwrap();
 
     let out = run(dir.path(), &["prime", "1"]);
-    assert!(!out.status.success());
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stderr(&out), "");
     assert_eq!(
-        stderr(&out),
-        "Error: hash the slice selector fileset\n\nCaused by:\n    Is a directory (os error 21)\n"
+        stdout(&out),
+        "RV-001 primed — 0 tracked path(s) from the target slice's selectors\nskipped non-file selector: src\n"
+    );
+}
+
+#[test]
+fn prime_degraded_clears_previous_cache() {
+    // D11 / RV-396 F-6: a degraded prime removes an earlier cache.toml so
+    // `status` stops reporting a staleness signal for a path-set that no
+    // longer exists.
+    let dir = tmp();
+    seed_slice(dir.path(), 1, &["src/a.rs"]);
+    seed_review(
+        dir.path(),
+        1,
+        "id    = 1\nslug  = \"t\"\ntitle = \"T1\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\n\n[target]\nref   = \"SL-001\"\n",
+        "# brief\n",
+    );
+    fs::create_dir_all(dir.path().join("src")).unwrap();
+    fs::write(dir.path().join("src/a.rs"), "hello\n").unwrap();
+
+    let out = run(dir.path(), &["prime", "1"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "RV-001 primed — 1 tracked path(s) from the target slice's selectors\n"
+    );
+
+    // Re-seed the slice with zero selectors — `seed_slice` overwrites the
+    // authored toml via `fs::write`.
+    seed_slice(dir.path(), 1, &[]);
+
+    let out = run(dir.path(), &["prime", "1"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stderr(&out), "");
+    assert_eq!(
+        stdout(&out),
+        "RV-001 primed nothing: slice SL-001 declares no selectors\nremoved the previous cache\n"
+    );
+
+    let out = run(dir.path(), &["status", "1"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "RV-001 — active · await=raiser · findings 0 · rounds 0\n"
     );
 }
 

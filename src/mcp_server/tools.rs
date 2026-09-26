@@ -281,7 +281,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_prime".to_owned(),
-            description: "Populate the reviewer-context warm-cache from the target slice's selectors (the path-set the staleness signal hashes). The RV's `[target].ref` must be a slice reference; the slice must declare at least one `[[selector]]` (else this errors). Each selector is resolved to concrete files — a literal path as-is, a glob expanded against the tracked file set — then hashed. Returns `{\"Primed\": { canonical: \"RV-NNN\", tracked_paths: [string], tracked_count: int }}`.".to_owned(),
+            description: "Populate the reviewer-context warm-cache from the target slice's selectors (the path-set the staleness signal hashes). When the RV's `[target].ref` is not a slice reference, or the slice declares zero `[[selector]]` rows, this DEGRADES rather than erroring: it returns `Primed` with `tracked_count: 0` and a named `degraded` reason, plus `cleared: true` when an earlier cache.toml was removed. Otherwise each selector is resolved to concrete files — a literal path passes through if it names a regular file or is absent, a glob expands against the tracked file set — then hashed; a literal selector naming a directory or a symlink (never followed) is excluded and listed in `skipped`. Returns `{\"Primed\": { canonical: \"RV-NNN\", tracked_paths: [string], tracked_count: int, degraded?: string, cleared?: bool, skipped?: [string] }}`.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {

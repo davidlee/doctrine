@@ -507,6 +507,67 @@ fn review_list_carries_warnings() {
     kill(child);
 }
 
+/// VT-3 (SL-268 PHASE-08, sec-8 VT 13 prime arm): D11's degrade path over the
+/// MCP arm. `seed_slice` writes NO `[[selector]]` rows, so `SL-001` is a
+/// ready-made zero-selector target — `review_prime` must DEGRADE rather than
+/// return a tool error, carrying a named `degraded` reason and no `cleared`
+/// key (there is no earlier cache to remove).
+#[test]
+fn review_prime_carries_degraded() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Test Slice", "test-slice");
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let _ = call(
+        &mut stdin,
+        &mut reader,
+        "initialize",
+        Some(&serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "test", "version": "1.0" }
+        })),
+    );
+
+    let params = tools_call_params(
+        "review_new",
+        serde_json::json!({ "facet": "design", "target": "SL-001" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    let review_id = out["Created"]["id"].as_u64().expect("review id") as u32;
+
+    let params = tools_call_params(
+        "review_prime",
+        serde_json::json!({ "reference": review_id.to_string() }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "review_prime: {resp:?}");
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+
+    let degraded = out["Primed"]["degraded"]
+        .as_str()
+        .expect("degraded reason string");
+    assert!(
+        degraded.contains("declares no selectors"),
+        "degraded reason: {degraded}"
+    );
+    assert_eq!(out["Primed"]["tracked_count"].as_u64(), Some(0));
+    assert!(
+        out["Primed"].get("cleared").is_none(),
+        "no earlier cache to clear: {out}"
+    );
+
+    kill(child);
+}
+
 // ── VT-5: review_show JSON returns valid data ────────────────────────────
 
 #[test]

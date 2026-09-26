@@ -66,3 +66,33 @@ fresh-as-of: 2026-09-26 · design (reviewing, pre-lock) · 8922d2e77
 - DEC-317..DEC-322 — shape the slice; cite in plan
 - RV-396 pass disposition, section review, design acceptance — awaiting user
 - notes "Design review passes" — two probes deferred to the split and D2 phases
+
+## PHASE-08 test-suite flips (D11)
+
+D11 (design.md sec-5 "Prime") makes `review prime` degrade-and-disclose instead
+of bailing on a non-slice target or a zero-selector slice, and ISS-059 makes it
+filter (not error on) a literal selector naming a directory or symlink. These
+existing tests changed shape to match — named here per the phase sheet's
+"Expected test changes" so the audit can see the flips were intended, not
+drift.
+
+Unit (`src/review/tests.rs`, deleted; replaced in `src/review/prime.rs`'s new
+`#[cfg(test)] mod tests`):
+
+- `vt2_prime_bails_named_on_a_non_slice_target` → `prime_non_slice_degrades`
+  (D11, IMP-259: was an `Err` assertion, now `Ok(Primed { degraded: Some(_),
+  .. })`).
+- `vt2_prime_bails_named_on_a_slice_with_no_selectors` →
+  `prime_zero_selectors_degrades` (D11, same flip for the zero-selector case).
+
+Golden (`tests/e2e_review_golden.rs`, "T7 — prime / status cache" block):
+
+- `prime_refuses_non_slice_target` → renamed `prime_degrades_on_non_slice_target`
+  (D11, IMP-259: exit ≠0 stderr error → exit 0, `RV-001 primed nothing: …`).
+- `prime_refuses_zero_selector_slice` → renamed
+  `prime_degrades_on_zero_selector_slice` (D11, same flip).
+- `prime_refuses_directory_selector` → renamed `prime_skips_directory_selector`
+  (D11, ISS-059: was `Is a directory (os error 21)`, now a successful prime with
+  a `skipped non-file selector: src` line — same fixture, same selector).
+- new: `prime_degraded_clears_previous_cache` (D11, RV-396 `F-6` — a degraded
+  prime removes an earlier `cache.toml`, and `status` stops reporting it).
