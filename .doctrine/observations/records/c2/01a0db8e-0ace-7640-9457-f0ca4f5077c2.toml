@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0db8e-0ace-7640-9457-f0ca4f5077c2"
+recorded_at = "2026-09-26T02:31:54.318645632Z"
+kind = "friction"
+summary = "audit (SL-267): a skipped `doctrine memory sync` leaves the delivered corpus stale while every gate stays green"
+detail = "PHASE-06's final commit (795317bdb) edited four shipped memory masters and never re-materialised. At HEAD .doctrine/memory/shipped/ still carried the pre-repair repo-private paths (install/, install/hymns/, ADR-019, memory/). `doctrine doctor` (51), `doctrine check gate` (exit 0), `publication validate` (98) and `e2e_claude_install` (13/13) were all green throughout. Only a re-run of `cargo build && doctrine memory sync` exposes it ('0 new, 9 changed'). design R5 predicted exactly this invisibility; no gate compares the materialised corpus against its sources."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
