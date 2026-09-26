@@ -102,6 +102,12 @@ pub(crate) struct FindingRow {
     pub(crate) detail: String,
     #[serde(default)]
     pub(crate) disposition: Option<String>,
+    /// Where the finding's answer routes (design sec-2/sec-4, SL-268 D1/D8) —
+    /// set by `dispose`/`amend`. `skip_serializing_if` keeps every legacy and
+    /// hand-seeded ledger's `show --json` byte-identical: absence on read is
+    /// absence on write back, never a null.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) route: Option<String>,
     #[serde(default)]
     pub(crate) response: Option<String>,
     /// This finding's journal (`[[finding.turn]]`), in file order. Absent is an

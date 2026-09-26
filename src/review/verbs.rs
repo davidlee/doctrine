@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! `review new`/`raise`/`dispose`/`verify`/`contest`/`withdraw`/`conclude` — the
-//! mint and write verbs (SL-268 PHASE-02 T5).
+//! `review new`/`raise`/`dispose`/`amend`/`verify`/`contest`/`reopen`/
+//! `withdraw`/`conclude` — the mint and write verbs (SL-268 PHASE-02 T5;
+//! `amend`/`reopen` added PHASE-05).
 
 use super::turn::{resolve_review_root, with_turn};
 use super::{
-    Act, Context, Deserialize, Facet, FindingStatus, Materialised, Path, PathBuf, REVIEW_DIR,
-    REVIEW_KIND, ReviewError, ReviewMeta, ReviewOutput, Role, Severity, Target, TurnFields, Vocab,
-    admissible_from, append_finding, append_review_turn, apply_act, can, canonical_id, entity,
-    finding_status_of, finding_table_mut, parse_ref, review_table_mut,
+    Act, Context, Deserialize, Disposition, Facet, FindingRow, FindingStatus, Materialised, Path,
+    PathBuf, REVIEW_DIR, REVIEW_KIND, ReviewError, ReviewMeta, ReviewOutput, Role, Route, Severity,
+    Target, TurnFields, Vocab, admissible_from, append_finding, append_review_turn, apply_act, can,
+    canonical_id, entity, finding_status_of, finding_table_mut, parse_ref, review_table_mut,
 };
 use crate::tomlfmt::toml_string;
 
@@ -264,18 +265,54 @@ pub(crate) fn run_raise(
     })
 }
 
-/// Bundled `review dispose` args.
+/// Bundled `review dispose` args. `disposition` is closed (SL-268 D8); `route`
+/// is optional — an omission keeps the finding's current route (A2).
 #[derive(Deserialize)]
 pub(crate) struct DisposeArgs {
     pub(crate) reference: String,
     pub(crate) finding: String,
-    pub(crate) disposition: String,
+    pub(crate) disposition: Disposition,
+    #[serde(default)]
+    pub(crate) route: Option<Route>,
     pub(crate) response: String,
 }
 
+/// The effective `route` a dispose/amend turn snapshots (A2): the given value,
+/// else the finding's current route. `apply_act` never deletes a key, so an
+/// omitted `--route` on a finding that already carries one keeps it.
+fn effective_route<'a>(
+    existing: &'a [FindingRow],
+    finding_id: &str,
+    given: Option<Route>,
+) -> Option<&'a str> {
+    given.map(Route::as_str).or_else(|| {
+        existing
+            .iter()
+            .find(|f| f.id == finding_id)
+            .and_then(|f| f.route.as_deref())
+    })
+}
+
+/// The effective `disposition` an amend turn snapshots (A2): the given value,
+/// else the finding's current disposition. The twin of [`effective_route`];
+/// `dispose` has no equivalent because its `--disposition` is required.
+fn effective_disposition<'a>(
+    existing: &'a [FindingRow],
+    finding_id: &str,
+    given: Option<Disposition>,
+) -> Option<&'a str> {
+    given.map(Disposition::as_str).or_else(|| {
+        existing
+            .iter()
+            .find(|f| f.id == finding_id)
+            .and_then(|f| f.disposition.as_deref())
+    })
+}
+
 /// `doctrine review dispose <RV-NNN> --finding F-n --disposition --response
-/// [--as responder]` — the responder answers a finding (open|contested →
-/// answered, design §5). Sets the responder-owned `disposition`/`response`.
+/// [--route] [--as responder]` — the responder answers a finding (open|
+/// contested → answered, design §5). Sets the responder-owned `disposition`/
+/// `response`, and `route` when given or already carried (A2).
 pub(crate) fn run_dispose(
     path: Option<PathBuf>,
     args: &DisposeArgs,
@@ -286,6 +323,7 @@ pub(crate) fn run_dispose(
     with_turn(&root, id, Act::Dispose, role, |doc, existing| {
         let from = finding_status_of(existing, &args.finding)?;
         gate(Act::Dispose, from, role, &args.finding)?;
+        let route = effective_route(existing, &args.finding, args.route);
         let table = finding_table_mut(doc, &args.finding)?;
         // The dispose turn snapshots the answer it gives (sec-2), so a later
         // re-dispose cannot erase what a contest argued against.
@@ -296,12 +334,73 @@ pub(crate) fn run_dispose(
             FindingStatus::Answered,
             TurnFields {
                 note: None,
-                disposition: Some(&args.disposition),
+                disposition: Some(args.disposition.as_str()),
+                route,
                 response: Some(&args.response),
             },
         )
     })?;
     Ok(ReviewOutput::Disposed {
+        finding_id: args.finding.clone(),
+        review_id: id,
+    })
+}
+
+/// Bundled `review amend` args (SL-268 PHASE-05, design sec-4). `note` is
+/// required (non-empty); `#[serde(default)]` lets a missing MCP note read as
+/// `""`, which refuses with `NOTE_REQUIRED` the same as an explicit blank
+/// (matching `review_contest`). `disposition`/`route` are optional — an
+/// omission keeps the finding's current value (A2).
+#[derive(Deserialize)]
+pub(crate) struct AmendArgs {
+    pub(crate) reference: String,
+    pub(crate) finding: String,
+    pub(crate) response: String,
+    #[serde(default)]
+    pub(crate) note: String,
+    #[serde(default)]
+    pub(crate) disposition: Option<Disposition>,
+    #[serde(default)]
+    pub(crate) route: Option<Route>,
+}
+
+/// `doctrine review amend <RV-NNN> --finding F-n --response --note
+/// [--disposition] [--route] [--as responder]` — the responder updates an
+/// already-answered finding's response and, optionally, its disposition/route
+/// (answered → answered, design sec-4). A blank note refuses before the lock
+/// is taken, so nothing is read or written (the `run_contest` shape). The
+/// amend turn snapshots the finding's effective disposition/route/response
+/// after the write (A2).
+pub(crate) fn run_amend(
+    path: Option<PathBuf>,
+    args: &AmendArgs,
+    role: Role,
+) -> anyhow::Result<ReviewOutput> {
+    if args.note.trim().is_empty() {
+        return Err(ReviewError::NoteRequired { act: Act::Amend }.into());
+    }
+    let root = resolve_review_root(path)?;
+    let id = parse_ref(&args.reference)?;
+    with_turn(&root, id, Act::Amend, role, |doc, existing| {
+        let from = finding_status_of(existing, &args.finding)?;
+        gate(Act::Amend, from, role, &args.finding)?;
+        let disposition = effective_disposition(existing, &args.finding, args.disposition);
+        let route = effective_route(existing, &args.finding, args.route);
+        let table = finding_table_mut(doc, &args.finding)?;
+        apply_act(
+            table,
+            Act::Amend,
+            role,
+            FindingStatus::Answered,
+            TurnFields {
+                note: Some(&args.note),
+                disposition,
+                route,
+                response: Some(&args.response),
+            },
+        )
+    })?;
+    Ok(ReviewOutput::Amended {
         finding_id: args.finding.clone(),
         review_id: id,
     })
@@ -361,6 +460,38 @@ pub(crate) fn run_contest(
         role,
     )?;
     Ok(ReviewOutput::Contested {
+        finding_id: finding.to_owned(),
+        review_id: id,
+    })
+}
+
+/// `doctrine review reopen <RV-NNN> --finding F-n --note … [--as raiser]` — the
+/// raiser reopens a verified finding, handing it back to the responder
+/// (verified → contested, design sec-4). The note is **required**, in the same
+/// shape as `contest`. Does **not** clear `[review].concluded` in this phase —
+/// PHASE-06 owns that (the phase sheet's Out-of-scope note).
+pub(crate) fn run_reopen(
+    path: Option<PathBuf>,
+    reference: &str,
+    finding: &str,
+    note: &str,
+    role: Role,
+) -> anyhow::Result<ReviewOutput> {
+    if note.trim().is_empty() {
+        return Err(ReviewError::NoteRequired { act: Act::Reopen }.into());
+    }
+    let root = resolve_review_root(path)?;
+    let id = parse_ref(reference)?;
+    run_raiser_transition(
+        &root,
+        id,
+        Act::Reopen,
+        FindingStatus::Contested,
+        finding,
+        Some(note),
+        role,
+    )?;
+    Ok(ReviewOutput::Reopened {
         finding_id: finding.to_owned(),
         review_id: id,
     })

@@ -420,6 +420,42 @@ mod write_class_tests {
         );
     }
 
+    /// A5 (SL-268 PHASE-05): the new `amend`/`reopen` write verbs classify as
+    /// `Write`, and a read verb (`status`) still classifies `Read` — the review
+    /// group had no rows in this table before this phase.
+    #[test]
+    fn review_split() {
+        assert_eq!(
+            cls(&[
+                "doctrine",
+                "review",
+                "amend",
+                "RV-001",
+                "--finding",
+                "F-1",
+                "--response",
+                "r",
+                "--note",
+                "n"
+            ]),
+            Some("review amend")
+        );
+        assert_eq!(
+            cls(&[
+                "doctrine",
+                "review",
+                "reopen",
+                "RV-001",
+                "--finding",
+                "F-1",
+                "--note",
+                "n"
+            ]),
+            Some("review reopen")
+        );
+        assert_eq!(cls(&["doctrine", "review", "status", "RV-001"]), None);
+    }
+
     #[test]
     fn memory_record_new_flags_parse_and_reach_the_variant() {
         let cli = Cli::try_parse_from([

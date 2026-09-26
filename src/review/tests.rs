@@ -7,10 +7,10 @@
 use super::*;
 use super::{prime::*, read::*, turn::*, verbs::*};
 use crate::review_ledger::{
-    BlockerRef, EFFECT_UNKNOWN_SEVERITY, FACETS, FINDING_STATUSES, OutstandingCounts, ROLES,
-    SEVERITIES, Vocab, VocabDefect, VocabField, gates_as_blocker, next_finding_id, observe_pass,
-    outstanding_by_severity, read_pass_facts, undisposed_blockers, unresolved_blockers_for,
-    vocabulary_defects,
+    BlockerRef, DISPOSITIONS, EFFECT_UNKNOWN_SEVERITY, FACETS, FINDING_STATUSES, OutstandingCounts,
+    ROLES, ROUTES, SEVERITIES, Vocab, VocabDefect, VocabField, gates_as_blocker, next_finding_id,
+    observe_pass, outstanding_by_severity, read_pass_facts, undisposed_blockers,
+    unresolved_blockers_for, vocabulary_defects,
 };
 
 // -- derived_status: total + named cases (VT-1 / VT-2) -------------------
@@ -110,23 +110,28 @@ fn derived_status_total_over_enum() {
 
 #[test]
 fn can_valid_single_owner_edges_pass() {
-    use FindingStatus::{Answered, Contested, Open};
+    use FindingStatus::{Answered, Contested, Open, Verified};
     assert!(can(Act::Raise, None, Role::Raiser));
     assert!(can(Act::Dispose, Some(Open), Role::Responder));
     assert!(can(Act::Dispose, Some(Contested), Role::Responder));
+    assert!(can(Act::Amend, Some(Answered), Role::Responder));
     assert!(can(Act::Verify, Some(Answered), Role::Raiser));
     assert!(can(Act::Contest, Some(Answered), Role::Raiser));
+    assert!(can(Act::Reopen, Some(Verified), Role::Raiser));
     assert!(can(Act::Withdraw, Some(Open), Role::Raiser));
     assert!(can(Act::Withdraw, Some(Answered), Role::Raiser));
 }
 
 #[test]
 fn can_wrong_role_refused() {
-    use FindingStatus::{Answered, Open};
-    // dispose is the responder's; the raiser may not.
+    use FindingStatus::{Answered, Open, Verified};
+    // dispose/amend are the responder's; the raiser may not.
     assert!(!can(Act::Dispose, Some(Open), Role::Raiser));
+    assert!(!can(Act::Amend, Some(Answered), Role::Raiser));
     // verify is the raiser's; the responder may not.
     assert!(!can(Act::Verify, Some(Answered), Role::Responder));
+    // reopen is the raiser's; the responder may not.
+    assert!(!can(Act::Reopen, Some(Verified), Role::Responder));
     // raise is the raiser's.
     assert!(!can(Act::Raise, None, Role::Responder));
 }
@@ -136,9 +141,13 @@ fn can_wrong_from_state_refused() {
     use FindingStatus::{Answered, Open, Verified, Withdrawn};
     // dispose only from open|contested.
     assert!(!can(Act::Dispose, Some(Answered), Role::Responder));
+    // amend only from answered.
+    assert!(!can(Act::Amend, Some(Open), Role::Responder));
     // verify/contest only from answered.
     assert!(!can(Act::Verify, Some(Open), Role::Raiser));
     assert!(!can(Act::Contest, Some(Open), Role::Raiser));
+    // reopen only from verified.
+    assert!(!can(Act::Reopen, Some(Answered), Role::Raiser));
     // withdraw only from open|answered, not contested/terminal.
     assert!(!can(
         Act::Withdraw,
@@ -232,15 +241,19 @@ fn await_str_forms() {
 fn verb_str_and_required_role() {
     assert_eq!(Act::Raise.as_str(), "raise");
     assert_eq!(Act::Dispose.as_str(), "dispose");
+    assert_eq!(Act::Amend.as_str(), "amend");
     assert_eq!(Act::Verify.as_str(), "verify");
     assert_eq!(Act::Contest.as_str(), "contest");
+    assert_eq!(Act::Reopen.as_str(), "reopen");
     assert_eq!(Act::Withdraw.as_str(), "withdraw");
     // Static verb→role (design §6 responsibility split).
     assert_eq!(Act::Raise.required_role(), Role::Raiser);
     assert_eq!(Act::Verify.required_role(), Role::Raiser);
     assert_eq!(Act::Contest.required_role(), Role::Raiser);
+    assert_eq!(Act::Reopen.required_role(), Role::Raiser);
     assert_eq!(Act::Withdraw.required_role(), Role::Raiser);
     assert_eq!(Act::Dispose.required_role(), Role::Responder);
+    assert_eq!(Act::Amend.required_role(), Role::Responder);
 }
 
 // -- SL-268 PHASE-03: fail-safe closed-vocabulary reads (D15, DEC-319) ----
@@ -750,6 +763,7 @@ fn derived_status_reads_findings_not_a_stored_status() {
             title: "t".to_owned(),
             detail: "d".to_owned(),
             disposition: None,
+            route: None,
             response: None,
             turn: vec![],
         }],
@@ -960,7 +974,8 @@ fn dispose_args(reference: &str, finding: &str) -> DisposeArgs {
     DisposeArgs {
         reference: reference.to_owned(),
         finding: finding.to_owned(),
-        disposition: "fixed".to_owned(),
+        disposition: Disposition::FixNow,
+        route: None,
         response: "done".to_owned(),
     }
 }
@@ -1010,7 +1025,7 @@ fn lifecycle_raise_dispose_verify() {
     .unwrap();
     let doc = read_doc(root, 1);
     assert_eq!(doc.finding[0].status, "answered");
-    assert_eq!(doc.finding[0].disposition.as_deref(), Some("fixed"));
+    assert_eq!(doc.finding[0].disposition.as_deref(), Some("fix-now"));
     assert_eq!(doc.finding[0].response.as_deref(), Some("done"));
     assert_eq!(read_baton(root, 1).unwrap().unwrap().awaiting, "raiser");
 
@@ -1058,7 +1073,7 @@ fn vt1_raiser_fields_immutable_responder_fields_mutable() {
     assert_eq!(f.detail, "orig-detail");
     assert_eq!(f.severity, "blocker");
     // Responder-owned: set by dispose.
-    assert_eq!(f.disposition.as_deref(), Some("fixed"));
+    assert_eq!(f.disposition.as_deref(), Some("fix-now"));
     assert_eq!(f.response.as_deref(), Some("done"));
     // Status moved on a single-owner edge.
     assert_eq!(f.status, "answered");
@@ -1092,6 +1107,7 @@ fn vt2_finding_ids_are_append_only() {
         title: "t".to_owned(),
         detail: "d".to_owned(),
         disposition: None,
+        route: None,
         response: None,
         turn: vec![],
     }];
@@ -1337,6 +1353,7 @@ fn vt5c_pre_write_cas_aborts_a_mid_turn_edit() {
                 TurnFields {
                     note: None,
                     disposition: Some("fixed"),
+                    route: None,
                     response: Some("done"),
                 },
             )
@@ -1771,7 +1788,7 @@ fn dispose_turn_snapshots_answer() {
     let p = || Some(root.to_path_buf());
     run_contest(p(), "RV-001", "F-1", "partial", Role::Raiser).unwrap();
     let second = DisposeArgs {
-        disposition: "tolerated".to_owned(),
+        disposition: Disposition::Tolerated,
         response: "second answer".to_owned(),
         ..dispose_args("RV-001", "F-1")
     };
@@ -1799,7 +1816,7 @@ fn dispose_turn_snapshots_answer() {
     assert_eq!(
         answers,
         [
-            (Some("fixed"), Some("done"), None),
+            (Some("fix-now"), Some("done"), None),
             (Some("tolerated"), Some("second answer"), None)
         ]
     );
@@ -1868,6 +1885,358 @@ fn withdraw_note_lands_in_turn() {
         ("withdraw", Some("duplicate of F-2"))
     );
     assert_eq!(doc.finding[1].turn.last().unwrap().note, None);
+}
+
+// =====================================================================
+// SL-268 PHASE-05 — amend, reopen (VT-1..3)
+// =====================================================================
+
+/// A raised → disposed → verified F-1 on a fresh RV-001 — the common start for
+/// the reopen tests.
+fn fixture_verified_f1() -> tempfile::TempDir {
+    let tmp = fixture_answered_f1();
+    let root = tmp.path();
+    run_verify(
+        Some(root.to_path_buf()),
+        "RV-001",
+        "F-1",
+        None,
+        Role::Raiser,
+    )
+    .unwrap();
+    tmp
+}
+
+fn amend_args(reference: &str, finding: &str, response: &str, note: &str) -> AmendArgs {
+    AmendArgs {
+        reference: reference.to_owned(),
+        finding: finding.to_owned(),
+        response: response.to_owned(),
+        note: note.to_owned(),
+        disposition: None,
+        route: None,
+    }
+}
+
+/// Stand a fresh RV-001/F-1 up in the given status, driven through the real
+/// verbs where possible; `"zombie"` hand-edits an out-of-vocabulary status and
+/// heals the baton's entry CAS (the `unknown_status_refuses_every_act` shape).
+fn seeded_status(status: &str) -> tempfile::TempDir {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    let p = || Some(root.to_path_buf());
+    run_raise(
+        p(),
+        &raise_args("RV-001", Severity::Major, "t"),
+        Role::Raiser,
+    )
+    .unwrap();
+    match status {
+        "open" => {}
+        "answered" => {
+            run_dispose(p(), &dispose_args("RV-001", "F-1"), Role::Responder).unwrap();
+        }
+        "contested" => {
+            run_dispose(p(), &dispose_args("RV-001", "F-1"), Role::Responder).unwrap();
+            run_contest(p(), "RV-001", "F-1", "n", Role::Raiser).unwrap();
+        }
+        "verified" => {
+            run_dispose(p(), &dispose_args("RV-001", "F-1"), Role::Responder).unwrap();
+            run_verify(p(), "RV-001", "F-1", None, Role::Raiser).unwrap();
+        }
+        "withdrawn" => {
+            run_withdraw(p(), "RV-001", "F-1", None, Role::Raiser).unwrap();
+        }
+        "zombie" => {
+            hand_edit_finding(root, 1, "F-1", "status", "zombie");
+            run_status(p(), "RV-001").unwrap();
+        }
+        other => panic!("seeded_status: unhandled status {other}"),
+    }
+    tmp
+}
+
+/// VT-1: amend moves answered → answered. Omitted `--disposition`/`--route`
+/// keep the finding's dispose-time values (A2); the amend turn snapshots the
+/// effective disposition/route/response it leaves standing.
+#[test]
+fn amend_answered_to_answered() {
+    let tmp = fixture_answered_f1();
+    let root = tmp.path();
+    let out = run_amend(
+        Some(root.to_path_buf()),
+        &amend_args("RV-001", "F-1", "R2", "n1"),
+        Role::Responder,
+    )
+    .unwrap();
+    match out {
+        ReviewOutput::Amended {
+            finding_id,
+            review_id,
+        } => assert_eq!((finding_id.as_str(), review_id), ("F-1", 1)),
+        other => panic!("expected Amended, got {other:?}"),
+    }
+    let doc = read_doc(root, 1);
+    let f = &doc.finding[0];
+    assert_eq!(f.status, "answered");
+    assert_eq!(
+        f.disposition.as_deref(),
+        Some("fix-now"),
+        "kept when omitted"
+    );
+    assert_eq!(f.response.as_deref(), Some("R2"));
+    let amend = f.turn.iter().find(|t| t.act == "amend").unwrap();
+    assert_eq!(
+        (
+            amend.role.as_str(),
+            amend.note.as_deref(),
+            amend.disposition.as_deref(),
+            amend.response.as_deref()
+        ),
+        ("responder", Some("n1"), Some("fix-now"), Some("R2"))
+    );
+}
+
+/// VT-1: reopen moves verified → contested, journalling the note.
+#[test]
+fn reopen_verified_to_contested() {
+    let tmp = fixture_verified_f1();
+    let root = tmp.path();
+    let out = run_reopen(
+        Some(root.to_path_buf()),
+        "RV-001",
+        "F-1",
+        "n3",
+        Role::Raiser,
+    )
+    .unwrap();
+    match out {
+        ReviewOutput::Reopened {
+            finding_id,
+            review_id,
+        } => assert_eq!((finding_id.as_str(), review_id), ("F-1", 1)),
+        other => panic!("expected Reopened, got {other:?}"),
+    }
+    let doc = read_doc(root, 1);
+    assert_eq!(doc.finding[0].status, "contested");
+    let reopen = doc.finding[0].turn.last().unwrap();
+    assert_eq!(
+        (
+            reopen.act.as_str(),
+            reopen.role.as_str(),
+            reopen.note.as_deref()
+        ),
+        ("reopen", "raiser", Some("n3"))
+    );
+}
+
+/// VT-1: amend refuses outside `answered` — every other status and an
+/// out-of-vocabulary one each give `StateMismatch`/`UnknownStatus`, ledger
+/// unchanged. Also one `RoleMismatch` case.
+#[test]
+fn amend_refused_outside_answered() {
+    for status in ["open", "contested", "verified", "withdrawn"] {
+        let tmp = seeded_status(status);
+        let root = tmp.path();
+        let before = fs::read_to_string(authored_path(root, 1)).unwrap();
+        let err = run_amend(
+            Some(root.to_path_buf()),
+            &amend_args("RV-001", "F-1", "R", "n"),
+            Role::Responder,
+        )
+        .unwrap_err();
+        match err.downcast_ref::<ReviewError>() {
+            Some(ReviewError::StateMismatch { finding, act, .. }) => {
+                assert_eq!((finding.as_str(), *act), ("F-1", Act::Amend));
+            }
+            other => panic!("expected StateMismatch for {status}, got {other:?} ({err})"),
+        }
+        assert_eq!(
+            fs::read_to_string(authored_path(root, 1)).unwrap(),
+            before,
+            "{status}"
+        );
+    }
+
+    let tmp = seeded_status("zombie");
+    let root = tmp.path();
+    let before = fs::read_to_string(authored_path(root, 1)).unwrap();
+    let err = run_amend(
+        Some(root.to_path_buf()),
+        &amend_args("RV-001", "F-1", "R", "n"),
+        Role::Responder,
+    )
+    .unwrap_err();
+    match err.downcast_ref::<ReviewError>() {
+        Some(ReviewError::UnknownStatus { finding, raw }) => {
+            assert_eq!((finding.as_str(), raw.as_str()), ("F-1", "zombie"));
+        }
+        other => panic!("expected UnknownStatus, got {other:?} ({err})"),
+    }
+    assert_eq!(fs::read_to_string(authored_path(root, 1)).unwrap(), before);
+
+    // One role case: amend --as raiser refuses RoleMismatch before the
+    // per-finding gate ever runs.
+    let tmp = fixture_answered_f1();
+    let root = tmp.path();
+    let before = fs::read_to_string(authored_path(root, 1)).unwrap();
+    let err = run_amend(
+        Some(root.to_path_buf()),
+        &amend_args("RV-001", "F-1", "R", "n"),
+        Role::Raiser,
+    )
+    .unwrap_err();
+    match err.downcast_ref::<ReviewError>() {
+        Some(ReviewError::RoleMismatch { act, .. }) => assert_eq!(*act, Act::Amend),
+        other => panic!("expected RoleMismatch, got {other:?} ({err})"),
+    }
+    assert_eq!(fs::read_to_string(authored_path(root, 1)).unwrap(), before);
+}
+
+/// VT-1: reopen refuses outside `verified` — every other status and an
+/// out-of-vocabulary one each give `StateMismatch`/`UnknownStatus`, ledger
+/// unchanged. Also one `RoleMismatch` case.
+#[test]
+fn reopen_refused_outside_verified() {
+    for status in ["open", "answered", "contested", "withdrawn"] {
+        let tmp = seeded_status(status);
+        let root = tmp.path();
+        let before = fs::read_to_string(authored_path(root, 1)).unwrap();
+        let err =
+            run_reopen(Some(root.to_path_buf()), "RV-001", "F-1", "n", Role::Raiser).unwrap_err();
+        match err.downcast_ref::<ReviewError>() {
+            Some(ReviewError::StateMismatch { finding, act, .. }) => {
+                assert_eq!((finding.as_str(), *act), ("F-1", Act::Reopen));
+            }
+            other => panic!("expected StateMismatch for {status}, got {other:?} ({err})"),
+        }
+        assert_eq!(
+            fs::read_to_string(authored_path(root, 1)).unwrap(),
+            before,
+            "{status}"
+        );
+    }
+
+    let tmp = seeded_status("zombie");
+    let root = tmp.path();
+    let before = fs::read_to_string(authored_path(root, 1)).unwrap();
+    let err = run_reopen(Some(root.to_path_buf()), "RV-001", "F-1", "n", Role::Raiser).unwrap_err();
+    match err.downcast_ref::<ReviewError>() {
+        Some(ReviewError::UnknownStatus { finding, raw }) => {
+            assert_eq!((finding.as_str(), raw.as_str()), ("F-1", "zombie"));
+        }
+        other => panic!("expected UnknownStatus, got {other:?} ({err})"),
+    }
+    assert_eq!(fs::read_to_string(authored_path(root, 1)).unwrap(), before);
+
+    // One role case: reopen --as responder refuses RoleMismatch.
+    let tmp = fixture_verified_f1();
+    let root = tmp.path();
+    let before = fs::read_to_string(authored_path(root, 1)).unwrap();
+    let err = run_reopen(
+        Some(root.to_path_buf()),
+        "RV-001",
+        "F-1",
+        "n",
+        Role::Responder,
+    )
+    .unwrap_err();
+    match err.downcast_ref::<ReviewError>() {
+        Some(ReviewError::RoleMismatch { act, .. }) => assert_eq!(*act, Act::Reopen),
+        other => panic!("expected RoleMismatch, got {other:?} ({err})"),
+    }
+    assert_eq!(fs::read_to_string(authored_path(root, 1)).unwrap(), before);
+}
+
+/// EX-3 / VT-2: amend needs a non-empty note (A3). A blank one refuses before
+/// the lock, so neither the ledger nor the baton is touched (the
+/// `contest_requires_note` shape).
+#[test]
+fn amend_requires_note() {
+    let tmp = fixture_answered_f1();
+    let root = tmp.path();
+    let ledger_before = fs::read_to_string(authored_path(root, 1)).unwrap();
+    let baton_before = fs::read_to_string(baton_path(root, 1)).unwrap();
+    for blank in ["", "  \n\t"] {
+        let err = run_amend(
+            Some(root.to_path_buf()),
+            &amend_args("RV-001", "F-1", "R", blank),
+            Role::Responder,
+        )
+        .unwrap_err();
+        match err.downcast_ref::<ReviewError>() {
+            Some(ReviewError::NoteRequired { act }) => assert_eq!(*act, Act::Amend),
+            other => panic!("expected NoteRequired, got {other:?} ({err})"),
+        }
+        assert_eq!(err.to_string(), "`amend` requires a non-empty --note");
+    }
+    assert_eq!(
+        fs::read_to_string(authored_path(root, 1)).unwrap(),
+        ledger_before
+    );
+    assert_eq!(
+        fs::read_to_string(baton_path(root, 1)).unwrap(),
+        baton_before
+    );
+    assert!(!lock_path(root, 1).exists(), "no lock left behind");
+}
+
+/// EX-3 / VT-2: reopen needs a non-empty note, in the same shape.
+#[test]
+fn reopen_requires_note() {
+    let tmp = fixture_verified_f1();
+    let root = tmp.path();
+    let ledger_before = fs::read_to_string(authored_path(root, 1)).unwrap();
+    let baton_before = fs::read_to_string(baton_path(root, 1)).unwrap();
+    for blank in ["", "  \n\t"] {
+        let err = run_reopen(
+            Some(root.to_path_buf()),
+            "RV-001",
+            "F-1",
+            blank,
+            Role::Raiser,
+        )
+        .unwrap_err();
+        match err.downcast_ref::<ReviewError>() {
+            Some(ReviewError::NoteRequired { act }) => assert_eq!(*act, Act::Reopen),
+            other => panic!("expected NoteRequired, got {other:?} ({err})"),
+        }
+        assert_eq!(err.to_string(), "`reopen` requires a non-empty --note");
+    }
+    assert_eq!(
+        fs::read_to_string(authored_path(root, 1)).unwrap(),
+        ledger_before
+    );
+    assert_eq!(
+        fs::read_to_string(baton_path(root, 1)).unwrap(),
+        baton_before
+    );
+    assert!(!lock_path(root, 1).exists(), "no lock left behind");
+}
+
+/// VT-3: `Disposition::parse`/`Route::parse` on an unknown token names every
+/// token of their own set.
+#[test]
+fn disposition_refusal_names_set() {
+    let err = Disposition::parse("bogus").unwrap_err();
+    for token in DISPOSITIONS {
+        assert!(err.contains(token), "{err} names {token}");
+    }
+    let err = Route::parse("bogus").unwrap_err();
+    for token in ROUTES {
+        assert!(err.contains(token), "{err} names {token}");
+    }
+}
+
+/// VT-3: the retired `route:` prose prefix is refused pointing at `--route`,
+/// naming the routes — not as a generic unknown-disposition message.
+#[test]
+fn route_prefix_refused() {
+    let err = Disposition::parse("route:probe fix-now").unwrap_err();
+    assert!(err.contains("--route"), "{err}");
+    for token in ROUTES {
+        assert!(err.contains(token), "{err} names {token}");
+    }
 }
 
 /// EX-4 / VT-3: the first journalled write seeds `rounds_base`/`contests_base`
@@ -3181,7 +3550,7 @@ fn show_index_carries_the_disposition() {
     .unwrap();
     let out = run_show(Some(root.to_path_buf()), "RV-001", Format::Table).unwrap();
     let rendered = print_review(&out);
-    assert!(rendered.contains("fixed"), "disposition: {rendered}");
+    assert!(rendered.contains("fix-now"), "disposition: {rendered}");
     assert!(rendered.contains("answered"), "status: {rendered}");
 }
 

@@ -6,16 +6,24 @@
 use super::schema::FindingRow;
 use super::vocab::{FINDING_STATUSES, FindingStatus, Role, Severity, Vocab};
 
-/// Every act a turn can assert (SL-268 D1): the five finding transitions plus the
-/// pass-level `conclude`. One vocabulary serves the role gate, the transition
-/// table, the refusal and the turn journal's `act` string; `status` and the
-/// read/coordination verbs are not acts and are not modelled here.
+/// Every act a turn can assert (SL-268 D1): the seven finding transitions plus
+/// the pass-level `conclude`. One vocabulary serves the role gate, the
+/// transition table, the refusal and the turn journal's `act` string; `status`
+/// and the read/coordination verbs are not acts and are not modelled here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Act {
     Raise,
     Dispose,
+    /// The responder updates an already-answered finding's response and/or its
+    /// disposition/route (design sec-4, SL-268 PHASE-05) — `answered` stays
+    /// `answered`.
+    Amend,
     Verify,
     Contest,
+    /// The raiser reopens a verified finding, handing it back to the responder
+    /// (design sec-4, SL-268 PHASE-05). Does **not** clear `[review].concluded`
+    /// in this phase (PHASE-06).
+    Reopen,
     Withdraw,
     /// The raiser declares the pass finished (SL-244 `sec-4`, IMP-392). It moves
     /// no finding, so the transition table admits no edge for it.
@@ -28,24 +36,30 @@ impl Act {
         match self {
             Self::Raise => "raise",
             Self::Dispose => "dispose",
+            Self::Amend => "amend",
             Self::Verify => "verify",
             Self::Contest => "contest",
+            Self::Reopen => "reopen",
             Self::Withdraw => "withdraw",
             Self::Conclude => "conclude",
         }
     }
 
     /// The role an act statically requires, knowable without a finding (design
-    /// §6 responsibility split): dispose is the responder's; every other act is
-    /// the raiser's. Concluding is the reviewer saying *I have finished reading*,
-    /// so it is deliberately not `dispose`'s. The `with_turn` wrapper checks this;
-    /// the per-finding `can` check (state-dependent) is the closure's job.
+    /// §6 responsibility split): dispose/amend are the responder's; every other
+    /// act is the raiser's. Concluding is the reviewer saying *I have finished
+    /// reading*, so it is deliberately not `dispose`'s. The `with_turn` wrapper
+    /// checks this; the per-finding `can` check (state-dependent) is the
+    /// closure's job.
     pub(crate) const fn required_role(self) -> Role {
         match self {
-            Self::Raise | Self::Verify | Self::Contest | Self::Withdraw | Self::Conclude => {
-                Role::Raiser
-            }
-            Self::Dispose => Role::Responder,
+            Self::Raise
+            | Self::Verify
+            | Self::Contest
+            | Self::Reopen
+            | Self::Withdraw
+            | Self::Conclude => Role::Raiser,
+            Self::Dispose | Self::Amend => Role::Responder,
         }
     }
 }
@@ -63,8 +77,10 @@ impl Act {
 /// |----------|--------------------|-----------|---|
 /// | raise    | (none)             | raiser    | open |
 /// | dispose  | open \| contested  | responder | answered |
+/// | amend    | answered           | responder | answered |
 /// | verify   | answered           | raiser    | verified (terminal) |
 /// | contest  | answered           | raiser    | contested |
+/// | reopen   | verified           | raiser    | contested |
 /// | withdraw | open \| answered   | raiser    | withdrawn (terminal) |
 pub(crate) const fn can(act: Act, from: Option<FindingStatus>, role: Role) -> bool {
     // Static role check first — the half `with_turn` also owns; refuse a
@@ -79,7 +95,11 @@ pub(crate) const fn can(act: Act, from: Option<FindingStatus>, role: Role) -> bo
                 Act::Dispose,
                 Some(FindingStatus::Open | FindingStatus::Contested)
             )
-            | (Act::Verify | Act::Contest, Some(FindingStatus::Answered))
+            | (
+                Act::Amend | Act::Verify | Act::Contest,
+                Some(FindingStatus::Answered)
+            )
+            | (Act::Reopen, Some(FindingStatus::Verified))
             | (
                 Act::Withdraw,
                 Some(FindingStatus::Open | FindingStatus::Answered)
@@ -152,12 +172,14 @@ pub(crate) fn write_counter_seed(
 }
 
 /// The optional account one turn carries (SL-268 sec-2). `note` is the act's
-/// own reasoning; `disposition`/`response` are set on a `dispose` turn, where
-/// they are also written to the finding as its current answer.
+/// own reasoning; `disposition`/`route`/`response` are set on a `dispose` or
+/// `amend` turn, where they are also written to the finding as its current
+/// answer.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct TurnFields<'a> {
     pub(crate) note: Option<&'a str>,
     pub(crate) disposition: Option<&'a str>,
+    pub(crate) route: Option<&'a str>,
     pub(crate) response: Option<&'a str>,
 }
 
@@ -166,8 +188,8 @@ pub(crate) struct TurnFields<'a> {
 const TURN_KEY: &str = "turn";
 
 /// Build one turn row in the design's key order (sec-2): `act`, `role`, then
-/// `note`, `disposition`, `response`, each only when present. User free-text
-/// rides `toml_edit::value`, which quotes/escapes it.
+/// `note`, `disposition`, `route`, `response`, each only when present. User
+/// free-text rides `toml_edit::value`, which quotes/escapes it.
 fn turn_row(act: Act, role: Role, fields: TurnFields<'_>) -> toml_edit::Table {
     let mut row = toml_edit::Table::new();
     row.insert("act", toml_edit::value(act.as_str()));
@@ -175,6 +197,7 @@ fn turn_row(act: Act, role: Role, fields: TurnFields<'_>) -> toml_edit::Table {
     for (key, value) in [
         ("note", fields.note),
         ("disposition", fields.disposition),
+        ("route", fields.route),
         ("response", fields.response),
     ] {
         if let Some(v) = value {
@@ -198,11 +221,12 @@ fn push_turn(parent: &mut toml_edit::Table, row: toml_edit::Table) -> anyhow::Re
 }
 
 /// Apply one finding act (design sec-2 "One write"): set the finding's `status`,
-/// any `disposition`/`response`, and append the act's turn row. This is the
-/// **only** writer of a finding's state fields and its journal, so the two move
-/// in one edit. Edit-preserving: the table is mutated in place, so comments /
-/// unknown keys / sibling findings survive (the `governance.rs:290` contract at
-/// finding scope).
+/// any `disposition`/`route`/`response`, and append the act's turn row. This is
+/// the **only** writer of a finding's state fields and its journal, so the two
+/// move in one edit. Never removes a key (A2: absent means kept). Edit-
+/// preserving: the table is mutated in place, so comments / unknown keys /
+/// sibling findings survive (the `governance.rs:290` contract at finding
+/// scope).
 pub(crate) fn apply_act(
     table: &mut toml_edit::Table,
     act: Act,
@@ -213,6 +237,9 @@ pub(crate) fn apply_act(
     table.insert("status", toml_edit::value(to.as_str()));
     if let Some(d) = fields.disposition {
         table.insert("disposition", toml_edit::value(d));
+    }
+    if let Some(r) = fields.route {
+        table.insert("route", toml_edit::value(r));
     }
     if let Some(r) = fields.response {
         table.insert("response", toml_edit::value(r));
@@ -301,11 +328,13 @@ mod tests {
     /// The refusal's from-set is `can`'s, and only `can`'s (SL-268 sec-4).
     #[test]
     fn admissible_from_is_computed_from_can() {
-        use FindingStatus::{Answered, Contested, Open};
+        use FindingStatus::{Answered, Contested, Open, Verified};
         let cases = [
             (Act::Dispose, vec![Open, Contested]),
+            (Act::Amend, vec![Answered]),
             (Act::Verify, vec![Answered]),
             (Act::Contest, vec![Answered]),
+            (Act::Reopen, vec![Verified]),
             (Act::Withdraw, vec![Open, Answered]),
             (Act::Conclude, vec![]),
             (Act::Raise, vec![]),

@@ -5428,7 +5428,8 @@ mod tests {
             &crate::review::DisposeArgs {
                 reference: "RV-001".to_owned(),
                 finding: "F-1".to_owned(),
-                disposition: "fixed".to_owned(),
+                disposition: crate::review_ledger::Disposition::FixNow,
+                route: None,
                 response: "done".to_owned(),
             },
             crate::review_ledger::Role::Responder,

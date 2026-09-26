@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! MCP tool definitions (JSON Schema) and handler dispatch.
 //!
-//! 29 tools: 10 review, 8 memory (`memory_search`, `memory_retrieve`, `memory_show`,
+//! 31 tools: 12 review, 8 memory (`memory_search`, `memory_retrieve`, `memory_show`,
 //! `memory_list`, `memory_validate`, `memory_record`, `memory_edit`, `doctrine_onboard`),
 //! the SL-199
 //! dispatch funnel write surface (`dispatch_import`, `dispatch_conclude_phase`,
@@ -70,7 +70,7 @@ const CAPTURE_REFUSED_KEYS: [&str; 10] = [
 
 // ── Tool definitions (function, not const — json!() is non-const) ─────────
 
-/// Return all 29 tool definitions with JSON Schema parameter descriptions.
+/// Return all 31 tool definitions with JSON Schema parameter descriptions.
 fn tools() -> Vec<McpTool> {
     vec![
         McpTool {
@@ -168,17 +168,35 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_dispose".to_owned(),
-            description: "Dispose a finding (the responder's verb) — answer an open/contested finding, setting disposition + response. Sanctioned dispositions: `aligned | fix-now | design-wrong | follow-up | tolerated` (free-text in practice, but these five are the protocol). `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Disposed\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            description: "Dispose a finding (the responder's verb) — answer an open/contested finding, setting disposition + response. `disposition` is a closed vocabulary (SL-268 D8); `route` is optional and closed — omitted keeps the finding's current route. A `route:` prefix on `disposition` (the retired prose form) is refused, naming `route`. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Disposed\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
                     "finding": { "type": "string", "description": "The finding id, e.g. F-2" },
-                    "disposition": { "type": "string", "description": "The disposition: aligned | fix-now | design-wrong | follow-up | tolerated" },
+                    "disposition": { "type": "string", "enum": json!(crate::review_ledger::DISPOSITIONS), "description": "The disposition (closed)" },
+                    "route": { "type": "string", "enum": json!(crate::review_ledger::ROUTES), "description": "Where the answer routes (closed, optional; omitted keeps the current route)" },
                     "response": { "type": "string", "description": "The response detail (free-text)" },
                     "as": { "type": "string", "description": "Cooperative role assertion (default: responder)" }
                 },
                 "required": ["reference", "finding", "disposition", "response"]
+            }),
+        },
+        McpTool {
+            name: "review_amend".to_owned(),
+            description: "Amend an already-answered finding (the responder's verb) — update the response and, optionally, the disposition/route (answered → answered). `note` is required and non-empty: it is recorded on the amend turn, as why the finding is being amended. A missing or blank note is refused with NOTE_REQUIRED. Omitted `disposition`/`route` keep the finding's current value. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Amended\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
+                    "finding": { "type": "string", "description": "The finding id, e.g. F-2" },
+                    "response": { "type": "string", "description": "The updated response detail (free-text, required)" },
+                    "note": { "type": "string", "description": "Why the finding is being amended — recorded on the amend turn (required, non-empty)" },
+                    "disposition": { "type": "string", "enum": json!(crate::review_ledger::DISPOSITIONS), "description": "The replacement disposition (closed, optional; omitted keeps the current value)" },
+                    "route": { "type": "string", "enum": json!(crate::review_ledger::ROUTES), "description": "The replacement route (closed, optional; omitted keeps the current value)" },
+                    "as": { "type": "string", "description": "Cooperative role assertion (default: responder)" }
+                },
+                "required": ["reference", "finding", "response", "note"]
             }),
         },
         McpTool {
@@ -204,6 +222,20 @@ fn tools() -> Vec<McpTool> {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
                     "finding": { "type": "string", "description": "The finding id, e.g. F-2" },
                     "note": { "type": "string", "description": "What the contest argues — recorded on the finding's contest turn (required, non-empty)" },
+                    "as": { "type": "string", "description": "Cooperative role assertion (default: raiser)" }
+                },
+                "required": ["reference", "finding", "note"]
+            }),
+        },
+        McpTool {
+            name: "review_reopen".to_owned(),
+            description: "Reopen a verified finding (the raiser's verb) — hand it back to the responder (verified → contested). `note` is required and non-empty: it is recorded on the finding's reopen turn in the ledger, as why it is being reopened. A missing or blank note is refused with NOTE_REQUIRED. Does not clear the pass's concluded marker. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Reopened\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
+                    "finding": { "type": "string", "description": "The finding id, e.g. F-2" },
+                    "note": { "type": "string", "description": "Why the finding is reopened — recorded on the finding's reopen turn (required, non-empty)" },
                     "as": { "type": "string", "description": "Cooperative role assertion (default: raiser)" }
                 },
                 "required": ["reference", "finding", "note"]
@@ -237,7 +269,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_status".to_owned(),
-            description: "Report a review's derived state and rebuild its baton (cache == recompute).\n\nReturns: {\"Status\": { canonical: \"RV-NNN\", status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", findings_count: int, rounds: int, cache_primed: bool, stale_paths: [string] }} — `rounds` counts all finding-state transitions (raise, dispose, verify, contest, withdraw); `cache_primed` is the prime-cache freshness signal, never a gate; `stale_paths` lists paths whose git-sha diverged since prime.".to_owned(),
+            description: "Report a review's derived state and rebuild its baton (cache == recompute).\n\nReturns: {\"Status\": { canonical: \"RV-NNN\", status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", findings_count: int, rounds: int, cache_primed: bool, stale_paths: [string] }} — `rounds` counts all finding-state transitions (raise, dispose, amend, verify, contest, reopen, withdraw); `cache_primed` is the prime-cache freshness signal, never a gate; `stale_paths` lists paths whose git-sha diverged since prime.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -709,6 +741,15 @@ fn call_tool(
             let out = review::run_dispose(Some(root.to_path_buf()), &args, role)?;
             Ok(serde_json::to_string(&out)?)
         }
+        "review_amend" => {
+            let args: review::AmendArgs = serde_json::from_value(arguments.clone())
+                .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
+            let role_str = arguments.get("as").and_then(|v| v.as_str());
+            let role = review::parse_role(role_str, crate::review_ledger::Role::Responder)
+                .context("invalid role")?;
+            let out = review::run_amend(Some(root.to_path_buf()), &args, role)?;
+            Ok(serde_json::to_string(&out)?)
+        }
         "review_verify" => {
             let fields = ExtractFields::from_value(arguments, &["reference", "finding"]);
             let role_str = fields.opt_str_field("as");
@@ -733,6 +774,22 @@ fn call_tool(
                 &fields.str_field("reference"),
                 &fields.str_field("finding"),
                 // A missing note reads as "", which `run_contest` refuses with
+                // `NoteRequired` — the same refusal as an explicit blank.
+                &fields.str_field("note"),
+                role,
+            )?;
+            Ok(serde_json::to_string(&out)?)
+        }
+        "review_reopen" => {
+            let fields = ExtractFields::from_value(arguments, &["reference", "finding", "note"]);
+            let role_str = fields.opt_str_field("as");
+            let role = review::parse_role(role_str.as_deref(), crate::review_ledger::Role::Raiser)
+                .context("invalid role")?;
+            let out = review::run_reopen(
+                Some(root.to_path_buf()),
+                &fields.str_field("reference"),
+                &fields.str_field("finding"),
+                // A missing note reads as "", which `run_reopen` refuses with
                 // `NoteRequired` — the same refusal as an explicit blank.
                 &fields.str_field("note"),
                 role,
@@ -1755,8 +1812,10 @@ When MCP tools are available, use these tools instead of CLI commands:
 | `doctrine review show <ref>` | `review_show` | `reference` param |
 | `doctrine review raise` | `review_raise` | |
 | `doctrine review dispose` | `review_dispose` | |
+| `doctrine review amend` | `review_amend` | |
 | `doctrine review verify` | `review_verify` | |
 | `doctrine review contest` | `review_contest` | |
+| `doctrine review reopen` | `review_reopen` | |
 | `doctrine review withdraw` | `review_withdraw` | |
 | `doctrine review conclude` | `review_conclude` | ends the pass; `Conducted` needs it |
 | `doctrine review status` | `review_status` | |
@@ -1847,11 +1906,12 @@ mod tests {
 
     // VT-3: tool list response contains exactly the registered tools, by name.
     // 30 → 29 at SL-254 PHASE-06 (`worker_commit` retired with the claude arm).
+    // 29 → 31 at SL-268 PHASE-05 (`review_amend`, `review_reopen` added).
 
     #[test]
-    fn tool_list_has_29_tools() {
+    fn tool_list_has_31_tools() {
         let list = tool_list();
-        assert_eq!(list.tools.len(), 29);
+        assert_eq!(list.tools.len(), 31);
         // The SL-199 funnel write surface is registered (named via the STD-001 consts).
         let names: Vec<&str> = list.tools.iter().map(|t| t.name.as_str()).collect();
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_IMPORT));
@@ -1881,8 +1941,10 @@ mod tests {
         assert!(names.contains(&"review_show"));
         assert!(names.contains(&"review_raise"));
         assert!(names.contains(&"review_dispose"));
+        assert!(names.contains(&"review_amend"));
         assert!(names.contains(&"review_verify"));
         assert!(names.contains(&"review_contest"));
+        assert!(names.contains(&"review_reopen"));
         assert!(names.contains(&"review_withdraw"));
         assert!(names.contains(&"review_conclude"));
         assert!(names.contains(&"review_status"));
@@ -2325,7 +2387,7 @@ mod tests {
         let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 29);
+        assert_eq!(tools.len(), 31);
     }
 
     #[test]

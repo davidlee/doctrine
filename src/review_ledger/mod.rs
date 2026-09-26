@@ -28,8 +28,8 @@ pub(crate) use transition::{
     finding_status_of, finding_table_mut, review_table_mut, write_counter_seed,
 };
 pub(crate) use vocab::{
-    Await, FINDING_STATUSES, Facet, FindingStatus, REVIEW_STATUSES, ReviewStatus, Role, Severity,
-    Vocab,
+    Await, DISPOSITIONS, Disposition, FINDING_STATUSES, Facet, FindingStatus, REVIEW_STATUSES,
+    ROUTES, ReviewStatus, Role, Route, Severity, Vocab,
 };
 
 // Reached only by unit tests (review, slice, mcp_server, priority).

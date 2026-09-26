@@ -20,12 +20,12 @@ use crate::entity::{self, Materialised};
 use crate::kinds::{REVIEW_DIR, REVIEW_KIND};
 use crate::listing::{self, Column, Format, ListArgs};
 use crate::review_ledger::{
-    Act, Await, FINDING_STATUSES, Facet, FindingRow, FindingState, FindingStatus, REVIEW_STATUSES,
-    ReviewDoc, ReviewMeta, ReviewStatus, Role, Severity, Target, TurnFields, Vocab, VocabDefect,
-    admissible_from, append_finding, append_review_turn, apply_act, authored_path, can,
-    canonical_id, counters, derived_status, finding_states_of, finding_status_of,
-    finding_table_mut, parse_ref, read_authored, read_review, read_reviews, review_table_mut, seed,
-    vocabulary_defects, write_counter_seed,
+    Act, Await, Disposition, FINDING_STATUSES, Facet, FindingRow, FindingState, FindingStatus,
+    REVIEW_STATUSES, ReviewDoc, ReviewMeta, ReviewStatus, Role, Route, Severity, Target,
+    TurnFields, Vocab, VocabDefect, admissible_from, append_finding, append_review_turn, apply_act,
+    authored_path, can, canonical_id, counters, derived_status, finding_states_of,
+    finding_status_of, finding_table_mut, parse_ref, read_authored, read_review, read_reviews,
+    review_table_mut, seed, vocabulary_defects, write_counter_seed,
 };
 
 mod cli;
@@ -39,8 +39,9 @@ pub(crate) use prime::{PrimeArgs, run_prime};
 pub(crate) use read::{Finding, ListRow, ReviewWarning, run_list, run_show, run_status};
 pub(crate) use turn::run_unlock;
 pub(crate) use verbs::{
-    DisposeArgs, NewArgs, RaiseArgs, materialise_review_at, mint_review, parse_role, run_conclude,
-    run_contest, run_dispose, run_new, run_raise, run_verify, run_withdraw,
+    AmendArgs, DisposeArgs, NewArgs, RaiseArgs, materialise_review_at, mint_review, parse_role,
+    run_amend, run_conclude, run_contest, run_dispose, run_new, run_raise, run_reopen, run_verify,
+    run_withdraw,
 };
 
 pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
@@ -125,6 +126,7 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             reference,
             finding,
             disposition,
+            route,
             response,
             role,
             path,
@@ -137,7 +139,36 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
                     reference,
                     finding,
                     disposition,
+                    route,
                     response,
+                },
+                role,
+            )?;
+            let rendered = print_review(&out);
+            write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+        ReviewCommand::Amend {
+            reference,
+            finding,
+            response,
+            note,
+            disposition,
+            route,
+            role,
+            path,
+        } => {
+            use std::io::Write;
+            let role = parse_role(role.as_deref(), Role::Responder)?;
+            let out = run_amend(
+                path,
+                &AmendArgs {
+                    reference,
+                    finding,
+                    response,
+                    note,
+                    disposition,
+                    route,
                 },
                 role,
             )?;
@@ -169,6 +200,20 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             use std::io::Write;
             let role = parse_role(role.as_deref(), Role::Raiser)?;
             let out = run_contest(path, &reference, &finding, &note, role)?;
+            let rendered = print_review(&out);
+            write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+        ReviewCommand::Reopen {
+            reference,
+            finding,
+            note,
+            role,
+            path,
+        } => {
+            use std::io::Write;
+            let role = parse_role(role.as_deref(), Role::Raiser)?;
+            let out = run_reopen(path, &reference, &finding, &note, role)?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;
             Ok(())
@@ -281,11 +326,19 @@ pub(crate) enum ReviewOutput {
         finding_id: String,
         review_id: u32,
     },
+    Amended {
+        finding_id: String,
+        review_id: u32,
+    },
     Verified {
         finding_id: String,
         review_id: u32,
     },
     Contested {
+        finding_id: String,
+        review_id: u32,
+    },
+    Reopened {
         finding_id: String,
         review_id: u32,
     },
@@ -388,6 +441,16 @@ pub(crate) fn print_review(out: &ReviewOutput) -> String {
                 canonical_id(*review_id)
             )
         }
+        ReviewOutput::Amended {
+            finding_id,
+            review_id,
+        } => {
+            format!(
+                "Amended {} on {} (answered)\n",
+                finding_id,
+                canonical_id(*review_id)
+            )
+        }
         ReviewOutput::Verified {
             finding_id,
             review_id,
@@ -404,6 +467,16 @@ pub(crate) fn print_review(out: &ReviewOutput) -> String {
         } => {
             format!(
                 "Contested {} on {} (contested)\n",
+                finding_id,
+                canonical_id(*review_id)
+            )
+        }
+        ReviewOutput::Reopened {
+            finding_id,
+            review_id,
+        } => {
+            format!(
+                "Reopened {} on {} (contested)\n",
                 finding_id,
                 canonical_id(*review_id)
             )
@@ -592,8 +665,10 @@ pub(crate) fn verb_past(act: Act) -> &'static str {
     match act {
         Act::Raise => "Raised",
         Act::Dispose => "Disposed",
+        Act::Amend => "Amended",
         Act::Verify => "Verified",
         Act::Contest => "Contested",
+        Act::Reopen => "Reopened",
         Act::Withdraw => "Withdrew",
         Act::Conclude => "Concluded",
     }

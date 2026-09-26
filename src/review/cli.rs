@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use clap::Subcommand;
 
-use super::{Facet, Format, Severity};
+use super::{Disposition, Facet, Format, Route, Severity};
 
 #[derive(Subcommand)]
 pub(crate) enum ReviewCommand {
@@ -115,13 +115,58 @@ pub(crate) enum ReviewCommand {
         #[arg(long)]
         finding: String,
 
-        /// The disposition (free-text; e.g. fixed / design-wrong / tolerated).
-        #[arg(long)]
-        disposition: String,
+        /// The disposition: aligned | fix-now | design-wrong | follow-up |
+        /// tolerated. A `route:` prefix is refused — pass the route with
+        /// `--route`.
+        #[arg(long, value_parser = Disposition::parse)]
+        disposition: Disposition,
+
+        /// Where the answer routes: review | demonstrate | probe | control |
+        /// owner-fix (optional; omitted keeps the finding's current route).
+        #[arg(long, value_parser = Route::parse)]
+        route: Option<Route>,
 
         /// The response detail (free-text).
         #[arg(long)]
         response: String,
+
+        /// Cooperative role assertion (default: responder).
+        #[arg(long = "as")]
+        role: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Amend an already-answered finding (the responder's verb) — update the
+    /// response and, optionally, the disposition/route (answered → answered).
+    Amend {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// The finding id, e.g. `F-2`.
+        #[arg(long)]
+        finding: String,
+
+        /// The updated response detail (free-text, required).
+        #[arg(long)]
+        response: String,
+
+        /// Why the finding is being amended — recorded on the amend turn
+        /// (required, non-empty).
+        #[arg(long)]
+        note: String,
+
+        /// The replacement disposition (optional; omitted keeps the current
+        /// value): aligned | fix-now | design-wrong | follow-up | tolerated.
+        #[arg(long, value_parser = Disposition::parse)]
+        disposition: Option<Disposition>,
+
+        /// The replacement route (optional; omitted keeps the current value):
+        /// review | demonstrate | probe | control | owner-fix.
+        #[arg(long, value_parser = Route::parse)]
+        route: Option<Route>,
 
         /// Cooperative role assertion (default: responder).
         #[arg(long = "as")]
@@ -167,6 +212,30 @@ pub(crate) enum ReviewCommand {
 
         /// What the contest argues — recorded in the ledger as this turn's
         /// reasoning (required, non-empty).
+        #[arg(long)]
+        note: String,
+
+        /// Cooperative role assertion (default: raiser).
+        #[arg(long = "as")]
+        role: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Reopen a verified finding (the raiser's verb) — hand it back to the
+    /// responder (verified → contested).
+    Reopen {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// The finding id, e.g. `F-2`.
+        #[arg(long)]
+        finding: String,
+
+        /// Why the finding is reopened — recorded on the reopen turn
+        /// (required, non-empty).
         #[arg(long)]
         note: String,
 

@@ -325,7 +325,7 @@ status = "answered"
 severity = "blocker"
 title = "T1"
 detail = "D1"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -335,7 +335,7 @@ role = "raiser"
 [[finding.turn]]
 act = "dispose"
 role = "responder"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding]]
@@ -380,7 +380,7 @@ status = "contested"
 severity = "blocker"
 title = "T1"
 detail = "D1"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -390,7 +390,7 @@ role = "raiser"
 [[finding.turn]]
 act = "dispose"
 role = "responder"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -439,7 +439,7 @@ status = "answered"
 severity = "blocker"
 title = "T1"
 detail = "D1"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -449,7 +449,7 @@ role = "raiser"
 [[finding.turn]]
 act = "dispose"
 role = "responder"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -460,7 +460,7 @@ note = "not really"
 [[finding.turn]]
 act = "dispose"
 role = "responder"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding]]
@@ -504,7 +504,7 @@ status = "verified"
 severity = "blocker"
 title = "T1"
 detail = "D1"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -514,7 +514,7 @@ role = "raiser"
 [[finding.turn]]
 act = "dispose"
 role = "responder"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -525,7 +525,7 @@ note = "not really"
 [[finding.turn]]
 act = "dispose"
 role = "responder"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -573,7 +573,7 @@ status = "verified"
 severity = "blocker"
 title = "T1"
 detail = "D1"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -583,7 +583,7 @@ role = "raiser"
 [[finding.turn]]
 act = "dispose"
 role = "responder"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -594,7 +594,7 @@ note = "not really"
 [[finding.turn]]
 act = "dispose"
 role = "responder"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -652,7 +652,7 @@ status = "verified"
 severity = "blocker"
 title = "T1"
 detail = "D1"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -662,7 +662,7 @@ role = "raiser"
 [[finding.turn]]
 act = "dispose"
 role = "responder"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -673,7 +673,7 @@ note = "not really"
 [[finding.turn]]
 act = "dispose"
 role = "responder"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -735,7 +735,7 @@ status = "verified"
 severity = "blocker"
 title = "T1"
 detail = "D1"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -745,7 +745,7 @@ role = "raiser"
 [[finding.turn]]
 act = "dispose"
 role = "responder"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -756,7 +756,7 @@ note = "not really"
 [[finding.turn]]
 act = "dispose"
 role = "responder"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -819,7 +819,7 @@ status = "verified"
 severity = "blocker"
 title = "T1"
 detail = "D1"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -829,7 +829,7 @@ role = "raiser"
 [[finding.turn]]
 act = "dispose"
 role = "responder"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -840,7 +840,7 @@ note = "not really"
 [[finding.turn]]
 act = "dispose"
 role = "responder"
-disposition = "fixed"
+disposition = "fix-now"
 response = "R1"
 
 [[finding.turn]]
@@ -1055,7 +1055,7 @@ fn write_chain_pins_ledger_after_each_step() {
             "--finding",
             "F-1",
             "--disposition",
-            "fixed",
+            "fix-now",
             "--response",
             "R1",
         ],
@@ -1082,7 +1082,7 @@ fn write_chain_pins_ledger_after_each_step() {
             "--finding",
             "F-1",
             "--disposition",
-            "fixed",
+            "fix-now",
             "--response",
             "R1",
         ],
@@ -1149,6 +1149,140 @@ fn write_chain_pins_ledger_after_each_step() {
     assert_eq!(ledger(dir.path(), 1), chain_step10_raise_on_concluded());
 }
 
+// === SL-268 PHASE-05 — D8 additions: `--route` on dispose ===================
+
+#[test]
+fn dispose_route_lands_on_finding_and_turn() {
+    if skip_under_worker_marker("dispose_route_lands_on_finding_and_turn") {
+        return;
+    }
+    let dir = tmp();
+    seed_one_finding(dir.path(), "open");
+
+    let out = run(
+        dir.path(),
+        &[
+            "dispose",
+            "1",
+            "--finding",
+            "F-1",
+            "--disposition",
+            "fix-now",
+            "--route",
+            "demonstrate",
+            "--response",
+            "R1",
+        ],
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "Disposed F-1 on RV-001 (answered)\n");
+    assert_eq!(
+        ledger(dir.path(), 1),
+        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"answered\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\ndisposition = \"fix-now\"\nroute = \"demonstrate\"\nresponse = \"R1\"\n\n[[finding.turn]]\nact = \"dispose\"\nrole = \"responder\"\ndisposition = \"fix-now\"\nroute = \"demonstrate\"\nresponse = \"R1\"\n"
+    );
+}
+
+// === SL-268 PHASE-05 — D1 additions: amend, reopen ===========================
+
+#[test]
+fn amend_and_reopen_chain_pins_ledger_after_each_step() {
+    if skip_under_worker_marker("amend_and_reopen_chain_pins_ledger_after_each_step") {
+        return;
+    }
+    let dir = tmp();
+    seed_one_finding(dir.path(), "open");
+
+    // 1. dispose --disposition follow-up --route probe.
+    let out = run(
+        dir.path(),
+        &[
+            "dispose",
+            "1",
+            "--finding",
+            "F-1",
+            "--disposition",
+            "follow-up",
+            "--route",
+            "probe",
+            "--response",
+            "R1",
+        ],
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "Disposed F-1 on RV-001 (answered)\n");
+    assert_eq!(
+        ledger(dir.path(), 1),
+        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"answered\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R1\"\n\n[[finding.turn]]\nact = \"dispose\"\nrole = \"responder\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R1\"\n"
+    );
+
+    // 2. amend --response R2 --note n1: disposition and route are kept.
+    let out = run(
+        dir.path(),
+        &[
+            "amend",
+            "1",
+            "--finding",
+            "F-1",
+            "--response",
+            "R2",
+            "--note",
+            "n1",
+        ],
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "Amended F-1 on RV-001 (answered)\n");
+    assert_eq!(
+        ledger(dir.path(), 1),
+        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"answered\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R2\"\n\n[[finding.turn]]\nact = \"dispose\"\nrole = \"responder\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R1\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n1\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R2\"\n"
+    );
+
+    // 3. amend --response R3 --note n2 --disposition tolerated --route
+    //    owner-fix: both are replaced.
+    let out = run(
+        dir.path(),
+        &[
+            "amend",
+            "1",
+            "--finding",
+            "F-1",
+            "--response",
+            "R3",
+            "--note",
+            "n2",
+            "--disposition",
+            "tolerated",
+            "--route",
+            "owner-fix",
+        ],
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "Amended F-1 on RV-001 (answered)\n");
+    assert_eq!(
+        ledger(dir.path(), 1),
+        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"answered\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\ndisposition = \"tolerated\"\nroute = \"owner-fix\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"dispose\"\nrole = \"responder\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R1\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n1\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R2\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n2\"\ndisposition = \"tolerated\"\nroute = \"owner-fix\"\nresponse = \"R3\"\n"
+    );
+
+    // 4. verify, then reopen --note n3: verified → contested, concluded absent.
+    let out = run(dir.path(), &["verify", "1", "--finding", "F-1"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "Verified F-1 on RV-001 (verified)\n");
+    assert_eq!(
+        ledger(dir.path(), 1),
+        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"verified\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\ndisposition = \"tolerated\"\nroute = \"owner-fix\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"dispose\"\nrole = \"responder\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R1\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n1\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R2\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n2\"\ndisposition = \"tolerated\"\nroute = \"owner-fix\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"verify\"\nrole = \"raiser\"\n"
+    );
+
+    let out = run(
+        dir.path(),
+        &["reopen", "1", "--finding", "F-1", "--note", "n3"],
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "Reopened F-1 on RV-001 (contested)\n");
+    assert_eq!(
+        ledger(dir.path(), 1),
+        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"contested\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\ndisposition = \"tolerated\"\nroute = \"owner-fix\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"dispose\"\nrole = \"responder\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R1\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n1\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R2\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n2\"\ndisposition = \"tolerated\"\nroute = \"owner-fix\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"verify\"\nrole = \"raiser\"\n\n[[finding.turn]]\nact = \"reopen\"\nrole = \"raiser\"\nnote = \"n3\"\n"
+    );
+}
+
 // === T4 — role refusals (R1-R8) =============================================
 
 #[test]
@@ -1191,7 +1325,7 @@ fn role_refusals_pin_ledger_unchanged() {
             "--finding",
             "F-1",
             "--disposition",
-            "d",
+            "fix-now",
             "--response",
             "r",
             "--as",
@@ -1276,6 +1410,48 @@ fn role_refusals_pin_ledger_unchanged() {
         "Error: unknown --as role `bogus` (known: raiser, responder)\n"
     );
 
+    // R9 (SL-268 PHASE-05): amend --as raiser.
+    let out = run(
+        dir.path(),
+        &[
+            "amend",
+            "1",
+            "--finding",
+            "F-1",
+            "--response",
+            "r",
+            "--note",
+            "n",
+            "--as",
+            "raiser",
+        ],
+    );
+    assert!(!out.status.success());
+    assert_eq!(
+        stderr(&out),
+        "Error: `amend` is the responder's verb; --as raiser cannot assert it\n"
+    );
+
+    // R10 (SL-268 PHASE-05): reopen --as responder.
+    let out = run(
+        dir.path(),
+        &[
+            "reopen",
+            "1",
+            "--finding",
+            "F-1",
+            "--note",
+            "n",
+            "--as",
+            "responder",
+        ],
+    );
+    assert!(!out.status.success());
+    assert_eq!(
+        stderr(&out),
+        "Error: `reopen` is the raiser's verb; --as responder cannot assert it\n"
+    );
+
     assert_eq!(ledger(dir.path(), 1), before, "no role refusal ever writes");
 }
 
@@ -1335,7 +1511,7 @@ fn dispose_state_refusals_pin_ledger_unchanged() {
             "--finding",
             "F-1",
             "--disposition",
-            "d",
+            "fix-now",
             "--response",
             "r",
         ],
@@ -1359,7 +1535,7 @@ fn dispose_state_refusals_pin_ledger_unchanged() {
             "--finding",
             "F-1",
             "--disposition",
-            "d",
+            "fix-now",
             "--response",
             "r",
         ],
@@ -1383,7 +1559,7 @@ fn dispose_state_refusals_pin_ledger_unchanged() {
             "--finding",
             "F-1",
             "--disposition",
-            "d",
+            "fix-now",
             "--response",
             "r",
         ],
@@ -1474,6 +1650,51 @@ fn withdraw_state_refusals_pin_ledger_unchanged() {
     assert_eq!(ledger(dir.path(), 1), before);
 }
 
+#[test]
+fn amend_and_reopen_state_refusals_pin_ledger_unchanged() {
+    if skip_under_worker_marker("amend_and_reopen_state_refusals_pin_ledger_unchanged") {
+        return;
+    }
+    // amend on `open`.
+    let dir = tmp();
+    seed_one_finding(dir.path(), "open");
+    let before = ledger(dir.path(), 1);
+    let out = run(
+        dir.path(),
+        &[
+            "amend",
+            "1",
+            "--finding",
+            "F-1",
+            "--response",
+            "r",
+            "--note",
+            "n",
+        ],
+    );
+    assert!(!out.status.success());
+    assert_eq!(
+        stderr(&out),
+        "Error: out of turn on F-1: current status open; amend needs answered\n"
+    );
+    assert_eq!(ledger(dir.path(), 1), before);
+
+    // reopen on `answered`.
+    let dir = tmp();
+    seed_one_finding(dir.path(), "answered");
+    let before = ledger(dir.path(), 1);
+    let out = run(
+        dir.path(),
+        &["reopen", "1", "--finding", "F-1", "--note", "n"],
+    );
+    assert!(!out.status.success());
+    assert_eq!(
+        stderr(&out),
+        "Error: out of turn on F-1: current status answered; reopen needs verified\n"
+    );
+    assert_eq!(ledger(dir.path(), 1), before);
+}
+
 // === SL-268 PHASE-04 — the turn journal's notes (design sec-2) ==============
 
 #[test]
@@ -1510,6 +1731,50 @@ fn contest_blank_note_refuses_ledger_unchanged() {
     assert_eq!(
         stderr(&out),
         "Error: `contest` requires a non-empty --note\n"
+    );
+    assert_eq!(ledger(dir.path(), 1), before);
+    assert!(
+        !dir.path().join(".doctrine/state").exists(),
+        "refused before the lock: no runtime state written"
+    );
+}
+
+#[test]
+fn amend_and_reopen_note_refusals() {
+    // `amend`'s missing `--note` is a required clap argument — the parse fails
+    // before dispatch, in the `contest_without_note_is_a_clap_refusal` shape.
+    let dir = tmp();
+    seed_one_finding(dir.path(), "answered");
+    let before = ledger(dir.path(), 1);
+    let out = run(
+        dir.path(),
+        &["amend", "1", "--finding", "F-1", "--response", "r"],
+    );
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(stdout(&out), "");
+    assert_eq!(
+        stderr(&out),
+        "error: the following required arguments were not provided:\n  --note <NOTE>\n\nUsage: doctrine review amend --finding <FINDING> --response <RESPONSE> --note <NOTE> --path <PATH> --color <COLOR> <REFERENCE>\n\nFor more information, try '--help'.\n"
+    );
+    assert_eq!(ledger(dir.path(), 1), before);
+
+    // `reopen --note ""` is a blank note, refused with `NoteRequired`, ledger
+    // unchanged — the `contest_blank_note_refuses_ledger_unchanged` shape.
+    if skip_under_worker_marker("amend_and_reopen_note_refusals") {
+        return;
+    }
+    let dir = tmp();
+    seed_one_finding(dir.path(), "verified");
+    let before = ledger(dir.path(), 1);
+    let out = run(
+        dir.path(),
+        &["reopen", "1", "--finding", "F-1", "--note", ""],
+    );
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(stdout(&out), "");
+    assert_eq!(
+        stderr(&out),
+        "Error: `reopen` requires a non-empty --note\n"
     );
     assert_eq!(ledger(dir.path(), 1), before);
     assert!(
@@ -1556,7 +1821,7 @@ fn unknown_finding_and_bad_reference_refused() {
             "--finding",
             "F-9",
             "--disposition",
-            "d",
+            "fix-now",
             "--response",
             "r",
         ],
@@ -1912,7 +2177,7 @@ fn unknown_status_act_refusal_pins_ledger_unchanged() {
             "--finding",
             "F-1",
             "--disposition",
-            "fixed",
+            "fix-now",
             "--response",
             "R1",
         ],
@@ -2069,5 +2334,70 @@ fn clap_value_refusals_pin_full_stderr() {
     assert_eq!(
         stderr(&out),
         "error: invalid value 'bogus' for '--facet <FACET>': unknown facet `bogus` (known: scope, design, plan, phase-plan, implementation, code-review, reconciliation)\n\nFor more information, try '--help'.\n"
+    );
+
+    // D8 additions (SL-268 PHASE-05): the closed `--disposition`/`--route`
+    // vocabularies refuse the same way, and the retired `route:` prose token
+    // is refused pointing at `--route`.
+    let out = run(
+        dir.path(),
+        &[
+            "dispose",
+            "1",
+            "--finding",
+            "F-1",
+            "--disposition",
+            "bogus",
+            "--response",
+            "r",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(stdout(&out), "");
+    assert_eq!(
+        stderr(&out),
+        "error: invalid value 'bogus' for '--disposition <DISPOSITION>': unknown disposition `bogus` (known: aligned, fix-now, design-wrong, follow-up, tolerated)\n\nFor more information, try '--help'.\n"
+    );
+
+    let out = run(
+        dir.path(),
+        &[
+            "dispose",
+            "1",
+            "--finding",
+            "F-1",
+            "--disposition",
+            "fix-now",
+            "--route",
+            "bogus",
+            "--response",
+            "r",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(stdout(&out), "");
+    assert_eq!(
+        stderr(&out),
+        "error: invalid value 'bogus' for '--route <ROUTE>': unknown route `bogus` (known: review, demonstrate, probe, control, owner-fix)\n\nFor more information, try '--help'.\n"
+    );
+
+    let out = run(
+        dir.path(),
+        &[
+            "dispose",
+            "1",
+            "--finding",
+            "F-1",
+            "--disposition",
+            "route:probe fix-now",
+            "--response",
+            "r",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(stdout(&out), "");
+    assert_eq!(
+        stderr(&out),
+        "error: invalid value 'route:probe fix-now' for '--disposition <DISPOSITION>': route: is not part of a disposition; pass the route with --route (known routes: review, demonstrate, probe, control, owner-fix)\n\nFor more information, try '--help'.\n"
     );
 }

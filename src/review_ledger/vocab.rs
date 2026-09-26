@@ -159,6 +159,140 @@ impl From<Severity> for String {
 /// `severity_known_set_matches_variants`.
 pub(crate) const SEVERITIES: &[&str] = &["blocker", "major", "minor", "nit"];
 
+/// The responder's answer to a finding (design sec-2/sec-4, SL-268 D8): closed
+/// on write, open on read (existing ledgers' free-text values are unaffected —
+/// only a fresh `dispose`/`amend` write is bound to this vocabulary). The
+/// template is [`Severity`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", try_from = "String", into = "String")]
+pub(crate) enum Disposition {
+    Aligned,
+    FixNow,
+    DesignWrong,
+    FollowUp,
+    Tolerated,
+}
+
+impl Disposition {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Aligned => "aligned",
+            Self::FixNow => "fix-now",
+            Self::DesignWrong => "design-wrong",
+            Self::FollowUp => "follow-up",
+            Self::Tolerated => "tolerated",
+        }
+    }
+
+    /// Parse a `--disposition` token against the closed 5-set (design sec-2,
+    /// SL-268 D8). A `route:` prefix is refused HERE — not merely unknown — so
+    /// clap (the CLI) and serde (MCP) both refuse the retired
+    /// `--disposition "route:<route> <vocab>"` form through this one function,
+    /// pointing the caller at `--route` (design sec-4).
+    pub(crate) fn parse(s: &str) -> Result<Self, String> {
+        if s.starts_with("route:") {
+            return Err(format!(
+                "route: is not part of a disposition; pass the route with --route (known routes: {})",
+                ROUTES.join(", ")
+            ));
+        }
+        match s {
+            "aligned" => Ok(Self::Aligned),
+            "fix-now" => Ok(Self::FixNow),
+            "design-wrong" => Ok(Self::DesignWrong),
+            "follow-up" => Ok(Self::FollowUp),
+            "tolerated" => Ok(Self::Tolerated),
+            other => Err(format!(
+                "unknown disposition `{other}` (known: {})",
+                DISPOSITIONS.join(", ")
+            )),
+        }
+    }
+}
+
+impl TryFrom<String> for Disposition {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::parse(&s)
+    }
+}
+
+impl From<Disposition> for String {
+    fn from(d: Disposition) -> Self {
+        d.as_str().to_owned()
+    }
+}
+
+/// The `Disposition` known-set. Lockstep-guarded by
+/// `disposition_known_set_matches_variants` (`vocab.rs`'s own test module —
+/// VT-4).
+pub(crate) const DISPOSITIONS: &[&str] = &[
+    "aligned",
+    "fix-now",
+    "design-wrong",
+    "follow-up",
+    "tolerated",
+];
+
+/// Where a dispose/amend answer sends the finding (design sec-2/sec-4, SL-268
+/// D1/D8): the `--route` field split out of the retired
+/// `--disposition "route:<route> <vocab>"` prose token. Closed on write, open
+/// on read, like [`Disposition`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", try_from = "String", into = "String")]
+pub(crate) enum Route {
+    Review,
+    Demonstrate,
+    Probe,
+    Control,
+    OwnerFix,
+}
+
+impl Route {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Review => "review",
+            Self::Demonstrate => "demonstrate",
+            Self::Probe => "probe",
+            Self::Control => "control",
+            Self::OwnerFix => "owner-fix",
+        }
+    }
+
+    /// Parse a `--route` token against the closed 5-set (design sec-2,
+    /// SL-268 D8).
+    pub(crate) fn parse(s: &str) -> Result<Self, String> {
+        match s {
+            "review" => Ok(Self::Review),
+            "demonstrate" => Ok(Self::Demonstrate),
+            "probe" => Ok(Self::Probe),
+            "control" => Ok(Self::Control),
+            "owner-fix" => Ok(Self::OwnerFix),
+            other => Err(format!(
+                "unknown route `{other}` (known: {})",
+                ROUTES.join(", ")
+            )),
+        }
+    }
+}
+
+impl TryFrom<String> for Route {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::parse(&s)
+    }
+}
+
+impl From<Route> for String {
+    fn from(r: Route) -> Self {
+        r.as_str().to_owned()
+    }
+}
+
+/// The `Route` known-set. Lockstep-guarded by `route_known_set_matches_variants`
+/// (`vocab.rs`'s own test module — VT-4).
+pub(crate) const ROUTES: &[&str] = &["review", "demonstrate", "probe", "control", "owner-fix"];
+
 // ---------------------------------------------------------------------------
 // Fail-safe authored reads (SL-268 D15, DEC-319)
 // ---------------------------------------------------------------------------
@@ -340,5 +474,52 @@ impl TryFrom<String> for Facet {
 impl From<Facet> for String {
     fn from(f: Facet) -> Self {
         f.as_str().to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// VT-4: the `Disposition` known-set matches the enum's own variants —
+    /// PHASE-05's drift canary, in the same shape as `severity_known_set_matches_variants`.
+    #[test]
+    fn disposition_known_set_matches_variants() {
+        let from_variants: Vec<&str> = [
+            Disposition::Aligned,
+            Disposition::FixNow,
+            Disposition::DesignWrong,
+            Disposition::FollowUp,
+            Disposition::Tolerated,
+        ]
+        .iter()
+        .map(|d| d.as_str())
+        .collect();
+        assert_eq!(from_variants, DISPOSITIONS.to_vec());
+    }
+
+    /// VT-4: the `Route` known-set matches the enum's own variants.
+    #[test]
+    fn route_known_set_matches_variants() {
+        let from_variants: Vec<&str> = [
+            Route::Review,
+            Route::Demonstrate,
+            Route::Probe,
+            Route::Control,
+            Route::OwnerFix,
+        ]
+        .iter()
+        .map(|r| r.as_str())
+        .collect();
+        assert_eq!(from_variants, ROUTES.to_vec());
+    }
+
+    /// VT-3: `Disposition::parse("route:probe fix-now")` is refused — the
+    /// `route:` prefix names `--route`, not an unknown-token message.
+    #[test]
+    fn disposition_parse_refuses_a_route_prefix() {
+        let err = Disposition::parse("route:probe fix-now").unwrap_err();
+        assert!(err.contains("--route"), "{err}");
+        assert!(err.contains("owner-fix"), "{err}");
     }
 }
