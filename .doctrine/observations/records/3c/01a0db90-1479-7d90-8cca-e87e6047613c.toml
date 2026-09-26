@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0db90-1479-7d90-8cca-e87e6047613c"
+recorded_at = "2026-09-26T02:34:07.865850234Z"
+kind = "friction"
+summary = "audit (SL-267): the skill's single `slice status <id> reconcile` hand-off needs two moves the binary enforces"
+detail = "The audit skill step 7 says record the lifecycle move as `doctrine slice status <id> reconcile`. The binary refuses that from `started` ('reachable only across the closure seam (→ reconcile from audit)') and requires `started → audit` first. The skill text should name both moves (or the audit stage should set `audit` on entry). Cost one refused invocation + a re-read."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
