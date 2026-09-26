@@ -40,7 +40,8 @@ Decision ids below are RFC-032 `decision-frontier.md`'s.
 3. **D2: uniform `done`.** `done ⇔ all findings terminal ∧ concluded`, derived
    on every read and never latched. `conclude` takes a required `--basis`,
    stored as a review-level turn, and becomes the required last move of every
-   pass. Legacy ledgers are not backfilled. Closes `ISS-314` and `ISS-366`.
+   pass: `raise` and `reopen` on a concluded ledger clear `concluded`
+   (RV-396 `F-4`). Legacy ledgers are not backfilled. Closes `ISS-314` and `ISS-366`.
 4. **D15: every closed vocabulary reads fail-safe.** An unknown `severity`
    gates as `blocker`. An unknown `status` reads as non-terminal. Both are
    disclosed where they are read (`review show`/`status`/`list` and the close
@@ -90,6 +91,7 @@ Decision ids below are RFC-032 `decision-frontier.md`'s.
 - Secret scanning (D10 rejects it for the review kind; a repo-wide backlog item).
 - Reconstructing pre-journal history, or backfilling `conclude` on legacy
   ledgers.
+- Catalog scan callers that drop warning diagnostics (ISS-492, RV-396 `F-3`).
 - Governing `doctor` (IMP-491), and new doctor checks: the install-doc CLI
   check (IMP-492) and the status/last-turn check (IMP-493) wait on it
   (DEC-320, DEC-322).

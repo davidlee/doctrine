@@ -15,7 +15,7 @@ ref   = "SL-268"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected flips permit all D2 assertion updates; observed list omits several existing done assertions"
 detail = "SL-268 design sec-8 lines 526-535 says only five named existing tests may change and any other assertion change is a finding. src/review.rs:3368-3383 pins all-terminal findings as Done without conclude; lines 3777-3779, 3805-3809, 4748-4765 and 5817-5834 likewise pin unconcluded ledgers as done. D2 at design sec-3 lines 266-274 requires active until concluded. These tests must change or gain a conclude setup, so the preservation gate is impossible as written. Expand the expected-flips list to cover each affected test and distinguish assertion changes from fixture setup."
@@ -24,7 +24,7 @@ response = "Verified: all_terminal_is_done_none (3368) and the tests near 3777, 
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "MCP review_list should disclose invalid vocabulary; design sends list warnings only to CLI stderr"
 detail = "DEC-319 requires unknown status or severity to be disclosed on the channel seen by each review read caller; STD-003 applies to every authored-state reader. SL-268 design sec-3 lines 307-318 gives review list only a stderr warning, while show and status get JSON and MCP warnings. src/mcp_server/tools.rs:651-667 calls review::run_list and serializes its output as the MCP response; stderr is not a field in that response. The planned list warning can therefore disappear from the MCP caller even as the row reports conservative active. Add structured warnings to the list output and MCP schema, with a test through review_list."
@@ -37,8 +37,8 @@ status = "answered"
 severity = "major"
 title = "Catalog RV status should disclose invalid finding status; design explicitly leaves a silent read"
 detail = "STD-003 requires every reader of authored state to disclose degraded reads on its own caller channel. SL-268 design sec-3 lines 320-323 and sec-9 lines 599-601 explicitly leave catalog status silently active for an RV with an unknown finding status. src/catalog/scan.rs:402-423 calls review::derived_status_string, which reads the finding ledger at src/review.rs:1618-1621; catalog then exposes that status through its cross-kind scan. DEC-319 only names the four review and close surfaces, but it does not waive STD-003 for catalog. Disclose the defect on catalog callers or make the cross-kind status probe return a distinguishable degraded result before this slice closes."
-disposition = "fix-now"
-response = "Accepted; the residual was an STD-003 gap DEC-319 did not waive. catalog already has a disclosure channel (CatalogDiagnostic, scan.rs:23). derived_status_string returns the status plus its vocabulary defects, and the status_and_title_for overlay pushes one warning diagnostic per defective RV. Residual removed from sec-9; test added to sec-8."
+disposition = "follow-up"
+response = "Contest accepted: most scan callers drop warning diagnostics (relation.rs:331 suppresses them, design.rs:1782 discards them), for every kind. By user ruling 2026-09-26, SL-268 still pushes the RV defect warning onto the catalog diagnostics channel, which doctor reads (doctor_checks.rs:85). Caller-side surfacing is filed as ISS-492 (catalog scan callers drop warning diagnostics). Design sec-3 and the sec-9 residual are updated; test 18 asserts that doctor reports it."
 
 [[finding]]
 id = "F-4"
@@ -46,12 +46,12 @@ status = "answered"
 severity = "major"
 title = "Conclude should be the final act of each pass; latch makes done automatic after later transitions"
 detail = "SL-268 design sec-3 lines 269-279 defines done from terminal findings plus the latched concluded flag, and sec-4 lines 390-394 allows conclude with open findings and keeps the latch after raise or reopen. Sec-6 lines 457-459 and RFC-032 D2 lines 231-243 call conclude with a basis the required last move of every pass. A raiser can conclude while F-1 is open, then a responder disposes it and the raiser verifies it; the review becomes done with verify as its last act and a basis that predates the answer. The same occurs after a late raise or reopen without a second conclude. Clarify whether the basis is once per ledger or per completed pass, and align derivation, acts, and guidance."
-disposition = "design-wrong"
-response = "Semantics kept, wording wrong. D1 gives turns no order across findings, so whether a conclude came after a late raise cannot be derived, and a done that requires it cannot be computed. The frontier D2 latch is the computable rule. sec-3 and sec-4 now say what conclude means: the raiser declares the examination finished, with a basis per pass; disposition and verification may follow it; a late raise or reopen reopens status until terminal, and guidance asks for another conclude covering it. Scope objectives 3 and 10 are reworded from last move to closing move of the examination, subject to user assent."
+disposition = "fix-now"
+response = "Contest accepted, by user ruling 2026-09-26. raise and reopen on a concluded ledger clear concluded in the same write, so done needs a fresh conclude after the last raise or reopen. This is enforced at write time and needs no cross-finding order. This supersedes frontier D2 on that sub-rule. sec-2 act table, sec-3 (what concluded means, and the DEC-138 consequence), sec-4 conclude, sec-6 guidance wording (closing move after the last raise or reopen) and the REV D-C8 text, sec-8 test 5, and sec-9 R8 are all updated."
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Unknown severity should render its raw value; proposed warnings leave the typed show projection ambiguous"
 detail = "SL-268 design sec-3 lines 298-316 defines blocker gating and warnings for unknown severity but never changes the finding projection that show and MCP return. src/review.rs:1995-2007 currently maps an unparseable severity to Severity::Major; lines 2020-2039 render that typed value in the table, and lines 1931-1944 return the typed findings to MCP. A warning beside a finding shown as major still launders the raw severity into a legitimate value, contrary to STD-003 and DEC-319, which says Severity gains an unknown-raw representation. Specify raw-preserving projection and test table plus MCP findings, not only the warning."
@@ -60,7 +60,7 @@ response = "Verified: finding_of_row maps an unparseable severity to Major (revi
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Degraded prime should invalidate an earlier cache; design leaves old cache observable as current"
 detail = "SL-268 design sec-5 lines 404-412 says a target with no path-set primes nothing and writes no cache, but does not clear or invalidate a cache from an earlier successful prime. src/review.rs:3006-3030 stores cache.toml by RV, and status at lines 3246-3261 reads any existing cache and can report cache: current from its old path set. If a slice loses its selectors, a second prime would report primed nothing while status still reports a primed current cache. Specify the degraded transition for an existing cache under the prime lock, and test successful-prime then zero-selector-prime then status."
@@ -69,7 +69,7 @@ response = "Verified: status reads any existing cache.toml (review.rs:3246-3261)
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Golden should account for the temp root in review new output"
 detail = "SL-268 design sec-8 lines 514-520 promises byte-exact stdout for new over hand-seeded fixtures, citing tests/e2e_adr_cli_golden.rs. src/review.rs:917-925 prints the Created directory, and src/entity.rs:552-565 builds that directory under the supplied project root. A tempfile fixture therefore changes the new stdout bytes each run; the ADR precedent explicitly carves out dynamic absolute paths at tests/e2e_adr_cli_golden.rs:11-15. State a deterministic root or a path-normalization/carve-out rule for new and path-bearing errors before calling the golden byte-exact."
@@ -78,7 +78,7 @@ response = "Verified: review new prints the created directory under the temp roo
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Schema example should agree with its final contest turn"
 detail = "SL-268 design sec-2 lines 182-206 shows F-3 status = answered, then ends its append-only finding journal with a contest turn. The act table in the same section, lines 222-224, makes contest answered to contested; sec-2 lines 232-235 says turn and status move in one write. The example therefore cannot be produced by the specified writer. Set current status to contested or add a later dispose turn so the binding schema demonstrates a reachable ledger."
@@ -87,7 +87,7 @@ response = "Verified. The example F-3 now reads status = contested, which matche
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Design-run readers should disclose unknown RV values; PassFacts exposes only counts and finding ids"
 detail = "STD-003 requires the caller of each authored-state reader to see a degraded value and its reason. SL-268 design sec-3 lines 307-323 specifies warnings only for review show/status/list and slice close, while sec-12 line 130 moves PassFacts unchanged. src/commands/design.rs:2595-2605 reads PassFacts outstanding counts for design-run projection, and lines 3160-3181 reads undisposed_blockers for gate admission. src/design_run/gate.rs:1345-1347 and 1710-1713 emit only finding ids when blocked. Under D15 an invalid severity would be counted as blocker, and an invalid status as non-terminal, but neither design-run caller sees the RV, raw value, or repair reason. Carry vocabulary defects through PassFacts and surface them in the design-run projection and refusal without changing the DEC-138 gate predicate."

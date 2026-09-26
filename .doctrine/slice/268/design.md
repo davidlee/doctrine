@@ -170,7 +170,7 @@ D14 (slice 2).*
 facet = "code-review"
 raiser = "codex"                # labels double as --as aliases (D8)
 responder = "claude"
-concluded = true                # latch, unchanged; PassFacts reads it (DEC-138)
+concluded = true                # examination closed; raise/reopen clear it; PassFacts reads it (DEC-138)
 rounds_base = 4                 # seeded once, at the first journalled write
 contests_base = 1
 
@@ -216,12 +216,12 @@ answered, so a later re-dispose cannot erase what a contest argued against
 
 | act | role | from → to | note |
 |---|---|---|---|
-| raise | raiser | ∅ → open | none (the finding's `detail` is the account) |
+| raise | raiser | ∅ → open | none (the finding's `detail` is the account); clears `concluded` |
 | dispose | responder | open \| contested → answered | optional |
 | amend | responder | answered → answered | **required**; new `response`; `disposition`/`route` optional (kept if omitted) |
 | verify | raiser | answered → verified | optional |
 | contest | raiser | answered → contested | **required** |
-| reopen | raiser | verified → contested | **required** |
+| reopen | raiser | verified → contested | **required**; clears `concluded` |
 | withdraw | raiser | open \| answered → withdrawn | optional |
 | conclude | raiser | review-level | **required** (`--basis`) |
 
@@ -273,20 +273,23 @@ Each has a `*_KNOWN` constant and a canary, and a refusal names the set.
 | else (all terminal, including empty) ∧ ¬concluded | active | raiser |
 | else (all terminal) ∧ concluded | done | none |
 
-It is derived on every read and never latched. A concluded ledger that gains a
-`raise` or `reopen` reads `active` until that finding is terminal again, and the
-marker is not cleared.
+It is derived on every read and never latched.
 
-**What `conclude` means (RV-396 `F-4`).** It is the raiser declaring the
-*examination* finished, with a basis saying what was examined. It closes the
-raising, not the resolution: disposition and verification may follow it, and
-`done` then arrives when the last finding turns terminal. Requiring conclude to
-be the literal last act is not computable, because D1 gives turns no order
-across findings, so nothing can tell whether a conclude came after a late
-`raise`. The latch is the computable rule, which is frontier D2's. A late raise
-or reopen after a conclude reopens the status until it is terminal. Guidance
-asks the raiser to conclude again with a basis covering it. That appends a
-second conclude turn, one basis per pass, but it is not enforced. Every caller moves with the signature: `ReviewDoc::derived`,
+**What `concluded` means (RV-396 `F-4`).** `concluded` says the examination is
+currently closed. `conclude` sets it, with a basis saying what was examined.
+Disposition and verification may follow a conclude: they resolve findings, and
+they do not reopen the examination. **`raise` and `reopen` on a concluded
+ledger clear it** (`concluded = false`), in the same write that appends their
+turn. So `done` needs a fresh conclude after the last raise or reopen, and
+conclude is enforceably the closing move of every pass. This is checked at
+write time, so no cross-finding turn order is needed. Earlier conclude turns stay
+in `[[review.turn]]` as the record of each pass. This replaces frontier D2's
+"a new finding does not clear the marker", on the user's 2026-09-26 ruling. A
+design run's `Conducted` disposition (DEC-138, which reads
+`PassFacts.concluded`) therefore stops being admissible after a late raise
+until the raiser concludes again.
+
+Every caller moves with the signature: `ReviewDoc::derived`,
 `reconcile_baton_fields`, `run_status`, show/list, `derived_status_string`.
 `doc_unresolved_blockers` keeps its `Active` guard. More ledgers now read
 `active`, but it still counts only non-terminal blockers, so the close gate
@@ -340,7 +343,10 @@ channel:
 - the cross-kind catalog (RV-396 `F-3`): `derived_status_string` returns the
   status and its defects. `catalog::scan`'s `status_and_title_for` overlay
   pushes one warning `CatalogDiagnostic` per defective RV onto the scan's
-  existing diagnostics channel;
+  diagnostics channel, which `doctor` reads (`doctor_checks.rs:85`). Most other
+  scan callers drop warning diagnostics for every kind today
+  (`commands/relation.rs:331`, `commands/design.rs:1782`). That pre-existing
+  STD-003 gap is ISS-492, and SL-268 does not widen into it;
 - the design run (RV-396 `F-9`): `PassFacts` gains `defects:
   Vec<VocabDefect>`, and no predicate reads it. The `commands/design.rs` shell
   prints a `warning:` line per defect, naming the RV, finding, raw value and
@@ -418,9 +424,10 @@ today.
 **Conclude (D2).** `review conclude RV --basis … [--as raiser]`. `--basis` is
 required and non-empty, and it becomes the note of a `[[review.turn]]`
 `act = "conclude"` row. `concluded = true` is written in the same edit. Open or
-answered findings are allowed (sec-3 defines what conclude closes). A repeat
-conclude appends another turn, because a second pass after a late raise or a
-reopen is a real event, and it reports `already`.
+answered findings are allowed (sec-3 defines what conclude closes). `raise`
+and `reopen` clear `concluded` in their own write. A later conclude appends
+another turn and sets it again. `already` reports whether the flag was set when
+this conclude ran.
 
 **Target spelling (D8).** `review new --target SL-NNN@PHASE-NN` is accepted as
 `--target SL-NNN --phase PHASE-NN`. Giving both `@` and `--phase` is refused.
@@ -475,7 +482,7 @@ D-C10 is amended to this selector model in the REV (sec-6). The prose tier and
 - ADR-007 **D-C5**: the turn journal, `amend`/`reopen`, disposition closed on
   write, and `route`;
 - ADR-007 **D-C8**: `done ⇔ all findings terminal ∧ concluded`, and the conclude
-  marker's role with its basis;
+  marker's role with its basis, and `raise`/`reopen` clearing it;
 - ADR-007 **D-C10**: the selector-model cache, and prime degrading;
 - **SPEC-003** container inventory: add the new spec, and add SPEC-029, which is
   already missing (DEC-317).
@@ -487,7 +494,7 @@ It is applied at reconcile.
 **Guidance, and the bounded review (DEC-320).** Phase work edits:
 
 - `install/review-ledger.md` (`CHR-079`): acts, `amend`/`reopen`, required notes,
-  `conclude --basis` as the last move, `--route`, aliases, `-`/`@path`, and MCP
+  `conclude --basis` as the closing move after the last raise or reopen, `--route`, aliases, `-`/`@path`, and MCP
   as the preferred write path, with a quoted heredoc on the CLI;
 - `install/design-prompts/reviewing.md`: `route` becomes the `--route` field, not
   a prose token;
@@ -589,8 +596,10 @@ Any other change to an existing assertion is a finding.
 4. counters: seeding from the baton at the first journalled write, 0 with no
    baton, `base + count` afterwards, and the legacy ledger reading the baton;
 5. `derived_status` over (finding states × concluded), including empty × both;
-   a concluded ledger reading `active` after a `raise`/`reopen`; and a conclude
-   with open findings reaching `done` once they turn terminal;
+   a conclude with open findings reaching `done` once they turn terminal;
+   `raise` and `reopen` on a concluded ledger clearing `concluded`, so `done`
+   needs a fresh conclude; and `PassFacts.concluded` reading `false` after a
+   late raise;
 6. unknown status: non-terminal, refused by every act with the named repair, and
    rendered verbatim with its warning;
 7. unknown severity: gates the close gate, counts as blocker in
@@ -614,7 +623,8 @@ Any other change to an existing assertion is a finding.
     in the table, index, `--json` and MCP, never as `major`/`open`;
 17. prime: a successful prime, then zero selectors, then prime, leaves `status`
     with no cache;
-18. the catalog scan emits a warning diagnostic for a defective RV;
+18. the catalog scan emits a warning diagnostic for a defective RV, and
+    `doctor` reports it;
 19. the design-run projection and gate admission print the defect warning, and
     the gate outcome is unchanged.
 
@@ -649,10 +659,12 @@ Any other change to an existing assertion is a finding.
   does not render turns by default. Slice 2 owns the read projection (D5).
 - **R7: alias ambiguity.** Refused at `new`. A legacy ledger whose labels
   collide accepts only the canonical role names, and the refusal says why.
-- **R8: `conclude` is not provably last.** A basis can predate a late raise.
-  Mitigated by guidance, which asks for another conclude, and by the `active`
-  reopen. It is not enforceable without a cross-finding order, which D1 rejects
-  (sec-3).
+- **R8: late raises clear `concluded`.** A design run whose pass was
+  conducted loses admissibility on a late raise until the raiser concludes
+  again. That is intended (sec-3). The guidance and the design-run reviewing
+  prompt say so.
+- **Residual: catalog callers drop warning diagnostics** for every kind
+  (ISS-492). The RV defect reaches `doctor` and review's own surfaces.
 - **Residual: the doctor checks** are IMP-492 and IMP-493, both needing IMP-491.
 - **Residual: `authored_status` still returns `Unavailable` for RV** (DEC-318,
   D14).
