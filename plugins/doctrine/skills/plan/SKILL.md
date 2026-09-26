@@ -42,11 +42,15 @@ Inputs:
 
     **Routed findings from the design review (provisional).**
     Before authoring phases, open the slice's design-review RV and read every
-    finding whose disposition begins `route:demonstrate`, `route:probe` or
-    `route:control`. Each is an obligation deliberately not repaired in prose. Its
-    response carries a criterion sketch and a placement constraint: transcribe the
-    sketch into an entry or exit criterion citing `RV-NNN F-n` inline in the
-    criterion text, on the earliest phase that satisfies the constraint. An
+    finding whose `route` is `demonstrate`, `probe` or `control`. The table view
+    of `review show` does not render the route: read it from
+    `doctrine review show RV-NNN --json` (`.review.finding[].route`). An older
+    ledger carries it instead as a `route:` prefix on the disposition string
+    (`route:probe fix-now`, say). Each is an obligation deliberately not
+    repaired in prose. Its response carries a criterion sketch and a placement
+    constraint: transcribe the sketch into an entry or exit criterion citing
+    `RV-NNN F-n` inline in the criterion text, on the earliest phase that
+    satisfies the constraint. An
     untranscribed routed blocker cannot honestly be verified, and an unverified
     blocker refuses the slice close. Nothing validates the transcription.
 

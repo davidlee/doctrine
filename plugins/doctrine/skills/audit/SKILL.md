@@ -36,11 +36,14 @@ Inputs:
 ## Tool preference
 
 If your harness supports MCP tools and doctrine's MCP server is connected
-(you see `review_new`, `review_raise`, `review_dispose`, `review_verify`,
-`review_prime`, `review_list`, `review_show`, `review_status` in your
-tool list), **prefer these MCP tools over the CLI** — they return machine-parseable
-JSON text in the MCP content block and eliminate shell overhead. Every review verb has
-an MCP equivalent.
+(you see `review_new`, `review_raise`, `review_dispose`, `review_amend`,
+`review_verify`, `review_contest`, `review_reopen`, `review_withdraw`,
+`review_conclude`, `review_prime`, `review_list`, `review_show`,
+`review_status` in your tool list), **prefer these MCP tools over the CLI** —
+they return machine-parseable JSON text in the MCP content block, carry prose as
+structured fields with no shell quoting, and eliminate shell overhead. Every
+review verb has an MCP equivalent except `review unlock` and `review paths`,
+which stay CLI-only.
 
 ## Audit lens
 
@@ -59,8 +62,10 @@ interrogates. Posture, if any, rides `--raiser`, never a new facet (`review-ledg
 - **discovery** — backfill or existing-code investigation.
 
 **Self-audit (the usual case).** When you are both reviewer and author, drive both
-roles with `--as <role>` — the raiser raises/verifies/withdraws, the responder
-disposes. This is cooperative role assertion, not a security boundary (`review-ledger.md` §4).
+roles with `--as <role>` — the raiser raises, verifies, contests, reopens,
+withdraws and concludes; the responder disposes and amends. Roles belong to
+acts, not agents; `--as` is cooperative role assertion, not a security boundary
+(`review-ledger.md`, "Acts and roles").
 
 **Disposition convention (audit-specific).** Audit's permitted dispositions are:
 `aligned` (observation correct, no change needed), `fix-now` (code fix within
@@ -158,8 +163,12 @@ not mutate a finding to `fixed`/`remediated`.
 6. **Harvest (audit tail).** Sweep durable risks, decisions, and gotchas from the
    disposable runtime **phase sheets** into `notes.md` — the audit-specific lens —
    then drive the rest of the harvest (legs and sinks) per `harvest.md`.
-7. **Hand off to reconcile.** Once the reconciliation brief is written, the ledger
-   is resolved, and every finding is terminal, hand off to `/reconcile`. Do NOT
+7. **Hand off to reconcile.** Once the reconciliation brief is written and every
+   finding is terminal, conclude the pass as raiser —
+   `doctrine review conclude RV-NNN --basis …` (or `review_conclude`), stating
+   what the audit examined — so `review status` reads `done · await=none`. A
+   later raise or reopen clears the conclusion; conclude again after it. Then
+   hand off to `/reconcile`. Do NOT
    hand off directly to `/close` — reconcile is the sole writer of reconciled
    truth; close only confirms the outcome. Record the lifecycle move:
    `doctrine slice status <id> reconcile` (bare number) — the binary refuses it
@@ -169,7 +178,8 @@ not mutate a finding to `fixed`/`remediated`.
 
 - Audit evidence is a structured RV ledger (`review-NNN.toml` + the review's
   `## Synthesis` + `## Reconciliation Brief`), not a hand-made `audit.md`.
-- Every finding ends terminal with an explicit disposition (or is withdrawn).
+- Every finding ends terminal with an explicit disposition (or is withdrawn), and
+  the pass is concluded with a `--basis`.
 - No unresolved `blocker` remains — the close-gate would refuse it.
 - The reconciliation brief maps every spec/governance finding to its target and
   write surface.

@@ -2,11 +2,11 @@ memory_uid = "mem_019fdfe379b67e53857735b88c394b52"
 memory_key = "mem.pattern.review.done-is-not-concluded"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "superseded"
 title = "A review reading `done` is not concluded — the design run needs the raiser's marker"
 summary = "`review list` showing `done` is DERIVED from findings; a design run's `conducted` disposition needs `review.concluded`, set only by `doctrine review conclude`."
 created = "2026-08-08"
-updated = "2026-08-08"
+updated = "2026-09-26"
 
 [scope]
 paths = ["src/review.rs", "src/design_run"]
@@ -39,4 +39,8 @@ trust_level = "high"
 [ranking]
 severity = "high"
 weight = 0
+
+[[relation]]
+label = "superseded_by"
+target = "mem_01a0ded7fd6e72f28caa1c87ae43ad20"
 

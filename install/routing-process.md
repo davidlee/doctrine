@@ -72,7 +72,9 @@ has not memorised it, so **introduce it qualified by that artefact's durable
 id** on first use in a message — a slice's `OQ-1` written as `SL-NNN`'s
 `OQ-1`, or a review's `F-4` as `RV-NNN`'s `F-4`, say — with a
 one-line synopsis where context does not supply one. This binds your own prose,
-not only what you quote. Criteria modes — `VT` by test / `VA` by agent / `VH` by
+not only what you quote. When the reader is a human, that first qualified
+mention also names the verb that opens the artefact — `doctrine show RV-NNN`,
+say — for every kind, not only reviews. Criteria modes — `VT` by test / `VA` by agent / `VH` by
 human.
 
 **Reference docs (read on demand).** Cited bare as `<name>.md` throughout the

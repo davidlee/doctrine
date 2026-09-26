@@ -107,12 +107,14 @@ instead: `"disposition": {"conducted": {"review": "RV-NNN"}}`.
 Applies to `blocker` and `major` findings on a design-review ledger. `minor` and
 `nit` dispositions are unchanged.
 
-Every severe finding carries one route, written as the first token of the
-disposition:
+Every severe finding carries one route, passed as its own flag beside the
+disposition vocab:
 
-    --disposition "route:<route> <vocab>"     e.g.  route:probe fix-now
+    --disposition <vocab> --route <route>     e.g.  --disposition fix-now --route probe
 
-The closed set is exactly five:
+The CLI refuses a `route:` prefix inside `--disposition`. `amend` can replace
+the route later; omitting `--route` keeps the finding's current one. The
+closed set is exactly five:
 
 | route | the question behind the finding | what settles it |
 |---|---|---|
@@ -149,12 +151,13 @@ signs:
   obligation needs of its host phase. You cannot name the phase: phases are
   devised at planning, after this review. Name the constraint, not the phase.
 
-The form rule is not style. `--response` is one shell argument with no file or
-stdin form, so a backtick span or a dollar sign is expanded away before doctrine
-sees it and the receipt still reads clean. Read your response back with
-`review show <RV> --json` before moving on. There is no amend verb: if what you
-read back is wrong, the only repair is to ask the raiser to `contest` so you can
-re-dispose.
+The form rule is not style. Passed inline as one shell argument, a backtick span
+or a dollar sign is expanded away before doctrine sees it, and the receipt still
+reads clean. Prefer the MCP tool, or pass `--response -` with a quoted heredoc
+(`<<'EOF'`) or `--response @path`. Read your response back with
+`review show <RV> --json` before moving on. If what you read back is wrong,
+repair it with `review amend <RV> --finding F-n --response … --note …` while the
+finding is still `answered`.
 
 **When a finding may stay open past the gate.** It may not, if the next step
 adds external reliance, durable state, authority or exposure, dependency spread,
@@ -165,19 +168,25 @@ state, not the cost to regenerate a diff.
 **Accumulation.** Do not route a second finding against a mechanism that already
 carries one — that changes the argument and reopens the design decision. Another
 test is not a disposition. Raisers: where several routed findings attack one
-mechanism, contest rather than verify. Past `verified` there is no reopening:
-no verb moves a finding out of it, so a later change of mind is a prose
-amendment on the RV `.md` stating what changed, why, and where the fix landed.
+mechanism, contest rather than verify. A later change of mind about a verified
+finding is `review reopen <RV> --finding F-n --note …` (verified → contested):
+the note says what changed and why, and the responder re-disposes.
 
 **Raisers, on an instrument-routed finding.** `verify` asserts that the
 obligation was correctly transcribed onto a phase criterion — not that the defect
 is repaired. That is a narrower claim than `verify` usually carries, and the
-`route:` token is what tells a later reader which claim it was. It happens after
-`slice phases`, not during this review: conclude the pass with instrument-routed
-findings `answered`. A finding routed `review` or `owner-fix` is repaired in
-prose, so you verify it in this review as usual.
+finding's `route` field is what tells a later reader which claim it was. It
+happens after `slice phases`, not during this review: conclude the pass with
+instrument-routed findings `answered`. A finding routed `review` or `owner-fix`
+is repaired in prose, so you verify it in this review as usual.
 
-Nothing validates any of this. The slice close gate will not let a blocker be
-closed over unverified, which forces the verify act to happen — but no gate
-reads what you wrote, and none checks that a criterion exists. Each unenforced
-clause is enumerated with the code site proving it.
+**Concluding, and raising after it.** Conclude with `review conclude <RV>
+--basis …`, stating what the pass examined. A raise or a reopen after conclude
+clears `concluded`: the raiser must conclude again, with a fresh `--basis`,
+before a `conducted` disposition is admissible. A `conducted` disposition
+already recorded stands.
+
+The route value is validated on write: the CLI accepts only the closed five. The
+rest is not. The slice close gate will not let a blocker be closed over
+unverified, which forces the verify act to happen — but no gate reads what you
+wrote, and none checks that a criterion exists.

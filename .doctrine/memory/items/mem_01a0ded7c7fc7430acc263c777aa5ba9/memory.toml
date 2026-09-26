@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0ded7c7fc7430acc263c777aa5ba9"
+memory_key = "mem.pattern.review.reopen-to-revise-verified"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "To revise a verified RV finding, reopen it — do not amend in prose"
+summary = "A verified RV finding can be revised: the raiser runs review reopen --note (verified -> contested), the responder re-disposes or amends, the raiser verifies and re-concludes. Prose amendment is only for a ledger whose raiser is unavailable, or legacy history."
+created = "2026-09-26"
+updated = "2026-09-26"
+
+[scope]
+paths = ["src/review_ledger/transition.rs"]
+globs = []
+commands = ["doctrine review reopen", "doctrine review amend", "doctrine review conclude"]
+tags = ["review", "rv-ledger", "disposition", "audit", "lifecycle"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "cb2cd54beb6cbbaf746363d23296d6a896ad0deb"
+ref_name = "refs/heads/work"
+checkout_state_id = "0a7627d1b70280a08cf37060b190097d62b036a17119a65e41ad864e3d730253"
+base_commit = "aadf9347f3c0830410d4dcf449116e6cce67daa1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
