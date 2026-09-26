@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dd28-8361-73e2-859f-c68b5d3ed79a"
+recorded_at = "2026-09-26T10:00:14.945580574Z"
+kind = "friction"
+summary = "[backlog] check quick always emits the full standing warning set — no delta against the previous run"
+detail = "Completion-checklist lint after a doc-only change: `doctrine check quick` prints the verdict line (`check: corpus OK`) buried mid-stream, then 51 findings — lifecycle warnings on long-terminal slices, prose citations of deliberate test-fixture ids (SL-998/999/1000, REQ-999, DEC-00), raw-label counts, and coord-hook warnings for two worktrees. All 51 are pre-existing; none referenced my change. Distinguishing 'did I break something' from 'this is the permanent background' meant eyeballing 51 lines and grepping for my own id, on every invocation. The verb has no 'new since baseline' or exit-status-vs-advisory split, so the signal in a cheap inner-loop check is a small fraction of its output."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
