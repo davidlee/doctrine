@@ -12,8 +12,11 @@ categories = ["command-line-utilities"]
 # embedded map server ships broken. An explicit allow-list also never walks the
 # .direnv symlink-loop cache (no "File system loop" warnings). Every compile-time
 # embed root must be listed: web/map/dist (RustEmbed map — run `just web-build`
-# before publish), install/ publication/ plugins/ memory/ (RustEmbed), .pi/.../mcp.ts
-# (include_str! in boot.rs). Cargo.toml + Cargo.lock are always included.
+# before publish), install/ publication/ plugins/ memory/ (RustEmbed), templates/
+# (include_str! in boot.rs: mcp.ts, surface.ts). Cargo.toml + Cargo.lock are always
+# included. An omitted root is invisible to `cargo package --list` (the listing IS
+# this allow-list, so the omission reads as agreement) — `just pkg-check` compiles
+# the packaged crate, which is what makes an omission fail the gate.
 include = [
   "/src/**",
   # The lib target exists for `crates/doctrine-control` alone and is never a
@@ -28,7 +31,7 @@ include = [
   "/publication/**",
   "/plugins/**",
   "/memory/**",
-  "/templates/mcp.ts",
+  "/templates/**",
   "/README.md",
   "/LICENSE-GPL-3.0",
   "/LICENSE-MIT",

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dc23-3f64-7db0-99c6-5fab93beaabf"
+recorded_at = "2026-09-26T05:14:52.644245842Z"
+kind = "friction"
+summary = "just publish: pkg-check checked the packaged crate by hand-enumeration, so an omitted embed root passed release-check and failed only inside cargo publish"
+detail = """Cargo.toml [package] include is an explicit allow-list (needed so gitignored web/map/dist ships). SL-263 PHASE-04 added a second include_str! embed, templates/surface.ts, without extending it. just pkg-check exists for exactly this class (SL-223 R7 / RV-287 F-2) but asserted only hand-named entries (publication/manifest.toml present, src/lib.rs absent) against cargo package --list — and --list reports the allow-list itself, so an omission looks like agreement. Outcome: web-build + gate + pkg-check + nix-build all green, then cargo publish died in the verification build with "couldn't read src/../templates/surface.ts", after the expensive legs had run. Fix: /templates/** in the allow-list, plus a second pkg-check leg running cargo package (verify build) — the only oracle that sees every compile-time embed, include_str! and RustEmbed alike. Cheaper signal would also help: the verification build was 35s warm, but it is sequenced after gate + nix-build."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

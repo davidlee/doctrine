@@ -321,12 +321,21 @@ sync-plugin-versions:
   done
   echo "synced plugin manifest versions → v${version}"
 
-# Assert every compile-time embed root survives `cargo package`'s include
-# allow-list — an omitted root ships a hollow crate on `cargo publish`/`install`
-# with NO compile error (SL-223 R7 / RV-287 F-2). `--allow-dirty`: web/map/dist
-# is gitignored but force-included, so the VCS walk always reads dirty (see
-# `publish`). `--list` does no build, so this runs in the jail (unlike nix-build).
-# Assert force-included embed roots are present in the packaged crate source.
+# Assert the packaged crate is complete and publishable — an omitted embed root
+# ships a hollow crate on `cargo publish`/`install` with NO compile error (SL-223
+# R7 / RV-287 F-2). Two legs, because neither subsumes the other:
+#  1. `--list` assertions (cheap, no build) for the two properties a build cannot
+#     prove: `publication/manifest.toml` is force-included, and `src/lib.rs` is
+#     NOT (SL-248 `sec-9` R7). A missing embed is invisible here — `--list`
+#     reports the Cargo.toml allow-list, so the omission presents as agreement.
+#  2. cargo's own verification build: the only oracle that sees every compile-time
+#     embed (include_str! targets + RustEmbed roots) the way the compiler does.
+#     `cargo package` extracts the tarball and compiles it, so the omitting-a-root
+#     class fails HERE rather than inside `publish` — the v0.45.0 hollow-crate
+#     publish (templates/surface.ts, SL-263) survived a green release-check and
+#     died only at `cargo publish`. `cargo publish` reuses target/package/ after.
+# `--allow-dirty`: web/map/dist is gitignored but force-included, so the VCS walk
+# always reads dirty (see `publish`). Both legs run in the jail (unlike nix-build).
 pkg-check:
   #!/usr/bin/env bash
   set -euo pipefail
@@ -348,6 +357,9 @@ pkg-check:
     exit 1
   fi
   echo "pkg-check: src/lib.rs absent from packaged source (src/main.rs present)"
+  # The build leg (header, 2): compile what actually ships.
+  cargo package -p doctrine --allow-dirty
+  echo "pkg-check: packaged crate compiles — every compile-time embed survives the allow-list"
 
 # Run before a version bump / tag — this is where flake breakage (a new embed
 # root absent from the crane source graft, a toolchain skew) actually bites.
