@@ -28,5 +28,4 @@ TOML/MD split every entity rides. See
 [[mem.signpost.doctrine.file-map]] for the layout and [[mem.pattern.doctrine.conventions]]
 for the pure/imperative split and no-parallel-implementation rules. For the
 relation-authoring surface, see [[mem.signpost.doctrine.relating-entities]].
-The concept map ([[mem.signpost.doctrine.concept-map]]) provides a visual
-overview of these entity relationships.
+A concept map provides a visual overview of these entity relationships.

@@ -52,16 +52,13 @@ thin Rust shell (the `doctrine` CLI).
 | Work with policies and standards | `mem.signpost.doctrine.policies-standards` |
 | Create a backlog item | `mem.signpost.doctrine.backlog` |
 | Test backlog membership rules | `mem.concept.backlog.work-intake-membership` |
-| Create an RFC | `mem.signpost.doctrine.rfc` |
 | Author a spec | `mem.signpost.doctrine.specs` |
 | Manage requirements and reconciliation | `mem.signpost.doctrine.requirements` |
 | Create a revision | `mem.signpost.doctrine.revisions` |
 | Relate entities to each other | `mem.signpost.doctrine.relating-entities` |
 | Run an audit phase | `mem.signpost.doctrine.audit` |
 | Conduct an adversarial review | `mem.signpost.doctrine.review` |
-| Work with reconciliation records | `mem.signpost.doctrine.rec` |
 | Capture knowledge records | `mem.signpost.doctrine.knowledge` |
-| Create a concept map | `mem.signpost.doctrine.concept-map` |
 | Read the reference docs | `mem.signpost.doctrine.reference-docs` |
 | Install doctrine in a project | `mem.signpost.doctrine.install` |
 

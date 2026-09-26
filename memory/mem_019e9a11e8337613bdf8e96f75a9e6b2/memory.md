@@ -20,7 +20,7 @@ detail (see [[mem.signpost.doctrine.skill-map]]). No code without an approved pl
    `completed`.
 7. **audit** — evidence gathering, conformance checking, and reconciliation
    against the design. Uses the review ledger (RV kind). See
-   [[mem.signpost.doctrine.review]] and [[mem.signpost.doctrine.rec]].
+   [[mem.signpost.doctrine.review]].
 8. **reconcile** — (the closure seam) formal reconciliation of findings,
    coverage, and lifecycle status. Resolves blockers and drift before the close
    gate.

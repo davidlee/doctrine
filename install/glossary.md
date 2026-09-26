@@ -7,16 +7,21 @@ The kinds below group into a small set of durable entities + typed facets.
 | **specs**                    | --       |        |
 | product requirements doc     | PRD-001  |   y    |
 | technical specification      | SPEC-001 |   y    |
+| concept map                  | CM-001   |   y    |
 | revision                     | REV-001  |   y    |
 | requirement                  | REQ-001  |   y    |
 | requirement label (membership) | FR-001 / NF-001 |  |
 | **slices**                   | --       |        |
 | slice                        | SL-001   |   y    |
 | phase sheet                  | PHASE-01 | phases |
+| **review & change**          | --       |        |
+| rfc                          | RFC-001  |   y    |
+| review ledger                | RV-001   |   y    |
+| reconciliation record        | REC-001  |   y    |
 | **governance**               | --       |        |
-| policy                       | POL-123  |        |
-| standard                     | STD-123  |        |
-| architecture decision record | ADR-001  |        |
+| policy                       | POL-123  |   y    |
+| standard                     | STD-123  |   y    |
+| architecture decision record | ADR-001  |   y    |
 | **knowledge records**         | --       |        |
 | assumption                   | ASM-001  |   y    |
 | decision                     | DEC-001  |   y    |
@@ -101,9 +106,11 @@ the hypothesis is supported by evidence; `refuted` means it has been falsified.
 | `plan.toml` | authored | phase plan (objectives, EN/EX/VT criteria, links) |
 | `plan.md` | authored | plan prose — rationale & sequencing (no queried data) |
 | `notes.md` | authored | durable implementation notes (on-demand) |
-| `audit.md` | authored | verification / code-review / drift findings |
 | `handover.md` | **runtime** (gitignored) | disposable agent context |
 | `phases/` | **runtime** (gitignored) | symlink into `.doctrine/state/slice/nnn/phases/` |
+
+Verification, audit and code-review findings do not live in the slice folder:
+they are written to a review ledger under `.doctrine/review/nnn/`.
 
 Also permitted inside a slice, spec, or backlog dir:
 - `research/*` — pre-design research round (gitignored, runtime tier):
