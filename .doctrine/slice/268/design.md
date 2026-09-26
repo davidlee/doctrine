@@ -284,10 +284,13 @@ turn. So `done` needs a fresh conclude after the last raise or reopen, and
 conclude is enforceably the closing move of every pass. This is checked at
 write time, so no cross-finding turn order is needed. Earlier conclude turns stay
 in `[[review.turn]]` as the record of each pass. This replaces frontier D2's
-"a new finding does not clear the marker", on the user's 2026-09-26 ruling. A
-design run's `Conducted` disposition (DEC-138, which reads
-`PassFacts.concluded`) therefore stops being admissible after a late raise
-until the raiser concludes again.
+"a new finding does not clear the marker", on the user's 2026-09-26 ruling. For a
+design run (DEC-138), `PassFacts.concluded` is read once, when a `Conducted`
+disposition is *recorded* (`design_run/admission.rs:147`). After a late raise,
+a new `Conducted` disposition cannot be recorded until the raiser concludes
+again. One already recorded stands, and the live gate keeps reading only
+`undisposed_blockers`, so a late *blocker* still holds the edge. The gate
+predicate is unchanged.
 
 Every caller moves with the signature: `ReviewDoc::derived`,
 `reconcile_baton_fields`, `run_status`, show/list, `derived_status_string`.
@@ -343,10 +346,13 @@ channel:
 - the cross-kind catalog (RV-396 `F-3`): `derived_status_string` returns the
   status and its defects. `catalog::scan`'s `status_and_title_for` overlay
   pushes one warning `CatalogDiagnostic` per defective RV onto the scan's
-  diagnostics channel, which `doctor` reads (`doctor_checks.rs:85`). Most other
-  scan callers drop warning diagnostics for every kind today
-  (`commands/relation.rs:331`, `commands/design.rs:1782`). That pre-existing
-  STD-003 gap is ISS-492, and SL-268 does not widen into it;
+  diagnostics channel. **No caller surfaces it yet.** `doctor` keeps only
+  facet-field diagnostics (`doctor_checks.rs:86`), and most other callers drop
+  warnings for every kind (`commands/relation.rs:331`,
+  `commands/design.rs:1782`). That pre-existing STD-003 gap is ISS-492, which
+  the user ruled out of SL-268. The diagnostic is emitted so ISS-492's callers
+  inherit it without an RV-specific change. On the catalog path the defect is
+  disclosed only once ISS-492 lands (residual, sec-9);
 - the design run (RV-396 `F-9`): `PassFacts` gains `defects:
   Vec<VocabDefect>`, and no predicate reads it. The `commands/design.rs` shell
   prints a `warning:` line per defect, naming the RV, finding, raw value and
@@ -598,8 +604,8 @@ Any other change to an existing assertion is a finding.
 5. `derived_status` over (finding states × concluded), including empty × both;
    a conclude with open findings reaching `done` once they turn terminal;
    `raise` and `reopen` on a concluded ledger clearing `concluded`, so `done`
-   needs a fresh conclude; and `PassFacts.concluded` reading `false` after a
-   late raise;
+   needs a fresh conclude; `PassFacts.concluded` reading `false` after a late
+   raise, so a new `Conducted` disposition is refused until a re-conclude;
 6. unknown status: non-terminal, refused by every act with the named repair, and
    rendered verbatim with its warning;
 7. unknown severity: gates the close gate, counts as blocker in
@@ -623,8 +629,8 @@ Any other change to an existing assertion is a finding.
     in the table, index, `--json` and MCP, never as `major`/`open`;
 17. prime: a successful prime, then zero selectors, then prime, leaves `status`
     with no cache;
-18. the catalog scan emits a warning diagnostic for a defective RV, and
-    `doctor` reports it;
+18. the catalog scan emits a warning diagnostic for a defective RV (no caller
+    surfaces it until ISS-492);
 19. the design-run projection and gate admission print the defect warning, and
     the gate outcome is unchanged.
 
@@ -659,12 +665,14 @@ Any other change to an existing assertion is a finding.
   does not render turns by default. Slice 2 owns the read projection (D5).
 - **R7: alias ambiguity.** Refused at `new`. A legacy ledger whose labels
   collide accepts only the canonical role names, and the refusal says why.
-- **R8: late raises clear `concluded`.** A design run whose pass was
-  conducted loses admissibility on a late raise until the raiser concludes
-  again. That is intended (sec-3). The guidance and the design-run reviewing
+- **R8: late raises clear `concluded`.** A new `Conducted` disposition is
+  refused after a late raise until the raiser concludes again. One already
+  recorded stands, and the gate holds only on undisposed blockers (sec-3). The guidance and the design-run reviewing
   prompt say so.
 - **Residual: catalog callers drop warning diagnostics** for every kind
-  (ISS-492). The RV defect reaches `doctor` and review's own surfaces.
+  (ISS-492). Until it lands, an RV vocabulary defect is disclosed on review's
+  own surfaces, the close gate and the design run, but not on catalog-backed
+  reads.
 - **Residual: the doctor checks** are IMP-492 and IMP-493, both needing IMP-491.
 - **Residual: `authored_status` still returns `Unavailable` for RV** (DEC-318,
   D14).
