@@ -8,8 +8,8 @@ use super::turn::{
 use super::{
     Await, Column, Context, FindingRow, FindingStatus, Format, ListArgs, Path, PathBuf, REVIEW_DIR,
     REVIEW_KIND, REVIEW_STATUSES, ReviewDoc, ReviewOutput, ReviewStatus, Serialize, Severity,
-    Vocab, VocabDefect, canonical_id, derived_status, finding_states_of, fs, listing, parse_ref,
-    read_authored, read_review, read_reviews, vocabulary_defects,
+    Vocab, VocabDefect, canonical_id, counters, derived_status, finding_states_of, fs, listing,
+    parse_ref, read_authored, read_review, read_reviews, vocabulary_defects,
 };
 use crate::tomlfmt::toml_string;
 
@@ -573,6 +573,9 @@ pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Resu
         ..prior
     };
     write_baton(&root, id, &rebuilt)?;
+    // Base plus count off the ledger journal; the baton's legacy counters stand
+    // in only for a ledger never journalled (SL-268 sec-2).
+    let rounds = counters(&doc, (rebuilt.rounds, rebuilt.contests)).rounds;
 
     // The marker rides the status line only when set: silence is the far commoner
     // state, and a `concluded=no` on every unconcluded pass would be noise on the
@@ -588,7 +591,7 @@ pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Resu
         status.as_str(),
         awaited.as_str(),
         doc.finding.len(),
-        rebuilt.rounds
+        rounds
     );
     let warnings = warnings_of(&doc);
     formatted.push_str(&warning_lines(&warnings));
@@ -616,7 +619,7 @@ pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Resu
         status: status.as_str().to_owned(),
         awaiting: awaited.as_str().to_owned(),
         findings_count: doc.finding.len(),
-        rounds: usize::try_from(rebuilt.rounds).unwrap_or(0),
+        rounds: usize::try_from(rounds).unwrap_or(0),
         cache_primed,
         stale_paths,
         warnings,

@@ -219,7 +219,9 @@ ledger toml; this prose companion carries the reviewer's framing.
 "#
 }
 
-/// Write-chain step 1: `raise F-1 blocker T1/D1`.
+/// Write-chain step 1: `raise F-1 blocker T1/D1`. The first journalled write
+/// seeds `rounds_base`/`contests_base` (0 — the fixture has no baton) and journals
+/// the raise turn inside F-1, in the same write (SL-268 sec-2).
 fn chain_step1_raise_f1() -> &'static str {
     r#"id    = 1
 slug  = "design-review-of-sl-001"
@@ -231,6 +233,8 @@ title = "design review of SL-001"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+rounds_base = 0
+contests_base = 0
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-001"
@@ -242,12 +246,16 @@ severity = "blocker"
 title = "T1"
 detail = "D1"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
 "#
 }
 
-/// Step 2: `raise F-2 major T2/D2`.
+/// Step 2: `raise F-2 major T2/D2` — its raise turn journals inside F-2.
 fn chain_step2_raise_f2() -> &'static str {
     r#"id    = 1
 slug  = "design-review-of-sl-001"
@@ -259,6 +267,8 @@ title = "design review of SL-001"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+rounds_base = 0
+contests_base = 0
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-001"
@@ -270,6 +280,10 @@ severity = "blocker"
 title = "T1"
 detail = "D1"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
 [[finding]]
 id = "F-2"
 status = "open"
@@ -277,12 +291,17 @@ severity = "major"
 title = "T2"
 detail = "D2"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
 "#
 }
 
-/// Step 3 (and, byte-identically, step 5): `dispose F-1 fixed/R1` from `open`.
+/// Step 3: `dispose F-1 fixed/R1` from `open`. The dispose turn snapshots the
+/// answer (`disposition`/`response`) it gave.
 fn chain_step3_dispose_f1() -> &'static str {
     r#"id    = 1
 slug  = "design-review-of-sl-001"
@@ -294,6 +313,8 @@ title = "design review of SL-001"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+rounds_base = 0
+contests_base = 0
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-001"
@@ -307,6 +328,16 @@ detail = "D1"
 disposition = "fixed"
 response = "R1"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fixed"
+response = "R1"
+
 [[finding]]
 id = "F-2"
 status = "open"
@@ -314,13 +345,18 @@ severity = "major"
 title = "T2"
 detail = "D2"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
 "#
 }
 
-/// Step 4: `contest F-1 --note "not really"` — the note is baton-only (D10);
-/// the ledger carries no trace of it, only the status flip.
+/// Step 4: `contest F-1 --note "not really"` — the note is the contest turn's
+/// recorded reasoning, in the ledger (SL-268 sec-2); it lands inside F-1 though F-2
+/// follows it in the file.
 fn chain_step4_contest_f1() -> &'static str {
     r#"id    = 1
 slug  = "design-review-of-sl-001"
@@ -332,6 +368,8 @@ title = "design review of SL-001"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+rounds_base = 0
+contests_base = 0
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-001"
@@ -345,6 +383,21 @@ detail = "D1"
 disposition = "fixed"
 response = "R1"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fixed"
+response = "R1"
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = "not really"
+
 [[finding]]
 id = "F-2"
 status = "open"
@@ -352,13 +405,82 @@ severity = "major"
 title = "T2"
 detail = "D2"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
 "#
 }
 
-/// Step 6: `verify F-1 --note ok`, from `answered` (the second dispose,
-/// byte-identical to step 3, is skipped as a fixture — same string).
+/// Step 5: `dispose F-1 fixed/R1` again (contested → answered). No longer
+/// byte-identical to step 3: the re-dispose journals its own turn.
+fn chain_step5_redispose_f1() -> &'static str {
+    r#"id    = 1
+slug  = "design-review-of-sl-001"
+title = "design review of SL-001"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-001"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "T1"
+detail = "D1"
+disposition = "fixed"
+response = "R1"
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fixed"
+response = "R1"
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = "not really"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fixed"
+response = "R1"
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "major"
+title = "T2"
+detail = "D2"
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.
+"#
+}
+
+/// Step 6: `verify F-1 --note ok`, from `answered` — the note lands in the verify
+/// turn.
 fn chain_step6_verify_f1() -> &'static str {
     r#"id    = 1
 slug  = "design-review-of-sl-001"
@@ -370,6 +492,8 @@ title = "design review of SL-001"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+rounds_base = 0
+contests_base = 0
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-001"
@@ -383,6 +507,32 @@ detail = "D1"
 disposition = "fixed"
 response = "R1"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fixed"
+response = "R1"
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = "not really"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fixed"
+response = "R1"
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "ok"
+
 [[finding]]
 id = "F-2"
 status = "open"
@@ -390,12 +540,16 @@ severity = "major"
 title = "T2"
 detail = "D2"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
 "#
 }
 
-/// Step 7: `withdraw F-2`, from `open`.
+/// Step 7: `withdraw F-2`, from `open` — a noteless withdraw turn.
 fn chain_step7_withdraw_f2() -> &'static str {
     r#"id    = 1
 slug  = "design-review-of-sl-001"
@@ -407,6 +561,8 @@ title = "design review of SL-001"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+rounds_base = 0
+contests_base = 0
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-001"
@@ -420,6 +576,32 @@ detail = "D1"
 disposition = "fixed"
 response = "R1"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fixed"
+response = "R1"
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = "not really"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fixed"
+response = "R1"
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "ok"
+
 [[finding]]
 id = "F-2"
 status = "withdrawn"
@@ -427,13 +609,21 @@ severity = "major"
 title = "T2"
 detail = "D2"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "withdraw"
+role = "raiser"
+
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
 "#
 }
 
-/// Step 8 (and, byte-identically, the idempotent step-9 re-conclude):
-/// `conclude` sets `concluded = true` under `[review]`.
+/// Step 8: `conclude` sets `concluded = true` under `[review]` and journals a
+/// noteless `[[review.turn]]` (PHASE-04 A1; PHASE-06 adds the required basis).
 fn chain_step8_conclude() -> &'static str {
     r#"id    = 1
 slug  = "design-review-of-sl-001"
@@ -445,7 +635,13 @@ title = "design review of SL-001"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+rounds_base = 0
+contests_base = 0
 concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-001"
@@ -459,6 +655,32 @@ detail = "D1"
 disposition = "fixed"
 response = "R1"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fixed"
+response = "R1"
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = "not really"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fixed"
+response = "R1"
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "ok"
+
 [[finding]]
 id = "F-2"
 status = "withdrawn"
@@ -466,14 +688,105 @@ severity = "major"
 title = "T2"
 detail = "D2"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "withdraw"
+role = "raiser"
+
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
 "#
 }
 
-/// Step 10 (S9): `raise F-3` on an already-`concluded` ledger succeeds and
-/// `concluded` stays `true` (D2 flips this later — today's behaviour pinned
-/// as-is).
+/// Step 9: the idempotent re-conclude. The latch is unchanged, but the turn is
+/// journalled, so the ledger is no longer byte-identical to step 8.
+fn chain_step9_reconclude() -> &'static str {
+    r#"id    = 1
+slug  = "design-review-of-sl-001"
+title = "design review of SL-001"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-001"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "T1"
+detail = "D1"
+disposition = "fixed"
+response = "R1"
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fixed"
+response = "R1"
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = "not really"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fixed"
+response = "R1"
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "ok"
+
+[[finding]]
+id = "F-2"
+status = "withdrawn"
+severity = "major"
+title = "T2"
+detail = "D2"
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "withdraw"
+role = "raiser"
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.
+"#
+}
+
+/// Step 10 (S9): `raise F-3` on an already-`concluded` ledger succeeds with its
+/// raise turn, and `concluded` stays `true` (clearing it is PHASE-06 — today's
+/// behaviour pinned as-is).
 fn chain_step10_raise_on_concluded() -> &'static str {
     r#"id    = 1
 slug  = "design-review-of-sl-001"
@@ -485,7 +798,17 @@ title = "design review of SL-001"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+rounds_base = 0
+contests_base = 0
 concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-001"
@@ -499,6 +822,32 @@ detail = "D1"
 disposition = "fixed"
 response = "R1"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fixed"
+response = "R1"
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = "not really"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fixed"
+response = "R1"
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "ok"
+
 [[finding]]
 id = "F-2"
 status = "withdrawn"
@@ -506,12 +855,24 @@ severity = "major"
 title = "T2"
 detail = "D2"
 
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "withdraw"
+role = "raiser"
+
 [[finding]]
 id = "F-3"
 status = "open"
 severity = "minor"
 title = "T3"
 detail = "D3"
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
@@ -703,7 +1064,7 @@ fn write_chain_pins_ledger_after_each_step() {
     assert_eq!(stdout(&out), "Disposed F-1 on RV-001 (answered)\n");
     assert_eq!(ledger(dir.path(), 1), chain_step3_dispose_f1());
 
-    // S5 — contest F-1 (the note is baton-only; ledger proves it never lands there).
+    // S5 — contest F-1: the note lands in the contest turn (SL-268 sec-2).
     let out = run(
         dir.path(),
         &["contest", "1", "--finding", "F-1", "--note", "not really"],
@@ -712,7 +1073,7 @@ fn write_chain_pins_ledger_after_each_step() {
     assert_eq!(stdout(&out), "Contested F-1 on RV-001 (contested)\n");
     assert_eq!(ledger(dir.path(), 1), chain_step4_contest_f1());
 
-    // dispose F-1 again (contested → answered), byte-identical to the first dispose.
+    // dispose F-1 again (contested → answered): a second dispose turn.
     let out = run(
         dir.path(),
         &[
@@ -728,7 +1089,7 @@ fn write_chain_pins_ledger_after_each_step() {
     );
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(stdout(&out), "Disposed F-1 on RV-001 (answered)\n");
-    assert_eq!(ledger(dir.path(), 1), chain_step3_dispose_f1());
+    assert_eq!(ledger(dir.path(), 1), chain_step5_redispose_f1());
 
     // S6 — verify F-1.
     let out = run(
@@ -757,9 +1118,10 @@ fn write_chain_pins_ledger_after_each_step() {
         stdout(&out),
         "Concluded the pass on RV-001 (already concluded)\n"
     );
-    assert_eq!(ledger(dir.path(), 1), chain_step8_conclude());
+    assert_eq!(ledger(dir.path(), 1), chain_step9_reconclude());
 
-    // S10 — status over the full chain: 9 turns written above, all terminal, concluded.
+    // S10 — status over the full chain: base 0 plus the 9 journalled turns
+    // (7 finding turns, 2 conclude turns), all terminal, concluded.
     let out = run(dir.path(), &["status", "1"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
@@ -856,7 +1218,16 @@ fn role_refusals_pin_ledger_unchanged() {
     // R4
     let out = run(
         dir.path(),
-        &["contest", "1", "--finding", "F-1", "--as", "responder"],
+        &[
+            "contest",
+            "1",
+            "--finding",
+            "F-1",
+            "--as",
+            "responder",
+            "--note",
+            "n",
+        ],
     );
     assert!(!out.status.success());
     assert_eq!(
@@ -951,8 +1322,8 @@ fn dispose_state_refusals_pin_ledger_unchanged() {
     if skip_under_worker_marker("dispose_state_refusals_pin_ledger_unchanged") {
         return;
     }
-    // T1: dispose on `answered` — the refusal names `open` as required even
-    // though `contested` is also legal (pinned as-is).
+    // T1: dispose on `answered` — the refusal names the whole admissible
+    // from-set, `open or contested`, computed from `can` (SL-268 sec-4).
     let dir = tmp();
     seed_one_finding(dir.path(), "answered");
     let before = ledger(dir.path(), 1);
@@ -972,7 +1343,7 @@ fn dispose_state_refusals_pin_ledger_unchanged() {
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: out of turn on F-1: current status answered != required open\n"
+        "Error: out of turn on F-1: current status answered; dispose needs open or contested\n"
     );
     assert_eq!(ledger(dir.path(), 1), before);
 
@@ -996,7 +1367,7 @@ fn dispose_state_refusals_pin_ledger_unchanged() {
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: out of turn on F-1: current status verified != required open\n"
+        "Error: out of turn on F-1: current status verified; dispose needs open or contested\n"
     );
     assert_eq!(ledger(dir.path(), 1), before);
 
@@ -1020,7 +1391,7 @@ fn dispose_state_refusals_pin_ledger_unchanged() {
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: out of turn on F-1: current status withdrawn != required open\n"
+        "Error: out of turn on F-1: current status withdrawn; dispose needs open or contested\n"
     );
     assert_eq!(ledger(dir.path(), 1), before);
 }
@@ -1038,7 +1409,7 @@ fn verify_and_contest_state_refusals_pin_ledger_unchanged() {
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: out of turn on F-1: current status open != required answered\n"
+        "Error: out of turn on F-1: current status open; verify needs answered\n"
     );
     assert_eq!(ledger(dir.path(), 1), before);
 
@@ -1046,11 +1417,14 @@ fn verify_and_contest_state_refusals_pin_ledger_unchanged() {
     let dir = tmp();
     seed_one_finding(dir.path(), "open");
     let before = ledger(dir.path(), 1);
-    let out = run(dir.path(), &["contest", "1", "--finding", "F-1"]);
+    let out = run(
+        dir.path(),
+        &["contest", "1", "--finding", "F-1", "--note", "n"],
+    );
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: out of turn on F-1: current status open != required answered\n"
+        "Error: out of turn on F-1: current status open; contest needs answered\n"
     );
     assert_eq!(ledger(dir.path(), 1), before);
 
@@ -1058,11 +1432,14 @@ fn verify_and_contest_state_refusals_pin_ledger_unchanged() {
     let dir = tmp();
     seed_one_finding(dir.path(), "verified");
     let before = ledger(dir.path(), 1);
-    let out = run(dir.path(), &["contest", "1", "--finding", "F-1"]);
+    let out = run(
+        dir.path(),
+        &["contest", "1", "--finding", "F-1", "--note", "n"],
+    );
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: out of turn on F-1: current status verified != required answered\n"
+        "Error: out of turn on F-1: current status verified; contest needs answered\n"
     );
     assert_eq!(ledger(dir.path(), 1), before);
 }
@@ -1080,7 +1457,7 @@ fn withdraw_state_refusals_pin_ledger_unchanged() {
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: out of turn on F-1: current status verified != required open\n"
+        "Error: out of turn on F-1: current status verified; withdraw needs open or answered\n"
     );
     assert_eq!(ledger(dir.path(), 1), before);
 
@@ -1092,9 +1469,74 @@ fn withdraw_state_refusals_pin_ledger_unchanged() {
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: out of turn on F-1: current status contested != required open\n"
+        "Error: out of turn on F-1: current status contested; withdraw needs open or answered\n"
     );
     assert_eq!(ledger(dir.path(), 1), before);
+}
+
+// === SL-268 PHASE-04 — the turn journal's notes (design sec-2) ==============
+
+#[test]
+fn contest_without_note_is_a_clap_refusal() {
+    // `--note` is a required clap argument: the parse fails before dispatch, so
+    // no fixture is touched and no worker-marker skip applies.
+    let dir = tmp();
+    seed_one_finding(dir.path(), "answered");
+    let before = ledger(dir.path(), 1);
+    let out = run(dir.path(), &["contest", "1", "--finding", "F-1"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(stdout(&out), "");
+    assert_eq!(
+        stderr(&out),
+        "error: the following required arguments were not provided:\n  --note <NOTE>\n\nUsage: doctrine review contest --finding <FINDING> --note <NOTE> --path <PATH> --color <COLOR> <REFERENCE>\n\nFor more information, try '--help'.\n"
+    );
+    assert_eq!(ledger(dir.path(), 1), before);
+}
+
+#[test]
+fn contest_blank_note_refuses_ledger_unchanged() {
+    if skip_under_worker_marker("contest_blank_note_refuses_ledger_unchanged") {
+        return;
+    }
+    let dir = tmp();
+    seed_one_finding(dir.path(), "answered");
+    let before = ledger(dir.path(), 1);
+    let out = run(
+        dir.path(),
+        &["contest", "1", "--finding", "F-1", "--note", ""],
+    );
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(stdout(&out), "");
+    assert_eq!(
+        stderr(&out),
+        "Error: `contest` requires a non-empty --note\n"
+    );
+    assert_eq!(ledger(dir.path(), 1), before);
+    assert!(
+        !dir.path().join(".doctrine/state").exists(),
+        "refused before the lock: no runtime state written"
+    );
+}
+
+#[test]
+fn withdraw_note_lands_in_the_withdraw_turn() {
+    if skip_under_worker_marker("withdraw_note_lands_in_the_withdraw_turn") {
+        return;
+    }
+    // A hand-seeded (pre-journal) finding: the withdraw is its first turn, and
+    // the ledger's first journalled write seeds the zero base alongside it.
+    let dir = tmp();
+    seed_one_finding(dir.path(), "open");
+    let out = run(
+        dir.path(),
+        &["withdraw", "1", "--finding", "F-1", "--note", "w"],
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "Withdrew F-1 on RV-001 (withdrawn)\n");
+    assert_eq!(
+        ledger(dir.path(), 1),
+        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"withdrawn\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\n\n[[finding.turn]]\nact = \"withdraw\"\nrole = \"raiser\"\nnote = \"w\"\n"
+    );
 }
 
 #[test]

@@ -1789,3 +1789,130 @@ fn observation_record_escapes_hostile_input_in_refusals() {
 
     kill(child);
 }
+
+// ── SL-268 PHASE-04 (VT-5): contest/withdraw notes land in the turn journal ──
+
+/// Spawn a handshaken server over a fresh RV-001 whose F-1 is `answered`
+/// (raised, then disposed) — the start state for the note round-trips.
+fn answered_f1_session(
+    root: &Path,
+) -> (
+    Child,
+    std::process::ChildStdin,
+    BufReader<std::process::ChildStdout>,
+) {
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Test Slice", "test-slice");
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let mut reader = BufReader::new(child.stdout.take().expect("stdout"));
+    let init = serde_json::json!({
+        "protocolVersion": "2024-11-05",
+        "capabilities": {},
+        "clientInfo": { "name": "test", "version": "1.0" }
+    });
+    let _ = call(&mut stdin, &mut reader, "initialize", Some(&init));
+    for (tool, args) in [
+        (
+            "review_new",
+            serde_json::json!({ "facet": "design", "target": "SL-001" }),
+        ),
+        (
+            "review_raise",
+            serde_json::json!({ "reference": "1", "severity": "minor", "title": "T", "detail": "D" }),
+        ),
+        (
+            "review_dispose",
+            serde_json::json!({
+                "reference": "1", "finding": "F-1", "disposition": "fixed", "response": "done"
+            }),
+        ),
+    ] {
+        let resp = call(
+            &mut stdin,
+            &mut reader,
+            "tools/call",
+            Some(&tools_call_params(tool, args)),
+        );
+        assert!(resp.get("error").is_none(), "{tool}: {resp:?}");
+    }
+    (child, stdin, reader)
+}
+
+fn ledger_text(root: &Path) -> String {
+    fs::read_to_string(root.join(".doctrine/review/001/review-001.toml")).unwrap()
+}
+
+/// F-1's turn rows, read back from the authored ledger.
+fn f1_turns(root: &Path) -> Vec<Value> {
+    let doc: toml::Value = toml::from_str(&ledger_text(root)).unwrap();
+    let turns = doc["finding"][0]["turn"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    turns
+        .into_iter()
+        .map(|t| serde_json::to_value(t).unwrap())
+        .collect()
+}
+
+#[test]
+fn review_contest_note_round_trips() {
+    let dir = tmp();
+    let root = dir.path();
+    let (child, mut stdin, mut reader) = answered_f1_session(root);
+
+    // A missing note and a blank note are both NOTE_REQUIRED, and write nothing.
+    let before = ledger_text(root);
+    for args in [
+        serde_json::json!({ "reference": "1", "finding": "F-1" }),
+        serde_json::json!({ "reference": "1", "finding": "F-1", "note": "" }),
+    ] {
+        let params = tools_call_params("review_contest", args);
+        let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+        let err = resp.get("error").expect("should have error");
+        assert_eq!(err["code"], -32602, "{resp:?}");
+        assert_eq!(err["data"]["code"], "NOTE_REQUIRED", "{resp:?}");
+        assert_eq!(err["data"]["act"], "contest", "{resp:?}");
+    }
+    assert_eq!(
+        ledger_text(root),
+        before,
+        "a refused contest writes nothing"
+    );
+
+    let params = tools_call_params(
+        "review_contest",
+        serde_json::json!({ "reference": "1", "finding": "F-1", "note": "the repair is partial" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+    let contest = f1_turns(root)
+        .into_iter()
+        .find(|t| t["act"] == "contest")
+        .expect("a contest turn");
+    assert_eq!(contest["role"], "raiser");
+    assert_eq!(contest["note"], "the repair is partial");
+
+    kill(child);
+}
+
+#[test]
+fn review_withdraw_note_round_trips() {
+    let dir = tmp();
+    let root = dir.path();
+    let (child, mut stdin, mut reader) = answered_f1_session(root);
+
+    let params = tools_call_params(
+        "review_withdraw",
+        serde_json::json!({ "reference": "1", "finding": "F-1", "note": "superseded by F-9" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+    let last = f1_turns(root).pop().expect("a withdraw turn");
+    assert_eq!(last["act"], "withdraw");
+    assert_eq!(last["note"], "superseded by F-9");
+
+    kill(child);
+}

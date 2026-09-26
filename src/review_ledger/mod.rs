@@ -13,7 +13,8 @@ mod transition;
 mod vocab;
 
 pub(crate) use derive::{
-    FindingState, VocabDefect, derived_status, finding_states_of, vocabulary_defects,
+    FindingState, VocabDefect, counters, derived_status, finding_states_of, seed,
+    vocabulary_defects,
 };
 pub(crate) use gate::{
     derived_status_string, observe_pass, read_pass_facts, relation_edges, unresolved_blockers_for,
@@ -23,8 +24,8 @@ pub(crate) use schema::{
     read_authored, read_review, read_reviews,
 };
 pub(crate) use transition::{
-    TurnAct, Verb, append_finding, apply_transition, can, finding_status_of, finding_table_mut,
-    required_for,
+    Act, TurnFields, admissible_from, append_finding, append_review_turn, apply_act, can,
+    finding_status_of, finding_table_mut, review_table_mut, write_counter_seed,
 };
 pub(crate) use vocab::{
     Await, FINDING_STATUSES, Facet, FindingStatus, REVIEW_STATUSES, ReviewStatus, Role, Severity,

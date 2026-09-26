@@ -52,6 +52,37 @@ pub(crate) struct ReviewMeta {
     /// somebody did.
     #[serde(default)]
     pub(crate) concluded: bool,
+    /// The baton's `rounds` at the first journalled write (SL-268 sec-2): the
+    /// pre-journal history the turn count cannot see. Absent until seeded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) rounds_base: Option<u32>,
+    /// The baton's `contests` at the first journalled write; the twin of
+    /// [`Self::rounds_base`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) contests_base: Option<u32>,
+    /// The review-level journal (`[[review.turn]]`): acts that move no finding.
+    /// Absent is an empty journal (no migration).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) turn: Vec<TurnRow>,
+}
+
+/// One journalled turn (SL-268 sec-2, D1): who acted, how, and why. Every field
+/// is a raw string, read open (D15) — an unknown `act` or `role` is carried, and
+/// still counts as a turn. `disposition`/`route`/`response` snapshot what a
+/// `dispose` answered, so a later re-dispose cannot erase what a contest argued
+/// against. Written only through `review_ledger::transition`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub(crate) struct TurnRow {
+    pub(crate) act: String,
+    pub(crate) role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) note: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) disposition: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) route: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) response: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -73,6 +104,10 @@ pub(crate) struct FindingRow {
     pub(crate) disposition: Option<String>,
     #[serde(default)]
     pub(crate) response: Option<String>,
+    /// This finding's journal (`[[finding.turn]]`), in file order. Absent is an
+    /// empty journal (no migration).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) turn: Vec<TurnRow>,
 }
 
 /// The full `review-NNN.toml` read as data (design §5) — id/slug/title (NO stored
@@ -197,4 +232,45 @@ pub(crate) fn authored_path(root: &Path, id: u32) -> PathBuf {
     root.join(REVIEW_DIR)
         .join(&name)
         .join(format!("review-{name}.toml"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const HEAD: &str = "id = 1\nslug = \"s\"\ntitle = \"t\"\n[review]\nfacet = \"design\"\n\
+                        raiser = \"r\"\nresponder = \"s\"\n";
+    const FINDING: &str = "[target]\nref = \"SL-001\"\n[[finding]]\nid = \"F-1\"\n\
+                           status = \"open\"\nseverity = \"major\"\ntitle = \"t\"\ndetail = \"d\"\n";
+
+    /// Turn rows read open (D15): an unknown act/role parses and keeps its raw
+    /// strings; a ledger with no `turn` key reads empty journals.
+    #[test]
+    fn turn_rows_read_open_vocabulary() {
+        let legacy: ReviewDoc = toml::from_str(&format!("{HEAD}{FINDING}")).unwrap();
+        assert!(legacy.review.turn.is_empty());
+        assert!(legacy.finding[0].turn.is_empty());
+        assert_eq!(
+            (legacy.review.rounds_base, legacy.review.contests_base),
+            (None, None)
+        );
+
+        let text = format!(
+            "{HEAD}[[review.turn]]\nact = \"ponder\"\nrole = \"oracle\"\n{FINDING}\
+             [[finding.turn]]\nact = \"frobnicate\"\nrole = \"gremlin\"\nroute = \"sideways\"\n"
+        );
+        let doc: ReviewDoc = toml::from_str(&text).unwrap();
+        assert_eq!(
+            (
+                doc.review.turn[0].act.as_str(),
+                doc.review.turn[0].role.as_str()
+            ),
+            ("ponder", "oracle")
+        );
+        let turn = &doc.finding[0].turn[0];
+        assert_eq!(
+            (turn.act.as_str(), turn.role.as_str(), turn.route.as_deref()),
+            ("frobnicate", "gremlin", Some("sideways"))
+        );
+    }
 }

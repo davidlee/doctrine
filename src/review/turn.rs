@@ -3,9 +3,9 @@
 //! (SL-268 PHASE-02 T5).
 
 use super::{
-    Context, Deserialize, FindingRow, FindingState, Path, PathBuf, ReviewDoc, ReviewError,
-    ReviewOutput, Role, Serialize, TurnAct, Write, authored_path, canonical_id, derived_status,
-    finding_states_of, fs, io, parse_ref, read_authored,
+    Act, Context, Deserialize, FindingRow, FindingState, Path, PathBuf, ReviewDoc, ReviewError,
+    ReviewOutput, Role, Serialize, Write, authored_path, canonical_id, derived_status,
+    finding_states_of, fs, io, parse_ref, read_authored, seed, write_counter_seed,
 };
 
 // ===========================================================================
@@ -27,8 +27,10 @@ use super::{
 
 /// The runtime baton (design §6, D-C2) — gitignored, regenerable, never authored.
 /// `await`/`authored_hash` are cache-derivable from the authored ledger (the
-/// recompute floor); `rounds`/`contests`/`handoff` are non-derivable observability
-/// bookkeeping (lost on baton loss — acceptable, D-C2).
+/// recompute floor). `rounds`/`contests` are the legacy counters: no longer
+/// incremented (SL-268 sec-2), read only to seed a ledger's `rounds_base`/
+/// `contests_base` at its first journalled write. A legacy baton's retired keys
+/// still parse (no `deny_unknown_fields`) and drop at the next baton write.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
 pub(super) struct Baton {
     /// The summarized turn (D-C8) — a display/routing convenience, never a gate.
@@ -38,16 +40,12 @@ pub(super) struct Baton {
     /// reconciled against (D-C4a). A divergence ⇒ an out-of-band edit landed.
     #[serde(default)]
     pub(super) authored_hash: String,
-    /// A coarse turn counter — bumped each turn (observability only).
+    /// The legacy turn counter — carried forward, never bumped (SL-268 sec-2).
     #[serde(default)]
     pub(super) rounds: u32,
-    /// How many `contest` turns this review has seen (observability only).
+    /// The legacy contest counter — carried forward, never bumped.
     #[serde(default)]
     pub(super) contests: u32,
-    /// Ephemeral handoff chatter (design D10) — the `--note` on contest/verify
-    /// lands here, NOT durable rationale. Lost on baton loss by design.
-    #[serde(default)]
-    pub(super) handoff: Vec<String>,
 }
 
 /// The runtime subtree for one review's baton + lock (design §6). Gitignored
@@ -190,20 +188,14 @@ type MidTurnHook<'a> = &'a dyn Fn();
 /// 3. ENTRY CAS: `sha256(authored) ≠ baton.authored_hash` ⇒ heal the baton (the
 ///    D-C2 recompute), bail "ledger changed underneath — re-run" (missing baton
 ///    ⇒ cold, proceed). Catches an edit landing BEFORE this invocation.
-/// 4. STATIC role check: `role == verb.required_role()` — mismatch ⇒ bail (D-C4).
+/// 4. STATIC role check: `role == act.required_role()` — mismatch ⇒ bail (D-C4).
 /// 5. AUTHORED FIRST: run the closure `f` (per-finding `can()` + the edit), then
 ///    PRE-WRITE CAS (re-read bytes ≠ the step-2 snapshot ⇒ bail, do NOT write —
 ///    catches an edit landing DURING this invocation), else `write_atomic`.
 /// 6. recompute `await` + the new hash from the written ledger.
 /// 7. BATON LAST: `write_atomic` the baton.
 /// 8. release the lock (`LockGuard` drop).
-pub(super) fn with_turn<F, T>(
-    root: &Path,
-    id: u32,
-    act: TurnAct,
-    role: Role,
-    f: F,
-) -> anyhow::Result<T>
+pub(super) fn with_turn<F, T>(root: &Path, id: u32, act: Act, role: Role, f: F) -> anyhow::Result<T>
 where
     F: FnOnce(&mut toml_edit::DocumentMut, &[FindingRow]) -> anyhow::Result<T>,
 {
@@ -214,7 +206,7 @@ where
 pub(super) fn with_turn_hooked<F, T>(
     root: &Path,
     id: u32,
-    act: TurnAct,
+    act: Act,
     role: Role,
     mid_turn: MidTurnHook<'_>,
     f: F,
@@ -230,15 +222,17 @@ where
     let snapshot_hash = crate::git::sha256(snapshot.as_bytes());
 
     // 3. ENTRY CAS — an edit landed BEFORE this invocation (baton stale).
-    //    (a missing baton ⇒ cold — proceed; the per-turn write seeds it.)
-    if let Some(baton) = read_baton(root, id)?.filter(|b| b.authored_hash != snapshot_hash) {
+    //    (a missing baton ⇒ cold — proceed; the per-turn write seeds it.) The
+    //    baton is read once, under the lock: the seed and step 7 reuse it.
+    let prior = read_baton(root, id)?;
+    if let Some(baton) = prior.as_ref().filter(|b| b.authored_hash != snapshot_hash) {
         // Heal: recompute await from the authored truth (D-C2), refresh the
-        // baton's CAS key, preserve the observability counters, then bail.
+        // baton's CAS key, preserve the legacy counters, then bail.
         let (awaiting, hash) = reconcile_baton_fields(&finding_states_of(&doc), &snapshot_hash);
         let healed = Baton {
             awaiting,
             authored_hash: hash,
-            ..baton
+            ..baton.clone()
         };
         write_baton(root, id, &healed)?;
         anyhow::bail!(
@@ -263,6 +257,13 @@ where
     let mut document = snapshot
         .parse::<toml_edit::DocumentMut>()
         .with_context(|| format!("Failed to parse {}", authored_path(root, id).display()))?;
+    let prior = prior.unwrap_or_default();
+    // The counter seed (SL-268 sec-2): a ledger's first journalled write copies
+    // the legacy baton counters into `[review]`, in THIS edit — so it rides the
+    // pre-write CAS below and never gets a write of its own.
+    if let Some(base) = seed(&doc, (prior.rounds, prior.contests)) {
+        write_counter_seed(&mut document, base)?;
+    }
     let result = f(&mut document, &doc.finding)?;
 
     // Test seam: a hand-edit injected here lands AFTER the step-2 read and BEFORE
@@ -288,17 +289,12 @@ where
         .with_context(|| format!("re-parse {}", authored_path(root, id).display()))?;
     let (awaiting, hash) = reconcile_baton_fields(&finding_states_of(&new_doc), &new_hash);
 
-    // 7. BATON LAST — preserve the observability counters across the turn.
-    let prior = read_baton(root, id)?.unwrap_or_default();
-    let contests = prior.contests + u32::from(act.is_contest());
+    // 7. BATON LAST — the legacy counters ride forward unchanged: the ledger's
+    //    turn journal counts now (SL-268 sec-2).
     let baton = Baton {
         awaiting,
         authored_hash: hash,
-        rounds: prior.rounds + 1,
-        contests,
-        // Handoff chatter is appended by the verb shell AFTER this turn write
-        // (D10) — carry the prior log forward untouched here.
-        handoff: prior.handoff,
+        ..prior
     };
     write_baton(root, id, &baton)?;
 

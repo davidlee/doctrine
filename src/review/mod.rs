@@ -20,11 +20,12 @@ use crate::entity::{self, Materialised};
 use crate::kinds::{REVIEW_DIR, REVIEW_KIND};
 use crate::listing::{self, Column, Format, ListArgs};
 use crate::review_ledger::{
-    Await, FINDING_STATUSES, Facet, FindingRow, FindingState, FindingStatus, REVIEW_STATUSES,
-    ReviewDoc, ReviewMeta, ReviewStatus, Role, Severity, Target, TurnAct, Verb, Vocab, VocabDefect,
-    append_finding, apply_transition, authored_path, can, canonical_id, derived_status,
-    finding_states_of, finding_status_of, finding_table_mut, parse_ref, read_authored, read_review,
-    read_reviews, required_for, vocabulary_defects,
+    Act, Await, FINDING_STATUSES, Facet, FindingRow, FindingState, FindingStatus, REVIEW_STATUSES,
+    ReviewDoc, ReviewMeta, ReviewStatus, Role, Severity, Target, TurnFields, Vocab, VocabDefect,
+    admissible_from, append_finding, append_review_turn, apply_act, authored_path, can,
+    canonical_id, counters, derived_status, finding_states_of, finding_status_of,
+    finding_table_mut, parse_ref, read_authored, read_review, read_reviews, review_table_mut, seed,
+    vocabulary_defects, write_counter_seed,
 };
 
 mod cli;
@@ -167,7 +168,7 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
         } => {
             use std::io::Write;
             let role = parse_role(role.as_deref(), Role::Raiser)?;
-            let out = run_contest(path, &reference, &finding, note.as_deref(), role)?;
+            let out = run_contest(path, &reference, &finding, &note, role)?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;
             Ok(())
@@ -175,12 +176,13 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
         ReviewCommand::Withdraw {
             reference,
             finding,
+            note,
             role,
             path,
         } => {
             use std::io::Write;
             let role = parse_role(role.as_deref(), Role::Raiser)?;
-            let out = run_withdraw(path, &reference, &finding, role)?;
+            let out = run_withdraw(path, &reference, &finding, note.as_deref(), role)?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;
             Ok(())
@@ -464,15 +466,23 @@ pub(crate) enum ReviewError {
     RoleMismatch {
         expected: Role,
         actual: Role,
-        /// The act refused. A [`TurnAct`] rather than a [`Verb`] because the
-        /// pass-level `conclude` takes the same static role check and has no
-        /// `Verb` to name itself with.
-        act: TurnAct,
+        /// The act refused — a finding act or the pass-level `conclude`, which
+        /// takes the same static role check.
+        act: Act,
     },
+    /// The act does not apply to the finding's current status. `admissible` is
+    /// the from-set `can` admits for the act (SL-268 sec-4), so the refusal names
+    /// every status the act could have fired from.
     StateMismatch {
         finding: String,
+        act: Act,
         current: FindingStatus,
-        required: FindingStatus,
+        admissible: Vec<FindingStatus>,
+    },
+    /// The act requires a non-empty `--note` and got none (SL-268 sec-2): its
+    /// reasoning is the turn's record.
+    NoteRequired {
+        act: Act,
     },
     /// The finding's authored status is out of vocabulary (SL-268 D15): no act
     /// applies to a state the transition table does not know, so every finding
@@ -514,15 +524,20 @@ impl fmt::Display for ReviewError {
             }
             Self::StateMismatch {
                 finding,
+                act,
                 current,
-                required,
+                admissible,
             } => {
                 write!(
                     f,
-                    "out of turn on {finding}: current status {} != required {}",
+                    "out of turn on {finding}: current status {}; {} needs {}",
                     current.as_str(),
-                    required.as_str()
+                    act.as_str(),
+                    status_set(admissible)
                 )
+            }
+            Self::NoteRequired { act } => {
+                write!(f, "`{}` requires a non-empty --note", act.as_str())
             }
             Self::UnknownStatus { finding, raw } => {
                 write!(
@@ -546,6 +561,19 @@ impl fmt::Display for ReviewError {
     }
 }
 
+/// Render a status set for a refusal: `open or contested`. Empty (an act with no
+/// finding edge) reads `no status`.
+fn status_set(statuses: &[FindingStatus]) -> String {
+    if statuses.is_empty() {
+        return "no status".to_owned();
+    }
+    statuses
+        .iter()
+        .map(|s| s.as_str())
+        .collect::<Vec<_>>()
+        .join(" or ")
+}
+
 impl std::error::Error for ReviewError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -560,13 +588,14 @@ impl std::error::Error for ReviewError {
     dead_code,
     reason = "used by print_review in main.rs via pub(crate) export"
 )]
-pub(crate) fn verb_past(verb: Verb) -> &'static str {
-    match verb {
-        Verb::Raise => "Raised",
-        Verb::Dispose => "Disposed",
-        Verb::Verify => "Verified",
-        Verb::Contest => "Contested",
-        Verb::Withdraw => "Withdrew",
+pub(crate) fn verb_past(act: Act) -> &'static str {
+    match act {
+        Act::Raise => "Raised",
+        Act::Dispose => "Disposed",
+        Act::Verify => "Verified",
+        Act::Contest => "Contested",
+        Act::Withdraw => "Withdrew",
+        Act::Conclude => "Concluded",
     }
 }
 

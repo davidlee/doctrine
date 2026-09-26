@@ -2,12 +2,12 @@
 //! `review new`/`raise`/`dispose`/`verify`/`contest`/`withdraw`/`conclude` — the
 //! mint and write verbs (SL-268 PHASE-02 T5).
 
-use super::turn::{read_baton, resolve_review_root, with_turn, write_baton};
+use super::turn::{resolve_review_root, with_turn};
 use super::{
-    Context, Deserialize, Facet, FindingStatus, Materialised, Path, PathBuf, REVIEW_DIR,
-    REVIEW_KIND, ReviewError, ReviewMeta, ReviewOutput, Role, Severity, Target, TurnAct, Verb,
-    Vocab, append_finding, apply_transition, can, canonical_id, entity, finding_status_of,
-    finding_table_mut, parse_ref, required_for,
+    Act, Context, Deserialize, Facet, FindingStatus, Materialised, Path, PathBuf, REVIEW_DIR,
+    REVIEW_KIND, ReviewError, ReviewMeta, ReviewOutput, Role, Severity, Target, TurnFields, Vocab,
+    admissible_from, append_finding, append_review_turn, apply_act, can, canonical_id, entity,
+    finding_status_of, finding_table_mut, parse_ref, review_table_mut,
 };
 use crate::tomlfmt::toml_string;
 
@@ -110,6 +110,11 @@ impl ReviewDraft {
                 // A pass is unconcluded until its raiser says otherwise, and the
                 // renderer emits no key for it — absence carries the same answer.
                 concluded: false,
+                // The journal and its counter seed are written at first use, not
+                // at mint: a fresh ledger carries neither.
+                rounds_base: None,
+                contests_base: None,
+                turn: Vec::new(),
             },
             target: Target {
                 reference: args.target.clone(),
@@ -235,13 +240,13 @@ pub(crate) fn run_raise(
 ) -> anyhow::Result<ReviewOutput> {
     let root = resolve_review_root(path)?;
     let id = parse_ref(&args.reference)?;
-    let new_id = with_turn(&root, id, Verb::Raise.into(), role, |doc, existing| {
+    let new_id = with_turn(&root, id, Act::Raise, role, |doc, existing| {
         // Per-finding gate: `raise` targets a fresh (None) finding (design §5).
-        if !can(Verb::Raise, None, role) {
+        if !can(Act::Raise, None, role) {
             return Err(ReviewError::RoleMismatch {
-                expected: Verb::Raise.required_role(),
+                expected: Act::Raise.required_role(),
                 actual: role,
-                act: Verb::Raise.into(),
+                act: Act::Raise,
             }
             .into());
         }
@@ -278,17 +283,23 @@ pub(crate) fn run_dispose(
 ) -> anyhow::Result<ReviewOutput> {
     let root = resolve_review_root(path)?;
     let id = parse_ref(&args.reference)?;
-    with_turn(&root, id, Verb::Dispose.into(), role, |doc, existing| {
+    with_turn(&root, id, Act::Dispose, role, |doc, existing| {
         let from = finding_status_of(existing, &args.finding)?;
-        gate(Verb::Dispose, from, role, &args.finding)?;
+        gate(Act::Dispose, from, role, &args.finding)?;
         let table = finding_table_mut(doc, &args.finding)?;
-        apply_transition(
+        // The dispose turn snapshots the answer it gives (sec-2), so a later
+        // re-dispose cannot erase what a contest argued against.
+        apply_act(
             table,
+            Act::Dispose,
+            role,
             FindingStatus::Answered,
-            Some(&args.disposition),
-            Some(&args.response),
-        );
-        Ok(())
+            TurnFields {
+                note: None,
+                disposition: Some(&args.disposition),
+                response: Some(&args.response),
+            },
+        )
     })?;
     Ok(ReviewOutput::Disposed {
         finding_id: args.finding.clone(),
@@ -298,7 +309,7 @@ pub(crate) fn run_dispose(
 
 /// `doctrine review verify <RV-NNN> --finding F-n [--as raiser] [--note …]` — the
 /// raiser accepts an answered finding (answered → verified, terminal, design §5).
-/// `--note` is ephemeral handoff chatter → the baton log (D10), NOT rationale.
+/// The optional `--note` is recorded on the verify turn as its reasoning.
 pub(crate) fn run_verify(
     path: Option<PathBuf>,
     reference: &str,
@@ -311,7 +322,7 @@ pub(crate) fn run_verify(
     run_raiser_transition(
         &root,
         id,
-        Verb::Verify,
+        Act::Verify,
         FindingStatus::Verified,
         finding,
         note,
@@ -323,10 +334,42 @@ pub(crate) fn run_verify(
     })
 }
 
-/// `doctrine review contest <RV-NNN> --finding F-n [--as raiser] [--note …]` — the
+/// `doctrine review contest <RV-NNN> --finding F-n --note … [--as raiser]` — the
 /// raiser rejects an answered finding (answered → contested, design §5), handing
-/// it back to the responder. `--note` is ephemeral handoff chatter (D10).
+/// it back to the responder. The note is **required** (SL-268 sec-2): it is what
+/// the contest argues, recorded on the turn. A blank note refuses before the
+/// lock is taken, so nothing is read or written.
 pub(crate) fn run_contest(
+    path: Option<PathBuf>,
+    reference: &str,
+    finding: &str,
+    note: &str,
+    role: Role,
+) -> anyhow::Result<ReviewOutput> {
+    if note.trim().is_empty() {
+        return Err(ReviewError::NoteRequired { act: Act::Contest }.into());
+    }
+    let root = resolve_review_root(path)?;
+    let id = parse_ref(reference)?;
+    run_raiser_transition(
+        &root,
+        id,
+        Act::Contest,
+        FindingStatus::Contested,
+        finding,
+        Some(note),
+        role,
+    )?;
+    Ok(ReviewOutput::Contested {
+        finding_id: finding.to_owned(),
+        review_id: id,
+    })
+}
+
+/// `doctrine review withdraw <RV-NNN> --finding F-n [--note …] [--as raiser]` —
+/// the raiser retracts a finding (open|answered → withdrawn, terminal, design
+/// §5). The optional `--note` is recorded on the withdraw turn.
+pub(crate) fn run_withdraw(
     path: Option<PathBuf>,
     reference: &str,
     finding: &str,
@@ -338,35 +381,10 @@ pub(crate) fn run_contest(
     run_raiser_transition(
         &root,
         id,
-        Verb::Contest,
-        FindingStatus::Contested,
-        finding,
-        note,
-        role,
-    )?;
-    Ok(ReviewOutput::Contested {
-        finding_id: finding.to_owned(),
-        review_id: id,
-    })
-}
-
-/// `doctrine review withdraw <RV-NNN> --finding F-n [--as raiser]` — the raiser
-/// retracts a finding (open|answered → withdrawn, terminal, design §5).
-pub(crate) fn run_withdraw(
-    path: Option<PathBuf>,
-    reference: &str,
-    finding: &str,
-    role: Role,
-) -> anyhow::Result<ReviewOutput> {
-    let root = resolve_review_root(path)?;
-    let id = parse_ref(reference)?;
-    run_raiser_transition(
-        &root,
-        id,
-        Verb::Withdraw,
+        Act::Withdraw,
         FindingStatus::Withdrawn,
         finding,
-        None,
+        note,
         role,
     )?;
     Ok(ReviewOutput::Withdrawn {
@@ -402,16 +420,16 @@ pub(crate) fn run_conclude(
     // The latch is written unconditionally: re-writing `true` costs an identical
     // byte sequence, where reading it before the turn would race the lock this
     // turn exists to hold.
-    let already = with_turn(&root, id, TurnAct::Conclude, role, |doc, _findings| {
-        let meta = doc
-            .get_mut("review")
-            .and_then(toml_edit::Item::as_table_mut)
-            .ok_or_else(|| anyhow::anyhow!("ledger has no `[review]` table"))?;
+    // Every conclude journals its own `[[review.turn]]` (SL-268 sec-2), so a
+    // re-conclude is idempotent on the latch but not on the file.
+    let already = with_turn(&root, id, Act::Conclude, role, |doc, _findings| {
+        let meta = review_table_mut(doc)?;
         let already = meta
             .get("concluded")
             .and_then(toml_edit::Item::as_bool)
             .unwrap_or(false);
         meta["concluded"] = toml_edit::value(true);
+        append_review_turn(doc, Act::Conclude, role, None)?;
         Ok(already)
     })?;
     Ok(ReviewOutput::Concluded {
@@ -421,40 +439,41 @@ pub(crate) fn run_conclude(
 }
 
 /// The shared shell for the three raiser status-only transitions
-/// (verify/contest/withdraw): gate per-finding, apply the status, and route an
-/// optional `--note` to the baton's ephemeral handoff log (D10). Disposition /
+/// (verify/contest/withdraw): gate per-finding, then apply the status and journal
+/// the turn, its `note` included, in one edit (SL-268 sec-2). Disposition /
 /// response are responder-owned, so these never touch them.
 fn run_raiser_transition(
     root: &Path,
     id: u32,
-    verb: Verb,
+    act: Act,
     to: FindingStatus,
     finding: &str,
     note: Option<&str>,
     role: Role,
 ) -> anyhow::Result<()> {
-    with_turn(root, id, verb.into(), role, |doc, existing| {
+    with_turn(root, id, act, role, |doc, existing| {
         let from = finding_status_of(existing, finding)?;
-        gate(verb, from, role, finding)?;
+        gate(act, from, role, finding)?;
         let table = finding_table_mut(doc, finding)?;
-        apply_transition(table, to, None, None);
-        Ok(())
-    })?;
-    // Handoff chatter (D10) — appended to the baton AFTER the turn's baton write,
-    // so it survives as the latest baton state (ephemeral, lost on baton loss).
-    if let (Some(n), Some(mut baton)) = (note, read_baton(root, id)?) {
-        baton.handoff.push(format!("{}: {n}", verb.as_str()));
-        write_baton(root, id, &baton)?;
-    }
-    Ok(())
+        apply_act(
+            table,
+            act,
+            role,
+            to,
+            TurnFields {
+                note,
+                ..TurnFields::default()
+            },
+        )
+    })
 }
 
 /// The per-finding gate (design §6 — the closure's half): refuse an out-of-turn
-/// write with a message naming the verb, the finding, and its current state. An
-/// out-of-vocabulary current status refuses before the table is consulted
-/// (SL-268 D15): no edge leaves a state the table does not know.
+/// write with a message naming the act, the finding, its current state and the
+/// states the act admits. An out-of-vocabulary current status refuses before the
+/// table is consulted (SL-268 D15): no edge leaves a state the table does not know.
 pub(super) fn gate(
-    verb: Verb,
+    act: Act,
     from: Vocab<FindingStatus>,
     role: Role,
     finding: &str,
@@ -469,13 +488,14 @@ pub(super) fn gate(
             .into());
         }
     };
-    if !can(verb, Some(from), role) {
+    if !can(act, Some(from), role) {
         // Role mismatch already caught by `with_turn` step 4; here it is always
         // a state mismatch.
         return Err(ReviewError::StateMismatch {
             finding: finding.to_owned(),
+            act,
             current: from,
-            required: required_for(verb),
+            admissible: admissible_from(act),
         }
         .into());
     }

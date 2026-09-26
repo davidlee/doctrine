@@ -141,8 +141,8 @@ pub(crate) enum ReviewCommand {
         #[arg(long)]
         finding: String,
 
-        /// Ephemeral handoff chatter for the baton log — NOT durable rationale
-        /// (durable justification belongs in a finding).
+        /// Why the finding is accepted — recorded in the ledger as this turn's
+        /// reasoning (optional).
         #[arg(long)]
         note: Option<String>,
 
@@ -165,10 +165,10 @@ pub(crate) enum ReviewCommand {
         #[arg(long)]
         finding: String,
 
-        /// Ephemeral handoff chatter for the baton log — NOT durable rationale
-        /// (durable justification belongs in a finding).
+        /// What the contest argues — recorded in the ledger as this turn's
+        /// reasoning (required, non-empty).
         #[arg(long)]
-        note: Option<String>,
+        note: String,
 
         /// Cooperative role assertion (default: raiser).
         #[arg(long = "as")]
@@ -188,6 +188,11 @@ pub(crate) enum ReviewCommand {
         /// The finding id, e.g. `F-2`.
         #[arg(long)]
         finding: String,
+
+        /// Why the finding is retracted — recorded in the ledger as this turn's
+        /// reasoning (optional).
+        #[arg(long)]
+        note: Option<String>,
 
         /// Cooperative role assertion (default: raiser).
         #[arg(long = "as")]

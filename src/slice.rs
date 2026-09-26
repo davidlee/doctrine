@@ -5468,6 +5468,7 @@ mod tests {
             Some(root.to_path_buf()),
             "RV-001",
             "F-1",
+            None,
             crate::review_ledger::Role::Raiser,
         )
         .unwrap();

@@ -1,24 +1,29 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! RV ledger transition table (SL-268 D4, engine tier): the write verbs, the
-//! `can` predicate, the per-verb required status, and the finding-scoped
-//! edit-preserving `toml_edit` writes that apply a transition.
+//! RV ledger transition table (SL-268 D4, engine tier): the acts, the `can`
+//! predicate and the admissible from-set it implies, and the finding-scoped
+//! edit-preserving `toml_edit` writes that apply an act and journal its turn.
 
 use super::schema::FindingRow;
-use super::vocab::{FindingStatus, Role, Severity, Vocab};
+use super::vocab::{FINDING_STATUSES, FindingStatus, Role, Severity, Vocab};
 
-/// The five write verbs that move a finding's status (design §5). `status` and
-/// the read/coordination verbs are not transition verbs and are not modelled
-/// here — `can` answers "may this verb fire on a finding in `from` for `role`?".
+/// Every act a turn can assert (SL-268 D1): the five finding transitions plus the
+/// pass-level `conclude`. One vocabulary serves the role gate, the transition
+/// table, the refusal and the turn journal's `act` string; `status` and the
+/// read/coordination verbs are not acts and are not modelled here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Verb {
+pub(crate) enum Act {
     Raise,
     Dispose,
     Verify,
     Contest,
     Withdraw,
+    /// The raiser declares the pass finished (SL-244 `sec-4`, IMP-392). It moves
+    /// no finding, so the transition table admits no edge for it.
+    Conclude,
 }
 
-impl Verb {
+impl Act {
+    /// The act's name — the refusal label and the journal's `act` string.
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::Raise => "raise",
@@ -26,69 +31,22 @@ impl Verb {
             Self::Verify => "verify",
             Self::Contest => "contest",
             Self::Withdraw => "withdraw",
-        }
-    }
-
-    /// The role a verb statically requires, knowable without a finding (design
-    /// §6 responsibility split): raise/verify/contest/withdraw are the raiser's;
-    /// dispose is the responder's. The `with_turn` wrapper checks this; the
-    /// per-finding `can` check (state-dependent) is the closure's job.
-    pub(crate) const fn required_role(self) -> Role {
-        match self {
-            Self::Raise | Self::Verify | Self::Contest | Self::Withdraw => Role::Raiser,
-            Self::Dispose => Role::Responder,
-        }
-    }
-}
-
-/// What one turn asserts — a finding transition, or the pass-level conclude.
-///
-/// [`Verb`] stays the **finding-transition** vocabulary: `can`, `required_for` and
-/// `gate` are all keyed on a [`FindingStatus`], and concluding has no finding, so
-/// a sixth `Verb` variant would force answers into that table that do not exist
-/// (there is no status a conclude requires). Splitting here instead keeps the
-/// transition table meaning what it says.
-///
-/// [`with_turn`] needs exactly two things from a turn — the role it statically
-/// requires, and whether it is a contest, for the baton's counter. Both live here.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum TurnAct {
-    /// One of the five finding transitions.
-    Finding(Verb),
-    /// The raiser declares the pass finished (SL-244 `sec-4`, IMP-392).
-    Conclude,
-}
-
-impl TurnAct {
-    /// The role this act statically requires. Concluding is the raiser's — it is
-    /// the reviewer saying *I have finished reading*, which is exactly the claim
-    /// the design run's `Conducted` arm repeats one layer out — and deliberately
-    /// not `dispose`'s, which is per-finding and the responder's.
-    pub(crate) const fn required_role(self) -> Role {
-        match self {
-            Self::Finding(verb) => verb.required_role(),
-            Self::Conclude => Role::Raiser,
-        }
-    }
-
-    /// Whether this turn is a contest, for the baton's observability counter.
-    pub(crate) const fn is_contest(self) -> bool {
-        matches!(self, Self::Finding(Verb::Contest))
-    }
-
-    /// The verb name a refusal reports. A conclude has no [`Verb`], so the
-    /// role-mismatch refusal needs its own label rather than a borrowed one.
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Self::Finding(verb) => verb.as_str(),
             Self::Conclude => "conclude",
         }
     }
-}
 
-impl From<Verb> for TurnAct {
-    fn from(verb: Verb) -> Self {
-        Self::Finding(verb)
+    /// The role an act statically requires, knowable without a finding (design
+    /// §6 responsibility split): dispose is the responder's; every other act is
+    /// the raiser's. Concluding is the reviewer saying *I have finished reading*,
+    /// so it is deliberately not `dispose`'s. The `with_turn` wrapper checks this;
+    /// the per-finding `can` check (state-dependent) is the closure's job.
+    pub(crate) const fn required_role(self) -> Role {
+        match self {
+            Self::Raise | Self::Verify | Self::Contest | Self::Withdraw | Self::Conclude => {
+                Role::Raiser
+            }
+            Self::Dispose => Role::Responder,
+        }
     }
 }
 
@@ -96,33 +54,34 @@ impl From<Verb> for TurnAct {
 // Transition predicate (design §5, D-C4/D-C5)
 // ---------------------------------------------------------------------------
 
-/// Whether `verb` may fire on a finding currently in `from` (or, for `raise`,
+/// Whether `act` may fire on a finding currently in `from` (or, for `raise`,
 /// not yet existing — `None`) when asserted by `role`. Pure and total: the
-/// single-owner edge table (design §5), every other combination refused.
+/// single-owner edge table (design §5), every other combination refused —
+/// `conclude` included, since it moves no finding.
 ///
-/// | verb     | from               | role      | → |
+/// | act      | from               | role      | → |
 /// |----------|--------------------|-----------|---|
 /// | raise    | (none)             | raiser    | open |
 /// | dispose  | open \| contested  | responder | answered |
 /// | verify   | answered           | raiser    | verified (terminal) |
 /// | contest  | answered           | raiser    | contested |
 /// | withdraw | open \| answered   | raiser    | withdrawn (terminal) |
-pub(crate) const fn can(verb: Verb, from: Option<FindingStatus>, role: Role) -> bool {
+pub(crate) const fn can(act: Act, from: Option<FindingStatus>, role: Role) -> bool {
     // Static role check first — the half `with_turn` also owns; refuse a
-    // role/verb mismatch regardless of state.
-    if !role_eq(role, verb.required_role()) {
+    // role/act mismatch regardless of state.
+    if !role_eq(role, act.required_role()) {
         return false;
     }
     matches!(
-        (verb, from),
-        (Verb::Raise, None)
+        (act, from),
+        (Act::Raise, None)
             | (
-                Verb::Dispose,
+                Act::Dispose,
                 Some(FindingStatus::Open | FindingStatus::Contested)
             )
-            | (Verb::Verify | Verb::Contest, Some(FindingStatus::Answered))
+            | (Act::Verify | Act::Contest, Some(FindingStatus::Answered))
             | (
-                Verb::Withdraw,
+                Act::Withdraw,
                 Some(FindingStatus::Open | FindingStatus::Answered)
             )
     )
@@ -134,6 +93,17 @@ const fn role_eq(a: Role, b: Role) -> bool {
         (a, b),
         (Role::Raiser, Role::Raiser) | (Role::Responder, Role::Responder)
     )
+}
+
+/// The statuses `act` may fire from when asserted by its own role, in vocabulary
+/// order — the from-set a state refusal reports (SL-268 sec-4). Computed from
+/// [`can`], so the refusal cannot disagree with the table it explains.
+pub(crate) fn admissible_from(act: Act) -> Vec<FindingStatus> {
+    FINDING_STATUSES
+        .iter()
+        .filter_map(|s| FindingStatus::parse(s).ok())
+        .filter(|s| can(act, Some(*s), act.required_role()))
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -158,30 +128,118 @@ pub(crate) fn finding_table_mut<'a>(
         .ok_or_else(|| anyhow::anyhow!("no finding `{finding_id}` in the ledger"))
 }
 
-/// Apply a single-owner status transition (design §5): set the finding's
-/// `status`, plus any responder-owned `disposition`/`response`. Edit-preserving —
-/// the table is mutated in place, so comments / unknown keys / sibling findings
-/// survive (the `governance.rs:290` contract at finding scope). User free-text
-/// rides `toml_edit::value`, which quotes/escapes it (the structured-write twin of
-/// the render path's `toml_string`).
-pub(crate) fn apply_transition(
+/// The `[review]` metadata table, mutably — the home of the pass-level latch,
+/// the counter seed and the review-level journal.
+pub(crate) fn review_table_mut(
+    doc: &mut toml_edit::DocumentMut,
+) -> anyhow::Result<&mut toml_edit::Table> {
+    doc.get_mut("review")
+        .and_then(toml_edit::Item::as_table_mut)
+        .ok_or_else(|| anyhow::anyhow!("ledger has no `[review]` table"))
+}
+
+/// Write the counter seed (SL-268 sec-2) into `[review]`: the legacy baton's
+/// `(rounds, contests)` as `rounds_base`/`contests_base`. The caller writes it in
+/// the same edit as the first journalled turn.
+pub(crate) fn write_counter_seed(
+    doc: &mut toml_edit::DocumentMut,
+    (rounds, contests): (u32, u32),
+) -> anyhow::Result<()> {
+    let meta = review_table_mut(doc)?;
+    meta.insert("rounds_base", toml_edit::value(i64::from(rounds)));
+    meta.insert("contests_base", toml_edit::value(i64::from(contests)));
+    Ok(())
+}
+
+/// The optional account one turn carries (SL-268 sec-2). `note` is the act's
+/// own reasoning; `disposition`/`response` are set on a `dispose` turn, where
+/// they are also written to the finding as its current answer.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct TurnFields<'a> {
+    pub(crate) note: Option<&'a str>,
+    pub(crate) disposition: Option<&'a str>,
+    pub(crate) response: Option<&'a str>,
+}
+
+/// The journal key a turn row is appended under (`[[finding.turn]]` /
+/// `[[review.turn]]`).
+const TURN_KEY: &str = "turn";
+
+/// Build one turn row in the design's key order (sec-2): `act`, `role`, then
+/// `note`, `disposition`, `response`, each only when present. User free-text
+/// rides `toml_edit::value`, which quotes/escapes it.
+fn turn_row(act: Act, role: Role, fields: TurnFields<'_>) -> toml_edit::Table {
+    let mut row = toml_edit::Table::new();
+    row.insert("act", toml_edit::value(act.as_str()));
+    row.insert("role", toml_edit::value(role.as_str()));
+    for (key, value) in [
+        ("note", fields.note),
+        ("disposition", fields.disposition),
+        ("response", fields.response),
+    ] {
+        if let Some(v) = value {
+            row.insert(key, toml_edit::value(v));
+        }
+    }
+    row
+}
+
+/// Push a turn row onto `parent`'s journal, creating the journal on first use.
+/// A `turn` key that is not an array of tables (a hand-edit) refuses rather than
+/// being skipped: an unrecorded turn must not pass for a recorded one (STD-003).
+fn push_turn(parent: &mut toml_edit::Table, row: toml_edit::Table) -> anyhow::Result<()> {
+    parent
+        .entry(TURN_KEY)
+        .or_insert_with(|| toml_edit::Item::ArrayOfTables(toml_edit::ArrayOfTables::new()))
+        .as_array_of_tables_mut()
+        .ok_or_else(|| anyhow::anyhow!("ledger `{TURN_KEY}` is not an array of tables"))?
+        .push(row);
+    Ok(())
+}
+
+/// Apply one finding act (design sec-2 "One write"): set the finding's `status`,
+/// any `disposition`/`response`, and append the act's turn row. This is the
+/// **only** writer of a finding's state fields and its journal, so the two move
+/// in one edit. Edit-preserving: the table is mutated in place, so comments /
+/// unknown keys / sibling findings survive (the `governance.rs:290` contract at
+/// finding scope).
+pub(crate) fn apply_act(
     table: &mut toml_edit::Table,
-    new_status: FindingStatus,
-    disposition: Option<&str>,
-    response: Option<&str>,
-) {
-    table.insert("status", toml_edit::value(new_status.as_str()));
-    if let Some(d) = disposition {
+    act: Act,
+    role: Role,
+    to: FindingStatus,
+    fields: TurnFields<'_>,
+) -> anyhow::Result<()> {
+    table.insert("status", toml_edit::value(to.as_str()));
+    if let Some(d) = fields.disposition {
         table.insert("disposition", toml_edit::value(d));
     }
-    if let Some(r) = response {
+    if let Some(r) = fields.response {
         table.insert("response", toml_edit::value(r));
     }
+    push_turn(table, turn_row(act, role, fields))
+}
+
+/// Append a review-level turn (`[[review.turn]]`, design sec-2) — the journal of
+/// acts that move no finding. Only `conclude` writes one.
+pub(crate) fn append_review_turn(
+    doc: &mut toml_edit::DocumentMut,
+    act: Act,
+    role: Role,
+    note: Option<&str>,
+) -> anyhow::Result<()> {
+    let meta = review_table_mut(doc)?;
+    let fields = TurnFields {
+        note,
+        ..TurnFields::default()
+    };
+    push_turn(meta, turn_row(act, role, fields))
 }
 
 /// Append a fresh `[[finding]]` with id `F-<max+1>` (design §5, append-only —
 /// never renumber, never reuse). Raiser-owned fields are fixed here at raise; the
-/// status is seeded `open`; the responder pair is absent until a `dispose`.
+/// status is seeded `open`; the responder pair is absent until a `dispose`. The
+/// raise turn is journalled inside the new finding, in the same edit (sec-2).
 pub(crate) fn append_finding(
     doc: &mut toml_edit::DocumentMut,
     existing: &[FindingRow],
@@ -196,6 +254,9 @@ pub(crate) fn append_finding(
     row.insert("severity", toml_edit::value(severity.as_str()));
     row.insert("title", toml_edit::value(title));
     row.insert("detail", toml_edit::value(detail));
+    let mut turns = toml_edit::ArrayOfTables::new();
+    turns.push(turn_row(Act::Raise, Role::Raiser, TurnFields::default()));
+    row.insert(TURN_KEY, toml_edit::Item::ArrayOfTables(turns));
     if let Some(array) = doc
         .entry("finding")
         .or_insert_with(|| toml_edit::Item::ArrayOfTables(toml_edit::ArrayOfTables::new()))
@@ -233,11 +294,35 @@ pub(crate) fn finding_status_of(
     Ok(Vocab::read(&row.status))
 }
 
-/// The canonical required status for each verb — the state a finding must be
-/// in for the verb to act on it. Compound cases pick the first valid status.
-pub(crate) fn required_for(verb: Verb) -> FindingStatus {
-    match verb {
-        Verb::Dispose | Verb::Withdraw | Verb::Raise => FindingStatus::Open,
-        Verb::Verify | Verb::Contest => FindingStatus::Answered,
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The refusal's from-set is `can`'s, and only `can`'s (SL-268 sec-4).
+    #[test]
+    fn admissible_from_is_computed_from_can() {
+        use FindingStatus::{Answered, Contested, Open};
+        let cases = [
+            (Act::Dispose, vec![Open, Contested]),
+            (Act::Verify, vec![Answered]),
+            (Act::Contest, vec![Answered]),
+            (Act::Withdraw, vec![Open, Answered]),
+            (Act::Conclude, vec![]),
+            (Act::Raise, vec![]),
+        ];
+        for (act, expected) in cases {
+            let got = admissible_from(act);
+            assert_eq!(got, expected, "{act:?}");
+            for status in FINDING_STATUSES
+                .iter()
+                .filter_map(|s| FindingStatus::parse(s).ok())
+            {
+                assert_eq!(
+                    can(act, Some(status), act.required_role()),
+                    got.contains(&status),
+                    "{act:?} from {status:?}"
+                );
+            }
+        }
     }
 }

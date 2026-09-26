@@ -183,13 +183,13 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_verify".to_owned(),
-            description: "Verify an answered finding (the raiser's verb) — accept it (terminal). `--note` is written to the baton handoff log (persisted but not surfaced in `review_show` or `review_status`), NOT durable rationale — durable justification belongs in the finding's `response` or a new finding. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Verified\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            description: "Verify an answered finding (the raiser's verb) — accept it (terminal). The optional `note` is recorded on the finding's verify turn in the ledger, as this turn's reasoning. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Verified\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
                     "finding": { "type": "string", "description": "The finding id, e.g. F-2" },
-                    "note": { "type": "string", "description": "Ephemeral handoff chatter for the baton log" },
+                    "note": { "type": "string", "description": "Why the finding is accepted — recorded on the finding's verify turn (optional)" },
                     "as": { "type": "string", "description": "Cooperative role assertion (default: raiser)" }
                 },
                 "required": ["reference", "finding"]
@@ -197,26 +197,27 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_contest".to_owned(),
-            description: "Contest an answered finding (the raiser's verb) — hand it back to the responder. `--note` is written to the baton handoff log (persisted but not surfaced in `review_show` or `review_status`), NOT durable rationale — durable justification belongs in a new finding or the finding's `response`. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Contested\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            description: "Contest an answered finding (the raiser's verb) — hand it back to the responder. `note` is required and non-empty: it is recorded on the finding's contest turn in the ledger, as what the contest argues. A missing or blank note is refused with NOTE_REQUIRED. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Contested\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
                     "finding": { "type": "string", "description": "The finding id, e.g. F-2" },
-                    "note": { "type": "string", "description": "Ephemeral handoff chatter for the baton log" },
+                    "note": { "type": "string", "description": "What the contest argues — recorded on the finding's contest turn (required, non-empty)" },
                     "as": { "type": "string", "description": "Cooperative role assertion (default: raiser)" }
                 },
-                "required": ["reference", "finding"]
+                "required": ["reference", "finding", "note"]
             }),
         },
         McpTool {
             name: "review_withdraw".to_owned(),
-            description: "Withdraw a finding (the raiser's verb) — retract an open/answered finding (terminal). `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Withdrawn\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            description: "Withdraw a finding (the raiser's verb) — retract an open/answered finding (terminal). The optional `note` is recorded on the finding's withdraw turn in the ledger, as this turn's reasoning. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Withdrawn\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
                     "finding": { "type": "string", "description": "The finding id, e.g. F-2" },
+                    "note": { "type": "string", "description": "Why the finding is retracted — recorded on the finding's withdraw turn (optional)" },
                     "as": { "type": "string", "description": "Cooperative role assertion (default: raiser)" }
                 },
                 "required": ["reference", "finding"]
@@ -723,7 +724,7 @@ fn call_tool(
             Ok(serde_json::to_string(&out)?)
         }
         "review_contest" => {
-            let fields = ExtractFields::from_value(arguments, &["reference", "finding"]);
+            let fields = ExtractFields::from_value(arguments, &["reference", "finding", "note"]);
             let role_str = fields.opt_str_field("as");
             let role = review::parse_role(role_str.as_deref(), crate::review_ledger::Role::Raiser)
                 .context("invalid role")?;
@@ -731,7 +732,9 @@ fn call_tool(
                 Some(root.to_path_buf()),
                 &fields.str_field("reference"),
                 &fields.str_field("finding"),
-                fields.opt_str_field("note").as_deref(),
+                // A missing note reads as "", which `run_contest` refuses with
+                // `NoteRequired` — the same refusal as an explicit blank.
+                &fields.str_field("note"),
                 role,
             )?;
             Ok(serde_json::to_string(&out)?)
@@ -745,6 +748,7 @@ fn call_tool(
                 Some(root.to_path_buf()),
                 &fields.str_field("reference"),
                 &fields.str_field("finding"),
+                fields.opt_str_field("note").as_deref(),
                 role,
             )?;
             Ok(serde_json::to_string(&out)?)
@@ -1649,21 +1653,36 @@ fn map_review_error(id: Option<Id>, err: &anyhow::Error) -> JsonRpcResponse {
             ),
             review::ReviewError::StateMismatch {
                 finding,
+                act,
                 current,
-                required,
-            } => JsonRpcResponse::error(
+                admissible,
+            } => {
+                let admissible: Vec<&str> = admissible.iter().map(|s| s.as_str()).collect();
+                JsonRpcResponse::error(
+                    id,
+                    -32602,
+                    format!(
+                        "State mismatch on {finding}: current {}; {} needs {}",
+                        current.as_str(),
+                        act.as_str(),
+                        admissible.join(" or ")
+                    ),
+                    Some(json!({
+                        "code": "STATE_MISMATCH",
+                        "finding": finding,
+                        "verb": act.as_str(),
+                        "current": current.as_str(),
+                        "admissible": admissible
+                    })),
+                )
+            }
+            review::ReviewError::NoteRequired { act } => JsonRpcResponse::error(
                 id,
                 -32602,
-                format!(
-                    "State mismatch on {finding}: current {} != required {}",
-                    current.as_str(),
-                    required.as_str()
-                ),
+                format!("Note required: `{}` needs a non-empty note", act.as_str()),
                 Some(json!({
-                    "code": "STATE_MISMATCH",
-                    "finding": finding,
-                    "current": current.as_str(),
-                    "required": required.as_str()
+                    "code": "NOTE_REQUIRED",
+                    "act": act.as_str()
                 })),
             ),
             review::ReviewError::UnknownStatus { finding, raw } => JsonRpcResponse::error(
@@ -2158,7 +2177,7 @@ mod tests {
         let err = ReviewError::RoleMismatch {
             expected: crate::review_ledger::Role::Raiser,
             actual: crate::review_ledger::Role::Responder,
-            act: crate::review_ledger::Verb::Dispose.into(),
+            act: crate::review_ledger::Act::Dispose,
         };
         let e = anyhow::anyhow!(err);
         let resp = map_review_error(Some(Id::Number(1)), &e);
@@ -2215,8 +2234,9 @@ mod tests {
     fn state_mismatch_error_mapping() {
         let err = ReviewError::StateMismatch {
             finding: "F-3".to_owned(),
+            act: crate::review_ledger::Act::Withdraw,
             current: crate::review_ledger::FindingStatus::Verified,
-            required: crate::review_ledger::FindingStatus::Open,
+            admissible: crate::review_ledger::admissible_from(crate::review_ledger::Act::Withdraw),
         };
         let e = anyhow::anyhow!(err);
         let resp = map_review_error(Some(Id::Number(1)), &e);
@@ -2224,6 +2244,22 @@ mod tests {
         assert_eq!(err.code, -32602);
         let data = err.data.unwrap();
         assert_eq!(data["code"], "STATE_MISMATCH");
+    }
+
+    // SL-268 PHASE-04 (EX-5): a missing/blank act note maps to -32602 with
+    // `NOTE_REQUIRED` and the act, never falling through to Internal.
+    #[test]
+    fn note_required_error_mapping() {
+        let err = ReviewError::NoteRequired {
+            act: crate::review_ledger::Act::Contest,
+        };
+        let e = anyhow::anyhow!(err);
+        let resp = map_review_error(Some(Id::Number(1)), &e);
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, -32602);
+        let data = err.data.unwrap();
+        assert_eq!(data["code"], "NOTE_REQUIRED");
+        assert_eq!(data["act"], "contest");
     }
 
     #[test]

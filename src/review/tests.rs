@@ -111,45 +111,45 @@ fn derived_status_total_over_enum() {
 #[test]
 fn can_valid_single_owner_edges_pass() {
     use FindingStatus::{Answered, Contested, Open};
-    assert!(can(Verb::Raise, None, Role::Raiser));
-    assert!(can(Verb::Dispose, Some(Open), Role::Responder));
-    assert!(can(Verb::Dispose, Some(Contested), Role::Responder));
-    assert!(can(Verb::Verify, Some(Answered), Role::Raiser));
-    assert!(can(Verb::Contest, Some(Answered), Role::Raiser));
-    assert!(can(Verb::Withdraw, Some(Open), Role::Raiser));
-    assert!(can(Verb::Withdraw, Some(Answered), Role::Raiser));
+    assert!(can(Act::Raise, None, Role::Raiser));
+    assert!(can(Act::Dispose, Some(Open), Role::Responder));
+    assert!(can(Act::Dispose, Some(Contested), Role::Responder));
+    assert!(can(Act::Verify, Some(Answered), Role::Raiser));
+    assert!(can(Act::Contest, Some(Answered), Role::Raiser));
+    assert!(can(Act::Withdraw, Some(Open), Role::Raiser));
+    assert!(can(Act::Withdraw, Some(Answered), Role::Raiser));
 }
 
 #[test]
 fn can_wrong_role_refused() {
     use FindingStatus::{Answered, Open};
     // dispose is the responder's; the raiser may not.
-    assert!(!can(Verb::Dispose, Some(Open), Role::Raiser));
+    assert!(!can(Act::Dispose, Some(Open), Role::Raiser));
     // verify is the raiser's; the responder may not.
-    assert!(!can(Verb::Verify, Some(Answered), Role::Responder));
+    assert!(!can(Act::Verify, Some(Answered), Role::Responder));
     // raise is the raiser's.
-    assert!(!can(Verb::Raise, None, Role::Responder));
+    assert!(!can(Act::Raise, None, Role::Responder));
 }
 
 #[test]
 fn can_wrong_from_state_refused() {
     use FindingStatus::{Answered, Open, Verified, Withdrawn};
     // dispose only from open|contested.
-    assert!(!can(Verb::Dispose, Some(Answered), Role::Responder));
+    assert!(!can(Act::Dispose, Some(Answered), Role::Responder));
     // verify/contest only from answered.
-    assert!(!can(Verb::Verify, Some(Open), Role::Raiser));
-    assert!(!can(Verb::Contest, Some(Open), Role::Raiser));
+    assert!(!can(Act::Verify, Some(Open), Role::Raiser));
+    assert!(!can(Act::Contest, Some(Open), Role::Raiser));
     // withdraw only from open|answered, not contested/terminal.
     assert!(!can(
-        Verb::Withdraw,
+        Act::Withdraw,
         Some(FindingStatus::Contested),
         Role::Raiser
     ));
     // nothing fires on a terminal finding.
-    assert!(!can(Verb::Verify, Some(Verified), Role::Raiser));
-    assert!(!can(Verb::Dispose, Some(Withdrawn), Role::Responder));
+    assert!(!can(Act::Verify, Some(Verified), Role::Raiser));
+    assert!(!can(Act::Dispose, Some(Withdrawn), Role::Responder));
     // raise requires a fresh finding (None), never an existing one.
-    assert!(!can(Verb::Raise, Some(Open), Role::Raiser));
+    assert!(!can(Act::Raise, Some(Open), Role::Raiser));
 }
 
 // -- enum ↔ array drift canaries (VT-4) ---------------------------------
@@ -230,17 +230,17 @@ fn await_str_forms() {
 
 #[test]
 fn verb_str_and_required_role() {
-    assert_eq!(Verb::Raise.as_str(), "raise");
-    assert_eq!(Verb::Dispose.as_str(), "dispose");
-    assert_eq!(Verb::Verify.as_str(), "verify");
-    assert_eq!(Verb::Contest.as_str(), "contest");
-    assert_eq!(Verb::Withdraw.as_str(), "withdraw");
+    assert_eq!(Act::Raise.as_str(), "raise");
+    assert_eq!(Act::Dispose.as_str(), "dispose");
+    assert_eq!(Act::Verify.as_str(), "verify");
+    assert_eq!(Act::Contest.as_str(), "contest");
+    assert_eq!(Act::Withdraw.as_str(), "withdraw");
     // Static verb→role (design §6 responsibility split).
-    assert_eq!(Verb::Raise.required_role(), Role::Raiser);
-    assert_eq!(Verb::Verify.required_role(), Role::Raiser);
-    assert_eq!(Verb::Contest.required_role(), Role::Raiser);
-    assert_eq!(Verb::Withdraw.required_role(), Role::Raiser);
-    assert_eq!(Verb::Dispose.required_role(), Role::Responder);
+    assert_eq!(Act::Raise.required_role(), Role::Raiser);
+    assert_eq!(Act::Verify.required_role(), Role::Raiser);
+    assert_eq!(Act::Contest.required_role(), Role::Raiser);
+    assert_eq!(Act::Withdraw.required_role(), Role::Raiser);
+    assert_eq!(Act::Dispose.required_role(), Role::Responder);
 }
 
 // -- SL-268 PHASE-03: fail-safe closed-vocabulary reads (D15, DEC-319) ----
@@ -338,8 +338,8 @@ fn unknown_status_refuses_every_act() {
     let errs = [
         run_dispose(p(), &dispose_args("RV-001", "F-1"), Role::Responder).unwrap_err(),
         run_verify(p(), "RV-001", "F-1", None, Role::Raiser).unwrap_err(),
-        run_contest(p(), "RV-001", "F-1", None, Role::Raiser).unwrap_err(),
-        run_withdraw(p(), "RV-001", "F-1", Role::Raiser).unwrap_err(),
+        run_contest(p(), "RV-001", "F-1", "n", Role::Raiser).unwrap_err(),
+        run_withdraw(p(), "RV-001", "F-1", None, Role::Raiser).unwrap_err(),
     ];
     for err in errs {
         match err.downcast_ref::<ReviewError>() {
@@ -618,6 +618,9 @@ fn meta(facet: &str) -> ReviewMeta {
         raiser: "rev".to_owned(),
         responder: "auth".to_owned(),
         concluded: false,
+        rounds_base: None,
+        contests_base: None,
+        turn: vec![],
     }
 }
 
@@ -748,6 +751,7 @@ fn derived_status_reads_findings_not_a_stored_status() {
             detail: "d".to_owned(),
             disposition: None,
             response: None,
+            turn: vec![],
         }],
         tags: Vec::new(),
         estimate: None,
@@ -1089,6 +1093,7 @@ fn vt2_finding_ids_are_append_only() {
         detail: "d".to_owned(),
         disposition: None,
         response: None,
+        turn: vec![],
     }];
     assert_eq!(next_finding_id(&rows), "F-8");
     assert_eq!(next_finding_id(&[]), "F-1");
@@ -1317,15 +1322,24 @@ fn vt5c_pre_write_cas_aborts_a_mid_turn_edit() {
     let err = with_turn_hooked(
         root,
         1,
-        Verb::Dispose.into(),
+        Act::Dispose,
         Role::Responder,
         &hook,
         |doc, existing| {
             let from = finding_status_of(existing, "F-1")?;
-            gate(Verb::Dispose, from, Role::Responder, "F-1")?;
+            gate(Act::Dispose, from, Role::Responder, "F-1")?;
             let table = finding_table_mut(doc, "F-1")?;
-            apply_transition(table, FindingStatus::Answered, Some("fixed"), Some("done"));
-            Ok(())
+            apply_act(
+                table,
+                Act::Dispose,
+                Role::Responder,
+                FindingStatus::Answered,
+                TurnFields {
+                    note: None,
+                    disposition: Some("fixed"),
+                    response: Some("done"),
+                },
+            )
         },
     )
     .unwrap_err();
@@ -1376,14 +1390,8 @@ fn vt5d_same_finding_contest_racing_verify() {
     assert_eq!(read_doc(root, 1).finding[0].status, "verified");
     // The racing contest now finds the finding terminal → per-finding gate
     // refuses; the ledger is untouched (no double-apply).
-    let err = run_contest(
-        Some(root.to_path_buf()),
-        "RV-001",
-        "F-1",
-        None,
-        Role::Raiser,
-    )
-    .unwrap_err();
+    let err =
+        run_contest(Some(root.to_path_buf()), "RV-001", "F-1", "n", Role::Raiser).unwrap_err();
     assert!(
         err.to_string().contains("out of turn"),
         "contest gated: {err}"
@@ -1613,10 +1621,28 @@ fn parse_role_defaults_and_validates() {
     assert!(parse_role(Some("bogus"), Role::Raiser).is_err());
 }
 
-/// A `--note` on verify/contest is ephemeral handoff chatter → the baton log
-/// (D10), NOT a ledger field (durable rationale promotes to a finding).
-#[test]
-fn note_is_handoff_chatter_in_the_baton_not_the_ledger() {
+// ---- SL-268 PHASE-04: the turn journal (design sec-2, D1) ----
+
+/// `(act, role)` of every turn on one finding, in file order.
+fn turn_acts(doc: &ReviewDoc, finding: &str) -> Vec<(String, String)> {
+    doc.finding
+        .iter()
+        .find(|f| f.id == finding)
+        .unwrap()
+        .turn
+        .iter()
+        .map(|t| (t.act.clone(), t.role.clone()))
+        .collect()
+}
+
+/// Every turn in the ledger, finding and review level.
+fn turn_count(doc: &ReviewDoc) -> usize {
+    doc.finding.iter().map(|f| f.turn.len()).sum::<usize>() + doc.review.turn.len()
+}
+
+/// A raised-then-disposed F-1 on a fresh RV-001 — the common start for the note
+/// tests.
+fn fixture_answered_f1() -> tempfile::TempDir {
     let tmp = fixture_rv();
     let root = tmp.path();
     run_raise(
@@ -1631,30 +1657,266 @@ fn note_is_handoff_chatter_in_the_baton_not_the_ledger() {
         Role::Responder,
     )
     .unwrap();
+    tmp
+}
+
+/// EX-3 (the named flip of the former baton-note test, SL-268 PHASE-04 EX-6):
+/// a contest or verify `--note` is the turn's recorded reasoning, in the ledger;
+/// the baton carries no note at all.
+#[test]
+fn note_lands_in_turn() {
+    let tmp = fixture_answered_f1();
+    let root = tmp.path();
+    let p = || Some(root.to_path_buf());
     run_contest(
-        Some(root.to_path_buf()),
+        p(),
         "RV-001",
         "F-1",
-        Some("please address the edge case"),
+        "please address the edge case",
         Role::Raiser,
     )
     .unwrap();
-    let baton = read_baton(root, 1).unwrap().unwrap();
-    assert!(
-        baton
-            .handoff
-            .iter()
-            .any(|h| h.contains("please address the edge case")),
-        "note in baton handoff log: {:?}",
-        baton.handoff
+    run_dispose(p(), &dispose_args("RV-001", "F-1"), Role::Responder).unwrap();
+    run_verify(p(), "RV-001", "F-1", Some("ok now"), Role::Raiser).unwrap();
+
+    let doc = read_doc(root, 1);
+    let turns = &doc.finding[0].turn;
+    let contest = turns.iter().find(|t| t.act == "contest").unwrap();
+    assert_eq!(
+        contest.note.as_deref(),
+        Some("please address the edge case")
     );
-    assert_eq!(baton.contests, 1, "contest counter bumped");
-    // The note is NOT in the authored ledger.
+    let verify = turns.iter().find(|t| t.act == "verify").unwrap();
+    assert_eq!(verify.note.as_deref(), Some("ok now"));
+    let baton = fs::read_to_string(baton_path(root, 1)).unwrap();
+    assert!(
+        !baton.contains("please address") && !baton.contains("ok now"),
+        "the baton carries no note: {baton}"
+    );
+}
+
+/// EX-2 / VT-1: every act appends exactly one turn with its act and role, and
+/// the parent finding's status moves in the same write (one read after each
+/// call sees both). F-1's later turns, appended after F-2 exists, stay F-1's —
+/// the file-order placement a TOML parse binds them by (R1).
+#[test]
+fn every_act_appends_one_turn() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    let p = || Some(root.to_path_buf());
+    let mut total = 0;
+    let mut step = |finding: &str, act: &str, role: &str, status: &str| {
+        let doc = read_doc(root, 1);
+        total += 1;
+        assert_eq!(turn_count(&doc), total, "one turn per act ({act})");
+        let last = turn_acts(&doc, finding).pop().unwrap();
+        assert_eq!(last, (act.to_owned(), role.to_owned()));
+        let row = doc.finding.iter().find(|f| f.id == finding).unwrap();
+        assert_eq!(row.status, status, "status moved with the {act} turn");
+    };
+
+    run_raise(
+        p(),
+        &raise_args("RV-001", Severity::Major, "a"),
+        Role::Raiser,
+    )
+    .unwrap();
+    step("F-1", "raise", "raiser", "open");
+    run_raise(
+        p(),
+        &raise_args("RV-001", Severity::Minor, "b"),
+        Role::Raiser,
+    )
+    .unwrap();
+    step("F-2", "raise", "raiser", "open");
+    run_dispose(p(), &dispose_args("RV-001", "F-1"), Role::Responder).unwrap();
+    step("F-1", "dispose", "responder", "answered");
+    run_contest(p(), "RV-001", "F-1", "no", Role::Raiser).unwrap();
+    step("F-1", "contest", "raiser", "contested");
+    run_dispose(p(), &dispose_args("RV-001", "F-1"), Role::Responder).unwrap();
+    step("F-1", "dispose", "responder", "answered");
+    run_verify(p(), "RV-001", "F-1", None, Role::Raiser).unwrap();
+    step("F-1", "verify", "raiser", "verified");
+    run_withdraw(p(), "RV-001", "F-2", None, Role::Raiser).unwrap();
+    step("F-2", "withdraw", "raiser", "withdrawn");
+
+    run_conclude(p(), "RV-001", Role::Raiser).unwrap();
+    let doc = read_doc(root, 1);
+    assert_eq!(turn_count(&doc), total + 1, "conclude journals one turn");
+    let conclude = doc.review.turn.last().unwrap();
+    assert_eq!(
+        (
+            conclude.act.as_str(),
+            conclude.role.as_str(),
+            conclude.note.as_deref()
+        ),
+        ("conclude", "raiser", None)
+    );
+    assert!(doc.review.concluded, "the latch moved with the turn");
+    assert_eq!(
+        turn_acts(&doc, "F-1")
+            .into_iter()
+            .map(|(a, _)| a)
+            .collect::<Vec<_>>(),
+        ["raise", "dispose", "contest", "dispose", "verify"]
+    );
+}
+
+/// EX-2: a dispose turn snapshots the answer it gave, so a re-dispose updates
+/// the finding's current answer without erasing the earlier one.
+#[test]
+fn dispose_turn_snapshots_answer() {
+    let tmp = fixture_answered_f1();
+    let root = tmp.path();
+    let p = || Some(root.to_path_buf());
+    run_contest(p(), "RV-001", "F-1", "partial", Role::Raiser).unwrap();
+    let second = DisposeArgs {
+        disposition: "tolerated".to_owned(),
+        response: "second answer".to_owned(),
+        ..dispose_args("RV-001", "F-1")
+    };
+    run_dispose(p(), &second, Role::Responder).unwrap();
+
+    let doc = read_doc(root, 1);
+    let f1 = &doc.finding[0];
+    assert_eq!(
+        (f1.disposition.as_deref(), f1.response.as_deref()),
+        (Some("tolerated"), Some("second answer")),
+        "the finding carries the current answer"
+    );
+    let answers: Vec<_> = f1
+        .turn
+        .iter()
+        .filter(|t| t.act == "dispose")
+        .map(|t| {
+            (
+                t.disposition.as_deref(),
+                t.response.as_deref(),
+                t.note.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        answers,
+        [
+            (Some("fixed"), Some("done"), None),
+            (Some("tolerated"), Some("second answer"), None)
+        ]
+    );
+}
+
+/// EX-3 / VT-2: a contest needs a non-empty note. A blank one refuses before the
+/// lock, so neither the ledger nor the baton is touched.
+#[test]
+fn contest_requires_note() {
+    let tmp = fixture_answered_f1();
+    let root = tmp.path();
+    let ledger_before = fs::read_to_string(authored_path(root, 1)).unwrap();
+    let baton_before = fs::read_to_string(baton_path(root, 1)).unwrap();
+    for blank in ["", "  \n\t"] {
+        let err = run_contest(
+            Some(root.to_path_buf()),
+            "RV-001",
+            "F-1",
+            blank,
+            Role::Raiser,
+        )
+        .unwrap_err();
+        match err.downcast_ref::<ReviewError>() {
+            Some(ReviewError::NoteRequired { act }) => assert_eq!(*act, Act::Contest),
+            other => panic!("expected NoteRequired, got {other:?} ({err})"),
+        }
+        assert_eq!(err.to_string(), "`contest` requires a non-empty --note");
+    }
+    assert_eq!(
+        fs::read_to_string(authored_path(root, 1)).unwrap(),
+        ledger_before
+    );
+    assert_eq!(
+        fs::read_to_string(baton_path(root, 1)).unwrap(),
+        baton_before
+    );
+    assert!(!lock_path(root, 1).exists(), "no lock left behind");
+}
+
+/// EX-3: a withdraw `--note` lands in the withdraw turn; without one the turn
+/// carries no `note` key.
+#[test]
+fn withdraw_note_lands_in_turn() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    let p = || Some(root.to_path_buf());
+    run_raise(
+        p(),
+        &raise_args("RV-001", Severity::Major, "a"),
+        Role::Raiser,
+    )
+    .unwrap();
+    run_raise(
+        p(),
+        &raise_args("RV-001", Severity::Major, "b"),
+        Role::Raiser,
+    )
+    .unwrap();
+    run_withdraw(p(), "RV-001", "F-1", Some("duplicate of F-2"), Role::Raiser).unwrap();
+    run_withdraw(p(), "RV-001", "F-2", None, Role::Raiser).unwrap();
+
+    let doc = read_doc(root, 1);
+    let noted = doc.finding[0].turn.last().unwrap();
+    assert_eq!(
+        (noted.act.as_str(), noted.note.as_deref()),
+        ("withdraw", Some("duplicate of F-2"))
+    );
+    assert_eq!(doc.finding[1].turn.last().unwrap().note, None);
+}
+
+/// EX-4 / VT-3: the first journalled write seeds `rounds_base`/`contests_base`
+/// from the legacy baton, in the same write; the baton stops counting; status
+/// reports base plus turns.
+#[test]
+fn first_journalled_write_seeds_base() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    let p = || Some(root.to_path_buf());
     let text = fs::read_to_string(authored_path(root, 1)).unwrap();
-    assert!(
-        !text.contains("please address the edge case"),
-        "note not durable: {text}"
+    let legacy = Baton {
+        awaiting: "raiser".to_owned(),
+        authored_hash: crate::git::sha256(text.as_bytes()),
+        rounds: 4,
+        contests: 1,
+    };
+    write_baton(root, 1, &legacy).unwrap();
+
+    run_raise(
+        p(),
+        &raise_args("RV-001", Severity::Major, "a"),
+        Role::Raiser,
+    )
+    .unwrap();
+    let doc = read_doc(root, 1);
+    assert_eq!(
+        (doc.review.rounds_base, doc.review.contests_base),
+        (Some(4), Some(1))
     );
+    run_dispose(p(), &dispose_args("RV-001", "F-1"), Role::Responder).unwrap();
+    let doc = read_doc(root, 1);
+    assert_eq!(doc.review.rounds_base, Some(4), "seeded once, never moved");
+    let baton = read_baton(root, 1).unwrap().unwrap();
+    assert_eq!(
+        (baton.rounds, baton.contests),
+        (4, 1),
+        "the baton stops counting"
+    );
+
+    match run_status(p(), "RV-001").unwrap() {
+        ReviewOutput::Status {
+            rounds, formatted, ..
+        } => {
+            assert_eq!(rounds, 6, "base 4 plus 2 turns");
+            assert!(formatted.contains("rounds 6"), "{formatted}");
+        }
+        other => panic!("expected Status, got {other:?}"),
+    }
 }
 
 // ---- PHASE-04: reverse close-gate scan (design §7, D8/D-C9b) ----
@@ -1755,7 +2017,14 @@ fn vt1_withdrawn_blocker_is_terminal_and_not_reported() {
         Role::Raiser,
     )
     .unwrap();
-    run_withdraw(Some(root.to_path_buf()), "RV-001", "F-1", Role::Raiser).unwrap();
+    run_withdraw(
+        Some(root.to_path_buf()),
+        "RV-001",
+        "F-1",
+        None,
+        Role::Raiser,
+    )
+    .unwrap();
     assert_eq!(read_doc(root, 1).derived().0, ReviewStatus::Done);
     assert!(unresolved_blockers_for(root, "SL-001").unwrap().is_empty());
 }
@@ -1848,14 +2117,7 @@ fn open_and_contested_blockers_are_carried_by_finding_id() {
         Role::Responder,
     )
     .unwrap();
-    run_contest(
-        Some(root.to_path_buf()),
-        "RV-001",
-        "F-2",
-        None,
-        Role::Raiser,
-    )
-    .unwrap();
+    run_contest(Some(root.to_path_buf()), "RV-001", "F-2", "n", Role::Raiser).unwrap();
 
     assert_eq!(
         undisposed_blockers(&read_doc(root, 1)),
@@ -2101,14 +2363,7 @@ fn outstanding_counts_span_the_severities_and_drop_the_terminal() {
         )
         .unwrap();
     }
-    run_contest(
-        Some(root.to_path_buf()),
-        "RV-001",
-        "F-3",
-        None,
-        Role::Raiser,
-    )
-    .unwrap();
+    run_contest(Some(root.to_path_buf()), "RV-001", "F-3", "n", Role::Raiser).unwrap();
     run_verify(
         Some(root.to_path_buf()),
         "RV-001",
@@ -2117,7 +2372,14 @@ fn outstanding_counts_span_the_severities_and_drop_the_terminal() {
         Role::Raiser,
     )
     .unwrap();
-    run_withdraw(Some(root.to_path_buf()), "RV-001", "F-6", Role::Raiser).unwrap();
+    run_withdraw(
+        Some(root.to_path_buf()),
+        "RV-001",
+        "F-6",
+        None,
+        Role::Raiser,
+    )
+    .unwrap();
 
     assert_eq!(
         outstanding_by_severity(&read_doc(root, 1)),
@@ -2533,7 +2795,7 @@ fn review_error_downcasts_from_anyhow() {
     let err = ReviewError::RoleMismatch {
         expected: Role::Raiser,
         actual: Role::Responder,
-        act: Verb::Raise.into(),
+        act: Act::Raise,
     };
     let anyhow_err: anyhow::Error = err.into();
     let downcast = anyhow_err
@@ -2547,7 +2809,7 @@ fn review_error_downcasts_from_anyhow() {
         } => {
             assert_eq!(*expected, Role::Raiser);
             assert_eq!(*actual, Role::Responder);
-            assert_eq!(*act, TurnAct::Finding(Verb::Raise));
+            assert_eq!(*act, Act::Raise);
         }
         _ => panic!("wrong variant: {downcast:?}"),
     }
