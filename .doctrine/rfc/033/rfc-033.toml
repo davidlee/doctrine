@@ -30,3 +30,7 @@ target = "SL-144"
 label = "related"
 target = "SL-242"
 
+[[relation]]
+label = "related"
+target = "ISS-490"
+
