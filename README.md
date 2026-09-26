@@ -316,6 +316,8 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [RFC-029 — Proof binding and the plan surface](.doctrine/rfc/029/rfc-029.md) — `open`
 - [RFC-030 — Inquiry map as a general interview substrate](.doctrine/rfc/030/rfc-030.md) — `open`
 - [RFC-031 — Design run fitness](.doctrine/rfc/031/rfc-031.md) — `open`
+- [RFC-032 — Review ledger effectiveness](.doctrine/rfc/032/rfc-032.md) — `open`
+- [RFC-033 — Learning surface: corpus unification, format, and publication](.doctrine/rfc/033/rfc-033.md) — `open`
 
 ### Architecture Decision Records
 
@@ -341,3 +343,5 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [ADR-020 — Adopt execution capsules as the dispatch authority boundary](.doctrine/adr/020/adr-020.md) — `accepted`
 - [ADR-021 — Unsafe code deny with a two-site budget](.doctrine/adr/021/adr-021.md) — `proposed`
 - [ADR-022 — Evidence ownership between peer corpora](.doctrine/adr/022/adr-022.md) — `proposed`
+- [ADR-023 — Authority model for agent instruction](.doctrine/adr/023/adr-023.md) — `accepted`
+- [ADR-024 — Shipped-corpus grounding: any address a client can resolve, never a repo-private id or path](.doctrine/adr/024/adr-024.md) — `accepted`
