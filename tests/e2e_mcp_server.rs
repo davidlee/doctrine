@@ -2167,6 +2167,26 @@ fn review_dispose_route_round_trips() {
     );
     let _ = call(&mut stdin, &mut reader, "tools/call", Some(&params));
 
+    // RV-397 F-5: `review_show` projects a finding's `route`, absent (not null)
+    // while unset, so an unrouted ledger's output is unchanged on the wire.
+    let show_finding = |stdin: &mut std::process::ChildStdin,
+                        reader: &mut BufReader<std::process::ChildStdout>,
+                        view: &str| {
+        let params = tools_call_params(
+            "review_show",
+            serde_json::json!({ "reference": "1", "format": "json", "view": view }),
+        );
+        let resp = call(stdin, reader, "tools/call", Some(&params));
+        assert!(resp.get("error").is_none(), "review_show: {resp:?}");
+        let out: Value = serde_json::from_str(tool_result_text(&resp)).expect("Showed JSON");
+        out["Showed"]["findings"][0].clone()
+    };
+    let before = show_finding(&mut stdin, &mut reader, "full");
+    assert!(
+        before.get("route").is_none(),
+        "unset route is absent: {before}"
+    );
+
     // `route` lands on the finding and on the dispose turn.
     let params = tools_call_params(
         "review_dispose",
@@ -2182,6 +2202,11 @@ fn review_dispose_route_round_trips() {
         toml_content.contains("route = \"demonstrate\""),
         "route on the finding and turn:\n{toml_content}"
     );
+    // ...and reads back over MCP, in both views (RV-397 F-5).
+    for view in ["full", "summary"] {
+        let after = show_finding(&mut stdin, &mut reader, view);
+        assert_eq!(after["route"], "demonstrate", "{view}: {after}");
+    }
 
     // An unknown disposition is -32602 with a `parse_error` naming the set.
     let params = tools_call_params(

@@ -55,7 +55,7 @@ pub(crate) enum ReviewCommand {
         list: crate::CommonListArgs,
 
         /// Restrict to reviews whose `reviews` edge targets this ref — the
-        /// subject canonical ref, e.g. `SL-024` (RFC-032 D5). A bare ref
+        /// subject canonical ref, e.g. `SL-024`. A bare ref
         /// admits any phase: `SL-024` also matches a `SL-024@PHASE-03` edge.
         /// `SL-NNN@PHASE-NN` is accepted as a target+phase pair and narrows
         /// to that phase; the `@` here is a phase scope, not an `@path` file
@@ -328,7 +328,7 @@ pub(crate) enum ReviewCommand {
 
     /// Prime the review context cache.
     /// Populates the warm-cache from the target slice's selectors — the path-set
-    /// the staleness signal hashes (SL-147 PHASE-05).
+    /// the staleness signal hashes.
     Prime {
         /// Review reference — `RV-007` or the bare id `7`.
         reference: String,
@@ -390,6 +390,11 @@ impl ReviewCommand {
     /// Optional prose (`new --title`, `verify --note`, `withdraw --note`) is
     /// resolved but never refused.
     ///
+    /// `--title` (on `new` and `raise`) resolves through
+    /// `input::resolve_prose_title`: a title read from `-`/`@path` drops its
+    /// trailing line terminators (a title is one line). Every other prose
+    /// field is kept verbatim.
+    ///
     /// `fs_read` must be callable more than once here (`Raise` and `Amend` each
     /// have two prose fields) — it is `impl Fn`, and a reference to it is
     /// handed down to `input::resolve_prose`'s `impl FnOnce`.
@@ -398,7 +403,10 @@ impl ReviewCommand {
         stdin: &mut impl Read,
         fs_read: impl Fn(&Path) -> std::io::Result<String>,
     ) -> anyhow::Result<Self> {
-        use crate::input::{refuse_second_dash, require_nonempty, resolve_prose as resolve};
+        use crate::input::{
+            TITLE_FLAG, refuse_second_dash, require_nonempty, resolve_prose as resolve,
+            resolve_prose_title,
+        };
 
         Ok(match self {
             ReviewCommand::New {
@@ -411,7 +419,7 @@ impl ReviewCommand {
                 path,
             } => {
                 let title = title
-                    .map(|t| resolve(&t, "--title", stdin, &fs_read))
+                    .map(|t| resolve_prose_title(&t, stdin, &fs_read))
                     .transpose()?;
                 ReviewCommand::New {
                     facet,
@@ -432,12 +440,12 @@ impl ReviewCommand {
                 path,
             } => {
                 refuse_second_dash(&[
-                    ("--title", Some(title.as_str())),
+                    (TITLE_FLAG, Some(title.as_str())),
                     ("--detail", Some(detail.as_str())),
                 ])?;
-                let title = resolve(&title, "--title", stdin, &fs_read)?;
+                let title = resolve_prose_title(&title, stdin, &fs_read)?;
                 let detail = resolve(&detail, "--detail", stdin, &fs_read)?;
-                require_nonempty("--title", &title)?;
+                require_nonempty(TITLE_FLAG, &title)?;
                 require_nonempty("--detail", &detail)?;
                 ReviewCommand::Raise {
                     reference,

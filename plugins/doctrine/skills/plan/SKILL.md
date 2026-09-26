@@ -44,7 +44,8 @@ Inputs:
     Before authoring phases, open the slice's design-review RV and read every
     finding whose `route` is `demonstrate`, `probe` or `control`. The table view
     of `review show` does not render the route: read it from
-    `doctrine review show RV-NNN --json` (`.review.finding[].route`). An older
+    `doctrine review show RV-NNN --json` (`.review.finding[].route`) or from the
+    MCP `review_show` output (`findings[].route`). An older
     ledger carries it instead as a `route:` prefix on the disposition string
     (`route:probe fix-now`, say). Each is an obligation deliberately not
     repaired in prose. Its response carries a criterion sketch and a placement

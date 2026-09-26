@@ -91,8 +91,9 @@ instead: `"disposition": {"conducted": {"review": "RV-NNN"}}`.
   is the point of binding it.
 - Human section review is the v1 default. Configurable reviewer postures are
   deferred; do not invent one.
-- Carry every finding to a disposition. An undispositioned finding blocks the
-  lock and does not expire on its own.
+- An undisposed blocker (open or contested) on the run's pass RV blocks a
+  `conducted` lock, and it does not expire on its own. Carry every other
+  finding to a disposition as well; the machine will not force that.
 - A review that found nothing is a result worth stating plainly, not a gap to
   fill with invented findings.
 - The current design must stand alone. A history ledger may explain how it

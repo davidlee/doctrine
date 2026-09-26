@@ -68,7 +68,9 @@ EOF
 ```
 
 At most one flag per invocation may read `-`. A literal value that starts with
-`@`, or is exactly `-`, must itself go through stdin or a file. The `@` in a
+`@`, or is exactly `-`, must itself go through stdin or a file. A `--title` read
+through `-` or `@path` drops its trailing newline, since a title is one line;
+every other prose flag is stored exactly as read. The `@` in a
 `--target SL-NNN@PHASE-NN` is a phase scope, not a file read.
 
 ## §1 — Pick the subject
@@ -241,7 +243,8 @@ did; the route records what instrument can settle the finding. The CLI refuses a
 finding's current route.
 
 The table view of `review show` renders the disposition, not the route: read it
-from `doctrine review show RV-NNN --json` (`.review.finding[].route`). An older
+from `doctrine review show RV-NNN --json` (`.review.finding[].route`), or from
+the MCP `review_show` output (`Showed.findings[].route`, absent while unset). An older
 ledger carries the route as a `route:` prefix inside its disposition string,
 which still reads verbatim.
 
@@ -308,7 +311,11 @@ The **close-gate**: an unresolved `blocker` on an active RV refuses the
 target's closure transitions — resolve it (`verify` or `withdraw`) before the
 subject can advance. `major` / `minor` / `nit` never gate.
 
-**Parent-tree caveat.** The `doctrine review` verbs refuse a root inside a
-worktree **fork** — any linked worktree that is not a dispatch coordination
-worktree. Drive reviews from the primary tree or a coordination worktree (or
-land the fork first), never from inside an isolated worker fork.
+**Parent-tree caveat.** The turn verbs (`raise`, `dispose`, `amend`, `verify`,
+`contest`, `reopen`, `withdraw`, `conclude`) and `status`, `prime` and `unlock`
+refuse a root inside a worktree **fork**: any linked worktree that is not a
+dispatch coordination worktree. `review new`, `show` and `list` do **not**
+refuse. A `review new` run in a fork succeeds and leaves a stray ledger there,
+which the next turn verb then refuses, so a successful `new` is no proof you are
+outside a fork. Open and drive reviews from the primary tree or a coordination
+worktree (or land the fork first), never from inside an isolated worker fork.

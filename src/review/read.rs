@@ -28,6 +28,10 @@ pub(crate) struct Finding {
     pub(crate) title: String,
     pub(crate) detail: String,
     pub(crate) disposition: Option<String>,
+    /// Where the answer routes, set by `dispose`/`amend`. Absent on the wire
+    /// while unset, so an unrouted finding serialises as it always did.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) route: Option<String>,
     pub(crate) response: Option<String>,
 }
 
@@ -262,6 +266,7 @@ fn finding_of_row(row: &FindingRow) -> Finding {
         title: row.title.clone(),
         detail: row.detail.clone(),
         disposition: row.disposition.clone(),
+        route: row.route.clone(),
         response: row.response.clone(),
     }
 }

@@ -105,6 +105,13 @@ those verbs: adjudicate before disposing, evidence before contesting, no
 disposition chosen to dodge a gate. Don't duplicate the ledger's records in
 prose, and don't bypass its gates. Compatible, not prescriptive.
 
+On a doctrine RV, the receiver of findings is the **responder**, and the
+conduct above maps onto the responder's acts. A finding you judge *wrong* is
+disposed `aligned`, with the verified counter-evidence in `--response`, not
+contested. `contest` is the raiser's verb, used when your answer does not
+satisfy them. A later change to your answer goes through `review amend`
+(`review-ledger.md` §4).
+
 For design review specifically, the RV is the revision-history surface. Keep
 finding chronology and point-by-point responses there, keep `design.md` as the
 current legible design, and promote accepted durable rulings to the knowledge or

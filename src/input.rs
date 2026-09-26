@@ -85,6 +85,30 @@ pub(crate) fn resolve_prose(
     }
 }
 
+/// Resolve a prose `--title` raw value through [`resolve_prose`], then drop the
+/// trailing line terminators a `-` or `@path` read carries. A title is one
+/// line, and a heredoc or title file nearly always ends in a newline, which
+/// would otherwise be stored and split every one-row-per-title render. A
+/// literal value is kept verbatim, as typed; only the read forms are trimmed,
+/// and only at the tail. Detail, response, note and basis prose never come
+/// through here: they stay verbatim.
+pub(crate) fn resolve_prose_title(
+    raw: &str,
+    stdin: &mut impl Read,
+    fs_read: impl FnOnce(&Path) -> io::Result<String>,
+) -> Result<String> {
+    let resolved = resolve_prose(raw, TITLE_FLAG, stdin, fs_read)?;
+    if raw == "-" || raw.starts_with('@') {
+        Ok(resolved.trim_end_matches(['\n', '\r']).to_owned())
+    } else {
+        Ok(resolved)
+    }
+}
+
+/// `--title`'s flag name, shared by [`resolve_prose_title`] and its callers' error
+/// wording (STD-001).
+pub(crate) const TITLE_FLAG: &str = "--title";
+
 /// Refuse more than one prose flag reading `stdin` (`-`) in the same
 /// invocation (SL-268 PHASE-07 D-T1-2) — a second reader would race the first
 /// for the same pipe, and stdin cannot be split. Pure (a string comparison, no
@@ -467,6 +491,42 @@ mod tests {
         let resolved = resolve_prose("-", "--title", &mut stdin, never_read_file).unwrap();
         assert_eq!(resolved, "unread");
         assert!(stdin.was_read.get(), "the one-dash control case must read");
+    }
+
+    #[test]
+    fn title_from_dash_or_at_path_drops_trailing_line_terminators() {
+        // RV-397 F-12: a heredoc or title file nearly always ends in a
+        // newline; a title is one line, so the resolved form is trimmed.
+        for input in ["T\n", "T\r\n", "T\n\n"] {
+            let mut stdin = std::io::Cursor::new(input.as_bytes());
+            let title = resolve_prose_title("-", &mut stdin, never_read_file).unwrap();
+            assert_eq!(title, "T", "stdin {input:?}");
+        }
+        let mut stdin = RecordingStdin::new(b"");
+        let title = resolve_prose_title("@title.txt", &mut stdin, |p: &Path| {
+            assert_eq!(p, Path::new("title.txt"));
+            Ok("File title\n".to_owned())
+        })
+        .unwrap();
+        assert_eq!(title, "File title");
+        // Only the tail is trimmed: leading/interior text is kept as read.
+        let mut stdin = std::io::Cursor::new(b"  a\nb \n".as_slice());
+        assert_eq!(
+            resolve_prose_title("-", &mut stdin, never_read_file).unwrap(),
+            "  a\nb "
+        );
+    }
+
+    #[test]
+    fn literal_title_stays_verbatim() {
+        // Control: a literal value is what the caller typed, trailing
+        // newline and all — only the read forms are trimmed.
+        let mut stdin = RecordingStdin::new(b"unread");
+        assert_eq!(
+            resolve_prose_title("T\n", &mut stdin, never_read_file).unwrap(),
+            "T\n"
+        );
+        assert!(!stdin.was_read.get());
     }
 
     #[test]

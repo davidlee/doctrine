@@ -75,7 +75,7 @@ fn tools() -> Vec<McpTool> {
     vec![
         McpTool {
             name: "review_new".to_owned(),
-            description: "Open a new adversarial review ledger targeting an entity via the `reviews` edge. Start of the adversarial review protocol — next: `review_prime` (derive the context cache from the target slice's selectors), then `review_raise` to add findings. Review verbs refuse worktree/fork-resolved roots — drive from the main tree.\n\nReturns: {\"Created\": { id: int, canonical: \"RV-NNN\", dir: string }}".to_owned(),
+            description: "Open a new adversarial review ledger targeting an entity via the `reviews` edge. Start of the adversarial review protocol — next: `review_prime` (derive the context cache from the target slice's selectors), then `review_raise` to add findings. This verb does NOT refuse a worktree fork (the turn verbs, `review_status`, `review_prime` and `review_unlock` do), so a ledger opened in a fork is stranded there — open it from the primary or coordination tree.\n\nReturns: {\"Created\": { id: int, canonical: \"RV-NNN\", dir: string }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -140,20 +140,20 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_show".to_owned(),
-            description: "Show one review: derived status, the reviews edge, and the brief.\n\nReturns: {\"Showed\": { id: int, canonical: \"RV-NNN\", title: string, status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", facet: string, target: string, finding_count: int, findings: [{ id: \"F-N\", status: \"open\"|\"answered\"|\"contested\"|\"verified\"|\"withdrawn\", severity: \"blocker\"|\"major\"|\"minor\"|\"nit\", title: string, detail: string, disposition?: string|null, response?: string|null }], body: string }} — `view=summary` blanks `body` → `\"\"`, each finding's `detail` → `\"\"` and `response` → `null`.".to_owned(),
+            description: "Show one review: derived status, the reviews edge, and the brief.\n\nReturns: {\"Showed\": { id: int, canonical: \"RV-NNN\", title: string, status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", facet: string, target: string, finding_count: int, findings: [{ id: \"F-N\", status: \"open\"|\"answered\"|\"contested\"|\"verified\"|\"withdrawn\", severity: \"blocker\"|\"major\"|\"minor\"|\"nit\", title: string, detail: string, disposition?: string|null, route?: string, response?: string|null }], body: string, warnings?: [{ rv: \"RV-NNN\", finding: \"F-N\", field: \"status\"|\"severity\", raw: string, effect: string }] }} — `route` (where the finding's answer routes: review|demonstrate|probe|control|owner-fix) is absent when unset; `warnings` is absent unless the ledger holds an out-of-vocabulary status or severity. `view=summary` blanks `body` → `\"\"`, each finding's `detail` → `\"\"` and `response` → `null`.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
                     "format": { "type": "string", "enum": ["table", "json"], "description": "Output format (default: json)" },
-                    "view": { "type": "string", "enum": ["full", "summary"], "description": "summary blanks `body` → \"\", each finding's `detail` → \"\" and `response` → null; preserves `id`, `status`, `severity`, `title`, `disposition` (default: full)" }
+                    "view": { "type": "string", "enum": ["full", "summary"], "description": "summary blanks `body` → \"\", each finding's `detail` → \"\" and `response` → null; preserves `id`, `status`, `severity`, `title`, `disposition`, `route` (default: full)" }
                 },
                 "required": ["reference"]
             }),
         },
         McpTool {
             name: "review_raise".to_owned(),
-            description: "Raise a finding on a review (the raiser's verb) — appends an open finding with fixed severity/title/detail. `severity`/`title`/`detail` are raiser-owned and fixed at raise — the ledger is append-only. On a concluded ledger it clears the pass's concluded marker in the same write; conclude again afterwards. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Raised\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            description: "Raise a finding on a review (the raiser's verb) — appends an open finding with fixed severity/title/detail. `severity`/`title`/`detail` are raiser-owned and fixed at raise — the ledger is append-only. On a concluded ledger it clears the pass's concluded marker in the same write; conclude again afterwards. `as` is a cooperative role assertion, not a security boundary.\n\nReturns: {\"Raised\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -168,7 +168,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_dispose".to_owned(),
-            description: "Dispose a finding (the responder's verb) — answer an open/contested finding, setting disposition + response. `disposition` is a closed vocabulary (SL-268 D8); `route` is optional and closed — omitted keeps the finding's current route. A `route:` prefix on `disposition` (the retired prose form) is refused, naming `route`. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Disposed\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            description: "Dispose a finding (the responder's verb) — answer an open/contested finding, setting disposition + response. `disposition` is a closed vocabulary; `route` is optional and closed — omitted keeps the finding's current route. A `route:` prefix on `disposition` (the retired prose form) is refused, naming `route`. `as` is a cooperative role assertion, not a security boundary.\n\nReturns: {\"Disposed\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -184,7 +184,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_amend".to_owned(),
-            description: "Amend an already-answered finding (the responder's verb) — update the response and, optionally, the disposition/route (answered → answered). `note` is required and non-empty: it is recorded on the amend turn, as why the finding is being amended. A missing or blank note is refused with NOTE_REQUIRED. Omitted `disposition`/`route` keep the finding's current value. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Amended\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            description: "Amend an already-answered finding (the responder's verb) — update the response and, optionally, the disposition/route (answered → answered). `note` is required and non-empty: it is recorded on the amend turn, as why the finding is being amended. A missing or blank note is refused with NOTE_REQUIRED. Omitted `disposition`/`route` keep the finding's current value. `as` is a cooperative role assertion, not a security boundary.\n\nReturns: {\"Amended\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -201,7 +201,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_verify".to_owned(),
-            description: "Verify an answered finding (the raiser's verb) — accept it (terminal). The optional `note` is recorded on the finding's verify turn in the ledger, as this turn's reasoning. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Verified\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            description: "Verify an answered finding (the raiser's verb) — accept it (terminal). The optional `note` is recorded on the finding's verify turn in the ledger, as this turn's reasoning. `as` is a cooperative role assertion, not a security boundary.\n\nReturns: {\"Verified\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -215,7 +215,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_contest".to_owned(),
-            description: "Contest an answered finding (the raiser's verb) — hand it back to the responder. `note` is required and non-empty: it is recorded on the finding's contest turn in the ledger, as what the contest argues. A missing or blank note is refused with NOTE_REQUIRED. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Contested\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            description: "Contest an answered finding (the raiser's verb) — hand it back to the responder. `note` is required and non-empty: it is recorded on the finding's contest turn in the ledger, as what the contest argues. A missing or blank note is refused with NOTE_REQUIRED. `as` is a cooperative role assertion, not a security boundary.\n\nReturns: {\"Contested\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -229,7 +229,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_reopen".to_owned(),
-            description: "Reopen a verified finding (the raiser's verb) — hand it back to the responder (verified → contested). `note` is required and non-empty: it is recorded on the finding's reopen turn in the ledger, as why it is being reopened. A missing or blank note is refused with NOTE_REQUIRED. Clears the pass's concluded marker in the same write; conclude again afterwards. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Reopened\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            description: "Reopen a verified finding (the raiser's verb) — hand it back to the responder (verified → contested). `note` is required and non-empty: it is recorded on the finding's reopen turn in the ledger, as why it is being reopened. A missing or blank note is refused with NOTE_REQUIRED. Clears the pass's concluded marker in the same write; conclude again afterwards. `as` is a cooperative role assertion, not a security boundary.\n\nReturns: {\"Reopened\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -243,7 +243,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_withdraw".to_owned(),
-            description: "Withdraw a finding (the raiser's verb) — retract an open/answered finding (terminal). The optional `note` is recorded on the finding's withdraw turn in the ledger, as this turn's reasoning. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Withdrawn\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            description: "Withdraw a finding (the raiser's verb) — retract an open/answered finding (terminal). The optional `note` is recorded on the finding's withdraw turn in the ledger, as this turn's reasoning. `as` is a cooperative role assertion, not a security boundary.\n\nReturns: {\"Withdrawn\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -257,7 +257,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_conclude".to_owned(),
-            description: "Declare the pass finished (the raiser's verb) — sets the concluded marker a design run's `Conducted` disposition is admissible over. `basis` is required and non-empty: it is recorded as the conclude turn's note in the ledger, as what this pass examined. A missing or blank basis is refused with NOTE_REQUIRED. The marker is not latched: a later raise or reopen clears it, and the pass must be concluded again. Open findings are fine (disposing them is the responder's work afterwards).\n\nReturns: {\"Concluded\": { review_id: int, already: bool }} — `already` is true when the marker was already set before this call (false after a raise or reopen cleared it).".to_owned(),
+            description: "Declare the pass finished (the raiser's verb) — sets the concluded marker a design run's `Conducted` disposition is admissible over. `basis` is required and non-empty: it is recorded as the conclude turn's note in the ledger, as what this pass examined. A missing or blank basis is refused with NOTE_REQUIRED. The marker is not latched: a later raise or reopen clears it, and the pass must be concluded again. Open findings are fine (disposing them is the responder's work afterwards). `as` is a cooperative role assertion, not a security boundary.\n\nReturns: {\"Concluded\": { review_id: int, already: bool }} — `already` is true when the marker was already set before this call (false after a raise or reopen cleared it).".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -1608,7 +1608,7 @@ fn reject_stdin_sentinel(body: Option<&str>) -> anyhow::Result<()> {
 
 /// Trim a `Showed` output to its summary projection (IMP-113 #2): blank the brief
 /// `body` and each finding's `detail`/`response` prose, keeping the finding
-/// skeleton (id / status / severity / title / disposition). Non-`Showed` outputs
+/// skeleton (id / status / severity / title / disposition / route). Non-`Showed` outputs
 /// pass through. Applied MCP-side; the `run_show` engine is untouched.
 fn project_show_summary(out: ReviewOutput) -> ReviewOutput {
     match out {
@@ -2237,6 +2237,7 @@ mod tests {
             title: "t".to_owned(),
             detail: "long detail prose".to_owned(),
             disposition: Some("tolerated".to_owned()),
+            route: None,
             response: Some("long response prose".to_owned()),
         }
     }

@@ -474,6 +474,7 @@ fn render_finding_escapes_hostile_free_text() {
         title: "a\"b\\c\nd]e".to_owned(),
         detail: "plain".to_owned(),
         disposition: None,
+        route: None,
         response: None,
     };
     let rendered = render_finding(&finding);
@@ -496,6 +497,7 @@ fn render_finding_emits_responder_fields_when_present() {
         title: "t".to_owned(),
         detail: "d".to_owned(),
         disposition: Some("fixed".to_owned()),
+        route: None,
         response: Some("done in r\"123".to_owned()),
     };
     let rendered = render_finding(&finding);

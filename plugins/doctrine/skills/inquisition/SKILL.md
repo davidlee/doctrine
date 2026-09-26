@@ -129,9 +129,10 @@ The Inquisition is **done** when every charge is terminal — verified or withdr
 `doctrine review conclude RV-NNN --basis …`, stating what the trial examined. A
 charge raised or reopened afterwards clears the conclusion; conclude again. An
 unresolved `blocker` will be refused at the target's close seam
-(`review-ledger.md` §6). **Drive the ledger from the primary tree** — the
-`doctrine review` verbs refuse a root inside a worktree fork (land the fork
-first, or try the heresy from the primary tree).
+(`review-ledger.md` §6). **Open and drive the ledger from the primary tree** (or a coordination
+worktree). The turn verbs refuse a root inside a worktree fork, but
+`doctrine review new` does not: run in a fork, it strands the ledger there. Land
+the fork first, or try the heresy from the primary tree.
 
 ## The mandate of voice
 

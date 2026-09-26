@@ -3027,6 +3027,73 @@ fn raise_title_dash_stdin_at_literal_stays_literal() {
     );
 }
 
+/// G-P6 (RV-397 F-12): a title read through `-` or `@path` loses its trailing
+/// newline, so it is stored as one line and `list` renders one row. The
+/// detail read through `@path` in the same call keeps its newline: only the
+/// title is trimmed.
+#[test]
+fn title_read_through_dash_or_at_path_is_stored_single_line() {
+    if skip_under_worker_marker("title_read_through_dash_or_at_path_is_stored_single_line") {
+        return;
+    }
+    let dir = tmp();
+    seed_slice(dir.path(), 1, &[]);
+
+    let out = run_stdin(
+        dir.path(),
+        &[
+            "new", "--facet", "design", "--target", "SL-001", "--title", "-",
+        ],
+        "Heredoc title\n",
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert!(
+        ledger(dir.path(), 1).contains("title = \"Heredoc title\"\n"),
+        "ledger: {}",
+        ledger(dir.path(), 1)
+    );
+    let list = run(dir.path(), &["list", "--target", "SL-001"]);
+    assert!(list.status.success(), "stderr: {}", stderr(&list));
+    assert_eq!(
+        stdout(&list)
+            .lines()
+            .filter(|l| l.contains("Heredoc title"))
+            .count(),
+        1
+    );
+    assert!(
+        !stdout(&list)
+            .lines()
+            .any(|l| l.trim_matches(['│', ' ']).is_empty()),
+        "no blank continuation row:\n{}",
+        stdout(&list)
+    );
+
+    fs::write(dir.path().join("title.txt"), "File title\r\n").unwrap();
+    fs::write(dir.path().join("detail.md"), "Detail kept\n").unwrap();
+    let out = run(
+        dir.path(),
+        &[
+            "raise",
+            "1",
+            "--severity",
+            "minor",
+            "--title",
+            "@title.txt",
+            "--detail",
+            "@detail.md",
+        ],
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    let text = ledger(dir.path(), 1);
+    assert!(text.contains("title = \"File title\"\n"), "ledger: {text}");
+    assert!(!text.contains("title = \"Detail kept"), "ledger: {text}");
+    assert!(
+        text.contains("detail = \"\"\"\nDetail kept\n\"\"\""),
+        "detail stays verbatim: {text}"
+    );
+}
+
 /// G-P5: `raise --detail ""` — a LITERAL empty value is refused too, not only
 /// one resolved from `-`/`@path` (D-T1-3, Q1: settled yes). Names `--detail`,
 /// ledger unchanged.

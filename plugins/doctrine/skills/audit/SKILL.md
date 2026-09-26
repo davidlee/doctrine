@@ -15,9 +15,10 @@ disposition vocab, synthesis, the close-gate, the parent-tree caveat) live in
 What follows is the audit *lens*: the facet, the modes, the scope, the evidence 
 the reconciliation loop demands, and the audit-specific harvest and closure tail.
 
-Findings are append-only to the ledger and field-owned, "no undispositioned 
-findings before close" is enforced by the binary
-(the close-gate teeth), and the audit prose becomes the review's `## Synthesis`.
+Findings are append-only to the ledger and field-owned. An unresolved **blocker**
+refuses the audit→reconcile and reconcile→done crossings (the close-gate teeth);
+carrying every other finding to a terminal state is this skill's discipline, not
+the binary's. The audit prose becomes the review's `## Synthesis`.
 
 > **Dispatched slice — review the candidate surface, not the raw evidence.** When
 > the slice was driven by `/dispatch`, `review/*` and `phase/*` are immutable
@@ -67,15 +68,18 @@ withdraws and concludes; the responder disposes and amends. Roles belong to
 acts, not agents; `--as` is cooperative role assertion, not a security boundary
 (`review-ledger.md`, "Acts and roles").
 
-**Disposition convention (audit-specific).** Audit's permitted dispositions are:
-`aligned` (observation correct, no change needed), `fix-now` (code fix within
-audit scope — never a spec or governance edit), `tolerated` (explicit accepted
-drift with rationale), and `verified` with a reconciliation-brief link for
-spec/governance changes delegated to `/reconcile`. Audit must **never** use
-`design-wrong` or `follow-up` for spec/governance items — those belong to the
-reconcile write surface. Every finding stays `verified` (the observation is
-confirmed); the *remediation* is reconcile's job and is recorded separately — do
-not mutate a finding to `fixed`/`remediated`.
+**Disposition convention (audit-specific).** `--disposition` takes only the
+closed vocab (`review-ledger.md` §4). Audit uses `aligned` (observation correct,
+no change needed), `fix-now` (code fix within audit scope — never a spec or
+governance edit), `tolerated` (explicit accepted drift with rationale), and
+`design-wrong` for a spec/governance change delegated to `/reconcile`, with the
+reconciliation-brief link in `--response`. Audit must **never** use `follow-up`
+for spec/governance items — those belong to the reconcile write surface, not the
+backlog. Keep disposition and status apart: `verified` is a finding **status**,
+reached when the raiser runs `review verify`, never a `--disposition` value (the
+CLI refuses it). Every finding ends `verified` (the observation is confirmed; a
+delegated one once its brief entry exists); the *remediation* is reconcile's job
+and is recorded separately — do not mutate a finding to `fixed`/`remediated`.
 
 ## Process
 
@@ -85,10 +89,12 @@ not mutate a finding to `fixed`/`remediated`.
    slice to). Verbs and flags: `review-ledger.md` §1–§2. Loose notes are
    insufficient for closure-grade work — findings belong in the ledger.
 
-   The old `domain_map`/`prime` seeding is **gone**: the
-   hand-authored area map was a dead authoring tax. The mechanical drift signal now
-   comes from `slice conformance` (step 2), computed from recorded source-deltas —
-   no curation.
+   Then prime it (`review-ledger.md` §2): `review prime` derives the path-set
+   from the slice's selectors, and the ledger's staleness signal hashes it. What
+   is **gone** is the old hand-curated `domain_map` (a dead authoring tax), not
+   the `prime` verb. The mechanical drift signal from `slice conformance` (step
+   2), computed from recorded source-deltas, complements prime rather than
+   replacing it.
 2. **Gather evidence** (the audit's divergent work):
    - prepare subject: do NOT change the main repository branch; use a worktree
      instead, if necessary.
@@ -115,8 +121,8 @@ not mutate a finding to `fixed`/`remediated`.
    - note where behaviour and design diverge — each divergence is a finding.
 3. **Raise + dispose every finding** on the ledger per `review-ledger.md` §3–§4.
    Hold the audit line on the **anti-escape pressure**: do not pick **follow-up**
-   for spec/governance findings — those go to the reconciliation brief with
-   `verified`; for code findings, do not pick **follow-up** merely because the fix
+   for spec/governance findings — dispose them `design-wrong` with the
+   reconciliation-brief link, and the raiser verifies once the brief entry exists; for code findings, do not pick **follow-up** merely because the fix
    is large; do not normalise **tolerated** without a real rationale; and do not
    downgrade a true **blocker** to dodge the close-gate. If the right route is
    ambiguous after reading `design.md` and governance, stop and `/consult`.
