@@ -623,7 +623,7 @@ sibling's `src/**` and `tests/e2e_design_tree.rs` changes were left untouched.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · PHASE-06 · c1acd6da7
+fresh-as-of: 2026-09-26 · AUDIT (RV-395) · 861930ab1
 
 ### Produced
 - design locked — SL-267 under run dr-01a0d8ff-b311 (rev 35); `design.md` 9 sections (commits 9750594e4, c17d9229a, 53add8888).
@@ -638,6 +638,7 @@ fresh-as-of: 2026-09-26 · PHASE-06 · c1acd6da7
 - PHASE-04 done — the accuracy axis (`CHR-080`): 19 claim groups paired with their deciding invocations (9 verified, 10 divergent); **seven** shipped masters + `install/glossary.md` + `spec-product/SKILL.md` corrected against the live CLI. Commits `7e5ec0fd8`, `25c4f0c35`. Both mechanical legs clean with controls. Gates: `check gate` exit 0 (124 suites), `doctor` 51, `publication validate` 98, `e2e_claude_install` 13/13.
 - PHASE-05 done — the sufficiency axis (`IMP-484`): **17 ledger rows** (8 admitted, 1 already-documented, 5 developer-only exclusions, 2 structural judgements, 1 left to `ISS-215`). The 8 admitted gaps landed as sections in four **existing published** docs — `install/using-doctrine.md` ×4 (corpus-health, worklist, facets, config) plus a `supersede` extension of its relating-entities section; `install/model-band.md`; `install/claude-activation.md`; `install/dispatch-mechanics.md`. No new doc, no signpost (`EX-5`/`VA-2`). Commit `682902651`; ledger § PHASE-05 sufficiency ledger. Gates: `check gate` exit 0 (124 suites), `doctor` 51, `publication validate` 98 (unchanged), `e2e_claude_install` 13/13, `verify-vt` **PHASE-05 `VT-1 ✓`** (was `FAIL`).
 - PHASE-06 done — the client-read acceptance test + the `RV-391` `F-7` control. Scratch repo `/tmp/sl267-client-read` (in-tree binary `4f4fbe13…`), 213 delivered artifacts. **F-7 control PASS: all 7 channels flagged their planted id.** The read was **not vacuous** and found **26 further repo-private citation sites in 24 shipped files** across four classes (doc-local `D-N`/`F-N`/`PHASE-NN`; unshipped `mem.*` keys; repo-private paths outside the `src/*.rs|install/*.md` regex; a served-prompt `this repo` referent) — repaired in-phase per `/consult` (2026-09-26). Two PHASE-02/03 ledger claims falsified (see ledger). Gates: `check gate` exit 0 (124 suites), `doctor` 51, `publication validate` 98, `e2e_claude_install` 13/13, `verify-vt` PHASE-06 `VT-2 ✓` / `VT-1` UNATTRIBUTABLE (tests/ untouched).
+- audited — `RV-395` (reconciliation, 13 findings, all terminal). Three repaired in-session (`fix-now`): F-1 (7 dangling memory-key citations in 5 shipped masters), F-6 (`install/glossary.md` kind table + retired `audit.md` row), F-13 (4 masters PHASE-06 edited without re-materialising — the delivered corpus was stale while every gate stayed green, R5). RV-391's control-routed F-7 verified. Commits `3dbe856c5`, `861930ab1`. Synthesis + reconciliation brief in `.doctrine/review/395/review-395.md`.
 
 ### Learned
 - mem.pattern.shipped-corpus.delivery-copy-cannot-cite-its-owner — a shipped delivery copy cannot cite its governance owner; the link runs governance → published address, one way.
@@ -656,7 +657,10 @@ fresh-as-of: 2026-09-26 · PHASE-06 · c1acd6da7
 - **A ledger row is a claim, and the tree is its evidence.** Two prior-phase rows were falsified by the read: PHASE-02 claimed `doctrine.toml.example:56` was inlined (it was not — the commit never touched the line), and PHASE-03's `EX-2` claimed `grep 'install/hymns'` returned zero (the path survived at `memory/mem_88193c…/memory.md:39`). Both trace to the same regex gap. A per-file verification must re-run the *claimed* grep, not restate the intent.
 - **The acceptance test must run where the private id does NOT resolve.** `doctrine library show` inside the doctrine repo resolves `ADR-007` to doctrine's own record; in `/tmp/sl267-client-read` it resolves to nothing. That is the whole of `F-7`, and it is what made the 26 sites visible.
 
+- **Audit residual (RV-395 F-6)** — `install/glossary.md`'s `folder` column has an undocumented convention and a `phases` value inconsistent with the rest; a faithful rebuild needs the engine's layout authority. Left after the audit added the RV/REC/RFC/CM rows.
+
 ### Open
+- **Audit residual (RV-395 F-13)** — **no gate compares the materialised `.doctrine/memory/shipped/` against its sources.** A skipped `memory sync` is invisible to `doctor`, `check gate`, `publication validate` and `e2e_claude_install` alike; only a re-run of `cargo build && doctrine memory sync` exposes it. Durable input to `ISS-309` part 2 (the drift-gate slice), alongside the citation gate — a *second, distinct* gap the audit found in the wild.
 - QUE-227 — drift-gate seam and the duplicate POL-002 rule (ISS-309 part 2); the only durable defence against re-drift.
 - CHR-081 — consolidate the two local memories restating the grounding rule (out of scope; local-memory health is a non-goal corpus).
 - ISS-215 — boot-index defect; CHR-036 — distilling project-local memories (both out of scope).
@@ -949,3 +953,49 @@ The `.toml` `paths`/`globs` scope fields remain untouched (PHASE-03 `D3`, deferr
   is not in this phase's delta (recorded for audit; the gate run above is the evidence).
 - No golden edited incidentally (`git diff` touches no `tests/**`, no manifest entry count).
 - Final tree: 24 files / 26 citation sites repaired; zero `SL267-CONTROL` residue.
+
+## Audit (RV-395) — reconciliation
+
+Ledger `.doctrine/review/395/` — 13 findings, all terminal; synthesis and
+reconciliation brief in `review-395.md`. Self-audit: raiser and responder are the
+same seat (`--as`).
+
+**Independent re-derivation at audit** (not transcribed from the phase sheets):
+`doctrine check gate` exit 0, 124 suites, zero failures · `doctor` 51 ·
+`publication validate` 98 · `e2e_claude_install` 13/13 · `slice conformance` 0
+undelivered, 83 conformant · zero dangling `[[mem.*]]` keys (positive controls on
+the key set) · no non-illustration repo-private id or path outside the
+do-not-sweep classes · both new published addresses resolving.
+
+| id | sev | finding | disposition |
+|---|---|---|---|
+| F-1 | major | 7 citations in 5 shipped masters named three memory keys that never reach a client (`mem.signpost.doctrine.{concept-map,rec,rfc}`); PHASE-06's class-B leg used the *source* key set, so the read was blind here | fix-now (`3dbe856c5`) |
+| F-2 | major | PHASE-05 edited `src/boot.rs` + `src/mcp_server/tools.rs`, forbidden by design sec-1/sec-7 | verified → brief (design text) |
+| F-3 | minor | boundary chain discontinuous + 3 sheet-vs-row disagreements; 39 undeclared, nearly all SL-266's | tolerated (obs `cfb2e4097`) |
+| F-4 | minor | PHASE-06 repaired 26 sites though the plan made it verification-only | tolerated (user-authorised) |
+| F-5 | minor | RV-391's control-routed F-7 left `answered`, not terminal | fix-now (verified) |
+| F-6 | minor | `install/glossary.md` omitted RV/REC/RFC/CM; folder column inconsistent; stale `audit.md` row | fix-now (`3dbe856c5`) |
+| F-7 | minor | two PHASE-02/03 `notes.md` rows assert resolutions the read falsified | verified → brief (annotate) |
+| F-8 | minor | plan PHASE-03 terrain numbers (11/14/74) vs live (13/16/~104) | tolerated |
+| F-9 | minor | `review-ledger.md`'s conforming published address sits in the e2e `store_allowlist` | tolerated |
+| F-10 | minor | 5 shipped `memory.toml` scope entries name private matchers; the design names no disposition class | verified → brief (design sec-5) |
+| F-11 | nit | `manifest.toml:9` + `doctrine.toml.example:120` private tokens inside comments | tolerated |
+| F-12 | minor | ISS-309 / CHR-080 / IMP-484 each understated their own bound | verified → brief |
+| F-13 | major | PHASE-06's final commit edited 4 shipped masters without re-materialising; the delivered corpus was stale while every gate stayed green (R5) | fix-now (`3dbe856c5`) |
+
+**Repairs landed in-session** — commit `3dbe856c5` (5 masters inlined/dropped,
+`install/glossary.md` completed, `cargo build` + `doctrine memory sync`
+`0 new, 9 changed`), commit `861930ab1` (the F-13 friction observation). Gate
+re-run after the repair: `check gate` exit 0 (124 suites), `doctor` 51,
+`publication validate` 98, `e2e_claude_install` 13/13; whole-set source-vs-shipped
+diff clean.
+
+**F-13 is the audit's sharpest finding.** The slice's own R5 predicted it and no
+gate caught it: `doctor`, `check gate`, `publication validate` and
+`e2e_claude_install` were all green over a delivered corpus that still carried
+four repo-private path citations. The repair removed them; the *invisibility*
+stays with `ISS-309` part 2 (the drift-gate slice) as a second, distinct gap — a
+rebuild-freshness check comparing the materialised corpus against its sources.
+
+**Verdict.** The design's closure intent is met on the source corpus and, after
+the audit repair, on the delivered corpus. Hand off to `/reconcile`.

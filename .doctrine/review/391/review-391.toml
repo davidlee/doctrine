@@ -69,7 +69,7 @@ response = "Both extra copies swept. IMP-484's observation paragraph is replaced
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Client-read test is run inside the doctrine repo, where repo-private ids silently resolve — the exact failure it must detect"
 detail = "Expected: sec-8 / slice closure intent read the corpus 'as an agent with no doctrine corpus'. Observed: the verification reads via doctrine library show and the materialised/installed copies, but names no environment; run from this repo, ADR-007 resolves to doctrine's own ADR-007, so a leftover citation reads as correct — the silent-resolution defect sec-1 describes. Penance: perform the read test in a scratch client (git init + doctrine install in a temp dir, memory sync), where any surviving repo-private id visibly resolves to nothing or the wrong thing; record that environment in the evidence artefact."

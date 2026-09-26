@@ -1,0 +1,253 @@
+id    = 395
+slug  = "sl-267-reconciliation-shipped-corpus-conformance-vs-designplan"
+title = "SL-267 reconciliation: shipped-corpus conformance vs design/plan"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-267"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Acceptance test's memory-key universe is the source corpus, not the delivered set — 7 citations to three non-materialising keys survive"
+detail = '''
+Expected (design sec-5 form 3 + sec-8): a claim grounded on a shipped memory key resolves for the client, because the key is present in the shipped corpus, and "every citation either resolves to a published address or stands without an id".
+
+Observed: `memory/mem.signpost.doctrine.{concept-map,rec,rfc}` are REAL directories (not uid-dir + `mem.<key>` symlink), so `corpus.rs::gather_assets` drops all three (ISS-215's cause). The materialised `.doctrine/memory/shipped/` declares 31 keys, none of the three; `doctrine memory show mem.signpost.doctrine.rec` -> UNREACHABLE (control: `mem.signpost.doctrine.dispatch` -> reachable). Seven citations in five shipped masters still name them, and the delivered copies carry them:
+- memory/mem_019e9a11b3797af3a8833c67acfa69bf/memory.md:55,62,64 (the shipped overview signpost's routing table: rfc/rec/concept-map)
+- memory/mem_019e9a1244d37f72a9b7246d2c976ef7/memory.md:31 (concept-map)
+- memory/mem_019ec92b300d7530998d79682ad0c134/memory.md:35 (rfc)
+- memory/mem_019ec92b30127db0aac7eb7badb1cbf2/memory.md:41 (rec)
+- memory/mem_019e9a11e8337613bdf8e96f75a9e6b2/memory.md:23 (rec)
+
+PHASE-06's class-B leg ("unshipped `mem.*` keys") compared `mem.\S+` against the SOURCE key set, which includes the three — so the read was blind for exactly the sub-class where a key does not reach the client. This is a partial recurrence of RV-391 F-7: the check did not run where resolution fails.
+
+Root cause is the engine defect ISS-215 (an explicit slice non-goal), but the CITATION is in `memory/**` — the slice's own surface — and the slice handled the identical case (`dispatch-claude-arm-wrong-base`) by dropping the pointer.
+
+Evidence commands: `doctrine memory show mem.signpost.doctrine.rec`; `ls -ld memory/mem.signpost.doctrine.{rec,rfc,concept-map}`; `grep -rl 'memory_key *= *"mem.signpost.doctrine.rec"' .doctrine/memory/shipped/` -> empty; `grep -rn 'mem\.signpost\.doctrine\.(concept-map|rec|rfc)([^a-z0-9-]|$)' install/ memory/ plugins/`.'''
+disposition = "fix-now"
+response = "Repaired at audit (commit 3dbe856c5): the 7 citations in five shipped masters inlined or dropped; `cargo build` + `doctrine memory sync` re-materialised (`0 new, 9 changed`); the shipped tree now matches its sources for every master and no shipped file cites the three keys (whole-set source-vs-shipped diff clean; `[[mem.*]]` ref/key `comm -23` empty with positive controls). Residual: the three masters remain unreachable (key-named real dirs dropped by `gather_assets`) — the engine cause stays with ISS-215, whose follow-through is to restore them and re-add the routing rows."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "src/** boundary departure: PHASE-05 edited src/boot.rs and src/mcp_server/tools.rs, which design sec-1/sec-7 forbid"
+detail = """
+Expected: design sec-1 "Boundary. The change is to shipped prose and skills; it makes no semantic change to `src/**`" and sec-7 "No `src/**` change".
+
+Observed: commit 682902651 (PHASE-05) changes `src/boot.rs` (two boot-test substrings: `prompt resolve --band model` -> `prompt resolve --role <role> --band model`) and `src/mcp_server/tools.rs` (`PROMPT_RESOLVE_MODEL_CMD` + one added prose line). `doctrine slice conformance 267` lists both as undeclared; `slice-267.toml`'s design-target selectors do not cover `src/**`.
+
+The change IS textual only (no behaviour change: a taught command string, two test literals, one prose line) and WAS user-authorised 2026-09-26 (recorded in notes.md § PHASE-05 and the commit message). But `design.md` sec-1/sec-7 still assert an absolute "no src/** change", so the frozen design now misstates the slice. The user-authorised departure was to the change, not to the design text.
+
+Evidence: `git show 682902651 -- src/boot.rs src/mcp_server/tools.rs`; `doctrine slice conformance 267`."""
+disposition = "verified"
+response = 'Confirmed. The departure is textual only (a taught command string, two boot-test literals, one MCP prose line) and was user-authorised 2026-09-26, so the change itself is accepted. What remains is a design-text correction: design.md sec-1/sec-7 still assert an absolute "no `src/**` change" → reconciliation brief (per-slice direct edit). Not a blocker: no behaviour changed and the departure has a named authority.'
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Conformance registry is not a usable signal: boundary chain is discontinuous and three runtime sheets disagree with their committed rows"
+detail = """
+Expected (design sec-8, plan's closure): `slice conformance` is the mechanical drift signal — undeclared paths are leads to disposition.
+
+Observed: the committed boundary registry is neither contiguous nor consistent with the runtime sheets.
+- Chain gaps/overlaps: PHASE-02 end `1f2a9000` -> PHASE-03 start `6507edd0` (a sibling SL-266 commit), PHASE-05 end `682902651` -> PHASE-06 start `720ddee6a` (sibling). Each range therefore splices foreign commits.
+- Sheet vs row: PHASE-03 (`6507edd0` vs sheet `bd4c4600`), PHASE-05 (`fd3c5345` vs `edd986b1`), PHASE-06 (`720ddee6` vs `c1acd6da`) disagree on `code_start_oid`.
+- Consequence: `doctrine slice conformance 267` reports 39 undeclared, of which the majority are SL-266-owned (`src/design_run/**`, `src/dtoml.rs`, `src/commands/**`, `src/knowledge.rs`, `tests/e2e_design_*`, `tests/design_fixture/**`). The undeclared cell cannot be read as scope creep.
+
+Known and documented: handover caveat 1 (the `--status completed` re-bind footgun), and observation `cfb2e4097`. No fix is offered here (the footgun is the binary's); recorded so the conformance signal is not mistaken for a clean bill.
+
+Evidence: `doctrine slice conformance 267`; `git log -1` on each boundary oid; `.doctrine/state/slice/267/{boundaries.toml,phases/*.toml}`."""
+disposition = "tolerated"
+response = "Accepted as drift with a real cause: the boundary registry's gaps/overlaps and the three sheet-vs-row disagreements are the shared-worktree reality plus the `--status completed` re-bind footgun, already recorded as observation cfb2e4097 and handover caveat 1. No fix is offered here (the footgun is the binary's). Recorded so the 39 undeclared paths are not read as scope creep: only `src/boot.rs` + `src/mcp_server/tools.rs` are SL-267's (F-2), the rest are SL-266's."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "PHASE-06 was verification-only by plan but repaired 26 citation sites; the plan's phase text now understates the phase"
+detail = """
+Expected (`plan.toml` PHASE-06 objective): "Prove conformance by the acceptance test the design names — a client agent's read in a scratch repo... rather than by a diff". Its exit criteria are reads, controls and gates; it authors nothing.
+
+Observed: PHASE-06 also repaired 26 repo-private citation sites across 24 shipped files in four classes the earlier locators missed (notes.md § PHASE-06). This was a `/consult` decision, user-authorised 2026-09-26. The plan's PHASE-06 objective/EX text therefore understates what the phase delivered.
+
+No plan.toml edit is permissible (criterion ids are immutable-append and plan.toml is off the reconcile surface), so this is recorded, not reconciled. It is the same class of authorised departure as the `src/**` one, and it is the reason the delivered corpus is cleaner than PHASE-02/03 left it.
+
+Evidence: plan.toml PHASE-06; notes.md § PHASE-06."""
+disposition = "tolerated"
+response = "Accepted: the in-phase repair was user-authorised via /consult, and it is why the delivered corpus is cleaner than PHASE-02/03 left it. `plan.toml` is off the reconcile surface (phase/criteria ids are immutable-append), so the plan's phase text stays as authored; recorded in the audit synthesis instead."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "RV-391's control-routed F-7 is still `answered`, not terminal — the design-review ledger is left open"
+detail = """
+Expected (plan EN-1): "RV-391 concluded (11 verified, F-7 deferred to this plan)". Per review-ledger §4, an instrument-routed finding's terminal close is deferred and "is verified after `slice phases`, against the criterion its obligation became".
+
+Observed: `review show RV-391` reports status `active`, `awaiting: raiser`, with F-7 `answered` (disposition `route:control`) and the design run reporting `review_pass RV-391 STALE`, 1 major outstanding. PHASE-06's VA-1 ran the control (one planted repo-private id per channel in a scratch repo; all seven flagged) and PASSed, so F-7's obligation is discharged in fact but the finding was never verified.
+
+A design-review ledger left open at close is a bookkeeping gap on the slice's own governance trail. Terminal close of F-7 (the raiser's verb) is the remedy.
+
+Evidence: `doctrine review show RV-391`; `doctrine design show 267 --format status`; notes.md § PHASE-06 (the F-7 control table)."""
+disposition = "fix-now"
+response = "Repaired at audit: RV-391's control-routed F-7 verified as raiser against PHASE-06 VA-1's control (one planted repo-private id per channel in a scratch repo; all seven flagged), closing the design-review ledger that plan EN-1 had already described as concluded."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Shipped `install/glossary.md` remains incomplete and stale despite Axis B's whole-corpus mandate"
+detail = """
+Expected (scope objective 2, design sec-6 Axis B): "Verify every shipped claim about CLI behaviour against the CLI and correct the mismatches. ... the pass must cover the whole corpus, not only the known-bad items."
+
+Observed — `install/glossary.md`, a primary client-facing id/kind reference:
+- Its kind↔abbreviation table omits four kinds the CLI mints: `src/kinds/mod.rs::ALL_KINDS` = SL ADR POL STD PRD SPEC REQ ISS IMP CHR RSK IDE RV REC ASM DEC QUE CON EVD HYP CPT CM REV RFC; the table has no RV, REC, RFC or CM row (`doctrine show RV-001` / `REC-001` / `RFC-001` / `CM-001` all resolve).
+- Its `folder` column is internally inconsistent and its semantics undocumented: POL/STD/ADR are blank although `.doctrine/{policy,standard,adr}/` exist; REV is `y`.
+- Its `## directory layout` still lists `audit.md` as the slice's authored verification artefact, though the audit stage now writes a review ledger (RV) — `audit.md` is retired (audit skill; ADR-007).
+
+PHASE-04 corrected only the knowledge-records table (C8/C9); its own ledger records the residual and notes `EX-4` did not reach it. Recorded, not swept.
+
+Evidence: `install/glossary.md` lines 5-30, 60-120; `src/kinds/mod.rs::ALL_KINDS`; the four `doctrine show` probes."""
+disposition = "fix-now"
+response = "Repaired at audit (commit 3dbe856c5): the kind table gains `concept map`/CM-001, a `review & change` group (rfc/RFC-001, review ledger/RV-001, reconciliation record/REC-001), and consistent `y` folder values for POL/STD/ADR; the retired `audit.md` layout row is replaced by the review-ledger location. The rendered copy re-read via `doctrine library show reference/glossary.md`. Residual not fixed: the `folder` column's convention is undocumented and its `phases` value is inconsistent with the rest — a faithful rebuild needs the engine's layout authority, recorded for a follow-up."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Two PHASE-02/03 ledger rows in notes.md assert resolutions later falsified by the read"
+detail = '''
+Expected (DEC-314, design sec-4): "the replacement resolving is the evidence; the id's absence is not", and a ledger row is a claim whose evidence is re-derivable.
+
+Observed: two PHASE-02/03 ledger rows in notes.md assert resolutions that never happened, and the PHASE-06 read falsified both:
+- PHASE-02 § Rows: "doctrine.toml.example:56 | one-clause rationale | inline | 'the y/N prompt' (was D8)". `git show 599dfb5c8 -- install/doctrine.toml.example` proves that commit never touched line 56.
+- PHASE-03 § Verification EX-2: "grep -n 'spec-023\|SPEC-023\|install/hymns' memory/mem_88193c…/memory.md -> zero". `install/hymns/` survived at that file's :39.
+
+Both sites were repaired only in PHASE-06, and PHASE-06's section records the falsification. The stale rows still assert the false resolution in the earlier sections a reader reaches first.
+
+Evidence: notes.md § PHASE-02 § Rows; § PHASE-03 § Verification; § PHASE-06 § The repair.'''
+disposition = "verified"
+response = "Confirmed. Both sites were repaired in PHASE-06 and the falsification is recorded in that section, so the substance is dispositioned; what remains is per-slice text hygiene → reconciliation brief: annotate the two PHASE-02/03 ledger rows in notes.md so the earlier sections do not assert a resolution the read falsified."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "Plan's PHASE-03 terrain numbers (11 masters / 14 files / 74 sites) are understated against the live corpus (13 / 16 / ~104)"
+detail = """
+Expected (design sec-8 evidence artefact): the per-axis ledger is the closure artefact, and its inventory of candidate sites is the bound the sweep worked to.
+
+Observed: the plan's PHASE-03 terrain text is known-inaccurate. `plan.toml` PHASE-03 objective says "11 of the 35 shipped memory masters, and 14 skill files carrying 74 sites". The live PHASE-03 pass found 13 masters, 16 skill files and ~104 sites (notes.md § PHASE-03 § Additions). PHASE-02's own count was likewise understated (its locator gap added five live sites). The numbers came from ISS-309, which is evidence (tier 5), not instruction.
+
+No scope breach — the slice's selectors cover the whole sub-corpus and EX-1 says "per candidate" — but the plan's terrain description is the audit's conformance yardstick and it is wrong in the direction that would make a complete sweep look oversized.
+
+Evidence: plan.toml PHASE-03; notes.md § PHASE-03 § Additions; § PHASE-02 § Additions."""
+disposition = "tolerated"
+response = "Accepted as recorded (notes.md PHASE-03 § A2): the plan's terrain numbers were transcribed from ISS-309, which is tier-5 evidence, and the live corpus is larger. No scope breach — the slice's selectors cover the whole sub-corpus and EX-1 is per-candidate. Durable input to ISS-309 part 2."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "`install/review-ledger.md`'s conforming published-address pointer sits inside the e2e `store_allowlist` (PHASE-02 D3)"
+detail = """
+Expected (design sec-5 form 6): an in-corpus relative path is admissible only where the target is installed next to the citing file; a published `install/` document has no file on disk in a client.
+
+Observed: `install/review-ledger.md` (published as `reference/review-ledger.md`) points at `design-prompts/reviewing.md`, which is a conforming *published address* (form 2, resolvable via `doctrine library show`) but the same literal is inside `tests/e2e_claude_install.rs::design_prompts_have_no_consumer_outside_the_design_run`'s `store_allowlist`. Rewriting the pointer to a different form to satisfy a test would be conforming the prose to the test; the deliberately-chosen remedy was to leave it (PHASE-02 D3), and the allowlist is byte-unchanged and the test green.
+
+Conforming it fully would need an out-of-selector `tests/**` edit. Recorded as an accepted tension; `e2e_claude_install` is 13/13.
+
+Evidence: `grep -rn 'design-prompts' install/` -> review-ledger.md:181 only; `cargo test --test e2e_claude_install` 13/13."""
+disposition = "tolerated"
+response = "Accepted: the pointer is a conforming published address (form 2); rewriting it to satisfy a test would conform the prose to the test, and a full fix needs an out-of-selector `tests/**` edit. `e2e_claude_install` 13/13 with the allowlist byte-unchanged. A real but consciously accepted tension."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "Five shipped `memory.toml` scope entries name doctrine-private matchers; the design names no disposition class for a scope field"
+detail = '''
+Expected (design sec-5): the grounding rule reaches "a repo-private entity id or repo-private source/spec path"; disposition classes cover citation shapes.
+
+Observed: five shipped `memory.toml` `paths`/`globs` scope entries name doctrine-private matchers, which in a client repo match nothing:
+- `memory/mem_019e9a12560d7972b29124e09f4de704` (`memory/`, `doc/memory-spec.md`)
+- `memory/mem_019e9a1244d37f72a9b7246d2c976ef7` (`src/`, `doc/entity-model.md`, `doc/relation-index.md`)
+- `memory/mem_88193c2859d72f043ef83a97a5952a96` (`install/hymns/`)
+
+Left `leave` by design (PHASE-03 D3): a scope field is a retrieval matcher (data), not a citation (prose), and editing one changes retrieval behaviour outside axis A. The design's disposition table names no class for a scope-field matcher, so the judgement lives only in notes.md.
+
+Evidence: `grep -rn 'paths\|globs'` in the five `memory.toml` files; notes.md § PHASE-03 § Open flag (PHASE-03 D3).'''
+disposition = "verified"
+response = "Confirmed: the leave judgement is defensible (a scope field is retrieval data, not prose) but it lives only in notes.md, and the design's disposition table names no class for it → reconciliation brief: design.md sec-5 should name the scope-field matcher class so the judgement has a durable home."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "nit"
+title = "Two repo-private path tokens survive inside a commented example and the engine-internal manifest (PHASE-06 J-1/J-2)"
+detail = """
+Expected (design sec-5, the do-not-sweep classes): commented payload examples are illustrations; an engine-internal manifest is not a client channel.
+
+Observed, recorded as a tension rather than a violation (PHASE-06 J-1):
+- `install/manifest.toml:9` names `install/<key>` — the manifest is engine-internal (not delivered as a document), and the token is a placeholder.
+- `install/doctrine.toml.example:120` names `install/agents/**` and `flake.nix` inside a fully-commented `worker-forbidden-writes` example — the commented-payload class.
+
+Both survive the PHASE-06 read and are named as visible survivors in notes.md § PHASE-06 § Mechanical sweep.
+
+Evidence: notes.md § PHASE-06 § Mechanical sweep; § Open (PHASE-06 J-1)."""
+disposition = "tolerated"
+response = "Accepted: `install/manifest.toml` is engine-internal (not a delivered document) and its token is a placeholder; `install/doctrine.toml.example`'s tokens sit inside a fully-commented `worker-forbidden-writes` example — the do-not-sweep payload class. Recorded, not swept."
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "minor"
+title = "The three evidence items behind the slice each understated their bound; corrections are recorded but not fed back to the items"
+detail = """
+Expected (design sec-6 axes): ISS-309 is the citation ledger, CHR-080 the accuracy ledger, IMP-484 the sufficiency ledger — evidence, not instruction.
+
+Observed: all three were falsified or re-scoped by the live work, and the corrections are landed in notes.md and (for IMP-484) in the item itself:
+- ISS-309's id regex omits CON/EVD/HYP/CPT, FR/NF labels, and the whole doc-local-id dimension; its `plugins/` count is stale by growth (14 -> 16 files, 74 -> ~104 sites) and its "none illustrations" claim is wrong (five sites).
+- CHR-080 named two accuracy instances; the live pass found ten divergent claim groups (G2, G5-G13), including a knowledge status vocabulary wrong in four rows.
+- IMP-484's observation gap was false (corrected in the design and the item); its memory-count basis was wrong (11 vs 13); its structural-gap causes were refined by PHASE-05.
+
+This is durable input to QUE-227 / ISS-309 part 2 (the deferred drift gate), and it is the strongest evidence for the slice's own thesis that a written rule does not hold without a gate.
+
+Evidence: notes.md § PHASE-02/03/04/05 § Additions / Corrections; § Harvest § Learned."""
+disposition = "verified"
+response = "Confirmed and accepted as recorded: ISS-309, CHR-080 and IMP-484 are tier-5 evidence, and all three understated their bound; IMP-484's false observation claim is already corrected in the item. The corrections are recorded in notes.md and are durable input to QUE-227 / ISS-309 part 2. → reconciliation brief: repoint the slice's citation of these items to their corrected forms."
+
+[[finding]]
+id = "F-13"
+status = "verified"
+severity = "major"
+title = "PHASE-06's final commit edited four shipped masters without re-materialising — the delivered corpus was stale and every gate stayed green (R5)"
+detail = """
+Expected (design sec-2 R5, plan PHASE-03 EX-5 / PHASE-06 EX-6): "Re-embed/sync steps skipped, change invisible" is the named risk, and the proof demanded is that "the materialised copy differs from the pre-phase copy in exactly the edited places". A `Finished` build line proves nothing.
+
+Observed: PHASE-06's final commit (`795317bdb`) edited four shipped masters — `mem_019e9a11cda27db…`, `mem_019ec92b100378508…`, `mem_019ec92b100678428…`, `mem_88193c2859d72f…` — in the class-B/C repair, and never re-ran `memory sync`. At HEAD the materialised `.doctrine/memory/shipped/` copies were the PRE-repair text, still carrying the repo-private tokens the repair had removed:
+- `install/` — the shipped source assets…  (mem_019e9a11cda27db…)
+- (ADR-019 — the eager projection base…  (mem_019ec92b100378508…)
+- `memory/` (shipped corpus, via `--global`).  (mem_019ec92b100678428…)
+- Two roots layer: `install/hymns/` (compile-embedded…  (mem_88193c2859d72f…)
+
+So the client-facing delivery still contained four repo-private path citations, while `doctor` (51), `check gate` (exit 0), `publication validate` (98) and `e2e_claude_install` (13/13) were all green — precisely the invisibility R5 predicts. It also means PHASE-06's "read the delivered artifact" claim was not true of these four files at HEAD.
+
+Discovered by the audit's own re-materialisation (a `cargo build` + `doctrine memory sync` immediately reported `0 new, 9 changed`: my 5 repaired masters plus these 4 unexplained ones). Now repaired — the shipped tree matches the sources for every master (verified by a whole-set source-vs-shipped diff).
+
+Evidence: `cargo build && doctrine memory sync --dry-run` → `9 changed`; `diff -rq /tmp/sl267-shipped-pre .doctrine/memory/shipped`; `git log -1 -- memory/<uid>/memory.md` → 795317bdb for all four."""
+disposition = "fix-now"
+response = "Repaired at audit: the four stale masters re-materialised (part of the `0 new, 9 changed` sync in commit 3dbe856c5), and the whole shipped set now matches its sources. Residual: no gate compares the materialised corpus against its sources, which is exactly the invisibility design R5 predicts — recorded as durable input to ISS-309 part 2 (the drift-gate slice), not fixed here (a new gate is engine work outside this slice)."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
