@@ -28,6 +28,27 @@ Design run `dr-01a0dc9c`. Evidence: `research/research.md` (tier 5) and RFC-032
 - **Assumptions.** Scope's two, plus research T4: new authored fields ride
   `serde(default)`, absent-default, no migration.
 
+## Design review passes (2026-09-26)
+
+- **RV-396** (codex-cli `gpt-6-sol`, high): 9 findings. 7 were verified on the
+  first repair. F-3 and F-4 were contested twice and verified on the third
+  round. The user ruled F-3 (catalog disclosure moves to ISS-492) and F-4
+  (`raise`/`reopen` clear `concluded`). The review is concluded, with every
+  finding terminal.
+- **A further pass is not needed before lock.** The last two rounds changed
+  only prose claims about existing code, and the raiser re-checked those
+  against `doctor_checks.rs` and `admission.rs`. If a pass is wanted, it would
+  probe:
+  - (a) whether `review_ledger` really needs nothing from a command module,
+    especially `read_review`'s `REVIEW_DIR` and `relation_edges`'
+    `RelationLabel`;
+  - (b) whether clearing `concluded` on raise interacts with any caller other
+    than the design run's admission.
+  Both are cheaper to settle in the split and D2 phases, against real code,
+  than in prose.
+- The pass is shown `STALE` because it is tied to the rev-23 section contents.
+  That indicator is not a gate (`design_run/gate.rs:1140`).
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
