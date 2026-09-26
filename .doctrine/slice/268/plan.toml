@@ -65,7 +65,7 @@ verification = [
   { id = "VT-1", expects = "review_ledger is classified engine and the layering gate passes", test_file = ".doctrine/adr/001/layering.toml", keywords = ["review_ledger = \"engine\"", "review = \"command\"", "SL-064"], waived = false },
   { id = "VT-2", expects = "derivation lives in the engine module", test_file = "src/review_ledger/derive.rs", keywords = ["fn derived_status"], waived = false },
   { id = "VT-3", expects = "DEC-318 comment names the engine-tier home and D14 retirement", test_file = "src/kinds/mod.rs", keywords = ["review_ledger::derive", "D14"], waived = false },
-  { id = "VA-1", text = "git diff PHASE-01's tip..PHASE-02's tip -- tests/ shows no assertion change: only the tests/ side of the moved suite's use lines. The golden file is byte-identical across the phase." },
+  { id = "VA-1", text = "The body of the old mod tests block (src/review.rs at a3bd0764c, from line 3320) and src/review/tests.rs differ only in use lines and module paths, shown by a diff with those lines filtered. tests/ is byte-identical across the phase (git diff PHASE-01's tip..PHASE-02's tip -- tests/ is empty)." },
 ]
 specs        = []
 requirements = []
@@ -160,14 +160,15 @@ exit_criteria = [
   { id = "EX-3", text = "raise and reopen on a concluded ledger clear concluded in the write that appends their turn." },
   { id = "EX-4", text = "PassFacts predicates and the design-run gate are unchanged (DEC-138). After a late raise, a new Conducted disposition is refused until a re-conclude; one already recorded stands." },
   { id = "EX-5", text = "MCP review_conclude.basis is required." },
-  { id = "EX-6", text = "Pre-existing test changes are named in the phase notes as flips (derived_status_empty_is_done_none, derived_status_all_terminal_is_done_none, derived_status_total_over_enum, show_renders_empty_ledger_done_and_the_edge, list_renders_empty_ledger_done_and_the_edge, in-file golden_* strings) or fixture-setup changes (the tests near the old review.rs:3777, 3805, 4748 and golden_run_status gain concluded = true or a conclude step, assertion unchanged). Any other assertion change is a finding (RV-396 F-1)." },
+  { id = "EX-6", text = "Pre-existing test changes are named in the phase notes as flips (derived_status_empty_is_done_none, derived_status_all_terminal_is_done_none, derived_status_total_over_enum, show_renders_empty_ledger_done_and_the_edge, list_renders_empty_ledger_done_and_the_edge, in-file golden_* strings) or fixture-setup changes (the tests at review.rs:3777, 3805 and 4748 as of a3bd0764c, and golden_run_status, gain concluded = true or a conclude step, assertion unchanged). Any other assertion change is a finding (RV-396 F-1)." },
   { id = "EX-7", text = "Golden updated. doctrine check gate green." },
 ]
 verification = [
   { id = "VT-1", expects = "derived_status over finding states × concluded, including empty × both (sec-8 VT 5)", test_file = "src/review_ledger/derive.rs", keywords = ["derived_status_total_over_enum", "concluded", "derived_status_empty_unconcluded_is_active"], waived = false },
   { id = "VT-2", expects = "conclude with open findings reaches done once they turn terminal; raise and reopen clear concluded (sec-8 VT 5)", test_file = "src/review/tests.rs", keywords = ["conclude_then_terminal_is_done", "raise_clears_concluded", "reopen_clears_concluded"], waived = false },
   { id = "VT-3", expects = "missing or empty --basis refused (sec-8 VT 3)", test_file = "src/review/tests.rs", keywords = ["conclude_requires_basis"], waived = false },
-  { id = "VT-4", expects = "PassFacts.concluded false after a late raise; Conducted refused until re-conclude; PassFacts unchanged over v2 ledgers (sec-8 VT 5, 14)", test_file = "tests/e2e_design_review.rs", keywords = ["late_raise_refuses_conducted_until_reconclude"], waived = false },
+  { id = "VT-5", expects = "MCP review_conclude requires basis and writes the conclude turn (sec-8 VT 13, conclude arm)", test_file = "tests/e2e_mcp_server.rs", keywords = ["review_conclude_requires_basis"], waived = false },
+  { id = "VT-4", expects = "PassFacts.concluded false after a late raise; Conducted refused until re-conclude; PassFacts unchanged over v2 ledgers, and the existing design-run review suites green (sec-8 VT 5, 14)", test_file = "tests/e2e_design_review.rs", keywords = ["late_raise_refuses_conducted_until_reconclude"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -211,6 +212,7 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "non-slice and zero-selector targets degrade and disclose; literal non-file filter (sec-8 VT 12)", test_file = "src/review/prime.rs", keywords = ["prime_non_slice_degrades", "prime_zero_selectors_degrades", "literal_directory_selector_skipped", "literal_symlink_selector_skipped"], waived = false },
   { id = "VT-2", expects = "prime, then zero selectors, then prime leaves status with no cache (sec-8 VT 17)", test_file = "src/review/prime.rs", keywords = ["degraded_prime_clears_stale_cache"], waived = false },
+  { id = "VT-3", expects = "MCP review_prime carries degraded (sec-8 VT 13, prime arm)", test_file = "tests/e2e_mcp_server.rs", keywords = ["review_prime_carries_degraded"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -252,6 +254,7 @@ exit_criteria = [
 ]
 verification = [
   { id = "VA-1", text = "doctrine spec show <new spec> --json shows every [[source]] anchor resolving (mem_019fc1308b8e7b73acf9644547351373)." },
+  { id = "VH-1", text = "The user accepts the tech spec and the REV draft, after reading each through doctrine show." },
   { id = "VA-2", text = "doctrine show on the REV lists the three ADR-007 decisions and the SPEC-003 inventory change, and the spec's prose matches the landed code, read once against src/review_ledger/." },
 ]
 specs        = []
