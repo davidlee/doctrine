@@ -17,14 +17,22 @@
 //! `knowledge edit` with one implementation and no per-kind copy.
 
 use std::io::{self, Read, Write};
+use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 
 use crate::entity::{self, BodyMode};
 
+/// `--body`'s flag name, named through a const (STD-001) so the byte-identical
+/// stdin-error wording below and [`resolve_body`]'s delegation to
+/// [`resolve_prose`] cannot drift apart by having the literal typed twice.
+const BODY_FLAG: &str = "--body";
+
 /// Resolve `--body`'s raw value: `-` reads `stdin` in full (a literal one-hyphen
 /// body has no way to spell itself through the flag — SL-230 PHASE-02 EX-5 — it
-/// must come via stdin instead); anything else is used verbatim. Takes
+/// must come via stdin instead); anything else is used verbatim, INCLUDING a
+/// leading `@` — `--body` never reads a file (SL-268 PHASE-07 D-T1: only the
+/// review prose flags gained `@path`; `--body`'s contract is unchanged). Takes
 /// `&mut impl Read` (not `io::stdin()` directly) so the stdin path is testable
 /// without driving a real pipe (mirrors `run_surface`'s in-file idiom,
 /// `memory.rs`, but propagates the read error rather than swallowing it — a
@@ -32,14 +40,82 @@ use crate::entity::{self, BodyMode};
 /// to silence).
 pub(crate) fn resolve_body(raw: &str, stdin: &mut impl Read) -> Result<String> {
     if raw == "-" {
-        let mut s = String::new();
-        stdin
-            .read_to_string(&mut s)
-            .context("Failed to read --body from stdin")?;
-        Ok(s)
+        // The fs_read closure is never called: `resolve_prose` only reaches it
+        // on a `@path` raw value, and this call's raw is pinned to `-`. It
+        // returns an `Err` rather than panicking (`clippy::unreachable` denies
+        // the macro in production code) — dead but harmless if that ever
+        // changed.
+        resolve_prose(raw, BODY_FLAG, stdin, |_: &Path| -> io::Result<String> {
+            Err(io::Error::other(
+                "--body never resolves @path (unreachable fs_read)",
+            ))
+        })
     } else {
         Ok(raw.to_owned())
     }
+}
+
+/// Resolve one prose flag's raw value (SL-268 PHASE-07 D10, design sec-4):
+/// `-` reads `stdin` in full; `@path` reads the named file, `path` resolved
+/// relative to the process's current working directory (`std::fs` semantics —
+/// A-T1); anything else is a literal, used verbatim and NEVER re-resolved (a
+/// stdin body of `"@x"` stays `"@x"`, it is not read again as a file). `flag`
+/// (e.g. `"--detail"`) names the argument in every error this raises. `fs_read`
+/// is injected (mirrors `stdin`) so the file-read path is testable without
+/// touching a real filesystem.
+pub(crate) fn resolve_prose(
+    raw: &str,
+    flag: &str,
+    stdin: &mut impl Read,
+    fs_read: impl FnOnce(&Path) -> io::Result<String>,
+) -> Result<String> {
+    if raw == "-" {
+        let mut s = String::new();
+        stdin
+            .read_to_string(&mut s)
+            .with_context(|| format!("Failed to read {flag} from stdin"))?;
+        Ok(s)
+    } else if let Some(rest) = raw.strip_prefix('@') {
+        if rest.is_empty() {
+            bail!("{flag}: `@` must be followed by a path");
+        }
+        fs_read(Path::new(rest)).with_context(|| format!("Failed to read {flag} from {rest}"))
+    } else {
+        Ok(raw.to_owned())
+    }
+}
+
+/// Refuse more than one prose flag reading `stdin` (`-`) in the same
+/// invocation (SL-268 PHASE-07 D-T1-2) — a second reader would race the first
+/// for the same pipe, and stdin cannot be split. Pure (a string comparison, no
+/// read), so it runs BEFORE anything is read — a caller checks every raw value
+/// up front, and only the flags that actually carry `-` are named in the
+/// refusal. `args` pairs each flag's name with its raw value (`None` for an
+/// unset optional flag, which never counts as a dash).
+pub(crate) fn refuse_second_dash(args: &[(&str, Option<&str>)]) -> Result<()> {
+    let dashed: Vec<&str> = args
+        .iter()
+        .filter_map(|(flag, raw)| (*raw == Some("-")).then_some(*flag))
+        .collect();
+    if dashed.len() > 1 {
+        bail!(
+            "only one flag may read stdin (`-`) per invocation; both {} passed `-`",
+            dashed.join(" and ")
+        );
+    }
+    Ok(())
+}
+
+/// Refuse an empty (post-`trim()`) required prose value, naming `flag` (e.g.
+/// `"--detail"`) in the refusal (SL-268 PHASE-07 D-T1-3, A-T2: emptiness is
+/// judged the same way `run_conclude`'s `NoteRequired` guard judges it). Called
+/// AFTER resolution, so a `-`/`@path` that resolves to blank is caught here too
+/// — a literal `""` and a blank file are refused identically.
+pub(crate) fn require_nonempty(flag: &str, value: &str) -> Result<()> {
+    if value.trim().is_empty() {
+        bail!("{flag} must not be empty");
+    }
+    Ok(())
 }
 
 /// The ONE wording for "a body mode with nothing to apply it to" (SL-230
@@ -284,5 +360,130 @@ mod tests {
     fn truncate_slug_never_empties_a_non_empty_slug() {
         assert!(!truncate_slug("aaaaaaaaaa", 3).is_empty());
         assert!(!truncate_slug("a-b-c-d-e-f", 4).is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // `resolve_prose` / `refuse_second_dash` / `require_nonempty`
+    // (SL-268 PHASE-07 T1, VT-1)
+    // -----------------------------------------------------------------------
+
+    /// A `Read` that records whether it was ever asked to read — the positive
+    /// control `second_dash_refused` needs beside its absence claim
+    /// (mem_019fe687859a7e73a06fc1b1881ff80b): a recording stdin that the
+    /// refused case must show untouched, and the one-dash case must show read.
+    struct RecordingStdin<'a> {
+        inner: std::io::Cursor<&'a [u8]>,
+        was_read: std::cell::Cell<bool>,
+    }
+
+    impl<'a> RecordingStdin<'a> {
+        fn new(data: &'a [u8]) -> Self {
+            RecordingStdin {
+                inner: std::io::Cursor::new(data),
+                was_read: std::cell::Cell::new(false),
+            }
+        }
+    }
+
+    impl Read for RecordingStdin<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            self.was_read.set(true);
+            self.inner.read(buf)
+        }
+    }
+
+    fn never_read_file(_: &Path) -> io::Result<String> {
+        panic!("fs_read must not be called for this raw value");
+    }
+
+    #[test]
+    fn dash_reads_stdin() {
+        let mut stdin = std::io::Cursor::new(b"from stdin".as_slice());
+        let resolved = resolve_prose("-", "--detail", &mut stdin, never_read_file).unwrap();
+        assert_eq!(resolved, "from stdin");
+    }
+
+    #[test]
+    fn at_path_reads_file() {
+        let mut stdin = std::io::Cursor::new(b"".as_slice());
+        let seen_path = std::cell::RefCell::new(None);
+        let resolved = resolve_prose("@detail.md", "--detail", &mut stdin, |p: &Path| {
+            *seen_path.borrow_mut() = Some(p.to_path_buf());
+            Ok("file contents".to_owned())
+        })
+        .unwrap();
+        assert_eq!(resolved, "file contents");
+        assert_eq!(seen_path.borrow().as_deref(), Some(Path::new("detail.md")));
+    }
+
+    #[test]
+    fn literal_passes_through() {
+        let mut stdin = std::io::Cursor::new(b"".as_slice());
+        let resolved = resolve_prose("just text", "--detail", &mut stdin, never_read_file).unwrap();
+        assert_eq!(resolved, "just text");
+    }
+
+    #[test]
+    fn leading_at_literal_via_stdin() {
+        // stdin content of "@x" resolved via raw "-" stays "@x" — never
+        // recursively re-resolved as a file (the contract's "never recursive").
+        let mut stdin = std::io::Cursor::new(b"@x".as_slice());
+        let resolved = resolve_prose("-", "--detail", &mut stdin, never_read_file).unwrap();
+        assert_eq!(resolved, "@x");
+    }
+
+    #[test]
+    fn bare_at_refused() {
+        let mut stdin = std::io::Cursor::new(b"".as_slice());
+        let err = resolve_prose("@", "--detail", &mut stdin, never_read_file).unwrap_err();
+        assert!(err.to_string().contains("--detail"));
+        assert!(err.to_string().contains('@'));
+    }
+
+    #[test]
+    fn missing_file_names_flag() {
+        let mut stdin = std::io::Cursor::new(b"".as_slice());
+        let err = resolve_prose("@missing.md", "--detail", &mut stdin, |_: &Path| {
+            Err(io::Error::new(io::ErrorKind::NotFound, "no such file"))
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains("--detail"));
+        assert!(err.to_string().contains("missing.md"));
+    }
+
+    #[test]
+    fn second_dash_refused() {
+        // Absence claim: a second `-` is refused before any read.
+        let recording = RecordingStdin::new(b"unread");
+        let mut stdin = recording;
+        let err =
+            refuse_second_dash(&[("--title", Some("-")), ("--detail", Some("-"))]).unwrap_err();
+        assert!(err.to_string().contains("--title"));
+        assert!(err.to_string().contains("--detail"));
+        assert!(!stdin.was_read.get(), "refused before any read");
+
+        // Positive control: exactly one `-` is fine, and reading it DOES read.
+        refuse_second_dash(&[("--title", Some("-")), ("--detail", Some("literal"))]).unwrap();
+        let resolved = resolve_prose("-", "--title", &mut stdin, never_read_file).unwrap();
+        assert_eq!(resolved, "unread");
+        assert!(stdin.was_read.get(), "the one-dash control case must read");
+    }
+
+    #[test]
+    fn resolve_body_unchanged() {
+        let mut stdin = std::io::Cursor::new(b"stdin body".as_slice());
+        assert_eq!(resolve_body("-", &mut stdin).unwrap(), "stdin body");
+        // `@x` stays literal for --body (callers unchanged) — never a file read.
+        let mut untouched = std::io::Cursor::new(b"".as_slice());
+        assert_eq!(resolve_body("@x", &mut untouched).unwrap(), "@x");
+        // The stdin-error text must stay byte-identical.
+        struct Failing;
+        impl Read for Failing {
+            fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+                Err(io::Error::other("boom"))
+            }
+        }
+        let err = resolve_body("-", &mut Failing).unwrap_err();
+        assert_eq!(err.to_string(), "Failed to read --body from stdin");
     }
 }

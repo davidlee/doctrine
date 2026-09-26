@@ -51,6 +51,34 @@ fn run(root: &Path, args: &[&str]) -> Output {
         .expect("spawn doctrine")
 }
 
+/// The `run()` shape, but with `input` piped to the child's stdin (SL-268
+/// PHASE-07 T1) — `run()`'s `Command::output()` leaves stdin null, so a `-`
+/// case needs this sibling: spawn, write, then wait.
+fn run_stdin(root: &Path, args: &[&str], input: &str) -> Output {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut child = common::doctrine_cmd(root)
+        .arg("review")
+        .args(args)
+        .arg("-p")
+        .arg(root)
+        .arg("--color")
+        .arg("never")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn doctrine");
+    child
+        .stdin
+        .take()
+        .expect("piped stdin")
+        .write_all(input.as_bytes())
+        .expect("write stdin");
+    child.wait_with_output().expect("wait for doctrine")
+}
+
 fn stdout(out: &Output) -> String {
     String::from_utf8(out.stdout.clone()).expect("utf8 stdout")
 }
@@ -2601,4 +2629,165 @@ fn clap_value_refusals_pin_full_stderr() {
         stderr(&out),
         "error: invalid value 'route:probe fix-now' for '--disposition <DISPOSITION>': route: is not part of a disposition; pass the route with --route (known routes: review, demonstrate, probe, control, owner-fix)\n\nFor more information, try '--help'.\n"
     );
+}
+
+// ── SL-268 PHASE-07 T1 (D10, VT-1/VT-4): prose resolution — `-`/`@path` ─────
+
+/// G-P1: `raise --title T --detail @detail.md` — the ledger's `detail` equals
+/// the file's bytes, read relative to the process cwd (A-T1; `doctrine_cmd`
+/// sets `cwd = root`, so `@detail.md` resolves inside the fixture root).
+#[test]
+fn raise_detail_at_path_reads_the_file_into_the_ledger() {
+    if skip_under_worker_marker("raise_detail_at_path_reads_the_file_into_the_ledger") {
+        return;
+    }
+    let dir = tmp();
+    seed_review(dir.path(), 1, fresh_ledger(), fresh_brief());
+    fs::write(dir.path().join("detail.md"), "Detail from a file").unwrap();
+
+    let out = run(
+        dir.path(),
+        &[
+            "raise",
+            "1",
+            "--severity",
+            "blocker",
+            "--title",
+            "T",
+            "--detail",
+            "@detail.md",
+        ],
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "Raised F-1 on RV-001\n");
+    assert!(
+        ledger(dir.path(), 1).contains("detail = \"Detail from a file\""),
+        "ledger: {}",
+        ledger(dir.path(), 1)
+    );
+}
+
+/// G-P2: `contest --note -` through a real pipe — the note lands in the
+/// contest turn, exactly as a literal `--note` would (mirrors
+/// `review_contest_note_round_trips`'s MCP counterpart).
+#[test]
+fn contest_note_dash_reads_stdin_into_the_turn() {
+    if skip_under_worker_marker("contest_note_dash_reads_stdin_into_the_turn") {
+        return;
+    }
+    let dir = tmp();
+    seed_one_finding(dir.path(), "answered");
+
+    let out = run_stdin(
+        dir.path(),
+        &["contest", "1", "--finding", "F-1", "--note", "-"],
+        "the repair is partial",
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "Contested F-1 on RV-001 (contested)\n");
+    assert!(
+        ledger(dir.path(), 1).contains("note = \"the repair is partial\""),
+        "ledger: {}",
+        ledger(dir.path(), 1)
+    );
+}
+
+/// G-P3: `raise --title - --detail -` — two prose flags both asking for
+/// stdin is refused BEFORE any read (D-T1-2), naming both flags, and the
+/// ledger is unchanged.
+#[test]
+fn raise_two_dashes_refused_before_any_read_ledger_unchanged() {
+    if skip_under_worker_marker("raise_two_dashes_refused_before_any_read_ledger_unchanged") {
+        return;
+    }
+    let dir = tmp();
+    seed_review(dir.path(), 1, fresh_ledger(), fresh_brief());
+    let before = ledger(dir.path(), 1);
+
+    let out = run(
+        dir.path(),
+        &[
+            "raise",
+            "1",
+            "--severity",
+            "blocker",
+            "--title",
+            "-",
+            "--detail",
+            "-",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(stdout(&out), "");
+    assert_eq!(
+        stderr(&out),
+        "Error: only one flag may read stdin (`-`) per invocation; both --title and --detail passed `-`\n"
+    );
+    assert_eq!(ledger(dir.path(), 1), before);
+}
+
+/// G-P4: `raise --title -` fed stdin `@literal` — the stored title is the
+/// LITERAL string `@literal`, never re-resolved as a file (the contract's
+/// "never recursive" — an `@`-looking value read FROM stdin is not itself
+/// `@path`-resolved).
+#[test]
+fn raise_title_dash_stdin_at_literal_stays_literal() {
+    if skip_under_worker_marker("raise_title_dash_stdin_at_literal_stays_literal") {
+        return;
+    }
+    let dir = tmp();
+    seed_review(dir.path(), 1, fresh_ledger(), fresh_brief());
+
+    let out = run_stdin(
+        dir.path(),
+        &[
+            "raise",
+            "1",
+            "--severity",
+            "blocker",
+            "--title",
+            "-",
+            "--detail",
+            "D",
+        ],
+        "@literal",
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "Raised F-1 on RV-001\n");
+    assert!(
+        ledger(dir.path(), 1).contains("title = \"@literal\""),
+        "ledger: {}",
+        ledger(dir.path(), 1)
+    );
+}
+
+/// G-P5: `raise --detail ""` — a LITERAL empty value is refused too, not only
+/// one resolved from `-`/`@path` (D-T1-3, Q1: settled yes). Names `--detail`,
+/// ledger unchanged.
+#[test]
+fn raise_literal_empty_detail_refused_ledger_unchanged() {
+    if skip_under_worker_marker("raise_literal_empty_detail_refused_ledger_unchanged") {
+        return;
+    }
+    let dir = tmp();
+    seed_review(dir.path(), 1, fresh_ledger(), fresh_brief());
+    let before = ledger(dir.path(), 1);
+
+    let out = run(
+        dir.path(),
+        &[
+            "raise",
+            "1",
+            "--severity",
+            "blocker",
+            "--title",
+            "T",
+            "--detail",
+            "",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(stdout(&out), "");
+    assert_eq!(stderr(&out), "Error: --detail must not be empty\n");
+    assert_eq!(ledger(dir.path(), 1), before);
 }

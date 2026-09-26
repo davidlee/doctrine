@@ -45,6 +45,12 @@ pub(crate) use verbs::{
 };
 
 pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
+    // Resolve every prose flag's `-`/`@path` raw value ONCE, up front (SL-268
+    // PHASE-07 D-T1-1) — every `run_*` below keeps taking a resolved
+    // `String`/`&str`, unchanged.
+    let stdin = io::stdin();
+    let mut stdin_lock = stdin.lock();
+    let cmd = cmd.resolve_prose(&mut stdin_lock, |p| fs::read_to_string(p))?;
     match cmd {
         ReviewCommand::New {
             facet,

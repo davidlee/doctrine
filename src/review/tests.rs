@@ -1556,6 +1556,233 @@ fn parse_role_defaults_and_validates() {
     assert!(parse_role(Some("bogus"), Role::Raiser).is_err());
 }
 
+// ---- SL-268 PHASE-07 T1: prose resolution (D10, sec-8 VT 9) ----
+
+/// Every review prose argument accepts `-`/`@path`, resolved once by
+/// `ReviewCommand::resolve_prose` before any `run_*` sees it (D-T1-1/EX-2).
+/// One fake `fs_read` names the path it was given, so `@x` proves it reached
+/// the file arm rather than passing through as a literal.
+#[test]
+fn resolve_prose_resolves_every_review_prose_argument() {
+    fn fake_fs(p: &std::path::Path) -> std::io::Result<String> {
+        Ok(format!("file:{}", p.display()))
+    }
+    fn stdin(s: &'static str) -> std::io::Cursor<&'static [u8]> {
+        std::io::Cursor::new(s.as_bytes())
+    }
+
+    // New.title — optional prose, `@path`.
+    let cmd = ReviewCommand::New {
+        facet: Facet::Design,
+        target: "SL-001".into(),
+        phase: None,
+        title: Some("@t.md".into()),
+        raiser: None,
+        responder: None,
+        path: None,
+    };
+    match cmd.resolve_prose(&mut stdin(""), fake_fs).unwrap() {
+        ReviewCommand::New { title, .. } => assert_eq!(title.as_deref(), Some("file:t.md")),
+        other => panic!("unexpected variant: {other:?}"),
+    }
+
+    // Raise.title/detail — both prose, one via stdin, one via `@path`.
+    let cmd = ReviewCommand::Raise {
+        reference: "1".into(),
+        severity: Severity::Minor,
+        title: "-".into(),
+        detail: "@d.md".into(),
+        role: None,
+        path: None,
+    };
+    match cmd
+        .resolve_prose(&mut stdin("from stdin"), fake_fs)
+        .unwrap()
+    {
+        ReviewCommand::Raise { title, detail, .. } => {
+            assert_eq!(title, "from stdin");
+            assert_eq!(detail, "file:d.md");
+        }
+        other => panic!("unexpected variant: {other:?}"),
+    }
+
+    // Dispose.response — literal passes through unchanged.
+    let cmd = ReviewCommand::Dispose {
+        reference: "1".into(),
+        finding: "F-1".into(),
+        disposition: Disposition::FixNow,
+        route: None,
+        response: "literal".into(),
+        role: None,
+        path: None,
+    };
+    match cmd.resolve_prose(&mut stdin(""), fake_fs).unwrap() {
+        ReviewCommand::Dispose { response, .. } => assert_eq!(response, "literal"),
+        other => panic!("unexpected variant: {other:?}"),
+    }
+
+    // Amend.response/note — both prose, via `@path` and stdin respectively.
+    let cmd = ReviewCommand::Amend {
+        reference: "1".into(),
+        finding: "F-1".into(),
+        response: "@r.md".into(),
+        note: "-".into(),
+        disposition: None,
+        route: None,
+        role: None,
+        path: None,
+    };
+    match cmd.resolve_prose(&mut stdin("why"), fake_fs).unwrap() {
+        ReviewCommand::Amend { response, note, .. } => {
+            assert_eq!(response, "file:r.md");
+            assert_eq!(note, "why");
+        }
+        other => panic!("unexpected variant: {other:?}"),
+    }
+
+    // Verify.note — optional prose, via stdin.
+    let cmd = ReviewCommand::Verify {
+        reference: "1".into(),
+        finding: "F-1".into(),
+        note: Some("-".into()),
+        role: None,
+        path: None,
+    };
+    match cmd
+        .resolve_prose(&mut stdin("verified because"), fake_fs)
+        .unwrap()
+    {
+        ReviewCommand::Verify { note, .. } => assert_eq!(note.as_deref(), Some("verified because")),
+        other => panic!("unexpected variant: {other:?}"),
+    }
+
+    // Contest.note — required prose, via `@path`.
+    let cmd = ReviewCommand::Contest {
+        reference: "1".into(),
+        finding: "F-1".into(),
+        note: "@c.md".into(),
+        role: None,
+        path: None,
+    };
+    match cmd.resolve_prose(&mut stdin(""), fake_fs).unwrap() {
+        ReviewCommand::Contest { note, .. } => assert_eq!(note, "file:c.md"),
+        other => panic!("unexpected variant: {other:?}"),
+    }
+
+    // Reopen.note — required prose, via stdin.
+    let cmd = ReviewCommand::Reopen {
+        reference: "1".into(),
+        finding: "F-1".into(),
+        note: "-".into(),
+        role: None,
+        path: None,
+    };
+    match cmd
+        .resolve_prose(&mut stdin("reopen reason"), fake_fs)
+        .unwrap()
+    {
+        ReviewCommand::Reopen { note, .. } => assert_eq!(note, "reopen reason"),
+        other => panic!("unexpected variant: {other:?}"),
+    }
+
+    // Withdraw.note — optional prose, via `@path`.
+    let cmd = ReviewCommand::Withdraw {
+        reference: "1".into(),
+        finding: "F-1".into(),
+        note: Some("@w.md".into()),
+        role: None,
+        path: None,
+    };
+    match cmd.resolve_prose(&mut stdin(""), fake_fs).unwrap() {
+        ReviewCommand::Withdraw { note, .. } => assert_eq!(note.as_deref(), Some("file:w.md")),
+        other => panic!("unexpected variant: {other:?}"),
+    }
+
+    // Conclude.basis — required prose, via stdin.
+    let cmd = ReviewCommand::Conclude {
+        reference: "1".into(),
+        basis: "-".into(),
+        role: None,
+        path: None,
+    };
+    match cmd
+        .resolve_prose(&mut stdin("what was examined"), fake_fs)
+        .unwrap()
+    {
+        ReviewCommand::Conclude { basis, .. } => assert_eq!(basis, "what was examined"),
+        other => panic!("unexpected variant: {other:?}"),
+    }
+}
+
+/// D-T1-3: `--title`/`--detail`/`--response` have no existing emptiness check,
+/// so `resolve_prose` adds one (Q1: a literal empty value is refused too, not
+/// only one resolved from `-`/`@path`). `--note`/`--basis` are untouched here —
+/// their `NoteRequired` guard lives in `run_*`, not in `resolve_prose` (S2).
+#[test]
+fn resolve_prose_refuses_empty_title_detail_and_response() {
+    fn never_read(_: &std::path::Path) -> std::io::Result<String> {
+        panic!("must not read a file")
+    }
+    let mut stdin = std::io::Cursor::new(b"".as_slice());
+
+    let cmd = ReviewCommand::Raise {
+        reference: "1".into(),
+        severity: Severity::Minor,
+        title: "T".into(),
+        detail: "".into(),
+        role: None,
+        path: None,
+    };
+    let err = cmd.resolve_prose(&mut stdin, never_read).unwrap_err();
+    assert!(err.to_string().contains("--detail"));
+
+    let cmd = ReviewCommand::Dispose {
+        reference: "1".into(),
+        finding: "F-1".into(),
+        disposition: Disposition::FixNow,
+        route: None,
+        response: "   ".into(),
+        role: None,
+        path: None,
+    };
+    let err = cmd.resolve_prose(&mut stdin, never_read).unwrap_err();
+    assert!(err.to_string().contains("--response"));
+}
+
+/// D-T1-2: `refuse_second_dash` runs before any read — two prose flags both
+/// set to `-` refuse, naming both flags, without touching stdin.
+#[test]
+fn resolve_prose_refuses_a_second_dash() {
+    struct RecordingStdin {
+        was_read: std::cell::Cell<bool>,
+    }
+    impl std::io::Read for RecordingStdin {
+        fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+            self.was_read.set(true);
+            Ok(0)
+        }
+    }
+    fn never_read(_: &std::path::Path) -> std::io::Result<String> {
+        panic!("must not read a file")
+    }
+    let mut recording = RecordingStdin {
+        was_read: std::cell::Cell::new(false),
+    };
+
+    let cmd = ReviewCommand::Raise {
+        reference: "1".into(),
+        severity: Severity::Minor,
+        title: "-".into(),
+        detail: "-".into(),
+        role: None,
+        path: None,
+    };
+    let err = cmd.resolve_prose(&mut recording, never_read).unwrap_err();
+    assert!(err.to_string().contains("--title"));
+    assert!(err.to_string().contains("--detail"));
+    assert!(!recording.was_read.get(), "refused before any read");
+}
+
 // ---- SL-268 PHASE-04: the turn journal (design sec-2, D1) ----
 
 /// `(act, role)` of every turn on one finding, in file order.

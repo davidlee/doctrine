@@ -2146,3 +2146,57 @@ fn review_dispose_route_round_trips() {
 
     kill(child);
 }
+
+// ── SL-268 PHASE-07 T1 (D-T1-5, VT-4 literal half) ───────────────────────────
+
+/// MCP passes JSON prose straight to `run_*` — `src/mcp_server/tools.rs`'s
+/// `review_raise` arm never calls `input::resolve_prose` — so a literal
+/// `-`/`@path` value is stored verbatim, unlike the CLI's resolved surface.
+/// This is a characterisation test: green on arrival by construction. Its
+/// teeth come from the mutation beat (phase sheet T1.4): temporarily route
+/// this arm through `input::resolve_prose`, confirm this test goes red, then
+/// revert.
+#[test]
+fn review_literal_dash_stays_literal() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Test Slice", "test-slice");
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let mut reader = BufReader::new(child.stdout.take().expect("stdout"));
+    let _ = call(
+        &mut stdin,
+        &mut reader,
+        "initialize",
+        Some(&serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "test", "version": "1.0" }
+        })),
+    );
+
+    let params = tools_call_params(
+        "review_new",
+        serde_json::json!({ "facet": "design", "target": "SL-001" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+
+    let params = tools_call_params(
+        "review_raise",
+        serde_json::json!({
+            "reference": "1", "severity": "minor", "title": "-", "detail": "@nope"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+
+    let doc: toml::Value = toml::from_str(&ledger_text(root)).unwrap();
+    assert_eq!(doc["finding"][0]["title"].as_str(), Some("-"));
+    assert_eq!(doc["finding"][0]["detail"].as_str(), Some("@nope"));
+
+    kill(child);
+}
