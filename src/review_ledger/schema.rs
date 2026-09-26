@@ -28,6 +28,40 @@ pub(crate) struct Target {
     pub(crate) phase: Option<String>,
 }
 
+impl Target {
+    /// Parse a `--target` argument, accepting the `ref@PHASE-NN` spelling as
+    /// equivalent to separate `--target ref --phase PHASE-NN` flags (SL-268
+    /// PHASE-07 D8, design D8 "target"). `PHASE-NN`'s shape is not validated
+    /// here — `--phase` does not validate it either today, so the two
+    /// spellings stay equal.
+    pub(crate) fn parse(raw: &str, phase: Option<&str>) -> anyhow::Result<Target> {
+        match raw.split_once('@') {
+            None => Ok(Target {
+                reference: raw.to_owned(),
+                phase: phase.map(str::to_owned),
+            }),
+            Some((reference, phase_part)) => {
+                if reference.is_empty() || phase_part.is_empty() || phase_part.contains('@') {
+                    anyhow::bail!(
+                        "malformed --target `{raw}`: the `ref@PHASE-NN` spelling needs a \
+                         non-empty ref and phase on either side of exactly one `@`"
+                    );
+                }
+                if phase.is_some() {
+                    anyhow::bail!(
+                        "--target `{raw}` already carries a phase via `@{phase_part}`; \
+                         --phase is redundant with the `@PHASE-NN` spelling"
+                    );
+                }
+                Ok(Target {
+                    reference: reference.to_owned(),
+                    phase: Some(phase_part.to_owned()),
+                })
+            }
+        }
+    }
+}
+
 /// The `[review]` metadata table (design §5): the facet, the two role labels, and
 /// the concluded-pass marker.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -249,6 +283,54 @@ mod tests {
                         raiser = \"r\"\nresponder = \"s\"\n";
     const FINDING: &str = "[target]\nref = \"SL-001\"\n[[finding]]\nid = \"F-1\"\n\
                            status = \"open\"\nseverity = \"major\"\ntitle = \"t\"\ndetail = \"d\"\n";
+
+    /// `Target::parse` (SL-268 PHASE-07 T3, VT-3): the `ref@PHASE-NN` spelling
+    /// and the separate `ref` + `--phase` flags parse to the same [`Target`].
+    #[test]
+    fn at_phase_spelling() {
+        assert_eq!(
+            Target::parse("SL-001", None).unwrap(),
+            Target {
+                reference: "SL-001".to_owned(),
+                phase: None,
+            }
+        );
+        assert_eq!(
+            Target::parse("SL-001", Some("PHASE-02")).unwrap(),
+            Target {
+                reference: "SL-001".to_owned(),
+                phase: Some("PHASE-02".to_owned()),
+            }
+        );
+        assert_eq!(
+            Target::parse("SL-001@PHASE-02", None).unwrap(),
+            Target {
+                reference: "SL-001".to_owned(),
+                phase: Some("PHASE-02".to_owned()),
+            }
+        );
+    }
+
+    /// Both spellings naming a phase at once is refused (D-T3-1): the raw
+    /// string cannot silently pick one.
+    #[test]
+    fn at_phase_conflicts_with_phase_flag() {
+        let err = Target::parse("SL-001@PHASE-02", Some("PHASE-01"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("SL-001@PHASE-02"), "{err}");
+        assert!(err.contains("already carries a phase"), "{err}");
+    }
+
+    /// A malformed `@` spelling — an empty side, or a second `@` — is refused,
+    /// never silently truncated.
+    #[test]
+    fn at_phase_malformed_rows_refused() {
+        for raw in ["@X", "SL-001@", "SL-001@PHASE-01@X"] {
+            let err = Target::parse(raw, None).unwrap_err().to_string();
+            assert!(err.contains(raw), "{raw}: {err}");
+        }
+    }
 
     /// Turn rows read open (D15): an unknown act/role parses and keeps its raw
     /// strings; a ledger with no `turn` key reads empty journals.

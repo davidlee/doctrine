@@ -86,11 +86,11 @@ fn tools() -> Vec<McpTool> {
                     },
                     "target": {
                         "type": "string",
-                        "description": "The subject canonical ref the review targets, e.g. SL-024"
+                        "description": "The subject canonical ref the review targets, e.g. SL-024. SL-NNN@PHASE-NN is accepted as target SL-NNN + phase PHASE-NN; the @ here is a phase scope, not an @path file read"
                     },
                     "phase": {
                         "type": "string",
-                        "description": "Optional phase scope, e.g. PHASE-03"
+                        "description": "Optional phase scope, e.g. PHASE-03. Conflicts with an @PHASE-NN already on target"
                     },
                     "title": {
                         "type": "string",
@@ -128,7 +128,7 @@ fn tools() -> Vec<McpTool> {
                     },
                     "target": {
                         "type": "string",
-                        "description": "Restrict to reviews whose reviews edge targets this ref (the subject canonical ref, e.g. SL-024); phase scope ignored"
+                        "description": "Restrict to reviews whose reviews edge targets this ref (the subject canonical ref, e.g. SL-024); a bare ref admits any phase. SL-NNN@PHASE-NN narrows to that phase; the @ here is a phase scope, not an @path file read"
                     },
                     "limit": {
                         "type": "integer",

@@ -8,8 +8,8 @@ use super::turn::{
 use super::{
     Await, Column, Context, FindingRow, FindingStatus, Format, ListArgs, Path, PathBuf, REVIEW_DIR,
     REVIEW_KIND, REVIEW_STATUSES, ReviewDoc, ReviewOutput, ReviewStatus, Serialize, Severity,
-    Vocab, VocabDefect, canonical_id, counters, derived_status, finding_states_of, fs, listing,
-    parse_ref, read_authored, read_review, read_reviews, vocabulary_defects,
+    Target, Vocab, VocabDefect, canonical_id, counters, derived_status, finding_states_of, fs,
+    listing, parse_ref, read_authored, read_review, read_reviews, vocabulary_defects,
 };
 use crate::tomlfmt::toml_string;
 
@@ -469,11 +469,19 @@ fn list_rows(root: &Path, mut args: ListArgs, target: Option<&str>) -> anyhow::R
     let (filter, format) = listing::build(args)?;
     let review_root = root.join(REVIEW_DIR);
     let mut docs = read_reviews(&review_root)?;
-    // RFC-032 D5: `--target` admits only reviews on the given subject edge. The
-    // filter is on the BARE `[target].ref`, so `SL-024` admits a
-    // `SL-024@PHASE-03` edge too (phase scope is not part of the subject id).
+    // RFC-032 D5 + SL-268 PHASE-07 D-T3-3: a bare `--target` ref admits only
+    // reviews on the given subject edge, regardless of the edge's own phase
+    // scope (`SL-024` also admits a `SL-024@PHASE-03` edge). The `@PHASE-NN`
+    // spelling narrows further — it matches the reference AND that phase.
     if let Some(want) = target {
-        docs.retain(|d| d.target.reference == want);
+        let wanted = Target::parse(want, None)?;
+        docs.retain(|d| {
+            d.target.reference == wanted.reference
+                && wanted
+                    .phase
+                    .as_deref()
+                    .is_none_or(|p| d.target.phase.as_deref() == Some(p))
+        });
     }
     let mut docs = listing::retain(docs, &filter, |_| false, key);
     docs.sort_by_key(|d| d.id);

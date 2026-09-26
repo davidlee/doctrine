@@ -1136,6 +1136,117 @@ fn new_refuses_dangling_target_creates_nothing() {
     );
 }
 
+// === SL-268 PHASE-07 T3 — `@PHASE-NN` target spelling (D8 target) ===========
+
+/// G-T1 (EX-4's "equals" proof): `--target SL-001@PHASE-01` and `--target
+/// SL-001 --phase PHASE-01` mint byte-identical ledgers, briefs and
+/// (normalised) stdout — two separate fixture roots, compared to each other.
+#[test]
+fn new_at_phase_spelling_equals_separate_target_and_phase_flags() {
+    if skip_under_worker_marker("new_at_phase_spelling_equals_separate_target_and_phase_flags") {
+        return;
+    }
+    let at_dir = tmp();
+    seed_slice(at_dir.path(), 1, &[]);
+    let at_out = run(
+        at_dir.path(),
+        &["new", "--facet", "design", "--target", "SL-001@PHASE-01"],
+    );
+    assert!(at_out.status.success(), "stderr: {}", stderr(&at_out));
+
+    let split_dir = tmp();
+    seed_slice(split_dir.path(), 1, &[]);
+    let split_out = run(
+        split_dir.path(),
+        &[
+            "new", "--facet", "design", "--target", "SL-001", "--phase", "PHASE-01",
+        ],
+    );
+    assert!(split_out.status.success(), "stderr: {}", stderr(&split_out));
+
+    assert_eq!(ledger(at_dir.path(), 1), ledger(split_dir.path(), 1));
+    assert_eq!(
+        fs::read_to_string(at_dir.path().join(".doctrine/review/001/review-001.md")).unwrap(),
+        fs::read_to_string(split_dir.path().join(".doctrine/review/001/review-001.md")).unwrap()
+    );
+    assert_eq!(
+        norm(at_dir.path(), &stdout(&at_out)),
+        norm(split_dir.path(), &stdout(&split_out))
+    );
+}
+
+/// G-T2: naming a phase both ways (`@PHASE-NN` on `--target` AND `--phase`) is
+/// refused, and nothing is minted.
+#[test]
+fn new_at_phase_conflicting_with_phase_flag_refuses_and_mints_nothing() {
+    if skip_under_worker_marker(
+        "new_at_phase_conflicting_with_phase_flag_refuses_and_mints_nothing",
+    ) {
+        return;
+    }
+    let dir = tmp();
+    seed_slice(dir.path(), 1, &[]);
+
+    let out = run(
+        dir.path(),
+        &[
+            "new",
+            "--facet",
+            "design",
+            "--target",
+            "SL-001@PHASE-01",
+            "--phase",
+            "PHASE-01",
+        ],
+    );
+    assert!(!out.status.success());
+    assert_eq!(stdout(&out), "");
+    assert_eq!(
+        stderr(&out),
+        "Error: --target `SL-001@PHASE-01` already carries a phase via `@PHASE-01`; --phase is redundant with the `@PHASE-NN` spelling\n"
+    );
+    assert!(
+        !dir.path().join(".doctrine/review").exists(),
+        "the target parse refusal runs BEFORE reservation — no review dir at all"
+    );
+}
+
+/// G-T3 (D-T3-3): `list --target SL-NNN@PHASE-NN` narrows to that phase; the
+/// bare `list --target SL-NNN` still admits any phase (RFC-032 D5, unchanged).
+#[test]
+fn list_target_at_phase_narrows_bare_target_does_not() {
+    let dir = tmp();
+    seed_review(
+        dir.path(),
+        1,
+        "id    = 1\nslug  = \"t1\"\ntitle = \"T1\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\n\n[target]\nref   = \"SL-001\"\nphase = \"PHASE-01\"\n",
+        "# brief\n",
+    );
+    seed_review(
+        dir.path(),
+        2,
+        "id    = 2\nslug  = \"t2\"\ntitle = \"T2\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\n\n[target]\nref   = \"SL-001\"\n",
+        "# brief\n",
+    );
+
+    let out = run(dir.path(), &["list", "--target", "SL-001@PHASE-01"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "id     │ status                │ facet  │ target          │ title\n\
+         RV-001 │ active (await raiser) │ design │ SL-001@PHASE-01 │ T1\n"
+    );
+
+    let out = run(dir.path(), &["list", "--target", "SL-001"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "id     │ status                │ facet  │ target          │ title\n\
+         RV-001 │ active (await raiser) │ design │ SL-001@PHASE-01 │ T1\n\
+         RV-002 │ active (await raiser) │ design │ SL-001          │ T2\n"
+    );
+}
+
 // === T3 — the write chain on a seeded ledger ================================
 
 #[test]

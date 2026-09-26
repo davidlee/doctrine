@@ -21,10 +21,13 @@ pub(crate) enum ReviewCommand {
         facet: Facet,
 
         /// The subject canonical ref the review targets, e.g. `SL-024`.
+        /// `SL-NNN@PHASE-NN` is accepted as `--target SL-NNN --phase
+        /// PHASE-NN`; the `@` here is a phase scope, not an `@path` file read.
         #[arg(long)]
         target: String,
 
         /// Optional phase scope for a phase-scoped facet, e.g. `PHASE-03`.
+        /// Conflicts with an `@PHASE-NN` already on `--target`.
         #[arg(long)]
         phase: Option<String>,
 
@@ -52,8 +55,11 @@ pub(crate) enum ReviewCommand {
         list: crate::CommonListArgs,
 
         /// Restrict to reviews whose `reviews` edge targets this ref — the
-        /// subject canonical ref, e.g. `SL-024` (RFC-032 D5). Phase scope is
-        /// ignored: `SL-024` also admits a `SL-024@PHASE-03` edge.
+        /// subject canonical ref, e.g. `SL-024` (RFC-032 D5). A bare ref
+        /// admits any phase: `SL-024` also matches a `SL-024@PHASE-03` edge.
+        /// `SL-NNN@PHASE-NN` is accepted as a target+phase pair and narrows
+        /// to that phase; the `@` here is a phase scope, not an `@path` file
+        /// read.
         #[arg(long)]
         target: Option<String>,
 

@@ -115,11 +115,18 @@ fn refuse_colliding_labels(raiser: &str, responder: &str) -> anyhow::Result<()> 
 }
 
 impl ReviewDraft {
-    fn from_args(args: &NewArgs) -> anyhow::Result<Self> {
+    /// Build a draft from the CLI/MCP args plus the already-[`Target::parse`]d
+    /// target (SL-268 PHASE-07 D-T3-1) — parsed once by the caller, never
+    /// re-parsed here, so `mint_review` and `materialise_review_at` cannot
+    /// drift into two readings of the same `--target` spelling.
+    fn from_args(args: &NewArgs, target: Target) -> anyhow::Result<Self> {
+        // D-T3-2: the default title uses the PARSED reference, never the raw
+        // `args.target` — this is what makes the `ref@PHASE-NN` and
+        // `ref --phase PHASE-NN` spellings byte-equal (EX-4).
         let title = args
             .title
             .clone()
-            .unwrap_or_else(|| format!("{} review of {}", args.facet.as_str(), args.target));
+            .unwrap_or_else(|| format!("{} review of {}", args.facet.as_str(), target.reference));
         let slug = crate::input::resolve_slug(&title, None)?;
         let raiser = args
             .raiser
@@ -146,10 +153,7 @@ impl ReviewDraft {
                 contests_base: None,
                 turn: Vec::new(),
             },
-            target: Target {
-                reference: args.target.clone(),
-                phase: args.phase.clone(),
-            },
+            target,
         })
     }
 
@@ -186,17 +190,22 @@ pub(crate) fn mint_review(
     args: &NewArgs,
     on_reserved: impl FnMut(u32, &str) -> anyhow::Result<()>,
 ) -> anyhow::Result<ReviewOutput> {
+    // SL-268 PHASE-07 D-T3-1: parse the `ref@PHASE-NN` spelling ONCE, before
+    // the forward-edge check — validating the raw string (with `@PHASE-NN`
+    // still attached) would refuse a resolvable ref as dangling.
+    let target = Target::parse(&args.target, args.phase.as_deref())?;
+
     // Forward-edge validation (design §7): refuse a dangling / unknown target
     // BEFORE claiming an id. Reuses the corpus id table (crate::kinds::KINDS).
     // Structured as `DanglingRef` (IMP-107) so the MCP transport maps it to
     // `DANGLING_REF` carrying the target, not a generic Internal.
-    crate::kinds::ensure_ref_resolves(root, &args.target).map_err(|_unresolved| {
+    crate::kinds::ensure_ref_resolves(root, &target.reference).map_err(|_unresolved| {
         ReviewError::DanglingRef {
-            target: args.target.clone(),
+            target: target.reference.clone(),
         }
     })?;
 
-    let draft = ReviewDraft::from_args(args)?;
+    let draft = ReviewDraft::from_args(args, target)?;
     let trunk_ids = crate::git::trunk_entity_ids(root, REVIEW_DIR)?;
     let (backend, mut reserved) =
         crate::reserve::backend(root, REVIEW_KIND.prefix, crate::install::prompt_confirm)?;
@@ -236,7 +245,11 @@ pub(crate) fn materialise_review_at(
     // The ref comes off the journal, so `review` parses it rather than teaching
     // the design command the RV grammar.
     let id = parse_ref(reference)?;
-    let draft = ReviewDraft::from_args(args)?;
+    // The intent's target resolved when it was journalled (D-T3-1's docstring
+    // above); re-parse the `@PHASE-NN` spelling here too, so a resumed mint
+    // reads the same `Target` a fresh one would.
+    let target = Target::parse(&args.target, args.phase.as_deref())?;
+    let draft = ReviewDraft::from_args(args, target)?;
     entity::materialise_prebuilt_at(
         root,
         REVIEW_DIR,

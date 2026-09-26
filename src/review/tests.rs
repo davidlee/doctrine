@@ -730,6 +730,29 @@ fn run_new_creates_an_empty_ledger_rv_against_a_real_target() {
     );
 }
 
+/// SL-268 PHASE-07 T3 (D-T3-1's trap, VT-3): `mint_review` validates the
+/// PARSED `target.reference`, not the raw `@PHASE-NN` string — a raw-string
+/// check would refuse this as dangling even though `SL-024` resolves.
+#[test]
+fn run_new_accepts_at_phase_target_spelling() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    plant_slice_target(root, 24);
+    run_new(
+        Some(root.to_path_buf()),
+        &new_args(Facet::Design, "SL-024@PHASE-01"),
+    )
+    .unwrap();
+
+    let review_root = root.join(REVIEW_DIR);
+    let doc = read_review(&review_root, 1).unwrap();
+    assert_eq!(doc.target.reference, "SL-024");
+    assert_eq!(doc.target.phase.as_deref(), Some("PHASE-01"));
+    // D-T3-2: the default title uses the parsed reference, not the raw
+    // `@PHASE-01` spelling.
+    assert_eq!(doc.title, "design review of SL-024");
+}
+
 /// VT-2: a dangling `[target].ref` (well-formed but no entity) is refused at
 /// creation — and no RV directory is minted (§7).
 #[test]
