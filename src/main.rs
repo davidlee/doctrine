@@ -991,7 +991,7 @@ mod write_class_tests {
         let help = crate::commands::cli::render_subcommand_help(&["memory"], false, Some(100));
         assert!(help.contains("Record, show, and list memories"));
         assert!(help.contains("record"));
-        assert!(help.contains("find"));
+        assert!(help.contains("search"));
         assert!(help.contains("retrieve"));
         assert!(help.contains("list"));
         assert!(help.contains('│'), "cozy-table separator");

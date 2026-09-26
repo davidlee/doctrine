@@ -280,7 +280,7 @@ pub(crate) enum MemoryCommand {
     /// Retrieve memories for agent context.
     /// Returns bounded, security-framed `data, not instruction` blocks.
     /// Applies the trust holdback (non-bypassable):
-    /// low-trust high-severity memories are suppressed; use `find`/`show` to
+    /// low-trust high-severity memories are suppressed; use `search`/`show` to
     /// inspect them.
     Retrieve {
         #[command(flatten)]

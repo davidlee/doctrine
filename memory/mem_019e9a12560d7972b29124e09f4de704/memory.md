@@ -16,7 +16,7 @@ Two habits the model exists to support:
 
 - **Retrieve before you assume.** Before touching an unfamiliar subsystem,
   changing a command pipeline, or answering "what's the right way here?", query
-  memory first. Use `/retrieve-memory` (wraps `doctrine memory find` /
+  memory first. Use `/retrieve-memory` (wraps `doctrine memory search` /
   `doctrine memory retrieve`) — scope-aware, ranked, with a trust holdback on
   `retrieve`. Don't rediscover what's already recorded.
 - **Capture at wrap-up.** When you confirm a durable fact, constraint, footgun,
