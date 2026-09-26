@@ -51,10 +51,18 @@ Design run `dr-01a0dc9c`. Evidence: `research/research.md` (tier 5) and RFC-032
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-26 · design (reviewing, pre-lock) · 8922d2e77
 
 ### Produced
+- design.md drafted and revised for RV-396 (commits 2a..8922d2e77 on edge; run dr-01a0dc9c)
+- minted: DEC-317..DEC-322 — inquiry answers; IMP-492 — doctor install-doc CLI check; IMP-493 — doctor status/last-turn check; ISS-492 — catalog callers drop warning diagnostics; RV-396 — design review
+- design goes past the frontier: top-level `review_ledger` module; `raise`/`reopen` clear `concluded` (user ruling, RV-396 F-4)
 
 ### Learned
+- mem_01a0062ebd7375f3a2f67ed833307283 — layering gate skips sub-classified out-edges; split engine units top-level
+- mem_01a0dd0af5367eb39223bb694e390380 — design sections materialise in lexical id order
 
 ### Open
+- DEC-317..DEC-322 — shape the slice; cite in plan
+- RV-396 pass disposition, section review, design acceptance — awaiting user
+- notes "Design review passes" — two probes deferred to the split and D2 phases
