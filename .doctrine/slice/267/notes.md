@@ -226,7 +226,7 @@ Evidence for PHASE-02 `EX-1`/`EX-2` (`design.md` sec-8: one row per candidate,
 | manifest.toml:5,14,20,29,34 | repo-private ids + member labels | inline | drop `SL-227`/`FR-007`/`FR-008`/`D8`/`slice-004`/`slice-005`/`PHASE-06` |
 | manifest.toml:8 | private source path | inline | "the engine's `BASE_BACKINGS`" (was `publication.rs`) |
 | manifest.toml:15 | private source path | inline | "the entity engine's `materialise*`" (was `entity.rs`) |
-| doctrine.toml.example:56 | doc-local design id | inline | "the y/N prompt" (was `D8`) |
+| doctrine.toml.example:56 | doc-local design id | inline | "the y/N prompt" (was `D8`) — **⚠ FALSIFIED (`RV-395` F-7): the PHASE-02 commit never touched the line; PHASE-06 `795317bdb` re-did it.** |
 | git-hooks/pre-commit:2 | header + private design ref | inline | drop `SL-228 PHASE-02`, `design §7` |
 | templates/plan.toml:38 | commented payload example | leave | `src/foo.rs` is obviously synthetic |
 | harvest.md:54,58,61,62 | fill-in-the-blank | leave | EX-2 (line numbers shifted by the header edit) |
@@ -442,6 +442,9 @@ anchor**, so a sweep must re-resolve every intra-file link it touches.
   `grep -n 'spec-023\|SPEC-023\|install/hymns' memory/mem_88193c2859d72f043ef83a97a5952a96/memory.md`
   → **zero**; the cascade rule stands in the body, and the pointer is
   `reference/model-band.md`.
+  **⚠ FALSIFIED (`RV-395` F-7).** The `install/hymns` leg was invisible to the
+  locator regex, so the path survived at `:39`; repaired by PHASE-06
+  (`795317bdb`), not by this phase.
 - **`EX-3` — zero dangling wikilinks.** `grep -rhoE '\[\[mem\.[a-zA-Z0-9._-]+\]\]' memory/ plugins/`
   → keys, `comm -23` against `ls memory/` → **empty**. Controls: a present key
   (`mem.signpost.doctrine.file-map`) is *not* reported; an injected fake key **is**.

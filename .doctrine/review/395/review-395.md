@@ -158,3 +158,76 @@ F-13 materialisation), `861930ab1` (the F-13 friction observation), plus RV-391
   `phases` value inconsistent with the rest; a faithful rebuild needs the
   engine's layout authority. (F-6 residual.)
 
+
+## Reconciliation Outcome
+
+Reconcile pass for `SL-267`, consuming the brief above. Findings confirmed
+terminal before writing (13/13). No REV items.
+
+### Direct edits applied
+
+- **`design.md` sec-1 (Boundary)** — records the user-authorised, **textual**
+  `src/**` departure: PHASE-05 corrected the taught `doctrine prompt resolve`
+  command string in `src/mcp_server/tools.rs` and two `src/boot.rs` boot-test
+  literals; no behaviour change. *(RV-395 F-2)*
+- **`design.md` sec-3 (constraints)** — "No `src/**` change" → "No semantic
+  `src/**` change", with a pointer to the Boundary note. The third copy of the
+  same claim, located while editing sec-1; leaving it would have contradicted the
+  corrected sec-1. *(RV-395 F-2)*
+- **`design.md` sec-7 (surface impact)** — new row for the two `src/` paths, and a
+  note that the design-target selector set describes the swept corpus, so
+  `slice conformance` still reports them undeclared (no registry change: the
+  selectors are not the departure's surface). *(RV-395 F-2)*
+- **`design.md` sec-5 (disposition classes)** — new `scope-field matcher` row and
+  note, naming the class the design previously left unaddressed (a `.toml`
+  `paths`/`globs` entry is retrieval data, not a citation). *(RV-395 F-10)*
+- **`.doctrine/slice/267/notes.md`** — the PHASE-02 `doctrine.toml.example:56` row
+  and the PHASE-03 `EX-2` evidence bullet are marked **FALSIFIED** with the
+  PHASE-06 repair commit, so the earlier sections no longer assert a resolution
+  the read falsified. The audit section and Harvest refresh landed during the
+  audit itself. *(RV-395 F-1, F-6, F-7, F-13)*
+
+### REVs completed
+
+- **None.** The brief named no governance/spec item. `ADR-024` is the grounding
+  rule's single home and needs no amendment: the audit found no defect in the
+  rule, only corpus instances that violated it, and those were repaired during
+  the audit (`3dbe856c5`). `POL-002`'s deliberate non-revision stands.
+
+### Withdrawn / tolerated
+
+- `F-1`, `F-6`, `F-13` — `fix-now`, repaired during the audit (`3dbe856c5`,
+  `861930ab1`).
+- `F-5` — `fix-now`: RV-391's control-routed `F-7` verified against PHASE-06
+  `VA-1`.
+- `F-3`, `F-4`, `F-8`, `F-9`, `F-11`, `F-12` — `tolerated`, rationale in each
+  finding's disposition (boundary footgun; the authorised PHASE-06 repair;
+  understated plan terrain; the e2e allowlist; commented tokens; tier-5 evidence
+  denominators).
+- `F-2`, `F-7`, `F-10` — `verified` → the direct edits above.
+
+### Residuals — owner named, not reconciled here
+
+- **`ISS-215`** — the three unreachable signposts
+  (`mem.signpost.doctrine.{concept-map,rec,rfc}`). F-1 removed the broken
+  citations; restoring the memories and re-adding the routing rows is its
+  follow-through.
+- **`ISS-309` part 2 / `QUE-227`** — the deferred drift gate, now carrying two
+  distinct gaps: the citation gate, and a **rebuild-freshness** check (source vs
+  materialised) that F-13 exposed; plus the corrected denominators for `ISS-309`
+  and `CHR-080` (F-8, F-12).
+- **`install/glossary.md` `folder` column** — undocumented convention, partly
+  inconsistent; a faithful rebuild needs the engine's layout authority (F-6
+  residual).
+
+### Notes
+
+- The locked design run `dr-01a0d8ff-b311` is **spent**; `design.md` was edited
+  out of band per `mem.pattern.reconcile.edit-design-out-of-band`. The section
+  fingerprints diverge from the file and the run's `review_pass RV-391` reads
+  `STALE` — expected at reconcile, not corruption. No regress/adopt/re-lock loop
+  was run.
+- No `plan.toml` criterion was touched (immutable-append) and no selector-registry
+  change was made.
+
+Reconcile pass complete — handoff to `/close`.

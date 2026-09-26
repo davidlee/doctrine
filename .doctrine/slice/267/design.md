@@ -35,8 +35,12 @@ shipped claim be grounded on, and at which tier — so one answer settles them
 to a separate slice (`QUE-227`, `ISS-309` part 2).
 
 **Boundary.** The change is to shipped prose and skills; it makes no semantic
-change to `src/**`. The drift gate, the boot-index defect (`ISS-215`), distilling
-project-local memories (`CHR-036`), and local-memory health are out of scope.
+change to `src/**`. One **textual** `src/**` departure was authorised during
+PHASE-05 (2026-09-26, `RV-395` F-2): the taught `doctrine prompt resolve` command
+string in `src/mcp_server/tools.rs` and two `src/boot.rs` boot-test literals were
+corrected to a form the binary accepts — no behaviour change. The drift gate, the
+boot-index defect (`ISS-215`), distilling project-local memories (`CHR-036`), and
+local-memory health are out of scope.
 
 **Outcome.** A client agent reading any published reference doc, shipped memory,
 or skill finds every citation either resolving to a published address or standing
@@ -129,8 +133,9 @@ client-unresolvable); `PRD-004`/`SPEC-007`; `PRD-002`/`SPEC-006`.
 
 **Constraints the design must respect:**
 
-- **No `src/**` change**, so the sweep cannot ride a new lint; the drift gate is
-  the follow-up slice.
+- **No semantic `src/**` change**, so the sweep cannot ride a new lint; the drift
+  gate is the follow-up slice. (One textual departure was authorised — see the
+  Boundary note in sec-1.)
 - **Do not mint a third POL-002 rule** (`QUE-227`); the duplicate rule is the gate
   slice's problem.
 - **Do not sweep the illustrations** — reference-form tables, client-structure
@@ -192,6 +197,12 @@ the resolution seams a client already has.
 | corpus-internal, durable referent | **repoint** to a published `reference/<name>.md` (existing, or newly published) |
 | client-structure reference / illustration | **leave** — it is the client's own structure, not a citation |
 | reasoning with no shipped home | **publish** — mint a reference doc, then repoint |
+| scope-field matcher (a `.toml` `paths`/`globs` entry) | **leave** — it is retrieval data, not a prose citation; a doctrine-private matcher is recorded, never swept |
+
+**Scope-field matchers are not citations.** A `paths`/`globs` entry matches
+against the *client's* tree; five shipped `memory.toml` entries carry a
+doctrine-private matcher and are recorded as a residual, not swept (`RV-395`
+F-10).
 
 **Decision procedure**, applied per site:
 
@@ -336,10 +347,14 @@ file is touched twice; mechanical legs before the prose pass.
 | `memory/**` | sweep 11 of 35 masters; hand-edit + re-embed |
 | `plugins/doctrine/skills/**` | sweep 74 sites across 14 skill files |
 | `.doctrine/adr/<NNN>/` | **new ADR** (`DEC-312`) |
+| `src/boot.rs`, `src/mcp_server/tools.rs` | **textual only** — the taught `doctrine prompt resolve` string and two boot-test literals corrected (authorised 2026-09-26, `RV-395` F-2); no behaviour change |
 | goldens / docs listing install assets or manifest entries | update if any pin the asset set or entry count |
 
 **Design-target selectors** this design commits to: `install/**`, `memory/**`,
-`plugins/**`, `.doctrine/adr/**`, `publication/manifest.toml`.
+`plugins/**`, `.doctrine/adr/**`, `publication/manifest.toml`. The two `src/`
+paths above are a recorded departure from that set, not a selector change: the
+registry describes the swept corpus, so `slice conformance` still reports them
+undeclared.
 <!-- doctrine:section sec-8 -->
 ## Verification
 
