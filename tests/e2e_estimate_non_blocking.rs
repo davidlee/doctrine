@@ -82,7 +82,9 @@ const ALLOWLIST: &[&str] = &[
     "governance.rs",
     "memory.rs",
     "rec.rs",
+    // SL-268 PHASE-02: review.rs split along the tier line (D4).
     "review.rs",
+    "review_ledger/schema.rs",
     "revision.rs",
     "spec.rs",
     // IMP-183: config loading for estimate/value display units in show/render

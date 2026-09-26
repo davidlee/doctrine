@@ -45,7 +45,7 @@ hymns = "leaf"              # out=0: SL-186 pure prompt-cascade resolver engine 
 interpretation = "leaf"     # out=0: [interpretation] policy — strict typed projection, canonical hash, restriction algebra; pure, exported to doctrine-control (SL-248 PHASE-02)
 kinds = "leaf"              # out=0: entity-kind vocabulary — pure constants
 kitty = "leaf"              # → tty: WindowGeometry only — pure kitty graphics protocol bytes (SL-245 PHASE-03)
-ledger = "leaf"             # out=0: review ledger types — pure
+ledger = "leaf"             # out=0: dispatch run-ledger (SL-064) — pure
 lexical = "leaf"            # out=0: BM25/lexical engine — pure (no domain)
 lifecycle = "leaf"          # out=0: lifecycle FSM — pure
 links = "leaf"              # out=0: wikilink extraction — pure
@@ -88,6 +88,7 @@ paths = "engine"            # PHASE-01/SL-139: shared entity-file-path projectio
 publication = "engine"      # SL-223 PHASE-02: → asset_source (leaf); publication declaration + fail-closed admission (D1/D6/D9). Downward: publication(engine)→asset_source(leaf); commands(command)→publication(engine)
 integrity = "engine"        # SL-204: → entity, meta (engine) + kinds, listing, fsutil, git, root (leaf); cross-kind integrity validator. PHASE-01→03 evicted the 13 kind-module up-reaches (Kind identity + KINDS table + ref resolvers relocated to leaf kinds/), breaking the 4 command back-cycles (backlog/rec/review/revision) → integrity drops to engine.
 authored_status = "engine"  # SL-238: → kinds, meta, entity; the sole per-kind authored-status reader (status + title from one read). Exactly `integrity`'s import set, so no new module edge in kind; sited here rather than in `meta` because it branches on RV/REC and `meta`'s charter is zero per-kind knowledge.
+review_ledger = "engine"    # SL-268 D4: → kinds, listing, estimate, value (leaf) + entity, relation (engine); RV ledger schema, derivation, transition table, blocker predicates
 relation_query = "command"  # SL-137: pure relation projection+filter engine over &Catalog; imports catalog (cmd) + integrity (now engine, SL-204) — uniformly command via catalog
 
 # ── command (21) ─────────────────────────────────────────────────────────
@@ -95,7 +96,7 @@ relation_query = "command"  # SL-137: pure relation projection+filter engine ove
 adr = "command"             # → engine/leaf + install; ADR entity-kind handler
 backlog = "command"         # → engine/leaf; backlog entity-kind handler + CLI
 boot = "command"            # → engine/leaf + adr, governance, install, memory, policy, standard, worktree
-catalog = "command"         # → engine/leaf + adr, backlog, knowledge, memory, policy, rec, review, revision, slice, spec, standard; umbrella — sub-classified below
+catalog = "command"         # → engine/leaf + adr, backlog, knowledge, memory, policy, rec, revision, slice, spec, standard; umbrella — sub-classified below
 commands = "command"        # → catalog, integrity, map_server, mcp_server, root, corpus, lazyspec; CLI command dispatch (SL-115: cli::Command + dispatch; guard; coverage/map/dep_seq/relation/supersede/inspect/facet/validate shells; serve)
 concept_map = "command"     # → engine/leaf; concept-map entity-kind handler
 corpus = "command"          # → boot, git, install, memory, root; corpus install machinery
@@ -108,7 +109,7 @@ lazyspec = "command"        # → engine/leaf + adr, backlog, requirement, slice
 main = "command"            # → commands, engine/leaf; binary entrypoint
 map_server = "command"      # → catalog, concept_map, fsutil, integrity, memory, priority; web map server
 search = "command"            # → catalog, integrity, lexical, listing; BM25 search over entity bodies
-mcp_server = "command"      # → listing, review, root; MCP stdio server
+mcp_server = "command"      # → listing, review, review_ledger, root; MCP stdio server
 memory = "command"          # → engine/leaf + catalog, lexical, links, retrieve; memory entity-kind handler
 policy = "command"          # → engine/leaf; policy entity-kind handler
 priority = "command"        # → engine/leaf + backlog_order, integrity, knowledge, relation_graph; priority subsystem; sub-classified below
@@ -116,11 +117,11 @@ rec = "command"             # → engine/leaf + coverage; rec entity-kind handle
 reconcile = "command"       # → coverage, coverage_scan, integrity, rec, requirement, root, slice; reconciliation verb
 requirement = "command"     # → engine/leaf + install; requirement entity-kind handler
 retrieve = "command"        # → engine/leaf + lexical, links, memory; retrieval verb
-review = "command"          # → engine/leaf + contentset, input, integrity, worktree; review entity-kind handler
+review = "command"          # → engine/leaf + review_ledger, contentset, input, integrity, worktree; review entity-kind handler
 revision = "command"        # → engine/leaf + rec, requirement; revision entity-kind handler
 rfc = "command"             # → engine/leaf + catalog, integrity, kinds; RFC entity-kind handler
 relation_graph = "command"  # uniformly command — all-kind seam through adr, backlog, catalog, …
-slice = "command"           # → engine/leaf + coverage, coverage_scan, conduct, dtoml, estimate, input, lifecycle, plan, rec, requirement, review, state, value; slice entity-kind handler
+slice = "command"           # → engine/leaf + coverage, coverage_scan, conduct, dtoml, estimate, input, lifecycle, plan, rec, requirement, review_ledger, state, value; slice entity-kind handler
 spec = "command"            # → engine/leaf + registry, requirement; spec entity-kind handler
 standard = "command"        # → engine/leaf; standard entity-kind handler
 worktree = "command"        # → fsutil, git, root, slice; worktree fork/coordinate/import
@@ -130,7 +131,7 @@ regression_run = "command"  # SL-170 S1 impure shell → coverage_store, git, re
 # Mixed umbrellas force sub-classification (design D9). The top-level module
 # (mod.rs) carries its own tier; files that reach higher are classified
 # separately here.
-"catalog::scan" = "command"       # reaches adr, backlog, knowledge, memory, policy, rec, review, revision, slice, spec, standard — 9 command modules
+"catalog::scan" = "command"       # reaches adr, backlog, governance, knowledge, memory, policy, priority, rec, revision, rfc, slice, spec, standard — 13 command modules (RV status/edges via review_ledger, engine; SL-268)
 "catalog::hydrate" = "engine"     # pure entity hydration
 "catalog::graph" = "engine"       # pure graph projection
 "catalog::diagnostic" = "engine"  # pure diagnostic dump

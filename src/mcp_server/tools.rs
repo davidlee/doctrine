@@ -694,8 +694,8 @@ fn call_tool(
             let args: review::RaiseArgs = serde_json::from_value(arguments.clone())
                 .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
             let role_str = arguments.get("as").and_then(|v| v.as_str());
-            let role =
-                review::parse_role(role_str, review::Role::Raiser).context("invalid role")?;
+            let role = review::parse_role(role_str, crate::review_ledger::Role::Raiser)
+                .context("invalid role")?;
             let out = review::run_raise(Some(root.to_path_buf()), &args, role)?;
             Ok(serde_json::to_string(&out)?)
         }
@@ -703,15 +703,15 @@ fn call_tool(
             let args: review::DisposeArgs = serde_json::from_value(arguments.clone())
                 .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
             let role_str = arguments.get("as").and_then(|v| v.as_str());
-            let role =
-                review::parse_role(role_str, review::Role::Responder).context("invalid role")?;
+            let role = review::parse_role(role_str, crate::review_ledger::Role::Responder)
+                .context("invalid role")?;
             let out = review::run_dispose(Some(root.to_path_buf()), &args, role)?;
             Ok(serde_json::to_string(&out)?)
         }
         "review_verify" => {
             let fields = ExtractFields::from_value(arguments, &["reference", "finding"]);
             let role_str = fields.opt_str_field("as");
-            let role = review::parse_role(role_str.as_deref(), review::Role::Raiser)
+            let role = review::parse_role(role_str.as_deref(), crate::review_ledger::Role::Raiser)
                 .context("invalid role")?;
             let out = review::run_verify(
                 Some(root.to_path_buf()),
@@ -725,7 +725,7 @@ fn call_tool(
         "review_contest" => {
             let fields = ExtractFields::from_value(arguments, &["reference", "finding"]);
             let role_str = fields.opt_str_field("as");
-            let role = review::parse_role(role_str.as_deref(), review::Role::Raiser)
+            let role = review::parse_role(role_str.as_deref(), crate::review_ledger::Role::Raiser)
                 .context("invalid role")?;
             let out = review::run_contest(
                 Some(root.to_path_buf()),
@@ -739,7 +739,7 @@ fn call_tool(
         "review_withdraw" => {
             let fields = ExtractFields::from_value(arguments, &["reference", "finding"]);
             let role_str = fields.opt_str_field("as");
-            let role = review::parse_role(role_str.as_deref(), review::Role::Raiser)
+            let role = review::parse_role(role_str.as_deref(), crate::review_ledger::Role::Raiser)
                 .context("invalid role")?;
             let out = review::run_withdraw(
                 Some(root.to_path_buf()),
@@ -752,7 +752,7 @@ fn call_tool(
         "review_conclude" => {
             let fields = ExtractFields::from_value(arguments, &["reference"]);
             let role_str = fields.opt_str_field("as");
-            let role = review::parse_role(role_str.as_deref(), review::Role::Raiser)
+            let role = review::parse_role(role_str.as_deref(), crate::review_ledger::Role::Raiser)
                 .context("invalid role")?;
             let out = review::run_conclude(
                 Some(root.to_path_buf()),
@@ -2081,8 +2081,8 @@ mod tests {
     fn sample_finding() -> crate::review::Finding {
         crate::review::Finding {
             id: "F-1".to_owned(),
-            status: crate::review::FindingStatus::Verified,
-            severity: crate::review::Severity::Minor,
+            status: crate::review_ledger::FindingStatus::Verified,
+            severity: crate::review_ledger::Severity::Minor,
             title: "t".to_owned(),
             detail: "long detail prose".to_owned(),
             disposition: Some("tolerated".to_owned()),
@@ -2134,9 +2134,9 @@ mod tests {
     #[test]
     fn role_mismatch_error_mapping() {
         let err = ReviewError::RoleMismatch {
-            expected: crate::review::Role::Raiser,
-            actual: crate::review::Role::Responder,
-            act: crate::review::Verb::Dispose.into(),
+            expected: crate::review_ledger::Role::Raiser,
+            actual: crate::review_ledger::Role::Responder,
+            act: crate::review_ledger::Verb::Dispose.into(),
         };
         let e = anyhow::anyhow!(err);
         let resp = map_review_error(Some(Id::Number(1)), &e);
@@ -2169,8 +2169,8 @@ mod tests {
     fn state_mismatch_error_mapping() {
         let err = ReviewError::StateMismatch {
             finding: "F-3".to_owned(),
-            current: crate::review::FindingStatus::Verified,
-            required: crate::review::FindingStatus::Open,
+            current: crate::review_ledger::FindingStatus::Verified,
+            required: crate::review_ledger::FindingStatus::Open,
         };
         let e = anyhow::anyhow!(err);
         let resp = map_review_error(Some(Id::Number(1)), &e);

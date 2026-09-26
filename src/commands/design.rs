@@ -1096,7 +1096,7 @@ fn review_pass_plan(slice: u32) -> MintPlan {
     MintPlan {
         subject: IntentSubject::ReviewPass,
         effect: MintEffect::Create(MintKind::Review(crate::review::NewArgs {
-            facet: crate::review::Facet::Design,
+            facet: crate::review_ledger::Facet::Design,
             target: slice_ref(slice),
             phase: None,
             title: None,
@@ -2596,7 +2596,7 @@ fn outstanding_by_severity(root: &Path, run: &DesignSnapshot) -> Result<Outstand
     let Some(pass) = run.review.pass.as_ref() else {
         return Ok(OutstandingBySeverity::default());
     };
-    let counts = crate::review::read_pass_facts(root, pass.review.as_str())?.outstanding;
+    let counts = crate::review_ledger::read_pass_facts(root, pass.review.as_str())?.outstanding;
     Ok(OutstandingBySeverity {
         blocker: counts.blocker,
         major: counts.major,
@@ -3173,7 +3173,7 @@ fn observed_review(
         ReviewDisposition::Conducted { review } => review,
         ReviewDisposition::Waived { .. } => return None,
     };
-    let facts = crate::review::observe_pass(root, reference.as_str())?;
+    let facts = crate::review_ledger::observe_pass(root, reference.as_str())?;
     Some(ObservedReview {
         reference: reference.clone(),
         concluded: facts.concluded,

@@ -1712,11 +1712,11 @@ mod tests {
     use crate::adr::ADR_KIND;
     use crate::backlog::{CHORE_KIND, IDEA_KIND, IMPROVEMENT_KIND, ISSUE_KIND, RISK_KIND};
     use crate::entity::Kind;
+    use crate::kinds::REVIEW_KIND;
     use crate::knowledge::ASSUMPTION_KIND;
     use crate::policy::POLICY_KIND;
     use crate::rec::REC_KIND;
     use crate::requirement::REQUIREMENT_KIND;
-    use crate::review::REVIEW_KIND;
     use crate::slice::SLICE_KIND;
     use crate::spec::{PRODUCT_SPEC_KIND, TECH_SPEC_KIND};
     use crate::standard::STANDARD_KIND;
@@ -1762,7 +1762,7 @@ mod tests {
         // governance::relation_edges emits supersedes/related for ADR·POL·STD.
         // spec::relation_edges (subtype-blind) emits descends_from/parent/members/
         //   interactions; members is the one design-corrected PRD·SPEC cell.
-        // review::relation_edges emits reviews for RV; rec::relation_edges emits
+        // review_ledger::relation_edges emits reviews for RV; rec::relation_edges emits
         //   owning_slice/decision_ref for REC.
         let expected: &[(RelationLabel, &[&str])] = &[
             // SL-149 PHASE-05: specs/requirements collapsed into references; the union of

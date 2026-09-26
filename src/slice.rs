@@ -1020,7 +1020,7 @@ pub(crate) fn run_status(
     // pins it). The teeth are HERE in the binary — the `slice status …` refusal —
     // not in skill prose.
     if crosses_closure_seam(&from, to) {
-        let blockers = crate::review::unresolved_blockers_for(&root, &canonical_id(id))?;
+        let blockers = crate::review_ledger::unresolved_blockers_for(&root, &canonical_id(id))?;
         if !blockers.is_empty() {
             let listed = blockers
                 .iter()
@@ -5311,7 +5311,7 @@ mod tests {
         crate::review::run_new(
             Some(root.to_path_buf()),
             &crate::review::NewArgs {
-                facet: crate::review::Facet::Reconciliation,
+                facet: crate::review_ledger::Facet::Reconciliation,
                 target: target.clone(),
                 phase: None,
                 title: None,
@@ -5324,11 +5324,11 @@ mod tests {
             Some(root.to_path_buf()),
             &crate::review::RaiseArgs {
                 reference: "RV-001".to_owned(),
-                severity: crate::review::Severity::Blocker,
+                severity: crate::review_ledger::Severity::Blocker,
                 title: "must fix".to_owned(),
                 detail: "d".to_owned(),
             },
-            crate::review::Role::Raiser,
+            crate::review_ledger::Role::Raiser,
         )
         .unwrap();
     }
@@ -5379,7 +5379,7 @@ mod tests {
                 disposition: "fixed".to_owned(),
                 response: "done".to_owned(),
             },
-            crate::review::Role::Responder,
+            crate::review_ledger::Role::Responder,
         )
         .unwrap();
         crate::review::run_verify(
@@ -5387,7 +5387,7 @@ mod tests {
             "RV-001",
             "F-1",
             None,
-            crate::review::Role::Raiser,
+            crate::review_ledger::Role::Raiser,
         )
         .unwrap();
 
@@ -5416,7 +5416,7 @@ mod tests {
             Some(root.to_path_buf()),
             "RV-001",
             "F-1",
-            crate::review::Role::Raiser,
+            crate::review_ledger::Role::Raiser,
         )
         .unwrap();
         run_status(

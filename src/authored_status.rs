@@ -25,9 +25,10 @@
 //! failure the rule exists to forbid (`SL-238` PHASE-01, `notes.md` — §7's VT-2
 //! bullet says otherwise and is corrected at reconcile).
 //!
-//! `RV`'s real status is derived at command tier from its finding ledger, above
-//! where this module sits; `catalog::scan::status_and_title_for` is the overlay
-//! that can reach it. This module names the gap, never guesses at it.
+//! `RV`'s real status is derived by the engine-tier `review_ledger` from its
+//! finding ledger, which this module does not call;
+//! `catalog::scan::status_and_title_for` is the overlay that can reach it. This
+//! module names the gap, never guesses at it.
 //!
 //! Engine tier (`ADR-001`): imports `kinds`, `meta` and `entity` — the set
 //! `integrity.rs` already carries, so this adds no new module edge in kind.

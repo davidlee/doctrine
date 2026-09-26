@@ -2,10 +2,11 @@
 //! Forward boundaries, cumulative clearance, and direct regression.
 //!
 //! [`Advance`] is the closed forward relation and the single owner of the edge
-//! set, modelled on `src/review.rs::can` (EX-3). It is *modelled on*, not reused:
-//! `review` is tier `command` and this module is `leaf`, so importing it would be
-//! an upward edge. What is ridden is the idiom — one total, pure, const-evaluable
-//! predicate that owns legality, with every other combination refused.
+//! set, modelled on `src/review_ledger/transition.rs::can` (EX-3). It is *modelled
+//! on*, not reused: `review_ledger` is tier `engine` and this module is `leaf`, so
+//! importing it would be an upward edge. What is ridden is the idiom — one total,
+//! pure, const-evaluable predicate that owns legality, with every other
+//! combination refused.
 //!
 //! Clearance is never stored. [`advance`] re-derives *every* cumulative condition
 //! up to the target stage from current evidence, so DEC-067 falls out of the

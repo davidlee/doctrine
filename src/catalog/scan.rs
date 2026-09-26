@@ -50,7 +50,7 @@ pub(crate) fn outbound_for(
         // REQUIREMENT authors no outbound relations — it is an edge target only.
         // CM (concept-map, SL-076) likewise authors no outbound relations.
         "REQ" | "CM" => Ok(Vec::new()),
-        "RV" => crate::review::relation_edges(root, id),
+        "RV" => crate::review_ledger::relation_edges(root, id),
         "REC" => crate::rec::relation_edges(root, id),
         // REV (SL-066, G3) — the arm MUST land WITH the `KINDS` row or the
         // fallthrough `debug_assert!(false)` panics every debug-build corpus scan the
@@ -400,7 +400,8 @@ where
 /// The engine reader answers the three-way [`crate::kinds::AuthoredStatus`] and
 /// stops where its tier does. This overlay sits above it and can see one thing
 /// further: `RV`'s status is DERIVED from its authored finding ledger
-/// (`review::derived_status_string`, D-C8), and `review` is command tier. So
+/// (`review_ledger::derived_status_string`, D-C8), which the engine reader does not
+/// call yet (SL-268 D14). So
 /// [`crate::kinds::AuthoredStatus::Unavailable`] — the engine's honest "not
 /// readable from down there" — is the arm this overlay resolves, and it is the
 /// only one it touches.
@@ -419,7 +420,7 @@ fn status_and_title_for(
     let status = match authored.status {
         // The one arm this tier can do better on.
         crate::kinds::AuthoredStatus::Unavailable => {
-            Some(crate::review::derived_status_string(root, id)?)
+            Some(crate::review_ledger::derived_status_string(root, id)?)
         }
         // Status-less by design — no diagnostic, just absent.
         crate::kinds::AuthoredStatus::Absent => None,
@@ -1401,9 +1402,9 @@ mod tests {
     /// `authored_status::read`. Asserted by BEHAVIOUR — one `RV` fixture observed
     /// through both tiers:
     ///
-    /// - the ENGINE reader sits below `review` (command tier, `layering.toml`), so
-    ///   it can only name the gap: `Unavailable`;
-    /// - the OVERLAY can reach `review::derived_status_string`, so it reports the
+    /// - the ENGINE reader does not call the engine-tier `review_ledger` derivation
+    ///   yet (SL-268 D14), so it can only name the gap: `Unavailable`;
+    /// - the OVERLAY can reach `review_ledger::derived_status_string`, so it reports the
     ///   derived `active`.
     ///
     /// They differ exactly as the tiering predicts, and they AGREE on the title
