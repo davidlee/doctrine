@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0dd0af5367eb39223bb694e390380"
+memory_key = "mem.pattern.design-run.section-order-lexical"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Design run sections materialise in lexical id order — sec-10 renders before sec-2"
+summary = "DesignId derives Ord over its string; with more than nine sections, assign bodies to ids so lexical order reads correctly, or keep to nine"
+created = "2026-09-26"
+updated = "2026-09-26"
+
+[scope]
+paths = ["src/design_run/ids.rs"]
+globs = []
+commands = ["doctrine design materialise"]
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "9569a48e291aec0162d48820f22f4e58742eb988"
+ref_name = "refs/heads/edge"
+checkout_state_id = "71989b9c552f3734790d2e86ea9136adea3e42ebe7e479eb32e32361dcf0d512"
+base_commit = "22903a3de214cbc5e062f5f7d4afcda384747bec"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-268"
+

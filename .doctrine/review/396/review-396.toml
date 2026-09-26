@@ -33,7 +33,7 @@ response = "Verified: review_list serialises run_list output (tools.rs:651-667),
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Catalog RV status should disclose invalid finding status; design explicitly leaves a silent read"
 detail = "STD-003 requires every reader of authored state to disclose degraded reads on its own caller channel. SL-268 design sec-3 lines 320-323 and sec-9 lines 599-601 explicitly leave catalog status silently active for an RV with an unknown finding status. src/catalog/scan.rs:402-423 calls review::derived_status_string, which reads the finding ledger at src/review.rs:1618-1621; catalog then exposes that status through its cross-kind scan. DEC-319 only names the four review and close surfaces, but it does not waive STD-003 for catalog. Disclose the defect on catalog callers or make the cross-kind status probe return a distinguishable degraded result before this slice closes."
@@ -42,7 +42,7 @@ response = "Contest accepted: doctor keeps only facet-field diagnostics (doctor_
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Conclude should be the final act of each pass; latch makes done automatic after later transitions"
 detail = "SL-268 design sec-3 lines 269-279 defines done from terminal findings plus the latched concluded flag, and sec-4 lines 390-394 allows conclude with open findings and keeps the latch after raise or reopen. Sec-6 lines 457-459 and RFC-032 D2 lines 231-243 call conclude with a basis the required last move of every pass. A raiser can conclude while F-1 is open, then a responder disposes it and the raiser verifies it; the review becomes done with verify as its last act and a basis that predates the answer. The same occurs after a late raise or reopen without a second conclude. Clarify whether the basis is once per ledger or per completed pass, and align derivation, acts, and guidance."

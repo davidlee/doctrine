@@ -64,3 +64,12 @@ own dependencies point downward.
 See [[mem.pattern.layering.direction-is-not-cohesion]] — that one says a downward
 edge can still be the wrong siting. This one says a *deep* edge is still a
 top-level edge.
+
+
+3. **Sub-classified umbrellas are not tier-checked on their out-edges.** The
+   cross-tier assertion skips every module that has `module::sub` rows (≈`:711`),
+   so `"foo::bar" = "engine"` is documentation, not enforcement. And an import
+   of `crate::foo::bar::X` from elsewhere is an edge into `foo`'s umbrella tier.
+   To split an **enforceable** engine-tier unit out of a command module, make it
+   a new **top-level** module (SL-268: `src/review_ledger/`, not
+   `src/review/ledger.rs`).
