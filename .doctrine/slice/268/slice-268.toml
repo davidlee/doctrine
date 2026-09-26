@@ -1,0 +1,117 @@
+id = 268
+slug = "review-ledger-v2"
+title = "Review ledger v2"
+status = "design"
+created = "2026-09-26"
+updated = "2026-09-26"
+tags = []
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/review.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/review/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/mcp_server/tools.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/design.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/doctor_checks.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_*review*.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/review-ledger.md"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "plugins/doctrine/skills/{audit,code-review,inquisition,reconcile,close}/SKILL.md"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".doctrine/spec/tech/**"
+intent = "scope-relevant"
+
+[[relation]]
+label = "fulfils"
+target = "ISS-314"
+
+[[relation]]
+label = "fulfils"
+target = "ISS-366"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-029"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-479"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-007"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "IMP-481"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "CHR-001"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "IMP-336"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "IMP-259"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "CHR-079"
+
+[[relation]]
+label = "related"
+target = "RFC-032"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis. Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-NNN
+#   doctrine link SL-NNN governed_by ADR-NNN
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
