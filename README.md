@@ -1,31 +1,76 @@
 # Doctrine
 
-Doctrine is an opinionated but hackable set of tools and conventions for
-software engineering with LLM agents.
+Doctrine is an evolving, ambitious, but pragmatic approach to agentic engineering, expressed as a Rust CLI tool.
+
+It promotes engineering rigour, fosters clear understanding, and bounds agent autonomy. Agents adhere to your intent, and you focus your attention on design, not supervision or repair.
+
+Why?
+
+You can build an effective process for small-scale projects in 80 lines of markdown - but agents follow prose instructions unreliably. As project scope and complexity grow, the effectiveness of this approach declines, and new failure modes emerge. Prose is flexible, but unstructured. A prompt, no matter how well considered, can only improve the odds so much.
+
+Doctrine supplements coding agents with the determinism of classical software systems. Workflows are pushed down into finite state machines. Structured data alongside markdown documents allows their traversal as nodes in a graph. Decisions, assumptions, hypotheses, and evidence records make a shared semantic view of your codebase legible. Memories decay over time, and are surfaced when the files they concern are encountered.
+
+Doctrine is designed to work with any model or harness, though specific integrations may vary slightly. Its vendor-agnostic handling of project context, and strict guardrails, make less capable and cheaper models more reliable and reduce the barriers to substitution.
 
 ![HERESIS URITUR; DOCTRINA MANET.](./doctrine.png) 
 
 > Heresy burns; Doctrine remains.
 
-## Design Goals:
+## Design Goals
 
-1. Correctness 
-2. Laziness
-3. Hackability
-4. Efficiency
+Priorities, in order — when two conflict, the higher one wins:
 
-- DX for solo developers, teams
-- time and token efficiency
-- suitability for systems of any size & complexity profile
-- useful support for "pre-rational" stages of specification (e.g. product design, backlog)
-- quality engineering: robust auditability; formal verification gates
-- separation of structured, relational data from prose
-- separation of mutable, disposable state from useful artifacts
-- thoughfully designed memory retrieval, relevance & decay
-- composability; provide "orchestration primitives"
-- avoidance of vendor lockin
-- single binary distribution
-- more with less: focused ambition, not minimalism.
+1. **Correctness.** Work that is wrong is worse than work not done. Lifecycle
+   rules live in the binary, not in a prompt: the CLI refuses an illegal
+   transition, whatever the agent was told. Phases close green; slices close
+   through an audit.
+2. **Comprehension.** You should be able to understand what your agents built
+   and why, months later. Intent, decisions, and evidence are recorded as they
+   happen, cited by durable ids, and linked into one graph you can query.
+3. **Adaptability.** Your process is not ours. Templates, skills, and
+   governance are plain files you own and edit; doctrine works with any model
+   or harness, at any project size.
+4. **Automation.** Once the above hold, hand over more of the loop: parallel
+   workers, prescribed next steps, derived priority.
+5. **Efficiency.** Spend as little as possible of three budgets — complexity,
+   tokens, and human attention. Agents load the context they need, when they
+   need it, instead of a wall of instructions every turn.
+
+### Why you might care
+
+- **Agents stop drifting.** A long design session survives context compaction
+  because its state lives on disk, not in the transcript. The framework tracks
+  where the work stands and what is owed next; the agent spends its judgement on
+  the problem.
+- **You review design, not wreckage.** Scope, design, and plan are agreed
+  before code is written. Review findings sit on a ledger that must be
+  resolved, not in a chat scroll.
+- **Knowledge compounds.** What one session learns, the next one inherits —
+  scoped to the files it concerns, with staleness flagged rather than silently
+  trusted.
+- **Cheaper models do more.** Structure and guardrails carry weight a frontier
+  model would otherwise carry in its head, which makes substitution practical.
+- **It's just files.** TOML and Markdown in your repo, versioned with your
+  code. A single binary, no service, no account, no lock-in.
+
+### What's in the box
+
+| Area | What it does |
+|---|---|
+| **Change lifecycle** | Every intentional change is a *slice*: scope → design → plan → phases → audit → reconcile → close. The lifecycle is a state machine; design runs are managed, so an interview resumes cleanly in a fresh context. |
+| **Specifications & governance** | Product and technical specs, requirements, ADRs, policies, standards, RFCs, and revisions. A boot snapshot puts the binding rules — and who may override them — in front of every agent session. |
+| **Epistemic records** | Assumptions, decisions, open questions, constraints, evidence, hypotheses, and concepts: the things a project acts on without having proven, tracked from *held* to *settled* instead of lost in prose. Useful before anything is concrete enough to build. |
+| **Memory** | Typed, scoped memories anchored to the code they describe. Surfaced when an agent touches matching files; verified, aged, and flagged when stale. Usable on its own (`--only-memory`). |
+| **Adversarial review** | Reviews as a first-class ledger: findings are raised, disposed, verified, or contested turn by turn — across models if you like. Audit uses the same ledger to reconcile what was built against what was designed. |
+| **Backlog & priority** | Cheap capture of issues, improvements, chores, risks, and ideas. Priority and actionability are derived from the dependency graph and lifecycle state; `doctrine next` explains its answer. Value can be elicited by pairwise comparison. |
+| **Parallel dispatch** | Phases run as workers in isolated git worktrees (kernel-confined on Linux). One orchestrator is the sole writer of shared state; progress is crash-resumable; nothing lands on trunk before audit. Orchestration verbs are primitives you can compose. |
+| **Exploration** | Ranked search over the whole corpus, relation graphs in the terminal, and a local web explorer (`doctrine map serve`). |
+| **Harness independence** | Skills install for Claude Code, Codex, pi, and other agents. Per-model prompt supplements resolve on demand, so one project works across harnesses. |
+| **Self-measurement** | An observation ledger captures process friction as it happens, so the workflow itself can be tuned on evidence. |
+
+The separation is deliberate throughout: structured, queryable data in TOML;
+prose in Markdown; disposable runtime state in a gitignored directory, apart
+from the artifacts worth keeping.
 
 ## Non-Goals
 
