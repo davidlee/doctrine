@@ -501,7 +501,15 @@ It is applied at reconcile.
 
 - `install/review-ledger.md` (`CHR-079`): acts, `amend`/`reopen`, required notes,
   `conclude --basis` as the closing move after the last raise or reopen, `--route`, aliases, `-`/`@path`, and MCP
-  as the preferred write path, with a quoted heredoc on the CLI;
+  as the preferred write path, with a quoted heredoc on the CLI. It also states
+  that roles belong to acts, not agents: a responder that spots a new defect
+  raises it `--as raiser`;
+- `install/routing-process.md`, the boot snapshot's **Reference forms**
+  paragraph: when the reader is a human, the first qualified mention of a
+  doc-local id also names the verb that opens it (for example
+  `doctrine show RV-NNN`). One rule for every kind, not a review-only one; the
+  example uses the placeholder because the file ships (ADR-024). `doctrine boot`
+  regenerates the snapshot;
 - `install/design-prompts/reviewing.md`: `route` becomes the `--route` field, not
   a prose token;
 - `plugins/doctrine/skills/{audit,code-review,inquisition,reconcile,close}/SKILL.md`
@@ -546,6 +554,7 @@ design-target`):
 | `tests/architecture_layering.rs` | unchanged unless its fixtures name `review` |
 | `install/templates/review.toml` | unchanged; new keys are written at first use, not at mint |
 | `install/review-ledger.md`, `install/design-prompts/reviewing.md` | guidance (sec-6) |
+| `install/routing-process.md` | Reference forms: name the read verb for a human reader (sec-6) |
 | `plugins/doctrine/skills/` | pass-running skills (sec-6), plus bounded-review fixes |
 
 The bounded review may touch further guidance files. Those are recorded as

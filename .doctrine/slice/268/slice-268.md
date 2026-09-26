@@ -73,7 +73,10 @@ Decision ids below are RFC-032 `decision-frontier.md`'s.
 10. **Guidance.** Update the skills that run a pass (`/audit`, `/code-review`,
     `/inquisition`, the design-run guidance) so `conclude --basis` is the last
     move and writes go through MCP. Refresh `install/review-ledger.md`
-    (`CHR-079`) for the verbs and acts this slice changes.
+    (`CHR-079`) for the verbs and acts this slice changes, including that a
+    responder raises a new finding `--as raiser`. Extend the boot snapshot's
+    Reference forms rule (`install/routing-process.md`): a human reader is told
+    the verb that opens a cited id (`doctrine show RV-NNN`).
 11. **Bounded guidance review (DEC-320).** Review the installed guidance
     (install reference docs, shipped skills, MCP tool descriptions) for
     misleading CLI and MCP usage (verbs, flags, fields, argument shapes),
@@ -84,6 +87,7 @@ Decision ids below are RFC-032 `decision-frontier.md`'s.
 
 - D5's read projection, census and JSON unification, and D14 (RV as a relation
   target): slice 2.
+- A per-finding detail read on `review show` (`--finding` / `--full`): IMP-494.
 - D3 (section anchor) and D6 (design-run bind-before, `External` arm, the
   `Finding` deletion): slice 3. SPEC-029 is not revised here.
 - D9 (clone-wide reservation) and D7 (locus tiers, merge backstop): slice 4.
@@ -114,7 +118,8 @@ engine-tier module with a spec that owns it.
   `src/relation.rs`, `src/priority/partition.rs`, `src/catalog/scan.rs`
 - tests: new e2e golden (IMP-029); `tests/e2e_design_review.rs`; the
   `review.rs` unit suite
-- `install/review-ledger.md`; `plugins/doctrine/skills/{audit,code-review,inquisition,reconcile,close}/SKILL.md`;
+- `install/review-ledger.md`; `install/routing-process.md` (Reference forms);
+  `plugins/doctrine/skills/{audit,code-review,inquisition,reconcile,close}/SKILL.md`;
   other installed guidance the bounded review flags
 - `src/kinds/mod.rs` `DERIVED_STATUS` comment and its pinning test (DEC-318)
 - governance: new tech spec, a REV against ADR-007 and SPEC-003

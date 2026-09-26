@@ -1,7 +1,7 @@
 id = 268
 slug = "review-ledger-v2"
 title = "Review ledger v2"
-status = "design"
+status = "plan"
 created = "2026-09-26"
 updated = "2026-09-26"
 tags = []
@@ -125,6 +125,11 @@ intent = "design-target"
 [[selector]]
 selector = "plugins/doctrine/skills/walkthrough/SKILL.md"
 intent = "design-target"
+
+[[selector]]
+selector = "install/routing-process.md"
+intent = "design-target"
+note = "Reference forms: name the read verb for a human reader"
 
 [[relation]]
 label = "fulfils"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dd21-20a2-7320-85bc-71016e419de2"
+recorded_at = "2026-09-26T09:52:10.914109005Z"
+kind = "friction"
+summary = "design skill: top-level acceptance on a section-edit apply recorded design-accepted"
+detail = "SL-268 run rev 32->33: an apply with only declare[sec-6,sec-7 body] plus top-level acceptance{basis} emitted act_recorded cpa-design-accepted. Intent was only to cite the user's basis for the section edits. The contract does not say a bare top-level acceptance is itself a design-accepted act; the reviewing fragment's lock example pairs it with checkpoint_act, which suggests it is only a basis."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
