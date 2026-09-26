@@ -12,6 +12,20 @@ raiser    = "reviewer"
 responder = "fixer"
 rounds_base = 0
 contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Full pass concluded. Covered:
+- install/**/*.md and plugins/doctrine/skills/**/SKILL.md (the review-touching subset read in full, the rest grep-scanned for review verbs/flags/states), checked against `./target/debug/doctrine review <verb> --help` built at HEAD and a live MCP tools/list dump: F-1 (audit disposition convention), F-3 (fork-caveat verb coverage), F-6 (audit must keep review prime), F-7 (design-run lock gate wording), F-8 (audit close-gate wording), F-9 (feedback skill responder mapping) all confirmed fixed and matching the binary/gate code (src/review_ledger/gate.rs, src/review/turn.rs resolve_review_root).
+- The two stale local memories: F-2 (mem_01a0d91d7a0d75f1853c505d08237451, route/vocab) and F-4 (mem_019eb741539075c380783b4cff747fec, fork-refusal verb list and code citation), both hand-edited in place and re-verified against current code.
+- MCP review_* tool descriptions and schemas (13 tools) against tools.rs source and CLI --help: F-5 (review_show route/warnings projection), F-10 (repo-private ids SL-268 D8 / ADR-007 / SL-147 PHASE-05 / RFC-032 D5 dropped from the review surface; remainder correctly scoped to backlog ISS-493), F-11 (--as -> as wording, review_conclude gained the sentence) all confirmed fixed.
+- Fix verification: cargo test --test e2e_mcp_server review_dispose_route (review_dispose_route_round_trips, F-5), cargo test --bin doctrine title_from_dash (title_from_dash_or_at_path_drops_trailing_line_terminators, F-12), cargo test --test e2e_review_golden title_read (title_read_through_dash_or_at_path_is_stored_single_line, F-12) all pass; cargo test --bin doctrine review:: (134 tests) green.
+
+All 12 findings verified terminal by the raiser. No contests, no new findings raised.
+"""
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-268"
@@ -19,7 +33,7 @@ phase = "PHASE-09"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Audit disposition convention should use the closed vocab; it teaches verified as a disposition"
 detail = """
@@ -47,9 +61,16 @@ response = """
 Fixed in plugins/doctrine/skills/audit/SKILL.md. The "Disposition convention (audit-specific)" paragraph now names the closed vocab. A spec/governance change delegated to /reconcile is disposed `design-wrong`, with the reconciliation-brief link in --response. `follow-up` stays forbidden for those items, and `design-wrong` is no longer forbidden. The paragraph also keeps status and disposition apart: `verified` is a status reached by the raiser's `review verify`, never a --disposition value. Process step 3's anti-escape line was changed to match: dispose `design-wrong` with the brief link, and the raiser verifies once the brief entry exists.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Checked: `review dispose --help` confirms the closed --disposition vocab is aligned|fix-now|design-wrong|follow-up|tolerated, with no `verified`. plugins/doctrine/skills/audit/SKILL.md now names that closed vocab, routes a spec/governance delegation to `design-wrong` with the reconciliation-brief link, keeps `follow-up` forbidden for those items, and states `verified` is a status reached via `review verify`, never a --disposition value. Defect gone.
+"""
+
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Memory should teach --route; mem.pattern.design-run.review-disposition-route-and-vocab teaches the refused route: prefix"
 detail = """
@@ -75,9 +96,16 @@ response = """
 Rewritten in place with `memory edit` (title, summary, body): local memory mem_01a0d91d7a0d75f1853c505d08237451 (mem.pattern.design-run.review-disposition-route-and-vocab). The key names the topic, not the false lesson, so it was hand-edited rather than superseded. It now teaches `--route <route>` beside a closed `--disposition <vocab>`, both validated on write and optional-route on dispose/amend. It says the `route:` prefix and a route-only disposition are refused (the old footgun is closed). It says how to read the route back: CLI `show --json` or MCP `review_show`, which now carries it (F-5). A legacy ledger's `route:` prefix still reads verbatim.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Checked: local memory mem_01a0d91d7a0d75f1853c505d08237451 was hand-edited (git show confirms). It now teaches --route <route> beside a closed --disposition vocab, both optional-route on dispose/amend, states the route: prefix and route-only disposition are refused, and gives the CLI --json / MCP review_show read-back path. The refused footgun the memory used to teach no longer appears. Defect gone.
+"""
+
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Fork caveat should name the verbs the guard covers; guidance says all review verbs refuse on a fork, but new, show and list do not"
 detail = """
@@ -114,9 +142,16 @@ Fixed in three places. The guard coverage was re-checked in code: `resolve_revie
 No fork guard was added to new/show/list; that would be a behaviour change outside the plan.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Checked against code: resolve_review_root (src/review/turn.rs) is called by the eight turn verbs in verbs.rs plus status/prime/unlock; run_new (verbs.rs) and run_show/run_list (read.rs) call crate::root::find directly with no fork guard, confirming the finding's premise. install/review-ledger.md Parent-tree caveat, inquisition/SKILL.md, and the MCP review_new description now all name the guarded verbs and say new/show/list do not refuse, warning that a fork-run new strands the ledger. Defect gone.
+"""
+
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Fork-refusal memory should cite current code and text; its core claim holds but its details are stale"
 detail = """
@@ -155,9 +190,16 @@ Refreshed local memory mem_019eb741539075c380783b4cff747fec (mem.pattern.review.
 - The summary was updated to match.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Checked: mem_019eb741539075c380783b4cff747fec was hand-edited. Verb list now reads the eight turn verbs plus status/prime/unlock (matches the call-site audit done for F-3); the refusal text ends "parent or coordination tree", matching turn.rs's actual bail! message; the code citation now names src/review/turn.rs resolve_review_root -> classify_worktree_role instead of the dead review.rs:2358. The "new succeeds on a fork" trap is kept, as required. Defect gone.
+"""
+
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "MCP review_show should surface route; the preferred MCP read cannot see the route the guidance says to read"
 detail = """
@@ -192,9 +234,16 @@ Fixed in code.
 - Guidance: install/review-ledger.md "Route axis" and plugins/doctrine/skills/plan/SKILL.md step 3 now name the MCP review_show path beside CLI `show --json`.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Checked: src/review/read.rs Finding gained route: Option<String> (skip_serializing_if none), filled in finding_of_row from row.route. MCP review_show/finding schema and Returns text now document route? and warnings?. cargo test --test e2e_mcp_server review_dispose_route -> review_dispose_route_round_trips ok. install/review-ledger.md and plan/SKILL.md step 3 now name the MCP review_show path beside CLI --json. Defect gone.
+"""
+
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Audit skill should keep review prime; it says prime seeding is gone while the ledger doc and sibling skills require it"
 detail = """
@@ -219,9 +268,16 @@ response = """
 Fixed in plugins/doctrine/skills/audit/SKILL.md, Process step 1. It now says to prime the ledger (review-ledger.md §2): `review prime` derives the path-set from the slice's selectors, and the staleness signal hashes it. It says what is gone is the hand-curated `domain_map`, not the `prime` verb. The `slice conformance` drift signal is described as complementing prime, not replacing it.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Checked: `review prime --help` confirms prime is a live verb deriving the path-set from the target slice's selectors. plugins/doctrine/skills/audit/SKILL.md Process step 1 now says to prime the ledger and that only the hand-curated domain_map is gone, not the prime verb, with slice conformance framed as complementary. Defect gone.
+"""
+
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Design lock gate should be stated as it is enforced; reviewing.md says any undispositioned finding blocks the lock"
 detail = """
@@ -247,9 +303,16 @@ response = """
 Fixed in install/design-prompts/reviewing.md, "What the machine will reject". The bullet now reads: "An undisposed blocker (open or contested) on the run's pass RV blocks a `conducted` lock, and it does not expire on its own. Carry every other finding to a disposition as well; the machine will not force that." This matches what run.rs `undisposed_blockers` enforces.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Checked against src/review_ledger/gate.rs: doc_unresolved_blockers/undisposed_blockers filter on gates_as_blocker (blocker severity or out-of-vocab only). install/design-prompts/reviewing.md's "What the machine will reject" bullet now states an undisposed blocker (open or contested) blocks a conducted lock, and that carrying every other finding to a disposition is not machine-enforced. Matches the gate. Defect gone.
+"""
+
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Audit skill should say the close-gate checks blockers only; it claims the binary enforces no undispositioned findings"
 detail = """
@@ -275,9 +338,16 @@ response = """
 Fixed in plugins/doctrine/skills/audit/SKILL.md, the intro paragraph. It now says an unresolved blocker refuses the audit→reconcile and reconcile→done crossings (the close-gate teeth), and that carrying every other finding to a terminal state is the skill's discipline, not the binary's. This is consistent with review-ledger.md §3/§6.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Checked: same gate.rs read as F-7 confirms only a blocker-severity finding gates close. plugins/doctrine/skills/audit/SKILL.md's intro paragraph now says an unresolved blocker refuses the audit->reconcile and reconcile->done crossings, and that carrying every other finding to a terminal state is the skill's discipline, not the binary's -- consistent with review-ledger.md and the gate code. Defect gone.
+"""
+
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Feedback skill should give the responder a responder act; on a doctrine RV it tells them to contest"
 detail = """
@@ -305,9 +375,16 @@ response = """
 Fixed in plugins/doctrine/skills/feedback/SKILL.md, "With structured review ledgers". A new paragraph maps the conduct onto the responder's acts on a doctrine RV. A finding judged wrong is disposed `aligned` with the verified counter-evidence in --response, not contested. `contest` is the raiser's verb, for when the answer does not satisfy them. A later change goes through `review amend`. The generic "contest" wording elsewhere in the skill is left as conversational language, as the finding allows.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Checked: plugins/doctrine/skills/feedback/SKILL.md, "With structured review ledgers" now has a paragraph mapping the responder's conduct onto the responder's acts on a doctrine RV -- a finding judged wrong is disposed aligned with counter-evidence in --response, contest is named explicitly as the raiser's verb, and a later change goes through review amend. No longer steers the responder toward contest. Defect gone.
+"""
+
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "MCP review tool descriptions should not cite repo-private ids; review_dispose now cites SL-268 D8"
 detail = """
@@ -348,9 +425,16 @@ The same class outside the review surface was filed as ISS-493 (related to ISS-3
 No test pinned any of the edited strings.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Checked live: grep for "(--as)"|(ADR-007)|SL-268 D8|SL-147 PHASE-05|RFC-032 D5 across src/mcp_server/tools.rs, src/review/cli.rs, src/commands/cli.rs returns zero hits; `review --help` reads "(the RV kind)" with no ADR-007 citation. The review surface is clean of repo-private ids. The fixer correctly scoped the remainder (shared --columns help, IMP-024 citation, general binary-text sweep) to backlog ISS-493 rather than silently leaving it, and that scoping is stated in the response. Defect gone on the declared scope.
+"""
+
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "MCP descriptions should name the field as; they say --as"
 detail = """
@@ -375,9 +459,16 @@ response = """
 Fixed in src/mcp_server/tools.rs. In the seven descriptions (review_raise, review_dispose, review_amend, review_verify, review_contest, review_reopen and review_withdraw), "`--as` is cooperative role assertion ..." now reads "`as` is a cooperative role assertion, not a security boundary.". review_conclude, which takes `as` but said nothing, gained the same sentence.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Checked live tools/list-equivalent (src/mcp_server/tools.rs source): the seven role-asserting descriptions (raise, dispose, amend, verify, contest, reopen, withdraw) all now read "`as` is a cooperative role assertion, not a security boundary" with no --as spelling, and review_conclude gained the same sentence where it previously had none. Defect gone.
+"""
+
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "A title read through - or @path should be single-line; the trailing newline is kept and splits the list row"
 detail = '''
@@ -412,6 +503,13 @@ Fixed in code.
 - Golden (tests/e2e_review_golden.rs, G-P6 `title_read_through_dash_or_at_path_is_stored_single_line`): `new --title -` with a heredoc-style "\n" stores a one-line title, and `list` renders one row with no blank continuation. `raise --title @title.txt` ("\r\n") stores a one-line title, while `--detail @detail.md` keeps its trailing newline. A mutation beat (trim disabled) failed this golden on its ledger assert, not on a compile error.
 MCP titles are JSON literals and never pass through the resolver, so they are unchanged.
 RV-397's own stored title (with a trailing newline, from before the fix) is left as it is.
+'''
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = '''
+Checked: src/input.rs resolve_prose_title trims trailing \n/\r only when raw was "-" or "@path", literal titles stay verbatim; wired into review/cli.rs New/Raise. cargo test --bin doctrine title_from_dash -> title_from_dash_or_at_path_drops_trailing_line_terminators ok. cargo test --test e2e_review_golden title_read -> title_read_through_dash_or_at_path_is_stored_single_line ok. Detail/response/note/basis remain untouched (verbatim), matching the fix's stated scope. Defect gone; RV-397's own pre-fix title is correctly left as-is per the response.
 '''
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
