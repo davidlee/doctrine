@@ -126,6 +126,10 @@ fn tools() -> Vec<McpTool> {
                         "items": { "type": "string" },
                         "description": "Tag filter (OR within the axis)"
                     },
+                    "target": {
+                        "type": "string",
+                        "description": "Restrict to reviews whose reviews edge targets this ref (the subject canonical ref, e.g. SL-024); phase scope ignored"
+                    },
                     "limit": {
                         "type": "integer",
                         "description": "Cap rows to the most recent N (default: 50; 0 = all). When capped, the response carries a `total` count."
@@ -657,7 +661,8 @@ fn call_tool(
                 ..Default::default()
             };
             let cap = effective_cap(fields.opt_usize_field("limit"));
-            let out = review::run_list(Some(root.to_path_buf()), args)
+            let target = fields.opt_str_field("target");
+            let out = review::run_list(Some(root.to_path_buf()), args, target.as_deref())
                 .map(|out| project_list_cap(out, cap))?;
             Ok(serde_json::to_string(&out)?)
         }
@@ -1934,6 +1939,22 @@ mod tests {
         assert!(
             resp.error.is_none(),
             "review_list status filter errored: {:?}",
+            resp.error
+        );
+        assert!(resp.result.is_some());
+    }
+
+    // IMP-490 (RFC-032 0c): the review_list `target` filter is advertised and
+    // threaded to the shared service (the behaviour it drives is proved in
+    // `review::tests::list_target_filters_to_the_subject_edge`).
+    #[test]
+    fn review_list_target_filter_succeeds() {
+        let (_dir, root) = temp_root();
+        let req = tools_call_req("review_list", json!({ "target": "SL-001" }));
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        assert!(
+            resp.error.is_none(),
+            "review_list target filter errored: {:?}",
             resp.error
         );
         assert!(resp.result.is_some());

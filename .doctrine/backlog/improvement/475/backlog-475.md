@@ -12,3 +12,12 @@ Requested: a first-class read render — `review show --findings`
 Observed 9+ times across 4 slices: obs `019fac2f`, `019facb4`, `01a00e42`,
 `01a00f14`, `019fc660`, `01a0049a`, `019ff661`, `019fbcb9`, `019fd1d9`.
 See RFC-032 `research.md` F1.
+
+---
+
+**Split (RFC-032 step 0c).** The finding index (now the *default* on
+`review show`) and `review list --target` are delivered by `IMP-490`. The
+`--findings` opt-in flag this item proposed is rejected by RFC-032 `D5`: the
+finding tier should be the default, not a flag. What remains here is the `D5`
+read-surface remainder — the CLI/MCP JSON projection unification (`IMP-476`) and
+the shared filters — which RFC-032 sequences into its slice 2.

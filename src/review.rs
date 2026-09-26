@@ -72,6 +72,12 @@ pub(crate) enum ReviewCommand {
         #[command(flatten)]
         list: crate::CommonListArgs,
 
+        /// Restrict to reviews whose `reviews` edge targets this ref — the
+        /// subject canonical ref, e.g. `SL-024` (RFC-032 D5). Phase scope is
+        /// ignored: `SL-024` also admits a `SL-024@PHASE-03` edge.
+        #[arg(long)]
+        target: Option<String>,
+
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -310,9 +316,9 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             write!(std::io::stdout(), "{rendered}")?;
             Ok(())
         }
-        ReviewCommand::List { list, path } => {
+        ReviewCommand::List { list, target, path } => {
             use std::io::Write;
-            let out = run_list(path, list.into_list_args(color))?;
+            let out = run_list(path, list.into_list_args(color), target.as_deref())?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;
             Ok(())
@@ -1885,7 +1891,7 @@ pub(crate) fn run_show(
     let id = parse_ref(reference)?;
     let doc = read_review(&review_root, id)?;
     let body = read_brief(&review_root, id)?;
-    let (status, awaiting) = doc.derived();
+    let view = ReviewView::of(&doc);
     let formatted = match format {
         Format::Table => {
             let cfg = crate::dtoml::load_doctrine_toml(&root)?;
@@ -1905,7 +1911,7 @@ pub(crate) fn run_show(
                 &estimation_unit,
             )?;
             format_show(
-                &doc,
+                &view,
                 &body,
                 &estimation_unit,
                 value_line.as_deref(),
@@ -1916,30 +1922,20 @@ pub(crate) fn run_show(
         }
         Format::Json => show_json(&doc, &body)?,
     };
-    let canonical = canonical_id(id);
-    let title = doc.title.clone();
-    let facet = doc.review.facet.clone();
-    let target = edge_label(&doc);
-    let findings_count = doc.finding.len();
-    let findings: Vec<Finding> = doc
-        .finding
-        .iter()
-        .map(|fr| Finding {
-            id: fr.id.clone(),
-            status: parse_finding_status(&fr.status),
-            severity: Severity::parse(&fr.severity).unwrap_or(Severity::Major),
-            title: fr.title.clone(),
-            detail: fr.detail.clone(),
-            disposition: fr.disposition.clone(),
-            response: fr.response.clone(),
-        })
-        .collect();
+    let canonical = view.canonical.clone();
+    let title = view.title.to_owned();
+    let facet = view.facet.to_owned();
+    let target = view.target.clone();
+    let status = view.status.as_str().to_owned();
+    let awaiting = view.awaiting.as_str().to_owned();
+    let findings_count = view.findings.len();
+    let findings = view.findings;
     Ok(ReviewOutput::Showed {
         id,
         canonical,
         title,
-        status: status.as_str().to_owned(),
-        awaiting: awaiting.as_str().to_owned(),
+        status,
+        awaiting,
         facet,
         target,
         findings_count,
@@ -1956,11 +1952,101 @@ fn read_brief(review_root: &Path, id: u32) -> anyhow::Result<String> {
     fs::read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))
 }
 
+/// The one read projection of a review ledger (RFC-032 D5, IMP-490). Everything
+/// a render needs — the derived status/await, the header fields, and the typed
+/// findings — computed ONCE from the authored doc. `show` renders it today; the
+/// JSON projection and the corpus census (D5 remainder) will read the same
+/// struct, so the ledger module can move (D4) without any renderer rewriting.
+/// Pure: no I/O, no clock.
+struct ReviewView<'a> {
+    canonical: String,
+    title: &'a str,
+    facet: &'a str,
+    status: ReviewStatus,
+    awaiting: Await,
+    /// The `reviews`-edge label (`SL-024` or `SL-024@PHASE-03`).
+    target: String,
+    raiser: &'a str,
+    responder: &'a str,
+    tags: &'a [String],
+    findings: Vec<Finding>,
+}
+
+impl<'a> ReviewView<'a> {
+    /// Build the projection from the authored doc — the single raw→typed parse of
+    /// a review. Pure.
+    fn of(doc: &'a ReviewDoc) -> Self {
+        let (status, awaiting) = doc.derived();
+        Self {
+            canonical: canonical_id(doc.id),
+            title: &doc.title,
+            facet: &doc.review.facet,
+            status,
+            awaiting,
+            target: edge_label(doc),
+            raiser: &doc.review.raiser,
+            responder: &doc.review.responder,
+            tags: &doc.tags,
+            findings: doc.finding.iter().map(finding_of_row).collect(),
+        }
+    }
+}
+
+/// One authored `[[finding]]` row → the typed [`Finding`] (the MCP/`--json` shape
+/// and the index's row). An out-of-vocabulary status reads `Open` (conservative,
+/// non-terminal); an out-of-vocabulary severity falls back to `Major` — unchanged
+/// from the pre-view parse.
+fn finding_of_row(row: &FindingRow) -> Finding {
+    Finding {
+        id: row.id.clone(),
+        status: parse_finding_status(&row.status),
+        severity: Severity::parse(&row.severity).unwrap_or(Severity::Major),
+        title: row.title.clone(),
+        detail: row.detail.clone(),
+        disposition: row.disposition.clone(),
+        response: row.response.clone(),
+    }
+}
+
+/// The em-dash rendered in the index's `disposition` column when a finding
+/// carries none (it is set only by `dispose`).
+const NO_DISPOSITION: &str = "—";
+
+/// Render the finding index (RFC-032 D5): one row per finding —
+/// `id │ severity │ status │ disposition │ title`. Rendered through the shared
+/// `listing::render_table` (not bespoke formatting) so colour/width policy and
+/// the census's column machinery stay in one place. An empty ledger renders
+/// nothing (the `findings: 0` count line stands alone).
+fn render_finding_index(findings: &[Finding]) -> String {
+    if findings.is_empty() {
+        return String::new();
+    }
+    let mut grid: Vec<Vec<String>> = Vec::with_capacity(findings.len() + 1);
+    grid.push(
+        ["id", "severity", "status", "disposition", "title"]
+            .iter()
+            .map(|header| (*header).to_owned())
+            .collect(),
+    );
+    grid.extend(findings.iter().map(|f| {
+        vec![
+            f.id.clone(),
+            f.severity.as_str().to_owned(),
+            f.status.as_str().to_owned(),
+            f.disposition
+                .clone()
+                .unwrap_or_else(|| NO_DISPOSITION.to_owned()),
+            f.title.clone(),
+        ]
+    }));
+    listing::render_table(&grid, None)
+}
+
 /// Render the `Table` show: identity header, the derived status + await, the
-/// `reviews` edge, then the brief body. House style — `Vec<String>` joined by
-/// `concat` (avoids the `push_str(&format!)` lint).
+/// `reviews` edge, the finding index, then the brief body. House style —
+/// `Vec<String>` joined by `concat` (avoids the `push_str(&format!)` lint).
 fn format_show(
-    doc: &ReviewDoc,
+    view: &ReviewView<'_>,
     body: &str,
     _estimation_unit: &str,
     value_line: Option<&str>,
@@ -1968,28 +2054,24 @@ fn format_show(
     _lower_pct: f64,
     _upper_pct: f64,
 ) -> String {
-    let (status, awaited) = doc.derived();
     let mut parts: Vec<String> = Vec::new();
-    parts.push(format!("{} — {}\n", canonical_id(doc.id), doc.title));
+    parts.push(format!("{} — {}\n", view.canonical, view.title));
     parts.push(format!(
         "{} · {} · await={}\n",
-        doc.review.facet,
-        status.as_str(),
-        awaited.as_str()
+        view.facet,
+        view.status.as_str(),
+        view.awaiting.as_str()
     ));
-    parts.push(format!(
-        "{} ──reviews──▶ {}\n",
-        canonical_id(doc.id),
-        edge_label(doc)
-    ));
+    parts.push(format!("{} ──reviews──▶ {}\n", view.canonical, view.target));
     parts.push(format!(
         "findings: {} (raiser {} · responder {})\n",
-        doc.finding.len(),
-        doc.review.raiser,
-        doc.review.responder
+        view.findings.len(),
+        view.raiser,
+        view.responder
     ));
-    if !doc.tags.is_empty() {
-        parts.push(format!("tags: {}\n", doc.tags.join(", ")));
+    parts.push(render_finding_index(&view.findings));
+    if !view.tags.is_empty() {
+        parts.push(format!("tags: {}\n", view.tags.join(", ")));
     }
     // SL-222 PHASE-07: pipeline-resolved estimate line (facet fallback deleted PHASE-09).
     if let Some(line) = estimate_line {
@@ -2099,13 +2181,24 @@ fn key(d: &ReviewDoc) -> listing::FilterFields {
 /// `review list` rows as a string — the compute half of [`run_list`]. No hide-set
 /// (an RV is either Active or Done; both are listed), sorted by id, each row
 /// carrying its derived status.
-fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<(String, Vec<ListRow>)> {
+fn list_rows(
+    root: &Path,
+    mut args: ListArgs,
+    target: Option<&str>,
+) -> anyhow::Result<(String, Vec<ListRow>)> {
     listing::validate_statuses(&args.status, REVIEW_STATUSES)?;
     let render = args.render;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let review_root = root.join(REVIEW_DIR);
-    let mut docs = listing::retain(read_reviews(&review_root)?, &filter, |_| false, key);
+    let mut docs = read_reviews(&review_root)?;
+    // RFC-032 D5: `--target` admits only reviews on the given subject edge. The
+    // filter is on the BARE `[target].ref`, so `SL-024` admits a
+    // `SL-024@PHASE-03` edge too (phase scope is not part of the subject id).
+    if let Some(want) = target {
+        docs.retain(|d| d.target.reference == want);
+    }
+    let mut docs = listing::retain(docs, &filter, |_| false, key);
     docs.sort_by_key(|d| d.id);
     let any_tagged = docs.iter().any(|d| !d.tags.is_empty());
     let rows: Vec<ReviewRow> = docs
@@ -2156,9 +2249,13 @@ fn json_rows(rows: &[ReviewRow]) -> Vec<ListRow> {
 
 /// `doctrine review list` — list reviews by id with derived status, facet, and
 /// the `reviews`-edge target.
-pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<ReviewOutput> {
+pub(crate) fn run_list(
+    path: Option<PathBuf>,
+    args: ListArgs,
+    target: Option<&str>,
+) -> anyhow::Result<ReviewOutput> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let (formatted, rows) = list_rows(&root, args)?;
+    let (formatted, rows) = list_rows(&root, args, target)?;
     Ok(ReviewOutput::Listed {
         rows,
         total: None,
@@ -3609,7 +3706,8 @@ mod tests {
             estimate: None,
             value: None,
         };
-        let out = format_show(&doc, "## Brief\n", "points", None, None, 0.0, 1.0);
+        let view = ReviewView::of(&doc);
+        let out = format_show(&view, "## Brief\n", "points", None, None, 0.0, 1.0);
         assert!(out.contains("RV-003 — Design review of SL-024"), "{out}");
         // empty ⇒ Done, await=None.
         assert!(out.contains("done · await=none"), "{out}");
@@ -5699,25 +5797,7 @@ mod tests {
     fn golden_run_list() {
         let tmp = fixture_rv();
         let root = tmp.path();
-        let out = run_list(
-            Some(root.to_path_buf()),
-            ListArgs {
-                substr: None,
-                regexp: None,
-                case_insensitive: false,
-                status: Vec::new(),
-                tags: Vec::new(),
-                all: false,
-                format: Format::Table,
-                json: false,
-                columns: None,
-                render: listing::RenderOpts {
-                    color: false,
-                    term_width: None,
-                },
-            },
-        )
-        .unwrap();
+        let out = run_list(Some(root.to_path_buf()), list_args(), None).unwrap();
         match &out {
             ReviewOutput::Listed {
                 rows, formatted, ..
@@ -5769,5 +5849,122 @@ mod tests {
         let rendered = print_review(&out);
         assert!(rendered.contains("\"kind\""), "show json: {rendered}");
         assert!(rendered.contains("\"review\""), "show json: {rendered}");
+    }
+
+    // -- IMP-490 (RFC-032 0c): the finding index + `list --target` -------------
+
+    /// A shared `ListArgs` for the review list tests (every axis default).
+    fn list_args() -> ListArgs {
+        ListArgs {
+            substr: None,
+            regexp: None,
+            case_insensitive: false,
+            status: Vec::new(),
+            tags: Vec::new(),
+            all: false,
+            format: Format::Table,
+            json: false,
+            columns: None,
+            render: listing::RenderOpts {
+                color: false,
+                term_width: None,
+            },
+        }
+    }
+
+    /// IMP-490: `show` renders the finding index by default — one row per finding
+    /// with id/severity/status/disposition/title, not just a count. Before the
+    /// index, the tier was reachable only via `--json`.
+    #[test]
+    fn show_renders_the_finding_index() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Blocker, "Always render the index"),
+            Role::Raiser,
+        )
+        .unwrap();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Nit, "A second finding"),
+            Role::Raiser,
+        )
+        .unwrap();
+        let out = run_show(Some(root.to_path_buf()), "RV-001", Format::Table).unwrap();
+        let rendered = print_review(&out);
+        // The index carries a column header...
+        assert!(rendered.contains("severity"), "index header: {rendered}");
+        assert!(rendered.contains("disposition"), "index header: {rendered}");
+        // ...one line per finding with its tier columns...
+        assert!(rendered.contains("F-1"), "index row: {rendered}");
+        assert!(rendered.contains("blocker"), "index row: {rendered}");
+        assert!(
+            rendered.contains("Always render the index"),
+            "index row: {rendered}"
+        );
+        assert!(rendered.contains("F-2"), "index row: {rendered}");
+        assert!(rendered.contains("nit"), "index row: {rendered}");
+        // ...and the existing count line survives alongside it.
+        assert!(rendered.contains("findings: 2"), "count line: {rendered}");
+    }
+
+    /// IMP-490: the index carries the responder's disposition once set.
+    #[test]
+    fn show_index_carries_the_disposition() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "needs a disposition"),
+            Role::Raiser,
+        )
+        .unwrap();
+        run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-1"),
+            Role::Responder,
+        )
+        .unwrap();
+        let out = run_show(Some(root.to_path_buf()), "RV-001", Format::Table).unwrap();
+        let rendered = print_review(&out);
+        assert!(rendered.contains("fixed"), "disposition: {rendered}");
+        assert!(rendered.contains("answered"), "status: {rendered}");
+    }
+
+    /// IMP-490: an empty ledger renders no index table (the count line stands
+    /// alone), so a clean pass stays a clean pass.
+    #[test]
+    fn finding_index_is_absent_for_an_empty_ledger() {
+        assert_eq!(render_finding_index(&[]), "");
+    }
+
+    /// IMP-490: `list --target` admits only reviews whose `reviews` edge targets
+    /// the given ref (phase scope ignored); no target lists every review.
+    #[test]
+    fn list_target_filters_to_the_subject_edge() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        plant_slice_target(root, 1);
+        plant_slice_target(root, 2);
+        run_new(Some(root.to_path_buf()), &new_args(Facet::Design, "SL-001")).unwrap();
+        run_new(Some(root.to_path_buf()), &new_args(Facet::Plan, "SL-002")).unwrap();
+
+        let listed =
+            |target: Option<&str>| match run_list(Some(root.to_path_buf()), list_args(), target)
+                .unwrap()
+            {
+                ReviewOutput::Listed { rows, .. } => rows,
+                other => panic!("expected Listed, got {other:?}"),
+            };
+
+        assert_eq!(listed(None).len(), 2, "no target lists both reviews");
+        let only_first = listed(Some("SL-001"));
+        assert_eq!(only_first.len(), 1, "SL-001 admits one: {only_first:?}");
+        assert_eq!(only_first[0].target, "SL-001");
+        assert!(
+            listed(Some("SL-404")).is_empty(),
+            "an unmatched target lists none"
+        );
     }
 }
