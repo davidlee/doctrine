@@ -181,7 +181,7 @@ note = "examined src/review_ledger/**, the golden, and ADR-007 D-C5"   # the --b
 
 [[finding]]
 id = "F-3"
-status = "answered"             # current state: what gates and renders read
+status = "contested"            # current state: what gates and renders read
 severity = "major"
 title = "…"
 detail = "…"
@@ -275,12 +275,24 @@ Each has a `*_KNOWN` constant and a canary, and a refusal names the set.
 
 It is derived on every read and never latched. A concluded ledger that gains a
 `raise` or `reopen` reads `active` until that finding is terminal again, and the
-marker is not cleared. Every caller moves with the signature: `ReviewDoc::derived`,
+marker is not cleared.
+
+**What `conclude` means (RV-396 `F-4`).** It is the raiser declaring the
+*examination* finished, with a basis saying what was examined. It closes the
+raising, not the resolution: disposition and verification may follow it, and
+`done` then arrives when the last finding turns terminal. Requiring conclude to
+be the literal last act is not computable, because D1 gives turns no order
+across findings, so nothing can tell whether a conclude came after a late
+`raise`. The latch is the computable rule, which is frontier D2's. A late raise
+or reopen after a conclude reopens the status until it is terminal. Guidance
+asks the raiser to conclude again with a basis covering it. That appends a
+second conclude turn, one basis per pass, but it is not enforced. Every caller moves with the signature: `ReviewDoc::derived`,
 `reconcile_baton_fields`, `run_status`, show/list, `derived_status_string`.
 `doc_unresolved_blockers` keeps its `Active` guard. More ledgers now read
 `active`, but it still counts only non-terminal blockers, so the close gate
-(D-C9b) changes only where D15 widens what gates (below). `PassFacts` and the
-design-run gate are untouched (DEC-138).
+(D-C9b) changes only where D15 widens what gates (below). The `PassFacts`
+predicates and the design-run gate are unchanged (DEC-138). `PassFacts` gains
+only the additive `defects` field (below).
 
 **Unknown status (D15).** `FindingStatus::parse(&str) -> Result<FindingStatus,
 Unknown>` replaces `parse_finding_status`. The derived reads hold a
@@ -294,6 +306,13 @@ vocabulary:
   the repair (correct the value in the ledger TOML; the next turn's entry CAS
   heals the baton);
 - it renders verbatim.
+
+**Raw-preserving projection (RV-396 `F-5`).** The typed `Finding` projection
+used by `show`, the finding index, `--json` and MCP carries `status` and
+`severity` as `Vocab<T> = Known(T) | Unknown(raw)`. It serialises as the raw
+string and renders verbatim. `finding_of_row`'s `Major` fallback and the `Open`
+fallback are deleted, so no read surface ever shows a legitimate value in place
+of a corrupted one.
 
 **Unknown severity (D15).** One predicate, `gates_as_blocker(raw) -> bool` =
 `Blocker` or out of vocabulary, is used by all three blocker predicates.
@@ -312,15 +331,24 @@ channel:
 
 - `review show`/`status`: a `warning:` line per defect in `formatted`, plus a
   `warnings` array in JSON and MCP output;
-- `review list`: one stderr `warning:` line per defect, naming the RV, because
-  the table cells stay single-valued;
+- `review list`: the list output carries a structured `warnings` array, each
+  entry naming the RV (RV-396 `F-2`). The CLI prints it to stderr so the table
+  cells stay single-valued. `--json` and the MCP `review_list` response carry it
+  as a field;
 - the close gate: `BlockerRef` gains `reason: Option<String>`, and the refusal
-  prints it beside the finding.
+  prints it beside the finding;
+- the cross-kind catalog (RV-396 `F-3`): `derived_status_string` returns the
+  status and its defects. `catalog::scan`'s `status_and_title_for` overlay
+  pushes one warning `CatalogDiagnostic` per defective RV onto the scan's
+  existing diagnostics channel;
+- the design run (RV-396 `F-9`): `PassFacts` gains `defects:
+  Vec<VocabDefect>`, and no predicate reads it. The `commands/design.rs` shell
+  prints a `warning:` line per defect, naming the RV, finding, raw value and
+  effect, wherever it reads `PassFacts`: the outstanding projection and gate
+  admission. The `design_run` leaf types and SPEC-029 are untouched.
 
 Out-of-vocabulary disposition and route values are not defects. D8 makes them
-open on read, and the 61 legacy disposition values stay quiet. `catalog`'s
-cross-kind status keeps its conservative `active` without a warning, and
-review's own surfaces carry the disclosure (residual, sec-9).
+open on read, and the 61 legacy disposition values stay quiet.
 
 <!-- doctrine:section sec-4 -->
 ## Write surface (D8, D10, new verbs, MCP parity)
@@ -389,9 +417,10 @@ today.
 
 **Conclude (D2).** `review conclude RV --basis … [--as raiser]`. `--basis` is
 required and non-empty, and it becomes the note of a `[[review.turn]]`
-`act = "conclude"` row. `concluded = true` is written in the same edit. A repeat
-conclude appends another turn (a second pass after a reopen is a real event) and
-reports `already`.
+`act = "conclude"` row. `concluded = true` is written in the same edit. Open or
+answered findings are allowed (sec-3 defines what conclude closes). A repeat
+conclude appends another turn, because a second pass after a late raise or a
+reopen is a real event, and it reports `already`.
 
 **Target spelling (D8).** `review new --target SL-NNN@PHASE-NN` is accepted as
 `--target SL-NNN --phase PHASE-NN`. Giving both `@` and `--phase` is refused.
@@ -406,9 +435,12 @@ reports `already`.
 - the target is not a slice ref (`IMP-259`), or
 - the slice declares zero selectors.
 
-In both cases it writes no cache, returns `Primed { tracked_count: 0, degraded:
-Some(reason) }`, and prints `primed nothing: <reason>` on stdout, exit 0
-(STD-003: disclosed, not silent). The MCP output carries `degraded`. A primed
+In both cases, under the prime lock, it removes any `cache.toml` left by an
+earlier successful prime, so `status` reports no cache instead of a stale
+`current` (RV-396 `F-6`). It then returns `Primed { tracked_count: 0, degraded:
+Some(reason), cleared: bool }`, and prints `primed nothing: <reason>` (plus
+`removed the previous cache` when one existed) on stdout, exit 0 (STD-003:
+disclosed, not silent). The MCP output carries `degraded`. A primed
 slice with selectors behaves as today.
 
 **Literal selectors (`ISS-059`).** The literal arm gets the glob arm's non-file
@@ -489,10 +521,11 @@ design-target`):
 | `src/input.rs` | `resolve_prose`; `resolve_body` delegates to it |
 | `src/mcp_server/tools.rs` | `review_*` schemas and arms: `basis`, `note`, `route`, aliases, `review_amend`, `review_reopen`, `warnings` |
 | `src/commands/cli.rs` | `Command::Review` import path |
-| `src/commands/design.rs`, `src/commands/guard.rs`, `src/commands/show.rs` | import paths; `guard`'s write-class table gains `amend`/`reopen` |
+| `src/commands/design.rs` | import paths; prints `PassFacts.defects` warnings in the projection and gate admission |
+| `src/commands/guard.rs`, `src/commands/show.rs` | import paths; `guard`'s write-class table gains `amend`/`reopen` |
 | `src/main.rs` | write-class test table |
 | `src/slice.rs` | close gate: import path; renders `BlockerRef.reason` |
-| `src/catalog/scan.rs` | import path |
+| `src/catalog/scan.rs` | import path; the status overlay pushes defect diagnostics |
 | `src/priority/partition.rs`, `src/relation.rs` | test import paths |
 | `src/kinds/mod.rs` | `DERIVED_STATUS` comment (DEC-318) |
 | `.doctrine/adr/001/layering.toml` | `review_ledger = "engine"`; `ledger` comment; `catalog::scan` comment |
@@ -513,7 +546,10 @@ Out of this slice: `src/doctor_checks.rs` (DEC-322), `src/authored_status.rs`
 
 **Behaviour-preservation gate (D4).** `tests/e2e_review_golden.rs` is written
 first, against today's binary, over hand-seeded fixtures with fixed dates (the
-SL-030 `e2e_adr_cli_golden.rs` pattern). It pins, byte-exact:
+SL-030 `e2e_adr_cli_golden.rs` pattern). Output is normalised before
+comparison by replacing the fixture root with a fixed `<ROOT>` token. That
+covers `new`'s created directory and every path-bearing error (RV-396 `F-7`).
+Nothing else is carved out. It pins, byte-exact:
 
 - stdout and error text for every verb, including `new`, `list`, `show`,
   `show --json`, `status`, `prime`, and each role and state refusal;
@@ -523,14 +559,23 @@ The split phase holds the golden and every existing suite green **unchanged**.
 Each later phase that changes behaviour edits the golden in the same commit, and
 the diff is the evidence of the change.
 
-**Expected flips (D2).** The only pre-existing tests allowed to change are:
+**Expected changes to pre-existing tests (D2, D1; RV-396 `F-1`).** There are
+two kinds, and each one is named in its phase's notes:
 
-- `derived_status_empty_is_done_none`
-- `derived_status_total_over_enum` (gains the `concluded` axis)
-- `show_renders_empty_ledger_done_and_the_edge`
-- `list_renders_empty_ledger_done_and_the_edge`
-- `note_is_handoff_chatter_in_the_baton_not_the_ledger`, which is replaced by a
-  note-in-turn test (D1 retires the concept it pins)
+- **Assertion flips.** The assertion changes because the rule changed:
+  `derived_status_empty_is_done_none`,
+  `derived_status_all_terminal_is_done_none`, `derived_status_total_over_enum`
+  (gains the `concluded` axis), `show_renders_empty_ledger_done_and_the_edge`,
+  `list_renders_empty_ledger_done_and_the_edge`, and
+  `note_is_handoff_chatter_in_the_baton_not_the_ledger` (replaced by a
+  note-in-turn test, since D1 retires the concept it pins).
+- **Fixture-setup changes.** A test whose point is unrelated to D2 but which
+  seeds an unconcluded all-terminal ledger and asserts `done` gains a
+  `concluded = true` fixture line or a `conclude` step, and its assertion is
+  unchanged. This covers the ledger-reading tests near `review.rs:3777`, `3805`
+  and `4748`, `golden_run_status`, and any other such test found in the phase.
+  In-file `golden_*` strings that render the new `done`/`active` value are
+  flips, and are named as such.
 
 Any other change to an existing assertion is a finding.
 
@@ -543,8 +588,9 @@ Any other change to an existing assertion is a finding.
    refused when missing or empty;
 4. counters: seeding from the baton at the first journalled write, 0 with no
    baton, `base + count` afterwards, and the legacy ledger reading the baton;
-5. `derived_status` over (finding states × concluded), including empty × both,
-   and a concluded ledger reading `active` after a `raise`/`reopen`;
+5. `derived_status` over (finding states × concluded), including empty × both;
+   a concluded ledger reading `active` after a `raise`/`reopen`; and a conclude
+   with open findings reaching `done` once they turn terminal;
 6. unknown status: non-terminal, refused by every act with the named repair, and
    rendered verbatim with its warning;
 7. unknown severity: gates the close gate, counts as blocker in
@@ -558,12 +604,19 @@ Any other change to an existing assertion is a finding.
 11. `@PHASE-NN` target spelling, and its conflict with `--phase`;
 12. prime: non-slice and zero-selector targets degrade and disclose; the literal
     non-file filter;
-13. MCP parity: each new field and tool round-trips through the same `run_*`,
-    and a literal `-` stays literal;
+13. MCP parity: each new field and tool round-trips through the same `run_*`;
+    a literal `-` stays literal; `review_list` carries `warnings`;
 14. `PassFacts` unchanged over v2 ledgers (DEC-138), and the design-run review
     suites green;
 15. layering: `review_ledger` classified `engine`, and
-    `tests/architecture_layering.rs` green.
+    `tests/architecture_layering.rs` green;
+16. raw-preserving projection: an unknown severity or status renders verbatim
+    in the table, index, `--json` and MCP, never as `major`/`open`;
+17. prime: a successful prime, then zero selectors, then prime, leaves `status`
+    with no cache;
+18. the catalog scan emits a warning diagnostic for a defective RV;
+19. the design-run projection and gate admission print the defect warning, and
+    the gate outcome is unchanged.
 
 **VA:**
 
@@ -596,9 +649,10 @@ Any other change to an existing assertion is a finding.
   does not render turns by default. Slice 2 owns the read projection (D5).
 - **R7: alias ambiguity.** Refused at `new`. A legacy ledger whose labels
   collide accepts only the canonical role names, and the refusal says why.
-- **Residual: `catalog` status.** The cross-kind status string reads an
-  unknown-status RV as `active` without a warning. Review's own surfaces
-  disclose it. Wider catalog disclosure is left to slice 2's read projection.
+- **R8: `conclude` is not provably last.** A basis can predate a late raise.
+  Mitigated by guidance, which asks for another conclude, and by the `active`
+  reopen. It is not enforceable without a cross-finding order, which D1 rejects
+  (sec-3).
 - **Residual: the doctor checks** are IMP-492 and IMP-493, both needing IMP-491.
 - **Residual: `authored_status` still returns `Unavailable` for RV** (DEC-318,
   D14).
