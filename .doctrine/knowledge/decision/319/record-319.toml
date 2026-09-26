@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 319
+slug = "unknown-rv-vocabulary-warns-at-the-read-site"
+title = "Unknown RV vocabulary warns at the read site"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-26"
+updated = "2026-09-26"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "RFC-032 D15 makes closed RV vocabularies read fail-safe. STD-003 requires a degraded read to be disclosed on a channel the caller of that command sees; a doctor-only finding does not reach review show/status/list or close-gate callers."
+choice = "An out-of-vocabulary severity or status is disclosed where it is read: review show, status, list and the close gate emit a warning naming the RV, the finding and the raw value. Gating stays fail-safe: unknown severity counts as blocker, unknown status as non-terminal. An unknown disposition renders verbatim."
+alternatives = ["Doctor finding only.", "Gate fail-safe silently."]
+rationale = "Meets both halves of STD-003 (tolerate and disclose) on the caller's own channel without depending on an unspecified doctor surface (IMP-491)."
+consequences = ["FindingStatus and Severity gain a representation for an unknown raw value.", "The three blocker predicates share one fail-safe classification."]
+decided_by = "user"
+decided_on = "2026-09-26"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-268"

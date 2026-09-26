@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 322
+slug = "sl-268-adds-no-doctor-checks"
+title = "SL-268 adds no doctor checks"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-26"
+updated = "2026-09-26"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-268 scope OQ-4 asked whether the D1 status/last-turn consistency check and the D15 out-of-vocabulary status check land in doctor. Doctor has no governing spec (IMP-491). DEC for inq-3 already discloses unknown vocabulary at the read site."
+choice = "No new doctor checks in SL-268. The out-of-vocabulary case is covered by read-site warnings. The status/last-turn consistency check is filed as a backlog item needing IMP-491."
+alternatives = ["Land both doctor checks in SL-268."]
+rationale = "STD-003 is met on the caller's channel; adding a doctor category is a six-site change to an unspecified surface."
+consequences = ["A backlog item captures the consistency check."]
+decided_by = "user"
+decided_on = "2026-09-26"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-268"

@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 320
+slug = "sl-268-runs-a-bounded-guidance-review-the-automated-doc-check-waits-on-imp-491"
+title = "SL-268 runs a bounded guidance review; the automated doc check waits on IMP-491"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-26"
+updated = "2026-09-26"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "RFC-032 D13 proposes a doctor check that every verb and flag a shipped install doc names exists in the CLI. It is repo-wide, adds a doctor category, and doctor has no governing spec (IMP-491). SL-268 changes review verbs, flags and MCP fields."
+choice = "SL-268 does not build the automated check. It carries a bounded, agent-verified review of installed guidance (install docs, shipped skills, MCP tool descriptions) for misleading CLI and MCP usage (verbs, flags, fields), prioritising surfaces SL-268 changes, and fixes what it finds in-slice. The automated check is filed as a backlog item needing IMP-491."
+alternatives = ["Build the doctor check in SL-268.", "Defer the check to slice 2 with no in-slice review."]
+rationale = "The user asked for a bounded review so guidance this slice touches is not left misleading, without growing an unspecified doctor surface."
+consequences = ["A VA criterion covers the guidance review.", "A backlog item captures the automated check."]
+decided_by = "user"
+decided_on = "2026-09-26"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-268"

@@ -42,9 +42,11 @@ Decision ids below are RFC-032 `decision-frontier.md`'s.
    stored as a review-level turn, and becomes the required last move of every
    pass. Legacy ledgers are not backfilled. Closes `ISS-314` and `ISS-366`.
 4. **D15: every closed vocabulary reads fail-safe.** An unknown `severity`
-   gates as `blocker`. An unknown `status` reads as non-terminal and produces a
-   doctor finding. An unknown `disposition` renders verbatim. The baton-note
-   write moves inside the lock/CAS (`CHR-001`).
+   gates as `blocker`. An unknown `status` reads as non-terminal. Both are
+   disclosed where they are read (`review show`/`status`/`list` and the close
+   gate warn, naming the RV, finding and raw value; STD-003, DEC-319). An unknown
+   `disposition` renders verbatim. The baton-note write moves inside the
+   lock/CAS (`CHR-001`).
 5. **D8, write side.** `--as` stays closed `{raiser, responder}`, with the
    labels declared at `review new` accepted as aliases and `--help` naming the
    legal values (`IMP-336`). `disposition` is closed on write and open on read.
@@ -59,14 +61,23 @@ Decision ids below are RFC-032 `decision-frontier.md`'s.
 8. **D12: no reverse index.** Close `IMP-479` as not needed until measured.
 9. **Governance.** Author the new "Review ledger" tech spec (container,
    `parent = SPEC-003`, no `descends_from` unless `/spec-tech` finds one, per
-   IMP-481) describing v2. Mint a REV amending ADR-007 D-C5 (turns, amend/reopen),
+   IMP-481) describing v2, in a governance phase after the code lands so its
+   anchors are live (DEC-321); design.md carries the target schema until then.
+   Mint a REV amending ADR-007 D-C5 (turns, amend/reopen),
    D-C8 (uniform `done`, the conclude marker's role) and D-C10 (D11), and
    revising SPEC-003's container inventory to add the new spec (REV-035
-   precedent; research T1 — SPEC-029's absence there is surfaced in the same REV).
+   precedent; SPEC-029, already missing there, is added in the same REV;
+   DEC-317). Keep DEC-233's RV `Unavailable` arm; update its comment and pinning
+   test to say derivation is engine-tier and it retires with D14 (DEC-318).
 10. **Guidance.** Update the skills that run a pass (`/audit`, `/code-review`,
     `/inquisition`, the design-run guidance) so `conclude --basis` is the last
     move and writes go through MCP. Refresh `install/review-ledger.md`
     (`CHR-079`) for the verbs and acts this slice changes.
+11. **Bounded guidance review (DEC-320).** Review the installed guidance
+    (install reference docs, shipped skills, MCP tool descriptions) for
+    misleading CLI and MCP usage (verbs, flags, fields, argument shapes),
+    starting with every surface this slice changes. Fix what is found in-slice
+    or file it. The automated check waits on IMP-492.
 
 ## Non-Goals
 
@@ -79,7 +90,9 @@ Decision ids below are RFC-032 `decision-frontier.md`'s.
 - Secret scanning (D10 rejects it for the review kind; a repo-wide backlog item).
 - Reconstructing pre-journal history, or backfilling `conclude` on legacy
   ledgers.
-- Governing `doctor` (IMP-491).
+- Governing `doctor` (IMP-491), and new doctor checks: the install-doc CLI
+  check (IMP-492) and the status/last-turn check (IMP-493) wait on it
+  (DEC-320, DEC-322).
 
 ## Summary
 
@@ -97,11 +110,11 @@ engine-tier module with a spec that owns it.
 - consumers of `derived_status` and the blocker predicates: `src/slice.rs`
   (close gate), `src/commands/design.rs`, `src/commands/guard.rs`,
   `src/relation.rs`, `src/priority/partition.rs`, `src/catalog/scan.rs`
-- doctor: a status/last-turn consistency check and an out-of-vocabulary
-  `status` finding (`src/doctor_checks.rs`)
 - tests: new e2e golden (IMP-029); `tests/e2e_design_review.rs`; the
   `review.rs` unit suite
-- `install/review-ledger.md`; `plugins/doctrine/skills/{audit,code-review,inquisition,reconcile,close}/SKILL.md`
+- `install/review-ledger.md`; `plugins/doctrine/skills/{audit,code-review,inquisition,reconcile,close}/SKILL.md`;
+  other installed guidance the bounded review flags
+- `src/kinds/mod.rs` `DERIVED_STATUS` comment and its pinning test (DEC-318)
 - governance: new tech spec, a REV against ADR-007 and SPEC-003
 
 ### Risks
@@ -125,32 +138,32 @@ engine-tier module with a spec that owns it.
 
 ### Open questions
 
-- **OQ-1**: Does D13's install-doc flag conformance check ride this slice or
-  slice 2? It has no spec home until IMP-491 is resolved.
-- **OQ-2**: Is the tech spec authored at the start (describing the target
-  schema) or at the end (describing what landed)? It is authored in-slice
-  either way.
+- **OQ-1**: *Resolved (DEC-320):* no automated check here; a bounded guidance
+  review rides this slice (objective 11). The check is IMP-492.
+- **OQ-2**: *Resolved (DEC-321):* authored at the end, describing what landed.
 - **OQ-3**: *Resolved (research):* step 0c (IMP-490) landed at `694acaf43`,
   before D4. D4 moves its finding-index view struct.
-- **OQ-4**: Do the doctor checks from D1 (status matches the last turn) and D15
-  (out-of-vocabulary status) land here, given doctor has no governing spec
-  (IMP-491)?
+- **OQ-4**: *Resolved (DEC-322, DEC-319):* no doctor checks here. Unknown
+  vocabulary warns at the read site; the consistency check is IMP-493.
 
 ### Verification / closure intent
 
 - The IMP-029 golden is green before and after the split. The existing review
   and design-review suites stay green without edits, except the D2 flips named
-  in the frontier (`show_renders_empty_ledger_done_and_the_edge`,
+  in the frontier and research (`derived_status_empty_is_done_none`,
+  `derived_status_total_over_enum`, `show_renders_empty_ledger_done_and_the_edge`,
   `list_renders_empty_ledger_done_and_the_edge`).
 - Tests cover: a turn appended on every transition; `amend` and `reopen`;
   counters equal baseline plus count; `done` requires conclude; `--basis`
-  required; fail-safe reads for each vocabulary; `-`/`@path` on every prose
+  required; fail-safe reads for each vocabulary, each with its read-site
+  warning; `-`/`@path` on every prose
   argument; alias `--as`; and the closed disposition refusal naming the set.
 - `derived_status` is reachable from the engine tier (no command-tier import).
 - The tech spec exists with live anchors. The REV is applied at reconcile.
   `ISS-314`, `ISS-366`, `IMP-479` and `IMP-029` are closed.
 - The skills and `review-ledger.md` name `conclude --basis` and the MCP write
-  path. `doctrine check gate` is green.
+  path. The bounded guidance review (VA) leaves a committed record of what it
+  checked and what it fixed or filed. `doctrine check gate` is green.
 
 ## Follow-Ups
 

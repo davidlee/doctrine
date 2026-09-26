@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 317
+slug = "sl-268-rev-revises-spec-003s-container-inventory"
+title = "SL-268 REV revises SPEC-003's container inventory"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-26"
+updated = "2026-09-26"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "REV-035 set the rule that adding a container under SPEC-003 revises its inventory in the same change. SL-268 adds the review-ledger tech spec as a SPEC-003 container. SPEC-029 is an existing SPEC-003 container absent from spec-003.md (drift)."
+choice = "SL-268's REV revises SPEC-003's container inventory to add the new review-ledger spec, and adds SPEC-029 in the same revision, citing the omission."
+alternatives = ["Add only the new spec and leave SPEC-029's omission as a backlog item.", "Skip the inventory revision, following SPEC-029's precedent."]
+rationale = "Follows the REV-035 rule and repairs the drift in one row, rather than copying it."
+consequences = ["The REV touches ADR-007 and SPEC-003."]
+decided_by = "user"
+decided_on = "2026-09-26"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-268"

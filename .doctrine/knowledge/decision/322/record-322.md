@@ -1,0 +1,5 @@
+# DEC-322: SL-268 adds no doctor checks
+
+<!-- Knowledge record body — context, detail, links. The structured, queried
+     fields live in the sister `record-NNN.toml`; this prose is free-form and is
+     never structurally parsed (the storage rule). -->

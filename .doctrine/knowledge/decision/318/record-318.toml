@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 318
+slug = "keep-rvs-unavailable-status-arm-until-d14"
+title = "Keep RV's Unavailable status arm until D14"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-26"
+updated = "2026-09-26"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-233 keys RV's Unavailable status on derivation living at command tier. SL-268's D4 split moves derived_status to the engine tier, so that stated reason becomes false. RV is not a relation target until RFC-032 D14 (slice 2)."
+choice = "Keep DERIVED_STATUS=[RV] and its Unavailable arm in SL-268. Update the kinds comment and its pinning test to say derivation is engine-tier and the arm retires with D14 in slice 2."
+alternatives = ["Retire the arm in SL-268 and amend DEC-233 now."]
+rationale = "No consumer reads an RV status through the probe until D14. Retiring now changes backlog-footer behaviour for no user and amends DEC-233 twice."
+consequences = ["Slice 2 (D14) owns the retirement and the DEC-233 amendment."]
+decided_by = "user"
+decided_on = "2026-09-26"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-268"
