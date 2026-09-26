@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dc86-43bd-7153-9e77-772f1062c128"
+recorded_at = "2026-09-26T07:03:01.821627383Z"
+kind = "friction"
+summary = "record-memory: the doctrine MCP server was unavailable (server_backoff) mid-session, forcing a CLI fallback"
+detail = """Attempting doctrine_memory_record via the MCP tool returned {code: server_backoff, message: 'Server "doctrine" not available (last failed 0s ago)'}. The fallback to `doctrine memory record` then cost an extra round trip because --provenance-source requires KIND:REF (my first attempt passed the bare IMP-490 and was refused). Net: 2 extra tool calls to record one memory. Likely the server process was launched from a stale DOCTRINE_BIN and died when cargo rebuilt ./target/debug/doctrine, but the tool reported backoff rather than a diagnosable cause."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
