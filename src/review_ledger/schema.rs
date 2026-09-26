@@ -36,8 +36,9 @@ pub(crate) struct ReviewMeta {
     pub(crate) raiser: String,
     pub(crate) responder: String,
     /// Whether the raiser has declared this pass finished (SL-244 `sec-4`,
-    /// IMP-392). Written only by [`run_conclude`]; never a function of the
-    /// findings.
+    /// IMP-392, SL-268 D2). Set by `run_conclude`; cleared by `raise`/`reopen` in
+    /// the same write that appends their turn (RV-396 `F-4`). Never a function of
+    /// the findings.
     ///
     /// **This is not the `status` the file's own header forbids.** A review's
     /// status is derived from its findings (ADR-007 D-C8) and so is never stored;
@@ -180,10 +181,10 @@ impl ReviewDoc {
             .collect()
     }
 
-    /// The review's derived `(ReviewStatus, Await)` (design §8) — computed at read
-    /// time, never stored.
+    /// The review's derived `(ReviewStatus, Await)` (design §8, SL-268 D2) —
+    /// computed at read time, never stored.
     pub(crate) fn derived(&self) -> (ReviewStatus, Await) {
-        derived_status(&self.finding_states())
+        derived_status(&self.finding_states(), self.review.concluded)
     }
 }
 

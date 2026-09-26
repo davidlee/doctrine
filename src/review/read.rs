@@ -564,8 +564,8 @@ pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Resu
     let (text, doc) = read_authored(&root, id)?;
     let hash = crate::git::sha256(text.as_bytes());
     let states = finding_states_of(&doc);
-    let (status, awaited) = derived_status(&states);
-    let (awaiting, authored_hash) = reconcile_baton_fields(&states, &hash);
+    let (status, awaited) = derived_status(&states, doc.review.concluded);
+    let (awaiting, authored_hash) = reconcile_baton_fields(&states, doc.review.concluded, &hash);
     let prior = read_baton(&root, id)?.unwrap_or_default();
     let rebuilt = Baton {
         awaiting,

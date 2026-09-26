@@ -1956,22 +1956,22 @@ fn list_table_json_and_target_filter() {
         stdout(&out),
         "id     │ status                   │ facet       │ target │ title\n\
          RV-001 │ active (await responder) │ design      │ SL-001 │ T1\n\
-         RV-002 │ done (await none)        │ code-review │ SL-002 │ T2\n"
+         RV-002 │ active (await raiser)    │ code-review │ SL-002 │ T2\n"
     );
 
     let out = run(dir.path(), &["list", "--json"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "{\n  \"kind\": \"review\",\n  \"rows\": [\n    {\n      \"awaiting\": \"responder\",\n      \"facet\": \"design\",\n      \"id\": \"RV-001\",\n      \"status\": \"active\",\n      \"tags\": [],\n      \"target\": \"SL-001\",\n      \"title\": \"T1\"\n    },\n    {\n      \"awaiting\": \"none\",\n      \"facet\": \"code-review\",\n      \"id\": \"RV-002\",\n      \"status\": \"done\",\n      \"tags\": [],\n      \"target\": \"SL-002\",\n      \"title\": \"T2\"\n    }\n  ]\n}"
+        "{\n  \"kind\": \"review\",\n  \"rows\": [\n    {\n      \"awaiting\": \"responder\",\n      \"facet\": \"design\",\n      \"id\": \"RV-001\",\n      \"status\": \"active\",\n      \"tags\": [],\n      \"target\": \"SL-001\",\n      \"title\": \"T1\"\n    },\n    {\n      \"awaiting\": \"raiser\",\n      \"facet\": \"code-review\",\n      \"id\": \"RV-002\",\n      \"status\": \"active\",\n      \"tags\": [],\n      \"target\": \"SL-002\",\n      \"title\": \"T2\"\n    }\n  ]\n}"
     );
 
     let out = run(dir.path(), &["list", "--target", "SL-002"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id     │ status            │ facet       │ target │ title\n\
-         RV-002 │ done (await none) │ code-review │ SL-002 │ T2\n"
+        "id     │ status                │ facet       │ target │ title\n\
+         RV-002 │ active (await raiser) │ code-review │ SL-002 │ T2\n"
     );
 }
 
@@ -2024,7 +2024,7 @@ fn show_empty_ledger_plain_no_phase() {
     assert_eq!(
         stdout(&out),
         "RV-001 — T1\n\
-         design · done · await=none\n\
+         design · active · await=raiser\n\
          RV-001 ──reviews──▶ SL-001\n\
          findings: 0 (raiser raiser · responder responder)\n\
          \n\
@@ -2219,7 +2219,7 @@ fn prime_and_status_cache_current_then_stale() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "RV-001 — done · await=none · findings 0 · rounds 0\ncache: current\n"
+        "RV-001 — active · await=raiser · findings 0 · rounds 0\ncache: current\n"
     );
 
     fs::write(dir.path().join("src/a.rs"), "hello\nagain\n").unwrap();
@@ -2228,7 +2228,7 @@ fn prime_and_status_cache_current_then_stale() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "RV-001 — done · await=none · findings 0 · rounds 0\ncache: stale (src/a.rs)\n"
+        "RV-001 — active · await=raiser · findings 0 · rounds 0\ncache: stale (src/a.rs)\n"
     );
 }
 

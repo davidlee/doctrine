@@ -13,99 +13,6 @@ use crate::review_ledger::{
     unresolved_blockers_for, vocabulary_defects,
 };
 
-// -- derived_status: total + named cases (VT-1 / VT-2) -------------------
-
-fn states(statuses: &[FindingStatus]) -> Vec<FindingState> {
-    statuses
-        .iter()
-        .map(|&status| FindingState {
-            status: Vocab::Known(status),
-        })
-        .collect()
-}
-
-#[test]
-fn derived_status_empty_is_done_none() {
-    assert_eq!(derived_status(&[]), (ReviewStatus::Done, Await::None));
-}
-
-#[test]
-fn derived_status_any_open_or_contested_is_active_responder() {
-    assert_eq!(
-        derived_status(&states(&[FindingStatus::Open])),
-        (ReviewStatus::Active, Await::Responder)
-    );
-    assert_eq!(
-        derived_status(&states(&[FindingStatus::Contested])),
-        (ReviewStatus::Active, Await::Responder)
-    );
-    // open + answered ⇒ open wins ⇒ Responder.
-    assert_eq!(
-        derived_status(&states(&[FindingStatus::Answered, FindingStatus::Open])),
-        (ReviewStatus::Active, Await::Responder)
-    );
-}
-
-#[test]
-fn derived_status_answered_and_none_open_is_active_raiser() {
-    assert_eq!(
-        derived_status(&states(&[FindingStatus::Answered])),
-        (ReviewStatus::Active, Await::Raiser)
-    );
-    // answered + a terminal one, none open ⇒ Raiser.
-    assert_eq!(
-        derived_status(&states(&[FindingStatus::Answered, FindingStatus::Verified])),
-        (ReviewStatus::Active, Await::Raiser)
-    );
-}
-
-#[test]
-fn derived_status_all_terminal_is_done_none() {
-    assert_eq!(
-        derived_status(&states(&[
-            FindingStatus::Verified,
-            FindingStatus::Withdrawn
-        ])),
-        (ReviewStatus::Done, Await::None)
-    );
-    assert_eq!(
-        derived_status(&states(&[FindingStatus::Verified])),
-        (ReviewStatus::Done, Await::None)
-    );
-    assert_eq!(
-        derived_status(&states(&[FindingStatus::Withdrawn])),
-        (ReviewStatus::Done, Await::None)
-    );
-}
-
-/// VT-1: total over the enum — every combination of up to two statuses
-/// yields a `(ReviewStatus, Await)` without panic or gap.
-#[test]
-fn derived_status_total_over_enum() {
-    let all = [
-        FindingStatus::Open,
-        FindingStatus::Answered,
-        FindingStatus::Contested,
-        FindingStatus::Verified,
-        FindingStatus::Withdrawn,
-    ];
-    // Singletons and every ordered pair.
-    for &a in &all {
-        let _single = derived_status(&states(&[a]));
-        for &b in &all {
-            let (status, awaited) = derived_status(&states(&[a, b]));
-            // The invariant the carrier must always hold: Done ⇔ None.
-            assert_eq!(
-                status == ReviewStatus::Done,
-                awaited == Await::None,
-                "Done iff await=None for [{}, {}]",
-                a.as_str(),
-                b.as_str()
-            );
-        }
-    }
-}
-
 // -- can(): single-owner edges (VT-3) -----------------------------------
 
 #[test]
@@ -305,10 +212,13 @@ fn unknown_status_reads_non_terminal() {
         status: Vocab::Known(FindingStatus::Verified),
     };
     assert_eq!(
-        derived_status(std::slice::from_ref(&zombie)),
+        derived_status(std::slice::from_ref(&zombie), false),
         (ReviewStatus::Active, Await::Responder)
     );
-    assert_eq!(derived_status(&[zombie, verified]).0, ReviewStatus::Active);
+    assert_eq!(
+        derived_status(&[zombie, verified], false).0,
+        ReviewStatus::Active
+    );
 
     // The same through the authored read: a hand-edited ledger.
     let tmp = fixture_rv();
@@ -684,10 +594,10 @@ fn render_review_toml_escapes_a_hostile_title() {
     assert!(doc.target.phase.is_none());
 }
 
-/// VT-4 (show): a fresh empty-ledger RV renders derived status `active` with
-/// done status, await `none`, and the `reviews` edge to the target.
+/// VT-4 (show): a fresh, unconcluded, empty-ledger RV renders derived status
+/// `active` (await `raiser`, SL-268 D2), and the `reviews` edge to the target.
 #[test]
-fn show_renders_empty_ledger_done_and_the_edge() {
+fn show_renders_empty_ledger_active_and_the_edge() {
     let doc = ReviewDoc {
         id: 3,
         slug: "s".to_owned(),
@@ -705,16 +615,17 @@ fn show_renders_empty_ledger_done_and_the_edge() {
     let view = ReviewView::of(&doc);
     let out = format_show(&view, "## Brief\n", "points", None, None, 0.0, 1.0);
     assert!(out.contains("RV-003 — Design review of SL-024"), "{out}");
-    // empty ⇒ Done, await=None.
-    assert!(out.contains("done · await=none"), "{out}");
+    // empty and unconcluded ⇒ Active, await=Raiser (SL-268 D2, R2).
+    assert!(out.contains("active · await=raiser"), "{out}");
     assert!(out.contains("RV-003 ──reviews──▶ SL-024"), "edge: {out}");
     assert!(out.contains("findings: 0"), "{out}");
 }
 
-/// VT-4 (list): the empty-ledger RV lists with derived status `done`
-/// (await none), facet, and the target edge — no stored status read.
+/// VT-4 (list): a fresh, unconcluded, empty-ledger RV lists with derived
+/// status `active` (await raiser, SL-268 D2), facet, and the target edge — no
+/// stored status read.
 #[test]
-fn list_renders_empty_ledger_done_and_the_edge() {
+fn list_renders_empty_ledger_active_and_the_edge() {
     let doc = ReviewDoc {
         id: 5,
         slug: "s".to_owned(),
@@ -736,7 +647,7 @@ fn list_renders_empty_ledger_done_and_the_edge() {
     let lines: Vec<&str> = out.lines().collect();
     assert!(lines[0].starts_with("id"), "header: {:?}", lines[0]);
     assert!(lines[1].starts_with("RV-005"), "{:?}", lines[1]);
-    assert!(lines[1].contains("done (await none)"), "{:?}", lines[1]);
+    assert!(lines[1].contains("active (await raiser)"), "{:?}", lines[1]);
     assert!(lines[1].contains("plan"), "{:?}", lines[1]);
     // phase-scoped edge `SL-009@PHASE-02`.
     assert!(lines[1].contains("SL-009@PHASE-02"), "{:?}", lines[1]);
@@ -772,8 +683,9 @@ fn derived_status_reads_findings_not_a_stored_status() {
         value: None,
     };
     assert_eq!(doc.derived(), (ReviewStatus::Active, Await::Responder));
-    // all-terminal ⇒ Done.
+    // all-terminal and concluded ⇒ Done.
     doc.finding[0].status = "verified".to_owned();
+    doc.review.concluded = true;
     assert_eq!(doc.derived(), (ReviewStatus::Done, Await::None));
 }
 
@@ -804,7 +716,9 @@ fn run_new_creates_an_empty_ledger_rv_against_a_real_target() {
     assert_eq!(doc.id, 1);
     assert_eq!(doc.target.reference, "SL-024");
     assert!(doc.finding.is_empty());
-    assert_eq!(doc.derived(), (ReviewStatus::Done, Await::None));
+    // SL-268 D2 (OQ-1): a fresh, unconcluded, empty ledger reads Active/Raiser —
+    // no findings to reconcile, but nobody has declared the pass done.
+    assert_eq!(doc.derived(), (ReviewStatus::Active, Await::Raiser));
     let brief = read_brief(&review_root, 1).unwrap();
     assert!(brief.contains("## Brief"), "brief seeded: {brief}");
     // The `NNN-slug` alias symlink landed.
@@ -1029,6 +943,10 @@ fn lifecycle_raise_dispose_verify() {
     assert_eq!(doc.finding[0].response.as_deref(), Some("done"));
     assert_eq!(read_baton(root, 1).unwrap().unwrap().awaiting, "raiser");
 
+    // A conclude here does not move the intermediate assert below: answered
+    // gives Raiser either way (SL-268 D2).
+    run_conclude(Some(root.to_path_buf()), "RV-001", Role::Raiser).unwrap();
+
     run_verify(
         Some(root.to_path_buf()),
         "RV-001",
@@ -1039,7 +957,7 @@ fn lifecycle_raise_dispose_verify() {
     .unwrap();
     let doc = read_doc(root, 1);
     assert_eq!(doc.finding[0].status, "verified");
-    // All-terminal ⇒ Done / await=none.
+    // All-terminal and concluded ⇒ Done / await=none.
     assert_eq!(read_baton(root, 1).unwrap().unwrap().awaiting, "none");
 }
 
@@ -1477,7 +1395,7 @@ fn vt9_status_rebuilds_the_baton() {
     run_status(Some(root.to_path_buf()), "RV-001").unwrap();
     let baton = read_baton(root, 1).unwrap().unwrap();
     let doc = read_doc(root, 1);
-    let (_, awaited) = derived_status(&finding_states_of(&doc));
+    let (_, awaited) = derived_status(&finding_states_of(&doc), doc.review.concluded);
     assert_eq!(baton.awaiting, awaited.as_str(), "cache == recompute");
     assert_eq!(
         baton.authored_hash,
@@ -2370,7 +2288,9 @@ fn vt1_verified_blocker_is_terminal_and_not_reported() {
         Role::Raiser,
     )
     .unwrap();
-    // All findings terminal ⇒ Done (D-C9a) ⇒ no unresolved blocker.
+    run_conclude(Some(root.to_path_buf()), "RV-001", Role::Raiser).unwrap();
+    // All findings terminal AND concluded ⇒ Done (SL-268 D2) ⇒ no unresolved
+    // blocker.
     assert_eq!(read_doc(root, 1).derived().0, ReviewStatus::Done);
     assert!(unresolved_blockers_for(root, "SL-001").unwrap().is_empty());
 }
@@ -2394,6 +2314,7 @@ fn vt1_withdrawn_blocker_is_terminal_and_not_reported() {
         Role::Raiser,
     )
     .unwrap();
+    run_conclude(Some(root.to_path_buf()), "RV-001", Role::Raiser).unwrap();
     assert_eq!(read_doc(root, 1).derived().0, ReviewStatus::Done);
     assert!(unresolved_blockers_for(root, "SL-001").unwrap().is_empty());
 }
@@ -3440,6 +3361,7 @@ fn golden_run_list() {
 fn golden_run_status() {
     let tmp = fixture_rv();
     let root = tmp.path();
+    run_conclude(Some(root.to_path_buf()), "RV-001", Role::Raiser).unwrap();
     let out = run_status(Some(root.to_path_buf()), "RV-001").unwrap();
     let formatted = match &out {
         ReviewOutput::Status {

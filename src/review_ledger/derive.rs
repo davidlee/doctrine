@@ -21,22 +21,22 @@ pub(crate) struct FindingState {
     pub(crate) status: Vocab<FindingStatus>,
 }
 
-/// The review's derived status + summarized turn (design §8, D-C8). Total over
-/// the finding-status enum; never stored (computed at `show`/`list`/`status`).
+/// The review's derived status + summarized turn (design §8, D-C8, SL-268 D2).
+/// Total over the finding-status enum; never stored (computed at
+/// `show`/`list`/`status`) — **derived on every read, never latched**. Implements
+/// sec-3's table, in order:
 ///
-/// - empty ⇒ `(Done, None)` — no findings, nothing to reconcile.
-/// - any `open`/`contested`/out-of-vocabulary ⇒ `(Active, Responder)` — work
-///   awaits the responder. An unknown status is **non-terminal** (SL-268 D15):
-///   it can never close a review by accident.
-/// - else any `answered` ⇒ `(Active, Raiser)` — work awaits the raiser.
-/// - all `∈ {verified, withdrawn}` ⇒ `(Done, None)`.
+/// 1. any `open`/`contested`/out-of-vocabulary ⇒ `(Active, Responder)` — work
+///    awaits the responder. An unknown status is **non-terminal** (SL-268 D15):
+///    it can never close a review by accident.
+/// 2. else any `answered` ⇒ `(Active, Raiser)` — work awaits the raiser.
+/// 3. else (all terminal, empty included) `∧ !concluded` ⇒ `(Active, Raiser)` —
+///    every finding is settled, but the raiser has not declared the pass done.
+/// 4. else ⇒ `(Done, None)`.
 ///
 /// `await` is a *priority summary* (open/contested wins display), never an
 /// exclusive gate — the turn gate is per-finding `can` (D7).
-pub(crate) fn derived_status(findings: &[FindingState]) -> (ReviewStatus, Await) {
-    if findings.is_empty() {
-        return (ReviewStatus::Done, Await::None);
-    }
+pub(crate) fn derived_status(findings: &[FindingState], concluded: bool) -> (ReviewStatus, Await) {
     if findings.iter().any(|f| {
         matches!(
             f.status,
@@ -49,6 +49,9 @@ pub(crate) fn derived_status(findings: &[FindingState]) -> (ReviewStatus, Await)
         .iter()
         .any(|f| f.status == Vocab::Known(FindingStatus::Answered))
     {
+        return (ReviewStatus::Active, Await::Raiser);
+    }
+    if !concluded {
         return (ReviewStatus::Active, Await::Raiser);
     }
     (ReviewStatus::Done, Await::None)
@@ -200,6 +203,164 @@ pub(crate) fn counters(doc: &ReviewDoc, baton: (u32, u32)) -> Counters {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -- derived_status: total + named cases (SL-268 D2, VT-1) --------------
+
+    fn states(statuses: &[FindingStatus]) -> Vec<FindingState> {
+        statuses
+            .iter()
+            .map(|&status| FindingState {
+                status: Vocab::Known(status),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn derived_status_empty_unconcluded_is_active() {
+        assert_eq!(
+            derived_status(&[], false),
+            (ReviewStatus::Active, Await::Raiser)
+        );
+    }
+
+    #[test]
+    fn derived_status_empty_concluded_is_done() {
+        assert_eq!(derived_status(&[], true), (ReviewStatus::Done, Await::None));
+    }
+
+    #[test]
+    fn derived_status_any_open_or_contested_is_active_responder() {
+        assert_eq!(
+            derived_status(&states(&[FindingStatus::Open]), false),
+            (ReviewStatus::Active, Await::Responder)
+        );
+        assert_eq!(
+            derived_status(&states(&[FindingStatus::Contested]), false),
+            (ReviewStatus::Active, Await::Responder)
+        );
+        // open + answered ⇒ open wins ⇒ Responder.
+        assert_eq!(
+            derived_status(
+                &states(&[FindingStatus::Answered, FindingStatus::Open]),
+                false
+            ),
+            (ReviewStatus::Active, Await::Responder)
+        );
+        // `concluded` never outranks a live finding.
+        assert_eq!(
+            derived_status(&states(&[FindingStatus::Open]), true),
+            (ReviewStatus::Active, Await::Responder)
+        );
+    }
+
+    #[test]
+    fn derived_status_answered_and_none_open_is_active_raiser() {
+        assert_eq!(
+            derived_status(&states(&[FindingStatus::Answered]), false),
+            (ReviewStatus::Active, Await::Raiser)
+        );
+        // answered + a terminal one, none open ⇒ Raiser.
+        assert_eq!(
+            derived_status(
+                &states(&[FindingStatus::Answered, FindingStatus::Verified]),
+                false
+            ),
+            (ReviewStatus::Active, Await::Raiser)
+        );
+        // `concluded` never outranks a live finding.
+        assert_eq!(
+            derived_status(&states(&[FindingStatus::Answered]), true),
+            (ReviewStatus::Active, Await::Raiser)
+        );
+    }
+
+    /// SL-268 D2: all terminal reaches `Done` only once the pass is concluded;
+    /// unconcluded it reads `(Active, Raiser)` — settled findings, an open marker.
+    #[test]
+    fn derived_status_all_terminal_is_done_only_when_concluded() {
+        assert_eq!(
+            derived_status(
+                &states(&[FindingStatus::Verified, FindingStatus::Withdrawn]),
+                true
+            ),
+            (ReviewStatus::Done, Await::None)
+        );
+        assert_eq!(
+            derived_status(&states(&[FindingStatus::Verified]), true),
+            (ReviewStatus::Done, Await::None)
+        );
+        assert_eq!(
+            derived_status(&states(&[FindingStatus::Withdrawn]), true),
+            (ReviewStatus::Done, Await::None)
+        );
+        assert_eq!(
+            derived_status(
+                &states(&[FindingStatus::Verified, FindingStatus::Withdrawn]),
+                false
+            ),
+            (ReviewStatus::Active, Await::Raiser)
+        );
+        assert_eq!(
+            derived_status(&states(&[FindingStatus::Verified]), false),
+            (ReviewStatus::Active, Await::Raiser)
+        );
+        assert_eq!(
+            derived_status(&states(&[FindingStatus::Withdrawn]), false),
+            (ReviewStatus::Active, Await::Raiser)
+        );
+    }
+
+    /// VT-1: total over the enum — every combination of up to two statuses, over
+    /// both `concluded` values, yields a `(ReviewStatus, Await)` without panic or
+    /// gap. `Done ⇔ None` (the carrier invariant), `Done ⇒ concluded`, and
+    /// `Done ⇒ every status terminal` (SL-268 D2).
+    #[test]
+    fn derived_status_total_over_enum() {
+        let all = [
+            FindingStatus::Open,
+            FindingStatus::Answered,
+            FindingStatus::Contested,
+            FindingStatus::Verified,
+            FindingStatus::Withdrawn,
+        ];
+        for &concluded in &[false, true] {
+            // Empty.
+            let (status, awaited) = derived_status(&[], concluded);
+            assert_eq!(status == ReviewStatus::Done, awaited == Await::None);
+            assert!(!(status == ReviewStatus::Done) || concluded);
+            // Singletons and every ordered pair.
+            for &a in &all {
+                let _single = derived_status(&states(&[a]), concluded);
+                for &b in &all {
+                    let set = states(&[a, b]);
+                    let (status, awaited) = derived_status(&set, concluded);
+                    // The invariant the carrier must always hold: Done ⇔ None.
+                    assert_eq!(
+                        status == ReviewStatus::Done,
+                        awaited == Await::None,
+                        "Done iff await=None for [{}, {}], concluded={concluded}",
+                        a.as_str(),
+                        b.as_str()
+                    );
+                    // Done never happens without the pass having been concluded.
+                    assert!(
+                        status != ReviewStatus::Done || concluded,
+                        "Done ⇒ concluded for [{}, {}]",
+                        a.as_str(),
+                        b.as_str()
+                    );
+                    // Done never happens with a non-terminal finding still present.
+                    assert!(
+                        status != ReviewStatus::Done
+                            || set.iter().all(|f| f.status.is_known_terminal()),
+                        "Done ⇒ every status terminal for [{}, {}]",
+                        a.as_str(),
+                        b.as_str()
+                    );
+                }
+            }
+        }
+    }
 
     /// A minimal ledger with the given `[review]` extras and one finding whose
     /// journal is `finding_turns` (inline TOML, `[[finding.turn]]` bodies).

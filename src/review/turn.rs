@@ -86,10 +86,15 @@ pub(super) fn write_baton(root: &Path, id: u32, baton: &Baton) -> anyhow::Result
 }
 
 /// Compute the `(await, authored_hash)` the baton should carry for a ledger whose
-/// findings are `findings` and whose bytes hash to `hash` — the D-C2 recompute
-/// floor reused by entry-CAS heal, the per-turn refresh, and `status`.
-pub(super) fn reconcile_baton_fields(findings: &[FindingState], hash: &str) -> (String, String) {
-    let (_, awaited) = derived_status(findings);
+/// findings are `findings`, concluded marker is `concluded`, and whose bytes hash
+/// to `hash` — the D-C2 recompute floor reused by entry-CAS heal, the per-turn
+/// refresh, and `status`.
+pub(super) fn reconcile_baton_fields(
+    findings: &[FindingState],
+    concluded: bool,
+    hash: &str,
+) -> (String, String) {
+    let (_, awaited) = derived_status(findings, concluded);
     (awaited.as_str().to_owned(), hash.to_owned())
 }
 
@@ -228,7 +233,11 @@ where
     if let Some(baton) = prior.as_ref().filter(|b| b.authored_hash != snapshot_hash) {
         // Heal: recompute await from the authored truth (D-C2), refresh the
         // baton's CAS key, preserve the legacy counters, then bail.
-        let (awaiting, hash) = reconcile_baton_fields(&finding_states_of(&doc), &snapshot_hash);
+        let (awaiting, hash) = reconcile_baton_fields(
+            &finding_states_of(&doc),
+            doc.review.concluded,
+            &snapshot_hash,
+        );
         let healed = Baton {
             awaiting,
             authored_hash: hash,
@@ -287,7 +296,11 @@ where
     let new_hash = crate::git::sha256(new_body.as_bytes());
     let new_doc: ReviewDoc = toml::from_str(&new_body)
         .with_context(|| format!("re-parse {}", authored_path(root, id).display()))?;
-    let (awaiting, hash) = reconcile_baton_fields(&finding_states_of(&new_doc), &new_hash);
+    let (awaiting, hash) = reconcile_baton_fields(
+        &finding_states_of(&new_doc),
+        new_doc.review.concluded,
+        &new_hash,
+    );
 
     // 7. BATON LAST — the legacy counters ride forward unchanged: the ledger's
     //    turn journal counts now (SL-268 sec-2).

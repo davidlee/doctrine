@@ -77,10 +77,14 @@ pub(crate) fn gates_as_blocker(raw_severity: &str) -> bool {
 /// its target. A finding gates iff it [`gates_as_blocker`] (`blocker` or an
 /// out-of-vocabulary severity) and its status is not *known* terminal (an
 /// out-of-vocabulary status holds, SL-268 D15) — but ONLY on an **Active** review
-/// (`derived_status == Active`, D-C8): a `Done` ledger (every finding terminal,
-/// D-C9a) holds nothing. An unknown status already keeps its review Active, so the
-/// guard cannot drop one. No I/O — operates on already-read data so the scan shell
-/// stays thin (the `integrity::scan_kind` shape).
+/// (`derived_status == Active`, D-C8): a ledger that is all terminal **and**
+/// concluded (SL-268 D2) holds nothing. An unconcluded all-terminal ledger reads
+/// `Active` (await raiser) but still holds no non-terminal blocker, so this
+/// guard's answer does not move (design sec-3) — a pass nobody has declared done
+/// still gates on nothing but a genuinely open or contested blocker. An unknown
+/// status already keeps its review Active, so the guard cannot drop one. No I/O —
+/// operates on already-read data so the scan shell stays thin (the
+/// `integrity::scan_kind` shape).
 pub(crate) fn doc_unresolved_blockers(doc: &ReviewDoc) -> Vec<BlockerRef> {
     if doc.derived().0 != ReviewStatus::Active {
         return Vec::new();
