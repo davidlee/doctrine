@@ -54,7 +54,7 @@ Design run `dr-01a0dc9c`. Evidence: `research/research.md` (tier 5) and RFC-032
 fresh-as-of: 2026-09-26 · design (reviewing, pre-lock) · 8922d2e77
 
 ### Produced
-- design.md drafted and revised for RV-396 (commits 2a..8922d2e77 on edge; run dr-01a0dc9c)
+- design.md drafted and revised for RV-396 (commits 810fef9dd..8922d2e77 on edge; run dr-01a0dc9c)
 - minted: DEC-317..DEC-322 — inquiry answers; IMP-492 — doctor install-doc CLI check; IMP-493 — doctor status/last-turn check; ISS-492 — catalog callers drop warning diagnostics; RV-396 — design review
 - design goes past the frontier: top-level `review_ledger` module; `raise`/`reopen` clear `concluded` (user ruling, RV-396 F-4)
 
