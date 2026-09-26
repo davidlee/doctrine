@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d91b-41af-7162-af60-e48317283649"
+recorded_at = "2026-09-25T15:07:17.295668955Z"
+kind = "friction"
+summary = "inquisition: re-disposition on RV-391 dropped the vocab token (route:owner-fix without fix-now) and nothing refused it"
+detail = "The design-review route axis wants 'route:<route> <vocab>'. Four re-dispositions of F-6..F-9 wrote only the route token and the dispose verb accepted them. The only repair is a contest round, so the defect was tolerated and noted in the synthesis. A dispose-time check that a vocab token is present would have caught it for free."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

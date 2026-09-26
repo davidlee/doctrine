@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dbd5-6a5f-7a41-9b76-86da08d9a66e"
+recorded_at = "2026-09-26T03:49:51.839438411Z"
+kind = "friction"
+summary = "route/preflight: doctrine search's scope is undocumented in every agent-facing surface — cost me a source read to learn it"
+detail = "Evaluating the doctrine-search guidance gap: to state accurately what `doctrine search` covers I had to read src/search.rs (corpus = scan_catalog entities only) and src/kinds/mod.rs SEARCH_DEFAULT (SL,ADR,PRD,SPEC,RFC,backlog,knowledge — POL/STD/REQ/RV/REC/CM/REV excluded) and confirm memories are absent (no MEM prefix). The boot snapshot's only mention is 'doctrine search  # BM25 entity search'; using-doctrine.md's 'which verb for which intent' table omits it entirely, and .agents/skills/preflight's search-order block never names it. Three facts an agent needs — (a) it is entities-only, not memories, not the reference library; (b) policy/standard/requirement are outside the default scope, needing -k all or --with; (c) the memory corpus has its own search — are all discoverable only from source."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

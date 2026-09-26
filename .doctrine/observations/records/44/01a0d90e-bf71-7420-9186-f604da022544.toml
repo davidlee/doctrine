@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0d90e-bf71-7420-9186-f604da022544"
+recorded_at = "2026-09-25T14:53:37.521216537Z"
+kind = "friction"
+summary = "inquisition: SL-267 handover.md stale (says no design run exists; run is at rev 28, reviewing) and the concluded RV-391 can't take the --raiser inquisitor stamp"
+detail = "handover.md is gitignored runtime state that nobody refreshed after /design started. The inquisition skill says to stamp --raiser inquisitor, but a managed run's existing ledger has a fixed raiser label, so a pass-2 inquisition on it can't be told apart from the first pass except through the Brief prose."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
