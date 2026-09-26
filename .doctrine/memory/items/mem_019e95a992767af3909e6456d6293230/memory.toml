@@ -2,11 +2,11 @@ memory_uid = "mem_019e95a992767af3909e6456d6293230"
 memory_key = "mem.thread.sl-011.governance-surface"
 schema_version = 1
 memory_type = "thread"
-status = "active"
+status = "archived"
 title = "User-customizable governance surface (doctrine.md analog)"
 summary = "Parked into SL-011: user-editable canon hook surviving install, loaded at /canon. Retire when SL-011 closes"
 created = "2026-06-05"
-updated = "2026-06-05"
+updated = "2026-09-26"
 
 [scope]
 paths = []

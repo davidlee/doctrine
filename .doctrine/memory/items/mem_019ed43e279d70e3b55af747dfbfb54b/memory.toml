@@ -6,7 +6,7 @@ status = "active"
 title = "Run doctrine install and boot from the freshly built in-tree binary, not PATH"
 summary = "install/boot read the RUNNING binary's embedded assets: after touch src/install.rs && cargo build, invoke ./target/debug/doctrine — the in-tree target is live (no CARGO_TARGET_DIR redirect since SL-156); a stale-embed binary silently rolls back the boot snapshot"
 created = "2026-06-17"
-updated = "2026-07-25"
+updated = "2026-09-26"
 
 [scope]
 paths = ["plugins/doctrine/skills/", "install/routing-process.md"]
@@ -25,12 +25,12 @@ tree = "cc02cd0e9dae5ca07b7456492b2045cbb57a1dc6"
 ref_name = "refs/heads/main"
 checkout_state_id = "22c6e4fec15a8dcae55d6bd8f7ae480d77dc085cadf4d75d6e6d66441e601644"
 base_commit = "985f8d0d140b0e5b5dc9fedceadbdaf16ee64357"
-verified_sha = "928aaa86dbfd4c8194797ca79f1e8297e233bca2"
+verified_sha = "1819b09bbfe32949c8f929a1cd9313f458de1f604c4945c3d564064d40e134ab"
 normalizer = "forget.checkout.v1"
 
 [review]
 verification_state = "verified"
-reviewed = "2026-07-25"
+reviewed = "2026-09-26"
 review_by = ""
 
 [trust]

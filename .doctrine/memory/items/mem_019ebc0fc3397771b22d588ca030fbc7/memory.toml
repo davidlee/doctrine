@@ -6,7 +6,7 @@ status = "active"
 title = "just gate runs a named-package test gate; new members are not auto-gated"
 summary = "test-all is 'cargo test -p doctrine -p cordage', NOT --workspace (RV-353 F-4 / ISS-342): doctrine-control's live-bwrap rows are host-capability-dependent and redded gate+release off-jail. default-members is ['.']. Reach the capsule crate with just capsule-check / capsule-verify. A new workspace member must be added to test-all by name."
 created = "2026-06-12"
-updated = "2026-08-11"
+updated = "2026-09-26"
 
 [scope]
 paths = ["justfile", "Cargo.toml", "crates/cordage", "crates/doctrine-control"]
@@ -25,12 +25,12 @@ tree = "0684b09fa20a8dc488149b749db9324938a36135"
 ref_name = "refs/heads/main"
 checkout_state_id = "64f06a5ad68b2948ba268674af992a27ebf46addf7623edb8595be85c7ff02dc"
 base_commit = "d80ecea5d9c1d40a56be5c5348c292c1efd5a252"
-verified_sha = "078c06c1f1fa6ddb79bf5adbdd74c6e5e502cd44"
+verified_sha = "16d04625d7a409886a4fceee3c953302be64c1cdded00a4b310f9d9e0438c120"
 normalizer = "forget.checkout.v1"
 
 [review]
 verification_state = "verified"
-reviewed = "2026-08-11"
+reviewed = "2026-09-26"
 review_by = ""
 
 [trust]

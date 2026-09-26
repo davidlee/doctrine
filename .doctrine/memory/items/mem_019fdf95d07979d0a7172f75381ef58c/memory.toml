@@ -6,7 +6,7 @@ status = "active"
 title = "Editing a locked design run: regress, hand-edit, design adopt"
 summary = "Correct a locked design's prose via stage regression + adopt_authored, not by re-emitting section bodies through declare"
 created = "2026-08-08"
-updated = "2026-09-24"
+updated = "2026-09-26"
 
 [scope]
 paths = ["src/commands/design.rs", "src/design_run/run.rs", "src/design_run/gate.rs"]
@@ -25,12 +25,12 @@ tree = "6ab84b76864f815279ae924db9625c24f4af6d1e"
 ref_name = "refs/heads/edge"
 checkout_state_id = "92af4026a7dac04e226021d4c582fed1e4e3aff23caee0fe6fee21cc6bcd4e80"
 base_commit = "a4e587263054ada3eac91eb261c3ba261fae7a18"
-verified_sha = "968cc8903e6113ae1923a04d2595abffaac656ba"
+verified_sha = "4a4746ca3a9550d43760d4c9ff5710958833f8dc75043f2725acf4da0b342061"
 normalizer = "forget.checkout.v1"
 
 [review]
 verification_state = "verified"
-reviewed = "2026-09-24"
+reviewed = "2026-09-26"
 review_by = ""
 
 [trust]

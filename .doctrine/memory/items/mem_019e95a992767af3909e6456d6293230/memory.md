@@ -27,3 +27,7 @@ Want a customizable surface that:
 - One file vs per-point files (a `canon.md` vs `route.md`/`execute.md` hooks).
 - How `/canon` references it without an `@` force-load (CSO: avoid force-loading).
 - Relationship to ADRs and specs — pointer layer, not a competing truth.
+
+---
+
+**Archived 2026-09-26 (memory review).** The thread's own retirement condition — *"Retire when SL-011 closes"* — is met: `SL-011` (cache-friendly session boot context) is `done`.

@@ -28,3 +28,7 @@ root justfile. Uninstall = delete the line.
   adopt). `glow`/`fzf` recipes are optional — degrade to "command not found".
 - "Marginally invasive" worry resolved by the module form: a `mod` line, not a
   root-justfile takeover.
+
+---
+
+**Archived 2026-09-26 (memory review).** Delivered: `.doctrine/doctrine.just` exists and its shipped counterpart is `install/mod.just` (seeded by `doctrine install`), adopted via the one-line `mod doctrine '.doctrine'` this thread proposed.

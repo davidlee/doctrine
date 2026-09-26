@@ -2,11 +2,11 @@ memory_uid = "mem_019e95a9928377d1a47916e78e24a6ee"
 memory_key = "mem.thread.backlog.just-module"
 schema_version = 1
 memory_type = "thread"
-status = "active"
+status = "archived"
 title = "Ship an opt-in just module into .doctrine"
 summary = "Future-slice idea: materialise .doctrine/doctrine.just; adopt via one-line mod. Depends SL-010; needs slice show --path"
 created = "2026-06-05"
-updated = "2026-06-05"
+updated = "2026-09-26"
 
 [scope]
 paths = []

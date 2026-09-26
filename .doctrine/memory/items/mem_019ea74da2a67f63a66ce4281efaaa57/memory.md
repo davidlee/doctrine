@@ -81,3 +81,7 @@ Pieces 2 (lock wire schema §3 + JSON conformance tests) and 3 (the emitter comm
 are **doctrine slices** — route through `/slice` when picked up. Coordinate with the
 in-flight JSON-output slice (currently touching `src/spec.rs`): the emitter should
 **ride that JSON substrate, not build a parallel one**.
+
+---
+
+**Archived 2026-09-26 (memory review).** Delivered, not dropped: `SL-026` (lazyspec read-only projection, `done`) shipped the doctrine-side piece and renamed it — the working name `emit-lazyspec-brief` became `doctrine export lazyspec`. The remaining item this thread tracked is coordination debt in the sibling `../lazyspec` repo, outside this corpus's reach.

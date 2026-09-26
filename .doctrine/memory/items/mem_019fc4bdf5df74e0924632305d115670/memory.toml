@@ -6,7 +6,7 @@ status = "active"
 title = "A refused write leaves no oversized artifact"
 summary = "A resource bound that refuses at the limit never materialises the oversize — assert the refusal's signature, not its product"
 created = "2026-08-02"
-updated = "2026-08-02"
+updated = "2026-09-26"
 
 [scope]
 paths = ["scripts/spike-capsule"]
@@ -25,12 +25,12 @@ tree = "09469763761327ab0297dd91f9520665e8c0810f"
 ref_name = "refs/heads/edge"
 checkout_state_id = "a03a2748acf18aa20b4f3b288f21506e221dddea0e0e95df4eccc1c2338c121c"
 base_commit = "6312f51961aebbda2c4a506249eca984daa90ad5"
-verified_sha = "1b2d60a76565a9d3f944a760d59ad9f0bcf3cff5"
+verified_sha = "9a98f1a3c1741f255133cd07c9f14f1e46a14c782698512ecaeb8b212188c7e6"
 normalizer = "forget.checkout.v1"
 
 [review]
 verification_state = "verified"
-reviewed = "2026-08-02"
+reviewed = "2026-09-26"
 review_by = ""
 
 [trust]

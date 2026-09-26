@@ -2,11 +2,11 @@ memory_uid = "mem_019ea74da2a67f63a66ce4281efaaa57"
 memory_key = "mem.thread.lazyspec.frontend-integration"
 schema_version = 1
 memory_type = "thread"
-status = "active"
+status = "archived"
 title = "lazyspec read-only front-end for doctrine"
 summary = "lazyspec as RO front-end for doctrine — CLI-JSON wire, fork-adapter, virtual_doc projection; research complete (brief in ../lazyspec); doctrine-side = pieces 2/3 (wire-lock + emit-lazyspec-brief)"
 created = "2026-06-08"
-updated = "2026-06-08"
+updated = "2026-09-26"
 
 [scope]
 paths = []
