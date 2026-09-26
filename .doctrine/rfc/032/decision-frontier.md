@@ -17,6 +17,11 @@ gate (`D2`/`D14`), locus tiers and RV ownership (`D7`), the reservation namespac
 (`D9`), journal limits (`D1`), adoption admission (`D6`), assessment-before-spec
 (`D13`), and the `ISS-314` edge (§3). "Dominated" claims without per-axis evidence
 are now worded as preferences.
+**Revised again:** 2026-09-26, second codex pass, all three points verified and
+integrated. A completed external RV is satisfied by attestation, not adoption,
+and the bind-before uniqueness check is scoped to this tree (`D6`). `status` is
+classified as runtime-writing (`D7`). Turns carry no global round, and the
+counters are baseline plus count (`D1`).
 
 ---
 
@@ -56,12 +61,12 @@ retracted before slice 1 starts. §3 step 0 lands `CHR-057` to do that.
 
 | # | decision | resolves |
 |---|---|---|
-| D1 | append-only per-finding turn journal; state stays stored | C3 · ISS-280 · ISS-485 · F2 |
+| D1 | append-only per-finding turn journal (no global order); state stays stored; counters = baseline + count | C3 · ISS-280 · ISS-485 · F2 |
 | D2 | `done ⇔ all terminal ∧ (non-empty ∨ concluded)`; `complete ⇔ all terminal ∧ concluded` gates dependencies; conclude carries a basis | C1 · ISS-314 · ISS-366 · ISS-322 trap |
 | D3 | optional `anchor` on a finding: opaque `(section, fingerprint)` | C9 (IMP-392 remainder) |
 | D4 | engine-tier ledger module; `review.rs` split | C24 · IMP-068 · IMP-433 |
 | D5 | one read projection: `show` renders the finding index by default | C6 · C7 · C8 · F1 · F10 |
-| D6 | design run binds a pass: mint by default, adopt by name under admission rules | C10 · ISS-322 · C11 · C12 (part) |
+| D6 | design run binds a pass: mint by default, adopt an unconcluded RV before its pass; a completed external RV is satisfied by attestation | C10 · ISS-322 · C11 · C12 (part) |
 | D7 | three locus tiers (read / runtime / authored) at the verb-family boundary; git merge is the declared multi-tree backstop | C2 · C17 · F5 · ISS-484 · IMP-240 |
 | D8 | roles closed + participant aliases; disposition closed-write; optional closed `route` | C13 · C14 · F4 |
 | D9 | clone-wide id reservation in a separate local ref namespace; `reseat` reads leniently | C16 · ISS-279 · ISS-277 · F12 |
@@ -122,8 +127,7 @@ detail = "…"
 disposition = "fix-now"
 response = "…"               # the current account
 
-[[finding.turn]]             # append-only history; one row per transition
-round = 4
+[[finding.turn]]             # append-only history; one row per transition; order = file order
 act = "contest"              # raise | dispose | contest | verify | withdraw | amend | reopen
 role = "raiser"
 note = "the repair is partial: …"   # required for contest/reopen/amend; optional otherwise
@@ -145,19 +149,28 @@ Rules:
   required). `withdraw` stays terminal.
 - Legacy findings simply have an empty journal. No migration. History from before
   the journal existed is **not** reconstructed. It never reached authored state.
-- **Legacy round baseline.** The first journalled write to a ledger that has no
-  turns copies the baton's current `rounds` into an authored `[review]
-  rounds_base` (0 if the baton is gone). From then on, `rounds = max(rounds_base,
-  max turn round)`.
+- **Turns carry no global sequence number.** A turn's order is its position in
+  its own finding's journal. There is **no** single order across findings.
+  `D7` lets two trees move different findings and merge, and a global round
+  number would collide at that merge: both trees would stamp "round 5".
+- **Counters are baseline plus count.** The baton's two observability counters
+  (`rounds`, `contests`; "observability only", `src/review.rs:2188`) become
+  derived values. The first journalled write to a ledger with no turns copies
+  the baton's current values into `[review] rounds_base` / `contests_base`
+  (0 if the baton is gone). From then on, `rounds = rounds_base + number of
+  turns` and `contests = contests_base + number of contest turns`. Counts add up
+  correctly across a merge. The unit moves from verb invocations to acts. The two
+  differ only when one invocation moves several findings, and no gate reads
+  either counter.
 
 **What falls out.**
 
-- After that first journalled write, `rounds` is derivable from authored state,
-  and the baton's durable content (rounds, await) is fully derivable too. The
-  baton lock and the per-invocation CAS stay runtime mechanism. This is what `D7`
-  relies on. A legacy ledger that has not yet had a journalled write still depends
-  on its baton for `rounds`. The only loss there is a cosmetic counter, which the
-  baseline handles.
+- After that first journalled write, the baton's authored-derivable content
+  (await, the two counters) is fully derivable, and `handoff` is replaced by
+  turn notes. The baton lock and the per-invocation CAS stay runtime mechanism.
+  This is what `D7` relies on. A legacy ledger that has not yet had a journalled
+  write still depends on its baton for its counters. The only loss there is
+  cosmetic.
 - **What the doctor check can detect, exactly:** for a finding with a non-empty
   journal, stored `status` must equal the status its last turn implies, and the
   last turn's role must be the one the act allows. That catches hand-set statuses
@@ -170,8 +183,9 @@ Rules:
 - The auditor's question "why did rev 2 become rev 3" has an answer in the
   committed file.
 
-**Gives up.** Ledger files grow (~one short table per transition; RV-346's 121
-rounds would add roughly that many rows). Acceptable: the file is the audit
+**Gives up.** No global turn order across findings (per-finding order only).
+Ledger files grow (~one short table per transition; RV-346's 121 rounds would
+add roughly that many rows). Acceptable: the file is the audit
 record, and the read surface (`D5`) does not render turns by default.
 
 ---
@@ -334,24 +348,32 @@ incidents, this is the cheapest friction relief in the programme.
 
 - On entry to `reviewing`, the run **binds** a pass. With no argument it mints, as
   today. With `--review RV-N` (or the equivalent declaration) it **adopts** an
-  existing RV. The mint remains the ordinary path; adoption is the route the
-  `reviewing` obligation already advertises for an external reviewer.
-- **Admission rules for adoption.** Each refusal names the rule it failed. An
+  existing RV. The mint remains the ordinary path.
+- **Two external routes, told apart by what the run can check:**
+
+  | route | when | how the review condition is satisfied |
+  |---|---|---|
+  | **bind before** | the external reviewer has not finished: the RV is unconcluded | adopt it as the pass. The reviewer works it and concludes. `Conducted` is derived exactly as for a minted pass |
+  | **completed RV** | the external pass already concluded (both recorded `ISS-322` occurrences: `RV-346` was concluded before anyone tried to name it) | **not adopted.** The run cannot tell from the ledger which state of the design a finished pass reviewed. The condition is satisfied **by attestation** (SPEC-029's existing attested kind): the user attests that `RV-N` reviewed this design, and the attestation names the RV and quotes its conclude `--basis` (`D2`) |
+
+  The completed-RV route replaces the `Waived` collapse `ISS-322` records with an
+  attributable statement that names the RV. It does not claim a proof. That is
+  deliberate: binding a finished pass to reviewed content would need a design
+  digest recorded at conclude, and review is opaque to design fingerprints
+  (`D3`). If attested completed passes turn out to be common, revisit it then.
+- **Admission rules for bind-before.** Each refusal names the rule it failed. An
   RV is admitted iff:
   1. it targets this slice, has facet `design`, and is readable in this tree;
-  2. it is **not concluded** — a concluded RV is a finished pass over some
-     earlier state of the design, and adopting it would let a stale review pass
-     the gate;
-  3. it is **not bound** to any other pass, in this run or any other. The binding
-     is recorded on `ReviewPass` and in the change row, so the check is a lookup
-     that needs no new store;
+  2. it is **not concluded** (a concluded RV takes the attestation route);
+  3. it is not already this run's pass, and not bound by an earlier pass in
+     **this tree's** run snapshot. Snapshots are per-tree runtime state
+     (`src/state.rs:142`), so the check cannot see other trees, and it claims
+     only what it can check;
   4. every finding that carries an `anchor` names a section that exists in the
-     current design. Anchors whose fingerprint no longer matches the section are
-     not refused. `D3`'s staleness warning flags them, the same as it does for a
-     minted pass.
-- Adoption changes SPEC-029's run contract, which today says the run mints its
+     current design. Stale fingerprints are not refused; `D3` warns about them.
+- Both routes change SPEC-029's run contract, which today says the run mints its
   pass. The slice that lands `D6` revises SPEC-029 for the bind step, the
-  admission rules, and the change row.
+  admission rules, the attestation shape, and the change row.
 - A pass is still one RV; re-entry binds a new pass (mint or adopt). Coverage stays
   on `ReviewPass.covered`, unchanged. Binding *several* RVs to one pass is rejected:
   it makes `Conducted`'s predicate a union over ledgers for no observed benefit;
@@ -367,8 +389,8 @@ incidents, this is the cheapest friction relief in the programme.
   `ISS-310` / `ISS-359` stay separate — they are attestation questions, not
   ledger ones.
 
-With `D2`'s basis, the `ISS-322` sequence (conclude an empty run-minted RV, point
-the disposition at a different ledger in prose) has no reason to exist.
+With both routes available, the `ISS-322` sequence (conclude an empty run-minted
+RV, point the disposition at a different ledger in prose) has no reason to exist.
 
 ---
 
@@ -387,10 +409,14 @@ worked in one tree is a single-tree review wherever that tree is.
 
 | tier | verbs | admitted where |
 |---|---|---|
-| read | `show`, `list`, `findings` (census), `status` | any tree the root resolves in, including a confined worker |
-| runtime | `prime` (reviewer cache in `.doctrine/state/`) | any tree with a writable state tier |
+| read | `show`, `list`, `findings` (census) | any tree the root resolves in, including a confined worker |
+| runtime | `prime` (reviewer cache), `status` (takes the lock and rebuilds the baton, `src/review.rs:3115`), `unlock` | any tree with a writable state tier |
 | authored | `new`, `raise`, `dispose`, `contest`, `verify`, `withdraw`, `amend`, `reopen`, `conclude` | any tree that can durably write `.doctrine/review/`. Refused in a confined dispatch worker (the `DOCTRINE_WORKER` marker / read-only authored tier) |
 
+- `status` is classified by what it does today, not by its name. A caller that
+  only needs to read, such as a worker, uses `show`, which reports the same
+  derived status. Making `status` a pure read is not proposed: repairing the
+  baton is its purpose, and a pure `status` would duplicate `show`.
 - `new` goes through the authored tier *before* it allocates an id. That closes
   `ISS-484`: no id is allocated in a tree that then refuses.
 - Primary, coordination and solo `/worktree` trees are admitted for authored
@@ -671,7 +697,13 @@ clone", `D9`). The tech spec is authored in-slice and grows per slice.
 - **Pre-journal history is not recovered** (`D1`). It never reached authored
   state.
 - **Two trees can edit one RV** (`D7`). Git merge is the backstop, and conflicts
-  on the same finding surface as text conflicts. No ownership field.
+  on the same finding surface as text conflicts. No ownership field, and no
+  global turn order (`D1`).
+- **A completed external pass is attested, not proven** (`D6`). The run cannot
+  tie a finished RV to the design state it reviewed. The attestation names the
+  RV and its basis.
+- **Adoption uniqueness is per tree** (`D6`). Run snapshots are per-tree
+  runtime state, so binding the same RV in two trees goes undetected.
 - **`reach = local` changes meaning** (`D9`), from "this tree" to "this clone",
   with a spec revision.
 - **No secret scanning in review** (`D10`). A repository-wide control belongs
@@ -702,8 +734,8 @@ recommendation is stated, and each is cheap to revisit.
 - New: amend/reopen acts (partly `ISS-485`), conclude `--basis`, the `complete`
   predicate for cross-kind gating, the review locus-tier table, the install-doc
   flag conformance doctor check, clone-wide local reservation (own namespace,
-  PRD-005/SPEC-008 revision), design-run adoption admission rules (SPEC-029
-  revision), repo-wide secret scanning, the quick-win finding index (split out of
+  PRD-005/SPEC-008 revision), design-run bind-before admission rules and
+  completed-RV attestation (SPEC-029 revision), repo-wide secret scanning, the quick-win finding index (split out of
   `IMP-475`).
 - Promote: `CHR-057` to step 0a — it now blocks the programme, not just tidies
   it. `IMP-481` to step 0b.
