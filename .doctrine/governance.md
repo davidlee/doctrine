@@ -66,7 +66,9 @@ The `/research` pre-design round spawns these — one read-only agent per thread
 just -l                    # list tasks
 doctrine <kind> paths <id> # list all files 
 doctrine status            # what's going on?
-doctrine search            # BM25 entity search 
+doctrine search <query>    # BM25 over the entity corpus — see using-doctrine.md for scope
+doctrine search -k all     # ...the default kind set omits POL/STD/REQ; widen it
+doctrine memory search     # BM25 over the memory corpus (a separate index)
 
 ## Instrumentation: capture friction as an observation
 

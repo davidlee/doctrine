@@ -21,6 +21,10 @@ see [[mem.fact.doctrine.cli-source-of-truth]].
   - `doctrine adr list` - architecture decision records 
   - `doctrine policy list` - policies 
   - `doctrine standard list` - standards of practice
+  - or jump straight to the ones bearing on your task: `doctrine search
+    "<keywords>" -k governance`. Policies and standards sit *outside* the
+    default kind scope, so a bare search misses exactly the rules you came for —
+    `reference/using-doctrine.md` has the scope and the widening flags.
 - the governing slice's `design.md` — canon for *this* change's design intent.
 
 For implementation truth (gotchas, patterns, invariants tied to files or

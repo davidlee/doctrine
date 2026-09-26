@@ -39,6 +39,10 @@ The core loop (slice→design→plan→execute→audit→close) is documented in
 
 - **Consult the backlog before choosing**: `backlog list` — is this intent
   already captured, and do open items bear on it?
+- **Search before assuming**: when the owning artifact is not obvious, `doctrine
+  search "<keywords>"` reaches every numbered entity in one query — `backlog
+  list` alone covers only latent work. Scope, and the corpora it misses:
+  `reference/using-doctrine.md`.
 - Authoring tech specs → `/spec-tech`; product specs → `/spec-product`;
   spec target or boundary unclear → `/spec-coverage-assessment` first.
 - "There is a slice" does **not** route to `/execute` — the design, plan, and

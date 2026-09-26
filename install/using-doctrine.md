@@ -20,6 +20,7 @@ reach-for-it map):
 |---|---|
 | read an entity (all tiers, synthesized) | `doctrine show <REF>` · `doctrine <kind> show <ID>` |
 | survey what exists | `doctrine <kind> list` |
+| find a thing by text, not knowing where it lives | `doctrine search <query>` · `doctrine memory search <query>` |
 | scope a change | `doctrine slice new` |
 | capture a unit of work intent | `doctrine backlog new <kind>` |
 | survey / inspect the backlog | `doctrine backlog list` · `doctrine backlog show <ID>` |
@@ -29,12 +30,35 @@ reach-for-it map):
 | capture friction as it happens | `doctrine observation record friction` |
 | read the friction corpus | `doctrine observation list` · `doctrine observation search` |
 | record a durable fact | `doctrine memory record` |
-| find / retrieve a memory | `doctrine memory find` · `doctrine memory retrieve` |
+| find / retrieve a memory | `doctrine memory search` · `doctrine memory retrieve` |
 | regenerate the boot snapshot | `doctrine boot` |
 | check a slice's phase rollup | `doctrine slice list` |
 
 `<kind>` is `slice`, `spec`, `adr`, `memory`, `backlog`, … (see `glossary.md`).
 Ask `doctrine <kind> --help` for the subcommands and flags each verb takes.
+
+### Finding things by text — three corpora, three verbs
+
+A ranked lexical (BM25) index answers "where does this live?" in one query —
+but there are three corpora, and a bare query reaches exactly one of them:
+
+| corpus | verb | what it holds |
+|---|---|---|
+| entities | `doctrine search <query>` | slices, specs, product requirements docs, ADRs, RFCs, backlog items, knowledge records |
+| memories | `doctrine memory search <query>` | the durable memory corpus |
+| the library | `doctrine library tree` · `doctrine library show reference/<name>.md` | the published reference docs — read by address, **not** in any search index |
+
+Two scope facts `doctrine search` does not advertise:
+
+- **It is entities-only.** Memories are a separate corpus with their own verb,
+  and the reference docs are not indexed at all. A bare query that finds nothing
+  has not searched everything.
+- **Its default kind set is deliberately narrow.** Policies, standards,
+  requirements, and review / reconciliation records are *outside* it, so a rule
+  you are sure exists will not surface from a bare query. Widen with `-k all`, or
+  add kinds to the default set with `--with <prefix,…>`; `-k` also takes the
+  named groups `backlog`, `governance`, `specs`, and `knowledge` — and `specs`
+  means product and technical specs only, never their requirements.
 
 ## Which home for which record
 

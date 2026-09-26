@@ -80,6 +80,11 @@ Search order:
 
 - provided artifact(s)
 - related / linked files, documents, artifacts
+- `doctrine search "<query>"` — the cheapest way to locate a thing whose owning
+  artifact you cannot name: one ranked query over the entity corpus. It reaches
+  neither memories nor the reference docs, and its default kind set excludes
+  policies and standards — `reference/using-doctrine.md` gives the scope and how
+  to widen it.
 - related governance (ADRs, standards, policies) — see `/canon`
 - related tech specs under `.doctrine/spec/tech/`
 - `/retrieve-memory`
