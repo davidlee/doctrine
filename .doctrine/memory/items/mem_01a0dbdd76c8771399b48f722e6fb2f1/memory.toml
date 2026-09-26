@@ -1,0 +1,43 @@
+memory_uid = "mem_01a0dbdd76c8771399b48f722e6fb2f1"
+memory_key = "mem.fact.build.plugin-skill-dirs-are-symlinks"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "The memory and partner plugins mount doctrine's skill masters by tracked symlink — one master file, three paths"
+summary = "plugins/doctrine-memory/skills/{record-memory,retrieve-memory} and plugins/doctrine-partner/skills/{pair,walkthrough} are tracked symlinks (mode 120000) into plugins/doctrine/skills/. The only skill master content is plugins/doctrine/skills/**; editing either path writes the same inode, and git reports the doctrineside path."
+created = "2026-09-26"
+updated = "2026-09-26"
+
+[scope]
+paths = ["plugins/doctrine/skills", "plugins/doctrine-memory/skills", "plugins/doctrine-partner/skills"]
+globs = []
+commands = []
+tags = ["area:install", "area:skills", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "433e4820c9b9d6f81d7d0f4b2e4ac79ea155d5c0"
+tree = "31d3ab275d264c03486bfb47a651ad157a7365c1"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "433e4820c9b9d6f81d7d0f4b2e4ac79ea155d5c0"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "low"
+weight = 0
+
