@@ -1,0 +1,43 @@
+memory_uid = "mem_01a0dbf1d1e37c339752507b78925b05"
+memory_key = "mem.fact.relations.governed-by-targets-are-governance-kinds-only"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "governed_by targets are governance kinds only — a spec-scoped item takes `related`"
+summary = '`governed_by` targets are restricted to ADR/POL/STD, so a backlog item or slice scoped by a PRD/SPEC takes `related` (as IMP-309 does with SPEC-026). descends_from is SPEC-only and shapes is knowledge-record-only, so no label means "issue → its governing spec".'
+created = "2026-09-26"
+updated = "2026-09-26"
+
+[scope]
+paths = ["src/relation.rs"]
+globs = []
+commands = []
+tags = ["area:relations", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "0ea6a35972e1da6365912e85840390d1d4d820db"
+tree = "1af383110f3c1bdaa43d9f41c85c336cba2416d3"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "0ea6a35972e1da6365912e85840390d1d4d820db"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "low"
+weight = 0
+
