@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dbd0-375d-7070-8515-b06f3b51f619"
+recorded_at = "2026-09-26T03:44:11.101250311Z"
+kind = "friction"
+summary = "reviewing-memory: memory edit --key late-binds memory_key without minting the key symlink — the key is then unresolvable"
+detail = "Repairing a dangling relation (memory.toml [[relation]] target naming a key), I used the documented remedy `doctrine memory edit <uid> --key <key>` on the unkeyed target. The verb wrote memory_key into memory.toml and reported success, but `memory show <key>` and `memory validate` still reported not-found. Cause (src/memory.rs resolve_show doc): key resolution is SYMLINK-ONLY — 'there is no memory_key scan fallback, so a stale hand-edited key with no live symlink is a not-found'. Keyed memories are stored in a mem_<uid>/ dir with a sibling symlink named by the key (592 such symlinks in .doctrine/memory/items). --key mints the field but not the symlink, so it produces exactly the stale-unbacked-key state the doc calls a not-found. Fix applied by hand: ln -s mem_<uid> <key> in items/. The verb should either mint the symlink or refuse."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

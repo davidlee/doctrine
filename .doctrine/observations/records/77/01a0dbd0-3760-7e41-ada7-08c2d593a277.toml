@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dbd0-3760-7e41-ada7-08c2d593a277"
+recorded_at = "2026-09-26T03:44:11.104872232Z"
+kind = "friction"
+summary = "reviewing-memory: the read tool appends a 'Doctrine memories for this file:' footer that is NOT file content"
+detail = "Reading .doctrine/memory/items/<uid>/memory.md (or a memory.toml) via the read tool returns the file text plus an appended block: 'Doctrine memories for this file:' followed by ranked memory hints. The block is NOT in the file (verified: tail -c on the path does not contain it, and the memory body returned by `memory show` does not either). Cost: an agent doing read-then-write-back (the standard surgical-edit loop this corpus is full of) will inject the footer into the file. I nearly did — it is only distinguishable by byte-comparing against `doctrine memory show --json` output. Suggest the footer be visually delimited as tool output, not plausible file content."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
