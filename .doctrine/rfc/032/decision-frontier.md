@@ -28,6 +28,10 @@ RVs have no conclude basis. `D7` downgrades git merge to a best-effort backstop
 and declares concurrent multi-tree editing unsupported. `D2` states that
 `complete` is derived, never latched. The slice-2/slice-3 anchor-column
 sequencing is fixed. Codex concurred with both §5 recommendations.
+**Settled:** 2026-09-26. The user settled both §5 forks: `D2` takes the uniform
+rule (no `complete`, no backfill), and `D5` shows findings by default. The
+frontier is adopted as RFC-032's programme proposal. It is still tier 5 until
+slice designs lock it.
 
 ---
 
@@ -51,7 +55,7 @@ choices**, and fixing those three dissolves a large share of the rest:
    stop two trees *editing* one RV; `D7` answers that separately.
 
 Around those three, the frontier choices are deliberately the *narrow* ones:
-narrow status fix (`D2`), adopt-don't-mint for design passes (`D6`), closed-write /
+one uniform status rule (`D2`), adopt-don't-mint for design passes (`D6`), closed-write /
 open-read vocabularies (`D8`), no reverse index (`D12`), ADR-007 keeps the *why*
 and a new tech spec owns the *how* (`D13`).
 
@@ -68,7 +72,7 @@ retracted before slice 1 starts. §3 step 0 lands `CHR-057` to do that.
 | # | decision | resolves |
 |---|---|---|
 | D1 | append-only per-finding turn journal (no global order); state stays stored; counters = baseline + count | C3 · ISS-280 · ISS-485 · F2 |
-| D2 | `done ⇔ all terminal ∧ (non-empty ∨ concluded)`; `complete ⇔ all terminal ∧ concluded` (derived, never latched) gates dependencies; conclude carries a basis | C1 · ISS-314 · ISS-366 · ISS-322 trap |
+| D2 | `done ⇔ all terminal ∧ concluded` (uniform, derived, never latched; no legacy backfill); conclude carries a basis | C1 · ISS-314 · ISS-366 · ISS-322 trap |
 | D3 | optional `anchor` on a finding: opaque `(section, fingerprint)` | C9 (IMP-392 remainder) |
 | D4 | engine-tier ledger module; `review.rs` split | C24 · IMP-068 · IMP-433 |
 | D5 | one read projection: `show` renders the finding index by default | C6 · C7 · C8 · F1 · F10 |
@@ -80,7 +84,7 @@ retracted before slice 1 starts. §3 step 0 lands `CHR-057` to do that.
 | D11 | ADR-007 D-C10 amended to the lived selector model; `prime` degrades, never fails | C19 · C25 · C27 · IMP-478 · F7 |
 | D12 | no reverse index; scan stays | C20 · IMP-479 |
 | D13 | leading proposal: a tech spec owns the RV mechanism (boundary fixed by `IMP-481` first); ADR-007 keeps the decision; doc drift is checked | C18 · C22 · IMP-481 · F13 |
-| D14 | `RV` admitted as a relation target once D4 lands; gates on `complete`, not `done` | C21 · IMP-480 · F9 |
+| D14 | `RV` admitted as a relation target once D4 lands; gates on `done` | C21 · IMP-480 · F9 |
 | D15 | fail-safe reads for every closed vocabulary | C5 · CHR-001 |
 
 ---
@@ -196,7 +200,7 @@ record, and the read surface (`D5`) does not render turns by default.
 
 ---
 
-### D2 — Status: `done ⇔ all findings terminal ∧ (non-empty ∨ concluded)`
+### D2 — Status: `done ⇔ all findings terminal ∧ concluded`
 
 **Question.** What does an empty ledger read as, and how does a clean pass differ
 from an untouched one? (`ISS-314`, `ISS-366`, `IMP-098`; research F6, A7.)
@@ -207,45 +211,46 @@ from an untouched one? (`ISS-314`, `ISS-366`, `IMP-098`; research F6, A7.)
 |---|---|---|---|
 | a | today: empty ⇒ `done` | fails D-C8 and `ISS-366` | — |
 | b | ADR-007 as written: empty ⇒ `active/raiser`, always | reintroduces `IMP-098`'s token-nit round for clean audits | trivial |
-| c | **narrow: empty ∧ ¬concluded ⇒ `active/raiser`; empty ∧ concluded ⇒ `done`; non-empty unchanged** | closes both observed failure shapes | trivial; uses the existing marker |
-| d | uniform: `done` requires `concluded` for every ledger | most coherent (the "one finding, more coming" case is the same ambiguity) | flips ~all legacy all-terminal ledgers to `active`, or needs a backfill that asserts events that never happened; adds a step to every review |
+| c | narrow: empty ∧ ¬concluded ⇒ `active/raiser`; empty ∧ concluded ⇒ `done`; non-empty unchanged | closes both observed failure shapes | needs a second predicate (`complete`) for dependency gates, because `done` would still fire mid-pass on a non-empty ledger |
+| d | **uniform: `done` requires `concluded` for every ledger** | closes both observed failure shapes *and* the non-empty mid-pass case, with one predicate | old ledgers that were never concluded read `active` (truthfully); one `conclude` step closes every pass |
 
-**Choice: (c)**, with one addition: **`conclude` takes a required `--basis`**
-(what the pass examined), stored as a review-level turn
-(`[[review.turn]] act = "conclude"`), reusing D1's shape.
-
-**Plus a second predicate for anything that gates on a review:**
+**Choice: (d), with no backfill.** Chosen by the user for long-term cleanliness
+(2026-09-26), over (c)'s two status words.
 
 ```
-complete ⇔ all findings terminal ∧ concluded
+done ⇔ all findings terminal ∧ concluded
+all findings terminal ∧ ¬concluded ⇒ active, await = raiser   (conclude, or raise more)
+any non-terminal finding          ⇒ active, await = derived role (unchanged)
 ```
 
-`done` is what a reader sees. `complete` is what a *dependency* reads. Under (c),
-a non-empty review whose findings are all terminal reads `done` while the raiser
-may still be working. That is harmless as a display, but wrong as a gate: once
-`D14` makes RV status reachable across kinds, an item that `needs` an RV would
-become actionable in the middle of a pass. So every cross-kind gate
-(`status_class`, actionability, `D14`) reads `complete`. D-C9b (the close gate)
-is unchanged — it reads blockers, not status.
-
-**`complete` is derived on every read, never latched.** `concluded` is a latch
-(`conclude` has no unset). But a concluded ledger still accepts `raise`, and
-`D1` adds `reopen`. Either one puts a non-terminal finding back on the ledger,
-and `complete` then reads false until that finding is terminal again. A
-dependant unblocked by an earlier `complete` becomes blocked again the next time
-its gate is read. That is intended: a late finding means the review is not
-finished, whatever the marker says. A new finding after `conclude` does **not**
-clear the marker. The pass happened, and the late finding is part of the record.
-
-Why not (d): every observed incident is the *empty* case, and (d)'s price is a
-semantic flip across the whole corpus. The one place where the non-empty
-ambiguity causes harm, dependency gating, is closed by `complete` without
-touching any existing ledger's displayed status. No existing edge is affected,
-because `complete` is only read by relations that `D14` introduces. The skills
-should still make `conclude` the normal last move of every pass.
-
-**What it costs:** two status words where (d) has one. That trade is listed as a
-genuine fork in §5.
+- **One word, one predicate.** Display, `status_class`, actionability and
+  `D14`'s dependency gate all read `done`. The `complete` concept is not
+  introduced.
+- **Empty ledgers** fall out of the same rule: empty ∧ ¬concluded is `active`,
+  and empty ∧ concluded is `done`. `ISS-314` is fixed without a special case.
+- **`conclude` takes a required `--basis`** (what the pass examined), stored as
+  a review-level turn (`[[review.turn]] act = "conclude"`), reusing D1's shape.
+  `conclude` becomes the required last move of every pass. The skills that run a
+  pass (`/audit`, `/code-review`, `/inquisition`, the design run) are updated to
+  say so.
+- **Derived on every read, never latched.** `concluded` is a latch (`conclude`
+  has no unset). But a concluded ledger still accepts `raise`, and `D1` adds
+  `reopen`. Either one puts a non-terminal finding back on the ledger, and `done`
+  reads false until that finding is terminal again. A dependant unblocked
+  earlier becomes blocked again the next time its gate is read. That is
+  intended: a late finding means the review is not finished. A new finding does
+  **not** clear the marker. The pass happened, and the late finding is part of
+  the record.
+- **Legacy ledgers are not backfilled.** One that was never concluded reads
+  `active` / await raiser. That is true, because nobody concluded it. A
+  backfill would assert conclusions that never happened. Nothing gates on
+  legacy status today: RVs become dependency targets only under `D14`, and the
+  close gate reads blockers (below). A legacy ledger someone still cares about
+  is closed by running `conclude` with an honest basis.
+- **D-C9b (the close gate) is unaffected.** `doc_unresolved_blockers` returns
+  nothing unless the review is `Active` (`src/review.rs:1669`), but it only
+  counts non-terminal blockers. A ledger that newly reads `active` because it is
+  unconcluded, with every finding terminal, therefore still yields no blockers.
 
 Why the basis: it defuses the `ISS-322` laundering trap without parsing prose.
 Concluding a zero-finding ledger remains legal (a clean pass is a real result),
@@ -257,9 +262,10 @@ honest clean pass.
 
 **Consequences.** The two tests pinning the violating value
 (`show_renders_empty_ledger_done_and_the_edge`,
-`list_renders_empty_ledger_done_and_the_edge`) flip. D-C9b is unaffected — an
-empty ledger has no blocker either way. ADR-007 D-C8 is amended by REV to state
-(c), the `complete` predicate, and the conclude marker's role in both.
+`list_renders_empty_ledger_done_and_the_edge`) flip, as do any tests that pin
+an unconcluded all-terminal ledger as `done`. `review list` and the catalog show
+legacy unconcluded ledgers as `active`. ADR-007 D-C8 is amended by REV to state
+(d) and the conclude marker's role in it.
 
 ---
 
@@ -384,7 +390,7 @@ incidents, this is the cheapest friction relief in the programme.
   ```
 
   Admitted iff the RV targets this slice, has facet `design`, is concluded, and
-  is `complete` (`D2`), and `scope` and `basis` are non-blank. `basis` is supplied
+  is `done` (`D2`), and `scope` and `basis` are non-blank. `basis` is supplied
   **by the attestation itself**. When the RV has a conclude `--basis`, the
   envelope pre-fills it. Legacy RVs have none: `RV-346` and `RV-360` are both
   concluded with only the bare marker, because `--basis` does not exist yet. So a
@@ -633,7 +639,7 @@ new spec's scope and parent, and which pieces belong in an existing spec instead
 **Leading proposal** (subject to the assessment):
 
 - A **tech spec** owns the ledger mechanism: schema (finding, turn, anchor,
-  route), the transition graph, `done` and `complete` (`D2`), the read
+  route), the transition graph, `done` (`D2`), the read
   projection, the locus tiers, conclude semantics. It is authored **in the first
   slice** (`D1`/`D2`/`D4` land there) and extended by each later slice — the
   RFC's "each slice leaves spec coverage" intent, given a concrete home.
@@ -664,10 +670,9 @@ new spec's scope and parent, and which pieces belong in an existing spec instead
 **Choice.** Yes, after `D4`: admit `RV` as a `references` target (role
 `originates_from` included), and let `partition::status_class` read its status
 through the engine-tier ledger module, retiring `DEC-233`'s `Unavailable` arm
-for RV. **The gate reads `complete`, not `done`** (`D2`): an RV counts as settled
-for a dependant only once its raiser has concluded and every finding is
-terminal. Otherwise a `needs` edge on an RV would become actionable in the
-middle of a pass. Finding-granular citation (`RV-N#F-3`) is **not** introduced; prose
+for RV. The gate reads `done`, which under `D2` already means "concluded, and
+every finding terminal". A `needs` edge on an RV therefore cannot become
+actionable in the middle of a pass. Finding-granular citation (`RV-N#F-3`) is **not** introduced; prose
 can name the finding, the edge names the review. Admitting `REC` is the same
 change and should ride it.
 
@@ -695,7 +700,7 @@ workstream labels, and still puts the most consequential decisions first.
 | 0a | *unblock (backlog item)* | land `CHR-057` (a verb to retract a `needs` edge), then retract `ISS-314 needs IMP-392` | the stale edge makes slice 1's status fix read as blocked under ADR-017 gating; retract it through a verb, not a hand edit |
 | 0b | *assessment* | `IMP-481` via `/spec-coverage-assessment` | fixes the tech spec's scope and parent before slice 1 authors it (`D13`) |
 | 0c | *quick win (backlog item)* | D5's finding index + `list --target` over existing fields | nine incidents; no schema dependency. Build it as a render over a view struct, not bespoke formatting, so D4 moves it without rewriting it |
-| 1 | **Ledger v2** | D4 (split, with `IMP-029` golden first), D1, D2 (incl. `complete`), D15, D10, D8 (write side), authors the tech spec | every later slice reads this schema; the hard, hard-to-reverse choices live here |
+| 1 | **Ledger v2** | D4 (split, with `IMP-029` golden first), D1, D2 (uniform `done`), D15, D10, D8 (write side), authors the tech spec | every later slice reads this schema; the hard, hard-to-reverse choices live here |
 | 2 | **Read surface** | D5 remainder (projection, census, JSON unification), D14 | needs D4's module and D1's columns; D3's anchor column joins in slice 3 |
 | 3 | **Design-run binding** | D3 (incl. the anchor column in the read projection), D6 (bind-before, `External` arm, `Finding` deletion, change row, envelope naming, `ISS-462`) | a *consumer* of the ledger; builds on D1–D3 |
 | 4 | **Identity & locus** | D9, then D7 | D7 is unsafe before D9 |
@@ -705,7 +710,7 @@ Slices 3 and 4 are independent of each other and can run in parallel. The 0-step
 are small and independent; 0a and 0b must land before slice 1's design locks.
 
 **Governance route** (unchanged from the RFC, made concrete): slice 1's REV
-amends ADR-007 D-C5 (turns, amend/reopen), D-C8 (`D2`, including `complete`)
+amends ADR-007 D-C5 (turns, amend/reopen), D-C8 (`D2`, uniform `done`)
 and, if `prime` is touched, D-C10 (`D11`). Slice 3 revises SPEC-029 (bind and
 adoption, `D6`). Slice 4's REV amends ADR-007 D-C1/D-C7 (`D7`'s tiers and the
 merge backstop) and revises PRD-005 / SPEC-008 (`reach = local` means "this
@@ -728,10 +733,9 @@ clone", `D9`). The tech spec is authored in-slice and grows per slice.
 - **Ledger size** grows with the turn journal (`D1`). Chosen over losing the
   reasoning that ADR-007 exists to keep.
 - **CLI JSON breaks** (`D5`). Chosen over keeping two shapes forever.
-- **Two status words** (`done` for display, `complete` for gates) (`D2`). Chosen
-  over a corpus-wide semantic flip. The non-empty premature-`done` ambiguity
-  stays in the display, where it has no recorded failure. It is closed for every
-  gate.
+- **Legacy ledgers that were never concluded read `active`** (`D2`). That is a
+  visible change to old state. Chosen over inventing conclusions by backfill,
+  and over a second status word. Each pass needs one more step, `conclude`.
 - **Out-of-band edits are detected, not prevented, and only status edits**
   (`D1`). Hand edits to prose fields that leave status alone go undetected.
   Nothing cooperative can do better at an acceptable cost.
@@ -741,7 +745,7 @@ clone", `D9`). The tech spec is authored in-slice and grows per slice.
   (`D7`). If it happens, git merge is a best-effort backstop. A lost concurrent
   turn cannot be detected. No ownership field, no semantic merge check, and no
   global turn order (`D1`).
-- **A late finding re-blocks dependants** (`D2`). `complete` is derived on every
+- **A late finding re-blocks dependants** (`D2`). `done` is derived on every
   read, so a `raise` or `reopen` after `conclude` turns it false again.
 - **A completed external pass is attested, not proven** (`D6`). The run cannot
   tie a finished RV to the design state it reviewed. The attestation names the
@@ -756,33 +760,26 @@ clone", `D9`). The tech spec is authored in-slice and grows per slice.
 
 ---
 
-## 5. Where the frontier genuinely forks
+## 5. Preference forks — settled
 
-Two choices depend on a preference rather than an engineering fact; the
-recommendation is stated, and each is cheap to revisit.
+Two choices depended on a preference rather than an engineering fact. The user
+settled both on 2026-09-26.
 
-1. **`D2` narrow + `complete` vs uniform.** Both are safe for gating. The choice
-   is two status words and no migration, or one word plus a migration. If the
-   user values a single rule (`done` always needs `conclude`, and `complete`
-   collapses into it), take option (d) and backfill `concluded = true` for legacy
-   all-terminal ledgers with a disclosed migration note. Recommendation: narrow +
-   `complete`. The backfill would record conclusions that never happened.
-   **The deciding question:** must a reader be able to treat the word `done` on
-   its own as a certified end of review? If yes, choose uniform, and accept a
-   visible change to legacy state (legacy ledgers reading `active`) rather than
-   inventing conclusions.
-2. **`D5` default render.** If default `show` output must stay minimal for some
-   consumer, invert to a `--findings` opt-in. Recommendation: findings by default
-   — nine observers hit the default, and none asked for less. **The deciding
-   question:** is there a known consumer that depends on today's minimal
-   human-readable `show` output?
+1. **`D2`: uniform, not narrow.** The user preferred the cleanest long-term rule,
+   with the repo's historical reviews set aside. One word (`done`), one
+   predicate, no `complete`, and no backfill. Legacy ledgers that were never
+   concluded read `active`. The narrow rule with a second gate word is
+   recorded in `D2`'s option table as the alternative.
+2. **`D5`: findings by default.** No consumer depends on today's minimal `show`
+   output beyond agent guidance (skills, `review-ledger.md`), and that guidance
+   is updated in the same slice. It stops being a constraint once it is updated.
 
 ---
 
 ## 6. Backlog deltas implied (not filed by this document)
 
-- New: amend/reopen acts (partly `ISS-485`), conclude `--basis`, the `complete`
-  predicate for cross-kind gating, the review locus-tier table, the install-doc
+- New: amend/reopen acts (partly `ISS-485`), conclude `--basis`, the uniform `done`
+  rule (skills make `conclude` the last move of every pass), the review locus-tier table, the install-doc
   flag conformance doctor check, clone-wide local reservation (own namespace,
   PRD-005/SPEC-008 revision), design-run bind-before admission rules and
   completed-RV attestation (SPEC-029 revision), repo-wide secret scanning, the quick-win finding index (split out of
