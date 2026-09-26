@@ -1,0 +1,258 @@
+# Implementation plan for SL-268 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-268"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable. VT = test, VA = agent,
+# VH = human. Reference another phase's criterion phase-qualified (PHASE-03/EX-2).
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Behaviour-preservation golden"
+objective = "Pin today's review CLI surface byte-exact in a black-box e2e golden over the built binary, before any code moves (D4, IMP-029, design sec-8)."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (run dr-01a0dc9c, revision 36); slice status plan or later." },
+  { id = "EN-2", text = "No change to src/ in this phase: the golden is written against the current binary." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "tests/e2e_review_golden.rs pins stdout and error text for every review verb (new, raise, dispose, verify, contest, withdraw, conclude, list, show, show --json, status, prime, unlock, paths) and each role refusal and state refusal, over hand-seeded fixtures." },
+  { id = "EX-2", text = "It pins the authored ledger TOML byte-exact after each write." },
+  { id = "EX-3", text = "The only normalisation replaces the fixture root with a fixed <ROOT> token (RV-396 F-7): it covers new's created directory and every path-bearing error. Nothing else is carved out." },
+  { id = "EX-4", text = "Write-path tests skip under the worker marker (the e2e_adr_cli_golden.rs skip_under_worker_marker pattern, ISS-260), so the coordinator-tree run is the authoritative one." },
+  { id = "EX-5", text = "doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "golden covers every verb and normalises only the fixture root", test_file = "tests/e2e_review_golden.rs", keywords = ["<ROOT>", "skip_under_worker_marker", "\"raise\"", "\"dispose\"", "\"verify\"", "\"contest\"", "\"withdraw\"", "\"conclude\"", "\"prime\"", "\"--json\""], waived = false },
+  { id = "VA-1", text = "The golden is run in an unmarked (coordinator) tree and every test executes rather than skips; the run's test count is recorded in the phase notes." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Tier split"
+objective = "Move src/review.rs into the engine module src/review_ledger/ and the command module src/review/ along design sec-12's file table, with no behaviour change (D4)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete; the golden is green in the coordinator tree." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/review.rs is gone. src/review_ledger/{mod,vocab,schema,derive,transition,gate}.rs and src/review/{mod,cli,turn,verbs,read,prime}.rs hold the items design sec-12 assigns them. Items that sec-12 names but that do not exist yet (Disposition, Route, TurnKind, Act, TurnRow, vocabulary_defects) are not created here." },
+  { id = "EX-2", text = "review_ledger imports nothing from a command-tier module. layering.toml gains review_ledger = \"engine\", keeps review = \"command\", corrects the ledger comment to the dispatch run-ledger (SL-064), and updates or drops catalog::scan's review reach to match what it still imports." },
+  { id = "EX-3", text = "External callers use crate::review_ledger:: for engine items and crate::review:: for verbs. No re-export shim: one path per item." },
+  { id = "EX-4", text = "The 97 in-file unit tests move to src/review/tests.rs with their assertions byte-unchanged; only use lines and module paths differ." },
+  { id = "EX-5", text = "DEC-318: the DERIVED_STATUS comment in src/kinds/mod.rs and its pinning test's wording say derivation is engine-tier (review_ledger::derive), the probe does not call it yet, and the arm retires with D14." },
+  { id = "EX-6", text = "The golden and every existing suite are green unchanged (the behaviour-preservation gate). doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "review_ledger is classified engine and the layering gate passes", test_file = ".doctrine/adr/001/layering.toml", keywords = ["review_ledger = \"engine\"", "review = \"command\"", "SL-064"], waived = false },
+  { id = "VT-2", expects = "derivation lives in the engine module", test_file = "src/review_ledger/derive.rs", keywords = ["fn derived_status"], waived = false },
+  { id = "VT-3", expects = "DEC-318 comment names the engine-tier home and D14 retirement", test_file = "src/kinds/mod.rs", keywords = ["review_ledger::derive", "D14"], waived = false },
+  { id = "VA-1", text = "git diff PHASE-01's tip..PHASE-02's tip -- tests/ shows no assertion change: only the tests/ side of the moved suite's use lines. The golden file is byte-identical across the phase." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Fail-safe reads and disclosure"
+objective = "Every closed vocabulary reads fail-safe and every read surface discloses the defect on its caller's channel (D15, DEC-319, design sec-3)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "FindingStatus::parse returns Result; parse_finding_status and the Open fallback are gone. An unknown status reads non-terminal, keeps the review active, counts in every blocker predicate, is refused by every act with ReviewError::UnknownStatus naming the known set and the repair, and renders verbatim." },
+  { id = "EX-2", text = "One gates_as_blocker(raw) predicate (Blocker or out of vocabulary) feeds all three blocker predicates; outstanding_by_severity buckets an unknown severity as blocker. The three predicates keep their state differences (SL-244)." },
+  { id = "EX-3", text = "The typed Finding projection carries status and severity as Vocab<T> (Known | Unknown(raw)), serialising the raw string; finding_of_row's Major fallback is gone (RV-396 F-5)." },
+  { id = "EX-4", text = "Pure vocabulary_defects(&ReviewDoc) yields {finding, field, raw, effect}. It is disclosed on: show/status (warning: lines, plus a warnings array in JSON and MCP); list (a structured warnings array naming the RV, printed to stderr on the CLI and carried as a field in --json and MCP review_list, RV-396 F-2); the close gate (BlockerRef.reason printed beside the finding); the catalog scan (one warning CatalogDiagnostic per defective RV, RV-396 F-3, surfaced by no caller until ISS-492); the design run (PassFacts.defects, printed by commands/design.rs in the outstanding projection and gate admission, no predicate reading it, RV-396 F-9)." },
+  { id = "EX-5", text = "An out-of-vocabulary disposition, route, act or role renders verbatim and is not a defect." },
+  { id = "EX-6", text = "Golden updated in the same commit; its diff is the evidence. doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "unknown status: non-terminal, act-refused with the repair, verbatim with a warning (sec-8 VT 6)", test_file = "src/review/tests.rs", keywords = ["unknown_status_reads_non_terminal", "unknown_status_refuses_every_act", "UnknownStatus"], waived = false },
+  { id = "VT-2", expects = "unknown severity gates the close gate, counts as blocker, and is warned on show/status/list/close (sec-8 VT 7)", test_file = "src/review/tests.rs", keywords = ["unknown_severity_gates_as_blocker", "unknown_severity_warned_on_every_surface", "gates_as_blocker"], waived = false },
+  { id = "VT-3", expects = "raw-preserving projection in table, index, --json and MCP (sec-8 VT 16)", test_file = "src/review/tests.rs", keywords = ["unknown_vocab_renders_verbatim_everywhere", "Vocab::Unknown"], waived = false },
+  { id = "VT-4", expects = "catalog scan emits a warning diagnostic for a defective RV (sec-8 VT 18)", test_file = "src/catalog/scan.rs", keywords = ["defective_rv_emits_warning_diagnostic"], waived = false },
+  { id = "VT-5", expects = "design-run projection and admission print the defect warning; gate outcome unchanged (sec-8 VT 19)", test_file = "tests/e2e_design_review.rs", keywords = ["defect_warning_printed_gate_unchanged"], waived = false },
+  { id = "VT-6", expects = "MCP review_list carries warnings (sec-8 VT 13, list arm)", test_file = "tests/e2e_mcp_server.rs", keywords = ["review_list_carries_warnings"], waived = false },
+  { id = "VT-7", expects = "a legacy unknown disposition renders verbatim with no warning (sec-8 VT 8, read arm)", test_file = "src/review/tests.rs", keywords = ["legacy_disposition_quiet"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Turn journal"
+objective = "Every existing act appends its turn row in the same CAS-guarded write that moves status; the ephemeral note and the out-of-lock baton write are deleted; counters become base plus count (D1, CHR-001, design sec-2)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Verb and TurnAct are one Act enum. can(act, from, role) is the single table; required_for is removed and the state refusal reports the admissible from-set computed from can." },
+  { id = "EX-2", text = "TurnRow { act, role, note?, disposition?, route?, response? } is read open-vocabulary. apply_act is the only writer of a finding's state fields and its turn; append_finding writes the raise turn; dispose turns snapshot disposition and response." },
+  { id = "EX-3", text = "contest requires a non-empty note; withdraw gains an optional note; verify's note lands in its turn. Baton.handoff and run_raiser_transition's post-turn baton write are deleted." },
+  { id = "EX-4", text = "Counters: the first journalled write to a ledger with no turns and no rounds_base seeds rounds_base/contests_base from the baton (0 when absent); afterwards rounds = base + count(all turns) and contests = base + count(contest turns). A never-journalled ledger reports the baton. The baton stops incrementing and keeps the fields serde-default." },
+  { id = "EX-5", text = "MCP review_contest.note (required) and review_withdraw.note call the same run_* functions." },
+  { id = "EX-6", text = "Flip named in the phase notes: note_is_handoff_chatter_in_the_baton_not_the_ledger is replaced by a note-in-turn test. Any other assertion change is a finding. Golden updated. doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "every act appends exactly one turn in the same write as status, with act/role/note (sec-8 VT 1)", test_file = "src/review/tests.rs", keywords = ["every_act_appends_one_turn", "note_lands_in_turn"], waived = false },
+  { id = "VT-2", expects = "contest without a note is refused, CLI and MCP (sec-8 VT 3, contest arm)", test_file = "src/review/tests.rs", keywords = ["contest_requires_note"], waived = false },
+  { id = "VT-3", expects = "counter seeding from the baton, 0 with no baton, base+count after, legacy reads the baton (sec-8 VT 4)", test_file = "src/review_ledger/derive.rs", keywords = ["rounds_base", "counters_seed_from_baton", "counters_legacy_reads_baton"], waived = false },
+  { id = "VT-4", expects = "the refusal's from-set is computed from can (no second table)", test_file = "src/review_ledger/transition.rs", keywords = ["pub(crate) enum Act", "admissible_from"], waived = false },
+  { id = "VT-5", expects = "MCP contest/withdraw note round-trips through the same run_* (sec-8 VT 13, note arm)", test_file = "tests/e2e_mcp_server.rs", keywords = ["review_contest_note_round_trips"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Amend, reopen, closed disposition and route"
+objective = "Add the amend and reopen acts, close disposition and route on write, and replace the route: prose token with a --route field (D1, D8, design sec-2, sec-4)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "review amend (responder, answered → answered, note and response required, disposition/route kept if omitted) and review reopen (raiser, verified → contested, note required) ride with_turn and apply_act. Amend turns snapshot disposition, route and response." },
+  { id = "EX-2", text = "Disposition (aligned | fix-now | design-wrong | follow-up | tolerated) and Route (review | demonstrate | probe | control | owner-fix) are STD-001 constants with *_known_set_matches_variants canaries; --disposition uses a clap value_parser, --route is optional; refusals name the set; a route: prefix in --disposition is refused pointing at --route." },
+  { id = "EX-3", text = "Legacy disposition values stay readable (PHASE-03/EX-5)." },
+  { id = "EX-4", text = "guard.rs's write-class table and main.rs's write-class test table gain amend and reopen." },
+  { id = "EX-5", text = "MCP: review_dispose.route and the new review_amend / review_reopen tools, with closed enums in their input schemas, call the same run_*." },
+  { id = "EX-6", text = "Golden updated. doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "amend and reopen transitions and their refusals from every other state (sec-8 VT 2)", test_file = "src/review/tests.rs", keywords = ["amend_answered_to_answered", "reopen_verified_to_contested", "amend_refused_outside_answered", "reopen_refused_outside_verified"], waived = false },
+  { id = "VT-2", expects = "amend and reopen refuse a missing or empty note (sec-8 VT 3)", test_file = "src/review/tests.rs", keywords = ["amend_requires_note", "reopen_requires_note"], waived = false },
+  { id = "VT-3", expects = "closed disposition/route refusals name the set; route: prefix refused (sec-8 VT 8)", test_file = "src/review/tests.rs", keywords = ["disposition_refusal_names_set", "route_prefix_refused"], waived = false },
+  { id = "VT-4", expects = "canaries for the two new vocabularies", test_file = "src/review_ledger/vocab.rs", keywords = ["disposition_known_set_matches_variants", "route_known_set_matches_variants"], waived = false },
+  { id = "VT-5", expects = "MCP review_amend / review_reopen / review_dispose.route round-trip (sec-8 VT 13)", test_file = "tests/e2e_mcp_server.rs", keywords = ["review_amend", "review_reopen", "review_dispose_route_round_trips"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Uniform done and conclude --basis"
+objective = "done ⇔ all findings terminal ∧ concluded, derived on every read; conclude takes a required basis stored as a review-level turn; raise and reopen clear concluded (D2, RV-396 F-4, design sec-3)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 complete (reopen exists to clear concluded)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "derived_status(findings, concluded) implements sec-3's table; every caller moves with the signature (ReviewDoc::derived, reconcile_baton_fields, run_status, show/list, derived_status_string). doc_unresolved_blockers keeps its Active guard." },
+  { id = "EX-2", text = "review conclude requires a non-empty --basis, appends a [[review.turn]] act = conclude row and sets concluded in the same edit; already reports the prior flag. Open or answered findings are allowed." },
+  { id = "EX-3", text = "raise and reopen on a concluded ledger clear concluded in the write that appends their turn." },
+  { id = "EX-4", text = "PassFacts predicates and the design-run gate are unchanged (DEC-138). After a late raise, a new Conducted disposition is refused until a re-conclude; one already recorded stands." },
+  { id = "EX-5", text = "MCP review_conclude.basis is required." },
+  { id = "EX-6", text = "Pre-existing test changes are named in the phase notes as flips (derived_status_empty_is_done_none, derived_status_all_terminal_is_done_none, derived_status_total_over_enum, show_renders_empty_ledger_done_and_the_edge, list_renders_empty_ledger_done_and_the_edge, in-file golden_* strings) or fixture-setup changes (the tests near the old review.rs:3777, 3805, 4748 and golden_run_status gain concluded = true or a conclude step, assertion unchanged). Any other assertion change is a finding (RV-396 F-1)." },
+  { id = "EX-7", text = "Golden updated. doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "derived_status over finding states × concluded, including empty × both (sec-8 VT 5)", test_file = "src/review_ledger/derive.rs", keywords = ["derived_status_total_over_enum", "concluded", "derived_status_empty_unconcluded_is_active"], waived = false },
+  { id = "VT-2", expects = "conclude with open findings reaches done once they turn terminal; raise and reopen clear concluded (sec-8 VT 5)", test_file = "src/review/tests.rs", keywords = ["conclude_then_terminal_is_done", "raise_clears_concluded", "reopen_clears_concluded"], waived = false },
+  { id = "VT-3", expects = "missing or empty --basis refused (sec-8 VT 3)", test_file = "src/review/tests.rs", keywords = ["conclude_requires_basis"], waived = false },
+  { id = "VT-4", expects = "PassFacts.concluded false after a late raise; Conducted refused until re-conclude; PassFacts unchanged over v2 ledgers (sec-8 VT 5, 14)", test_file = "tests/e2e_design_review.rs", keywords = ["late_raise_refuses_conducted_until_reconclude"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-07"
+name      = "Prose input, role aliases, target spelling"
+objective = "Prose arguments accept - and @path through one engine-tier resolver; --as accepts the ledger's declared labels; @PHASE-NN is a target spelling (D10, D8, design sec-4)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 complete (every prose flag it resolves exists: --note, --basis, --response)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "input::resolve_prose(raw, flag, stdin, fs_read) resolves - (stdin), @path (cwd-relative file) or literal; resolve_body delegates to it with its callers' behaviour unchanged. A second - is refused before any read, naming both flags; an empty resolved required value is refused." },
+  { id = "EX-2", text = "review/cli.rs resolves --title, --detail, --response, --note and --basis before calling a verb; run_* take resolved Strings. MCP does no resolution: a literal - or @x stays literal." },
+  { id = "EX-3", text = "parse_role(token, default, meta) accepts raiser/responder and the ledger's declared labels; review new refuses colliding labels and a label naming the other role; --as help and the refusal name the legal values and the ledger's labels. MCP role accepts the aliases." },
+  { id = "EX-4", text = "review new --target SL-NNN@PHASE-NN equals --target SL-NNN --phase PHASE-NN; both at once is refused; review list --target accepts it via one Target::parse. Help says @ in a target is not @path." },
+  { id = "EX-5", text = "Golden updated. doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "- and @path on every review prose argument; two - refused; leading-@ literal via stdin; resolve_body unchanged (sec-8 VT 9)", test_file = "src/input.rs", keywords = ["fn resolve_prose", "second_dash_refused", "at_path_reads_file", "resolve_body_unchanged"], waived = false },
+  { id = "VT-2", expects = "--as aliases, collision refusal at new, help naming the values (sec-8 VT 10)", test_file = "src/review/tests.rs", keywords = ["as_accepts_declared_labels", "new_refuses_colliding_labels"], waived = false },
+  { id = "VT-3", expects = "@PHASE-NN target spelling and its conflict with --phase (sec-8 VT 11)", test_file = "src/review_ledger/schema.rs", keywords = ["at_phase_spelling", "at_phase_conflicts_with_phase_flag"], waived = false },
+  { id = "VT-4", expects = "MCP literal - stays literal; role alias accepted (sec-8 VT 13)", test_file = "tests/e2e_mcp_server.rs", keywords = ["review_literal_dash_stays_literal"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-08"
+name      = "Prime degrades"
+objective = "prime degrades and discloses on a target with no path-set, clears a stale cache, and filters non-file literal selectors (D11, IMP-259, ISS-059, RV-396 F-6, design sec-5)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete. Independent of PHASE-03..07: may run in parallel with them on a disjoint file set (src/review/prime.rs)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A non-slice target or a zero-selector slice returns Primed { tracked_count: 0, degraded: Some(reason), cleared }, prints primed nothing: <reason> (plus removed the previous cache when one existed) on stdout, exit 0. The MCP output carries degraded." },
+  { id = "EX-2", text = "Under the prime lock, a degraded prime removes any earlier cache.toml, so status reports no cache rather than a stale current." },
+  { id = "EX-3", text = "Literal selectors: absent kept, regular file kept, directory or symlink (via symlink_metadata, never followed) excluded and listed on a skipped non-file selector: line." },
+  { id = "EX-4", text = "Golden updated. doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "non-slice and zero-selector targets degrade and disclose; literal non-file filter (sec-8 VT 12)", test_file = "src/review/prime.rs", keywords = ["prime_non_slice_degrades", "prime_zero_selectors_degrades", "literal_directory_selector_skipped", "literal_symlink_selector_skipped"], waived = false },
+  { id = "VT-2", expects = "prime, then zero selectors, then prime leaves status with no cache (sec-8 VT 17)", test_file = "src/review/prime.rs", keywords = ["degraded_prime_clears_stale_cache"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-09"
+name      = "Guidance and bounded review"
+objective = "Bring the shipped guidance in line with v2, then run the bounded guidance review over the installed corpus against the built binary (DEC-320, CHR-079, design sec-6)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03..08 complete: the binary carries every verb, flag and field the guidance describes." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/review-ledger.md covers the acts, amend/reopen, required notes, conclude --basis as the closing move after the last raise or reopen, --route, aliases, - / @path, MCP as the preferred write path with a quoted heredoc on the CLI, and that roles belong to acts, not agents (a responder raises a new finding --as raiser). The ephemeral --note paragraph is gone." },
+  { id = "EX-2", text = "install/routing-process.md's Reference forms paragraph adds: when the reader is a human, the first qualified mention of a doc-local id also names the verb that opens it, using the RV-NNN placeholder (ADR-024). doctrine boot regenerates the snapshot; doctrine boot --check is clean." },
+  { id = "EX-3", text = "install/design-prompts/reviewing.md takes route as the --route field, not a prose token, and states R8 (a late raise needs a re-conclude). The audit, code-review, inquisition, reconcile and close skills, and plan/walkthrough where they cite the route token or --note, are updated." },
+  { id = "EX-4", text = "doctrine install refreshes installed skills; doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "review-ledger.md names the new surface", test_file = "install/review-ledger.md", keywords = ["review amend", "review reopen", "--basis", "--route", "roles belong to acts"], waived = false },
+  { id = "VT-2", expects = "Reference forms rule names the read verb", test_file = "install/routing-process.md", keywords = ["doctrine show RV-NNN"], waived = false },
+  { id = "VT-3", expects = "reviewing prompt uses the --route field", test_file = "install/design-prompts/reviewing.md", keywords = ["--route"], waived = false },
+  { id = "VA-1", text = "Bounded review (DEC-320): over install/**/*.md, plugins/doctrine/skills/**/SKILL.md and the MCP review_* tool descriptions, check every doctrine review verb, flag, value and argument shape and every review_* tool and field against the built binary's --help and the MCP schema; spot-check other doctrine verbs in the files opened. Findings go on an RV ledger against SL-268, each fixed in-slice or filed, and the ledger ends with every finding terminal and concluded with a basis naming what was covered." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-10"
+name      = "Governance"
+objective = "Author the Review ledger tech spec describing what landed, mint the REV amending ADR-007 and SPEC-003, and close IMP-479 (DEC-317, DEC-321, D12, design sec-6)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02..09 complete: src/review_ledger/ and src/review/ exist in their final shape." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The Review ledger tech spec exists via /spec-tech: c4_level container, parent SPEC-003, no descends_from unless /spec-tech finds one (IMP-481), live [[source]] anchors on src/review_ledger/ and src/review/. It describes schema v2, the act table, the derivation rules, the fail-safe reads and the prime model." },
+  { id = "EX-2", text = "A REV minted with doctrine revision new --originates-from RFC-032 amends ADR-007 D-C5 (journal, amend/reopen, closed disposition, route), D-C8 (done ⇔ all terminal ∧ concluded; the marker and its basis; raise/reopen clearing it) and D-C10 (selector-model cache, prime degrading), and revises SPEC-003's container inventory to add the new spec and SPEC-029. It is drafted here and applied at reconcile." },
+  { id = "EX-3", text = "IMP-479 is closed as not needed until measured (D12)." },
+  { id = "EX-4", text = "doctrine check gate green." },
+]
+verification = [
+  { id = "VA-1", text = "doctrine spec show <new spec> --json shows every [[source]] anchor resolving (mem_019fc1308b8e7b73acf9644547351373)." },
+  { id = "VA-2", text = "doctrine show on the REV lists the three ADR-007 decisions and the SPEC-003 inventory change, and the spec's prose matches the landed code, read once against src/review_ledger/." },
+]
+specs        = []
+requirements = []

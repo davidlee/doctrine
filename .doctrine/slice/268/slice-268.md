@@ -25,9 +25,9 @@ caller's shell (obs `019fc0bc`: live API keys spliced into a committed ledger).
 Decision ids below are RFC-032 `decision-frontier.md`'s.
 
 1. **D4: split `review.rs` along the tier line, golden first.** Write IMP-029's
-   black-box e2e CLI golden *before* moving code. Then split into an engine-tier
-   `review/ledger` module (schema, lenient reader, `derived_status`, transition
-   graph, blocker predicates) and command modules (verbs, `with_turn`,
+   black-box e2e CLI golden *before* moving code. Then split into a top-level
+   engine-tier `review_ledger` module (schema, lenient reader, `derived_status`,
+   transition graph, blocker predicates) and command modules (verbs, `with_turn`,
    baton/lock, prime, render). This refactor preserves behaviour, and the
    existing suites plus the golden are the gate.
 2. **D1: an append-only turn journal per finding.** `[[finding.turn]]` rows
@@ -109,8 +109,8 @@ engine-tier module with a spec that owns it.
 
 ### Affected surface
 
-- `src/review.rs` becomes `src/review/` (ledger engine module plus command
-  modules)
+- `src/review.rs` becomes `src/review_ledger/` (engine) plus `src/review/`
+  (command)
 - review verbs in `src/commands/cli.rs`, and the review tools in
   `src/mcp_server/tools.rs`
 - consumers of `derived_status` and the blocker predicates: `src/slice.rs`
@@ -156,10 +156,8 @@ engine-tier module with a spec that owns it.
 ### Verification / closure intent
 
 - The IMP-029 golden is green before and after the split. The existing review
-  and design-review suites stay green without edits, except the D2 flips named
-  in the frontier and research (`derived_status_empty_is_done_none`,
-  `derived_status_total_over_enum`, `show_renders_empty_ledger_done_and_the_edge`,
-  `list_renders_empty_ledger_done_and_the_edge`).
+  and design-review suites stay green without edits, except the test flips and
+  fixture-setup changes the design's Verification section names (RV-396 `F-1`).
 - Tests cover: a turn appended on every transition; `amend` and `reopen`;
   counters equal baseline plus count; `done` requires conclude; `--basis`
   required; fail-safe reads for each vocabulary, each with its read-site
