@@ -79,17 +79,28 @@ impl FindingStatus {
     pub(crate) const fn is_terminal(self) -> bool {
         matches!(self, Self::Verified | Self::Withdrawn)
     }
+
+    /// Parse an authored finding-status token against the closed 5-set (the
+    /// [`Severity::parse`] pattern). There is **no fallback** (SL-268 D15): an
+    /// unknown token is an error naming the whole set, and a reader that must go
+    /// on reads it through [`Vocab`] instead of guessing a status for it.
+    pub(crate) fn parse(s: &str) -> Result<Self, String> {
+        match s {
+            "open" => Ok(Self::Open),
+            "answered" => Ok(Self::Answered),
+            "contested" => Ok(Self::Contested),
+            "verified" => Ok(Self::Verified),
+            "withdrawn" => Ok(Self::Withdrawn),
+            other => Err(format!(
+                "unknown finding status `{other}` (known: {})",
+                FINDING_STATUSES.join(", ")
+            )),
+        }
+    }
 }
 
 /// The `FindingStatus` known-set. Lockstep-guarded by
 /// `finding_status_known_set_matches_variants`.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "read only by the review drift canaries (SL-268 D4 split)"
-    )
-)]
 pub(crate) const FINDING_STATUSES: &[&str] =
     &["open", "answered", "contested", "verified", "withdrawn"];
 
@@ -147,6 +158,88 @@ impl From<Severity> for String {
 /// The `Severity` known-set. Lockstep-guarded by
 /// `severity_known_set_matches_variants`.
 pub(crate) const SEVERITIES: &[&str] = &["blocker", "major", "minor", "nit"];
+
+// ---------------------------------------------------------------------------
+// Fail-safe authored reads (SL-268 D15, DEC-319)
+// ---------------------------------------------------------------------------
+
+/// A closed vocabulary an authored ledger field is read against — the bound
+/// [`Vocab`] reads through. `parse_known` is the strict parse with the error
+/// dropped: the caller keeps the raw string, so nothing is lost by it.
+pub(crate) trait ClosedVocab: Copy {
+    fn parse_known(raw: &str) -> Option<Self>;
+    fn token(self) -> &'static str;
+}
+
+impl ClosedVocab for FindingStatus {
+    fn parse_known(raw: &str) -> Option<Self> {
+        Self::parse(raw).ok()
+    }
+    fn token(self) -> &'static str {
+        self.as_str()
+    }
+}
+
+impl ClosedVocab for Severity {
+    fn parse_known(raw: &str) -> Option<Self> {
+        Self::parse(raw).ok()
+    }
+    fn token(self) -> &'static str {
+        self.as_str()
+    }
+}
+
+/// One authored closed-vocabulary value, read **without a fallback** (SL-268
+/// D15): either a known token or the raw string exactly as authored. A reader
+/// never substitutes a guessed value — each consumer decides what `Unknown`
+/// means for it (fail-safe: non-terminal status, blocker severity) and the read
+/// surfaces disclose it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Vocab<T> {
+    Known(T),
+    Unknown(String),
+}
+
+impl<T: ClosedVocab> Vocab<T> {
+    /// Read an authored token: `Known` if it is in the vocabulary, else the raw
+    /// string verbatim.
+    pub(crate) fn read(raw: &str) -> Self {
+        T::parse_known(raw).map_or_else(|| Self::Unknown(raw.to_owned()), Self::Known)
+    }
+
+    /// The token as rendered: the canonical token when known, the raw authored
+    /// string when not — never a substitute.
+    pub(crate) fn as_str(&self) -> &str {
+        match self {
+            Self::Known(t) => t.token(),
+            Self::Unknown(raw) => raw,
+        }
+    }
+
+    /// The known value, or `None` for an out-of-vocabulary read.
+    pub(crate) fn known(&self) -> Option<T> {
+        match self {
+            Self::Known(t) => Some(*t),
+            Self::Unknown(_) => None,
+        }
+    }
+}
+
+impl Vocab<FindingStatus> {
+    /// Whether this status is *known* terminal. An out-of-vocabulary status is
+    /// not (SL-268 D15) — the fail-safe read keeps it holding its review open.
+    pub(crate) fn is_known_terminal(&self) -> bool {
+        self.known().is_some_and(FindingStatus::is_terminal)
+    }
+}
+
+/// Serialised as its rendered token — `Unknown` carries its raw string onto the
+/// wire, so a JSON/MCP reader sees what the ledger says.
+impl<T: ClosedVocab> Serialize for Vocab<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
 
 /// The party asserting a verb (`--as`, design §5). Cooperative role assertion,
 /// not security (ADR-007 Negative).

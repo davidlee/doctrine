@@ -8,8 +8,8 @@ use super::turn::{
 use super::{
     Await, Column, Context, FindingRow, FindingStatus, Format, ListArgs, Path, PathBuf, REVIEW_DIR,
     REVIEW_KIND, REVIEW_STATUSES, ReviewDoc, ReviewOutput, ReviewStatus, Serialize, Severity,
-    canonical_id, derived_status, finding_states_of, fs, listing, parse_finding_status, parse_ref,
-    read_authored, read_review, read_reviews,
+    Vocab, VocabDefect, canonical_id, derived_status, finding_states_of, fs, listing, parse_ref,
+    read_authored, read_review, read_reviews, vocabulary_defects,
 };
 use crate::tomlfmt::toml_string;
 
@@ -23,8 +23,8 @@ use crate::tomlfmt::toml_string;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Finding {
     pub(crate) id: String,
-    pub(crate) status: FindingStatus,
-    pub(crate) severity: Severity,
+    pub(crate) status: Vocab<FindingStatus>,
+    pub(crate) severity: Vocab<Severity>,
     pub(crate) title: String,
     pub(crate) detail: String,
     pub(crate) disposition: Option<String>,
@@ -137,7 +137,7 @@ pub(crate) fn run_show(
                 upper_pct,
             )
         }
-        Format::Json => show_json(&doc, &body)?,
+        Format::Json => show_json(&doc, &body, &view.warnings)?,
     };
     let canonical = view.canonical.clone();
     let title = view.title.to_owned();
@@ -147,6 +147,7 @@ pub(crate) fn run_show(
     let awaiting = view.awaiting.as_str().to_owned();
     let findings_count = view.findings.len();
     let findings = view.findings;
+    let warnings = view.warnings;
     Ok(ReviewOutput::Showed {
         id,
         canonical,
@@ -158,6 +159,7 @@ pub(crate) fn run_show(
         findings_count,
         findings,
         body,
+        warnings,
         formatted,
     })
 }
@@ -187,6 +189,44 @@ pub(super) struct ReviewView<'a> {
     responder: &'a str,
     tags: &'a [String],
     findings: Vec<Finding>,
+    /// The ledger's closed-vocabulary defects (SL-268 D15), for disclosure.
+    warnings: Vec<ReviewWarning>,
+}
+
+/// One closed-vocabulary defect as disclosed on a structured channel (`--json`,
+/// MCP): the defect plus the RV it sits on, so a multi-review surface (`list`)
+/// needs no second shape. Serialises as `{effect, field, finding, raw, rv}`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct ReviewWarning {
+    pub(crate) rv: String,
+    #[serde(flatten)]
+    pub(crate) defect: VocabDefect,
+}
+
+impl ReviewWarning {
+    /// The text-channel line (`warning: RV-NNN F-n …`), newline-terminated.
+    pub(crate) fn line(&self) -> String {
+        let mut line = self.defect.warning_line(&self.rv);
+        line.push('\n');
+        line
+    }
+}
+
+/// Every closed-vocabulary defect in one ledger, as [`ReviewWarning`]s.
+fn warnings_of(doc: &ReviewDoc) -> Vec<ReviewWarning> {
+    let rv = canonical_id(doc.id);
+    vocabulary_defects(doc)
+        .into_iter()
+        .map(|defect| ReviewWarning {
+            rv: rv.clone(),
+            defect,
+        })
+        .collect()
+}
+
+/// The text-channel rendering of a set of warnings: one line each.
+fn warning_lines(warnings: &[ReviewWarning]) -> String {
+    warnings.iter().map(ReviewWarning::line).collect()
 }
 
 impl<'a> ReviewView<'a> {
@@ -205,19 +245,20 @@ impl<'a> ReviewView<'a> {
             responder: &doc.review.responder,
             tags: &doc.tags,
             findings: doc.finding.iter().map(finding_of_row).collect(),
+            warnings: warnings_of(doc),
         }
     }
 }
 
 /// One authored `[[finding]]` row → the typed [`Finding`] (the MCP/`--json` shape
-/// and the index's row). An out-of-vocabulary status reads `Open` (conservative,
-/// non-terminal); an out-of-vocabulary severity falls back to `Major` — unchanged
-/// from the pre-view parse.
+/// and the index's row). No fallback (SL-268 D15): an out-of-vocabulary status
+/// or severity is carried as [`Vocab::Unknown`] with its raw string, so every
+/// render shows what the ledger says; the view's `warnings` disclose it.
 fn finding_of_row(row: &FindingRow) -> Finding {
     Finding {
         id: row.id.clone(),
-        status: parse_finding_status(&row.status),
-        severity: Severity::parse(&row.severity).unwrap_or(Severity::Major),
+        status: Vocab::read(&row.status),
+        severity: Vocab::read(&row.severity),
         title: row.title.clone(),
         detail: row.detail.clone(),
         disposition: row.disposition.clone(),
@@ -287,6 +328,7 @@ pub(super) fn format_show(
         view.responder
     ));
     parts.push(render_finding_index(&view.findings));
+    parts.push(warning_lines(&view.warnings));
     if !view.tags.is_empty() {
         parts.push(format!("tags: {}\n", view.tags.join(", ")));
     }
@@ -312,16 +354,32 @@ struct ShowJson<'a> {
     awaiting: &'a str,
 }
 
-/// Render the `Json` show under the shared `{kind, …}` envelope.
-fn show_json(doc: &ReviewDoc, body: &str) -> anyhow::Result<String> {
+/// Render the `Json` show under the shared `{kind, …}` envelope. A top-level
+/// `warnings` array rides beside it only when the ledger has a defect, so a clean
+/// ledger's JSON is unchanged.
+fn show_json(doc: &ReviewDoc, body: &str, warnings: &[ReviewWarning]) -> anyhow::Result<String> {
     let (status, awaited) = doc.derived();
     let row = ShowJson {
         doc,
         status: status.as_str(),
         awaiting: awaited.as_str(),
     };
-    let value = serde_json::json!({ "kind": "review", "review": row, "body": body });
+    let mut value = serde_json::json!({ "kind": "review", "review": row, "body": body });
+    with_warnings(&mut value, warnings)?;
     serde_json::to_string_pretty(&value).context("failed to serialize review show JSON")
+}
+
+/// Attach a non-empty `warnings` array to a JSON object envelope (absent when
+/// empty — the clean-ledger shape stays byte-identical).
+fn with_warnings(value: &mut serde_json::Value, warnings: &[ReviewWarning]) -> anyhow::Result<()> {
+    if warnings.is_empty() {
+        return Ok(());
+    }
+    let warnings = serde_json::to_value(warnings).context("failed to serialize review warnings")?;
+    if let Some(object) = value.as_object_mut() {
+        object.insert("warnings".to_owned(), warnings);
+    }
+    Ok(())
 }
 
 /// The `review list` row tuple: the doc plus its derived status (computed once).
@@ -395,14 +453,16 @@ fn key(d: &ReviewDoc) -> listing::FilterFields {
     }
 }
 
+/// What `list_rows` computes: the rendered list, its JSON rows, and the
+/// closed-vocabulary warnings across the listed RVs (in id order).
+type Listing = (String, Vec<ListRow>, Vec<ReviewWarning>);
+
 /// `review list` rows as a string — the compute half of [`run_list`]. No hide-set
 /// (an RV is either Active or Done; both are listed), sorted by id, each row
-/// carrying its derived status.
-fn list_rows(
-    root: &Path,
-    mut args: ListArgs,
-    target: Option<&str>,
-) -> anyhow::Result<(String, Vec<ListRow>)> {
+/// carrying its derived status. The listed (post-filter) RVs' vocabulary defects
+/// are gathered once here, for the CLI's stderr and the MCP `warnings` field
+/// alike; `--json` also carries them top-level when there are any.
+fn list_rows(root: &Path, mut args: ListArgs, target: Option<&str>) -> anyhow::Result<Listing> {
     listing::validate_statuses(&args.status, REVIEW_STATUSES)?;
     let render = args.render;
     let columns = args.columns.take();
@@ -418,6 +478,7 @@ fn list_rows(
     let mut docs = listing::retain(docs, &filter, |_| false, key);
     docs.sort_by_key(|d| d.id);
     let any_tagged = docs.iter().any(|d| !d.tags.is_empty());
+    let warnings: Vec<ReviewWarning> = docs.iter().flat_map(warnings_of).collect();
     let rows: Vec<ReviewRow> = docs
         .into_iter()
         .map(|d| {
@@ -432,9 +493,15 @@ fn list_rows(
                 listing::select_columns(&REVIEW_COLUMNS, &effective_default, columns.as_deref())?;
             listing::render_columns(&rows, &sel, render)
         }
-        Format::Json => listing::json_envelope("review", &json_rows(&rows))?,
+        // The shared `listing::json_envelope` shape, plus `warnings` when any.
+        Format::Json => {
+            let mut value = serde_json::json!({ "kind": "review", "rows": json_rows(&rows) });
+            with_warnings(&mut value, &warnings)?;
+            serde_json::to_string_pretty(&value)
+                .context("failed to serialize list JSON envelope")?
+        }
     };
-    Ok((formatted, json_rows(&rows)))
+    Ok((formatted, json_rows(&rows), warnings))
 }
 
 /// Faithful JSON rows for `list` — the prefixed id, derived status/await, facet,
@@ -472,10 +539,11 @@ pub(crate) fn run_list(
     target: Option<&str>,
 ) -> anyhow::Result<ReviewOutput> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let (formatted, rows) = list_rows(&root, args, target)?;
+    let (formatted, rows, warnings) = list_rows(&root, args, target)?;
     Ok(ReviewOutput::Listed {
         rows,
         total: None,
+        warnings,
         formatted,
     })
 }
@@ -522,6 +590,8 @@ pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Resu
         doc.finding.len(),
         rebuilt.rounds
     );
+    let warnings = warnings_of(&doc);
+    formatted.push_str(&warning_lines(&warnings));
 
     let mut cache_primed = false;
     let mut stale_paths: Vec<String> = Vec::new();
@@ -549,6 +619,7 @@ pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Resu
         rounds: usize::try_from(rebuilt.rounds).unwrap_or(0),
         cache_primed,
         stale_paths,
+        warnings,
         formatted,
     })
 }

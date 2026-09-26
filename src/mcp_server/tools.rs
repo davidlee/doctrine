@@ -1518,6 +1518,7 @@ fn project_show_summary(out: ReviewOutput) -> ReviewOutput {
             findings_count,
             findings,
             body: _,
+            warnings,
             formatted,
         } => {
             let findings = findings
@@ -1539,6 +1540,7 @@ fn project_show_summary(out: ReviewOutput) -> ReviewOutput {
                 findings_count,
                 findings,
                 body: String::new(),
+                warnings,
                 formatted,
             }
         }
@@ -1569,6 +1571,7 @@ fn project_list_cap(out: ReviewOutput, cap: Option<usize>) -> ReviewOutput {
         (
             ReviewOutput::Listed {
                 mut rows,
+                warnings,
                 formatted,
                 ..
             },
@@ -1576,9 +1579,11 @@ fn project_list_cap(out: ReviewOutput, cap: Option<usize>) -> ReviewOutput {
         ) if rows.len() > n => {
             let total = rows.len();
             rows = rows.split_off(total - n);
+            // The full pre-cap warnings ride on: disclosure outranks the cap.
             ReviewOutput::Listed {
                 rows,
                 total: Some(total),
+                warnings,
                 formatted,
             }
         }
@@ -1659,6 +1664,17 @@ fn map_review_error(id: Option<Id>, err: &anyhow::Error) -> JsonRpcResponse {
                     "finding": finding,
                     "current": current.as_str(),
                     "required": required.as_str()
+                })),
+            ),
+            review::ReviewError::UnknownStatus { finding, raw } => JsonRpcResponse::error(
+                id,
+                -32602,
+                format!("Unknown status on {finding}: `{raw}`"),
+                Some(json!({
+                    "code": "UNKNOWN_STATUS",
+                    "finding": finding,
+                    "raw": raw,
+                    "known": crate::review_ledger::FINDING_STATUSES
                 })),
             ),
             review::ReviewError::DanglingRef { target } => JsonRpcResponse::error(
@@ -1968,6 +1984,7 @@ mod tests {
         let listed = ReviewOutput::Listed {
             rows: vec![],
             total: None,
+            warnings: vec![],
             formatted: "RENDERED TABLE".to_owned(),
         };
         let v = serde_json::to_value(&listed).unwrap();
@@ -1990,6 +2007,7 @@ mod tests {
             rounds: 0,
             cache_primed: true,
             stale_paths: vec![],
+            warnings: vec![],
             formatted: "RENDERED STATUS".to_owned(),
         };
         let v = serde_json::to_value(&status).unwrap();
@@ -2014,6 +2032,7 @@ mod tests {
             findings_count: 1,
             findings: vec![sample_finding()],
             body: "BIG BRIEF BODY".to_owned(),
+            warnings: vec![],
             formatted: String::new(),
         };
         let ReviewOutput::Showed { body, findings, .. } = project_show_summary(out) else {
@@ -2051,6 +2070,7 @@ mod tests {
         let make = || ReviewOutput::Listed {
             rows: vec![row("RV-1"), row("RV-2"), row("RV-3")],
             total: None,
+            warnings: vec![],
             formatted: String::new(),
         };
 
@@ -2081,8 +2101,10 @@ mod tests {
     fn sample_finding() -> crate::review::Finding {
         crate::review::Finding {
             id: "F-1".to_owned(),
-            status: crate::review_ledger::FindingStatus::Verified,
-            severity: crate::review_ledger::Severity::Minor,
+            status: crate::review_ledger::Vocab::Known(
+                crate::review_ledger::FindingStatus::Verified,
+            ),
+            severity: crate::review_ledger::Vocab::Known(crate::review_ledger::Severity::Minor),
             title: "t".to_owned(),
             detail: "long detail prose".to_owned(),
             disposition: Some("tolerated".to_owned()),
@@ -2147,6 +2169,30 @@ mod tests {
         assert_eq!(data["expected"], "raiser");
         assert_eq!(data["actual"], "responder");
         assert_eq!(data["verb"], "dispose");
+    }
+
+    // SL-268 PHASE-03 (EX-1): an out-of-vocabulary status refusal maps to -32602
+    // with the raw value and the known set in the structured payload.
+
+    #[test]
+    fn unknown_status_error_mapping() {
+        let err = ReviewError::UnknownStatus {
+            finding: "F-1".to_owned(),
+            raw: "zombie".to_owned(),
+        };
+        let e = anyhow::anyhow!(err);
+        let resp = map_review_error(Some(Id::Number(1)), &e);
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, -32602);
+        assert_eq!(err.message, "Unknown status on F-1: `zombie`");
+        let data = err.data.unwrap();
+        assert_eq!(data["code"], "UNKNOWN_STATUS");
+        assert_eq!(data["finding"], "F-1");
+        assert_eq!(data["raw"], "zombie");
+        assert_eq!(
+            data["known"],
+            json!(["open", "answered", "contested", "verified", "withdrawn"])
+        );
     }
 
     // VT-6: ReviewError::NotFound maps to -32000 with NOT_FOUND code

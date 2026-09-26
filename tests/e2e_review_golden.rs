@@ -1391,19 +1391,24 @@ fn status_seeded_ledger_reports_rounds_zero() {
     );
 }
 
+/// A hand-edited ledger whose one finding carries an out-of-vocabulary
+/// status, severity and disposition.
+const OUT_OF_VOCAB_LEDGER: &str = "id    = 1\nslug  = \"t\"\ntitle = \"T1\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"zombie\"\nseverity = \"catastrophic\"\ntitle = \"Ti1\"\ndetail = \"De1\"\ndisposition = \"whatever\"\n";
+
+/// The two defect lines [`OUT_OF_VOCAB_LEDGER`] discloses, status first.
+const OUT_OF_VOCAB_WARNINGS: &str = "warning: RV-001 F-1 status `zombie` is out of vocabulary; reading as non-terminal\n\
+     warning: RV-001 F-1 severity `catastrophic` is out of vocabulary; gating as blocker\n";
+
 #[test]
 fn vocab_defects_render_across_every_read_surface() {
     // A hand-edited finding with an out-of-vocabulary status/severity/
-    // disposition (D15 flips this later — today's fail-open behaviour pinned
-    // as-is): `show` renders it as `major`/`open`; `--json` passes the raw
-    // strings through; `list`/`status` read it as active/await=responder.
+    // disposition, read fail-safe (SL-268 D15): every surface renders the raw
+    // values verbatim and discloses the status and severity defects on its
+    // caller's channel (show/status text, `--json` `warnings`, list stderr). The
+    // free-text disposition is carried and is no defect; the zombie status holds
+    // the review active, awaiting the responder.
     let dir = tmp();
-    seed_review(
-        dir.path(),
-        1,
-        "id    = 1\nslug  = \"t\"\ntitle = \"T1\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"zombie\"\nseverity = \"catastrophic\"\ntitle = \"Ti1\"\ndetail = \"De1\"\ndisposition = \"whatever\"\n",
-        "# brief\n",
-    );
+    seed_review(dir.path(), 1, OUT_OF_VOCAB_LEDGER, "# brief\n");
 
     let out = run(dir.path(), &["show", "1"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
@@ -1413,8 +1418,10 @@ fn vocab_defects_render_across_every_read_surface() {
          design · active · await=responder\n\
          RV-001 ──reviews──▶ SL-001\n\
          findings: 1 (raiser raiser · responder responder)\n\
-         id  │ severity │ status │ disposition │ title\n\
-         F-1 │ major    │ open   │ whatever    │ Ti1\n\
+         id  │ severity     │ status │ disposition │ title\n\
+         F-1 │ catastrophic │ zombie │ whatever    │ Ti1\n\
+         warning: RV-001 F-1 status `zombie` is out of vocabulary; reading as non-terminal\n\
+         warning: RV-001 F-1 severity `catastrophic` is out of vocabulary; gating as blocker\n\
          \n\
          # brief\n"
     );
@@ -1423,7 +1430,7 @@ fn vocab_defects_render_across_every_read_surface() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "{\n  \"body\": \"# brief\\n\",\n  \"kind\": \"review\",\n  \"review\": {\n    \"awaiting\": \"responder\",\n    \"finding\": [\n      {\n        \"detail\": \"De1\",\n        \"disposition\": \"whatever\",\n        \"id\": \"F-1\",\n        \"response\": null,\n        \"severity\": \"catastrophic\",\n        \"status\": \"zombie\",\n        \"title\": \"Ti1\"\n      }\n    ],\n    \"id\": 1,\n    \"review\": {\n      \"concluded\": false,\n      \"facet\": \"design\",\n      \"raiser\": \"raiser\",\n      \"responder\": \"responder\"\n    },\n    \"slug\": \"t\",\n    \"status\": \"active\",\n    \"tags\": [],\n    \"target\": {\n      \"phase\": null,\n      \"ref\": \"SL-001\"\n    },\n    \"title\": \"T1\"\n  }\n}"
+        "{\n  \"body\": \"# brief\\n\",\n  \"kind\": \"review\",\n  \"review\": {\n    \"awaiting\": \"responder\",\n    \"finding\": [\n      {\n        \"detail\": \"De1\",\n        \"disposition\": \"whatever\",\n        \"id\": \"F-1\",\n        \"response\": null,\n        \"severity\": \"catastrophic\",\n        \"status\": \"zombie\",\n        \"title\": \"Ti1\"\n      }\n    ],\n    \"id\": 1,\n    \"review\": {\n      \"concluded\": false,\n      \"facet\": \"design\",\n      \"raiser\": \"raiser\",\n      \"responder\": \"responder\"\n    },\n    \"slug\": \"t\",\n    \"status\": \"active\",\n    \"tags\": [],\n    \"target\": {\n      \"phase\": null,\n      \"ref\": \"SL-001\"\n    },\n    \"title\": \"T1\"\n  },\n  \"warnings\": [\n    {\n      \"effect\": \"reading as non-terminal\",\n      \"field\": \"status\",\n      \"finding\": \"F-1\",\n      \"raw\": \"zombie\",\n      \"rv\": \"RV-001\"\n    },\n    {\n      \"effect\": \"gating as blocker\",\n      \"field\": \"severity\",\n      \"finding\": \"F-1\",\n      \"raw\": \"catastrophic\",\n      \"rv\": \"RV-001\"\n    }\n  ]\n}"
     );
 
     let out = run(dir.path(), &["list"]);
@@ -1433,13 +1440,50 @@ fn vocab_defects_render_across_every_read_surface() {
         "id     │ status                   │ facet  │ target │ title\n\
          RV-001 │ active (await responder) │ design │ SL-001 │ T1\n"
     );
+    assert_eq!(stderr(&out), OUT_OF_VOCAB_WARNINGS);
 
     let out = run(dir.path(), &["status", "1"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "RV-001 — active · await=responder · findings 1 · rounds 0\n"
+        "RV-001 — active · await=responder · findings 1 · rounds 0\n\
+         warning: RV-001 F-1 status `zombie` is out of vocabulary; reading as non-terminal\n\
+         warning: RV-001 F-1 severity `catastrophic` is out of vocabulary; gating as blocker\n"
     );
+}
+
+#[test]
+fn unknown_status_act_refusal_pins_ledger_unchanged() {
+    // SL-268 D15 / EX-1: no act applies to an out-of-vocabulary status — the
+    // refusal names the known set and the remedy, and writes nothing.
+    if skip_under_worker_marker("unknown_status_act_refusal_pins_ledger_unchanged") {
+        return;
+    }
+    let dir = tmp();
+    seed_review(dir.path(), 1, OUT_OF_VOCAB_LEDGER, "# brief\n");
+
+    let out = run(
+        dir.path(),
+        &[
+            "dispose",
+            "1",
+            "--finding",
+            "F-1",
+            "--disposition",
+            "fixed",
+            "--response",
+            "R1",
+        ],
+    );
+    assert!(!out.status.success(), "stdout: {}", stdout(&out));
+    assert_eq!(stdout(&out), "");
+    assert_eq!(
+        stderr(&out),
+        "Error: F-1 has out-of-vocabulary status `zombie` (known: open, answered, contested, \
+         verified, withdrawn); no act applies — correct the value in the ledger TOML, and the \
+         next turn's entry check heals the baton\n"
+    );
+    assert_eq!(ledger(dir.path(), 1), OUT_OF_VOCAB_LEDGER);
 }
 
 // === T7 — prime / status cache ===============================================

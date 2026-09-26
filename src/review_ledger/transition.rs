@@ -3,8 +3,8 @@
 //! `can` predicate, the per-verb required status, and the finding-scoped
 //! edit-preserving `toml_edit` writes that apply a transition.
 
-use super::schema::{FindingRow, parse_finding_status};
-use super::vocab::{FindingStatus, Role, Severity};
+use super::schema::FindingRow;
+use super::vocab::{FindingStatus, Role, Severity, Vocab};
 
 /// The five write verbs that move a finding's status (design §5). `status` and
 /// the read/coordination verbs are not transition verbs and are not modelled
@@ -218,16 +218,19 @@ pub(crate) fn next_finding_id(existing: &[FindingRow]) -> String {
     format!("F-{}", max + 1)
 }
 
-/// The current authored status of a finding (for the per-finding `can()` gate).
+/// The current authored status of a finding (for the per-finding `can()` gate),
+/// read fail-safe: an out-of-vocabulary status comes back as
+/// [`Vocab::Unknown`] for the caller to refuse, never as a guessed `Open` that
+/// an act could then move (SL-268 D15).
 pub(crate) fn finding_status_of(
     existing: &[FindingRow],
     finding_id: &str,
-) -> anyhow::Result<FindingStatus> {
+) -> anyhow::Result<Vocab<FindingStatus>> {
     let row = existing
         .iter()
         .find(|f| f.id == finding_id)
         .ok_or_else(|| anyhow::anyhow!("no finding `{finding_id}` in the ledger"))?;
-    Ok(parse_finding_status(&row.status))
+    Ok(Vocab::read(&row.status))
 }
 
 /// The canonical required status for each verb — the state a finding must be

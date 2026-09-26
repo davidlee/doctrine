@@ -20,11 +20,11 @@ use crate::entity::{self, Materialised};
 use crate::kinds::{REVIEW_DIR, REVIEW_KIND};
 use crate::listing::{self, Column, Format, ListArgs};
 use crate::review_ledger::{
-    Await, Facet, FindingRow, FindingState, FindingStatus, REVIEW_STATUSES, ReviewDoc, ReviewMeta,
-    ReviewStatus, Role, Severity, Target, TurnAct, Verb, append_finding, apply_transition,
-    authored_path, can, canonical_id, derived_status, finding_states_of, finding_status_of,
-    finding_table_mut, parse_finding_status, parse_ref, read_authored, read_review, read_reviews,
-    required_for,
+    Await, FINDING_STATUSES, Facet, FindingRow, FindingState, FindingStatus, REVIEW_STATUSES,
+    ReviewDoc, ReviewMeta, ReviewStatus, Role, Severity, Target, TurnAct, Verb, Vocab, VocabDefect,
+    append_finding, apply_transition, authored_path, can, canonical_id, derived_status,
+    finding_states_of, finding_status_of, finding_table_mut, parse_ref, read_authored, read_review,
+    read_reviews, required_for, vocabulary_defects,
 };
 
 mod cli;
@@ -35,7 +35,7 @@ mod verbs;
 
 pub(crate) use cli::ReviewCommand;
 pub(crate) use prime::{PrimeArgs, run_prime};
-pub(crate) use read::{Finding, ListRow, run_list, run_show, run_status};
+pub(crate) use read::{Finding, ListRow, ReviewWarning, run_list, run_show, run_status};
 pub(crate) use turn::run_unlock;
 pub(crate) use verbs::{
     DisposeArgs, NewArgs, RaiseArgs, materialise_review_at, mint_review, parse_role, run_conclude,
@@ -74,6 +74,14 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             let out = run_list(path, list.into_list_args(color), target.as_deref())?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;
+            // The list's stdout is the row table (or the JSON document), so its
+            // vocabulary defects go to stderr (SL-268 D15), after the rows.
+            if let ReviewOutput::Listed { warnings, .. } = &out {
+                let mut stderr = std::io::stderr();
+                for warning in warnings {
+                    write!(stderr, "{}", warning.line())?;
+                }
+            }
             Ok(())
         }
         ReviewCommand::Show {
@@ -302,6 +310,10 @@ pub(crate) enum ReviewOutput {
         findings_count: usize,
         findings: Vec<Finding>,
         body: String,
+        /// Closed-vocabulary defects on this ledger (SL-268 D15) — absent on the
+        /// wire when there are none, so a clean ledger's output is unchanged.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        warnings: Vec<ReviewWarning>,
         #[serde(skip)]
         formatted: String,
     },
@@ -312,6 +324,11 @@ pub(crate) enum ReviewOutput {
         /// keeps uncapped lists and the CLI path byte-unchanged.
         #[serde(skip_serializing_if = "Option::is_none")]
         total: Option<usize>,
+        /// Closed-vocabulary defects across the listed RVs (SL-268 D15), in id
+        /// order — never capped (disclosure outranks the row cap); absent when
+        /// none. The CLI writes them to stderr.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        warnings: Vec<ReviewWarning>,
         #[serde(skip)]
         formatted: String,
     },
@@ -328,6 +345,9 @@ pub(crate) enum ReviewOutput {
         rounds: usize,
         cache_primed: bool,
         stale_paths: Vec<String>,
+        /// Closed-vocabulary defects on this ledger (SL-268 D15); absent when none.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        warnings: Vec<ReviewWarning>,
         #[serde(skip)]
         formatted: String,
     },
@@ -454,6 +474,13 @@ pub(crate) enum ReviewError {
         current: FindingStatus,
         required: FindingStatus,
     },
+    /// The finding's authored status is out of vocabulary (SL-268 D15): no act
+    /// applies to a state the transition table does not know, so every finding
+    /// act refuses until the ledger is corrected by hand.
+    UnknownStatus {
+        finding: String,
+        raw: String,
+    },
     DanglingRef {
         target: String,
     },
@@ -495,6 +522,15 @@ impl fmt::Display for ReviewError {
                     "out of turn on {finding}: current status {} != required {}",
                     current.as_str(),
                     required.as_str()
+                )
+            }
+            Self::UnknownStatus { finding, raw } => {
+                write!(
+                    f,
+                    "{finding} has out-of-vocabulary status `{raw}` (known: {}); no act \
+                     applies — correct the value in the ledger TOML, and the next turn's \
+                     entry check heals the baton",
+                    FINDING_STATUSES.join(", ")
                 )
             }
             Self::DanglingRef { target } => {

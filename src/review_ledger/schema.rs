@@ -9,7 +9,7 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 use super::derive::{FindingState, derived_status};
-use super::vocab::{Await, FindingStatus, ReviewStatus};
+use super::vocab::{Await, ReviewStatus, Vocab};
 use crate::entity;
 use crate::kinds::{REVIEW_DIR, REVIEW_KIND};
 use crate::listing;
@@ -59,9 +59,9 @@ pub(crate) struct ReviewMeta {
 // ---------------------------------------------------------------------------
 
 /// One authored `[[finding]]` row, read as data for `show`/`list` derived status.
-/// A faithful mirror of the on-disk shape (the raiser/responder/status fields);
-/// the closed-vocab strings are validated only where a transition needs them
-/// (PHASE-03) — `show`/`list` read them verbatim.
+/// A faithful mirror of the on-disk shape (the raiser/responder/status fields).
+/// The closed-vocab strings stay raw here: each reader classifies them through
+/// [`Vocab`] (SL-268 D15), so a hand-edited value is carried, never rewritten.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub(crate) struct FindingRow {
     pub(crate) id: String,
@@ -125,15 +125,16 @@ where
 }
 
 impl ReviewDoc {
-    /// Map the authored finding-status strings to the pure [`FindingStatus`] for
-    /// the derived-status summary. An out-of-vocab status (a hand-edit) is treated
-    /// as `Open` — non-terminal, keeping the review `Active` rather than silently
-    /// closing it (the conservative read; the write path validates in PHASE-03).
+    /// Read the authored finding-status strings for the derived-status summary —
+    /// the one status parse every reader shares. An out-of-vocabulary status (a
+    /// hand-edit) reads as [`Vocab::Unknown`] with its raw string, never as a
+    /// guessed known status (SL-268 D15); `derived_status` holds it non-terminal
+    /// and the read surfaces disclose it (`vocabulary_defects`).
     pub(crate) fn finding_states(&self) -> Vec<FindingState> {
         self.finding
             .iter()
             .map(|f| FindingState {
-                status: parse_finding_status(&f.status),
+                status: Vocab::read(&f.status),
             })
             .collect()
     }
@@ -142,18 +143,6 @@ impl ReviewDoc {
     /// time, never stored.
     pub(crate) fn derived(&self) -> (ReviewStatus, Await) {
         derived_status(&self.finding_states())
-    }
-}
-
-/// Parse an authored finding-status string into [`FindingStatus`], defaulting an
-/// unknown value to `Open` (conservative — see [`ReviewDoc::finding_states`]).
-pub(crate) fn parse_finding_status(s: &str) -> FindingStatus {
-    match s {
-        "answered" => FindingStatus::Answered,
-        "contested" => FindingStatus::Contested,
-        "verified" => FindingStatus::Verified,
-        "withdrawn" => FindingStatus::Withdrawn,
-        _ => FindingStatus::Open,
     }
 }
 

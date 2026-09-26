@@ -12,28 +12,33 @@ mod schema;
 mod transition;
 mod vocab;
 
-pub(crate) use derive::{FindingState, derived_status, finding_states_of};
+pub(crate) use derive::{
+    FindingState, VocabDefect, derived_status, finding_states_of, vocabulary_defects,
+};
 pub(crate) use gate::{
     derived_status_string, observe_pass, read_pass_facts, relation_edges, unresolved_blockers_for,
 };
 pub(crate) use schema::{
-    FindingRow, ReviewDoc, ReviewMeta, Target, authored_path, canonical_id, parse_finding_status,
-    parse_ref, read_authored, read_review, read_reviews,
+    FindingRow, ReviewDoc, ReviewMeta, Target, authored_path, canonical_id, parse_ref,
+    read_authored, read_review, read_reviews,
 };
 pub(crate) use transition::{
     TurnAct, Verb, append_finding, apply_transition, can, finding_status_of, finding_table_mut,
     required_for,
 };
 pub(crate) use vocab::{
-    Await, Facet, FindingStatus, REVIEW_STATUSES, ReviewStatus, Role, Severity,
+    Await, FINDING_STATUSES, Facet, FindingStatus, REVIEW_STATUSES, ReviewStatus, Role, Severity,
+    Vocab,
 };
 
 // Reached only by unit tests (review, slice, mcp_server, priority).
 #[cfg(test)]
+pub(crate) use derive::{EFFECT_UNKNOWN_SEVERITY, VocabField};
+#[cfg(test)]
 pub(crate) use gate::{
-    BlockerRef, OutstandingCounts, outstanding_by_severity, undisposed_blockers,
+    BlockerRef, OutstandingCounts, gates_as_blocker, outstanding_by_severity, undisposed_blockers,
 };
 #[cfg(test)]
 pub(crate) use transition::next_finding_id;
 #[cfg(test)]
-pub(crate) use vocab::{FACETS, FINDING_STATUSES, ROLES, SEVERITIES};
+pub(crate) use vocab::{FACETS, ROLES, SEVERITIES};

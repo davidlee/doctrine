@@ -7,10 +7,9 @@ use std::path::Path;
 
 use anyhow::Context;
 
-use super::schema::{
-    ReviewDoc, canonical_id, parse_finding_status, parse_ref, read_review, read_reviews,
-};
-use super::vocab::{FindingStatus, ReviewStatus, Severity};
+use super::derive::{VocabDefect, vocabulary_defects};
+use super::schema::{ReviewDoc, canonical_id, parse_ref, read_review, read_reviews};
+use super::vocab::{FindingStatus, ReviewStatus, Severity, Vocab};
 use crate::kinds::REVIEW_DIR;
 
 /// A review's authored outbound relation (SL-046 §5.2/§5.3): the single
@@ -43,37 +42,66 @@ pub(crate) fn derived_status_string(root: &Path, id: u32) -> anyhow::Result<Stri
 /// One unresolved blocker holding a target's closure open (design §7, D8/D-C9b):
 /// the canonical RV id (`RV-007`) and the offending finding id (`F-2`). Surfaced
 /// by the close-gate to name *why* a closure-seam transition is refused.
+///
+/// `reason` is `None` for a finding whose vocabulary is clean; when the finding
+/// gates only through a fail-safe read (SL-268 D15), it carries that finding's
+/// [`VocabDefect::describe`]s joined `"; "`, so the refusal says why a finding
+/// the author never marked `blocker` is holding the close.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BlockerRef {
     pub(crate) rv: String,
     pub(crate) finding: String,
+    pub(crate) reason: Option<String>,
+}
+
+/// Whether a finding's authored severity gates as a blocker (SL-268 D15, EX-2):
+/// `blocker` itself **or any out-of-vocabulary value**. The fail-safe read — a
+/// typo'd severity must not quietly un-gate a closure. This is the single
+/// severity classification all three predicates below share; they differ only in
+/// which statuses they hold.
+pub(crate) fn gates_as_blocker(raw_severity: &str) -> bool {
+    !matches!(
+        Vocab::<Severity>::read(raw_severity),
+        Vocab::Known(Severity::Major | Severity::Minor | Severity::Nit)
+    )
 }
 
 /// Pure check (design §7): the unresolved blocker findings *this* RV holds against
-/// its target. A finding gates iff `severity == Blocker && status ∉ {verified,
-/// withdrawn}` — but ONLY on an **Active** review (`derived_status == Active`,
-/// D-C8): a `Done` ledger (every finding terminal, D-C9a) holds nothing, even if a
-/// stray non-terminal status were hand-edited in (the derived gate already
-/// excludes that by keeping it Active). No I/O — operates on already-read data so
-/// the scan shell stays thin (the `integrity::scan_kind` shape).
+/// its target. A finding gates iff it [`gates_as_blocker`] (`blocker` or an
+/// out-of-vocabulary severity) and its status is not *known* terminal (an
+/// out-of-vocabulary status holds, SL-268 D15) — but ONLY on an **Active** review
+/// (`derived_status == Active`, D-C8): a `Done` ledger (every finding terminal,
+/// D-C9a) holds nothing. An unknown status already keeps its review Active, so the
+/// guard cannot drop one. No I/O — operates on already-read data so the scan shell
+/// stays thin (the `integrity::scan_kind` shape).
 pub(crate) fn doc_unresolved_blockers(doc: &ReviewDoc) -> Vec<BlockerRef> {
     if doc.derived().0 != ReviewStatus::Active {
         return Vec::new();
     }
+    let defects = vocabulary_defects(doc);
     doc.finding
         .iter()
-        .filter(|f| Severity::parse(&f.severity) == Ok(Severity::Blocker))
-        .filter(|f| !parse_finding_status(&f.status).is_terminal())
-        .map(|f| BlockerRef {
-            rv: canonical_id(doc.id),
-            finding: f.id.clone(),
+        .filter(|f| gates_as_blocker(&f.severity))
+        .filter(|f| !Vocab::<FindingStatus>::read(&f.status).is_known_terminal())
+        .map(|f| {
+            let reasons: Vec<String> = defects
+                .iter()
+                .filter(|d| d.finding == f.id)
+                .map(VocabDefect::describe)
+                .collect();
+            BlockerRef {
+                rv: canonical_id(doc.id),
+                finding: f.id.clone(),
+                reason: (!reasons.is_empty()).then(|| reasons.join("; ")),
+            }
         })
         .collect()
 }
 
 /// Pure check (SL-244 DEC-138): the findings on this RV that hold a design run's
-/// `reviewing → locked` edge — `severity == Blocker` **and** `status ∈ {open,
-/// contested}`, carried as the ledger's own `F-n` ids.
+/// `reviewing → locked` edge — [`gates_as_blocker`] **and** `status ∈ {open,
+/// contested}` or out of vocabulary (SL-268 D15: an unknown status may still be
+/// undisposed, so it holds), carried as the ledger's own `F-n` ids.
 ///
 /// **Spelled separately from [`doc_unresolved_blockers`], and deliberately not by
 /// copying it and restricting the state.** Two things follow from that, and the
@@ -95,11 +123,11 @@ pub(crate) fn doc_unresolved_blockers(doc: &ReviewDoc) -> Vec<BlockerRef> {
 pub(crate) fn undisposed_blockers(doc: &ReviewDoc) -> Vec<String> {
     doc.finding
         .iter()
-        .filter(|f| Severity::parse(&f.severity) == Ok(Severity::Blocker))
+        .filter(|f| gates_as_blocker(&f.severity))
         .filter(|f| {
             matches!(
-                parse_finding_status(&f.status),
-                FindingStatus::Open | FindingStatus::Contested
+                Vocab::<FindingStatus>::read(&f.status),
+                Vocab::Known(FindingStatus::Open | FindingStatus::Contested) | Vocab::Unknown(_)
             )
         })
         .map(|f| f.id.clone())
@@ -145,8 +173,10 @@ pub(crate) struct OutstandingCounts {
 ///   already zero — which is why the argument is about coupling, as its
 ///   neighbour's is.
 ///
-/// A severity that will not parse is counted nowhere, matching
-/// [`undisposed_blockers`]'s handling of the same malformed row.
+/// The fail-safe reads are shared with both neighbours (SL-268 D15): an
+/// out-of-vocabulary status is not terminal, so it is counted, and an
+/// out-of-vocabulary severity is counted as `blocker` — the same
+/// [`gates_as_blocker`] classification, so the lamp and the gates agree.
 ///
 /// No I/O: operates on already-read data, like both neighbours.
 pub(crate) fn outstanding_by_severity(doc: &ReviewDoc) -> OutstandingCounts {
@@ -154,14 +184,13 @@ pub(crate) fn outstanding_by_severity(doc: &ReviewDoc) -> OutstandingCounts {
     for finding in doc
         .finding
         .iter()
-        .filter(|f| !parse_finding_status(&f.status).is_terminal())
+        .filter(|f| !Vocab::<FindingStatus>::read(&f.status).is_known_terminal())
     {
-        let bucket = match Severity::parse(&finding.severity) {
-            Ok(Severity::Blocker) => &mut counts.blocker,
-            Ok(Severity::Major) => &mut counts.major,
-            Ok(Severity::Minor) => &mut counts.minor,
-            Ok(Severity::Nit) => &mut counts.nit,
-            Err(_) => continue,
+        let bucket = match Vocab::<Severity>::read(&finding.severity) {
+            Vocab::Known(Severity::Major) => &mut counts.major,
+            Vocab::Known(Severity::Minor) => &mut counts.minor,
+            Vocab::Known(Severity::Nit) => &mut counts.nit,
+            Vocab::Known(Severity::Blocker) | Vocab::Unknown(_) => &mut counts.blocker,
         };
         *bucket = bucket.saturating_add(1);
     }

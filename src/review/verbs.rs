@@ -6,7 +6,7 @@ use super::turn::{read_baton, resolve_review_root, with_turn, write_baton};
 use super::{
     Context, Deserialize, Facet, FindingStatus, Materialised, Path, PathBuf, REVIEW_DIR,
     REVIEW_KIND, ReviewError, ReviewMeta, ReviewOutput, Role, Severity, Target, TurnAct, Verb,
-    append_finding, apply_transition, can, canonical_id, entity, finding_status_of,
+    Vocab, append_finding, apply_transition, can, canonical_id, entity, finding_status_of,
     finding_table_mut, parse_ref, required_for,
 };
 use crate::tomlfmt::toml_string;
@@ -450,13 +450,25 @@ fn run_raiser_transition(
 }
 
 /// The per-finding gate (design §6 — the closure's half): refuse an out-of-turn
-/// write with a message naming the verb, the finding, and its current state.
+/// write with a message naming the verb, the finding, and its current state. An
+/// out-of-vocabulary current status refuses before the table is consulted
+/// (SL-268 D15): no edge leaves a state the table does not know.
 pub(super) fn gate(
     verb: Verb,
-    from: FindingStatus,
+    from: Vocab<FindingStatus>,
     role: Role,
     finding: &str,
 ) -> anyhow::Result<()> {
+    let from = match from {
+        Vocab::Known(status) => status,
+        Vocab::Unknown(raw) => {
+            return Err(ReviewError::UnknownStatus {
+                finding: finding.to_owned(),
+                raw,
+            }
+            .into());
+        }
+    };
     if !can(verb, Some(from), role) {
         // Role mismatch already caught by `with_turn` step 4; here it is always
         // a state mismatch.

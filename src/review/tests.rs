@@ -6,9 +6,10 @@
 use super::*;
 use super::{prime::*, read::*, turn::*, verbs::*};
 use crate::review_ledger::{
-    BlockerRef, FACETS, FINDING_STATUSES, OutstandingCounts, ROLES, SEVERITIES, next_finding_id,
-    observe_pass, outstanding_by_severity, read_pass_facts, undisposed_blockers,
-    unresolved_blockers_for,
+    BlockerRef, EFFECT_UNKNOWN_SEVERITY, FACETS, FINDING_STATUSES, OutstandingCounts, ROLES,
+    SEVERITIES, Vocab, VocabDefect, VocabField, gates_as_blocker, next_finding_id, observe_pass,
+    outstanding_by_severity, read_pass_facts, undisposed_blockers, unresolved_blockers_for,
+    vocabulary_defects,
 };
 
 // -- derived_status: total + named cases (VT-1 / VT-2) -------------------
@@ -16,7 +17,9 @@ use crate::review_ledger::{
 fn states(statuses: &[FindingStatus]) -> Vec<FindingState> {
     statuses
         .iter()
-        .map(|&status| FindingState { status })
+        .map(|&status| FindingState {
+            status: Vocab::Known(status),
+        })
         .collect()
 }
 
@@ -239,6 +242,291 @@ fn verb_str_and_required_role() {
     assert_eq!(Verb::Dispose.required_role(), Role::Responder);
 }
 
+// -- SL-268 PHASE-03: fail-safe closed-vocabulary reads (D15, DEC-319) ----
+
+/// EX-1: `FindingStatus::parse` accepts exactly the five and, on anything else,
+/// names the whole known set — no silent `Open` fallback.
+#[test]
+fn finding_status_parse_accepts_the_five_and_names_the_set() {
+    for (token, want) in [
+        ("open", FindingStatus::Open),
+        ("answered", FindingStatus::Answered),
+        ("contested", FindingStatus::Contested),
+        ("verified", FindingStatus::Verified),
+        ("withdrawn", FindingStatus::Withdrawn),
+    ] {
+        assert_eq!(FindingStatus::parse(token), Ok(want));
+    }
+    let err = FindingStatus::parse("zombie").unwrap_err();
+    assert_eq!(
+        err,
+        "unknown finding status `zombie` (known: open, answered, contested, verified, withdrawn)"
+    );
+}
+
+/// EX-3: an out-of-vocabulary value survives the read verbatim — `as_str` and
+/// serde both give back the raw string, and `known()` admits nothing.
+#[test]
+fn vocab_unknown_round_trips_the_raw_value() {
+    let status = Vocab::<FindingStatus>::read("zombie");
+    assert_eq!(status, Vocab::Unknown("zombie".to_owned()));
+    assert_eq!(status.as_str(), "zombie");
+    assert_eq!(status.known(), None);
+    assert_eq!(serde_json::to_value(&status).unwrap(), "zombie");
+
+    let known = Vocab::<Severity>::read("blocker");
+    assert_eq!(known.known(), Some(Severity::Blocker));
+    assert_eq!(known.as_str(), "blocker");
+    assert_eq!(serde_json::to_value(&known).unwrap(), "blocker");
+}
+
+/// EX-1 / VT-1: an out-of-vocabulary status reads non-terminal — it keeps the
+/// review `Active` awaiting the responder, alone or beside a terminal sibling.
+#[test]
+fn unknown_status_reads_non_terminal() {
+    let zombie = FindingState {
+        status: Vocab::Unknown("zombie".to_owned()),
+    };
+    let verified = FindingState {
+        status: Vocab::Known(FindingStatus::Verified),
+    };
+    assert_eq!(
+        derived_status(std::slice::from_ref(&zombie)),
+        (ReviewStatus::Active, Await::Responder)
+    );
+    assert_eq!(derived_status(&[zombie, verified]).0, ReviewStatus::Active);
+
+    // The same through the authored read: a hand-edited ledger.
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    for title in ["a", "b"] {
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Minor, title),
+            Role::Raiser,
+        )
+        .unwrap();
+    }
+    hand_edit_finding(root, 1, "F-1", "status", "zombie");
+    hand_edit_finding(root, 1, "F-2", "status", "verified");
+    assert_eq!(
+        read_doc(root, 1).derived(),
+        (ReviewStatus::Active, Await::Responder)
+    );
+}
+
+/// EX-1 / VT-1: no act applies to an out-of-vocabulary status. Each of the four
+/// finding acts refuses with the typed `UnknownStatus`, naming the known set and
+/// the remedy, and the ledger bytes are untouched.
+#[test]
+fn unknown_status_refuses_every_act() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    run_raise(
+        Some(root.to_path_buf()),
+        &raise_args("RV-001", Severity::Major, "t"),
+        Role::Raiser,
+    )
+    .unwrap();
+    hand_edit_finding(root, 1, "F-1", "status", "zombie");
+    // Heal the baton's CAS key so the acts reach the per-finding gate.
+    run_status(Some(root.to_path_buf()), "RV-001").unwrap();
+    let before = fs::read_to_string(authored_path(root, 1)).unwrap();
+
+    let p = || Some(root.to_path_buf());
+    let errs = [
+        run_dispose(p(), &dispose_args("RV-001", "F-1"), Role::Responder).unwrap_err(),
+        run_verify(p(), "RV-001", "F-1", None, Role::Raiser).unwrap_err(),
+        run_contest(p(), "RV-001", "F-1", None, Role::Raiser).unwrap_err(),
+        run_withdraw(p(), "RV-001", "F-1", Role::Raiser).unwrap_err(),
+    ];
+    for err in errs {
+        match err.downcast_ref::<ReviewError>() {
+            Some(ReviewError::UnknownStatus { finding, raw }) => {
+                assert_eq!((finding.as_str(), raw.as_str()), ("F-1", "zombie"));
+            }
+            other => panic!("expected UnknownStatus, got {other:?} ({err})"),
+        }
+        let text = err.to_string();
+        for known in FINDING_STATUSES {
+            assert!(text.contains(known), "{text} names {known}");
+        }
+        assert!(text.contains("ledger TOML"), "{text}");
+    }
+    assert_eq!(fs::read_to_string(authored_path(root, 1)).unwrap(), before);
+}
+
+/// EX-2 / VT-2: one `gates_as_blocker` classification feeds all three blocker
+/// predicates — an out-of-vocabulary severity gates as `blocker`, and an
+/// out-of-vocabulary status counts as not-terminal. The predicates keep their
+/// state differences (SL-244): an `answered` blocker holds the review open but
+/// no longer holds a design run's edge.
+#[test]
+fn unknown_severity_gates_as_blocker() {
+    assert!(gates_as_blocker("crit"));
+    assert!(gates_as_blocker("blocker"));
+    for known in ["major", "minor", "nit"] {
+        assert!(!gates_as_blocker(known), "{known}");
+    }
+
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    for title in ["open crit", "answered crit", "zombie blocker"] {
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Minor, title),
+            Role::Raiser,
+        )
+        .unwrap();
+    }
+    hand_edit_finding(root, 1, "F-1", "severity", "crit");
+    hand_edit_finding(root, 1, "F-2", "severity", "crit");
+    hand_edit_finding(root, 1, "F-2", "status", "answered");
+    hand_edit_finding(root, 1, "F-3", "severity", "blocker");
+    hand_edit_finding(root, 1, "F-3", "status", "zombie");
+    let doc = read_doc(root, 1);
+
+    let unresolved: Vec<String> = unresolved_blockers_for(root, "SL-001")
+        .unwrap()
+        .into_iter()
+        .map(|b| b.finding)
+        .collect();
+    assert_eq!(unresolved, ["F-1", "F-2", "F-3"]);
+    assert_eq!(undisposed_blockers(&doc), ["F-1", "F-3"]);
+    assert_eq!(outstanding_by_severity(&doc).blocker, 3);
+}
+
+/// The `ReviewOutput` of a read verb as its wire JSON (the MCP shape), unwrapped
+/// from its externally tagged variant.
+fn wire(out: &ReviewOutput, variant: &str) -> serde_json::Value {
+    serde_json::to_value(out).unwrap()[variant].clone()
+}
+
+/// The CLI rendering of a read verb's output.
+fn rendered(out: &ReviewOutput) -> String {
+    print_review(out)
+}
+
+/// EX-5 / VT-7: only `status` and `severity` are closed vocabularies a read
+/// discloses. A legacy free-text `disposition` is carried verbatim and is no
+/// defect — while a sibling RV's out-of-vocabulary severity, on the same
+/// surface, is one (the positive control: the channel is read).
+#[test]
+fn legacy_disposition_quiet() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    run_new(Some(root.to_path_buf()), &new_args(Facet::Design, "SL-001")).unwrap();
+    for rv in ["RV-001", "RV-002"] {
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args(rv, Severity::Minor, "t"),
+            Role::Raiser,
+        )
+        .unwrap();
+    }
+    hand_edit_finding(root, 1, "F-1", "disposition", "whatever");
+    hand_edit_finding(root, 2, "F-1", "severity", "crit");
+    let p = || Some(root.to_path_buf());
+
+    assert_eq!(vocabulary_defects(&read_doc(root, 1)), []);
+    let quiet = rendered(&run_show(p(), "RV-001", Format::Table).unwrap());
+    assert!(quiet.contains("whatever"), "{quiet}");
+    assert!(!quiet.contains("warning:"), "{quiet}");
+
+    assert_eq!(
+        vocabulary_defects(&read_doc(root, 2)),
+        [VocabDefect {
+            finding: "F-1".to_owned(),
+            field: VocabField::Severity,
+            raw: "crit".to_owned(),
+            effect: EFFECT_UNKNOWN_SEVERITY,
+        }]
+    );
+    let loud = rendered(&run_show(p(), "RV-002", Format::Table).unwrap());
+    assert!(
+        loud.contains(
+            "warning: RV-002 F-1 severity `crit` is out of vocabulary; gating as blocker\n"
+        ),
+        "{loud}"
+    );
+}
+
+/// EX-3 / VT-3: an out-of-vocabulary value renders verbatim on every surface —
+/// the show index, `show --json`, and the typed MCP `findings` — never as the
+/// known value a fallback would have guessed.
+#[test]
+fn unknown_vocab_renders_verbatim_everywhere() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    run_raise(
+        Some(root.to_path_buf()),
+        &raise_args("RV-001", Severity::Major, "t"),
+        Role::Raiser,
+    )
+    .unwrap();
+    hand_edit_finding(root, 1, "F-1", "severity", "catastrophic");
+    hand_edit_finding(root, 1, "F-1", "status", "zombie");
+    let p = || Some(root.to_path_buf());
+
+    let table = run_show(p(), "RV-001", Format::Table).unwrap();
+    assert!(
+        rendered(&table).contains("F-1 │ catastrophic │ zombie │"),
+        "{}",
+        rendered(&table)
+    );
+    let finding = &wire(&table, "Showed")["findings"][0];
+    assert_eq!(finding["severity"], "catastrophic");
+    assert_eq!(finding["status"], "zombie");
+
+    let json: serde_json::Value =
+        serde_json::from_str(&rendered(&run_show(p(), "RV-001", Format::Json).unwrap())).unwrap();
+    assert_eq!(json["review"]["finding"][0]["severity"], "catastrophic");
+    assert_eq!(json["review"]["finding"][0]["status"], "zombie");
+}
+
+/// EX-4 / VT-2: an out-of-vocabulary severity is disclosed on every review read
+/// surface, each on its caller's channel — the show and status text, the
+/// `warnings` field of `Showed`/`Status`/`Listed`, and the close gate's
+/// `BlockerRef.reason`.
+#[test]
+fn unknown_severity_warned_on_every_surface() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    run_raise(
+        Some(root.to_path_buf()),
+        &raise_args("RV-001", Severity::Minor, "t"),
+        Role::Raiser,
+    )
+    .unwrap();
+    hand_edit_finding(root, 1, "F-1", "severity", "crit");
+    let p = || Some(root.to_path_buf());
+    let line = "warning: RV-001 F-1 severity `crit` is out of vocabulary; gating as blocker\n";
+    let warning = serde_json::json!([{
+        "effect": "gating as blocker",
+        "field": "severity",
+        "finding": "F-1",
+        "raw": "crit",
+        "rv": "RV-001",
+    }]);
+
+    let show = run_show(p(), "RV-001", Format::Table).unwrap();
+    assert!(rendered(&show).contains(line), "{}", rendered(&show));
+    assert_eq!(wire(&show, "Showed")["warnings"], warning);
+
+    let status = run_status(p(), "RV-001").unwrap();
+    assert!(rendered(&status).contains(line), "{}", rendered(&status));
+    assert_eq!(wire(&status, "Status")["warnings"], warning);
+
+    let list = run_list(p(), crate::listing::ListArgs::default(), None).unwrap();
+    assert_eq!(wire(&list, "Listed")["warnings"], warning);
+
+    let blockers = unresolved_blockers_for(root, "SL-001").unwrap();
+    assert_eq!(
+        blockers[0].reason.as_deref(),
+        Some("severity `crit` is out of vocabulary; gating as blocker")
+    );
+}
+
 // -- is_terminal mirror -------------------------------------------------
 
 #[test]
@@ -256,8 +544,8 @@ fn finding_status_terminal_set() {
 fn render_finding_escapes_hostile_free_text() {
     let finding = Finding {
         id: "F-1".to_owned(),
-        status: FindingStatus::Open,
-        severity: Severity::Major,
+        status: Vocab::Known(FindingStatus::Open),
+        severity: Vocab::Known(Severity::Major),
         // A hostile title: a quote, a backslash, a newline, and a `]`.
         title: "a\"b\\c\nd]e".to_owned(),
         detail: "plain".to_owned(),
@@ -279,8 +567,8 @@ fn render_finding_escapes_hostile_free_text() {
 fn render_finding_emits_responder_fields_when_present() {
     let finding = Finding {
         id: "F-2".to_owned(),
-        status: FindingStatus::Answered,
-        severity: Severity::Nit,
+        status: Vocab::Known(FindingStatus::Answered),
+        severity: Vocab::Known(Severity::Nit),
         title: "t".to_owned(),
         detail: "d".to_owned(),
         disposition: Some("fixed".to_owned()),
@@ -674,6 +962,20 @@ fn dispose_args(reference: &str, finding: &str) -> DisposeArgs {
 
 fn read_doc(root: &Path, id: u32) -> ReviewDoc {
     read_review(&root.join(REVIEW_DIR), id).unwrap()
+}
+
+/// Hand-edit one field of one finding in an RV's authored ledger (edit-
+/// preserving) — the out-of-band write a closed-vocabulary read must survive.
+fn hand_edit_finding(root: &Path, id: u32, finding: &str, field: &str, value: &str) {
+    let path = authored_path(root, id);
+    let mut doc = fs::read_to_string(&path)
+        .unwrap()
+        .parse::<toml_edit::DocumentMut>()
+        .unwrap();
+    finding_table_mut(&mut doc, finding)
+        .unwrap()
+        .insert(field, toml_edit::value(value));
+    fs::write(&path, doc.to_string()).unwrap();
 }
 
 /// A full raise→dispose→verify lifecycle drives the finding through its
@@ -1376,6 +1678,7 @@ fn vt3_scan_reports_an_unresolved_blocker_on_an_active_rv() {
         vec![BlockerRef {
             rv: "RV-001".to_owned(),
             finding: "F-1".to_owned(),
+            reason: None,
         }]
     );
 }
