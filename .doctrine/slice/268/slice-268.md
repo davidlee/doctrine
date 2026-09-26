@@ -60,7 +60,9 @@ Decision ids below are RFC-032 `decision-frontier.md`'s.
 9. **Governance.** Author the new "Review ledger" tech spec (container,
    `parent = SPEC-003`, no `descends_from` unless `/spec-tech` finds one, per
    IMP-481) describing v2. Mint a REV amending ADR-007 D-C5 (turns, amend/reopen),
-   D-C8 (uniform `done`, the conclude marker's role) and D-C10 (D11).
+   D-C8 (uniform `done`, the conclude marker's role) and D-C10 (D11), and
+   revising SPEC-003's container inventory to add the new spec (REV-035
+   precedent; research T1 — SPEC-029's absence there is surfaced in the same REV).
 10. **Guidance.** Update the skills that run a pass (`/audit`, `/code-review`,
     `/inquisition`, the design-run guidance) so `conclude --basis` is the last
     move and writes go through MCP. Refresh `install/review-ledger.md`
@@ -100,7 +102,7 @@ engine-tier module with a spec that owns it.
 - tests: new e2e golden (IMP-029); `tests/e2e_design_review.rs`; the
   `review.rs` unit suite
 - `install/review-ledger.md`; `plugins/doctrine/skills/{audit,code-review,inquisition,reconcile,close}/SKILL.md`
-- governance: new tech spec, a REV against ADR-007
+- governance: new tech spec, a REV against ADR-007 and SPEC-003
 
 ### Risks
 
@@ -128,8 +130,8 @@ engine-tier module with a spec that owns it.
 - **OQ-2**: Is the tech spec authored at the start (describing the target
   schema) or at the end (describing what landed)? It is authored in-slice
   either way.
-- **OQ-3**: Is step 0c (IMP-490) landed before this slice's D4 phase, or
-  folded in?
+- **OQ-3**: *Resolved (research):* step 0c (IMP-490) landed at `694acaf43`,
+  before D4. D4 moves its finding-index view struct.
 - **OQ-4**: Do the doctor checks from D1 (status matches the last turn) and D15
   (out-of-vocabulary status) land here, given doctor has no governing spec
   (IMP-491)?

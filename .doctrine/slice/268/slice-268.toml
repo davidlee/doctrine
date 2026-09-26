@@ -75,6 +75,43 @@ label = "fulfils"
 target = "IMP-479"
 
 [[relation]]
+label = "fulfils"
+target = "ISS-280"
+
+[[relation]]
+label = "fulfils"
+target = "ISS-485"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-377"
+
+[[relation]]
+label = "fulfils"
+target = "ISS-059"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-433"
+
+[[relation]]
+label = "fulfils"
+degree = "partial"
+target = "IMP-068"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-259"
+
+[[relation]]
+label = "fulfils"
+target = "CHR-001"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-336"
+
+[[relation]]
 label = "governed_by"
 target = "ADR-007"
 
@@ -82,21 +119,6 @@ target = "ADR-007"
 label = "references"
 role = "concerns"
 target = "IMP-481"
-
-[[relation]]
-label = "references"
-role = "concerns"
-target = "CHR-001"
-
-[[relation]]
-label = "references"
-role = "concerns"
-target = "IMP-336"
-
-[[relation]]
-label = "references"
-role = "concerns"
-target = "IMP-259"
 
 [[relation]]
 label = "references"
