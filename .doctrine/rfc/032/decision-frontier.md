@@ -22,6 +22,12 @@ integrated. A completed external RV is satisfied by attestation, not adoption,
 and the bind-before uniqueness check is scoped to this tree (`D6`). `status` is
 classified as runtime-writing (`D7`). Turns carry no global round, and the
 counters are baseline plus count (`D1`).
+**Revised a third time:** 2026-09-26, third codex pass. `D6` gains a defined
+`External` disposition arm whose basis the attestation supplies, because legacy
+RVs have no conclude basis. `D7` downgrades git merge to a best-effort backstop
+and declares concurrent multi-tree editing unsupported. `D2` states that
+`complete` is derived, never latched. The slice-2/slice-3 anchor-column
+sequencing is fixed. Codex concurred with both §5 recommendations.
 
 ---
 
@@ -62,12 +68,12 @@ retracted before slice 1 starts. §3 step 0 lands `CHR-057` to do that.
 | # | decision | resolves |
 |---|---|---|
 | D1 | append-only per-finding turn journal (no global order); state stays stored; counters = baseline + count | C3 · ISS-280 · ISS-485 · F2 |
-| D2 | `done ⇔ all terminal ∧ (non-empty ∨ concluded)`; `complete ⇔ all terminal ∧ concluded` gates dependencies; conclude carries a basis | C1 · ISS-314 · ISS-366 · ISS-322 trap |
+| D2 | `done ⇔ all terminal ∧ (non-empty ∨ concluded)`; `complete ⇔ all terminal ∧ concluded` (derived, never latched) gates dependencies; conclude carries a basis | C1 · ISS-314 · ISS-366 · ISS-322 trap |
 | D3 | optional `anchor` on a finding: opaque `(section, fingerprint)` | C9 (IMP-392 remainder) |
 | D4 | engine-tier ledger module; `review.rs` split | C24 · IMP-068 · IMP-433 |
 | D5 | one read projection: `show` renders the finding index by default | C6 · C7 · C8 · F1 · F10 |
-| D6 | design run binds a pass: mint by default, adopt an unconcluded RV before its pass; a completed external RV is satisfied by attestation | C10 · ISS-322 · C11 · C12 (part) |
-| D7 | three locus tiers (read / runtime / authored) at the verb-family boundary; git merge is the declared multi-tree backstop | C2 · C17 · F5 · ISS-484 · IMP-240 |
+| D6 | design run binds a pass: mint by default, adopt an unconcluded RV before its pass; a completed external RV is satisfied by a new `External` disposition arm | C10 · ISS-322 · C11 · C12 (part) |
+| D7 | three locus tiers (read / runtime / authored) at the verb-family boundary; one writer per RV at a time; git merge is a best-effort backstop | C2 · C17 · F5 · ISS-484 · IMP-240 |
 | D8 | roles closed + participant aliases; disposition closed-write; optional closed `route` | C13 · C14 · F4 |
 | D9 | clone-wide id reservation in a separate local ref namespace; `reseat` reads leniently | C16 · ISS-279 · ISS-277 · F12 |
 | D10 | every prose argument takes `-`/`@file`; MCP is the preferred write path | C4 · IMP-377 · ISS-486 · F3 |
@@ -151,8 +157,8 @@ Rules:
   the journal existed is **not** reconstructed. It never reached authored state.
 - **Turns carry no global sequence number.** A turn's order is its position in
   its own finding's journal. There is **no** single order across findings.
-  `D7` lets two trees move different findings and merge, and a global round
-  number would collide at that merge: both trees would stamp "round 5".
+  If two trees' edits to one RV are ever merged (unsupported, but not prevented,
+  `D7`), a global round number would collide: both trees would stamp "round 5".
 - **Counters are baseline plus count.** The baton's two observability counters
   (`rounds`, `contests`; "observability only", `src/review.rs:2188`) become
   derived values. The first journalled write to a ledger with no turns copies
@@ -221,6 +227,15 @@ may still be working. That is harmless as a display, but wrong as a gate: once
 become actionable in the middle of a pass. So every cross-kind gate
 (`status_class`, actionability, `D14`) reads `complete`. D-C9b (the close gate)
 is unchanged — it reads blockers, not status.
+
+**`complete` is derived on every read, never latched.** `concluded` is a latch
+(`conclude` has no unset). But a concluded ledger still accepts `raise`, and
+`D1` adds `reopen`. Either one puts a non-terminal finding back on the ledger,
+and `complete` then reads false until that finding is terminal again. A
+dependant unblocked by an earlier `complete` becomes blocked again the next time
+its gate is read. That is intended: a late finding means the review is not
+finished, whatever the marker says. A new finding after `conclude` does **not**
+clear the marker. The pass happened, and the late finding is part of the record.
 
 Why not (d): every observed incident is the *empty* case, and (d)'s price is a
 semantic flip across the whole corpus. The one place where the non-empty
@@ -354,9 +369,29 @@ incidents, this is the cheapest friction relief in the programme.
   | route | when | how the review condition is satisfied |
   |---|---|---|
   | **bind before** | the external reviewer has not finished: the RV is unconcluded | adopt it as the pass. The reviewer works it and concludes. `Conducted` is derived exactly as for a minted pass |
-  | **completed RV** | the external pass already concluded (both recorded `ISS-322` occurrences: `RV-346` was concluded before anyone tried to name it) | **not adopted.** The run cannot tell from the ledger which state of the design a finished pass reviewed. The condition is satisfied **by attestation** (SPEC-029's existing attested kind): the user attests that `RV-N` reviewed this design, and the attestation names the RV and quotes its conclude `--basis` (`D2`) |
+  | **completed RV** | the external pass already concluded (both recorded `ISS-322` occurrences: `RV-346` was concluded before anyone tried to name it) | **not adopted.** The run cannot tell from the ledger which state of the design a finished pass reviewed. The condition is satisfied by a new disposition arm, `External`, below |
 
-  The completed-RV route replaces the `Waived` collapse `ISS-322` records with an
+- **A third `ReviewDisposition` arm.** Today there are two
+  (`src/design_run/attestation.rs:686`): `Conducted { review }`, which must name
+  the run's bound pass, and `Waived { reason }`. `D6` adds:
+
+  ```rust
+  External {
+      review: ReviewRef,   // the completed external RV
+      scope: String,       // which design sections / revision it reviewed — user-stated
+      basis: String,       // what the pass examined — user-stated
+  }
+  ```
+
+  Admitted iff the RV targets this slice, has facet `design`, is concluded, and
+  is `complete` (`D2`), and `scope` and `basis` are non-blank. `basis` is supplied
+  **by the attestation itself**. When the RV has a conclude `--basis`, the
+  envelope pre-fills it. Legacy RVs have none: `RV-346` and `RV-360` are both
+  concluded with only the bare marker, because `--basis` does not exist yet. So a
+  legacy RV is admitted with a basis the user states, not refused for lacking
+  one.
+
+  `External` replaces the `Waived` collapse `ISS-322` records with an
   attributable statement that names the RV. It does not claim a proof. That is
   deliberate: binding a finished pass to reviewed content would need a design
   digest recorded at conclude, and review is opaque to design fingerprints
@@ -373,7 +408,7 @@ incidents, this is the cheapest friction relief in the programme.
      current design. Stale fingerprints are not refused; `D3` warns about them.
 - Both routes change SPEC-029's run contract, which today says the run mints its
   pass. The slice that lands `D6` revises SPEC-029 for the bind step, the
-  admission rules, the attestation shape, and the change row.
+  admission rules, the `External` arm, and the change row.
 - A pass is still one RV; re-entry binds a new pass (mint or adopt). Coverage stays
   on `ReviewPass.covered`, unchanged. Binding *several* RVs to one pass is rejected:
   it makes `Conducted`'s predicate a union over ledgers for no observed benefit;
@@ -425,22 +460,28 @@ worked in one tree is a single-tree review wherever that tree is.
 - `IMP-024`'s large-review funnel stays deferred; it is about fanning a raiser,
   not about where a single-tree review may live.
 
-**Two trees editing one RV.** Unique ids (`D9`) do not stop this. The
-choice is to **declare git merge the backstop** rather than add an ownership
-mechanism:
+**Two trees editing one RV — not a supported workflow.** Admitting more trees
+serves *sequential* use: an audit or close worked in a worktree, then landed.
+It does not serve two trees working the same RV at once, and no recorded
+workflow needs that. The rule stays one writer per RV at a time. Unique ids
+(`D9`) do not enforce it, and nothing mechanical does.
 
-- two trees that move *different* findings merge cleanly, and that result is
-  correct, because findings are independent;
-- two trees that move the *same* finding both rewrite its `status` line, and git
-  raises a textual conflict that someone has to resolve;
-- after the merge, `D1`'s doctor check confirms that each finding's `status`
-  agrees with its last turn.
+If it happens anyway, git merge is a **best-effort** backstop, with a stated
+residual risk. Text merge guarantees nothing about ledger semantics: edits to
+different findings can conflict (adjacent TOML hunks), and edits to the same
+finding can merge silently (different lines). After a merge, `D1`'s doctor
+check confirms that each finding's `status` agrees with its last turn. It
+cannot show that no concurrent turn was lost.
+
+A semantic merge check (reconcile two journals, detect lost turns) is not
+built. It is the right answer only if concurrent multi-tree editing becomes a
+supported workflow, and that change would reopen this decision.
 
 Rejected: recording a home tree or branch on the RV and refusing writes
 elsewhere. Trees are ephemeral and branch names do not survive landing, so the
 recorded owner would go stale in the normal lifecycle. ADR-007 D-C7's
-single-tree rule is amended by REV from "one tree" to "one writer at a time per
-finding, with merge as the backstop".
+single-tree rule is amended by REV from "one tree" to "one writer per RV at a
+time, in any admitted tree; merge is a best-effort backstop, not a guarantee".
 
 **Dependency.** Admitting more trees widens the id-collision window, so `D7`
 ships **with or after** `D9`, never before.
@@ -655,8 +696,8 @@ workstream labels, and still puts the most consequential decisions first.
 | 0b | *assessment* | `IMP-481` via `/spec-coverage-assessment` | fixes the tech spec's scope and parent before slice 1 authors it (`D13`) |
 | 0c | *quick win (backlog item)* | D5's finding index + `list --target` over existing fields | nine incidents; no schema dependency. Build it as a render over a view struct, not bespoke formatting, so D4 moves it without rewriting it |
 | 1 | **Ledger v2** | D4 (split, with `IMP-029` golden first), D1, D2 (incl. `complete`), D15, D10, D8 (write side), authors the tech spec | every later slice reads this schema; the hard, hard-to-reverse choices live here |
-| 2 | **Read surface** | D5 remainder (projection, census, JSON unification), D14 | needs D4's module and D1/D3's columns |
-| 3 | **Design-run binding** | D3, D6 (adopt, `Finding` deletion, change row, envelope naming, `ISS-462`) | a *consumer* of the ledger; builds on D1–D3 |
+| 2 | **Read surface** | D5 remainder (projection, census, JSON unification), D14 | needs D4's module and D1's columns; D3's anchor column joins in slice 3 |
+| 3 | **Design-run binding** | D3 (incl. the anchor column in the read projection), D6 (bind-before, `External` arm, `Finding` deletion, change row, envelope naming, `ISS-462`) | a *consumer* of the ledger; builds on D1–D3 |
 | 4 | **Identity & locus** | D9, then D7 | D7 is unsafe before D9 |
 | — | rides whichever slice touches it | D11 (with any `prime` change, else slice 1), D12 (close `IMP-479`), D13's doc check (slice 1 or 2) | governance reconciliation, not work of its own |
 
@@ -696,9 +737,12 @@ clone", `D9`). The tech spec is authored in-slice and grows per slice.
   Nothing cooperative can do better at an acceptable cost.
 - **Pre-journal history is not recovered** (`D1`). It never reached authored
   state.
-- **Two trees can edit one RV** (`D7`). Git merge is the backstop, and conflicts
-  on the same finding surface as text conflicts. No ownership field, and no
+- **Concurrent multi-tree editing of one RV is unsupported and unenforced**
+  (`D7`). If it happens, git merge is a best-effort backstop. A lost concurrent
+  turn cannot be detected. No ownership field, no semantic merge check, and no
   global turn order (`D1`).
+- **A late finding re-blocks dependants** (`D2`). `complete` is derived on every
+  read, so a `raise` or `reopen` after `conclude` turns it false again.
 - **A completed external pass is attested, not proven** (`D6`). The run cannot
   tie a finished RV to the design state it reviewed. The attestation names the
   RV and its basis.
@@ -723,9 +767,15 @@ recommendation is stated, and each is cheap to revisit.
    collapses into it), take option (d) and backfill `concluded = true` for legacy
    all-terminal ledgers with a disclosed migration note. Recommendation: narrow +
    `complete`. The backfill would record conclusions that never happened.
+   **The deciding question:** must a reader be able to treat the word `done` on
+   its own as a certified end of review? If yes, choose uniform, and accept a
+   visible change to legacy state (legacy ledgers reading `active`) rather than
+   inventing conclusions.
 2. **`D5` default render.** If default `show` output must stay minimal for some
    consumer, invert to a `--findings` opt-in. Recommendation: findings by default
-   — nine observers hit the default, and none asked for less.
+   — nine observers hit the default, and none asked for less. **The deciding
+   question:** is there a known consumer that depends on today's minimal
+   human-readable `show` output?
 
 ---
 
