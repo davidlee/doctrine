@@ -3,11 +3,11 @@ version = 1
 
 id = 33
 slug = "learning-surface-corpus-format-publication"
-title = "Learning surface: corpus unification, format, and publication"
+title = "Learning surface: corpus unification and format"
 status = "open"
 created = "2026-09-26"
 updated = "2026-09-26"
-tags = ["corpus", "docs", "memory", "onboarding", "publication"]
+tags = ["corpus", "docs", "memory", "onboarding"]
 
 [relationships]
 # RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
@@ -33,4 +33,8 @@ target = "SL-242"
 [[relation]]
 label = "related"
 target = "ISS-490"
+
+[[relation]]
+label = "related"
+target = "CHR-023"
 

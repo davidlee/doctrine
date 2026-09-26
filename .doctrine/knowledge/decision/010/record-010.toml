@@ -5,9 +5,9 @@ id = 10
 slug = "bounded-reachability-set"
 title = "Published set = full projection complement (Option A)"
 record_kind = "decision"
-status = "proposed"
+status = "accepted"
 created = "2026-07-24"
-updated = "2026-07-24"
+updated = "2026-09-26"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
