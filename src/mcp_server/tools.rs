@@ -161,7 +161,7 @@ fn tools() -> Vec<McpTool> {
                     "severity": { "type": "string", "enum": ["blocker", "major", "minor", "nit"], "description": "Severity (only blocker gates close)" },
                     "title": { "type": "string", "description": "The finding's title (fixed at raise)" },
                     "detail": { "type": "string", "description": "The finding's detail (fixed at raise)" },
-                    "as": { "type": "string", "description": "Cooperative role assertion (default: raiser)" }
+                    "as": { "type": "string", "description": "Cooperative role assertion: raiser | responder, or this ledger's declared labels (default: raiser)" }
                 },
                 "required": ["reference", "severity", "title", "detail"]
             }),
@@ -177,7 +177,7 @@ fn tools() -> Vec<McpTool> {
                     "disposition": { "type": "string", "enum": json!(crate::review_ledger::DISPOSITIONS), "description": "The disposition (closed)" },
                     "route": { "type": "string", "enum": json!(crate::review_ledger::ROUTES), "description": "Where the answer routes (closed, optional; omitted keeps the current route)" },
                     "response": { "type": "string", "description": "The response detail (free-text)" },
-                    "as": { "type": "string", "description": "Cooperative role assertion (default: responder)" }
+                    "as": { "type": "string", "description": "Cooperative role assertion: raiser | responder, or this ledger's declared labels (default: responder)" }
                 },
                 "required": ["reference", "finding", "disposition", "response"]
             }),
@@ -194,7 +194,7 @@ fn tools() -> Vec<McpTool> {
                     "note": { "type": "string", "description": "Why the finding is being amended — recorded on the amend turn (required, non-empty)" },
                     "disposition": { "type": "string", "enum": json!(crate::review_ledger::DISPOSITIONS), "description": "The replacement disposition (closed, optional; omitted keeps the current value)" },
                     "route": { "type": "string", "enum": json!(crate::review_ledger::ROUTES), "description": "The replacement route (closed, optional; omitted keeps the current value)" },
-                    "as": { "type": "string", "description": "Cooperative role assertion (default: responder)" }
+                    "as": { "type": "string", "description": "Cooperative role assertion: raiser | responder, or this ledger's declared labels (default: responder)" }
                 },
                 "required": ["reference", "finding", "response", "note"]
             }),
@@ -208,7 +208,7 @@ fn tools() -> Vec<McpTool> {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
                     "finding": { "type": "string", "description": "The finding id, e.g. F-2" },
                     "note": { "type": "string", "description": "Why the finding is accepted — recorded on the finding's verify turn (optional)" },
-                    "as": { "type": "string", "description": "Cooperative role assertion (default: raiser)" }
+                    "as": { "type": "string", "description": "Cooperative role assertion: raiser | responder, or this ledger's declared labels (default: raiser)" }
                 },
                 "required": ["reference", "finding"]
             }),
@@ -222,7 +222,7 @@ fn tools() -> Vec<McpTool> {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
                     "finding": { "type": "string", "description": "The finding id, e.g. F-2" },
                     "note": { "type": "string", "description": "What the contest argues — recorded on the finding's contest turn (required, non-empty)" },
-                    "as": { "type": "string", "description": "Cooperative role assertion (default: raiser)" }
+                    "as": { "type": "string", "description": "Cooperative role assertion: raiser | responder, or this ledger's declared labels (default: raiser)" }
                 },
                 "required": ["reference", "finding", "note"]
             }),
@@ -236,7 +236,7 @@ fn tools() -> Vec<McpTool> {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
                     "finding": { "type": "string", "description": "The finding id, e.g. F-2" },
                     "note": { "type": "string", "description": "Why the finding is reopened — recorded on the finding's reopen turn (required, non-empty)" },
-                    "as": { "type": "string", "description": "Cooperative role assertion (default: raiser)" }
+                    "as": { "type": "string", "description": "Cooperative role assertion: raiser | responder, or this ledger's declared labels (default: raiser)" }
                 },
                 "required": ["reference", "finding", "note"]
             }),
@@ -250,7 +250,7 @@ fn tools() -> Vec<McpTool> {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
                     "finding": { "type": "string", "description": "The finding id, e.g. F-2" },
                     "note": { "type": "string", "description": "Why the finding is retracted — recorded on the finding's withdraw turn (optional)" },
-                    "as": { "type": "string", "description": "Cooperative role assertion (default: raiser)" }
+                    "as": { "type": "string", "description": "Cooperative role assertion: raiser | responder, or this ledger's declared labels (default: raiser)" }
                 },
                 "required": ["reference", "finding"]
             }),
@@ -263,7 +263,7 @@ fn tools() -> Vec<McpTool> {
                 "properties": {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
                     "basis": { "type": "string", "description": "What this pass examined — recorded as the conclude turn's note (required, non-empty)" },
-                    "as": { "type": "string", "description": "Cooperative role assertion (default: raiser)" }
+                    "as": { "type": "string", "description": "Cooperative role assertion: raiser | responder, or this ledger's declared labels (default: raiser)" }
                 },
                 "required": ["reference", "basis"]
             }),
@@ -728,8 +728,13 @@ fn call_tool(
             let args: review::RaiseArgs = serde_json::from_value(arguments.clone())
                 .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
             let role_str = arguments.get("as").and_then(|v| v.as_str());
-            let role = review::parse_role(role_str, crate::review_ledger::Role::Raiser)
-                .context("invalid role")?;
+            let role = review::resolve_role(
+                Some(root.to_path_buf()),
+                &args.reference,
+                role_str,
+                crate::review_ledger::Act::Raise,
+            )
+            .context("invalid role")?;
             let out = review::run_raise(Some(root.to_path_buf()), &args, role)?;
             Ok(serde_json::to_string(&out)?)
         }
@@ -737,8 +742,13 @@ fn call_tool(
             let args: review::DisposeArgs = serde_json::from_value(arguments.clone())
                 .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
             let role_str = arguments.get("as").and_then(|v| v.as_str());
-            let role = review::parse_role(role_str, crate::review_ledger::Role::Responder)
-                .context("invalid role")?;
+            let role = review::resolve_role(
+                Some(root.to_path_buf()),
+                &args.reference,
+                role_str,
+                crate::review_ledger::Act::Dispose,
+            )
+            .context("invalid role")?;
             let out = review::run_dispose(Some(root.to_path_buf()), &args, role)?;
             Ok(serde_json::to_string(&out)?)
         }
@@ -746,16 +756,26 @@ fn call_tool(
             let args: review::AmendArgs = serde_json::from_value(arguments.clone())
                 .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
             let role_str = arguments.get("as").and_then(|v| v.as_str());
-            let role = review::parse_role(role_str, crate::review_ledger::Role::Responder)
-                .context("invalid role")?;
+            let role = review::resolve_role(
+                Some(root.to_path_buf()),
+                &args.reference,
+                role_str,
+                crate::review_ledger::Act::Amend,
+            )
+            .context("invalid role")?;
             let out = review::run_amend(Some(root.to_path_buf()), &args, role)?;
             Ok(serde_json::to_string(&out)?)
         }
         "review_verify" => {
             let fields = ExtractFields::from_value(arguments, &["reference", "finding"]);
             let role_str = fields.opt_str_field("as");
-            let role = review::parse_role(role_str.as_deref(), crate::review_ledger::Role::Raiser)
-                .context("invalid role")?;
+            let role = review::resolve_role(
+                Some(root.to_path_buf()),
+                &fields.str_field("reference"),
+                role_str.as_deref(),
+                crate::review_ledger::Act::Verify,
+            )
+            .context("invalid role")?;
             let out = review::run_verify(
                 Some(root.to_path_buf()),
                 &fields.str_field("reference"),
@@ -768,8 +788,13 @@ fn call_tool(
         "review_contest" => {
             let fields = ExtractFields::from_value(arguments, &["reference", "finding", "note"]);
             let role_str = fields.opt_str_field("as");
-            let role = review::parse_role(role_str.as_deref(), crate::review_ledger::Role::Raiser)
-                .context("invalid role")?;
+            let role = review::resolve_role(
+                Some(root.to_path_buf()),
+                &fields.str_field("reference"),
+                role_str.as_deref(),
+                crate::review_ledger::Act::Contest,
+            )
+            .context("invalid role")?;
             let out = review::run_contest(
                 Some(root.to_path_buf()),
                 &fields.str_field("reference"),
@@ -784,8 +809,13 @@ fn call_tool(
         "review_reopen" => {
             let fields = ExtractFields::from_value(arguments, &["reference", "finding", "note"]);
             let role_str = fields.opt_str_field("as");
-            let role = review::parse_role(role_str.as_deref(), crate::review_ledger::Role::Raiser)
-                .context("invalid role")?;
+            let role = review::resolve_role(
+                Some(root.to_path_buf()),
+                &fields.str_field("reference"),
+                role_str.as_deref(),
+                crate::review_ledger::Act::Reopen,
+            )
+            .context("invalid role")?;
             let out = review::run_reopen(
                 Some(root.to_path_buf()),
                 &fields.str_field("reference"),
@@ -800,8 +830,13 @@ fn call_tool(
         "review_withdraw" => {
             let fields = ExtractFields::from_value(arguments, &["reference", "finding"]);
             let role_str = fields.opt_str_field("as");
-            let role = review::parse_role(role_str.as_deref(), crate::review_ledger::Role::Raiser)
-                .context("invalid role")?;
+            let role = review::resolve_role(
+                Some(root.to_path_buf()),
+                &fields.str_field("reference"),
+                role_str.as_deref(),
+                crate::review_ledger::Act::Withdraw,
+            )
+            .context("invalid role")?;
             let out = review::run_withdraw(
                 Some(root.to_path_buf()),
                 &fields.str_field("reference"),
@@ -814,8 +849,13 @@ fn call_tool(
         "review_conclude" => {
             let fields = ExtractFields::from_value(arguments, &["reference", "basis"]);
             let role_str = fields.opt_str_field("as");
-            let role = review::parse_role(role_str.as_deref(), crate::review_ledger::Role::Raiser)
-                .context("invalid role")?;
+            let role = review::resolve_role(
+                Some(root.to_path_buf()),
+                &fields.str_field("reference"),
+                role_str.as_deref(),
+                crate::review_ledger::Act::Conclude,
+            )
+            .context("invalid role")?;
             let out = review::run_conclude(
                 Some(root.to_path_buf()),
                 &fields.str_field("reference"),

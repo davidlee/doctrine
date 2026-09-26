@@ -101,7 +101,8 @@ pub(crate) enum ReviewCommand {
         #[arg(long)]
         detail: String,
 
-        /// Cooperative role assertion (default: raiser).
+        /// Cooperative role assertion: `raiser` | `responder`, or this ledger's declared
+        /// labels (default: raiser).
         #[arg(long = "as")]
         role: Option<String>,
 
@@ -136,7 +137,8 @@ pub(crate) enum ReviewCommand {
         #[arg(long)]
         response: String,
 
-        /// Cooperative role assertion (default: responder).
+        /// Cooperative role assertion: `raiser` | `responder`, or this ledger's declared
+        /// labels (default: responder).
         #[arg(long = "as")]
         role: Option<String>,
 
@@ -175,7 +177,8 @@ pub(crate) enum ReviewCommand {
         #[arg(long, value_parser = Route::parse)]
         route: Option<Route>,
 
-        /// Cooperative role assertion (default: responder).
+        /// Cooperative role assertion: `raiser` | `responder`, or this ledger's declared
+        /// labels (default: responder).
         #[arg(long = "as")]
         role: Option<String>,
 
@@ -198,7 +201,8 @@ pub(crate) enum ReviewCommand {
         #[arg(long)]
         note: Option<String>,
 
-        /// Cooperative role assertion (default: raiser).
+        /// Cooperative role assertion: `raiser` | `responder`, or this ledger's declared
+        /// labels (default: raiser).
         #[arg(long = "as")]
         role: Option<String>,
 
@@ -223,7 +227,8 @@ pub(crate) enum ReviewCommand {
         #[arg(long)]
         note: String,
 
-        /// Cooperative role assertion (default: raiser).
+        /// Cooperative role assertion: `raiser` | `responder`, or this ledger's declared
+        /// labels (default: raiser).
         #[arg(long = "as")]
         role: Option<String>,
 
@@ -247,7 +252,8 @@ pub(crate) enum ReviewCommand {
         #[arg(long)]
         note: String,
 
-        /// Cooperative role assertion (default: raiser).
+        /// Cooperative role assertion: `raiser` | `responder`, or this ledger's declared
+        /// labels (default: raiser).
         #[arg(long = "as")]
         role: Option<String>,
 
@@ -271,7 +277,8 @@ pub(crate) enum ReviewCommand {
         #[arg(long)]
         note: Option<String>,
 
-        /// Cooperative role assertion (default: raiser).
+        /// Cooperative role assertion: `raiser` | `responder`, or this ledger's declared
+        /// labels (default: raiser).
         #[arg(long = "as")]
         role: Option<String>,
 
@@ -293,7 +300,8 @@ pub(crate) enum ReviewCommand {
         #[arg(long)]
         basis: String,
 
-        /// Cooperative role assertion (default: raiser).
+        /// Cooperative role assertion: `raiser` | `responder`, or this ledger's declared
+        /// labels (default: raiser).
         #[arg(long = "as")]
         role: Option<String>,
 

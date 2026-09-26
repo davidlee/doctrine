@@ -1548,12 +1548,228 @@ fn vt10b_coord_worktree_admitted_and_baton_in_its_own_state() {
 /// required role.
 #[test]
 fn parse_role_defaults_and_validates() {
-    assert_eq!(parse_role(None, Role::Responder).unwrap(), Role::Responder);
+    let meta = labelled_meta("raiser", "responder");
     assert_eq!(
-        parse_role(Some("raiser"), Role::Responder).unwrap(),
+        parse_role(None, Role::Responder, &meta).unwrap(),
+        Role::Responder
+    );
+    assert_eq!(
+        parse_role(Some("raiser"), Role::Responder, &meta).unwrap(),
         Role::Raiser
     );
-    assert!(parse_role(Some("bogus"), Role::Raiser).is_err());
+    assert!(parse_role(Some("bogus"), Role::Raiser, &meta).is_err());
+}
+
+// ---- SL-268 PHASE-07 T2: role aliases (D8 roles, sec-8 VT 10) ----
+
+/// A `[review]` header carrying the given role labels — the only fields
+/// `parse_role` reads.
+fn labelled_meta(raiser: &str, responder: &str) -> ReviewMeta {
+    ReviewMeta {
+        facet: "design".to_owned(),
+        raiser: raiser.to_owned(),
+        responder: responder.to_owned(),
+        concluded: false,
+        rounds_base: None,
+        contests_base: None,
+        turn: Vec::new(),
+    }
+}
+
+/// VT-2: `--as` accepts the ledger's declared labels as aliases for the
+/// canonical roles; the canonical tokens keep working; an unknown token names
+/// this ledger's labels so the caller can see what would have been accepted.
+#[test]
+fn as_accepts_declared_labels() {
+    let meta = labelled_meta("codex", "claude");
+    assert_eq!(
+        parse_role(Some("codex"), Role::Responder, &meta).unwrap(),
+        Role::Raiser
+    );
+    assert_eq!(
+        parse_role(Some("claude"), Role::Raiser, &meta).unwrap(),
+        Role::Responder
+    );
+    assert_eq!(
+        parse_role(Some("raiser"), Role::Responder, &meta).unwrap(),
+        Role::Raiser
+    );
+    assert_eq!(
+        parse_role(Some("responder"), Role::Raiser, &meta).unwrap(),
+        Role::Responder
+    );
+    assert_eq!(parse_role(None, Role::Raiser, &meta).unwrap(), Role::Raiser);
+    let err = parse_role(Some("bogus"), Role::Raiser, &meta)
+        .unwrap_err()
+        .to_string();
+    assert_eq!(
+        err,
+        "unknown --as role `bogus` (known: raiser, responder; this ledger's labels: \
+         raiser = codex, responder = claude)"
+    );
+}
+
+/// D-T2-3: on a default-label ledger the unknown-role refusal is byte-identical
+/// to the pre-alias wording — no labels suffix to add.
+#[test]
+fn as_unknown_on_default_labels_keeps_the_legacy_wording() {
+    let err = parse_role(
+        Some("bogus"),
+        Role::Raiser,
+        &labelled_meta("raiser", "responder"),
+    )
+    .unwrap_err()
+    .to_string();
+    assert_eq!(err, "unknown --as role `bogus` (known: raiser, responder)");
+}
+
+/// The canonical tokens win over a label: a legacy ledger whose raiser label is
+/// `responder` still reads `--as responder` as the responder.
+#[test]
+fn as_canonical_token_is_checked_before_labels() {
+    let meta = labelled_meta("responder", "raiser");
+    assert_eq!(
+        parse_role(Some("responder"), Role::Raiser, &meta).unwrap(),
+        Role::Responder
+    );
+    assert_eq!(
+        parse_role(Some("raiser"), Role::Responder, &meta).unwrap(),
+        Role::Raiser
+    );
+}
+
+/// A legacy ledger minted before the collision refusal may declare one label
+/// for both roles; that shared token cannot pick a role and is refused.
+#[test]
+fn as_refuses_a_token_both_labels_declare() {
+    let meta = labelled_meta("codex", "codex");
+    let err = parse_role(Some("codex"), Role::Raiser, &meta)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("ambiguous --as role `codex`"), "{err}");
+    assert!(err.contains("`raiser` or `responder`"), "{err}");
+    // The canonical tokens are still the way through.
+    assert_eq!(
+        parse_role(Some("responder"), Role::Raiser, &meta).unwrap(),
+        Role::Responder
+    );
+}
+
+/// `resolve_role` reads the labels off the authored ledger (outside the lock,
+/// design sec-4), resolves the alias, and journals the CANONICAL role (D-T2-4).
+#[test]
+fn resolve_role_reads_the_ledgers_labels_and_journals_the_canonical_role() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    plant_slice_target(root, 24);
+    let args = NewArgs {
+        raiser: Some("codex".to_owned()),
+        responder: Some("claude".to_owned()),
+        ..new_args(Facet::Design, "SL-024")
+    };
+    run_new(Some(root.to_path_buf()), &args).unwrap();
+
+    let role = resolve_role(
+        Some(root.to_path_buf()),
+        "RV-001",
+        Some("codex"),
+        Act::Raise,
+    )
+    .unwrap();
+    assert_eq!(role, Role::Raiser);
+    assert_eq!(
+        resolve_role(Some(root.to_path_buf()), "RV-001", None, Act::Dispose).unwrap(),
+        Role::Responder,
+        "the default is the act's required role"
+    );
+    run_raise(
+        Some(root.to_path_buf()),
+        &RaiseArgs {
+            reference: "RV-001".to_owned(),
+            severity: Severity::Blocker,
+            title: "T".to_owned(),
+            detail: "D".to_owned(),
+        },
+        role,
+    )
+    .unwrap();
+    let doc = read_review(&root.join(REVIEW_DIR), 1).unwrap();
+    let turn_roles: Vec<&str> = doc.finding[0]
+        .turn
+        .iter()
+        .map(|t| t.role.as_str())
+        .collect();
+    assert_eq!(
+        turn_roles,
+        ["raiser"],
+        "the journal stores the canonical role"
+    );
+    assert_eq!(
+        resolve_role(
+            Some(root.to_path_buf()),
+            "RV-001",
+            Some("claude"),
+            Act::Dispose
+        )
+        .unwrap(),
+        Role::Responder
+    );
+}
+
+/// A missing RV reports the ledger read failure — the same text a write verb
+/// gave before resolution moved ahead of the lock (R-a).
+#[test]
+fn resolve_role_on_a_missing_review_reports_not_found() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let err = resolve_role(
+        Some(root.to_path_buf()),
+        "RV-099",
+        Some("bogus"),
+        Act::Raise,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.starts_with("review 099 not found at "), "{err}");
+}
+
+/// VT-2: `new` refuses labels that would make `--as` ambiguous — equal labels,
+/// or a label that is the OTHER role's canonical name — before any id is
+/// claimed. Positive control: a legal pair in the same root does mint.
+#[test]
+fn new_refuses_colliding_labels() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    plant_slice_target(root, 24);
+    let labelled = |raiser: Option<&str>, responder: Option<&str>| NewArgs {
+        raiser: raiser.map(str::to_owned),
+        responder: responder.map(str::to_owned),
+        ..new_args(Facet::Design, "SL-024")
+    };
+    let review_root = root.join(REVIEW_DIR);
+    for (raiser, responder, needle) in [
+        (Some("codex"), Some("codex"), "must differ"),
+        (Some("responder"), None, "--raiser label `responder`"),
+        (None, Some("raiser"), "--responder label `raiser`"),
+    ] {
+        let err = run_new(Some(root.to_path_buf()), &labelled(raiser, responder))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains(needle), "{raiser:?}/{responder:?}: {err}");
+        assert!(
+            entity::scan_ids(&review_root)
+                .unwrap_or_default()
+                .is_empty(),
+            "{raiser:?}/{responder:?}: a refused new mints nothing"
+        );
+    }
+    // A label equal to its OWN role name is the default, and legal.
+    run_new(
+        Some(root.to_path_buf()),
+        &labelled(Some("raiser"), Some("claude")),
+    )
+    .unwrap();
+    assert_eq!(entity::scan_ids(&review_root).unwrap(), [1]);
 }
 
 // ---- SL-268 PHASE-07 T1: prose resolution (D10, sec-8 VT 9) ----

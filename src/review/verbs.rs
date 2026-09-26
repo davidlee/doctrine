@@ -8,7 +8,8 @@ use super::{
     Act, Context, Deserialize, Disposition, Facet, FindingRow, FindingStatus, Materialised, Path,
     PathBuf, REVIEW_DIR, REVIEW_KIND, ReviewError, ReviewMeta, ReviewOutput, Role, Route, Severity,
     Target, TurnFields, Vocab, admissible_from, append_finding, append_review_turn, apply_act, can,
-    canonical_id, entity, finding_status_of, finding_table_mut, parse_ref, review_table_mut,
+    canonical_id, entity, finding_status_of, finding_table_mut, parse_ref, read_authored,
+    review_table_mut,
 };
 use crate::tomlfmt::toml_string;
 
@@ -91,6 +92,28 @@ struct ReviewDraft {
     target: Target,
 }
 
+/// Refuse role labels that would make `--as` ambiguous (SL-268 D8): a label
+/// naming the OTHER role's canonical token, or one label for both roles. A label
+/// equal to its own role's name is the default, and legal.
+fn refuse_colliding_labels(raiser: &str, responder: &str) -> anyhow::Result<()> {
+    if raiser == Role::Responder.as_str() {
+        anyhow::bail!(
+            "--raiser label `{raiser}` is the responder's role name; `--as {raiser}` \
+             could not tell the roles apart"
+        );
+    }
+    if responder == Role::Raiser.as_str() {
+        anyhow::bail!(
+            "--responder label `{responder}` is the raiser's role name; `--as {responder}` \
+             could not tell the roles apart"
+        );
+    }
+    if raiser == responder {
+        anyhow::bail!("--raiser and --responder labels must differ (both are `{raiser}`)");
+    }
+    Ok(())
+}
+
 impl ReviewDraft {
     fn from_args(args: &NewArgs) -> anyhow::Result<Self> {
         let title = args
@@ -98,16 +121,22 @@ impl ReviewDraft {
             .clone()
             .unwrap_or_else(|| format!("{} review of {}", args.facet.as_str(), args.target));
         let slug = crate::input::resolve_slug(&title, None)?;
+        let raiser = args
+            .raiser
+            .clone()
+            .unwrap_or_else(|| Role::Raiser.as_str().to_owned());
+        let responder = args
+            .responder
+            .clone()
+            .unwrap_or_else(|| Role::Responder.as_str().to_owned());
+        refuse_colliding_labels(&raiser, &responder)?;
         Ok(Self {
             title,
             slug,
             review: ReviewMeta {
                 facet: args.facet.as_str().to_owned(),
-                raiser: args.raiser.clone().unwrap_or_else(|| "raiser".to_owned()),
-                responder: args
-                    .responder
-                    .clone()
-                    .unwrap_or_else(|| "responder".to_owned()),
+                raiser,
+                responder,
                 // A pass is unconcluded until its raiser says otherwise, and the
                 // renderer emits no key for it — absence carries the same answer.
                 concluded: false,
@@ -646,11 +675,60 @@ pub(super) fn gate(
 /// Parse a `--as` role token (the cooperative role assertion, design §5 — NOT a
 /// security boundary, ADR-007 Negative). Defaults to the verb's required role when
 /// omitted, so a single-party drive need not toggle `--as` on every call.
-pub(crate) fn parse_role(token: Option<&str>, default: Role) -> anyhow::Result<Role> {
-    match token {
-        None => Ok(default),
-        Some("raiser") => Ok(Role::Raiser),
-        Some("responder") => Ok(Role::Responder),
-        Some(other) => anyhow::bail!("unknown --as role `{other}` (known: raiser, responder)"),
+///
+/// The canonical tokens are checked first, then the ledger's declared labels
+/// (SL-268 D8), so a label only ever adds a spelling. A token both labels declare
+/// (a ledger minted before `new` refused the collision) cannot pick a role.
+pub(crate) fn parse_role(
+    token: Option<&str>,
+    default: Role,
+    meta: &ReviewMeta,
+) -> anyhow::Result<Role> {
+    let Some(token) = token else {
+        return Ok(default);
+    };
+    for role in [Role::Raiser, Role::Responder] {
+        if token == role.as_str() {
+            return Ok(role);
+        }
     }
+    match (token == meta.raiser, token == meta.responder) {
+        (true, false) => Ok(Role::Raiser),
+        (false, true) => Ok(Role::Responder),
+        (true, true) => anyhow::bail!(
+            "ambiguous --as role `{token}`: this ledger declares it as both the raiser \
+             and the responder label; pass `raiser` or `responder`"
+        ),
+        (false, false) => anyhow::bail!(
+            "unknown --as role `{token}` (known: raiser, responder{})",
+            labels_suffix(meta)
+        ),
+    }
+}
+
+/// The unknown-role refusal's mapping suffix — empty on a default-label ledger,
+/// so that refusal stays byte-identical to the pre-alias wording (D-T2-3).
+fn labels_suffix(meta: &ReviewMeta) -> String {
+    if meta.raiser == Role::Raiser.as_str() && meta.responder == Role::Responder.as_str() {
+        return String::new();
+    }
+    format!(
+        "; this ledger's labels: raiser = {}, responder = {}",
+        meta.raiser, meta.responder
+    )
+}
+
+/// Resolve a verb's `--as` token against the ledger's declared labels (SL-268
+/// D8). The labels are fixed at `new`, so reading them before `with_turn` takes
+/// the lock is race-free (design sec-4); the default is the act's required role.
+pub(crate) fn resolve_role(
+    path: Option<PathBuf>,
+    reference: &str,
+    token: Option<&str>,
+    act: Act,
+) -> anyhow::Result<Role> {
+    let root = resolve_review_root(path)?;
+    let id = parse_ref(reference)?;
+    let (_text, doc) = read_authored(&root, id)?;
+    parse_role(token, act.required_role(), &doc.review)
 }

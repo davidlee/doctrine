@@ -2200,3 +2200,89 @@ fn review_literal_dash_stays_literal() {
 
     kill(child);
 }
+
+/// SL-268 PHASE-07 T2 (D8, VT-4 alias half): `review_raise`'s `as` accepts the
+/// ledger's declared raiser label, and the journal records the CANONICAL role.
+/// A `review_new` whose labels collide is refused before anything is minted.
+#[test]
+fn review_role_alias_accepted() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Test Slice", "test-slice");
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let mut reader = BufReader::new(child.stdout.take().expect("stdout"));
+    let _ = call(
+        &mut stdin,
+        &mut reader,
+        "initialize",
+        Some(&serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "test", "version": "1.0" }
+        })),
+    );
+
+    // Refused: one label for both roles — nothing minted.
+    let params = tools_call_params(
+        "review_new",
+        serde_json::json!({
+            "facet": "design", "target": "SL-001", "raiser": "codex", "responder": "codex"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_some(), "{resp:?}");
+    assert!(
+        !root.join(".doctrine/review/001").exists(),
+        "a refused review_new mints nothing"
+    );
+
+    let params = tools_call_params(
+        "review_new",
+        serde_json::json!({
+            "facet": "design", "target": "SL-001", "raiser": "codex", "responder": "claude"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+
+    // The responder's label resolves to the responder, so it cannot raise — the
+    // alias is read, not ignored in favour of the verb's default.
+    let params = tools_call_params(
+        "review_raise",
+        serde_json::json!({
+            "reference": "1", "severity": "minor", "title": "T", "detail": "D", "as": "claude"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert_eq!(
+        resp["error"]["data"]["code"].as_str(),
+        Some("ROLE_MISMATCH"),
+        "{resp:?}"
+    );
+    assert_eq!(
+        resp["error"]["data"]["actual"].as_str(),
+        Some("responder"),
+        "{resp:?}"
+    );
+
+    let params = tools_call_params(
+        "review_raise",
+        serde_json::json!({
+            "reference": "1", "severity": "minor", "title": "T", "detail": "D", "as": "codex"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+
+    let doc: toml::Value = toml::from_str(&ledger_text(root)).unwrap();
+    assert_eq!(
+        doc["finding"][0]["turn"][0]["role"].as_str(),
+        Some("raiser")
+    );
+
+    kill(child);
+}

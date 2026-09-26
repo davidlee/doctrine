@@ -39,7 +39,7 @@ pub(crate) use prime::{PrimeArgs, run_prime};
 pub(crate) use read::{Finding, ListRow, ReviewWarning, run_list, run_show, run_status};
 pub(crate) use turn::run_unlock;
 pub(crate) use verbs::{
-    AmendArgs, DisposeArgs, NewArgs, RaiseArgs, materialise_review_at, mint_review, parse_role,
+    AmendArgs, DisposeArgs, NewArgs, RaiseArgs, materialise_review_at, mint_review, resolve_role,
     run_amend, run_conclude, run_contest, run_dispose, run_new, run_raise, run_reopen, run_verify,
     run_withdraw,
 };
@@ -113,7 +113,7 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             path,
         } => {
             use std::io::Write;
-            let role = parse_role(role.as_deref(), Role::Raiser)?;
+            let role = resolve_role(path.clone(), &reference, role.as_deref(), Act::Raise)?;
             let out = run_raise(
                 path,
                 &RaiseArgs {
@@ -138,7 +138,7 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             path,
         } => {
             use std::io::Write;
-            let role = parse_role(role.as_deref(), Role::Responder)?;
+            let role = resolve_role(path.clone(), &reference, role.as_deref(), Act::Dispose)?;
             let out = run_dispose(
                 path,
                 &DisposeArgs {
@@ -165,7 +165,7 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             path,
         } => {
             use std::io::Write;
-            let role = parse_role(role.as_deref(), Role::Responder)?;
+            let role = resolve_role(path.clone(), &reference, role.as_deref(), Act::Amend)?;
             let out = run_amend(
                 path,
                 &AmendArgs {
@@ -190,7 +190,7 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             path,
         } => {
             use std::io::Write;
-            let role = parse_role(role.as_deref(), Role::Raiser)?;
+            let role = resolve_role(path.clone(), &reference, role.as_deref(), Act::Verify)?;
             let out = run_verify(path, &reference, &finding, note.as_deref(), role)?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;
@@ -204,7 +204,7 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             path,
         } => {
             use std::io::Write;
-            let role = parse_role(role.as_deref(), Role::Raiser)?;
+            let role = resolve_role(path.clone(), &reference, role.as_deref(), Act::Contest)?;
             let out = run_contest(path, &reference, &finding, &note, role)?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;
@@ -218,7 +218,7 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             path,
         } => {
             use std::io::Write;
-            let role = parse_role(role.as_deref(), Role::Raiser)?;
+            let role = resolve_role(path.clone(), &reference, role.as_deref(), Act::Reopen)?;
             let out = run_reopen(path, &reference, &finding, &note, role)?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;
@@ -232,7 +232,7 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             path,
         } => {
             use std::io::Write;
-            let role = parse_role(role.as_deref(), Role::Raiser)?;
+            let role = resolve_role(path.clone(), &reference, role.as_deref(), Act::Withdraw)?;
             let out = run_withdraw(path, &reference, &finding, note.as_deref(), role)?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;
@@ -245,7 +245,7 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             path,
         } => {
             use std::io::Write;
-            let role = parse_role(role.as_deref(), Role::Raiser)?;
+            let role = resolve_role(path.clone(), &reference, role.as_deref(), Act::Conclude)?;
             let out = run_conclude(path, &reference, &basis, role)?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;

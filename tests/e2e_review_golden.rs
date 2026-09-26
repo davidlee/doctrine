@@ -1650,18 +1650,18 @@ fn role_refusals_pin_ledger_unchanged() {
     assert_eq!(ledger(dir.path(), 1), before, "no role refusal ever writes");
 }
 
+/// The `codex`/`claude` single-finding ledger the alias cases share (R8, R11).
+const LABELLED_LEDGER: &str = "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"codex\"\nresponder = \"claude\"\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"open\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\n";
+
 #[test]
-fn role_refusal_treats_ledgers_declared_raiser_label_as_unknown() {
-    if skip_under_worker_marker("role_refusal_treats_ledgers_declared_raiser_label_as_unknown") {
+fn role_alias_accepts_ledgers_declared_label() {
+    if skip_under_worker_marker("role_alias_accepts_ledgers_declared_label") {
         return;
     }
-    // R8: a ledger whose `raiser = "codex"` still refuses `--as codex` today —
-    // `parse_role` only ever knows raiser/responder (D8 teaches it declared
-    // labels later). Pinned as today's behaviour.
+    // R8 (flipped by SL-268 D8): a ledger whose `raiser = "codex"` accepts
+    // `--as codex` as the raiser. The journal records the CANONICAL role.
     let dir = tmp();
-    let toml = "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"codex\"\nresponder = \"claude\"\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"open\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\n";
-    seed_review(dir.path(), 1, toml, "# brief\n");
-    let before = ledger(dir.path(), 1);
+    seed_review(dir.path(), 1, LABELLED_LEDGER, "# brief\n");
 
     let out = run(
         dir.path(),
@@ -1678,12 +1678,120 @@ fn role_refusal_treats_ledgers_declared_raiser_label_as_unknown() {
             "codex",
         ],
     );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "Raised F-2 on RV-001\n");
+    assert_eq!(
+        ledger(dir.path(), 1),
+        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"codex\"\nresponder = \"claude\"\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"open\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\n\n[[finding]]\nid = \"F-2\"\nstatus = \"open\"\nseverity = \"blocker\"\ntitle = \"T\"\ndetail = \"D\"\n\n[[finding.turn]]\nact = \"raise\"\nrole = \"raiser\"\n"
+    );
+}
+
+#[test]
+fn role_alias_unknown_token_names_the_ledgers_labels_ledger_unchanged() {
+    if skip_under_worker_marker(
+        "role_alias_unknown_token_names_the_ledgers_labels_ledger_unchanged",
+    ) {
+        return;
+    }
+    // R11 (SL-268 D8, D-T2-3): on a non-default-label ledger the unknown-role
+    // refusal appends this ledger's label mapping.
+    let dir = tmp();
+    seed_review(dir.path(), 1, LABELLED_LEDGER, "# brief\n");
+    let before = ledger(dir.path(), 1);
+
+    let out = run(
+        dir.path(),
+        &[
+            "raise",
+            "1",
+            "--severity",
+            "blocker",
+            "--title",
+            "T",
+            "--detail",
+            "D",
+            "--as",
+            "bogus",
+        ],
+    );
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: unknown --as role `codex` (known: raiser, responder)\n"
+        "Error: unknown --as role `bogus` (known: raiser, responder; this ledger's labels: raiser = codex, responder = claude)\n"
     );
     assert_eq!(ledger(dir.path(), 1), before);
+}
+
+#[test]
+fn new_refuses_colliding_role_labels_creates_nothing() {
+    if skip_under_worker_marker("new_refuses_colliding_role_labels_creates_nothing") {
+        return;
+    }
+    // SL-268 D8: labels that would make `--as` ambiguous are refused at `new`,
+    // before any id is claimed.
+    let dir = tmp();
+    seed_slice(dir.path(), 1, &[]);
+    let review_dir = dir.path().join(".doctrine/review");
+
+    let out = run(
+        dir.path(),
+        &[
+            "new",
+            "--facet",
+            "design",
+            "--target",
+            "SL-001",
+            "--raiser",
+            "codex",
+            "--responder",
+            "codex",
+        ],
+    );
+    assert!(!out.status.success());
+    assert_eq!(stdout(&out), "");
+    assert_eq!(
+        stderr(&out),
+        "Error: --raiser and --responder labels must differ (both are `codex`)\n"
+    );
+    assert!(!review_dir.exists(), "a refused new mints nothing");
+
+    let out = run(
+        dir.path(),
+        &[
+            "new",
+            "--facet",
+            "design",
+            "--target",
+            "SL-001",
+            "--raiser",
+            "responder",
+        ],
+    );
+    assert!(!out.status.success());
+    assert_eq!(stdout(&out), "");
+    assert_eq!(
+        stderr(&out),
+        "Error: --raiser label `responder` is the responder's role name; `--as responder` could not tell the roles apart\n"
+    );
+    assert!(!review_dir.exists(), "a refused new mints nothing");
+
+    // Positive control: a legal label pair in the same root does mint.
+    let out = run(
+        dir.path(),
+        &[
+            "new",
+            "--facet",
+            "design",
+            "--target",
+            "SL-001",
+            "--raiser",
+            "codex",
+            "--responder",
+            "claude",
+        ],
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert!(review_dir.join("001/review-001.toml").is_file());
 }
 
 // === T5 — state refusals (T1-T9) + X3 =======================================
