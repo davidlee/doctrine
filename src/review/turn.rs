@@ -4,8 +4,8 @@
 
 use super::{
     Act, Context, Deserialize, FindingRow, FindingState, Path, PathBuf, ReviewDoc, ReviewError,
-    ReviewOutput, Role, Serialize, Write, authored_path, canonical_id, derived_status,
-    finding_states_of, fs, io, parse_ref, read_authored, seed, write_counter_seed,
+    ReviewOutput, Role, Serialize, Write, authored_path, canonical_id, clear_concluded,
+    derived_status, finding_states_of, fs, io, parse_ref, read_authored, seed, write_counter_seed,
 };
 
 // ===========================================================================
@@ -274,6 +274,12 @@ where
         write_counter_seed(&mut document, base)?;
     }
     let result = f(&mut document, &doc.finding)?;
+    // Clearing (SL-268 D2): a raise or reopen un-finishes the pass. It lands in
+    // THIS edit, after the closure admitted the act (a refused act returns above
+    // and clears nothing), so it rides the same pre-write CAS as the turn.
+    if act.clears_concluded() {
+        clear_concluded(&mut document)?;
+    }
 
     // Test seam: a hand-edit injected here lands AFTER the step-2 read and BEFORE
     // the step-5 write — the exact window the pre-write CAS must catch.

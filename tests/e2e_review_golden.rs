@@ -622,8 +622,9 @@ role = "raiser"
 "#
 }
 
-/// Step 8: `conclude` sets `concluded = true` under `[review]` and journals a
-/// noteless `[[review.turn]]` (PHASE-04 A1; PHASE-06 adds the required basis).
+/// Step 8: `conclude --basis B1` sets `concluded = true` under `[review]` and
+/// journals a `[[review.turn]]` whose note is the basis (PHASE-04 A1; SL-268
+/// PHASE-06 D2 made the basis required).
 fn chain_step8_conclude() -> &'static str {
     r#"id    = 1
 slug  = "design-review-of-sl-001"
@@ -642,6 +643,7 @@ concluded = true
 [[review.turn]]
 act = "conclude"
 role = "raiser"
+note = "B1"
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-001"
@@ -701,8 +703,9 @@ role = "raiser"
 "#
 }
 
-/// Step 9: the idempotent re-conclude. The latch is unchanged, but the turn is
-/// journalled, so the ledger is no longer byte-identical to step 8.
+/// Step 9: `conclude --basis B2` on a set marker (reports `already`). The marker
+/// is unchanged, but the turn is journalled with its basis, so the ledger is no
+/// longer byte-identical to step 8.
 fn chain_step9_reconclude() -> &'static str {
     r#"id    = 1
 slug  = "design-review-of-sl-001"
@@ -721,10 +724,12 @@ concluded = true
 [[review.turn]]
 act = "conclude"
 role = "raiser"
+note = "B1"
 
 [[review.turn]]
 act = "conclude"
 role = "raiser"
+note = "B2"
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-001"
@@ -784,10 +789,106 @@ role = "raiser"
 "#
 }
 
-/// Step 10 (S9): `raise F-3` on an already-`concluded` ledger succeeds with its
-/// raise turn, and `concluded` stays `true` (clearing it is PHASE-06 — today's
-/// behaviour pinned as-is).
+/// Step 10 (S9): `raise F-3` on a `concluded` ledger succeeds with its raise
+/// turn, and clears the marker in place in the same write — `concluded = false`,
+/// nothing else moves (SL-268 D2, RV-396 `F-4`).
 fn chain_step10_raise_on_concluded() -> &'static str {
+    r#"id    = 1
+slug  = "design-review-of-sl-001"
+title = "design review of SL-001"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = false
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "B1"
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "B2"
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-001"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "T1"
+detail = "D1"
+disposition = "fix-now"
+response = "R1"
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "R1"
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = "not really"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "R1"
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "ok"
+
+[[finding]]
+id = "F-2"
+status = "withdrawn"
+severity = "major"
+title = "T2"
+detail = "D2"
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "withdraw"
+role = "raiser"
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "minor"
+title = "T3"
+detail = "D3"
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.
+"#
+}
+
+/// Step 11 (S12): `conclude --basis B3` after the late raise sets the marker again
+/// in place and journals a third conclude turn (SL-268 D2, EX-2).
+fn chain_step11_reconclude_after_raise() -> &'static str {
     r#"id    = 1
 slug  = "design-review-of-sl-001"
 title = "design review of SL-001"
@@ -805,10 +906,17 @@ concluded = true
 [[review.turn]]
 act = "conclude"
 role = "raiser"
+note = "B1"
 
 [[review.turn]]
 act = "conclude"
 role = "raiser"
+note = "B2"
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "B3"
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-001"
@@ -1106,13 +1214,13 @@ fn write_chain_pins_ledger_after_each_step() {
     assert_eq!(stdout(&out), "Withdrew F-2 on RV-001 (withdrawn)\n");
     assert_eq!(ledger(dir.path(), 1), chain_step7_withdraw_f2());
 
-    // S8 — conclude, then again (idempotent).
-    let out = run(dir.path(), &["conclude", "1"]);
+    // S8 — conclude, then again on the set marker (reports already).
+    let out = run(dir.path(), &["conclude", "1", "--basis", "B1"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(stdout(&out), "Concluded the pass on RV-001\n");
     assert_eq!(ledger(dir.path(), 1), chain_step8_conclude());
 
-    let out = run(dir.path(), &["conclude", "1"]);
+    let out = run(dir.path(), &["conclude", "1", "--basis", "B2"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
@@ -1129,8 +1237,8 @@ fn write_chain_pins_ledger_after_each_step() {
         "RV-001 — done · await=none · findings 2 · rounds 9 · concluded\n"
     );
 
-    // S9 — raise on a concluded ledger still succeeds; concluded stays true
-    // (D2 flips this later — today's behaviour, pinned as-is).
+    // S9 — raise on a concluded ledger succeeds and clears the marker in the
+    // same write (SL-268 D2, RV-396 F-4).
     let out = run(
         dir.path(),
         &[
@@ -1147,6 +1255,28 @@ fn write_chain_pins_ledger_after_each_step() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(stdout(&out), "Raised F-3 on RV-001\n");
     assert_eq!(ledger(dir.path(), 1), chain_step10_raise_on_concluded());
+
+    // S11 — the late raise made the pass un-done: no `· concluded` tail.
+    let out = run(dir.path(), &["status", "1"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "RV-001 — active · await=responder · findings 3 · rounds 10\n"
+    );
+
+    // S12 — re-conclude after the clear: NOT "already" (EX-2).
+    let out = run(dir.path(), &["conclude", "1", "--basis", "B3"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "Concluded the pass on RV-001\n");
+    assert_eq!(ledger(dir.path(), 1), chain_step11_reconclude_after_raise());
+
+    // S13 — concluded again; F-3 is still open, so the pass stays active.
+    let out = run(dir.path(), &["status", "1"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "RV-001 — active · await=responder · findings 3 · rounds 11 · concluded\n"
+    );
 }
 
 // === SL-268 PHASE-05 — D8 additions: `--route` on dispose ===================
@@ -1283,6 +1413,40 @@ fn amend_and_reopen_chain_pins_ledger_after_each_step() {
     );
 }
 
+/// SL-268 PHASE-06 G7 (D2, EX-3): a reopen on a concluded ledger clears the
+/// marker in place, in the same write as its turn and the counter seed.
+#[test]
+fn reopen_clears_concluded_pins_ledger() {
+    if skip_under_worker_marker("reopen_clears_concluded_pins_ledger") {
+        return;
+    }
+    let dir = tmp();
+    seed_review(
+        dir.path(),
+        1,
+        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nconcluded = true\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"verified\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\n",
+        "# brief\n",
+    );
+
+    let out = run(
+        dir.path(),
+        &["reopen", "1", "--finding", "F-1", "--note", "n"],
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "Reopened F-1 on RV-001 (contested)\n");
+    assert_eq!(
+        ledger(dir.path(), 1),
+        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nconcluded = false\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"contested\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\n\n[[finding.turn]]\nact = \"reopen\"\nrole = \"raiser\"\nnote = \"n\"\n"
+    );
+
+    let out = run(dir.path(), &["status", "1"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "RV-001 — active · await=responder · findings 1 · rounds 1\n"
+    );
+}
+
 // === T4 — role refusals (R1-R8) =============================================
 
 #[test]
@@ -1380,8 +1544,11 @@ fn role_refusals_pin_ledger_unchanged() {
         "Error: `withdraw` is the raiser's verb; --as responder cannot assert it\n"
     );
 
-    // R6
-    let out = run(dir.path(), &["conclude", "1", "--as", "responder"]);
+    // R6 (`--basis` so clap admits it and the role gate is what refuses)
+    let out = run(
+        dir.path(),
+        &["conclude", "1", "--basis", "b", "--as", "responder"],
+    );
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
@@ -1696,6 +1863,40 @@ fn amend_and_reopen_state_refusals_pin_ledger_unchanged() {
 }
 
 // === SL-268 PHASE-04 — the turn journal's notes (design sec-2) ==============
+
+#[test]
+fn conclude_basis_refusals() {
+    if skip_under_worker_marker("conclude_basis_refusals") {
+        return;
+    }
+    // SL-268 PHASE-06 G9 (EX-2, VT-3): `--basis` is clap-required, and a blank
+    // basis is refused before the lock, naming `--basis` (A3).
+    let dir = tmp();
+    seed_one_finding(dir.path(), "open");
+    let before = ledger(dir.path(), 1);
+
+    let out = run(dir.path(), &["conclude", "1"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(stdout(&out), "");
+    assert_eq!(
+        stderr(&out),
+        "error: the following required arguments were not provided:\n  --basis <BASIS>\n\nUsage: doctrine review conclude --basis <BASIS> --path <PATH> --color <COLOR> <REFERENCE>\n\nFor more information, try '--help'.\n"
+    );
+    assert_eq!(ledger(dir.path(), 1), before);
+
+    let out = run(dir.path(), &["conclude", "1", "--basis", ""]);
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(stdout(&out), "");
+    assert_eq!(
+        stderr(&out),
+        "Error: `conclude` requires a non-empty --basis\n"
+    );
+    assert_eq!(ledger(dir.path(), 1), before);
+    assert!(
+        !dir.path().join(".doctrine/state").exists(),
+        "refused before the lock: no runtime state written"
+    );
+}
 
 #[test]
 fn contest_without_note_is_a_clap_refusal() {

@@ -25,7 +25,7 @@ pub(crate) use schema::{
 };
 pub(crate) use transition::{
     Act, TurnFields, admissible_from, append_finding, append_review_turn, apply_act, can,
-    finding_status_of, finding_table_mut, review_table_mut, write_counter_seed,
+    clear_concluded, finding_status_of, finding_table_mut, review_table_mut, write_counter_seed,
 };
 pub(crate) use vocab::{
     Await, DISPOSITIONS, Disposition, FINDING_STATUSES, Facet, FindingStatus, REVIEW_STATUSES,

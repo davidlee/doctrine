@@ -79,7 +79,8 @@ pub(crate) enum ReviewCommand {
     },
 
     /// Raise a finding on a review (the raiser's verb) — appends an `open`
-    /// finding with a fixed, raiser-owned severity/title/detail.
+    /// finding with a fixed, raiser-owned severity/title/detail. Clears the
+    /// pass's concluded marker.
     Raise {
         /// Review reference — `RV-007` or the bare id `7`.
         reference: String,
@@ -225,7 +226,7 @@ pub(crate) enum ReviewCommand {
     },
 
     /// Reopen a verified finding (the raiser's verb) — hand it back to the
-    /// responder (verified → contested).
+    /// responder (verified → contested). Clears the pass's concluded marker.
     Reopen {
         /// Review reference — `RV-007` or the bare id `7`.
         reference: String,
@@ -273,12 +274,16 @@ pub(crate) enum ReviewCommand {
     },
 
     /// Declare the pass finished (the raiser's verb) — sets the concluded marker
-    /// a design run's `Conducted` disposition is admissible over. Idempotent, and
-    /// there is no unset. Open findings are fine: disposing them is the
-    /// responder's work afterwards.
+    /// a design run's `Conducted` disposition is admissible over. A later raise
+    /// or reopen clears it; conclude again after them. Open findings are fine:
+    /// disposing them is the responder's work afterwards.
     Conclude {
         /// Review reference — `RV-007` or the bare id `7`.
         reference: String,
+
+        /// What this pass examined — recorded as the conclude turn's note.
+        #[arg(long)]
+        basis: String,
 
         /// Cooperative role assertion (default: raiser).
         #[arg(long = "as")]

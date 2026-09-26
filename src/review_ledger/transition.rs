@@ -21,8 +21,8 @@ pub(crate) enum Act {
     Verify,
     Contest,
     /// The raiser reopens a verified finding, handing it back to the responder
-    /// (design sec-4, SL-268 PHASE-05). Does **not** clear `[review].concluded`
-    /// in this phase (PHASE-06).
+    /// (design sec-4, SL-268 PHASE-05). Clears `[review].concluded` in the same
+    /// write as its turn (D2, [`Act::clears_concluded`]).
     Reopen,
     Withdraw,
     /// The raiser declares the pass finished (SL-244 `sec-4`, IMP-392). It moves
@@ -60,6 +60,24 @@ impl Act {
             | Self::Withdraw
             | Self::Conclude => Role::Raiser,
             Self::Dispose | Self::Amend => Role::Responder,
+        }
+    }
+
+    /// Whether the act clears the pass's `[review].concluded` marker in the
+    /// write that journals its turn (SL-268 D2, RV-396 `F-4`, design sec-3): a
+    /// new finding or a reopened one means the pass is no longer finished, so
+    /// `done` needs a fresh `conclude`. The one table — the turn guard reads it.
+    pub(crate) const fn clears_concluded(self) -> bool {
+        matches!(self, Self::Raise | Self::Reopen)
+    }
+
+    /// The flag that carries the act's required free-text account — `--basis`
+    /// for `conclude` (what the pass examined), `--note` for every other act.
+    /// The CLI refusal and the MCP error both name it from here.
+    pub(crate) const fn note_flag(self) -> &'static str {
+        match self {
+            Self::Conclude => "basis",
+            _ => "note",
         }
     }
 }
@@ -168,6 +186,24 @@ pub(crate) fn write_counter_seed(
     let meta = review_table_mut(doc)?;
     meta.insert("rounds_base", toml_edit::value(i64::from(rounds)));
     meta.insert("contests_base", toml_edit::value(i64::from(contests)));
+    Ok(())
+}
+
+/// Clear the pass's concluded marker (SL-268 D2): set `[review].concluded =
+/// false` **in place**, and only when it is currently `true`. An absent or
+/// already-`false` marker is left untouched, so a never-concluded ledger gains
+/// no line. The caller writes it in the same edit as the clearing act's turn.
+pub(crate) fn clear_concluded(doc: &mut toml_edit::DocumentMut) -> anyhow::Result<()> {
+    let meta = review_table_mut(doc)?;
+    if let Some(value) = meta
+        .get_mut("concluded")
+        .and_then(toml_edit::Item::as_value_mut)
+        .filter(|v| v.as_bool() == Some(true))
+    {
+        let decor = value.decor().clone();
+        *value = toml_edit::Value::from(false);
+        *value.decor_mut() = decor;
+    }
     Ok(())
 }
 

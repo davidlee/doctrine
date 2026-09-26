@@ -234,6 +234,8 @@ pub(crate) struct RaiseArgs {
 /// `doctrine review raise <RV-NNN> --severity --title --detail [--as raiser]` —
 /// append a fresh `open` finding (design §5). Append-only; `raise` is the raiser's
 /// and is NOT await-blocked (it may fire even while `await=Responder`, D7/§8).
+/// On a concluded ledger it clears `[review].concluded` in the same write (D2):
+/// the pass is no longer finished until the raiser concludes again.
 pub(crate) fn run_raise(
     path: Option<PathBuf>,
     args: &RaiseArgs,
@@ -468,8 +470,8 @@ pub(crate) fn run_contest(
 /// `doctrine review reopen <RV-NNN> --finding F-n --note … [--as raiser]` — the
 /// raiser reopens a verified finding, handing it back to the responder
 /// (verified → contested, design sec-4). The note is **required**, in the same
-/// shape as `contest`. Does **not** clear `[review].concluded` in this phase —
-/// PHASE-06 owns that (the phase sheet's Out-of-scope note).
+/// shape as `contest`. Clears `[review].concluded` in the same write as its turn
+/// (SL-268 D2): the reopened finding un-finishes the pass.
 pub(crate) fn run_reopen(
     path: Option<PathBuf>,
     reference: &str,
@@ -524,8 +526,9 @@ pub(crate) fn run_withdraw(
     })
 }
 
-/// `doctrine review conclude <RV-NNN> [--as raiser]` — the raiser declares the
-/// pass finished, setting the concluded marker (SL-244 `sec-4`, IMP-392).
+/// `doctrine review conclude <RV-NNN> --basis … [--as raiser]` — the raiser
+/// declares the pass finished, setting the concluded marker (SL-244 `sec-4`,
+/// IMP-392), and records what the pass examined as the conclude turn's note.
 ///
 /// The marker is what a design run's `Conducted` disposition is admissible over,
 /// and it is deliberately **not** a function of the finding set: a clean pass and
@@ -539,20 +542,27 @@ pub(crate) fn run_withdraw(
 /// responder's work afterwards, and requiring a clean ledger would make this a
 /// second, stricter spelling of the gate it feeds.
 ///
-/// Idempotent, and there is no unset — a pass that concluded happened. A run that
-/// wants another pass gets a new `RV`.
+/// The basis is **required** (SL-268 D2): a blank one refuses before the lock is
+/// taken, and a present one is stored verbatim. The marker is not latched —
+/// `raise` and `reopen` clear it (D2); a re-conclude after them sets it again and
+/// reports `already: false`, while a re-conclude on a set marker reports
+/// `already: true`.
 pub(crate) fn run_conclude(
     path: Option<PathBuf>,
     reference: &str,
+    basis: &str,
     role: Role,
 ) -> anyhow::Result<ReviewOutput> {
+    if basis.trim().is_empty() {
+        return Err(ReviewError::NoteRequired { act: Act::Conclude }.into());
+    }
     let root = resolve_review_root(path)?;
     let id = parse_ref(reference)?;
-    // The latch is written unconditionally: re-writing `true` costs an identical
+    // The marker is written unconditionally: re-writing `true` costs an identical
     // byte sequence, where reading it before the turn would race the lock this
     // turn exists to hold.
     // Every conclude journals its own `[[review.turn]]` (SL-268 sec-2), so a
-    // re-conclude is idempotent on the latch but not on the file.
+    // re-conclude on a set marker leaves the marker alone but not the file.
     let already = with_turn(&root, id, Act::Conclude, role, |doc, _findings| {
         let meta = review_table_mut(doc)?;
         let already = meta
@@ -560,7 +570,7 @@ pub(crate) fn run_conclude(
             .and_then(toml_edit::Item::as_bool)
             .unwrap_or(false);
         meta["concluded"] = toml_edit::value(true);
-        append_review_turn(doc, Act::Conclude, role, None)?;
+        append_review_turn(doc, Act::Conclude, role, Some(basis))?;
         Ok(already)
     })?;
     Ok(ReviewOutput::Concluded {

@@ -1901,6 +1901,50 @@ fn review_contest_note_round_trips() {
     kill(child);
 }
 
+/// SL-268 PHASE-06 VT-5 (EX-5): `review_conclude` requires a non-empty `basis`
+/// (the schema lists it; a missing or blank one is NOTE_REQUIRED with
+/// `act = "conclude"`), and a present one lands as the conclude turn's note.
+#[test]
+fn review_conclude_requires_basis() {
+    let dir = tmp();
+    let root = dir.path();
+    let (child, mut stdin, mut reader) = answered_f1_session(root);
+
+    let before = ledger_text(root);
+    for args in [
+        serde_json::json!({ "reference": "1" }),
+        serde_json::json!({ "reference": "1", "basis": "" }),
+    ] {
+        let params = tools_call_params("review_conclude", args);
+        let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+        let err = resp.get("error").expect("should have error");
+        assert_eq!(err["code"], -32602, "{resp:?}");
+        assert_eq!(err["data"]["code"], "NOTE_REQUIRED", "{resp:?}");
+        assert_eq!(err["data"]["act"], "conclude", "{resp:?}");
+    }
+    assert_eq!(
+        ledger_text(root),
+        before,
+        "a refused conclude writes nothing"
+    );
+
+    let params = tools_call_params(
+        "review_conclude",
+        serde_json::json!({ "reference": "1", "basis": "examined X" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+    let doc: toml::Value = toml::from_str(&ledger_text(root)).unwrap();
+    assert_eq!(doc["review"]["concluded"].as_bool(), Some(true));
+    let turns = doc["review"]["turn"].as_array().expect("review turns");
+    let last = serde_json::to_value(turns.last().unwrap()).unwrap();
+    assert_eq!(last["act"], "conclude");
+    assert_eq!(last["role"], "raiser");
+    assert_eq!(last["note"], "examined X");
+
+    kill(child);
+}
+
 #[test]
 fn review_withdraw_note_round_trips() {
     let dir = tmp();

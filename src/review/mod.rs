@@ -23,7 +23,7 @@ use crate::review_ledger::{
     Act, Await, Disposition, FINDING_STATUSES, Facet, FindingRow, FindingState, FindingStatus,
     REVIEW_STATUSES, ReviewDoc, ReviewMeta, ReviewStatus, Role, Route, Severity, Target,
     TurnFields, Vocab, VocabDefect, admissible_from, append_finding, append_review_turn, apply_act,
-    authored_path, can, canonical_id, counters, derived_status, finding_states_of,
+    authored_path, can, canonical_id, clear_concluded, counters, derived_status, finding_states_of,
     finding_status_of, finding_table_mut, parse_ref, read_authored, read_review, read_reviews,
     review_table_mut, seed, vocabulary_defects, write_counter_seed,
 };
@@ -234,12 +234,13 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
         }
         ReviewCommand::Conclude {
             reference,
+            basis,
             role,
             path,
         } => {
             use std::io::Write;
             let role = parse_role(role.as_deref(), Role::Raiser)?;
-            let out = run_conclude(path, &reference, role)?;
+            let out = run_conclude(path, &reference, &basis, role)?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;
             Ok(())
@@ -552,8 +553,9 @@ pub(crate) enum ReviewError {
         current: FindingStatus,
         admissible: Vec<FindingStatus>,
     },
-    /// The act requires a non-empty `--note` and got none (SL-268 sec-2): its
-    /// reasoning is the turn's record.
+    /// The act requires a non-empty `--note` (`--basis` for `conclude`, per
+    /// [`Act::note_flag`]) and got none (SL-268 sec-2): its reasoning is the
+    /// turn's record.
     NoteRequired {
         act: Act,
     },
@@ -610,7 +612,12 @@ impl fmt::Display for ReviewError {
                 )
             }
             Self::NoteRequired { act } => {
-                write!(f, "`{}` requires a non-empty --note", act.as_str())
+                write!(
+                    f,
+                    "`{}` requires a non-empty --{}",
+                    act.as_str(),
+                    act.note_flag()
+                )
             }
             Self::UnknownStatus { finding, raw } => {
                 write!(

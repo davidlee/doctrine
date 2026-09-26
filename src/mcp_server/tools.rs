@@ -153,7 +153,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_raise".to_owned(),
-            description: "Raise a finding on a review (the raiser's verb) — appends an open finding with fixed severity/title/detail. `severity`/`title`/`detail` are raiser-owned and fixed at raise — the ledger is append-only. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Raised\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            description: "Raise a finding on a review (the raiser's verb) — appends an open finding with fixed severity/title/detail. `severity`/`title`/`detail` are raiser-owned and fixed at raise — the ledger is append-only. On a concluded ledger it clears the pass's concluded marker in the same write; conclude again afterwards. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Raised\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -229,7 +229,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_reopen".to_owned(),
-            description: "Reopen a verified finding (the raiser's verb) — hand it back to the responder (verified → contested). `note` is required and non-empty: it is recorded on the finding's reopen turn in the ledger, as why it is being reopened. A missing or blank note is refused with NOTE_REQUIRED. Does not clear the pass's concluded marker. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Reopened\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
+            description: "Reopen a verified finding (the raiser's verb) — hand it back to the responder (verified → contested). `note` is required and non-empty: it is recorded on the finding's reopen turn in the ledger, as why it is being reopened. A missing or blank note is refused with NOTE_REQUIRED. Clears the pass's concluded marker in the same write; conclude again afterwards. `--as` is cooperative role assertion, not a security boundary (ADR-007).\n\nReturns: {\"Reopened\": { finding_id: \"F-N\", review_id: int }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -257,14 +257,15 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_conclude".to_owned(),
-            description: "Declare the pass finished (the raiser's verb) — sets the concluded marker a design run's `Conducted` disposition is admissible over. Idempotent, no unset; open findings are fine (disposing them is the responder's work afterwards).\n\nReturns: {\"Concluded\": { review_id: int, already: bool }} — `already` is true when the pass was concluded before this call.".to_owned(),
+            description: "Declare the pass finished (the raiser's verb) — sets the concluded marker a design run's `Conducted` disposition is admissible over. `basis` is required and non-empty: it is recorded as the conclude turn's note in the ledger, as what this pass examined. A missing or blank basis is refused with NOTE_REQUIRED. The marker is not latched: a later raise or reopen clears it, and the pass must be concluded again. Open findings are fine (disposing them is the responder's work afterwards).\n\nReturns: {\"Concluded\": { review_id: int, already: bool }} — `already` is true when the marker was already set before this call (false after a raise or reopen cleared it).".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
+                    "basis": { "type": "string", "description": "What this pass examined — recorded as the conclude turn's note (required, non-empty)" },
                     "as": { "type": "string", "description": "Cooperative role assertion (default: raiser)" }
                 },
-                "required": ["reference"]
+                "required": ["reference", "basis"]
             }),
         },
         McpTool {
@@ -811,13 +812,16 @@ fn call_tool(
             Ok(serde_json::to_string(&out)?)
         }
         "review_conclude" => {
-            let fields = ExtractFields::from_value(arguments, &["reference"]);
+            let fields = ExtractFields::from_value(arguments, &["reference", "basis"]);
             let role_str = fields.opt_str_field("as");
             let role = review::parse_role(role_str.as_deref(), crate::review_ledger::Role::Raiser)
                 .context("invalid role")?;
             let out = review::run_conclude(
                 Some(root.to_path_buf()),
                 &fields.str_field("reference"),
+                // A missing basis reads as "", which `run_conclude` refuses with
+                // `NoteRequired` — the same refusal as an explicit blank.
+                &fields.str_field("basis"),
                 role,
             )?;
             Ok(serde_json::to_string(&out)?)
@@ -1736,7 +1740,11 @@ fn map_review_error(id: Option<Id>, err: &anyhow::Error) -> JsonRpcResponse {
             review::ReviewError::NoteRequired { act } => JsonRpcResponse::error(
                 id,
                 -32602,
-                format!("Note required: `{}` needs a non-empty note", act.as_str()),
+                format!(
+                    "Note required: `{}` needs a non-empty {}",
+                    act.as_str(),
+                    act.note_flag()
+                ),
                 Some(json!({
                     "code": "NOTE_REQUIRED",
                     "act": act.as_str()

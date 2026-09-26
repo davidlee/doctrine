@@ -1497,10 +1497,10 @@ fn ledger_path(root: &Path, pass_ref: &str) -> PathBuf {
         .join(format!("{LEDGER_STEM}-{id:03}.toml"))
 }
 
-/// Hand-edit a minted pass's ledger to `concluded = true` (SL-268 D-nil: no
-/// `review conclude` verb exists yet — PHASE-06 — so the marker is set the way
-/// every fail-safe read must survive: out of band). No finding is added; this
-/// is the clean twin.
+/// Hand-edit a minted pass's ledger to `concluded = true`, out of band — the
+/// way every fail-safe read must survive. (`review conclude` exists since
+/// SL-268 PHASE-06; the hand-edit is kept deliberately, so the defect twin
+/// below can share its shape.) No finding is added; this is the clean twin.
 fn conclude_pass(root: &Path, pass_ref: &str) {
     let path = ledger_path(root, pass_ref);
     let mut doc = std::fs::read_to_string(&path)
@@ -1644,5 +1644,131 @@ fn defect_warning_printed_gate_unchanged() {
     assert!(
         defective_apply_stderr.contains(&expected_warning),
         "admission still discloses the defect: {defective_apply_stderr}"
+    );
+}
+
+// ── SL-268 PHASE-06 (EX-4, VT-4) ────────────────────────────────────────────
+
+/// The run's current pass, as its canonical ref.
+fn pass_of(fixture: &Fixture) -> String {
+    fixture
+        .read()
+        .review
+        .pass
+        .as_ref()
+        .expect("a run in `reviewing` holds a pass")
+        .review
+        .as_str()
+        .to_owned()
+}
+
+/// Drive a `review` verb through the built binary, expecting success.
+fn review_verb(root: &Path, args: &[&str]) {
+    let mut argv = vec!["review"];
+    argv.extend_from_slice(args);
+    argv.extend_from_slice(&["-p", "."]);
+    let out = run_capturing(root, &argv);
+    assert!(
+        out.status.success(),
+        "`review {args:?}` failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// A late `minor` raise on `pass`.
+fn late_raise(root: &Path, pass: &str) {
+    review_verb(
+        root,
+        &[
+            "raise",
+            pass,
+            "--severity",
+            "minor",
+            "--title",
+            "t",
+            "--detail",
+            "d",
+        ],
+    );
+}
+
+/// Apply a `Conducted` disposition over `pass`, returning the full output.
+fn apply_conducted(fixture: &Fixture, submission: &str, pass: &str) -> std::process::Output {
+    let body = json!({"checkpoint_act": design_act::review_disposed(
+        "the pass is disposed of at the close of review",
+        ReviewDisposition::Conducted { review: ReviewRef::new(pass) },
+    )});
+    let input = fixture.payload(submission, &body);
+    run_capturing(
+        &fixture.root,
+        &["design", "apply", SLICE, "-p", ".", "--input", &input],
+    )
+}
+
+/// Whether the run has recorded a review disposition.
+fn has_disposition(fixture: &Fixture) -> bool {
+    fixture
+        .read()
+        .acts
+        .acts
+        .iter()
+        .any(|act| act.act == ActKind::ReviewDisposed)
+}
+
+/// `VT-4`: a raise after `conclude` clears the marker (SL-268 D2), so the
+/// design-run gate — unchanged (DEC-138) — refuses a `Conducted` disposition
+/// until the raiser concludes again. A disposition already recorded before the
+/// late raise stands: nothing re-reads it.
+#[test]
+fn late_raise_refuses_conducted_until_reconclude() {
+    let fixture = Fixture::reviewing();
+    let pass = pass_of(&fixture);
+    review_verb(&fixture.root, &["conclude", &pass, "--basis", "b"]);
+    late_raise(&fixture.root, &pass);
+
+    let refused = apply_conducted(&fixture, "dispose", &pass);
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        !refused.status.success(),
+        "a late raise un-concludes the pass: `Conducted` is refused"
+    );
+    assert!(
+        stderr.contains(&format!(
+            "`{pass}` carries no concluded-pass marker Doctrine can read"
+        )),
+        "the refusal is `PassNotConcluded`: {stderr}"
+    );
+    assert!(!has_disposition(&fixture), "a refusal records nothing");
+
+    review_verb(&fixture.root, &["conclude", &pass, "--basis", "again"]);
+    let admitted = apply_conducted(&fixture, "dispose-again", &pass);
+    assert!(
+        admitted.status.success(),
+        "re-concluded, `Conducted` is admitted: {}",
+        String::from_utf8_lossy(&admitted.stderr)
+    );
+    assert!(has_disposition(&fixture));
+
+    // One already recorded stands: a late raise after the disposition does not
+    // unwind it, and the run still resumes.
+    let recorded = Fixture::reviewing();
+    let pass = pass_of(&recorded);
+    review_verb(&recorded.root, &["conclude", &pass, "--basis", "b"]);
+    let admitted = apply_conducted(&recorded, "dispose", &pass);
+    assert!(
+        admitted.status.success(),
+        "concluded, `Conducted` is admitted: {}",
+        String::from_utf8_lossy(&admitted.stderr)
+    );
+    late_raise(&recorded.root, &pass);
+    let resumed = run_capturing(&recorded.root, &["design", "resume", SLICE, "-p", "."]);
+    assert!(
+        resumed.status.success(),
+        "the run resumes after a late raise: {}",
+        String::from_utf8_lossy(&resumed.stderr)
+    );
+    assert!(
+        has_disposition(&recorded),
+        "the recorded disposition stands after the late raise"
     );
 }

@@ -768,7 +768,15 @@ fn growing_run() -> DesignRun {
     }
     run(
         &designed.root,
-        &["review", "conclude", pass.as_str(), "-p", "."],
+        &[
+            "review",
+            "conclude",
+            pass.as_str(),
+            "--basis",
+            "the pass read the whole design",
+            "-p",
+            ".",
+        ],
     );
     designed.apply(
         "dispose",

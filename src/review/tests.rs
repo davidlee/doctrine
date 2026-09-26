@@ -945,7 +945,7 @@ fn lifecycle_raise_dispose_verify() {
 
     // A conclude here does not move the intermediate assert below: answered
     // gives Raiser either way (SL-268 D2).
-    run_conclude(Some(root.to_path_buf()), "RV-001", Role::Raiser).unwrap();
+    run_conclude(Some(root.to_path_buf()), "RV-001", "basis", Role::Raiser).unwrap();
 
     run_verify(
         Some(root.to_path_buf()),
@@ -1675,7 +1675,7 @@ fn every_act_appends_one_turn() {
     run_withdraw(p(), "RV-001", "F-2", None, Role::Raiser).unwrap();
     step("F-2", "withdraw", "raiser", "withdrawn");
 
-    run_conclude(p(), "RV-001", Role::Raiser).unwrap();
+    run_conclude(p(), "RV-001", "basis", Role::Raiser).unwrap();
     let doc = read_doc(root, 1);
     assert_eq!(turn_count(&doc), total + 1, "conclude journals one turn");
     let conclude = doc.review.turn.last().unwrap();
@@ -1685,9 +1685,9 @@ fn every_act_appends_one_turn() {
             conclude.role.as_str(),
             conclude.note.as_deref()
         ),
-        ("conclude", "raiser", None)
+        ("conclude", "raiser", Some("basis"))
     );
-    assert!(doc.review.concluded, "the latch moved with the turn");
+    assert!(doc.review.concluded, "the marker moved with the turn");
     assert_eq!(
         turn_acts(&doc, "F-1")
             .into_iter()
@@ -2288,7 +2288,7 @@ fn vt1_verified_blocker_is_terminal_and_not_reported() {
         Role::Raiser,
     )
     .unwrap();
-    run_conclude(Some(root.to_path_buf()), "RV-001", Role::Raiser).unwrap();
+    run_conclude(Some(root.to_path_buf()), "RV-001", "basis", Role::Raiser).unwrap();
     // All findings terminal AND concluded ⇒ Done (SL-268 D2) ⇒ no unresolved
     // blocker.
     assert_eq!(read_doc(root, 1).derived().0, ReviewStatus::Done);
@@ -2314,7 +2314,7 @@ fn vt1_withdrawn_blocker_is_terminal_and_not_reported() {
         Role::Raiser,
     )
     .unwrap();
-    run_conclude(Some(root.to_path_buf()), "RV-001", Role::Raiser).unwrap();
+    run_conclude(Some(root.to_path_buf()), "RV-001", "basis", Role::Raiser).unwrap();
     assert_eq!(read_doc(root, 1).derived().0, ReviewStatus::Done);
     assert!(unresolved_blockers_for(root, "SL-001").unwrap().is_empty());
 }
@@ -2490,13 +2490,14 @@ fn unreadable_review_reads_as_unmet() {
 
 // ---- IMP-392: the concluded-pass marker (SL-244 `sec-4`) ----
 
-/// The marker is a **latch**: absent means not-concluded, `conclude` sets it,
-/// and concluding again is a no-op success rather than a refusal.
+/// Absent means not-concluded, `conclude` sets the marker, and a re-conclude on
+/// a set marker reports `already` — a success rather than a refusal. (Only
+/// `raise`/`reopen` clear it, SL-268 D2 — see `raise_clears_concluded`.)
 ///
 /// Both halves are asserted here because the failure mode is asymmetric — a
 /// verb that refuses the second call looks correct in the happy path and
 /// breaks exactly the caller who cannot know whether a pass was already
-/// closed, which is the caller the latch exists for.
+/// closed, which is the caller the marker exists for.
 #[test]
 fn conclude_latches_the_marker_and_is_idempotent() {
     let tmp = fixture_rv();
@@ -2507,21 +2508,21 @@ fn conclude_latches_the_marker_and_is_idempotent() {
         "absence is not-concluded — a fresh ledger carries no marker"
     );
 
-    let first = run_conclude(Some(root.to_path_buf()), "RV-001", Role::Raiser).unwrap();
+    let first = run_conclude(Some(root.to_path_buf()), "RV-001", "basis", Role::Raiser).unwrap();
     assert!(
         matches!(first, ReviewOutput::Concluded { already: false, .. }),
         "the first conclude sets the latch: {first:?}"
     );
     assert!(observe_pass(root, "RV-001").unwrap().concluded);
 
-    let second = run_conclude(Some(root.to_path_buf()), "RV-001", Role::Raiser).unwrap();
+    let second = run_conclude(Some(root.to_path_buf()), "RV-001", "basis", Role::Raiser).unwrap();
     assert!(
         matches!(second, ReviewOutput::Concluded { already: true, .. }),
         "concluding a concluded pass is a no-op, not a refusal: {second:?}"
     );
     assert!(
         observe_pass(root, "RV-001").unwrap().concluded,
-        "and the latch stays set — there is no unset"
+        "and the marker stays set — a re-conclude on a set marker reports already"
     );
 }
 
@@ -2533,7 +2534,7 @@ fn conclude_is_the_raisers_verb() {
     let tmp = fixture_rv();
     let root = tmp.path();
 
-    let err = run_conclude(Some(root.to_path_buf()), "RV-001", Role::Responder)
+    let err = run_conclude(Some(root.to_path_buf()), "RV-001", "basis", Role::Responder)
         .expect_err("the responder cannot conclude the raiser's pass");
     assert!(
         err.to_string().contains("raiser"),
@@ -2557,7 +2558,7 @@ fn conclude_leaves_open_findings_alone() {
     )
     .unwrap();
 
-    run_conclude(Some(root.to_path_buf()), "RV-001", Role::Raiser).unwrap();
+    run_conclude(Some(root.to_path_buf()), "RV-001", "basis", Role::Raiser).unwrap();
 
     let facts = observe_pass(root, "RV-001").unwrap();
     assert!(facts.concluded, "a live blocker does not block concluding");
@@ -2566,6 +2567,221 @@ fn conclude_leaves_open_findings_alone() {
         vec!["F-1".to_owned()],
         "and the finding is untouched by the pass-level act"
     );
+}
+
+// ---- SL-268 PHASE-06: conclude --basis; raise and reopen clear it (D2) ----
+
+/// The ledger's authored bytes — the single file every turn writes.
+fn ledger_bytes(root: &Path) -> String {
+    fs::read_to_string(authored_path(root, 1)).unwrap()
+}
+
+/// Conclude RV-001 and assert the marker is set — the positive control every
+/// clearing test needs, so a `false` afterwards is not vacuous.
+fn conclude_and_confirm(root: &Path, basis: &str) {
+    run_conclude(Some(root.to_path_buf()), "RV-001", basis, Role::Raiser).unwrap();
+    assert!(
+        read_doc(root, 1).review.concluded,
+        "positive control: the marker is set before the clearing act"
+    );
+}
+
+/// Re-conclude after a clear: the marker was cleared, so the report is
+/// `already: false`, and the marker is set again.
+fn reconclude_reports_not_already(root: &Path) {
+    let again = run_conclude(Some(root.to_path_buf()), "RV-001", "again", Role::Raiser).unwrap();
+    assert!(
+        matches!(again, ReviewOutput::Concluded { already: false, .. }),
+        "a re-conclude after a clear is not `already`: {again:?}"
+    );
+    assert!(read_doc(root, 1).review.concluded);
+}
+
+/// SL-268 VT-2 / EX-3: a raise on a concluded ledger clears the marker in the
+/// write that journals its turn, so the late finding makes the pass un-done.
+#[test]
+fn raise_clears_concluded() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    conclude_and_confirm(root, "examined all");
+    assert_eq!(
+        read_doc(root, 1).derived(),
+        (ReviewStatus::Done, Await::None)
+    );
+
+    run_raise(
+        Some(root.to_path_buf()),
+        &raise_args("RV-001", Severity::Minor, "late"),
+        Role::Raiser,
+    )
+    .unwrap();
+
+    // One read of the one file: the clear and the raise turn landed together.
+    let doc = read_doc(root, 1);
+    assert!(!doc.review.concluded, "the raise cleared the marker");
+    assert_eq!(doc.derived().0, ReviewStatus::Active);
+    assert_eq!(
+        turn_acts(&doc, "F-1"),
+        [("raise".to_owned(), "raiser".to_owned())]
+    );
+    assert!(
+        ledger_bytes(root).contains("concluded = false"),
+        "cleared in place, not removed (A1)"
+    );
+
+    reconclude_reports_not_already(root);
+}
+
+/// SL-268 VT-2 / EX-3: a reopen on a concluded ledger clears the marker in the
+/// write that journals its turn.
+#[test]
+fn reopen_clears_concluded() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    let p = || Some(root.to_path_buf());
+    run_raise(
+        p(),
+        &raise_args("RV-001", Severity::Major, "a"),
+        Role::Raiser,
+    )
+    .unwrap();
+    run_dispose(p(), &dispose_args("RV-001", "F-1"), Role::Responder).unwrap();
+    run_verify(p(), "RV-001", "F-1", None, Role::Raiser).unwrap();
+    conclude_and_confirm(root, "examined all");
+    assert_eq!(
+        read_doc(root, 1).derived(),
+        (ReviewStatus::Done, Await::None)
+    );
+
+    run_reopen(p(), "RV-001", "F-1", "not fixed", Role::Raiser).unwrap();
+
+    let doc = read_doc(root, 1);
+    assert!(!doc.review.concluded, "the reopen cleared the marker");
+    assert_eq!(doc.derived().0, ReviewStatus::Active);
+    assert_eq!(
+        turn_acts(&doc, "F-1").pop().unwrap(),
+        ("reopen".to_owned(), "raiser".to_owned())
+    );
+
+    reconclude_reports_not_already(root);
+}
+
+/// SL-268 A1: clearing writes only over a set marker — a raise on a
+/// never-concluded ledger adds no `concluded` line.
+#[test]
+fn raise_on_unconcluded_ledger_writes_no_concluded_key() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    assert!(!ledger_bytes(root).contains("concluded"));
+
+    run_raise(
+        Some(root.to_path_buf()),
+        &raise_args("RV-001", Severity::Minor, "a"),
+        Role::Raiser,
+    )
+    .unwrap();
+
+    let bytes = ledger_bytes(root);
+    assert!(bytes.contains("act = \"raise\""), "the raise landed");
+    assert!(!bytes.contains("concluded"), "no marker line was written");
+}
+
+/// SL-268 VT-3 / EX-2: a blank basis refuses before the lock, naming `--basis`,
+/// and leaves the ledger bytes unchanged.
+#[test]
+fn conclude_requires_basis() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    let before = ledger_bytes(root);
+    for blank in ["", "  "] {
+        let err = run_conclude(Some(root.to_path_buf()), "RV-001", blank, Role::Raiser)
+            .expect_err("a blank basis is refused");
+        assert_eq!(err.to_string(), "`conclude` requires a non-empty --basis");
+        assert_eq!(ledger_bytes(root), before, "nothing written for {blank:?}");
+    }
+    // The basis is stored verbatim (A4).
+    run_conclude(Some(root.to_path_buf()), "RV-001", " b ", Role::Raiser).unwrap();
+    let doc = read_doc(root, 1);
+    assert_eq!(doc.review.turn.last().unwrap().note.as_deref(), Some(" b "));
+}
+
+/// SL-268 VT-2, design sec-3: a conclude over open findings reaches `done` once
+/// they turn terminal — no second conclude is needed.
+#[test]
+fn conclude_then_terminal_is_done() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    let p = || Some(root.to_path_buf());
+    run_raise(
+        p(),
+        &raise_args("RV-001", Severity::Major, "a"),
+        Role::Raiser,
+    )
+    .unwrap();
+    run_conclude(p(), "RV-001", "examined all", Role::Raiser).unwrap();
+    assert_eq!(
+        read_doc(root, 1).derived(),
+        (ReviewStatus::Active, Await::Responder)
+    );
+
+    run_dispose(p(), &dispose_args("RV-001", "F-1"), Role::Responder).unwrap();
+    assert_eq!(
+        read_doc(root, 1).derived(),
+        (ReviewStatus::Active, Await::Raiser)
+    );
+
+    run_verify(p(), "RV-001", "F-1", None, Role::Raiser).unwrap();
+    assert_eq!(
+        read_doc(root, 1).derived(),
+        (ReviewStatus::Done, Await::None)
+    );
+}
+
+/// SL-268 VT-4 / EX-4 (unit half): one ledger read two ways. `derived()` moves
+/// with D2 while `PassFacts` — what the design-run gate reads — does not: an
+/// unconcluded all-terminal ledger is `Active` yet holds no undisposed blocker.
+/// A late raise clears `concluded` in `PassFacts` too, until a re-conclude.
+#[test]
+fn pass_facts_unchanged_over_unconcluded_terminal_ledger() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    let p = || Some(root.to_path_buf());
+    run_raise(
+        p(),
+        &raise_args("RV-001", Severity::Blocker, "a"),
+        Role::Raiser,
+    )
+    .unwrap();
+    run_dispose(p(), &dispose_args("RV-001", "F-1"), Role::Responder).unwrap();
+    run_verify(p(), "RV-001", "F-1", None, Role::Raiser).unwrap();
+
+    assert_eq!(
+        read_doc(root, 1).derived(),
+        (ReviewStatus::Active, Await::Raiser)
+    );
+    let facts = observe_pass(root, "RV-001").unwrap();
+    assert!(facts.undisposed_blockers.is_empty());
+    assert!(!facts.concluded);
+
+    run_conclude(p(), "RV-001", "examined all", Role::Raiser).unwrap();
+    assert_eq!(
+        read_doc(root, 1).derived(),
+        (ReviewStatus::Done, Await::None)
+    );
+    let facts = observe_pass(root, "RV-001").unwrap();
+    assert!(facts.undisposed_blockers.is_empty());
+    assert!(facts.concluded);
+
+    // Late raise: the gate's reading of `concluded` falls until a re-conclude.
+    run_raise(
+        p(),
+        &raise_args("RV-001", Severity::Minor, "late"),
+        Role::Raiser,
+    )
+    .unwrap();
+    assert!(!observe_pass(root, "RV-001").unwrap().concluded);
+    run_conclude(p(), "RV-001", "again", Role::Raiser).unwrap();
+    assert!(observe_pass(root, "RV-001").unwrap().concluded);
 }
 
 // ---- SL-244 PHASE-07: the severity summary (EX-2) ----
@@ -3361,7 +3577,7 @@ fn golden_run_list() {
 fn golden_run_status() {
     let tmp = fixture_rv();
     let root = tmp.path();
-    run_conclude(Some(root.to_path_buf()), "RV-001", Role::Raiser).unwrap();
+    run_conclude(Some(root.to_path_buf()), "RV-001", "basis", Role::Raiser).unwrap();
     let out = run_status(Some(root.to_path_buf()), "RV-001").unwrap();
     let formatted = match &out {
         ReviewOutput::Status {
