@@ -12,35 +12,31 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/review.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/review/**"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/cli.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/mcp_server/tools.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/slice.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/design.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/guard.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/doctor_checks.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/e2e_*review*.rs"
@@ -48,7 +44,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "install/review-ledger.md"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "plugins/doctrine/skills/{audit,code-review,inquisition,reconcile,close}/SKILL.md"
@@ -57,6 +53,78 @@ intent = "scope-relevant"
 [[selector]]
 selector = ".doctrine/spec/tech/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/review_ledger/**"
+intent = "design-target"
+
+[[selector]]
+selector = "src/input.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/show.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/catalog/scan.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/partition.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/relation.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/kinds/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_review_golden.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/design-prompts/reviewing.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/audit/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/code-review/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/inquisition/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/reconcile/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/close/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/plan/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/walkthrough/SKILL.md"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"

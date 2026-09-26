@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dcd8-2185-7733-842a-ffbed58afa1a"
+recorded_at = "2026-09-26T08:32:27.01310065Z"
+kind = "friction"
+summary = "[design; SL-268] design materialise orders sections lexically: sec-10 renders before sec-2"
+detail = "DesignId derives Ord over its string (src/design_run/ids.rs:157), so a design with more than nine sections materialises sec-1, sec-10, sec-11, sec-12, sec-2… The contract exposes no order key and no section removal, so the workaround was to reassign bodies to ids so lexical order reads correctly, remapping every cross-reference by hand. Fix: numeric ordering on the sec- suffix, or an explicit order."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
