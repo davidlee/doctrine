@@ -1,0 +1,32 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 33
+slug = "learning-surface-corpus-format-publication"
+title = "Learning surface: corpus unification, format, and publication"
+status = "open"
+created = "2026-09-26"
+updated = "2026-09-26"
+tags = ["corpus", "docs", "memory", "onboarding", "publication"]
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "RFC-017"
+
+[[relation]]
+label = "related"
+target = "ADR-005"
+
+[[relation]]
+label = "related"
+target = "SL-144"
+
+[[relation]]
+label = "related"
+target = "SL-242"
+
