@@ -1,0 +1,22 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 488
+slug = "promote-doctrine-search-in-agent-facing-guidance-and-document-its-scope"
+title = "Promote doctrine search in agent-facing guidance and document its scope"
+kind = "improvement"
+status = "resolved"
+resolution = "fixed"
+created = "2026-09-26"
+updated = "2026-09-26"
+tags = ["area:agents", "area:cli", "area:docs", "area:skills"]
+
+# outbound-only. Cross-kind structural edges (e.g. references with a role
+# — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
+# uniform `[[relation]]` rows — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
