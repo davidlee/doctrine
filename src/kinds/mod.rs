@@ -91,10 +91,11 @@ pub(crate) const VALUE_BEARING: &[&str] = &[SL, ISS, IMP, CHR, RSK, IDE];
 /// context-only, no diagnostic.
 pub(crate) const STATUS_LESS: &[&str] = &[REC];
 
-/// Kinds whose status is DERIVED above the tier an engine-tier reader can reach
-/// (`RV` — `review::derived_status_string` reads the finding ledger at command
-/// tier). A reader below that tier can only report the gap, never the status
-/// (SL-238 §3, DEC-233).
+/// Kinds whose status is DERIVED from an authored ledger rather than
+/// authored. RV's derivation is engine-tier (`review_ledger::derive`); the
+/// engine probe (`authored_status::read`) does not call it yet, so the probe
+/// reports Unavailable, and this arm retires with D14 (RFC-032 slice 2).
+/// SL-238 §3, DEC-233, DEC-318.
 pub(crate) const DERIVED_STATUS: &[&str] = &[RV];
 
 /// What an entity's authored status is, as far as the kind vocabulary and an
@@ -508,10 +509,11 @@ mod tests {
     }
 
     /// SL-238 §3: the two kind sets the per-kind status reader dispatches on are
-    /// pinned. `DERIVED_STATUS` names the kinds whose status is derived ABOVE the
-    /// tier an engine-tier reader can reach, and `STATUS_LESS` the kinds that
-    /// author no status at all. A future kind that derives its status and is not
-    /// added must fail here rather than degrade quietly into a status the reader
+    /// pinned. `DERIVED_STATUS` names the kinds whose status is derived, not
+    /// authored; the probe does not call the engine-tier derivation yet, and
+    /// this arm retires with D14. `STATUS_LESS` names the kinds that author no
+    /// status at all. A future kind that derives its status and is not added
+    /// must fail here rather than degrade quietly into a status the reader
     /// cannot see. The behavioural half of the pin is `catalog::scan`'s overlay
     /// test — one reader, so the set binds what every caller does.
     #[test]
@@ -519,7 +521,8 @@ mod tests {
         assert_eq!(
             DERIVED_STATUS,
             &[RV],
-            "a kind whose status is derived above engine tier must be listed here"
+            "a kind whose status is derived rather than authored must be \
+             listed here until D14 retires the arm"
         );
         assert_eq!(
             STATUS_LESS,

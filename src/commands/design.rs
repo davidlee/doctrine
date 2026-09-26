@@ -2591,7 +2591,7 @@ fn project(
 /// means *nothing outstanding*. So where the run names a pass Doctrine cannot
 /// read, this errors naming the reference rather than borrowing the spelling of
 /// good news. This is the one path that diverges from the gate's, which reads the
-/// same failure as refusal through `review::observe_pass`.
+/// same failure as refusal through `review_ledger::observe_pass`.
 fn outstanding_by_severity(root: &Path, run: &DesignSnapshot) -> Result<OutstandingBySeverity> {
     let Some(pass) = run.review.pass.as_ref() else {
         return Ok(OutstandingBySeverity::default());
