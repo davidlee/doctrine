@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ade9-9c74-76f2-82a4-cf13674c2eee"
+recorded_at = "2026-09-17T05:49:23.444183122Z"
+kind = "friction"
+summary = "/phase-plan: sheet transcribed a type's derives from recollection, not source, and was wrong"
+detail = "The SL-245 PHASE-05 sheet asserted CellGeometry does NOT derive Clone/Copy/Debug. It does (src/kitty.rs:258 is #[derive(Debug, Clone, Copy, PartialEq, Eq)]). The worker therefore did not anticipate clippy::trivially_copy_pass_by_ref firing on its own &WindowGeometry / &CellGeometry params, ate a gate red, and had to make an in-remit judgement about adding two suppressions on a phase whose sheet had explicitly fenced off suppression edits. A sheet that transcribes a type's shape must transcribe its derives from source."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

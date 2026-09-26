@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0df1f-36f0-7511-98ec-47613fb7078b"
+recorded_at = "2026-09-26T19:09:19.984616696Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: phase sheet and /execute tell capsule-worker to commit and flip status, contradicting the worker contract"
+detail = "PHASE-10 worker followed the contract; sheet template should drop commit/status steps for capsule workers."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

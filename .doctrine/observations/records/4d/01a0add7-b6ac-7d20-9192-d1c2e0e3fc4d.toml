@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0add7-b6ac-7d20-9192-d1c2e0e3fc4d"
+recorded_at = "2026-09-17T05:29:50.508378746Z"
+kind = "friction"
+summary = "/phase-plan: 'doctrine memory retrieve' returns uid/title/trust only, forcing a second 'memory show' per candidate"
+detail = "Distilling memory into a phase sheet is the planner's core job, but retrieve returns no body and no snippet, so judging relevance costs one 'memory show' round trip per candidate. The SL-245 PHASE-05 planner estimated a --snippet or body-in-retrieve mode would cut roughly half the token cost of the phase-plan step."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

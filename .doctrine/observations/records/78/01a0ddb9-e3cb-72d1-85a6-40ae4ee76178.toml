@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ddb9-e3cb-72d1-85a6-40ae4ee76178"
+recorded_at = "2026-09-26T12:39:02.347371254Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: PHASE-03 sheet split tranches by tier, not by reader, stranding engine fields whose only readers were in tranche B"
+detail = "PassFacts.defects and derived_status_string's defect return had readers only in tranche B (design-run print, catalog scan); adding them in tranche A would need an expect(dead_code) or a silent drop (STD-003). Worker deferred them. Split tranches by reader."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

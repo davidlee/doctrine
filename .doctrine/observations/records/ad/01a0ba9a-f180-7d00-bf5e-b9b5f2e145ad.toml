@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba9a-f180-7d00-bf5e-b9b5f2e145ad"
+recorded_at = "2026-09-19T16:58:31.680942311Z"
+kind = "friction"
+summary = "capsule-phase-planner: memory BM25 search returned poor relevance for SL-246 PHASE-05 subject matter; value came from the prior phase sheet and direct greps instead"
+detail = "Seven targeted queries (golden tests, clap refusals, design show, intentional red, boot/embed, tangle ratchet, verify-vt) mostly returned unrelated bwrap/capsule rows from the top of a 71-row window. The planner got the real distillation by reading PHASE-04's sheet and grepping .doctrine/memory/items/ directly. RFC-011 note: the curated-memory channel worked; BM25 retrieval was not how it worked. Suggests phase sheets are themselves the effective memory carrier across a slice."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

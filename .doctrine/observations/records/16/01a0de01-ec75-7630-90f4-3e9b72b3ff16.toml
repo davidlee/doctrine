@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0de01-ec75-7630-90f4-3e9b72b3ff16"
+recorded_at = "2026-09-26T13:57:43.157720567Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: e2e_observation flaky BrokenPipe fails gate"
+detail = "doctrine check gate failed once on tests/e2e_observation.rs:102 record_input_cannot_be_combined_with_the_per_field_flags with 'write stdin: Broken pipe' (child exits before the test writes stdin). Passed 3/3 in isolation; untouched by the SL-268 diff. Costs a full gate rerun (>2 min). Test should tolerate EPIPE on stdin write."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

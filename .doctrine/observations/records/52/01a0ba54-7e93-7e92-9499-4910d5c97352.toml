@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba54-7e93-7e92-9499-4910d5c97352"
+recorded_at = "2026-09-19T15:41:34.73985328Z"
+kind = "friction"
+summary = "/phase-plan: no way to read ONE phase entry from a slice plan, so every phase planner greps and seds plan.toml"
+detail = """Reported by the SL-246 PHASE-04 capsule-phase-planner and independently true for PHASE-03's. A phase planner's whole job is to expand ONE authored phase, but there is no structured per-phase read: 'doctrine slice plan <ID>' emits the whole plan and 'doctrine slice show' excludes it. Extracting PHASE-04's entry meant grep -n 'id        = "PHASE-0' for line numbers then sed -n on a range - i.e. reading authored TOML raw, against the boot guardrail, and matching on incidental whitespace in the key alignment. Compounded by python3 being absent from the jail (only perl/sed/awk), so the obvious scripted extraction failed too. Every phase planner on every slice pays this. A 'doctrine slice phase show <ID> <PHASE>' read verb would remove it."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

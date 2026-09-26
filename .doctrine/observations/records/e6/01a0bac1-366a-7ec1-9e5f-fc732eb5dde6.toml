@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bac1-366a-7ec1-9e5f-fc732eb5dde6"
+recorded_at = "2026-09-19T17:40:19.690859612Z"
+kind = "friction"
+summary = "capsule-orchestrator: doctrine slice record-delta's usage line is self-contradictory — it lists --commit, --start and --end as all required, then refuses --commit combined with either"
+detail = "Running 'doctrine slice record-delta SL-246' printed: 'error: the following required arguments were not provided: --end <END> --start <START> <PHASE>' with usage 'record-delta --commit <COMMIT> --end <END> --start <START> <ID> <PHASE>'. Supplying all three then failed with 'the argument --commit cannot be used with: --start, --end'. So the usage string demands a combination the parser rejects. --commit alone is what works. Cost: two wasted round trips at exactly the point an orchestrator is discharging verification, and the error text actively misleads toward the invalid form. The clap groups should be expressed as an either/or in the usage line."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

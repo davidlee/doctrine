@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0add7-ad79-7b42-9714-286c8397519e"
+recorded_at = "2026-09-17T05:29:48.153210936Z"
+kind = "friction"
+summary = "/phase-plan: 'doctrine memory retrieve' takes --query, not a positional, and its error does not name the flag"
+detail = "A capsule-phase-planner on SL-245 PHASE-05 invoked 'doctrine memory retrieve <text>' and got 'unexpected argument ... found' with no mention of --query, costing a round trip. Compounding it, /phase-plan step 3 instructs 'run /retrieve-memory', which a subagent cannot invoke, so every subagent planner must rediscover the CLI shape by trial. Either the error should name --query, or retrieve should accept a positional query."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

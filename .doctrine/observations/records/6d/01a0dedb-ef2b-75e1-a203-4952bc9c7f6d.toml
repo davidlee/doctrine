@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dedb-ef2b-75e1-a203-4952bc9c7f6d"
+recorded_at = "2026-09-26T17:55:50.699889475Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: phase sheet told worker to memory edit while orchestrator settled supersede"
+detail = "PHASE-09 T1: sheet and orchestrator brief disagreed on memory repair method; cost a reconciliation step."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

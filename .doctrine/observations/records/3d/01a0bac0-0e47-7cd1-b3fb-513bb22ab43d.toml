@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bac0-0e47-7cd1-b3fb-513bb22ab43d"
+recorded_at = "2026-09-19T17:39:03.879493523Z"
+kind = "friction"
+summary = "capsule-worker: the record-delta then verify-vt ritual is unreachable to a worker by construction — record-delta requires --commit <sha> and a capsule worker must not commit"
+detail = "Phase sheets (and the /execute-shaped ritual they inherit) instruct the implementer to run record-delta then verify-vt then grep. In the capsule split the worker hands back an UNCOMMITTED delta, so it has no sha and cannot run step 1; step 2 then reports UNATTRIBUTABLE for every row because file-in-delta is tested before keyword. Only the grep step is actually the worker's. The pair belongs to the orchestrator, after the commit. Sheets should route it there explicitly rather than leaving the worker to discover the verb is closed to it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

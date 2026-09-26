@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0badb-e546-7472-a3ac-694849a24ec7"
+recorded_at = "2026-09-19T18:09:28.390332757Z"
+kind = "friction"
+summary = "capsule-orchestrator: SL-246 PHASE-06 surfaced THREE tests pinning the retiring slice design verb through mechanisms no symbol grep can see — the whitelist should have been a predicate, not a file list"
+detail = "design.md 5.6's intentional-red whitelist named three LOCATIONS. Deleting SliceCommand::Design produced casualties in two further files it never grepped: src/main.rs::write_class_tests::slice_split (pins the guard classification via argv -> clap -> write_class, where the variant appears only as the string literal 'design' in an argv array) and tests/e2e_boot_map_golden.rs::boot_map_sublines_a_command_with_distinctive_verbs (asserts a verb list that cli.rs::distinctive() computes dynamically by introspecting clap). Three discovery habits are each independently blind to these: grepping tests/ for the symbol misses them (it is a string, or not present at all); grepping src/ for the symbol misses the cfg(test) module and the dynamic list; and cargo build misses both because test-only code is not compiled and the dynamic list is computed at runtime. The ONLY reliable enumerator is running the full test suite. Practical fix that worked: instead of respawning once per discovered red, I ran 'cargo test -p doctrine --no-fail-fast' to enumerate ALL casualties at once (exactly one remained), then ruled on them in a single pass. A whitelist expressed as a PREDICATE — 'any test asserting the retiring surface exists' — would have covered all five sites; a file list covered three. Cost: two worker halts and two respawn cycles."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

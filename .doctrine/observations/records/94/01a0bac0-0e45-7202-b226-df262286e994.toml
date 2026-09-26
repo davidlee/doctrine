@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bac0-0e45-7202-b226-df262286e994"
+recorded_at = "2026-09-19T17:39:03.877216234Z"
+kind = "friction"
+summary = "capsule-worker: SL-246 EX-1 (envelope bytes unchanged) and EX-7 (migrate emitted strings) are in direct tension and neither criterion mentions the other"
+detail = "delta_unavailable_line is emitted INSIDE the prompt rendering, so EX-7's re-pointing of 'design show --full' to 'design show --format prompt --full' necessarily moves bytes that EX-1 calls byte-for-byte unchanged. The phase sheet said both 'these four edits should red nothing' and 'capture the prior bytes and assert equality' — both true, jointly unsatisfiable naively. The worker resolved it by holding pre-change bytes and applying the EX-7 substitution as two named constants, asserting the substitution applied in both directions before comparing, so the golden pins I1 AND observes EX-7 and cannot go vacuously true. Real cost: this was the phase's hardest reasoning step, and the cheap wrong move (recapture post-change) silently destroys I1's evidence forever while looking like a passing test. Criteria that constrain the same bytes in opposite directions should cross-reference each other."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

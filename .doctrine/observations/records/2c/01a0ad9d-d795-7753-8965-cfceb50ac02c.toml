@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ad9d-d795-7753-8965-cfceb50ac02c"
+recorded_at = "2026-09-17T04:26:37.845329454Z"
+kind = "friction"
+summary = "phase-plan: doctrine memory retrieve has no positional query arg, costing failed calls"
+detail = """A capsule-phase-planner working SL-245 PHASE-02 followed the documented/suggested form 'doctrine memory retrieve "<topic>"' and got 'error: unexpected argument'. The CLI accepts only flags (--query / --path-scope / etc). Cost a couple of failed invocations before the agent fell back to --help. Either the skill text that suggests the positional form should be corrected, or retrieve should accept a positional query as sugar."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

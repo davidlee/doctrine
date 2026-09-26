@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bac0-64b8-7033-b93b-0797b015dc31"
+recorded_at = "2026-09-19T17:39:26.008499061Z"
+kind = "friction"
+summary = "capsule-orchestrator: design.md 5.6's touch-set missed src/design_run/gate.rs, because OQ-1 was drafted on a revision-comparison model of staleness the engine does not implement"
+detail = "PHASE-05 EX-5 mandates a stale_run disclosure. Satisfying it without breaching STD-001 required deriving from the engine's OWN staleness predicate, so materialisation_stale was extracted from gate.rs::satisfied's EngineSource::Materialisation arm (pure extraction: body and comment move verbatim, satisfied calls it, gate behaviour unchanged) and is now shared by Cause::MaterialisationStale and design show's document arm. gate.rs appears in no SL-246 selector; I declared it design-target with a note. Root cause worth carrying to reconcile: OQ-1 and EX-5 assume staleness is a comparison of two revisions, so they predicted no engine edit at all. The engine actually implements fingerprint identity (watermark vs authored_fingerprint). That single mis-modelling produced BOTH this missing touch-set row AND EX-5's document_revision key being structurally null in every case it can ever fire on."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

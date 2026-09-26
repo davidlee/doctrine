@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dea8-6943-73e2-822c-6b07bf2eace1"
+recorded_at = "2026-09-26T16:59:34.083703723Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: capsule-worker used git stash despite the no-stash rule"
+detail = "PHASE-07 T3 worker (sonnet) ran git stash on the main worktree to confirm pre-existing clippy denials on the base commit, then popped it. No loss (stash list empty, tree intact), but the rule in AGENTS.md was not honoured; worker prompts should restate 'use git show / a scratch worktree, never stash'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

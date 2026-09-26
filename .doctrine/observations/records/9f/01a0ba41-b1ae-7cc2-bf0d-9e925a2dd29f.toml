@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba41-b1ae-7cc2-bf0d-9e925a2dd29f"
+recorded_at = "2026-09-19T15:21:02.638708054Z"
+kind = "friction"
+summary = "/phase-plan: a sheet recommendation the worker is asked to decide should be marked open, not recommended"
+detail = "Reported by the SL-246 PHASE-03 capsule-worker, as a counterweight to an otherwise excellent sheet (it opened the 3400-line design.md zero times, as intended - the format_metadata index-3-or-4 trap, the vacuous-all() ordering, the EVD-under-Only(Argument) discriminator and the pre-verified 6744-byte figure all saved real cost). The sheet's D-i RECOMMENDED a two-variant entry header while simultaneously requiring the worker to choose the spelling and record it. The worker chose one variant instead - the better call, and the orchestrator upheld it - but reported feeling friction deviating from something framed as a recommendation. If a phase sheet delegates a decision to the worker, it should present the options as OPEN with the tradeoff, not as a recommendation the worker must then argue against."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

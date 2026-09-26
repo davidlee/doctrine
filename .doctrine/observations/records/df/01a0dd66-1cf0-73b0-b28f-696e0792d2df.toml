@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dd66-1cf0-73b0-b28f-696e0792d2df"
+recorded_at = "2026-09-26T11:07:31.95214655Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: PHASE-02 'tests/ byte-identical' gate conflicts with a path-keyed allowlist test"
+detail = "tests/e2e_estimate_non_blocking.rs ALLOWLIST names 'review.rs' by path; EX-1 deletes src/review.rs, so EX-6/VA-1 (tests/ unchanged) cannot hold. Plan-time grep of tests/ for .rs path strings would have caught it before lock. Orchestrator adapted: one sanctioned allowlist edit."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

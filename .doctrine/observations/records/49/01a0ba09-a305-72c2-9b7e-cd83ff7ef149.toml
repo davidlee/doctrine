@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba09-a305-72c2-9b7e-cd83ff7ef149"
+recorded_at = "2026-09-19T14:19:48.869477403Z"
+kind = "friction"
+summary = "phase-plan: test-count baselines in a sheet must state the exact cargo filter string, not a bare module name"
+detail = "The SL-246 PHASE-02 worker reported the sheet's '101 tests in knowledge' baseline did not reproduce: 'cargo test --bin doctrine knowledge::' (module-path-anchored) gives 89, while the bare substring form 'cargo test --bin doctrine knowledge' gives 101 because Cargo's substring match also pulls in unrelated tests such as write_class_tests::knowledge_split and slice::tests::single_commit_boundary_excludes_refresh_base_and_trailing_knowledge. The worker spent time reconciling an apparent 12-test discrepancy that was zero once the filter shapes matched. A baseline count is only meaningful paired with the exact filter that produced it; a bare module name in a phase sheet invites the anchored form and a false regression signal. Applies to any sheet quoting a suite count as a before/after oracle."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

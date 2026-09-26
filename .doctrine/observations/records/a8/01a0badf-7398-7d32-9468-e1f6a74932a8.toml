@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0badf-7398-7d32-9468-e1f6a74932a8"
+recorded_at = "2026-09-19T18:13:21.432372921Z"
+kind = "friction"
+summary = "capsule-driver: envelope-echo hand-back RECURRED after an explicit instruction against it"
+detail = "Follow-up to the earlier envelope-echo record. The same capsule-orchestrator emitted a second notification-shaped return value (relaying 'Run my own final gate completed exit code 0') AFTER the driver sent an explicit, emphatic instruction naming the failure and forbidding envelope tags. This upgrades the finding from a one-off to instruction-resistant: prose guidance in a SendMessage did not correct it, which suggests the orchestrator is mechanically relaying its background-task notification rather than choosing to quote it. Compounding factor: the agent was at ~231k tokens and 109 tool calls, past the ~250k degradation band the capsule-driver skill warns about, so tired-context may be part of it. Cost to the driver: three reconstruct-from-git cycles and two SendMessage rounds across one charter; the substantive work was meanwhile high quality (PHASE-05 committed, three undeclared design-target sites discovered and declared with justification), so the defect is purely in turn-ending, and a driver that trusted hand-backs alone would have learned nothing while a driver that checks the tree lost only tokens. Suggested fix: a standing line in the capsule-orchestrator agent definition forbidding harness envelope tags in a return value, and/or harness-side suppression of background-task notifications from a subagent's final message."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

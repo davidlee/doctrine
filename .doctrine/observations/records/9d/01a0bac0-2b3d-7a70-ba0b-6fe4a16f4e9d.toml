@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bac0-2b3d-7a70-ba0b-6fe4a16f4e9d"
+recorded_at = "2026-09-19T17:39:11.293669133Z"
+kind = "friction"
+summary = "capsule-worker: the STD-003 stderr disclosure for an unparseable design-run snapshot is multi-line and reads badly"
+detail = "On the design show document arm, when the run snapshot exists but will not parse, the disclosure inlines the whole indented TOML parse error and then trails ' — the design document renders without its run disclosure'. Honest and STD-003-compliant (the degraded read is disclosed, the document still renders), but the shape is hard to read at a terminal. A one-line summary form with the detail behind a flag would serve the reader better. Cosmetic, not a defect; noted so it is not rediscovered."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

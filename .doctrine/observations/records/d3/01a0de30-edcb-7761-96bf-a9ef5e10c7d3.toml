@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0de30-edcb-7761-96bf-a9ef5e10c7d3"
+recorded_at = "2026-09-26T14:49:03.691825875Z"
+kind = "friction"
+summary = "capsule-worker SL-268 PHASE-05: worker ran ~400k tokens, over the 250k bound"
+detail = "Sonnet worker for PHASE-05 (amend/reopen/closed disposition+route, ~1580-line diff over 14 files incl. golden + MCP) used 397k subagent tokens and 226 tool uses. Phase planner estimated medium; a phase touching CLI, ledger, MCP and golden at once should be tranched across two workers (by reader) to stay under budget. Worker also noted the sheet's exhaustive expected-test-changes list omitted an assertion mentioned only in the reading list."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

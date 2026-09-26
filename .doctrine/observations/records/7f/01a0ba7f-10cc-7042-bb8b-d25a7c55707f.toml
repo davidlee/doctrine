@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba7f-10cc-7042-bb8b-d25a7c55707f"
+recorded_at = "2026-09-19T16:28:04.684189345Z"
+kind = "friction"
+summary = "/execute: doctrine check commit takes 2-3 minutes and exceeds the default foreground command timeout"
+detail = "Reported by the SL-246 PHASE-04 capsule-worker and independently true for the orchestrator's check gate. 'doctrine check commit' proxies just check = fmt lint lint-js build validate test, i.e. a rebuild plus the full root-package suite, and runs 2-3 minutes wall-clock. That exceeds the 120s default foreground timeout, so the worker's first invocation was killed and it had to re-issue as a background task with a poll loop. Phase sheets that budget 'one check commit before hand-back' as a cheap closing beat are mispricing it. Worth stating in the sheet template that check commit and check gate are background-task-only, with the poll shape given, so every worker does not rediscover it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

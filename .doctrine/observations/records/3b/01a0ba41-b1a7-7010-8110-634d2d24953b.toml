@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba41-b1a7-7010-8110-634d2d24953b"
+recorded_at = "2026-09-19T15:21:02.631870496Z"
+kind = "friction"
+summary = "/execute: a mutation beat can report a false green when the mutation silently failed to apply"
+detail = '''Reported by the SL-246 PHASE-03 capsule-worker (no broker; recorded by the orchestrator). The worker ran a five-mutation battery to recover discriminating red after deny(unused) collapsed per-task red/green into one compile point. Two mutations failed to APPLY because 'perl -0777 s{...}{...}' mis-parses Rust replacement text containing braces, and \Q...\E literalises the backslash in \n so a heredoc-quoted pattern does not match what it visually appears to match. One of them reported MUTATION DID NOT APPLY. Had the worker not grepped to confirm application before reading the test result, an unapplied mutation would have read as 'the mutation reds nothing' - i.e. as a non-discriminating fixture, which is exactly the false signal mem_019fe1653d817712904d6cb2381f85f8 warns about, arriving with the opposite cause. THE DURABLE RULE: a mutation beat must assert the mutation actually applied before reading the test result. Worth recording as a memory.'''
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

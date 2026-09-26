@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0adcb-429f-7fe0-b4bb-774f34764f21"
+recorded_at = "2026-09-17T05:16:14.367851444Z"
+kind = "friction"
+summary = "plan: SL-245 PHASE-03 VT-5 mandates a keyword its own named input cannot produce"
+detail = "VT-5 names input vec![0; 5000] and requires the keyword 'm=1,q=2'. 5000 bytes base64-encode to 6668 bytes, i.e. exactly TWO 4096-byte chunks, whose continuation is the LAST chunk and therefore reads 'm=0,q=2'. No middle continuation exists, so 'm=1,q=2' is unobservable in that case. The worker kept the vec![0; 5000] test verbatim and added a second test over vec![0; 7000] (9336 base64 bytes, three chunks) where the keyword is actually observable. The plan row as authored is not self-consistent; criteria ids are immutable so this needs an appended correction at reconcile, not an edit."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba03-bb7a-7a03-a918-56557a5d36c5"
+recorded_at = "2026-09-19T14:13:21.91406494Z"
+kind = "friction"
+summary = "knowledge edit: comma-separated list flags split prose mid-sentence with no escape documented"
+detail = "Authoring DEC-274 via 'doctrine knowledge edit decision --alternatives / --consequences', the comma-separated parsing split my list items at every comma INSIDE a sentence, producing fragments like ' which is normal' and ' so it retains its power' as separate list entries. The flag help says '(comma-separated; bare flag clears)' but documents no escape, so any list item containing ordinary English punctuation is mangled. The mangling is silent and only visible on read-back. I worked around it by rewriting every clause to avoid internal commas, which distorts the prose to satisfy the parser. For a facet field whose content is argued prose -- alternatives and consequences on a DEC are exactly that -- comma-splitting is the wrong delimiter. Either document an escape, support a repeatable flag (--alternatives X --alternatives Y), or accept stdin-fed items. Cost: one full rewrite of two fields plus a read-back to notice."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

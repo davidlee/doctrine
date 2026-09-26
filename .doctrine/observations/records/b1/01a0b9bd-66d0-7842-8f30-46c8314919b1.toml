@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b9bd-66d0-7842-8f30-46c8314919b1"
+recorded_at = "2026-09-19T12:56:32.720623568Z"
+kind = "friction"
+summary = "phase-plan: memory --path-scope and subject scoping missed the hazards that mattered; lint/test vocabulary search found them"
+detail = "Planning SL-246 PHASE-01 (src/knowledge.rs facet render collapse), 'doctrine memory retrieve --path-scope src/knowledge.rs' returned nothing about knowledge or facets. The three memories that actually shaped the phase sheet — dead-code reported at the outermost item so an expect() must sit at enum not variant level, 'unused = deny' collapsing TDD into one compile point, and the additive-widening one-input-two-readings test shape — were all found by 'memory search' on LINT and TEST vocabulary, not by path or subject scope. The corpus was well stocked on the phase's real hazards; the scope probes were the wrong index into it. Suggests path-scope is indexed on something other than the hazards a phase touching that path will hit."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

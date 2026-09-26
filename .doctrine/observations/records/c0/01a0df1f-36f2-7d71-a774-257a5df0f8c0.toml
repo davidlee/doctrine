@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0df1f-36f2-7d71-a774-257a5df0f8c0"
+recorded_at = "2026-09-26T19:09:19.98667462Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: pgrep -f polling of gate matched the polling shell itself"
+detail = "PHASE-10 worker: reported gate RUNNING ~20 min after it finished; poll a log/PID file instead."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

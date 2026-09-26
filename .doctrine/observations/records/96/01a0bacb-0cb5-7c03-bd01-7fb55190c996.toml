@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bacb-0cb5-7c03-bd01-7fb55190c996"
+recorded_at = "2026-09-19T17:51:04.373051816Z"
+kind = "friction"
+summary = "capsule-orchestrator: SL-246 PHASE-06's EX-1 enumerates three symbols but the tree's unused=deny makes their private call-graph tail mandatory to delete, and no criterion asks for that sweep"
+detail = "EX-1 names SliceCommand::Design, scaffold_design_doc and run_deprecated_slice_design. Tracing one level further: scaffold_design_doc calls entity::materialise(&DESIGN_KIND, design_scaffold, ..); design_scaffold calls render_design; run_deprecated_slice_design is the sole consumer of DESIGN_DEPRECATION_NOTICE. Verified by grep that none of those four has any surviving production caller. Cargo.toml:230 sets unused = { level = deny } so each becomes a HARD BUILD FAILURE, not a warning — meaning EX-5's 'gate green with NO suite red' cannot be satisfied without deleting them, yet EX-1 does not name them. Four unit tests in src/slice.rs (:3644, :3725, :3780, :3810) exercise only that chain and go with it, by EX-4's own reasoning. Structural lesson: a deletion phase needs an explicit transitive-private-closure sweep as a step, because a touch-set enumerated as files-and-public-symbols cannot express 'private helper reachable only from a dying symbol'. Ruled: delete the chain — determinable intent, since EX-1's 'and with it' already implies the private closure and the design's 'nothing more' constrains feature scope, not dead-code hygiene."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

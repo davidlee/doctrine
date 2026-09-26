@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ded3-f47d-72e2-8c96-60c8c2f8355b"
+recorded_at = "2026-09-26T17:47:07.773389357Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: PATH and dev doctrine binaries both report 0.45.0"
+detail = "PHASE-09 planner: --version cannot distinguish the nix PATH binary (lacks SL-268 verbs, embeds old install/) from ./target/debug/doctrine; running install/boot from PATH would re-project stale guidance."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

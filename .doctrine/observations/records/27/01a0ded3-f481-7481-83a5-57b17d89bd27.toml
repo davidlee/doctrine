@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ded3-f481-7481-83a5-57b17d89bd27"
+recorded_at = "2026-09-26T17:47:07.777277126Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: review verbs refuse linked-worktree forks, undocumented in dispatch guidance"
+detail = "PHASE-09 planner found resolve_review_root refuses non-primary, non-dispatch trees only by reading source; phase template and dispatch docs don't mention it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

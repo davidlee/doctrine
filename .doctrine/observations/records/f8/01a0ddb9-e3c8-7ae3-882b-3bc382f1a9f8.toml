@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ddb9-e3c8-7ae3-882b-3bc382f1a9f8"
+recorded_at = "2026-09-26T12:39:02.344598832Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: harness 'file changed on disk since last read' noise after worker's own sed/cargo fmt edits"
+detail = "PHASE-03 tranche A worker repeatedly had to check whether another agent was editing the tree after its own sed and cargo fmt rewrites triggered stale-read warnings."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ade9-b56d-7ae2-80c0-d6c9274c49d2"
+recorded_at = "2026-09-17T05:49:29.837597918Z"
+kind = "friction"
+summary = "A module-level #![allow(dead_code)]'s reason line is not its scope — inventories of what a blanket hides are wrong by construction"
+detail = "SL-245 PHASE-05's suppression inventory enumerated the items each blanket NAMED in its reason string, and was complete by that measure. But a module-level #![allow(dead_code)] covers the whole module, so kitty.rs's blanket was also hiding DA1_REQUEST, a private const with no production reader that no reason line mentioned. It only became visible when the blanket was deleted and the module recompiled. The general lesson: the set of items a blanket hides is discoverable only by removing it, never by reading it, so any plan that budgets for a blanket removal must budget for unknown residue too. Worth promoting to a memory beside mem_019fab1f3de77403adfe1487790e6d53 (suppression scopes)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

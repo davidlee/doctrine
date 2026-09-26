@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0defa-7bab-7ce1-b622-f5c0fcfef3f1"
+recorded_at = "2026-09-26T18:29:12.747553378Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: no revision change remove; a wrong change row cannot be undone via CLI"
+detail = "PHASE-10 planner: sheet must tell the worker to stop rather than hand-edit TOML on a mistaken change add."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

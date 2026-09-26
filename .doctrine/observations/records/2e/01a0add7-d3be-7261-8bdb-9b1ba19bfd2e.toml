@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0add7-d3be-7261-8bdb-9b1ba19bfd2e"
+recorded_at = "2026-09-17T05:29:57.950809335Z"
+kind = "friction"
+summary = "layering.toml's '-- leaf (45) --' section header count is hand-maintained and already drifted"
+detail = "Observed while planning SL-245 PHASE-05. The leaf-section header in .doctrine/adr/001/layering.toml carries a hand-written count; SL-245 PHASE-02 and PHASE-03 each bumped it by hand and nothing gates it. A grep count of leaf rows now returns 49 against a header saying 45, so the comment is already approximate. Latent drift: either gate the count or drop it. Backlog chore, not SL-245 work."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

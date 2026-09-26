@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b9b5-3056-7843-bf5a-b4931dd97c14"
+recorded_at = "2026-09-19T12:47:34.486448768Z"
+kind = "friction"
+summary = "capsule-driver PHASE-01 VA-1 positive control: the criterion's predicted count of per-kind facet enumerations was wrong about the tree"
+detail = "SL-246 PHASE-01 VA-1 says 'the same grep must find three at the phase's branch point (the authored rows, format_facet's match, facet_json's match)'. A naive grep for facet field names in src/knowledge.rs finds SIX per-kind sites at the branch point, not three: the three VA-1 names, plus cfg(test)-gated render_facet (on-disk TOML round-trip emit), KnowledgeFacetEdit::raw_edits (CLI edit write dispatch), and SettleArgs::captures (argv->capture mapping). The extra three are different concerns and out of scope, so the criterion is discharge-able once the grep is narrowed to the show/render path the criterion itself names — but the orchestrator has to derive that narrowing before the positive control means anything, and a less careful reader either escalates a false conflict or collapses write-dispatch code it should not touch. Cost: ~6 extra tool calls reading each site to classify it. A VA criterion that predicts a grep COUNT should state the grep."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

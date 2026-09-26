@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba84-12f9-7260-baac-c7c0d3d30c4a"
+recorded_at = "2026-09-19T16:33:32.921063992Z"
+kind = "friction"
+summary = "/execute: python3 absent from the jail keeps costing capsule workers a round-trip on structured source edits"
+detail = "Third independent occurrence in one charter: the SL-246 PHASE-03 worker, the PHASE-04 T4 cleanup worker, and the orchestrator itself all reached for python3 and all failed. Only perl, sed and awk are present. Each agent lost a round-trip discovering it and then fell back to sed -i line-splicing or a perl program - for Rust source edits that is a strictly worse tool than the one they reached for, and for the orchestrator (which holds no Edit/Write) it meant writing a 25-line perl program to change two TOML strings. The jail's environment notes in AGENTS.md describe what is mounted readonly and tell an agent to STOP and ask if something is missing, but do not say which scripting interpreters exist. One line naming perl/sed/awk as the available set, and python3 as absent, would end this."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

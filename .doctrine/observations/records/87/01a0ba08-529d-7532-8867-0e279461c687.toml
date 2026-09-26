@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba08-529d-7532-8867-0e279461c687"
+recorded_at = "2026-09-19T14:18:22.749543491Z"
+kind = "friction"
+summary = "gate: e2e_observation stdin test is BrokenPipe-flaky under full-suite parallelism, which fires the C1 alarm spuriously"
+detail = "During SL-246 PHASE-02's closing gate, tests/e2e_observation.rs::record_input_cannot_be_combined_with_the_per_field_flags failed with 'write stdin: Os { code: 32, kind: BrokenPipe }' at tests/e2e_observation.rs:102. Re-run in isolation it passes 3/3. The test writes to the stdin of a doctrine invocation that is SUPPOSED to refuse the flag combination -- so the child exits before the parent finishes writing, and the write races into EPIPE. Under load (full test-all parallelism) the child wins that race more often. The suite was green at the branch point and nothing in PHASE-02 touches observation, so this is a pre-existing latent flake surfaced by timing. Why it matters beyond the flake itself: this capsule's standing rule is 'any red suite that is not your own new failing test is an alarm, halt and escalate'. A nondeterministic red in the shared gate directly attacks that rule -- it costs an orchestrator a full investigation cycle to clear, and it trains agents to re-run reds rather than treat them as signal, which is exactly the habit the rule exists to prevent. Fix: the test should tolerate EPIPE on the stdin write (the refusal is the assertion, not the successful write), not be made to pass by retry."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

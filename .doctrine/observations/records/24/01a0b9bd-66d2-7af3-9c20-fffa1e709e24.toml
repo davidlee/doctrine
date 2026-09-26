@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b9bd-66d2-7af3-9c20-fffa1e709e24"
+recorded_at = "2026-09-19T12:56:32.722737208Z"
+kind = "friction"
+summary = "phase-plan: grep for a phase block in plan.toml misses aligned TOML keys"
+detail = """grep -n 'id = "PHASE-' returns nothing against .doctrine/slice/NNN/plan.toml because the authored file aligns its keys: 'id        = "PHASE-01"'. That is the obvious first grep for locating one phase's block in a 6-phase plan, and it silently returns empty rather than failing loudly. Minor but it costs a retry every time a planner orients."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

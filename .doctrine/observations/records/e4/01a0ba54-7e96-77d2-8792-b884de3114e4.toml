@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba54-7e96-77d2-8792-b884de3114e4"
+recorded_at = "2026-09-19T15:41:34.742274058Z"
+kind = "friction"
+summary = "/phase-plan: a phase's authored context must be reconstructed from a 3400-line design monolith by targeted grep"
+detail = "Reported by both SL-246 phase planners. design.md is ~3400 lines and its doc-local ids (I1 I5 I6 I7 X1 X5 X6 X7 D3 D6 C4 C7 F-23) are spread across nine sections with no index, so assembling what ONE phase needs took roughly a dozen targeted greps per planner. The mitigation works - the distillation lands in the runtime sheet and both workers opened design.md zero times, which is the tiering paying off - but the underlying shape is a recurring per-phase cost paid by the planner tier on every slice with a large design. Note this is the cost the capsule tiering exists to absorb, so it is arguably working as intended; recorded because the magnitude (a dozen greps x six phases) is worth having a number for under RFC-011."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

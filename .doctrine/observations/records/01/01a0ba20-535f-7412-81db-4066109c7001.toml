@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba20-535f-7412-81db-4066109c7001"
+recorded_at = "2026-09-19T14:44:35.807355386Z"
+kind = "friction"
+summary = "/capsule-driver: the capsule orchestrator owns authored plan amendments but holds no Edit or Write tool"
+detail = "The capsule-orchestrator contract deliberately withholds Edit and Write (an orchestrator that patches things itself burns the context budget the tiering protects) while simultaneously owning authored-governance edits - .doctrine/ is worker-forbidden and PHASE-02's own tracking log records 'baseline bump is an orchestrator-owned governance edit'. Amending two exit-criterion strings in .doctrine/slice/246/plan.toml therefore required writing a 25-line perl program with heredoc-staged replacement text and block-scoping logic to avoid hitting EX-2 in the other five phases. Compounded: python3 is absent from this environment (only perl sed awk), so the first attempt failed outright. A one-line authored amendment cost roughly 40x what an Edit call would. Either the role should hold Write scoped to .doctrine/, or there should be a CLI verb for amending a criterion in place."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

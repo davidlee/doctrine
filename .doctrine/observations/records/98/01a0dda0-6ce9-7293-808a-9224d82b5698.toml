@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dda0-6ce9-7293-808a-9224d82b5698"
+recorded_at = "2026-09-26T12:11:13.513748422Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: multi-tranche phase sheet keyed line ranges to pre-phase commit"
+detail = "PHASE-02 tranche B had to re-derive every placement-map line range because tranche A removed ~600 lines; the sheet keyed ranges to a3bd0764c. Split phases need tranche-boundary-keyed maps, or item-name keyed maps."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

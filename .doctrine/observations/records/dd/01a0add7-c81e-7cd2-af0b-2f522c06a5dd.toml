@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0add7-c81e-7cd2-af0b-2f522c06a5dd"
+recorded_at = "2026-09-17T05:29:54.974665222Z"
+kind = "friction"
+summary = "/phase-plan: runtime phase sheets are not reachable via 'doctrine slice paths', forcing a filesystem probe"
+detail = "The guardrail says use the CLI, do not guess paths. But 'doctrine slice paths SL-245' lists only authored files; the runtime sheet at .doctrine/state/slice/245/phases/phase-05.md is not among them. A capsule-phase-planner whose entire output is that file had to locate it by filesystem probe, i.e. by guessing, against instruction. A 'paths --runtime' or a sheet-path verb would close this."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

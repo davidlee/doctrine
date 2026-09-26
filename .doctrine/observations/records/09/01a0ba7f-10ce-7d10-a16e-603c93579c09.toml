@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba7f-10ce-7d10-a16e-603c93579c09"
+recorded_at = "2026-09-19T16:28:04.686278886Z"
+kind = "friction"
+summary = "/phase-plan: PHASE-04's T4 mandated an extraction but not the cleanup, so the refactor beat stopped one step short and left dead production code"
+detail = "SL-246 PHASE-04 task T4 mandated extracting render_view(root, &view, format) out of relation_graph::render_from so the command layer could hold the InspectView and select the knowledge block off it without a second corpus scan. The sheet named the two existing unit tests passing UNCHANGED as the extraction's byte-neutrality proof - correct, and it worked. But neither the sheet nor the criterion said what to do with render_from afterwards, and the worker left it in the tree with NO production caller (verified: its only callers were src/relation_graph.rs:3269 and :3276, both inside cfg(test)), silenced with a freshly ADDED expect(dead_code) whose stated reason was 'kept as the byte-neutrality proof for the two unit tests below'. That resting state inverts the gate: the two assertions now guard a path no user can reach, so if render_view drifts they stay green - and PHASE-05 adds a second caller of this machinery, making live-path coverage matter more not less. Caught by the orchestrator reading the diff rather than by any criterion or gate; clippy is silent by construction because the worker added the attribute. GENERAL LESSON for phase sheets: a task that mandates extracting a helper out of an existing function must also state the disposition of the original - deleted with its callers re-pointed, or retained with a named production caller. 'Add the new thing' without 'and here is what happens to the old thing' reliably yields dead code plus tests of dead code."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

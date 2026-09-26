@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0adcb-522d-72b1-9dbf-b5e18832d677"
+recorded_at = "2026-09-17T05:16:18.349114014Z"
+kind = "friction"
+summary = "phase-plan: sheet misstated rustix error plumbing, costing a compile cycle"
+detail = "The SL-245 PHASE-03 phase sheet claimed 'every rustix call returns io::Result<T> already (a type alias over std::io::Error), so ? composes directly with zero manual mapping'. Wrong: rustix::io::Result<T> is Result<T, rustix::io::Errno>. The ? operator composes only because From<Errno> for std::io::Error exists. Anywhere the value is RETURNED rather than ?-ed - which is exactly what bracket's exit closure must do, since it hands the restore error up unswallowed - an explicit .map_err(std::io::Error::from) is required. Cost the worker a compile cycle. Planner-distilled API claims about third-party error types should be stated as the concrete type, not as an alias equivalence."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

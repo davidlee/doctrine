@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dd78-10a0-7533-a2a4-f175c149adcd"
+recorded_at = "2026-09-26T11:27:08.44856609Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: gate log prints ~17 fixture 'warning:' lines and a 'claude: refresh failed' message from passing tests"
+detail = "doctrine check gate output mixes fixture-emitted warnings from passing tests with real diagnostics, making a quick scan look alarming; orchestrator and worker both had to filter on 'test result' lines."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0defa-7ba6-7f23-8471-1023e188e618"
+recorded_at = "2026-09-26T18:29:12.742936631Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: spec list takes no subtype and --json gave jq nothing usable"
+detail = "PHASE-10 planner spent several probes enumerating specs."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba9b-0f4b-7cf0-8569-55578d4bd9b7"
+recorded_at = "2026-09-19T16:58:39.307036186Z"
+kind = "friction"
+summary = "capsule-phase-planner: python3 absent in the jail, and design.md:1237 / R6 carry two stale paths"
+detail = "Planner spent one call discovering python3 is unavailable. Separately it found design.md's R6 names .agents/skills/handover/SKILL.md which does not exist (the file is plugins/doctrine/skills/handover/SKILL.md) and src/knowledge.rs:939's comment claims PHASE-04 made KnowledgeLevel a clap::ValueEnum when PHASE-04 actually used value_parser = KnowledgeLevel::from_str + default_value_t (src/commands/cli.rs:271-282). Both are stale-prose-vs-code divergences that cost a reader a verification step; the second could have produced a wrong idiom copy. Reconcile inputs."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

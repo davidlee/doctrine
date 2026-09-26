@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0adcb-6a64-7c33-b3ce-217edcf67158"
+recorded_at = "2026-09-17T05:16:24.548642871Z"
+kind = "friction"
+summary = "execute: expect(dead_code) altitude memory does not cover the live-by-rooting field case"
+detail = "mem.pattern.lint.expect-dead-code-at-item-level says the attribute goes on the item, never the field. That is right for a wholly dead struct but does not cover what a worker hit on SL-245 PHASE-03: putting #[expect(dead_code)] on two ROOTS (open_render_terminal, RenderTerminal::query) silences the whole item-level cluster, because rustc treats a lint-allowed item as a live root and liveness is transitive - so endpoint, bracket, Endpoint and QueryError needed nothing. But four FIELD-level reports survive that, since the enclosing items are now live while their fields are not (RenderTarget::Terminal's payload, RenderTerminal.window, both QueryError payloads). The fix is to scope the expect at the enclosing TYPE. An agent following the memory literally attaches at the wrong altitude and gets an unfulfilled-expectation hard error. The memory needs the second half of the rule."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

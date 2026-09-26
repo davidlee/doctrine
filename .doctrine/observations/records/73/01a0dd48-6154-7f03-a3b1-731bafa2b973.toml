@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dd48-6154-7f03-a3b1-731bafa2b973"
+recorded_at = "2026-09-26T10:35:03.380907419Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: planner contract cites 'memory retrieve <topic>' but retrieve takes no positional query"
+detail = """capsule-phase-planner (PHASE-01) found 'doctrine memory retrieve "<topic>"' errors; it needs --query or --path-scope, and output dumps full bodies. memory search was the usable triage path."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

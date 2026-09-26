@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba7f-10c9-7a93-811e-268f3891db41"
+recorded_at = "2026-09-19T16:28:04.681632497Z"
+kind = "friction"
+summary = "/execute: cross-kind inbound-group order is EntityKey's derived Ord (prefix-lexical then numeric) not RecordKind::ALL declaration order — nearly shipped two wrong goldens"
+detail = "Reported by the SL-246 PHASE-04 capsule-worker. Writing the inspect --knowledge goldens the worker assumed a target's inbound-group SOURCE order follows RecordKind::ALL's declaration order (ASM DEC QUE CON EVD HYP CPT) then id - an assumption reinforced by commands/inspect.rs's pre-existing SL-050 F2 comment 'scan order is the same both saw — KINDS table / id ascending'. Running the actual binary showed CPT-903 BEFORE DEC-901/DEC-902. The true rule is EntityKey's derived Ord (src/catalog/scan.rs:85, #[derive(PartialOrd, Ord)] struct EntityKey { prefix: &'static str, id: u32 }): lexicographic on the PREFIX STRING first, then numeric id. Consistent with RSK-007's existing 'numeric-within-prefix, not lexical' unit-test comment (relation_graph.rs:2084) - it is just that KINDS-table order was never the ACROSS-prefix rule, and the SL-050 comment reads as though it were. Two goldens would have been wrong; caught only because the orchestrator mandated derive-then-run-the-binary rather than reasoning about expected output. MEMORY CANDIDATE, phrased for retrieval: cross-kind ordering in a relation/inspect view is prefix-lexical then numeric via EntityKey's derived Ord, NOT the KINDS table order the nearby comments imply."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

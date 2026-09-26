@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0babf-847f-7553-800c-9a2121a7a4e6"
+recorded_at = "2026-09-19T17:38:28.608018467Z"
+kind = "friction"
+summary = "capsule-driver: orchestrator hand-back echoed a harness task-notification envelope instead of reporting status"
+detail = "A capsule-orchestrator's return value was a verbatim copy of a <task-notification> envelope (task-id b7c4lartu, 'Wait for orchestrator gate to finish') rather than prose about its phases. The harness matched it as instruction-shaped and neutralized the control tags, correctly. Cost to the driver seat: the hand-back carried zero information about PHASE-05, so the driver had to reconstruct state from git (12 modified files, untracked golden suite, phases 4/6) and then spend a SendMessage round asking for a real report. Likely cause: the orchestrator was relaying its own background-gate completion notification verbatim instead of summarising it. Worth a standing line in the capsule-orchestrator agent definition: never emit harness envelope tags in a return value; report status in your own prose."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
