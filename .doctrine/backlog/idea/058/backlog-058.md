@@ -29,10 +29,11 @@ Origin: user proposal, this session.
 
 ## Design questions (unresolved — this is why it is an idea, not scoped)
 
-1. **The seam.** ~91 `stdout()`/`print!` call sites across `src/commands/*`. A
-   `-G` needs ONE interception point on the markdown-emitting show surface, not
-   91 call-site edits. Candidates: a shared markdown-emit helper the `show`
-   route delegates through, or interception at the `main.rs` dispatch boundary.
+1. **The seam.** ~91 `stdout()`/`print!` call sites across `src/commands/*`
+   (59 of them the document shape `let out = <render>; write!(io::stdout(),
+   "{out}")?`). A `-G` needs ONE interception point on the markdown-emitting
+   show surface, not 91 call-site edits. See *Feasibility finding* below — this
+   one looks answered, and the answer is not a render-seam helper.
 2. **Fallback when `glow` is absent** (it is not installed in the dev jail).
    Pass through the raw markdown, or refuse with a named-tool message, mirroring
    `RasterOutcome::ToolUnavailable`?
@@ -43,6 +44,47 @@ Origin: user proposal, this session.
    plain markdown.
 5. **Paging semantics off a tty.** A piped or redirected `-G` should presumably
    be a no-op passthrough, consistent with `--color`'s tty-gated auto.
+
+## Feasibility finding (design probe, this session)
+
+`main()` is already a single funnel — `Cli::try_parse()` → `resolve_color` →
+`worker_guard` → `dispatch` (`src/main.rs`). Everything downstream reaches for
+`io::stdout()` on its own. So the interception belongs **above** dispatch, where
+zero call sites have to change:
+
+**Preferred — re-exec self with stdout on the pager's stdin.** In `main()`, before
+dispatch: if `-G` is set and stdout is a terminal and `glow` is on PATH, strip
+`-G` from argv and re-exec `current_exe()` with its stdout wired to `glow --pager`'s
+stdin. The child runs the command completely unmodified — every one of the 59
+`write!` sites lands in glow's pipe without knowing it exists. Streaming and
+Ctrl-C are preserved, and there is no fd surgery. Precedent: `boot.rs` resolves
+`current_exe()`, and `src/worktree/claim_lock.rs` already spawns a child *from*
+`current_exe()`. Costs one extra process, on `-G` invocations only. The
+`glow`-absent fallback is decided in the parent, before the re-exec.
+
+**Rejected — fd capture.** `dup2` stdout onto a pipe/temp file, run dispatch,
+restore, feed the buffer to glow. Also zero edits, but it buffers: no output until
+the command finishes, and the pager gets a lump rather than a stream. Dominated by
+re-exec.
+
+**The predicate is the real question, not the interception.** "Semi-global" is the
+right word, and clap can carry it: declare the flag in a `#[derive(Args)]` bundle
+flattened into the markdown-emitting verbs — a sibling of the existing
+`CommonListArgs` (`src/main.rs`), the repo's own pattern for "the mandatory spine
+of a read surface, which a kind cannot quietly grow bespoke flags around". Then a
+plain argv scan for `-G` at the root is *exact*, because clap has already rejected
+the flag on any verb that does not declare it: the enumeration lives in the type
+system rather than in a match arm someone forgets to extend. The alternative — a
+root global riding `--color` plus a pure `pages_markdown(&Command)` predicate —
+keeps the existing global-arg seam but re-introduces a hand-maintained list that
+can drift. `-G` is free as a short flag (`-g` is `install --global` only).
+
+**Named but deferred — sink-as-data.** Injecting an output target the way colour
+and width already are (`src/tty.rs`: capabilities read in the shell, injected as
+plain values, render layer never touching ambient tty) is the architecturally
+correct end state, and would remove ambient `io::stdout()` from the whole command
+layer. It buys this feature nothing that re-exec does not get for free, so it is
+the refactor to do when a *second* output policy appears.
 
 ## Relationship to prior art
 
