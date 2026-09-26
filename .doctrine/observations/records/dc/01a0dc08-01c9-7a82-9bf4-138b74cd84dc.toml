@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dc08-01c9-7a82-9bf4-138b74cd84dc"
+recorded_at = "2026-09-26T04:45:07.401570956Z"
+kind = "friction"
+summary = "backlog item: doctrine install blocks on an interactive prompt when run non-interactively"
+detail = "While refreshing the installed backlog skill for CHR-057, './target/debug/doctrine install' waited on stdin (like the startup corpus-sync y/N) and hung the agent's shell for the 600s tool timeout. The agent had to kill it. A non-TTY run should fail fast or take a --yes flag."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
