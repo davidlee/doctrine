@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0dc23ef327670902bcb26847bcb32"
+memory_key = "mem.pattern.release.embed-verify-build"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "cargo package --list cannot detect a missing embed; the verify build is the only oracle"
+summary = "Cargo.toml [package] include is an allow-list, so --list reports an omitted embed root as agreement. Compile the packaged crate (cargo package's verify step) to catch a dropped include_str!/RustEmbed root — it fails there instead of inside cargo publish."
+created = "2026-09-26"
+updated = "2026-09-26"
+
+[scope]
+paths = ["Cargo.toml", "justfile"]
+globs = []
+commands = []
+tags = ["release", "packaging", "embed", "assets", "gate"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "e844efec3ce93fd85038775e642aa3a52574fa7d"
+tree = "2e284478ca6ad9ce114438c3f264c958500ca0fc"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "e844efec3ce93fd85038775e642aa3a52574fa7d"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
