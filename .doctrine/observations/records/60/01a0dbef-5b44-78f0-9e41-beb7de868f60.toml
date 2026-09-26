@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dbef-5b44-78f0-9e41-beb7de868f60"
+recorded_at = "2026-09-26T04:18:11.90829714Z"
+kind = "friction"
+summary = "boot model-band floor directive: prompt resolve emits empty output on a non-matching --model key"
+detail = "Acting on the boot snapshot's floor directive while routing this task. `./target/debug/doctrine prompt resolve --role orchestrator --band model --model deepseek-flash --model deepseek` exited 0 with zero bytes on stdout — no signal whether the band was empty, the key was misspelled, or the selector matched nothing. `doctrine prompt model-keys` lists a key written `deepseek/_default`, while `prompt resolve --help` documents the field as 'Model key (e.g. anthropic/claude-sonnet-4)', so the shape of a valid --model value for a default-bucket key is not derivable from either output. Cost: two extra round-trips and an unverifiable guess, on a directive the boot tells every session to act on immediately. Either have a no-match resolve report itself on stderr, or have model-keys print values in the --model form."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
