@@ -1,19 +1,19 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 481
-slug = "rv-kind-governance-coverage"
-title = "Assess and author governance coverage for the RV kind"
+id = 491
+slug = "no-spec-governs-doctor"
+title = "No spec governs doctor"
 kind = "improvement"
-status = "resolved"
-resolution = "done"
-created = "2026-09-25"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-09-26"
 updated = "2026-09-26"
-tags = []
+tags = ["area:doctor", "area:governance"]
 
-# outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
+# outbound-only. Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
-# uniform `[[relation]]` rows (SL-048 "the cut") — author them with
+# uniform `[[relation]]` rows — author them with
 # `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
@@ -23,4 +23,4 @@ triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
 label = "related"
-target = "RFC-032"
+target = "IMP-481"
