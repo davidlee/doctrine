@@ -30,7 +30,8 @@ authored, not hand-written:
 ## Editing an existing master: hand-edit, and only hand-edit
 
 **No `memory` write verb reaches the masters tree.** `edit`, `status` and `tag`
-all resolve through `resolve_memory_toml_path` (`src/memory.rs:2478`), which
+all resolve through `resolve_memory_toml_path` (`src/memory.rs:2557` as of
+2026-09-26; anchor on the name, not the offset), which
 checks `items/` — "the canonical, writable location" — then hard-errors on
 `shipped/` as read-only, and **never looks at repo-root `memory/` at all**. So a
 master reference resolves to a bare "memory not found". That is by design, not a

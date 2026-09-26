@@ -6,7 +6,7 @@ status = "active"
 title = "A Revision cannot revise a knowledge record — DEC/QUE/ASM go through supersede"
 summary = "`revises` accepts only [SPEC, PRD, REQ, ADR, POL, STD]; correcting an accepted DEC is `knowledge new` + `doctrine supersede`, and supersede leaves the predecessor's status untouched."
 created = "2026-07-30"
-updated = "2026-07-30"
+updated = "2026-09-26"
 
 [scope]
 paths = []
@@ -25,12 +25,12 @@ tree = "bf552c5e970e5da1eb11bae7d4cbbfb108047759"
 ref_name = "refs/heads/edge"
 checkout_state_id = "d45dffda7e559a65027de7a0089f68c80fdabb41ad2a8fd82fc5825136908ac9"
 base_commit = "3819f292dd75ae931ecc2860d761ecbc7b02091a"
-verified_sha = "6bf487aa56ea9a5961808a0f5f65c09bfa97071e"
+verified_sha = ""
 normalizer = "forget.checkout.v1"
 
 [review]
-verification_state = "verified"
-reviewed = "2026-07-30"
+verification_state = "unverified"
+reviewed = ""
 review_by = ""
 
 [trust]

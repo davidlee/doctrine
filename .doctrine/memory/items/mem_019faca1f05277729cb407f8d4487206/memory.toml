@@ -6,7 +6,7 @@ status = "active"
 title = "A design gate may specify something that already exists — find the incumbent before authoring the sketch"
 summary = "Gate criteria are written before the code and can read as greenfield after an earlier phase has already built the thing"
 created = "2026-07-29"
-updated = "2026-07-29"
+updated = "2026-09-26"
 
 [scope]
 paths = []
@@ -25,12 +25,12 @@ tree = "245bdf538d6bb0618de163331c1601bfd92b16f3"
 ref_name = "refs/heads/edge"
 checkout_state_id = "e7830e580947c23e3dccc52e35657f5e41bdeae74bc928096837485369f5ceb7"
 base_commit = "751c75acd4411ca3073cd01e6c402505cc9a180e"
-verified_sha = ""
+verified_sha = "11de0f7c849b93d811a96f3f018e2d34391d5dfad89abec0964daf5b54e0b65e"
 normalizer = "forget.checkout.v1"
 
 [review]
-verification_state = "unverified"
-reviewed = ""
+verification_state = "verified"
+reviewed = "2026-09-26"
 review_by = ""
 
 [trust]

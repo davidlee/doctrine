@@ -7,9 +7,11 @@ will not say so, because it could not have known.
 
 SL-233 PHASE-06's `EN-2` asks for a sketch answering seven questions about the
 stable-section-ID marker grammar. It reads as greenfield format design. It is
-not: `MARKER_OPEN` / `MARKER_CLOSE` (`src/commands/design.rs:66,68`),
-`authored_sections` (`:249`), `authored_section_digests` (`:272`) and
-`render_document` (`:1146`) already wrote and read markers at head.
+not: `MARKER_OPEN` / `MARKER_CLOSE` (now `src/design_run/document.rs`),
+`authored_sections` (now `src/commands/design.rs`) and `render_document`
+already wrote and read markers at head. *(Offsets re-checked 2026-09-26 — the
+symbols had moved out of `commands/design.rs` and `authored_section_digests`
+was folded away. Anchor on the names; re-grep before citing an offset.)*
 
 Nothing in `EN-2`, the exit criteria, or the handover packet mentioned it. The
 first draft of the sketch was written as a greenfield grammar and had to be

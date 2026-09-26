@@ -21,7 +21,8 @@ namespace state, not a PATH lookup, so nothing short of a jail cycle re-resolves
 boundary).** Bind the **immutable** crane/nix store output over the cargo path
 instead of the mutable cargo file. A store path is content-addressed — a rebuild
 mints a *new* path; nothing renames over the existing one, so the bind never goes
-stale mid-session. `flake.nix:95` — `ro-bind` two-arg, src≠dst:
+stale mid-session. `flake.nix` — `ro-bind`, two-arg, src≠dst (`:186` as of
+2026-09-26; anchor on the bind, not the offset):
 
 ```nix
 (ro-bind "${doctrine}/bin/doctrine" (noescape "~/.cargo/bin/doctrine"))

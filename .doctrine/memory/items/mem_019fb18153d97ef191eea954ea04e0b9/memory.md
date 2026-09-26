@@ -19,10 +19,13 @@ Knowledge records are append-only in spirit — you do not edit an accepted one 
 make it true. Instead:
 
 1. `doctrine knowledge new decision "<title>"` — mint the successor.
-2. Author its `[facet]` **by hand**. There is no `knowledge edit` verb; the
-   `knowledge` group is `new | list | show | inspect | status | paths`. The facet
-   is edit-preserving TOML, so hand-authoring it is the sanctioned route (that is
-   how the existing corpus records got theirs).
+2. Author its `[facet]` with the kind-dispatched editor —
+   `doctrine knowledge edit <kind> <ID>`, one subverb per kind
+   (`assumption`/`decision`/`question`/`constraint`/`evidence`/`hypothesis`; the
+   `concept` subverb REFUSES, concepts carry no facet fields), with typed flags
+   for that kind's fields. *(Corrected 2026-09-26: this step used to say there
+   was no `edit` verb and the facet had to be hand-authored. `knowledge edit`
+   landed afterwards.)*
 3. `doctrine supersede <NEW> <OLD>` — writes `supersedes` on the successor and
    `superseded_by` on the predecessor.
 4. **`doctrine knowledge status <OLD> superseded` — a SEPARATE step.** `supersede`
@@ -31,6 +34,10 @@ make it true. Instead:
    superseded`), and `doctrine validate` reports **`corpus clean`** with an
    `accepted` record that is `superseded_by` something — so nothing surfaces the
    contradiction. Skip step 4 and canon asserts two live records for one rule.
+   (For a record moving to a *resolving* state — `answered`, `validated`,
+   `invalidated`, `waived` — `doctrine knowledge settle <ID> <STATE> --by <W>`
+   lands state + disposition in one write; `superseded` is deliberately not in
+   that set and stays with `knowledge status`.)
 5. `doctrine link <NEW> shapes <SL-NNN>` if the predecessor carried that edge —
    relations do not migrate.
 
