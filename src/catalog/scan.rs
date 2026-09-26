@@ -176,7 +176,7 @@ pub(crate) fn scan_entities(
         let mut ids = entity::scan_ids(&root.join(kref.kind.dir))?;
         ids.sort_unstable();
         for id in ids {
-            let (status, title) = match status_and_title_for(root, kref, id) {
+            let (status, title) = match status_and_title_for(root, kref, id, diagnostics) {
                 Ok(v) => v,
                 Err(e) => {
                     diagnostics.push(CatalogDiagnostic {
@@ -411,16 +411,47 @@ where
 /// implementation reconciled only by two string constants. The COMMON path stays
 /// ONE parse (SL-050 F1) — `meta::read_meta` carries both fields — and the
 /// lenient title reader moved with it. The `kref` carries the tree dir and stem.
+///
+/// **Disclosure (SL-268 D15, DEC-319, RV-396 `F-3`).** The `RV` arm's derived
+/// read can surface closed-vocabulary defects on the ledger it just read; this
+/// pushes ONE warning [`CatalogDiagnostic`] per defective RV onto `diagnostics`,
+/// alongside its neighbours [`read_facets`] / [`check_facet_residue`] which do
+/// the same for their own fields. **No caller surfaces it yet** (ISS-492,
+/// SL-268 out of scope) — the diagnostic is emitted so ISS-492's callers
+/// inherit it without an RV-specific change.
 fn status_and_title_for(
     root: &Path,
     kref: &crate::kinds::KindRef,
     id: u32,
+    diagnostics: &mut Vec<CatalogDiagnostic>,
 ) -> anyhow::Result<(Option<String>, String)> {
     let authored = crate::authored_status::read(root, kref, id)?;
     let status = match authored.status {
         // The one arm this tier can do better on.
         crate::kinds::AuthoredStatus::Unavailable => {
-            Some(crate::review_ledger::derived_status_string(root, id)?)
+            let (status, defects) = crate::review_ledger::derived_status_string(root, id)?;
+            if !defects.is_empty() {
+                let key = EntityKey {
+                    prefix: kref.kind.prefix,
+                    id,
+                };
+                let details = defects
+                    .iter()
+                    .map(|d| format!("{} {}", d.finding, d.describe()))
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                diagnostics.push(CatalogDiagnostic {
+                    file: root.join(kref.kind.dir).join(format!("{id:03}")),
+                    entity_key: Some(CatalogKey::Numbered(key)),
+                    field: Some("finding".to_owned()),
+                    message: format!(
+                        "{}: out-of-vocabulary finding value(s): {details}",
+                        key.canonical()
+                    ),
+                    severity: Severity::Warning,
+                });
+            }
+            Some(status)
         }
         // Status-less by design — no diagnostic, just absent.
         crate::kinds::AuthoredStatus::Absent => None,
@@ -1398,6 +1429,67 @@ mod tests {
         );
     }
 
+    /// Seed a `review-NNN.toml` with one finding carrying an explicit (possibly
+    /// out-of-vocabulary) `status`/`severity` pair — the T9 defect fixture.
+    fn seed_review_with_finding(root: &Path, id: u32, title: &str, status: &str, severity: &str) {
+        write(
+            root,
+            &rel_toml(kref_for("RV"), id),
+            &format!(
+                "id = {id}\nslug = \"rv{id}\"\ntitle = \"{title}\"\n\n\
+                 [review]\nfacet = \"design\"\nraiser = \"agent\"\nresponder = \"human\"\n\n\
+                 [target]\nref = \"SL-001\"\n\n\
+                 [[finding]]\nid = \"F-1\"\nstatus = \"{status}\"\nseverity = \"{severity}\"\n\
+                 title = \"t\"\ndetail = \"d\"\n"
+            ),
+        );
+    }
+
+    /// SL-268 T9 (PHASE-03 EX-4): the catalog scan pushes ONE warning
+    /// [`CatalogDiagnostic`] per RV whose finding ledger carries a closed-
+    /// vocabulary defect — RV-001's `status`/`severity` are both out of
+    /// vocabulary, RV-002's are both clean. Positive and negative controls sit
+    /// in one test (`mem_019fe687859a7e73a06fc1b1881ff80b`): exactly one
+    /// diagnostic, naming RV-001 and neither raw value's sibling absent, and no
+    /// diagnostic names RV-002 at all.
+    #[test]
+    fn defective_rv_emits_warning_diagnostic() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_review_with_finding(root, 1, "RV One", "zombie", "crit");
+        seed_review_with_finding(root, 2, "RV Two", "open", "major");
+
+        let mut diags = Vec::new();
+        let scanned = scan_entities(root, &mut diags, ScanMode::default()).unwrap();
+        assert_eq!(scanned.len(), 2, "both RVs still scan cleanly");
+
+        let warnings: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Severity::Warning)
+            .collect();
+        assert_eq!(
+            warnings.len(),
+            1,
+            "exactly one warning diagnostic, for the one defective RV: {diags:?}"
+        );
+        let warning = warnings[0];
+        assert_eq!(
+            warning.entity_key.as_ref().map(|k| k.canonical()),
+            Some("RV-001".to_owned())
+        );
+        assert!(
+            warning.message.contains("zombie") && warning.message.contains("crit"),
+            "message names both out-of-vocabulary raw values: {}",
+            warning.message
+        );
+        assert!(
+            !diags
+                .iter()
+                .any(|d| d.entity_key.as_ref().map(|k| k.canonical()) == Some("RV-002".to_owned())),
+            "the clean RV names no diagnostic: {diags:?}"
+        );
+    }
+
     /// SL-238 VT-6: `status_and_title_for` becomes the command-tier OVERLAY over
     /// `authored_status::read`. Asserted by BEHAVIOUR — one `RV` fixture observed
     /// through both tiers:
@@ -1427,7 +1519,7 @@ mod tests {
             "a new derived-status kind needs an overlay arm and a fixture beside this one"
         );
 
-        let (status, title) = status_and_title_for(root, kref, 1).unwrap();
+        let (status, title) = status_and_title_for(root, kref, 1, &mut Vec::new()).unwrap();
         assert_eq!(
             status.as_deref(),
             Some("active"),
@@ -1469,7 +1561,7 @@ mod tests {
 
         // Common arm: one parse yields both halves.
         seed_slice(root, 1, &[]);
-        let (status, title) = status_and_title_for(root, sl, 1).unwrap();
+        let (status, title) = status_and_title_for(root, sl, 1, &mut Vec::new()).unwrap();
         assert_eq!(status.as_deref(), Some("proposed"));
         assert_eq!(title, "S1", "the title rides the same parse as the status");
 
@@ -1480,7 +1572,7 @@ mod tests {
             "id = 2\nslug = \"s2\"\ntitle = \"S2\"\n",
         );
         assert!(
-            status_and_title_for(root, sl, 2).is_err(),
+            status_and_title_for(root, sl, 2, &mut Vec::new()).is_err(),
             "a status-less common-arm toml is corruption — strict parse, no lenient fallback"
         );
 
@@ -1491,7 +1583,7 @@ mod tests {
             &rel_toml(rec, 1),
             "id = 1\nslug = \"r\"\ntitle = \"R One\"\n",
         );
-        let (status, title) = status_and_title_for(root, rec, 1).unwrap();
+        let (status, title) = status_and_title_for(root, rec, 1, &mut Vec::new()).unwrap();
         assert_eq!(status, None, "REC authors no status — absent, not corrupt");
         assert_eq!(title, "R One");
     }

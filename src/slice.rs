@@ -1024,7 +1024,10 @@ pub(crate) fn run_status(
         if !blockers.is_empty() {
             let listed = blockers
                 .iter()
-                .map(|b| format!("{}/{}", b.rv, b.finding))
+                .map(|b| match &b.reason {
+                    Some(reason) => format!("{}/{} ({reason})", b.rv, b.finding),
+                    None => format!("{}/{}", b.rv, b.finding),
+                })
                 .collect::<Vec<_>>()
                 .join(", ");
             anyhow::bail!(
@@ -5303,6 +5306,23 @@ mod tests {
         );
     }
 
+    /// Hand-edit one field of one finding in an RV's authored ledger — the
+    /// out-of-band write a closed-vocabulary read must survive (SL-268 D15).
+    /// Mirrors `review::tests::hand_edit_finding`; duplicated rather than
+    /// exported because it is test-only and `slice` must not gain a
+    /// production dependency on `review`'s test surface (ADR-001).
+    fn hand_edit_finding(root: &Path, id: u32, finding: &str, field: &str, value: &str) {
+        let path = crate::review_ledger::authored_path(root, id);
+        let mut doc = fs::read_to_string(&path)
+            .unwrap()
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
+        crate::review_ledger::finding_table_mut(&mut doc, finding)
+            .unwrap()
+            .insert(field, toml_edit::value(value));
+        fs::write(&path, doc.to_string()).unwrap();
+    }
+
     /// Raise one `blocker` finding on a fresh RV targeting `SL-<target_id>`. Returns
     /// the project root unchanged. Drives the real verb path (raise under the turn
     /// guard) so the ledger is authentic.
@@ -5358,6 +5378,38 @@ mod tests {
         assert!(err.contains("refused"), "refusal wording: {err}");
         // The transition was refused BEFORE the write — status unchanged.
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "audit");
+    }
+
+    /// SL-268 T8 (PHASE-03 EX-4): when a blocking finding's fail-safe read carries
+    /// a [`crate::review_ledger::BlockerRef::reason`] (an out-of-vocabulary
+    /// severity or status), the close-gate refusal prints it beside the finding —
+    /// `RV-001/F-1 (severity \`crit\` is out of vocabulary; gating as blocker)` —
+    /// so the operator sees WHY a finding the author never marked `blocker` is
+    /// holding the close, not just which finding.
+    #[test]
+    fn vt2_close_refusal_prints_the_vocab_reason() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "s", "S", "2026-06-04");
+        set_status_raw(root, 1, "audit");
+        raise_blocker_rv(root, 1);
+        hand_edit_finding(root, 1, "F-1", "severity", "crit");
+        hand_edit_finding(root, 1, "F-1", "status", "open");
+
+        let err = run_status(
+            Some(root.to_path_buf()),
+            1,
+            Some(SliceStatus::Reconcile),
+            None,
+            false,
+            false,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains("RV-001/F-1 (severity `crit` is out of vocabulary; gating as blocker)"),
+            "names the vocab reason beside the finding: {err}"
+        );
     }
 
     /// VT-2 (pass half): the SAME seam crossing PASSES once the blocker is verified

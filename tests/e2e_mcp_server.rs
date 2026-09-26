@@ -410,6 +410,100 @@ fn vt4_full_cycle() {
     kill(child);
 }
 
+// ── SL-268 T11 (PHASE-03 VT-6): MCP review_list carries warnings ─────────
+
+/// The MCP `review_list` tool carries the ledger's closed-vocabulary defects
+/// as a structured `warnings` field (SL-268 D15, DEC-319, RV-396 `F-2`) —
+/// wired in tranche A (`ReviewOutput::Listed.warnings`, `list_rows`), and
+/// proved here over the built binary rather than only the in-process unit
+/// suite. As a control, the SAME call before the hand-edit has no `warnings`
+/// key at all (`skip_serializing_if` on an empty vec).
+#[test]
+fn review_list_carries_warnings() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Test Slice", "test-slice");
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let _ = call(
+        &mut stdin,
+        &mut reader,
+        "initialize",
+        Some(&serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "test", "version": "1.0" }
+        })),
+    );
+
+    // review_new + review_raise (mirrors vt4_full_cycle's opening steps).
+    let params = tools_call_params(
+        "review_new",
+        serde_json::json!({ "facet": "design", "target": "SL-001" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    let review_id = out["Created"]["id"].as_u64().expect("review id") as u32;
+
+    let params = tools_call_params(
+        "review_raise",
+        serde_json::json!({
+            "reference": review_id.to_string(),
+            "severity": "major",
+            "title": "Test Finding",
+            "detail": "This is a test finding detail.",
+            "as": "raiser"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "review_raise: {resp:?}");
+
+    // Control: before the hand-edit, `review_list` carries no `warnings` key.
+    let params = tools_call_params("review_list", serde_json::json!({}));
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    assert!(
+        out["Listed"].get("warnings").is_none(),
+        "a clean ledger carries no warnings key: {out}"
+    );
+
+    // Hand-edit the ledger's severity to an out-of-vocabulary value.
+    let ledger_path = root.join(".doctrine/review/001/review-001.toml");
+    let toml_content = fs::read_to_string(&ledger_path).unwrap();
+    let edited = toml_content.replacen("severity = \"major\"", "severity = \"crit\"", 1);
+    assert_ne!(
+        toml_content, edited,
+        "the hand-edit must actually change the ledger"
+    );
+    fs::write(&ledger_path, edited).unwrap();
+
+    let params = tools_call_params("review_list", serde_json::json!({}));
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    let warnings = out["Listed"]["warnings"]
+        .as_array()
+        .expect("warnings is an array once the ledger is defective");
+    assert_eq!(
+        warnings,
+        &vec![serde_json::json!({
+            "rv": "RV-001",
+            "finding": "F-1",
+            "field": "severity",
+            "raw": "crit",
+            "effect": "gating as blocker",
+        })],
+        "review_list names the defect: {out}"
+    );
+
+    kill(child);
+}
+
 // ── VT-5: review_show JSON returns valid data ────────────────────────────
 
 #[test]

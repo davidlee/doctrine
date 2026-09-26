@@ -1472,3 +1472,177 @@ fn disposition_rows(held: &DesignSnapshot) -> Vec<Vec<String>> {
         })
         .collect()
 }
+
+// ── SL-268 T10 (PHASE-03 EX-4, VT-5) ────────────────────────────────────────
+
+/// Run the built binary, returning the full `Output` regardless of exit status
+/// — the disclosure assertions below need `stderr` on the SUCCESS path too
+/// (`run`/`fail` each throw one channel away).
+fn run_capturing(root: &Path, args: &[&str]) -> std::process::Output {
+    common::doctrine_cmd(root)
+        .args(args)
+        .output()
+        .expect("spawn doctrine")
+}
+
+/// The minted pass's authored ledger path, from its canonical ref (`RV-NNN`).
+fn ledger_path(root: &Path, pass_ref: &str) -> PathBuf {
+    let id: u32 = pass_ref
+        .strip_prefix(&format!("{REVIEW_PREFIX}-"))
+        .expect("a canonical RV ref")
+        .parse()
+        .expect("a numeric RV id");
+    root.join(common::REVIEW_DIR)
+        .join(format!("{id:03}"))
+        .join(format!("{LEDGER_STEM}-{id:03}.toml"))
+}
+
+/// Hand-edit a minted pass's ledger to `concluded = true` (SL-268 D-nil: no
+/// `review conclude` verb exists yet — PHASE-06 — so the marker is set the way
+/// every fail-safe read must survive: out of band). No finding is added; this
+/// is the clean twin.
+fn conclude_pass(root: &Path, pass_ref: &str) {
+    let path = ledger_path(root, pass_ref);
+    let mut doc = std::fs::read_to_string(&path)
+        .unwrap()
+        .parse::<toml_edit::DocumentMut>()
+        .unwrap();
+    doc["review"]["concluded"] = toml_edit::value(true);
+    std::fs::write(&path, doc.to_string()).unwrap();
+}
+
+/// [`conclude_pass`], plus one finding whose `severity` is out of vocabulary
+/// (`crit`) on an already-`verified` (known-terminal) status — sheet `A3`'s
+/// fixture shape: [`gates_as_blocker`]-fed predicates all also require a
+/// non-terminal status, so this defect cannot move a gate outcome, only the
+/// disclosure.
+fn conclude_and_seed_defect(root: &Path, pass_ref: &str) {
+    let path = ledger_path(root, pass_ref);
+    let mut doc = std::fs::read_to_string(&path)
+        .unwrap()
+        .parse::<toml_edit::DocumentMut>()
+        .unwrap();
+    doc["review"]["concluded"] = toml_edit::value(true);
+    let mut finding = toml_edit::Table::new();
+    finding["id"] = toml_edit::value("F-1");
+    finding["status"] = toml_edit::value("verified");
+    finding["severity"] = toml_edit::value("crit");
+    finding["title"] = toml_edit::value("t");
+    finding["detail"] = toml_edit::value("d");
+    let mut findings = toml_edit::ArrayOfTables::new();
+    findings.push(finding);
+    doc["finding"] = toml_edit::Item::ArrayOfTables(findings);
+    std::fs::write(&path, doc.to_string()).unwrap();
+}
+
+/// `VT-5`: `PassFacts.defects` (SL-268 D15, RV-396 `F-9`) is disclosed on
+/// stderr everywhere `commands/design.rs` reads a pass — the outstanding
+/// projection (`design resume`) and the disposition admission path
+/// (`declared.is_some()`) — and feeds no predicate, so a `Conducted`
+/// disposition over a defective pass reaches the SAME admission outcome as one
+/// over a clean twin. Two runs rather than a before/after edit on one, because
+/// the projection assertion needs a clean NEGATIVE control beside the
+/// defective POSITIVE one in the same test
+/// (`mem_019fe687859a7e73a06fc1b1881ff80b`).
+#[test]
+fn defect_warning_printed_gate_unchanged() {
+    let clean = Fixture::reviewing();
+    let defective = Fixture::reviewing();
+
+    let clean_pass = clean
+        .read()
+        .review
+        .pass
+        .as_ref()
+        .expect("a run in `reviewing` holds a pass")
+        .review
+        .as_str()
+        .to_owned();
+    let defective_pass = defective
+        .read()
+        .review
+        .pass
+        .as_ref()
+        .expect("a run in `reviewing` holds a pass")
+        .review
+        .as_str()
+        .to_owned();
+
+    conclude_pass(&clean.root, &clean_pass);
+    conclude_and_seed_defect(&defective.root, &defective_pass);
+
+    let expected_warning = format!(
+        "warning: {defective_pass} F-1 severity `crit` is out of vocabulary; gating as blocker"
+    );
+
+    // (a) the projection: `design resume`.
+    let clean_resume = run_capturing(&clean.root, &["design", "resume", SLICE, "-p", "."]);
+    let clean_resume_stderr = String::from_utf8_lossy(&clean_resume.stderr).into_owned();
+    assert!(
+        clean_resume.status.success(),
+        "clean resume unexpectedly failed: {clean_resume_stderr}"
+    );
+    assert!(
+        !clean_resume_stderr.contains("warning: RV-"),
+        "the clean run's resume prints no defect warning (absence probe beside \
+         the positive control below): {clean_resume_stderr}"
+    );
+
+    let defective_resume = run_capturing(&defective.root, &["design", "resume", SLICE, "-p", "."]);
+    let defective_resume_stderr = String::from_utf8_lossy(&defective_resume.stderr).into_owned();
+    assert!(
+        defective_resume.status.success(),
+        "defective resume unexpectedly failed: {defective_resume_stderr}"
+    );
+    assert!(
+        defective_resume_stderr.contains(&expected_warning),
+        "the defective run's resume names the defect on stderr: {defective_resume_stderr}"
+    );
+
+    // (b) admission: a `Conducted` disposition (with acceptance, as
+    // `disposition_requires_an_acceptance_declaration` builds one) over each
+    // run's own pass.
+    let conducted_body = |review: &str| {
+        json!({"checkpoint_act": design_act::review_disposed(
+            "the pass is disposed of at the close of review",
+            ReviewDisposition::Conducted { review: ReviewRef::new(review) },
+        )})
+    };
+    let clean_input = clean.payload("dispose", &conducted_body(&clean_pass));
+    let clean_apply = run_capturing(
+        &clean.root,
+        &["design", "apply", SLICE, "-p", ".", "--input", &clean_input],
+    );
+    let defective_input = defective.payload("dispose", &conducted_body(&defective_pass));
+    let defective_apply = run_capturing(
+        &defective.root,
+        &[
+            "design",
+            "apply",
+            SLICE,
+            "-p",
+            ".",
+            "--input",
+            &defective_input,
+        ],
+    );
+
+    assert_eq!(
+        clean_apply.status.success(),
+        defective_apply.status.success(),
+        "the defect moves NO admission outcome: clean stderr {}, defective stderr {}",
+        String::from_utf8_lossy(&clean_apply.stderr),
+        String::from_utf8_lossy(&defective_apply.stderr)
+    );
+    assert!(
+        clean_apply.status.success(),
+        "the `Conducted` disposition over a concluded pass is admissible on \
+         both twins: clean stderr {}",
+        String::from_utf8_lossy(&clean_apply.stderr)
+    );
+    let defective_apply_stderr = String::from_utf8_lossy(&defective_apply.stderr).into_owned();
+    assert!(
+        defective_apply_stderr.contains(&expected_warning),
+        "admission still discloses the defect: {defective_apply_stderr}"
+    );
+}

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! The 97 `review` command-tier unit tests (SL-268 PHASE-02 T4), unchanged in
-//! substance from `src/review.rs` at `a3bd0764c` — only `use` lines and module
-//! paths differ.
+//! The `review` command-tier unit tests: 97 as of SL-268 PHASE-02 `T4`,
+//! unchanged in substance from `src/review.rs` at `a3bd0764c` (only `use` lines
+//! and module paths differed there); 105 as of PHASE-03, which added the
+//! fail-safe-read and disclosure tests (`T1`–`T6`).
 
 use super::*;
 use super::{prime::*, read::*, turn::*, verbs::*};

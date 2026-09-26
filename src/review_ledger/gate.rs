@@ -29,14 +29,21 @@ pub(crate) fn relation_edges(
 }
 
 /// A review's DERIVED status string (`"active"`/`"done"`) for the cross-kind
-/// priority scan (SL-047 §5.2). An RV authors no `status` field (D-C8); its status
+/// priority scan (SL-047 §5.2), alongside its closed-vocabulary defects
+/// (SL-268 D15, DEC-319, RV-396 `F-3`) — the one caller
+/// ([`crate::catalog::scan::status_and_title_for`]) needs both, and a second
+/// `vocabulary_defects` call over the same doc would be a second parse's worth
+/// of drift risk for nothing. An RV authors no `status` field (D-C8); its status
 /// is `derived_status` over the AUTHORED finding ledger — authored-tier, not a
 /// runtime read. Reads via the existing `read_review` reader (no new TOML parse),
 /// then runs the same pure `derived` the `show`/`list`/`status` surfaces use.
-pub(crate) fn derived_status_string(root: &Path, id: u32) -> anyhow::Result<String> {
+pub(crate) fn derived_status_string(
+    root: &Path,
+    id: u32,
+) -> anyhow::Result<(String, Vec<VocabDefect>)> {
     let doc = read_review(&root.join(REVIEW_DIR), id)?;
     let (status, _await) = doc.derived();
-    Ok(status.as_str().to_string())
+    Ok((status.as_str().to_string(), vocabulary_defects(&doc)))
 }
 
 /// One unresolved blocker holding a target's closure open (design §7, D8/D-C9b):
@@ -221,6 +228,11 @@ pub(crate) struct PassFacts {
     /// What the ledger still holds, by severity — the warning lamp's input, wider
     /// than [`Self::undisposed_blockers`] on purpose (SL-244 `EX-2`).
     pub(crate) outstanding: OutstandingCounts,
+    /// Closed-vocabulary defects on this ledger (SL-268 D15, RV-396 `F-9`) —
+    /// additive disclosure only. **No predicate reads this field**: the gate
+    /// outcome is unchanged (`EX-4`/`VT-5`); `commands/design.rs` prints one
+    /// `warning:` line per defect wherever it reads `PassFacts`.
+    pub(crate) defects: Vec<VocabDefect>,
 }
 
 /// Read a named `RV` for a design run — the single parse both consumers share.
@@ -247,6 +259,7 @@ pub(crate) fn read_pass_facts(root: &Path, reference: &str) -> anyhow::Result<Pa
         concluded: doc.review.concluded,
         undisposed_blockers: undisposed_blockers(&doc),
         outstanding: outstanding_by_severity(&doc),
+        defects: vocabulary_defects(&doc),
     })
 }
 
