@@ -271,3 +271,29 @@ Surfaced during `SL-244`'s design run, from the constraint that decided `DEC-127
 or citation must reference an ensured-up-to-date published copy rather than a
 private artefact. `DEC-127` establishes the rule for the asset it was deciding;
 this item owns the existing corpus and the check.
+
+## Status — part 1 delivered by `SL-267`; part 2 open (2026-09-26)
+
+**Part 1 (the sweep) landed** in `SL-267` (shipped-corpus conformance). All three
+sub-corpora were swept (`install/`, `memory/`, `plugins/`) and the vocabulary
+question above was settled: the grounding rule — inline prose, a published
+`reference/<name>.md` address, a shipped memory key, a skill name, a CLI verb, or
+an in-corpus relative path where the target sits beside the citing file — is
+recorded once as the accepted `ADR-024`. Evidence: `SL-267`'s `notes.md`
+(three per-axis ledgers + the client-read control) and audit `RV-395`.
+
+**Ledger corrections, for part 2** — the inventory above is a floor, not a bound:
+
+- The id regex omits the knowledge-kind prefixes (`CON`/`EVD`/`HYP`/`CPT`),
+  membership labels (`FR-`/`NF-`), and the whole doc-local-id dimension
+  (`D-N`, `F-N`, `INV-N`, `S-N`, `PHASE-NN`).
+- The `plugins/` inventory is stale by growth: 35 `SKILL.md` on disk, ~104 sites
+  across 16 files — not "14 files / 74 sites" — and its "none illustrations"
+  claim is wrong (five sites).
+- The `memory/` denominator is 13 masters, not 11.
+
+**Part 2 (the check) remains open.** A second, *distinct* integrity gap was
+found while closing `SL-267` and is filed as `IMP-487`: a skipped re-embed or
+`memory sync` leaves the **materialised** corpus stale while every gate stays
+green. Part 2's slice should carry both checks — content (this item) and
+freshness (`IMP-487`) — as they do not subsume each other.
