@@ -27,6 +27,11 @@ act = "conclude"
 role = "raiser"
 note = "Round 3: read F-4, F-7, F-11 responses at e2f8181fa against DEC-334 item 1, DEC-326 choice and rationale, design sec-3 and sec-5 VT-2/VT-3, and REV-065 After text. F-5 and F-7 left answered (control routes)."
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Round 4: checked F-12 response at ae2310556 against REV-065 Amendment 2 After text and DEC-326 amendment note."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-270"
 
@@ -413,7 +418,7 @@ note = "DEC-326 choice and sec-3 now count an out-of-vocabulary status as dispos
 
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "REV-065 approved SPEC-032 text predates the F-11 fail-closed change"
 detail = """
@@ -433,6 +438,11 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = "Accepted. REV-065 Amendment 2 now says the lock refuses on a severe finding whose status is not open or withdrawn (an out-of-vocabulary status counts), matching DEC-326 and sec-3. DEC-326's amendment note cites F-7 and F-11. The wording change narrows nothing the owner approved; the owner is told of it at the lock gate."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "REV-065 Amendment 2 now reads not open or withdrawn with out-of-vocabulary status counting, matching DEC-326; DEC-326 note cites F-7 and F-11."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
