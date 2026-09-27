@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 333
+slug = "probe-and-control-are-told-apart-by-the-findings-subject"
+title = "probe and control are told apart by the finding's subject"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "In RFC-026 E14's design-review population, probe/control was 26 of the 70 rater disagreements (exploratory, not pre-registered). The contested findings are typically hostile input against an integrity check, which reads both as 'does the mechanism withstand the adversary?' and 'would the check notice failure?'. The rater prompt omitted reviewing.md's tie-break, which puts control before probe."
+choice = "reviewing.md gains one boundary sentence: the subject decides - doubt about the mechanism's resistance routes probe; doubt about the check's detection routes control. The existing tie-break stays. No further re-rate before the window; rater noise is recorded in the trial protocol instead."
+alternatives = ["Rewrite the probe and control definitions. Rejected: the definitions are P10's; the evidence shows a boundary case, not a wrong definition.", "Re-rate again with the tie-break in the prompt. Rejected: cost against an exploratory result; the window's second rater measures it anyway."]
+rationale = "One sentence addresses the observed confusion at the moment of routing; the window's blind second rater, with the tie-break included, tests whether it closes the gap."
+consequences = ["reviewing.md's route section gains the boundary sentence alongside the DEC-330 route changes.", "The trial protocol reports probe/control disagreement separately."]
+decided_by = "owner, on agent proposal (SL-270 design inq-6)"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-270"

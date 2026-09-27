@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 330
+slug = "owner-fix-splits-into-dedupe-and-refresh"
+title = "owner-fix splits into dedupe and refresh"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "RFC-026 P11 proposed splitting owner-fix or naming the stale-account class. The pre-registered re-rate (RFC-026 E14, R4, design-review population) found both raters agreeing on duplicate versus stale for 17 of 19 jointly owner-fix findings, 9 of them stale, which meets the pre-registered split threshold. Deleting a duplicate and editing a stale record are different acts. No ledger in this repo carries a route field yet, so the route set can change without migration."
+choice = "The route set becomes six, fixed before the second trial window. owner-fix is retired and replaced by two routes: dedupe - are there two live accounts of one fact? settled by deleting the duplicate, verifying the surviving owner and sweeping the affected class (DEC-267's sweep clause moves here); refresh - does a record lag the thing it describes? settled by first confirming which side is right, then editing the record and sweeping the records that cite it. Where the thing described is itself wrong, the finding is a defect and routes review, not refresh. The tie-break order becomes dedupe, refresh, control, probe, demonstrate. The change lands in the Route enum and ROUTES (src/review_ledger/vocab.rs), the MCP route schema, reviewing.md and review-ledger.md. A legacy owner-fix value on a client ledger reads as an unknown route, disclosed by vocabulary_defects, and counts as unrouted at the lock (DEC-326)."
+alternatives = ["Keep owner-fix for duplicates and add refresh only. Rejected: both halves are fixes by an owner, so the old name keeps inviting the merged reading, and it means two things across E11-E14 and later reports.", "Keep five routes. Rejected: fails the pre-registered R4 reading.", "Other names for refresh: reconcile (collides with the /reconcile stage), amend (collides with review amend), update (too generic), resync (close second). refresh chosen; owner found no more obvious verb."]
+rationale = "The split follows a rule fixed before the data existed, and renaming both halves keeps each name to one meaning at no migration cost."
+consequences = ["The Route enum, ROUTES, the MCP schema, reviewing.md (route table, tie-break, per-route obligations) and review-ledger.md change together, before any eligible slice opens.", "Earlier evidence (E11-E14) keeps the owner-fix label; reports map it as the union of dedupe and refresh.", "A client ledger carrying owner-fix is disclosed, not migrated."]
+decided_by = "owner (SL-270 design inq-3)"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-270"

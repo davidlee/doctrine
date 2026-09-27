@@ -82,33 +82,29 @@ confound.
                          auto-capture)       binary floor)          slices)
 ```
 
-1. **Settle the taxonomy before the window.** Re-run `E13`'s classification with
-   the steering rule removed (finding 5) and the reading rule published first.
-   Also classify the design-review severe findings on `E11`'s eleven ledgers,
-   so `owner-fix`'s load is measured in the facet where routing applies
-   (finding 7). Decide `P11`, split or keep, from that evidence. Freeze the
-   route set for the window's duration.
-2. **Enforce the form in code** (findings 1, 3, 4):
-   - a design-facet ledger cannot conclude while any `blocker`/`major` finding
-     carries no route;
-   - `--route` is refused on ledgers outside the design facet, which makes
-     `QUE-224`'s answer structural rather than documentary;
-   - `review conclude` writes the pass's rounds and contests into the authored
-     ledger, so `DEC-276`'s capture happens by construction.
-3. **Freeze the protocol in a decision record** before any eligible slice opens:
-   eligibility (next N code-changing slices, rule as `SL-260` scope §5),
-   collection procedure (`DEC-276` / `SL-260` design §9.4, updated for the
-   `--route` field), reading rules including the `L` (*repair drew a later
-   finding*) row, and a binary floor: the build serving agents (CLI and MCP) must
-   expose `route` (finding 2).
-4. **Run the window.** This slice ships steps 1–3. The window and its report
-   belong to a chore minted at design, sequenced `after` this slice, as
-   `CHR-077` was to `SL-260`.
+1. **Settle the taxonomy before the window.** Done in research: the unsteered
+   re-rate (`RFC-026` `E14`) resolved `P11` to a split. The route set becomes
+   six: `owner-fix` is replaced by `dedupe` and `refresh` (`DEC-330`), and
+   `reviewing.md` gains a `probe`/`control` boundary sentence (`DEC-333`). The
+   code and docs change before the window and stay fixed through it.
+2. **Enforce route presence in code** (findings 1, 2): the design-run lock
+   refuses while a disposed `blocker`/`major` finding on the design review
+   carries no known route (`DEC-326`). Two items left the original scope:
+   refusing `--route` outside design review (`DEC-331`: the evidence no longer
+   supports it, and the lock check already holds the scope), and writing
+   counters at `conclude` (`DEC-327`: rounds and contests are already
+   journal-derived, finding 3).
+3. **Freeze the protocol** in `DEC-334` (supersedes `DEC-276`): eligibility (the
+   next 3 code-changing slices with a conducted design review), a build floor
+   covering the CLI, the MCP server and installed skills (finding 2), collection,
+   a blind second rater, and reading rules headed by `L`.
+4. **Run the window** in `CHR-082`, sequenced `after` this slice, as `CHR-077`
+   was to `SL-260`.
 
 ## Non-Goals
 
-- Extending routing to audit or code-review (`QUE-224` stands; this slice
-  enforces it).
+- Extending routing to audit or code-review (`QUE-224` stands). Not refused
+  either (`DEC-331`).
 - A pass mark. `P10` sets none and three to five ledgers cannot carry one.
 - Re-litigating `E11`–`E13` counts. Findings 5–8 qualify their readings, and
   the re-rate in step 1 supersedes `E13`'s headline rather than amending it.
@@ -121,6 +117,4 @@ the protocol before a second window, so that window can measure the mechanism.
 
 ## Follow-Ups
 
-- Trial-report chore, minted at design (step 4).
-- `QUE-224`'s recorded rationale should be amended to the pre/post-implementation
-  argument (finding 7) if the owner agrees.
+- Trial window and report: `CHR-082`.

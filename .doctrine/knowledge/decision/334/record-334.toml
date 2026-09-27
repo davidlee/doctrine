@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 334
+slug = "routing-trial-two-protocol"
+title = "Routing trial two protocol"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "RFC-026 P10's first window (E12) measured delivery and found it absent. SL-270 enforces route presence at the design-run lock (DEC-326), fixes the route set at six (DEC-330, DEC-327, DEC-331, DEC-333), and must fix the second window's protocol before any eligible slice opens, since every mid-window change so far has been a confound. This decision carries forward DEC-276's collection procedure, minus the at-conclusion capture DEC-327 withdrew."
+choice = "(1) ELIGIBILITY: the next 3 code-changing slices whose design run conducts a review, taken consecutively after SL-270 closes, not selected; a slice whose review is waived is recorded and skipped. (2) BUILD FLOOR, checked and recorded at window open and at each eligible slice's design start: review dispose --help lists the six routes; the MCP server's review_dispose schema offers route with the six; installed skills are fresh (doctrine install check or equivalent). A failing check holds the slice until fixed; it is never counted without the floor. (3) PER SEVERE FINDING (blocker/major): route; for demonstrate, probe and control, whether the instrument produced the evidence it promised; L - whether the repair was later contested or drew a related finding. (4) PER LEDGER, as counts: rounds and contests (journal, DEC-327), artefact-prose findings, findings against repair text, design line growth during review, later audit findings, slice completed. (5) SECOND RATER: re-routes blind from the same ledger JSON with the six-route prompt including the tie-break and the probe/control sentence (DEC-333); disagreements reported as disagreements, with kappa against E14's 0.44-0.56, and probe/control disagreement reported separately. (6) READING: no pass mark. Route presence is a manipulation check - the lock forces 100%, so a miss is a gate failure, not a convention miss. The headline is L on routed findings against E12's window (50-61%) and E11's converged ledgers. Cases where a route needed the owner to interpret it are reported (a P10 kill condition)."
+alternatives = ["N = 5 slices. Rejected for now: more findings, but a longer window and more exposure to mid-window change; N = 3 matches the first window for direct comparison.", "Leave the method to the trial chore. Rejected: DEC-276's reason stands - a method chosen after outcomes are visible can be tuned to them."]
+rationale = "Every lever that could move the answer after the fact - eligibility, collection, reading - is fixed now, and the build floor closes the stale-binary and stale-projection gap that could silently disable routing (SL-270 context finding 2)."
+consequences = ["The trial chore carries this protocol and records each build-floor check.", "DEC-276 is superseded: its capture rule by DEC-327, its procedure by this record.", "Presence can no longer be a finding of the trial; the trial measures the mechanism."]
+decided_by = "owner, on agent proposal (SL-270 design inq-7)"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = ["DEC-276"]   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-270"

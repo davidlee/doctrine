@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 327
+slug = "trial-rounds-and-contests-are-read-from-the-ledger-journal"
+title = "Trial rounds and contests are read from the ledger journal"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-276 requires the trial owner to copy review status into an authored record at each design pass conclusion, because rounds and contests lived only in the gitignored baton. CHR-077 missed that capture on all three ledgers. SL-268 has since made both counters journal-derived: rounds = rounds_base + turns, contests = contests_base + contest turns, read from the authored ledger (src/review_ledger/derive.rs:182-200; ADR-007 D-C5), so DEC-276's premise no longer holds."
+choice = "The at-conclusion capture rule is withdrawn. Rounds and contests are read after the fact from review show --json on each eligible ledger. This supersedes DEC-276 in that rule only; the rest of DEC-276's collection procedure carries forward into the SL-270 trial-protocol decision. The residual - a legacy ledger whose baton was lost before its first journalled write - does not arise for a ledger opened after SL-268, and is reported as unavailable if met."
+alternatives = ["Have review conclude write the counters into the ledger (SL-270's original scope step 2). Rejected: stores a derived total beside its derivation (REQ-006) and duplicates what the journal already yields.", "Keep the manual capture as a belt. Rejected: an honour-system step that already failed, guarding a value that is now durable."]
+rationale = "The measure is durable by construction, so the obligation that protected it has no remaining job."
+consequences = ["SL-270 scope step 2 loses its counter-capture item.", "DEC-276 is superseded in its at-conclusion capture rule; the trial-protocol decision restates the collection procedure without it."]
+decided_by = "owner, on agent proposal (SL-270 design inq-5)"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-270"
