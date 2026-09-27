@@ -315,6 +315,11 @@ pub(super) fn every_cause(members: usize) -> Vec<Cause> {
         Cause::BlockersUndisposed {
             findings: (0..members).map(|n| format!("F-{n:0>5}")).collect(),
         },
+        Cause::SevereFindingsUnrouted {
+            findings: (0..members)
+                .map(|n| format!("F-{n:0>5} (no route)"))
+                .collect(),
+        },
         Cause::PassSuperseded {
             disposed: review(),
             current: review(),
@@ -364,7 +369,9 @@ pub(super) fn widest_causes(condition: Condition, members: usize) -> Vec<Cause> 
                 causes.extend(pick(|cause| {
                     matches!(
                         cause,
-                        Cause::PassSuperseded { .. } | Cause::BlockersUndisposed { .. }
+                        Cause::PassSuperseded { .. }
+                            | Cause::BlockersUndisposed { .. }
+                            | Cause::SevereFindingsUnrouted { .. }
                     )
                 }));
                 causes

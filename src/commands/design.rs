@@ -3213,6 +3213,7 @@ fn observed_review(
         reference: reference.clone(),
         concluded: facts.concluded,
         undisposed_blockers: facts.undisposed_blockers,
+        unrouted_severe: facts.unrouted_severe,
     }))
 }
 

@@ -2141,6 +2141,7 @@ fn a_conducted_disposition_naming_a_pass_the_run_is_not_on_is_refused() {
         reference: ReviewRef::new("RV-324"),
         concluded: true,
         undisposed_blockers: Vec::new(),
+        unrouted_severe: Vec::new(),
     };
     assert_eq!(
         faults(
@@ -2179,6 +2180,7 @@ fn a_conducted_disposition_over_a_pass_that_has_not_concluded_is_refused() {
         reference: ReviewRef::new("RV-344"),
         concluded: false,
         undisposed_blockers: Vec::new(),
+        unrouted_severe: Vec::new(),
     };
     let refused = |observed: Option<&ObservedReview>| {
         faults(
@@ -2199,6 +2201,7 @@ fn a_conducted_disposition_over_a_pass_that_has_not_concluded_is_refused() {
         reference: ReviewRef::new("RV-324"),
         concluded: true,
         undisposed_blockers: Vec::new(),
+        unrouted_severe: Vec::new(),
     };
     assert_eq!(
         refused(Some(&elsewhere)),
@@ -3144,6 +3147,7 @@ fn waiver_clears_over_live_findings_and_dismisses_none() {
         reference: ReviewRef::new(PASS),
         concluded: false,
         undisposed_blockers: findings.clone(),
+        unrouted_severe: Vec::new(),
     });
 
     assert_holds(Condition::ReviewDispositionAttested, &run, &derived);
@@ -3203,6 +3207,7 @@ fn a_re_disposed_blocker_clears_the_edge_again() {
             reference: ReviewRef::new(PASS),
             concluded: true,
             undisposed_blockers,
+            unrouted_severe: Vec::new(),
         })
     };
 
@@ -3219,6 +3224,73 @@ fn a_re_disposed_blocker_clears_the_edge_again() {
     // the same pass — so a row that cleared here on anything but the ledger
     // would be reading its own history.
     derived.gate.observed_review = observing(Vec::new());
+    assert_holds(Condition::ReviewDispositionAttested, &run, &derived);
+}
+
+/// SL-270 `VT-5` (DEC-326) — an unrouted severe finding holds the lock edge as
+/// its own cause, beside the blockers rather than folded into them, and the
+/// edge clears once the ledger routes it.
+///
+/// Both lists at once in the first leg: a derivation that reported only one
+/// of two non-empty lists would pass a one-list test.
+#[test]
+fn an_unrouted_severe_finding_holds_the_edge_until_routed() {
+    let (mut run, mut derived) = cleared();
+    let act = run
+        .acts
+        .acts
+        .iter_mut()
+        .find(|held| held.act == ActKind::ReviewDisposed)
+        .expect("the fixture disposes the pass");
+    act.disposition = Some(DisposedPass {
+        pass: ReviewRef::new(PASS),
+        disposition: ReviewDisposition::Conducted {
+            review: ReviewRef::new(PASS),
+        },
+    });
+    let observing = |undisposed_blockers: Vec<String>, unrouted_severe: Vec<String>| {
+        Some(ObservedReview {
+            reference: ReviewRef::new(PASS),
+            concluded: true,
+            undisposed_blockers,
+            unrouted_severe,
+        })
+    };
+
+    derived.gate.observed_review =
+        observing(vec!["F-2".to_owned()], vec!["F-3 (no route)".to_owned()]);
+    assert_eq!(
+        causes_of(Condition::ReviewDispositionAttested, &run, &derived),
+        vec![
+            Cause::BlockersUndisposed {
+                findings: vec!["F-2".to_owned()],
+            },
+            Cause::SevereFindingsUnrouted {
+                findings: vec!["F-3 (no route)".to_owned()],
+            },
+        ],
+    );
+
+    derived.gate.observed_review = observing(Vec::new(), vec!["F-3 (no route)".to_owned()]);
+    let causes = causes_of(Condition::ReviewDispositionAttested, &run, &derived);
+    assert_eq!(
+        causes,
+        vec![Cause::SevereFindingsUnrouted {
+            findings: vec!["F-3 (no route)".to_owned()],
+        }],
+        "blocker-free, the unrouted finding alone holds the edge"
+    );
+    let rendered = causes[0].to_string();
+    assert!(
+        rendered.starts_with("severe findings carry no route: F-3 (no route); "),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("--route"),
+        "the refusal names the repair: {rendered}"
+    );
+
+    derived.gate.observed_review = observing(Vec::new(), Vec::new());
     assert_holds(Condition::ReviewDispositionAttested, &run, &derived);
 }
 

@@ -190,7 +190,7 @@ impl Disposition {
     /// `--disposition "route:<route> <vocab>"` form through this one function,
     /// pointing the caller at `--route` (design sec-4).
     pub(crate) fn parse(s: &str) -> Result<Self, String> {
-        if s.starts_with("route:") {
+        if s.starts_with(LEGACY_ROUTE_PREFIX) {
             return Err(format!(
                 "route: is not part of a disposition; pass the route with --route (known routes: {})",
                 ROUTES.join(", ")
@@ -291,6 +291,10 @@ impl From<Route> for String {
         r.as_str().to_owned()
     }
 }
+
+/// The retired prose form of a route: the first token of a disposition string
+/// (`route:probe fix-now`). Refused on write; still found in older ledgers.
+pub(crate) const LEGACY_ROUTE_PREFIX: &str = "route:";
 
 /// The `Route` known-set. Lockstep-guarded by `route_known_set_matches_variants`
 /// (`vocab.rs`'s own test module — VT-4).

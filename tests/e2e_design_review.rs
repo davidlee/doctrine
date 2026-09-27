@@ -1772,3 +1772,86 @@ fn late_raise_refuses_conducted_until_reconclude() {
         "the recorded disposition stands after the late raise"
     );
 }
+
+// ── SL-270 PHASE-02 (DEC-326, VT-4) ─────────────────────────────────────────
+
+/// `VT-4`: the lock refuses a concluded, blocker-free pass holding one answered
+/// `major` with no route, naming it; routing that finding with `review amend`
+/// lets the same run lock. Nothing else moves between the two attempts, so the
+/// route is what the lock read.
+#[test]
+fn lock_refuses_an_unrouted_major_until_amended_with_a_route() {
+    let fixture = Fixture::reviewing();
+    let pass = pass_of(&fixture);
+    review_verb(
+        &fixture.root,
+        &[
+            "raise",
+            &pass,
+            "--as",
+            "raiser",
+            "--severity",
+            "major",
+            "--title",
+            "t",
+            "--detail",
+            "d",
+        ],
+    );
+    review_verb(
+        &fixture.root,
+        &[
+            "dispose",
+            &pass,
+            "--as",
+            "responder",
+            "--finding",
+            "F-1",
+            "--disposition",
+            "fix-now",
+            "--response",
+            "r",
+        ],
+    );
+    review_verb(&fixture.root, &["conclude", &pass, "--basis", "b"]);
+    let disposed = apply_conducted(&fixture, "dispose", &pass);
+    assert!(
+        disposed.status.success(),
+        "a concluded pass admits `Conducted`: {}",
+        String::from_utf8_lossy(&disposed.stderr)
+    );
+    fixture.apply(&fixture.payload(
+        "accept",
+        &json!({"checkpoint_act": design_act::checkpoint_act(
+            ActKind::DesignAccepted,
+            "User accepted the design at the close of review",
+        )}),
+    ));
+
+    let stderr = fixture.refuse(&fixture.lock_payload("lock", None));
+    assert!(
+        stderr.contains("severe findings carry no route: F-1 (no route)"),
+        "the refusal names the unrouted finding: {stderr}"
+    );
+    assert_eq!(fixture.stage(), Stage::Reviewing);
+
+    review_verb(
+        &fixture.root,
+        &[
+            "amend",
+            &pass,
+            "--as",
+            "responder",
+            "--finding",
+            "F-1",
+            "--route",
+            "probe",
+            "--response",
+            "r",
+            "--note",
+            "routed",
+        ],
+    );
+    fixture.apply(&fixture.lock_payload("lock-again", None));
+    assert_eq!(fixture.stage(), Stage::Locked);
+}

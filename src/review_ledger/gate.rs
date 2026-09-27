@@ -8,8 +8,8 @@ use std::path::Path;
 use anyhow::Context;
 
 use super::derive::{VocabDefect, vocabulary_defects};
-use super::schema::{ReviewDoc, canonical_id, parse_ref, read_review, read_reviews};
-use super::vocab::{FindingStatus, ReviewStatus, Severity, Vocab};
+use super::schema::{FindingRow, ReviewDoc, canonical_id, parse_ref, read_review, read_reviews};
+use super::vocab::{FindingStatus, LEGACY_ROUTE_PREFIX, ReviewStatus, Route, Severity, Vocab};
 use crate::kinds::REVIEW_DIR;
 
 /// A review's authored outbound relation (SL-046 §5.2/§5.3): the single
@@ -145,6 +145,61 @@ pub(crate) fn undisposed_blockers(doc: &ReviewDoc) -> Vec<String> {
         .collect()
 }
 
+/// Pure check (SL-270 DEC-326): the disposed severe findings on this pass that
+/// carry no known route, rendered `F-n (<reason>)` for the design-run lock.
+///
+/// A finding is listed iff it is
+///
+/// - **severe**: [`gates_as_blocker`] or a known `major`, so an unknown severity
+///   counts;
+/// - **disposed**: its status is not a known `open` or `withdrawn`, so an unknown
+///   status counts and the check fails closed (RV-400 `F-11`);
+/// - **not already an [`undisposed_blockers`] entry**, so no finding is reported
+///   twice (RV-400 `F-7`); and
+/// - **unrouted**: see [`route_missing`].
+///
+/// The labels are opaque to the gate (ADR-001: `design_run` is leaf), which only
+/// needs *non-empty refuses* and *what to show*.
+pub(crate) fn unrouted_severe(doc: &ReviewDoc) -> Vec<String> {
+    let held = undisposed_blockers(doc);
+    doc.finding
+        .iter()
+        .filter(|f| {
+            gates_as_blocker(&f.severity)
+                || Vocab::<Severity>::read(&f.severity) == Vocab::Known(Severity::Major)
+        })
+        .filter(|f| {
+            !matches!(
+                Vocab::<FindingStatus>::read(&f.status),
+                Vocab::Known(FindingStatus::Open | FindingStatus::Withdrawn)
+            )
+        })
+        .filter(|f| !held.contains(&f.id))
+        .filter_map(|f| route_missing(f).map(|reason| format!("{} ({reason})", f.id)))
+        .collect()
+}
+
+/// Why a finding has no known route, or `None` when it has one.
+///
+/// Read here rather than on the row because a stored route is open on read:
+/// [`Route::parse`] runs only on write, so a legacy `owner-fix` reads fine and is
+/// judged unknown only at this gate.
+fn route_missing(finding: &FindingRow) -> Option<String> {
+    match &finding.route {
+        Some(raw) => Route::parse(raw)
+            .err()
+            .map(|_| format!("unknown route {raw}")),
+        None if finding
+            .disposition
+            .as_deref()
+            .is_some_and(|d| d.starts_with(LEGACY_ROUTE_PREFIX)) =>
+        {
+            Some("legacy route: prefix".to_owned())
+        }
+        None => Some("no route".to_owned()),
+    }
+}
+
 /// The findings one `RV` still holds, counted by severity (SL-244 `EX-2`).
 ///
 /// A **fixed record rather than a map**, because the ledger's severity vocabulary
@@ -229,6 +284,9 @@ pub(crate) struct PassFacts {
     pub(crate) concluded: bool,
     /// The findings holding the run's `reviewing → locked` edge, by `F-n` id.
     pub(crate) undisposed_blockers: Vec<String>,
+    /// Disposed severe findings with no known route, rendered `F-n (<reason>)`
+    /// (SL-270 DEC-326): the lock's second list, beside the blockers.
+    pub(crate) unrouted_severe: Vec<String>,
     /// What the ledger still holds, by severity — the warning lamp's input, wider
     /// than [`Self::undisposed_blockers`] on purpose (SL-244 `EX-2`).
     pub(crate) outstanding: OutstandingCounts,
@@ -262,6 +320,7 @@ pub(crate) fn read_pass_facts(root: &Path, reference: &str) -> anyhow::Result<Pa
     Ok(PassFacts {
         concluded: doc.review.concluded,
         undisposed_blockers: undisposed_blockers(&doc),
+        unrouted_severe: unrouted_severe(&doc),
         outstanding: outstanding_by_severity(&doc),
         defects: vocabulary_defects(&doc),
     })

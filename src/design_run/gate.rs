@@ -1210,6 +1210,12 @@ pub(crate) enum Cause {
         /// The ledger's own finding ids.
         findings: Vec<String>,
     },
+    /// The named `RV` holds disposed severe findings with no known route
+    /// (SL-270 DEC-326), as the ledger's `F-n (<reason>)` labels.
+    SevereFindingsUnrouted {
+        /// The ledger's own labels, reason included.
+        findings: Vec<String>,
+    },
     /// The disposition was given over a pass that is no longer the run's current
     /// one — `sec-3`'s re-entry rule. Names both, because the repair is to
     /// dispose the new pass and the reader has to know there is one.
@@ -1271,7 +1277,8 @@ impl Cause {
             Cause::ActMissing { ref mut lanes, .. } => cut(lanes, max),
             Cause::SectionsUnreviewed { ref mut subjects } => cut(subjects, max),
             Cause::CoverageStale { ref mut moved, .. } => cut(moved, max),
-            Cause::BlockersUndisposed { ref mut findings } => cut(findings, max),
+            Cause::BlockersUndisposed { ref mut findings }
+            | Cause::SevereFindingsUnrouted { ref mut findings } => cut(findings, max),
             Cause::InquiriesOpen { ref mut nodes } => cut(nodes, max),
             Cause::NoSections
             | Cause::ObservedStale { .. }
@@ -1345,6 +1352,17 @@ impl fmt::Display for Cause {
             Cause::BlockersUndisposed { ref findings } => write!(
                 f,
                 "blocking findings hold the edge: {}",
+                join(findings.iter().map(String::as_str))
+            ),
+            // The repair depends on the finding's status, and the refusal is
+            // where a responder meets it (design sec-3), so it rides here.
+            Cause::SevereFindingsUnrouted { ref findings } => write!(
+                f,
+                "severe findings carry no route: {}; route each one: if answered, \
+                 `review amend <RV> --finding F-n --route <route> --response … --note …`; if \
+                 contested, dispose again with `--route`; if verified, the raiser \
+                 reopens and the responder disposes again with `--route`; an \
+                 out-of-vocabulary status is repaired by hand",
                 join(findings.iter().map(String::as_str))
             ),
             Cause::PassSuperseded {
@@ -1713,6 +1731,11 @@ fn disposition_causes(
             findings: seen.undisposed_blockers.clone(),
         });
     }
+    if !seen.unrouted_severe.is_empty() {
+        causes.push(Cause::SevereFindingsUnrouted {
+            findings: seen.unrouted_severe.clone(),
+        });
+    }
 }
 
 /// Attempt a forward move.
@@ -1851,7 +1874,7 @@ mod tests {
     use crate::design_run::fixture::every_cause;
     use crate::design_run::render::envelope::{Detail, UnmetRow};
 
-    /// Whether `cause` is one of the five list-carrying variants — stated here
+    /// Whether `cause` is one of the six list-carrying variants — stated here
     /// rather than read off `capped`, which is what is under test.
     const fn carries_a_list(cause: &Cause) -> bool {
         matches!(
@@ -1860,6 +1883,7 @@ mod tests {
                 | Cause::SectionsUnreviewed { .. }
                 | Cause::CoverageStale { .. }
                 | Cause::BlockersUndisposed { .. }
+                | Cause::SevereFindingsUnrouted { .. }
                 | Cause::InquiriesOpen { .. }
         )
     }
@@ -1869,7 +1893,7 @@ mod tests {
     #[test]
     fn cause_lists_are_capped_never_silently() {
         let causes = every_cause(12);
-        assert_eq!(causes.iter().filter(|c| carries_a_list(c)).count(), 5);
+        assert_eq!(causes.iter().filter(|c| carries_a_list(c)).count(), 6);
         for cause in &causes {
             let capped = cause.capped(5);
             if carries_a_list(cause) {

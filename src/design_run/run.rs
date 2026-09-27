@@ -188,6 +188,9 @@ pub(crate) struct ObservedReview {
     /// the ledger's own `F-n` ids: they identify rows on the `RV`, not subjects in
     /// the run, so they are not [`DesignId`]s.
     pub(crate) undisposed_blockers: Vec<String>,
+    /// Disposed severe findings carrying no known route (SL-270 DEC-326), as
+    /// opaque `F-n (<reason>)` labels the ledger rendered. Read at the lock only.
+    pub(crate) unrouted_severe: Vec<String>,
 }
 
 /// One runbook as the shell read it, with the digest of each step's definition

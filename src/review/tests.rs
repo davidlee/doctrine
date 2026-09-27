@@ -10,7 +10,7 @@ use crate::review_ledger::{
     BlockerRef, DISPOSITIONS, EFFECT_UNKNOWN_SEVERITY, FACETS, FINDING_STATUSES, OutstandingCounts,
     ROLES, ROUTES, SEVERITIES, Vocab, VocabDefect, VocabField, gates_as_blocker, next_finding_id,
     observe_pass, outstanding_by_severity, read_pass_facts, undisposed_blockers,
-    unresolved_blockers_for, vocabulary_defects,
+    unresolved_blockers_for, unrouted_severe, vocabulary_defects,
 };
 
 // -- can(): single-owner edges (VT-3) -----------------------------------
@@ -2881,6 +2881,92 @@ fn open_and_contested_blockers_are_carried_by_finding_id() {
         undisposed_blockers(&read_doc(root, 1)),
         vec!["F-1".to_owned(), "F-2".to_owned()]
     );
+}
+
+/// Raise one finding per `(severity, edits)` row on a fresh RV, then hand-edit
+/// each row's fields — the ledger a route-presence read has to classify.
+fn ledger_with(rows: &[(Severity, &[(&str, &str)])]) -> (tempfile::TempDir, ReviewDoc) {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    // Every raise before any edit: a hand edit moves the ledger under the baton,
+    // which the next verb would refuse.
+    for (severity, _) in rows {
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", *severity, "t"),
+            Role::Raiser,
+        )
+        .unwrap();
+    }
+    for (n, (_, edits)) in rows.iter().enumerate() {
+        let id = format!("F-{}", n + 1);
+        for (field, value) in *edits {
+            hand_edit_finding(root, 1, &id, field, value);
+        }
+    }
+    let doc = read_doc(root, 1);
+    (tmp, doc)
+}
+
+/// SL-270 `VT-2` (DEC-326): the lock's route-presence list holds every disposed
+/// severe finding with no known route, each with its reason, and nothing else.
+///
+/// RV-400 `F-7` is the control: F-9, a contested route-less blocker, already
+/// holds the edge as an undisposed blocker, so a predicate that listed it here
+/// too would report one finding twice. It must appear in exactly one list.
+#[test]
+fn unrouted_severe_lists_disposed_severe_findings_without_a_known_route() {
+    let (_tmp, doc) = ledger_with(&[
+        (Severity::Major, &[("status", "answered")]),
+        (
+            Severity::Blocker,
+            &[
+                ("status", "answered"),
+                ("disposition", "route:probe fix-now"),
+            ],
+        ),
+        (
+            Severity::Major,
+            &[("status", "verified"), ("route", "owner-fix")],
+        ),
+        (Severity::Major, &[("status", "contested")]),
+        (
+            Severity::Major,
+            &[("status", "answered"), ("route", "probe")],
+        ),
+        (Severity::Major, &[]),
+        (Severity::Major, &[("status", "withdrawn")]),
+        (Severity::Minor, &[("status", "answered")]),
+        (Severity::Blocker, &[("status", "contested")]),
+    ]);
+
+    assert_eq!(
+        unrouted_severe(&doc),
+        [
+            "F-1 (no route)",
+            "F-2 (legacy route: prefix)",
+            "F-3 (unknown route owner-fix)",
+            "F-4 (no route)",
+        ]
+    );
+    assert_eq!(undisposed_blockers(&doc), ["F-9"]);
+}
+
+/// SL-270 `VT-3`: both unknowns fail closed (RV-400 `F-11`). An out-of-
+/// vocabulary severity counts as severe, as it gates as a blocker; an
+/// out-of-vocabulary status counts as disposed, so a route-less major holding
+/// one is listed rather than let through.
+#[test]
+fn unrouted_severe_fails_closed_on_unknown_severity_and_status() {
+    let (_tmp, doc) = ledger_with(&[
+        (
+            Severity::Minor,
+            &[("severity", "crit"), ("status", "verified")],
+        ),
+        (Severity::Major, &[("status", "zombie")]),
+    ]);
+
+    assert_eq!(unrouted_severe(&doc), ["F-1 (no route)", "F-2 (no route)"]);
 }
 
 /// SL-244 `EX-6b`: the predicate reads `severity` and `status` per finding and

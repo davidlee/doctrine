@@ -38,6 +38,7 @@ pub(crate) use derive::{EFFECT_UNKNOWN_SEVERITY, VocabField};
 #[cfg(test)]
 pub(crate) use gate::{
     BlockerRef, OutstandingCounts, gates_as_blocker, outstanding_by_severity, undisposed_blockers,
+    unrouted_severe,
 };
 #[cfg(test)]
 pub(crate) use transition::next_finding_id;
