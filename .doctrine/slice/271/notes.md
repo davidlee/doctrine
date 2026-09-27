@@ -308,7 +308,7 @@ at the tail (`mem.pattern.reconcile.edit-design-out-of-band`).
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-27 · audit (RV-403 concluded; fork landed) · ad5754620
+fresh-as-of: 2026-09-27 · close (SL-271 done; RV-403/RV-404 resolved) · 65891ddcc
 
 ### Produced
 
@@ -321,11 +321,18 @@ fresh-as-of: 2026-09-27 · audit (RV-403 concluded; fork landed) · ad5754620
 - `RV-402` (code review of the delta, 5 findings) and `RV-403` (audit,
   6 findings) — both `done`, every finding terminal. Fixes for `RV-402`
   `F-2`/`F-3`/`F-4` landed as `21620b316`.
+- PHASE-04 `3be4df419` — the probe retired; `[features] hooks` read from the
+  project `.codex/config.toml`.
+- `RV-404` (re-audit after the back-edge, 4 findings) — `done`; its F-1 wrote the
+  PHASE-03 VT supersession into design sec-9.
+- `REV-066` (`reconcile-sl-271`, done): `SPEC-011` `FR-012` → `REQ-483` (Claude
+  `.mcp.json` registration), `FR-013` → `REQ-484` (codex `[mcp_servers.doctrine]`),
+  plus the scope/responsibilities/mechanism prose.
 - Memories: `mem_01a0e1e1` (report-seam output is e2e-only), `mem_01a0e1f0`
   (`install --dry-run` skips `wire`), `mem.fact.codex.project-config-trust-gated`
   (the probe's premise is false; also one friction record on the fork/RV split).
 - Fork `slice/SL-271-codex-mcp-registration-during-install` landed onto `edge`
-  (`ad5754620`, `--no-ff`).
+  (`ad5754620`, `--no-ff`); the fork itself is retained in the worktree list.
 
 ### Learned
 
@@ -338,27 +345,23 @@ fresh-as-of: 2026-09-27 · audit (RV-403 concluded; fork landed) · ad5754620
 - codex applies a project `.codex/config.toml` only for TRUSTED projects, so a
   pre-trust `codex features list` answers for the user layer — the reason `RV-403`
   `F-1` is a design defect, not a bug (`mem.fact.codex.project-config-trust-gated`).
+- A **retirement phase** leaves its predecessor's immutable VT mandates
+  mechanically unsatisfiable: `PHASE-03` VT-1..VT-4 pinned symbols `PHASE-04`
+  deleted, and the plan criteria cannot be re-pointed. The supersession is
+  recorded in `design.md` sec-9 (the `RV-404` F-1 lesson), not the `plan.toml`.
+- `doctrine slice reconcile-phases` fixes a stale multi-phase rollup from
+  composite truth without touching `boundaries.toml`; a naive
+  `slice phase --status completed` from the main tree would re-stamp the range
+  (`mem.pattern.doctrine.phase-complete-clobbers-boundary`).
 - An unlanded fork cannot host its own RV (turn verbs refuse a worktree root) and
   `review prime` then hashes the primary tree — the review/audit had to run from
   the primary tree against fork evidence.
 
 ### Open
 
-- **`RV-403` `F-1` (blocker, `design-wrong`), remedy decided by the user: option A**
-  — read `[features] hooks` from the project `.codex/config.toml` and retire the
-  probe (`HooksState`, `parse_codex_features`, `codex_hooks_state`,
-  `write_codex_activation`'s `Option<HooksState>`, `wire()`'s runner parameter,
-  `install.rs`'s `Capture`/`CommandRunner`/`CaptureRunner`). This owes CODE, so the
-  route is the design back-edge, not a reconcile direct edit. `RV-402` `F-5` is
-  obsoleted by it. Full consequences recorded in `RV-403`'s brief.
-- `RV-403` `F-2` — one `SPEC-011` Revision, two members (Claude `.mcp.json`
-  registration retro-covered; the codex `[mcp_servers]` leg), plus the spec's scope
-  enumeration extended. Still owed.
-- `RV-403` `F-3`/`F-4` — design sec-5.4 prose corrections and the `install/**`
-  selector decision (drop it, or owe a shipped-corpus sentence). Still owed.
-- Runtime phase rollup reads `0/3` on edge: the phase sheets here say `planned`
-  while the work is done (`boundaries.toml` carries the registry). Fix before
-  close — consult `mem.pattern.doctrine.phase-complete-clobbers-boundary` first
-  (`reconcile-phases`, not a blind `phase ... completed`).
-- `IMP-111` resolves (`promoted`) at close; `IMP-497` is the post-write seam
-  re-verification follow-up; `ISS-495` stays out of scope by design.
+- `IMP-497` — post-write `codex mcp get doctrine` seam re-verification (open,
+  references SL-271).
+- `ISS-495` — `install_mcp`'s blanket `.ok()` on the Claude `.mcp.json` read
+  remains out of scope by design.
+- `doctrine slice verify-vt 271` reads `PHASE-03` VT-1..VT-4 FAIL as a recorded
+  supersession (design sec-9), not drift.

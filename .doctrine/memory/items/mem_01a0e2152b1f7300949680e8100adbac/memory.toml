@@ -1,0 +1,50 @@
+memory_uid = "mem_01a0e2152b1f7300949680e8100adbac"
+memory_key = "mem.pattern.doctrine.retirement-supersedes-vt-mandates"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A retirement phase leaves predecessor VT mandates unverifiable"
+summary = "A retirement phase leaves an earlier phase's plan VT mandates mechanically unverifiable; record the supersession in design, never the plan criterion."
+created = "2026-09-27"
+updated = "2026-09-27"
+
+[scope]
+paths = [".doctrine/slice"]
+globs = []
+commands = ["slice"]
+tags = ["slice", "plan", "verification", "supersession", "audit"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "08aeb654897b0253081685bc7d230383d401c2dd"
+ref_name = "refs/heads/edge"
+checkout_state_id = "5ac22f2771b9f2e5d00a21357d86d932236e843c0fae3991b79e3c54b480d0cf"
+base_commit = "65891ddcc1a4056d37a05e3273bb71eb33585e72"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-404"
+
+[[source]]
+kind = "slice"
+ref = "SL-271"
+
