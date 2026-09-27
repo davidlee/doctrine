@@ -51,8 +51,8 @@ usage: oubliette.sh send <slice> <slot> [ref]
         code AND its gitignored state half, and prints the agent's first line.
         Refuses first if the slot's guest was not built from this code — see
         check_toolchain; OUBLIETTE_SKIP_TOOLCHAIN_CHECK=1 sends anyway.
-  back  lands the code on a fresh branch + worktree, adopts the state half
-        into it, and tells you where to audit.
+  back  lands the code on a fresh branch + worktree, provisions it,
+        adopts the state half into it, and says what can be audited there.
 
   env   CAPSULE_BIN, DOCTRINE_BIN, OUBLIETTE_SKIP_TOOLCHAIN_CHECK
 USAGE
@@ -371,6 +371,9 @@ cmd_back() {
 
   git worktree add "$wt" "$branch"
   say "worktree: $wt"
+  # The gitignored files a build needs (`.worktreeinclude`: web/map/dist, …).
+  # Without them `check gate` fails to compile here (ISS-494).
+  "$DOCTRINE" worktree provision "$wt"
 
   # The state half. Laid out first where `adopt` insists — an empty directory,
   # checked before it is written — and then merged in by the ignore test above.
@@ -393,7 +396,12 @@ $ID generation $GEN is home.
   cd $wt && $DOCTRINE slice show $ID
 
 Phase status, handover and research came back with it. The divergence and
-conflict report above is against this repo's HEAD. Audit here, not on edge.
+conflict report above is against this repo's HEAD.
+
+Gather audit evidence here: check gate, slice verify-vt, and
+slice conformance --against <base>..$branch. The review verbs refuse this
+worktree (ISS-494, IMP-240), so the RV ledger can only open on edge, after
+the merge.
 EOF
 }
 

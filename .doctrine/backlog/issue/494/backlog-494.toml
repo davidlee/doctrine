@@ -5,8 +5,8 @@ id = 494
 slug = "capsule-adopt-directs-audit-to-a-worktree-the-review-verbs-refuse"
 title = "capsule-adopt directs audit to a worktree the review verbs refuse"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-09-27"
 updated = "2026-09-27"
 tags = []
@@ -20,3 +20,11 @@ tags = []
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "related"
+target = "IMP-240"
+
+[[relation]]
+label = "related"
+target = "RV-398"

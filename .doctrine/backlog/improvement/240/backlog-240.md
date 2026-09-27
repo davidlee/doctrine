@@ -37,3 +37,19 @@ SL-192 audit RV-238 — process friction (recorded, not an SL-192 defect). Detai
 in RV-238 `## Synthesis` "Standing items → Process friction" and RFC-011
 case-notes `[audit; SL-192-audit-238]`. Related: IMP-024 (baton parent-tree
 residency, the root of defect 1).
+
+## Second instance: adopted capsule worktrees (2026-09-27)
+
+An oubliette capsule landed by the project's `scripts/oubliette.sh back` sits on
+`capsule/<SL>/<slot><gen>` in a linked worktree with its state tier *adopted
+into it*. `resolve_review_root` classifies it `fork` and refuses the review
+verbs, so SL-268's audit (RV-398 `F-5`, ISS-494) had to merge the capsule into
+edge before its RV ledger could open — unaudited code landed first, as in
+defect 2.
+
+The guard's real question is whether the tree owns its state tier, not its
+branch shape. Doctrine cannot learn that from a host-chosen branch name
+(POL-002 facet 1), so the fix needs a doctrine-owned declaration of a
+review-capable locus. Riding `worktree coordinate` (`dispatch/<N>`) is one
+option; it borrows dispatch's identity (e.g. `coordination-live`) for a
+non-dispatch tree.

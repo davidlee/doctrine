@@ -20,3 +20,20 @@ Fix one side: either classify an adopted capsule worktree as a review-capable
 locus, or change capsule-adopt's advice (and provision `web/map/dist`).
 Related: IMP-240 (solo-fork audit path), ISS-484 (`review new` bypasses the
 locus guard). Observation `01a0e021`.
+
+## Resolution (2026-09-27)
+
+Narrowed to the script half; fixed in `scripts/oubliette.sh` `back` (the
+`capsule adopt` wrapper — the "Audit here" advice lived there, not in shipped
+guidance):
+
+- the landing worktree is provisioned with `doctrine worktree provision`
+  (`.worktreeinclude` already lists `web/map/dist/**`);
+- the advice now says what works: gather evidence in the worktree (`check gate`,
+  `slice verify-vt`, `slice conformance --against`), open the RV ledger on edge
+  after the merge.
+
+The review-locus half is not fixed here. Keying the fork guard on the
+`capsule/` branch shape would make the engine load-bear on a host convention
+(POL-002 facet 1). The real invariant — the tree owns its state tier — needs a
+doctrine-owned declaration; that is IMP-240 defect 2, carried there.
