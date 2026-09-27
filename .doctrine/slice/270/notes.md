@@ -4,6 +4,28 @@ Durable per-slice scratchpad — tracked in git. The place to lift anything from
 disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 `rm -rf` before the slice close-out audit harvests it.
 
+## PHASE-01 VA-1 sweep (2026-09-27)
+
+Re-runnable:
+
+    rg -l --hidden "owner-fix|OwnerFix" -g '!target' -g '!.git' .
+    rg -l --hidden -i "five routes|closed five|exactly five|5-set|five-route" -g '!target' -g '!.git' .
+
+Every hit is excluded, for one of these reasons:
+
+- **Historical evidence**: closed-slice docs (SL-260, SL-261, SL-268, older),
+  review ledgers, knowledge records, RFC-026 (E11-E14) and RFC-032 material,
+  REV-064, and observation records. They record what was true when written.
+- **Via REV-065, at reconcile**: ADR-007, SPEC-032, and REV-065's own before
+  column.
+- **This slice's own authored docs**: slice-270.md, design.md, plan.*, notes.md.
+- **Legacy or refusal tests**: `vocab.rs` (a test that `owner-fix` is refused;
+  a doc comment naming the split), `tests/e2e_review_golden.rs` (VT-7's
+  legacy-read ledger). The route-teaching memory names `owner-fix` only as
+  retired.
+- **Not about routes**: the "5-set" hits in `vocab.rs` are the finding-status
+  and disposition vocabularies, which really are five.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-09-27 · design locked · b196d9183
