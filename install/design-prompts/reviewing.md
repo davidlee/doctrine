@@ -115,7 +115,7 @@ disposition vocab:
 
 The CLI refuses a `route:` prefix inside `--disposition`. `amend` can replace
 the route later; omitting `--route` keeps the finding's current one. The
-closed set is exactly five:
+closed set is exactly six:
 
 | route | the question behind the finding | what settles it |
 |---|---|---|
@@ -123,15 +123,18 @@ closed set is exactly five:
 | `demonstrate` | can these parts connect as proposed? | a thin implementation exercising the disputed connection — "it compiles" is not the bar |
 | `probe` | does the mechanism withstand the adversary? | a stated adversary, then a hostile probe |
 | `control` | would the planned check notice failure? | a negative control: name the concrete incorrect candidate the check must reject, and observe it rejected |
-| `owner-fix` | do two accounts of one fact disagree? | remove the duplicate, verify the surviving owner, sweep the affected class |
+| `dedupe` | are there two live accounts of one fact? | delete the duplicate, verify the surviving owner, sweep the affected class |
+| `refresh` | does a record lag the thing it describes? | confirm which side is right, edit the record, sweep the records that cite it |
 
 The route and the vocab are different axes: the vocab records what you did, the
 route records what instrument can settle the finding. There is no default.
 
 **When more than one route fits.** Route on the claim whose failure would make
 the rest of the finding moot. If two still fit, prefer any route other than
-`review`. If two non-`review` routes still fit, take the first of `owner-fix`,
-`control`, `probe`, `demonstrate`. Where the finding carries a genuinely
+`review`. If two non-`review` routes still fit, take the first of `dedupe`,
+`refresh`, `control`, `probe`, `demonstrate`. Between `probe` and `control`,
+the subject decides: doubt the mechanism's resistance, route `probe`; doubt the
+check's detection, route `control`. Where the finding carries a genuinely
 separable second arm, name it in `--response` so the raiser can raise it as a
 sibling — a finding is immutable and cannot be split in place. If you cannot
 tell which question the finding is asking at all, that is the ambiguity the
@@ -139,15 +142,18 @@ anti-escape guardrails already send to `/consult`, not a reason to write
 `review`.
 
 `demonstrate`, `probe` and `control` are the **instrument routes**, and they are
-NOT repaired in prose. (`review` and `owner-fix` are settled the way they always
-were.) In `--response` you write, as plain prose — no backticks and no dollar
+NOT repaired in prose. (`review`, `dedupe` and `refresh` are settled in prose, in
+this review.) In `--response` you write, as plain prose — no backticks and no dollar
 signs:
 
 - `probe` — the adversary, as *must hold against X, need not hold against Y*.
 - `control` — the concrete incorrect candidate the check must reject. A control
   establishes discrimination against a named fault, not completeness.
-- `owner-fix` — which duplicate goes, which owner survives, and the class you
+- `dedupe` — which duplicate goes, which owner survives, and the class you
   will sweep. The sweep is the clause people drop.
+- `refresh` — which side is right, the record you will edit, and the records
+  citing it that you will sweep. If the thing the record describes is itself
+  wrong, the finding is a defect, not a lag: route `review`.
 - all three instrument routes — what the criterion must assert, and what the
   obligation needs of its host phase. You cannot name the phase: phases are
   devised at planning, after this review. Name the constraint, not the phase.
@@ -178,8 +184,8 @@ obligation was correctly transcribed onto a phase criterion — not that the def
 is repaired. That is a narrower claim than `verify` usually carries, and the
 finding's `route` field is what tells a later reader which claim it was. It
 happens after `slice phases`, not during this review: conclude the pass with
-instrument-routed findings `answered`. A finding routed `review` or `owner-fix`
-is repaired in prose, so you verify it in this review as usual.
+instrument-routed findings `answered`. A finding routed `review`, `dedupe` or
+`refresh` is repaired in prose, so you verify it in this review as usual.
 
 **Concluding, and raising after it.** Conclude with `review conclude <RV>
 --basis …`, stating what the pass examined. A raise or a reopen after conclude
@@ -187,7 +193,7 @@ clears `concluded`: the raiser must conclude again, with a fresh `--basis`,
 before a `conducted` disposition is admissible. A `conducted` disposition
 already recorded stands.
 
-The route value is validated on write: the CLI accepts only the closed five. The
+The route value is validated on write: the CLI accepts only the closed six. The
 rest is not. The slice close gate will not let a blocker be closed over
 unverified, which forces the verify act to happen — but no gate reads what you
 wrote, and none checks that a criterion exists.

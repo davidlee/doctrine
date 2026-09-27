@@ -7,7 +7,7 @@ status = "active"
 title = "A design-review finding's route goes in --route, beside a closed-vocab --disposition"
 summary = "Route and disposition are separate closed flags on review dispose/amend; a route: prefix inside --disposition is refused"
 created = "2026-09-25"
-updated = "2026-09-26"
+updated = "2026-09-27"
 
 [scope]
 paths = []

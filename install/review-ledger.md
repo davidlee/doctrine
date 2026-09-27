@@ -237,7 +237,7 @@ Reopen clears the pass's `concluded` marker, just as raise does.
 
 Severe findings on a design-review ledger additionally carry a **route** —
 `--route <route>` on `dispose` or `amend`, one of `review | demonstrate | probe |
-control | owner-fix`. The disposition vocab above records what the responder
+control | dedupe | refresh`. The disposition vocab above records what the responder
 did; the route records what instrument can settle the finding. The CLI refuses a
 `route:` prefix inside `--disposition`, and omitting `--route` keeps the
 finding's current route.
