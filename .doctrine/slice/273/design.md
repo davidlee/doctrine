@@ -72,8 +72,10 @@ lib:templates/design.md
 - **Recognition** (scanner, section 4): the marker preceded by start-of-text or a
   non-alphanumeric character, followed by a maximal run of characters that are
   not whitespace, a backtick, a quote, `<`, `>`, `(`, `)`, `[` or `]`. Trailing
-  `.`, `,`, `;`, `:` are then trimmed, so a citation ending a sentence or
-  wrapped in a Markdown link target still parses. The run is taken whole —
+  sentence punctuation and Markdown emphasis (`.` `,` `;` `:` `!` `?` `*` `_`
+  `~`, repeatedly) are then trimmed from the end of the run only, so a citation
+  ending a sentence, set in bold, or wrapped in a Markdown link target still
+  parses. The run is taken whole —
   anything after the address (`#section`, `?x`) stays in it and fails
   resolution, so the check validates exactly what `library show` would be
   given. A placeholder such as `lib:<address>` yields an empty run and is not a
@@ -225,8 +227,12 @@ checks. The message names the file, line, address and reason, and the fix
 - `scan` finds a citation in a code span, in a fence, at end of sentence
   (trailing `.` trimmed), in a Markdown link target, and none in
   `lib:<address>` or `xlib:foo.md`.
-- `scan` keeps a suffix: `lib:reference/glossary.md#x` yields the address
-  `reference/glossary.md#x`, which `unresolved` reports as undeclared.
+- `scan` trims trailing punctuation and emphasis: `lib:reference/glossary.md!`,
+  `…glossary.md?` and `**lib:reference/glossary.md**` yield
+  `reference/glossary.md`.
+- `scan` keeps an inner suffix: `lib:reference/glossary.md#x` and
+  `lib:reference/glossary.md?x` keep it, and `unresolved` reports them as
+  undeclared.
 - `unresolved` classifies a traversal address as malformed and an undeclared
   one as undeclared; a declared address passes.
 - `bare_mentions` reports `glossary.md`, `install/glossary.md` and

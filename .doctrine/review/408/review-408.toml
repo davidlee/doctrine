@@ -19,12 +19,19 @@ note = """
 Reviewed SL-273 design against DEC-339..DEC-346, its scope and research, ADR-001/005/013/019/024, STD-001/003, POL-002, PRD-017, SPEC-011/026, publication and boot code, doctor behavior, shipped install and skill text, tests, manifest, and memory path selectors. Raised six findings with file:line evidence. Checked grammar edge cases, test roots and embed freshness, the 88-line essentials budget, Revision targets, and inventory verification; found no supported defect in the cap or governing Revision list.
 """
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Verified the responder's six SL-273 design repairs against the original findings, adjacent design sections, named tests, publication manifest, parser behavior, and revision diff. All six original findings are resolved. Raised F-7 for a new scanner-grammar regression introduced by the F-3 revision: ordinary exclamation punctuation after a formerly valid citation is now consumed as part of the address. This pass is concluded; F-7 awaits responder disposition.
+"""
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-273"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Sweep verification permits edits to leave rows"
 detail = """
@@ -48,9 +55,14 @@ response = """
 Accepted. Design sec-5 (section 6.3): verification is per occurrence against each row's own verdict — accept/amend rows read as adjudicated, leave/reject rows unchanged — and every changed occurrence must map to exactly one applied row; hunk co-residence no longer authorises. Mechanical over inventory.toml + git diff, output in notes.md. Section 6.4: the audit re-pass also flags any lib: occurrence at a first-inventory leave/reject location. I5 restated per occurrence (sec-6).
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Sections 6.3-6.4 require per-occurrence checks against adjudicated outcomes, unchanged leave/reject occurrences, exact mapping of changed occurrences, and audit detection of unauthorized conversions."
+
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Shipped TOML citations escape the enforcing sweep test"
 detail = """
@@ -74,9 +86,14 @@ response = """
 Accepted; verified install/templates/plan.toml:25 and install/doctrine.toml:25. Design sec-3 (4.2): SHIPPED_TEXT_ROOTS walks every file under the roots, not only *.md; a non-UTF-8 file fails by name. Test renamed no_bare_library_mention_in_shipped_text; I2 and verification restated for shipped text.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Section 4.2 walks every file under the shipped roots, including TOML, fails named non-UTF-8 files, and consistently renames the enforcing test and I2."
+
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Scanner silently validates a truncated citation"
 detail = """
@@ -100,9 +117,14 @@ response = """
 Accepted; verified LogicalAddress::parse accepts '#'. Design sec-2 (3.1): recognition takes a whole run up to whitespace, backtick, quote, angle brackets, parens or square brackets, then trims trailing .,;: — a suffix such as #section stays in the address and fails resolution, so the check validates exactly what library show receives. Core test added (4.4); edge case in 7.2.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Section 3.1 consumes #section and ?x as part of the address, so unresolved rejects those suffixes; section 4.4 adds the corresponding core case."
+
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Shipped citation test trusts the potentially stale embed"
 detail = """
@@ -126,9 +148,14 @@ response = """
 Accepted; verified src/asset_source.rs:69-74. Design sec-3 (4.2): the build-repo test admits the manifest from disk via asset_source::publication_manifest_bytes_from_disk; the doctor leg keeps the embed; backing availability stays with every_shipped_entry_resolves_and_is_mit. R5 mitigation updated.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Section 4.2 admits the current manifest from disk for the build-repo citation test, preserving the embedded resolver test for backing availability."
+
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Doctor can report clean after an unreadable authored Markdown file"
 detail = """
@@ -152,9 +179,14 @@ response = """
 Accepted; verified src/doctor_checks.rs:284-321 silently skips. Design sec-3 (4.3): the leg discloses manifest admission failure, glob construction failure, and each unreadable matched file (name + reason) while continuing over readable siblings; it does not copy prose_cite's walk. Tests added (4.4) and verification row updated.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Section 4.3 requires findings for manifest, glob, and per-file read failures, plus continued checking of readable siblings; sections 4.4 and 8.1 require doctor tests."
+
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Rename leaves four active memory path selectors stale"
 detail = """
@@ -177,6 +209,42 @@ disposition = "fix-now"
 response = """
 Accepted and widened: the class is every live reference the rename or boot-footer retirement leaves dead. Design sec-4 (5.4): rename repair covers the shipped memory, the four local memories' scope paths/globs via doctrine memory edit, and instructing prose in local memories; phase 2 ends with a sweep for both old names over .doctrine (excluding slice history and ledgers), memory, install, plugins and src, each hit repaired or recorded as history. Code impact and verification updated.
 """
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Section 5.4 explicitly repairs all four local memory path/glob selectors, instructing prose, and other live references in a phase-2 sweep."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Revised scanner rejects a previously valid citation before an exclamation mark"
+detail = """
+Expected: the F-3 repair must consume unsupported address suffixes without making a previously valid citation fail. The pre-revision SL-273 design (a5d7d32e0, section 3.1) scanned a maximal `[A-Za-z0-9_./-]` run, so `lib:reference/glossary.md!` yielded the declared address `reference/glossary.md`; `!` was ordinary sentence punctuation. The manifest declares that address (publication/manifest.toml:309).
+Observed: revised design.md:72-80 consumes every non-delimiter character and trims only `.,;:`. It therefore passes `reference/glossary.md!` to `unresolved`, which reports undeclared even though the citation before sentence punctuation resolves. The same regression affects `**lib:reference/glossary.md**` and similar Markdown delimiters outside inline code; scanner recognition is specified independently of formatting at design.md:81-83. Narrow or trim sentence/formatting punctuation without truncating `#section` and `?x`, and cover both cases in section 4.4 tests.
+"""
+disposition = "fix-now"
+response = """
+Accepted. Design sec-2 (3.1): after taking the run, trailing sentence punctuation and Markdown emphasis (. , ; : ! ? * _ ~, repeatedly) are trimmed from the end only; inner suffixes (#x, ?x) are kept and fail resolution. Section 4.4 tests cover trailing !, ?, bold, and inner #x / ?x.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. Design sec-2 (3.1): after taking the run, trailing sentence punctuation and Markdown emphasis (. , ; : ! ? * _ ~, repeatedly) are trimmed from the end only; inner suffixes (#x, ?x) are kept and fail resolution. Section 4.4 tests cover trailing !, ?, bold, and inner #x / ?x.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Section 3.1 trims trailing !, ? and Markdown emphasis only after scanning the full run, so the F-7 punctuation cases resolve while inner #x and ?x remain in the address and fail resolution; section 4.4 covers both behaviors."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
