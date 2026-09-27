@@ -1,0 +1,182 @@
+id    = 408
+slug  = "design-review-of-sl-273"
+title = "design review of SL-273"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Reviewed SL-273 design against DEC-339..DEC-346, its scope and research, ADR-001/005/013/019/024, STD-001/003, POL-002, PRD-017, SPEC-011/026, publication and boot code, doctor behavior, shipped install and skill text, tests, manifest, and memory path selectors. Raised six findings with file:line evidence. Checked grammar edge cases, test roots and embed freshness, the 88-line essentials budget, Revision targets, and inventory verification; found no supported defect in the cap or governing Revision list.
+"""
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-273"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "Sweep verification permits edits to leave rows"
+detail = """
+Expected: DEC-341 and SL-273 design I5 require every sweep edit to be authorized by an adjudicated inventory row, including a check that rows marked leave stayed unchanged.
+Observed: design.md:376-383 requires checking that applied rows changed and that no diff hunk lacks a row; it does not require unchanged leave rows, and hunk membership is weaker than occurrence membership. A phase-4 worker can turn the slice-artefact `design.md` in install/using-doctrine.md:187-189 into resolving `lib:templates/design.md` despite its leave verdict. The nearby conversion of `glossary.md` at install/using-doctrine.md:191 gives that diff hunk an authorized row. The lib resolver passes, the bare check excludes templates (design.md:157-162), and the audit re-pass exempts text already in target form (design.md:388-393). The unadjudicated semantic change can therefore pass all specified checks. Verify each diff occurrence against its own verdict, including leave rows, and compare the audit inventory against original leave rows.
+"""
+disposition = "fix-now"
+response = """
+Accepted. Design sec-5 (section 6.3): verification is per occurrence against each row's own verdict — accept/amend rows read as adjudicated, leave/reject rows unchanged — and every changed occurrence must map to exactly one applied row; hunk co-residence no longer authorises. Mechanical over inventory.toml + git diff, output in notes.md. Section 6.4: the audit re-pass also flags any lib: occurrence at a first-inventory leave/reject location. I5 restated per occurrence (sec-6).
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. Design sec-5 (section 6.3): verification is per occurrence against each row's own verdict — accept/amend rows read as adjudicated, leave/reject rows unchanged — and every changed occurrence must map to exactly one applied row; hunk co-residence no longer authorises. Mechanical over inventory.toml + git diff, output in notes.md. Section 6.4: the audit re-pass also flags any lib: occurrence at a first-inventory leave/reject location. I5 restated per occurrence (sec-6).
+"""
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "Shipped TOML citations escape the enforcing sweep test"
+detail = """
+Expected: design.md:399-402 and 447-449 promise that the shipped-corpus tests enforce resolution and no bare library mention across shipped prose.
+Observed: design.md:170-179 walks only `*.md` under `install` and `plugins/doctrine/skills`. Shipped non-Markdown assets already contain real library citations: install/templates/plan.toml:25 cites `glossary.md`, and install/doctrine.toml:25 cites `claude-activation.md`; install/manifest.toml:11 projects doctrine.toml into every client. The inventory may repair today's instances, but future bare or unresolved `lib:` citations in these shipped comments pass both permanent tests. The roots need text-bearing shipped assets beyond `*.md`, or the invariant and test claim need a narrower explicit boundary with another gate for those assets.
+"""
+disposition = "fix-now"
+response = """
+Accepted; verified install/templates/plan.toml:25 and install/doctrine.toml:25. Design sec-3 (4.2): SHIPPED_TEXT_ROOTS walks every file under the roots, not only *.md; a non-UTF-8 file fails by name. Test renamed no_bare_library_mention_in_shipped_text; I2 and verification restated for shipped text.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted; verified install/templates/plan.toml:25 and install/doctrine.toml:25. Design sec-3 (4.2): SHIPPED_TEXT_ROOTS walks every file under the roots, not only *.md; a non-UTF-8 file fails by name. Test renamed no_bare_library_mention_in_shipped_text; I2 and verification restated for shipped text.
+"""
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "major"
+title = "Scanner silently validates a truncated citation"
+detail = """
+Expected: a citation copied from prose must be the same address the check validates (design.md:83-92), and section 3.1 forbids anchors (design.md:80-81).
+Observed: the maximal `[A-Za-z0-9_./-]` run at design.md:72-76 stops before `#` or `?`. For `lib:reference/glossary.md#section`, `scan` returns the declared `reference/glossary.md` (publication/manifest.toml declares that address), so `unresolved` reports nothing. But `doctrine library show lib:reference/glossary.md#section` passes the full post-prefix string to LogicalAddress::parse; src/publication.rs:162-172 accepts `#` as a character, and src/publication.rs:500-510 then reports UnknownAddress. The prose check thus claims a citation resolves although the copied citation fails. Reject unsupported suffixes as malformed or define a syntax that consumes and validates them; add a core and doctor test.
+"""
+disposition = "fix-now"
+response = """
+Accepted; verified LogicalAddress::parse accepts '#'. Design sec-2 (3.1): recognition takes a whole run up to whitespace, backtick, quote, angle brackets, parens or square brackets, then trims trailing .,;: — a suffix such as #section stays in the address and fails resolution, so the check validates exactly what library show receives. Core test added (4.4); edge case in 7.2.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted; verified LogicalAddress::parse accepts '#'. Design sec-2 (3.1): recognition takes a whole run up to whitespace, backtick, quote, angle brackets, parens or square brackets, then trims trailing .,;: — a suffix such as #section stays in the address and fails resolution, so the check validates exactly what library show receives. Core test added (4.4); edge case in 7.2.
+"""
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "major"
+title = "Shipped citation test trusts the potentially stale embed"
+detail = """
+Expected: the finish-line test should compare current shipped prose to current publication declarations, so a removed or renamed address fails immediately.
+Observed: design.md:170-179 loads PublicationManifest::load(), which reads the compiled manifest embed (src/publication.rs:340-346), and design.md:125-127 relies on every_shipped_entry_resolves_and_is_mit, which also uses the compiled resolver (src/publication.rs:989-1005). src/asset_source.rs:69-74 explicitly documents that incremental builds can leave RustEmbed data stale and provides disk-source helpers for staleness-proof gates. If publication/manifest.toml removes an address while a prose file still cites it, both proposed resolution tests can pass against the old embed; the disk-source reachability gate checks backing coverage, not citation address membership (src/asset_source.rs:126-153). Admit the manifest from disk for the build-repo citation test, and keep the embedded resolver test for backing availability.
+"""
+disposition = "fix-now"
+response = """
+Accepted; verified src/asset_source.rs:69-74. Design sec-3 (4.2): the build-repo test admits the manifest from disk via asset_source::publication_manifest_bytes_from_disk; the doctor leg keeps the embed; backing availability stays with every_shipped_entry_resolves_and_is_mit. R5 mitigation updated.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted; verified src/asset_source.rs:69-74. Design sec-3 (4.2): the build-repo test admits the manifest from disk via asset_source::publication_manifest_bytes_from_disk; the doctor leg keeps the embed; backing availability stays with every_shipped_entry_resolves_and_is_mit. R5 mitigation updated.
+"""
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "major"
+title = "Doctor can report clean after an unreadable authored Markdown file"
+detail = """
+Expected: STD-003 requires a corpus diagnostic to disclose each degraded read, and SL-273 design.md:188-203 promises a citation check over client `.doctrine/**/*.md` with a manifest-load failure finding.
+Observed: the design names only manifest admission failure; it gives no per-file read or glob-error result and tests only the load failure (design.md:205-213, 450-452). The existing sibling walk it reuses silently skips unreadable Markdown at src/doctor_checks.rs:301-321 and returns an empty finding set on invalid glob setup at src/doctor_checks.rs:284-290. A client file containing an unresolved `lib:` citation that cannot be read can therefore produce a clean doctor result if the new leg copies that walk. Require and test a finding naming an unreadable matched file and reason, while continuing over readable siblings, as STD-003 specifies.
+"""
+disposition = "fix-now"
+response = """
+Accepted; verified src/doctor_checks.rs:284-321 silently skips. Design sec-3 (4.3): the leg discloses manifest admission failure, glob construction failure, and each unreadable matched file (name + reason) while continuing over readable siblings; it does not copy prose_cite's walk. Tests added (4.4) and verification row updated.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted; verified src/doctor_checks.rs:284-321 silently skips. Design sec-3 (4.3): the leg discloses manifest admission failure, glob construction failure, and each unreadable matched file (name + reason) while continuing over readable siblings; it does not copy prose_cite's walk. Tests added (4.4) and verification row updated.
+"""
+
+[[finding]]
+id = "F-6"
+status = "answered"
+severity = "minor"
+title = "Rename leaves four active memory path selectors stale"
+detail = """
+Expected: after renaming install/routing-process.md to install/essentials.md (design.md:228-233), path-scoped memory retrieval for the new boot source should still surface the relevant active memories.
+Observed: design.md:290-293 and 475 list only one shipped memory body update. Four active local memory scopes still name the retired path: .doctrine/memory/items/mem_019ed3fa2e0c7301a889a346105d3011/memory.toml:12, mem_019ed43e279d70e3b55af747dfbfb54b/memory.toml:12, mem_019ea4f1d1ab7d508d95eaa31651143e/memory.toml:12, and mem_019ea47314bd72c2b1f720017449a909/memory.toml:12. `doctrine memory retrieve --path-scope install/essentials.md` would no longer match those selectors. Update the path scopes as rename repair; check titles and prose references separately.
+"""
+disposition = "fix-now"
+response = """
+Accepted and widened: the class is every live reference the rename or boot-footer retirement leaves dead. Design sec-4 (5.4): rename repair covers the shipped memory, the four local memories' scope paths/globs via doctrine memory edit, and instructing prose in local memories; phase 2 ends with a sweep for both old names over .doctrine (excluding slice history and ledgers), memory, install, plugins and src, each hit repaired or recorded as history. Code impact and verification updated.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted and widened: the class is every live reference the rename or boot-footer retirement leaves dead. Design sec-4 (5.4): rename repair covers the shipped memory, the four local memories' scope paths/globs via doctrine memory edit, and instructing prose in local memories; phase 2 ends with a sweep for both old names over .doctrine (excluding slice history and ledgers), memory, install, plugins and src, each hit repaired or recorded as history. Code impact and verification updated.
+"""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

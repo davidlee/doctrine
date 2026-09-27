@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e2cb-c92d-79b3-b11a-aa4511be8fd6"
+recorded_at = "2026-09-27T12:16:41.261922569Z"
+kind = "friction"
+summary = "design skill: top-level acceptance in reviewing silently records design-accepted"
+detail = "SL-273 run rev 36: submitted att- section attestations with a top-level 'acceptance' block (the contract lists it as optional with no stated effect). In stage reviewing the engine also recorded act_recorded cpa-design-accepted, discharging user-acceptance-attested without the user's assent. No verb retracts a recorded act; the contract does not say top-level acceptance maps to design-accepted."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

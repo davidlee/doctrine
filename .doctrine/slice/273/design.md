@@ -70,10 +70,14 @@ lib:templates/design.md
   `src/publication.rs` (STD-001). Stripping it yields exactly the argument
   `LogicalAddress::parse` accepts (ADR-024 form 2).
 - **Recognition** (scanner, section 4): the marker preceded by start-of-text or a
-  non-alphanumeric character, followed by a maximal run of `[A-Za-z0-9_./-]`.
-  Trailing `.`, `,`, `;`, `:` are trimmed, so a citation ending a sentence
-  still parses. A placeholder such as `lib:<address>` has no address
-  characters after the marker and is not a citation.
+  non-alphanumeric character, followed by a maximal run of characters that are
+  not whitespace, a backtick, a quote, `<`, `>`, `(`, `)`, `[` or `]`. Trailing
+  `.`, `,`, `;`, `:` are then trimmed, so a citation ending a sentence or
+  wrapped in a Markdown link target still parses. The run is taken whole —
+  anything after the address (`#section`, `?x`) stays in it and fails
+  resolution, so the check validates exactly what `library show` would be
+  given. A placeholder such as `lib:<address>` yields an empty run and is not a
+  citation.
 - Citations are written in inline code in Markdown (`` `lib:reference/glossary.md` ``);
   the scanner reads code spans and fenced blocks alike — the marker, not the
   formatting, is what identifies a citation.
@@ -122,9 +126,11 @@ flowchart LR
   LC --> PUB
 ```
 
-The core depends only on the admitted manifest, not on the resolver's
-adapter: whether a declared address has bytes behind it is already pinned by
-`publication.rs`'s `every_shipped_entry_resolves_and_is_mit`. ADR-001 layering
+The core depends only on an admitted manifest, not on the resolver's adapter:
+whether a declared address has bytes behind it is already pinned by
+`publication.rs`'s `every_shipped_entry_resolves_and_is_mit`. Which manifest
+is the caller's choice — the build-repo test admits it from disk, the doctor leg
+from the embed. ADR-001 layering
 holds — `lib_citation` is engine, its callers are a test and a command-layer
 check.
 
@@ -169,21 +175,30 @@ pub(crate) fn bare_mentions<'t>(text: &'t str, targets: &BTreeSet<&str>) -> Vec<
 
 An in-crate `#[cfg(test)]` module in `lib_citation.rs` — in-crate because the
 core is `pub(crate)`; an integration test under `tests/` cannot reach it. It
-walks the shipped prose roots, a named constant
-`SHIPPED_PROSE_ROOTS = ["plugins/doctrine/skills", "install"]` under
-`CARGO_MANIFEST_DIR`, every `*.md`, against `PublicationManifest::load()`.
+walks the shipped roots, a named constant
+`SHIPPED_TEXT_ROOTS = ["plugins/doctrine/skills", "install"]` under
+`CARGO_MANIFEST_DIR` — **every file**, not only `*.md`: shipped TOML comments,
+`doctrine.toml.example` and hook scripts carry citations too
+(`install/templates/plan.toml:25`, `install/doctrine.toml:25`). A file that is
+not UTF-8 fails the test by name rather than being skipped (STD-003).
+
+It admits the manifest **from disk**
+(`asset_source::publication_manifest_bytes_from_disk`), not the compiled
+embed: `debug-embed` means an incremental build can serve a stale manifest
+(`src/asset_source.rs:69-74`), and a removed or renamed address must fail the
+test immediately.
 
 | test | from | asserts |
 |---|---|---|
 | `every_shipped_lib_citation_resolves` | phase 1 | no `unresolved` result across the roots |
-| `no_bare_library_mention_in_shipped_prose` | phase 1 as `#[ignore]`, un-ignored in phase 4 | no `bare_mentions` result across the roots |
+| `no_bare_library_mention_in_shipped_text` | phase 1 as `#[ignore]`, un-ignored in phase 4 | no `bare_mentions` result across the roots |
 
 The ignored test is runnable on demand (`cargo test -- --ignored`) and prints
 every mention by file and line — the working list during the sweep. Removing
 the `#[ignore]` is the act that makes the bare report enforcing.
 
-Rust string literals (`src/**`) are not prose and are not in the test roots;
-the sweep inventory covers them (section 6).
+Rust string literals (`src/**`) are not in the test roots — scanning source
+would trip on code and fixtures; the sweep inventory covers them (section 6).
 
 ### 4.3 Caller 2 — the doctor leg
 
@@ -198,19 +213,28 @@ checks. The message names the file, line, address and reason, and the fix
 - **No bare report in clients.** A client's prose may legitimately say
   `glossary.md`; only a citation that claims to be a library citation is held
   to resolving.
-- **Load failure is disclosed.** If the embedded manifest does not admit, the
-  leg emits one finding saying the check could not run, never silence
-  (STD-003).
+- **Degraded reads are disclosed** (STD-003), never silence: a manifest that
+  does not admit → one finding saying the check could not run; a glob that
+  cannot be built → one finding naming the pattern; a matched file that cannot
+  be read → one finding naming the file and the reason, and the walk continues
+  over its readable siblings. The leg does not copy `prose_cite`'s walk, which
+  skips all three silently (`src/doctor_checks.rs:284-321`).
 
 ### 4.4 Test cases (core)
 
 - `scan` finds a citation in a code span, in a fence, at end of sentence
-  (trailing `.` trimmed), and none in `lib:<address>` or `xlib:foo.md`.
+  (trailing `.` trimmed), in a Markdown link target, and none in
+  `lib:<address>` or `xlib:foo.md`.
+- `scan` keeps a suffix: `lib:reference/glossary.md#x` yields the address
+  `reference/glossary.md#x`, which `unresolved` reports as undeclared.
 - `unresolved` classifies a traversal address as malformed and an undeclared
   one as undeclared; a declared address passes.
 - `bare_mentions` reports `glossary.md`, `install/glossary.md` and
   `reference/glossary.md` outside a citation; ignores the same name inside
   `lib:reference/glossary.md`, and ignores `my-glossary.md` and `governance.md`.
+- Doctor leg: an unreadable matched file yields a finding naming it while a
+  readable sibling's unresolved citation is still reported; a manifest that
+  does not admit yields the could-not-run finding.
 <!-- doctrine:section sec-4 -->
 ## 5. Library consolidation
 
@@ -287,10 +311,21 @@ through one Revision (ADR-013) before the rename lands:
 - **ADR-024** — line 135's pointer to `install/routing-process.md`.
 - **SPEC-011** — line 76's reference to the embedded digest.
 
-One shipped memory lists `routing-process.md` as a published example
-(`mem_019ec92b0ffc79d294a49559db9aa12a`); the rename would leave it naming a
-retired address, so its one mention is updated. That is repairing breakage this
-slice causes, not the memory rewrite RFC-033 S2 owns.
+**Rename repair beyond governance.** The rename and the `boot-footer.md`
+retirement would leave other references naming dead paths. Repairing breakage
+this slice causes is in scope; the memory rewrite RFC-033 S2 owns is not.
+
+- the shipped memory `mem_019ec92b0ffc79d294a49559db9aa12a` — its one mention;
+- local memories whose `scope` paths or globs name `install/routing-process.md`
+  (four today: `mem_019ea47314bd…`, `mem_019ea4f1d1ab…`, `mem_019ed3fa2e0c…`,
+  `mem_019ed43e279d…`) — updated through `doctrine memory edit`, so
+  path-scoped retrieval still surfaces them;
+- prose mentions in local memories — reviewed, and corrected where they
+  instruct rather than record history.
+
+Phase 2 ends with a sweep for both old names over `.doctrine/` (excluding
+slice history and review ledgers), `memory/`, `install/`, `plugins/` and `src/`;
+every hit is repaired or recorded as history.
 
 ### 5.5 Mechanics
 
@@ -376,11 +411,19 @@ before phase 4 starts.
 The phase 4 worker applies exactly the `accept` and `amend` rows, locating each
 by file and excerpt, and nothing else. The orchestrator then:
 
-1. removes the `#[ignore]` on `no_bare_library_mention_in_shipped_prose`;
+1. removes the `#[ignore]` on `no_bare_library_mention_in_shipped_text`;
    both section 4.2 tests pass;
-2. checks the diff row by row: every applied row changed as adjudicated, no
-   hunk lacks a row;
-3. confirms every `log` row is in IMP-500.
+2. checks **every row against its own verdict**, by occurrence, not by hunk:
+   an `accept` / `amend` row's excerpt now reads as adjudicated; a `leave` or
+   `reject` row's excerpt is unchanged;
+3. checks every changed occurrence in the diff maps to exactly one applied
+   row — a change sitting in a hunk that also holds an authorised row is not
+   thereby authorised;
+4. confirms every `log` row is in IMP-500.
+
+Steps 2–3 are mechanical over `inventory.toml` and `git diff`; a throwaway
+script run by the orchestrator is enough, and its output is recorded in
+`notes.md`.
 
 If the diff is too large to verify in one pass, phase 4 splits into two
 dispatches along the C-/R- boundary; the design is unchanged.
@@ -388,9 +431,10 @@ dispatches along the C-/R- boundary; the design is unchanged.
 ### 6.4 Audit re-pass
 
 During `/audit`, a fresh DeepSeek worker runs the phase 3 brief against the
-landed tree and writes `inventory-audit.toml`. Any row that is neither a
-`leave` in the first inventory nor already in the target form is a finding on
-the audit ledger.
+landed tree and writes `inventory-audit.toml`. Findings on the audit ledger:
+any occurrence not in the target form that was not a `leave` in the first
+inventory; and any occurrence **in** `lib:` form at the location of a first
+inventory `leave` or `reject` row — a conversion nobody authorised.
 <!-- doctrine:section sec-6 -->
 ## 7. Invariants, edge cases and risks
 
@@ -398,12 +442,14 @@ the audit ledger.
 
 - **I1 — every shipped `lib:` citation resolves** to a declared publication
   address. Enforced from phase 1 by `every_shipped_lib_citation_resolves`.
-- **I2 — no bare library-doc mention in shipped prose** outside a `lib:`
-  citation, `governance.md` exempt. Enforced from phase 4.
+- **I2 — no bare library-doc mention in shipped text** (every file under the
+  shipped roots) outside a `lib:` citation, `governance.md` exempt. Enforced
+  from phase 4.
 - **I3 — one owner per rule or concept**; summaries in `essentials.md` end with
   a cue to their owner; no owner points back to a summary.
 - **I4 — `essentials.md` stays within today's 88 lines.**
-- **I5 — no sweep edit without an adjudicated inventory row.**
+- **I5 — no sweep edit without an adjudicated inventory row**, checked per
+  occurrence, `leave` rows included.
 - **I6 — the marker is one constant** (`LIB_PREFIX`); the exemption set and
   test roots are named constants (STD-001).
 
@@ -424,6 +470,8 @@ the audit ledger.
 - **Retired address still cited in a client's prose.** Doctor reports it as
   undeclared — the intended signal after the rename and the `boot-footer.md`
   retirement.
+- **Suffix after an address** (`#section`, `?x`) stays in the citation and fails
+  resolution — the check never passes a citation `library show` would refuse.
 - **Nested worktree copies** under `.dispatch/`, `.worktrees/` are outside
   `.doctrine/**`; `.doctrine/state/` is skipped.
 
@@ -435,7 +483,7 @@ the audit ledger.
 | R2 targets move under the sweep | consolidation and rename land in phase 2, before the inventory |
 | R3 looser worker misses or over-rewrites | exhaustive enumeration, adjudication, two-way diff check, audit re-pass |
 | R4 cited guidance skipped — a retrieval is a tool call agents sometimes skip | boot mandate; per-message essentials stay resident; structural fix is IDE-060 |
-| R5 stale embed — `install/` edits invisible until rebuild | verification after `cargo build`; `doctrine boot` after the rename |
+| R5 stale embed — `install/` edits invisible until rebuild | the build-repo test reads the manifest from disk; other verification after `cargo build`; `doctrine boot` after the rename |
 | R6 ownerless concepts stay restated | logged in IMP-500 with locations; accepted until owners exist |
 <!-- doctrine:section sec-7 -->
 ## 8. Verification and code impact
@@ -445,13 +493,14 @@ the audit ledger.
 | claim | mode | evidence |
 |---|---|---|
 | `scan` / `unresolved` / `bare_mentions` behave per section 4.4 | VT | unit tests in `lib_citation.rs` |
-| every shipped `lib:` citation resolves (I1) | VT | `every_shipped_lib_citation_resolves` |
-| no bare library mention in shipped prose (I2) | VT | `no_bare_library_mention_in_shipped_prose`, un-ignored |
+| every shipped `lib:` citation resolves against the on-disk manifest (I1) | VT | `every_shipped_lib_citation_resolves` |
+| no bare library mention in shipped text (I2) | VT | `no_bare_library_mention_in_shipped_text`, un-ignored |
 | `library show lib:<address>` equals `library show <address>` | VT | `library.rs` round-trip test |
-| doctor reports an unresolved client citation and discloses a load failure | VT | `doctor_checks` tests |
+| doctor reports an unresolved client citation and discloses manifest, glob and per-file read failures | VT | `doctor_checks` tests |
 | boot carries the `lib:` rule and mandatory-retrieval line under "Essentials" | VT | `boot.rs` assertion |
 | one owner per concept (I3); `essentials.md` ≤ 88 lines (I4) | VA | owner map in section 5.2 checked against the landed docs; `wc -l` |
-| every inventory row adjudicated and applied as adjudicated (I5) | VA | two-way diff check, section 6.3 |
+| every inventory row adjudicated and applied as adjudicated, `leave` rows unchanged (I5) | VA | per-occurrence check, section 6.3, output in `notes.md` |
+| no live reference to the old names | VA | phase 2 sweep, section 5.4 |
 | audit re-pass finds nothing unrecorded | VA | `inventory-audit.toml` vs `inventory.toml` |
 | governing text names `essentials.md` | VA | the Revision applied to ADR-005, ADR-024, SPEC-011 |
 | `doctrine check gate` green | VT | close |
@@ -473,6 +522,7 @@ the audit ledger.
 | `install/templates/**`, `install/hymns/**`, `plugins/doctrine/skills/**` | citations and restate cuts, per the inventory |
 | prose literals in `src/**` | citations, per the inventory |
 | `memory/mem_019ec92b0ffc79d294a49559db9aa12a` | one mention of the renamed doc |
+| local memories naming `install/routing-process.md` | scope paths/globs via `doctrine memory edit`; instructing prose |
 | ADR-005, ADR-024, SPEC-011 | via Revision |
 | `.doctrine/slice/273/inventory.toml`, `inventory-audit.toml` | new, tracked |
 | IMP-500 | ownerless-table locations |
