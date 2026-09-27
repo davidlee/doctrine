@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 341
+slug = "citation-sweep-inventory-adjudicate-implement-verify"
+title = "Citation sweep: inventory, adjudicate, implement, verify"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Bare *.md basenames collide (design.md, notes.md, plan.md, memory.md, governance.md, AGENTS.md mean library assets and also slice artefacts or client files); a basename rewrite corrupts, a fixed target list can miss real citations, and unsupervised per-occurrence judgement by DeepSeek is unreviewable."
+choice = "Four steps. (1) A DeepSeek worker inventories every *.md / library-path occurrence in the shipped surfaces, each row carrying a recommended disposition (convert to lib:<address> / leave, with reason), written as a tracked slice artefact. (2) The orchestrator adjudicates each row. (3) DeepSeek implements the adjudicated inventory only. (4) The orchestrator verifies against the inventory and the DEC-339 check. Library filenames are not renamed."
+alternatives = ["fixed positive target list, collisions left untouched", "DeepSeek judges and rewrites each occurrence in one pass", "rename colliding library assets"]
+rationale = "Separates exhaustive enumeration (cheap, mechanical) from judgement (reviewed) from editing (mechanical against a settled list); nothing is missed and nothing is rewritten on an unreviewed call. The adjudicated inventory is durable evidence an audit can re-derive."
+consequences = ["the sweep spans two DeepSeek dispatches with an adjudication gate between", "the inventory is authored (tracked) so audit can check it", "the DEC-339 check still reports over-rewrites; the inventory covers under-rewrites"]
+decided_by = "user"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-273"
