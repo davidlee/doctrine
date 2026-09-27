@@ -52,7 +52,7 @@ and `VT-6` at implementation; no further design pass is recommended.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-27 · plan/ready, PHASE-01 planned · e09574cd3
+fresh-as-of: 2026-09-27 · PHASE-01 implemented, gate green · 94e655d92
 
 ### Produced
 
@@ -60,6 +60,18 @@ fresh-as-of: 2026-09-27 · plan/ready, PHASE-01 planned · e09574cd3
   (design review, done: F-1..F-7 verified)
 - Design locked (run revision 30) · plan: `PHASE-01`, `PHASE-02`
 - `IMP-499` (filed pre-slice, fulfilled here)
+- `PHASE-01`: `d21b571a8` (refusals: `ISS-482`, `IMP-499`), `94e655d92`
+  (payload contract). VT-1..VT-4 green under their plan names.
+
+### Decisions (implementation)
+
+- `presence_note` wording for `Presence::OptionalNullRefused`: variant-generic
+  `(omit means absent · null refused)`, not design sec-2's key-specific
+  `(omit → non-blocking · null refused)` — the note is one string per variant
+  (`EX-9`). Token stays `optional`. Wording only; the rule is as designed.
+- The refusal texts are pinned by equality in the e2e tests (VT-1, VT-2, VT-3)
+  rather than by a separate unit pin of `Display`: the e2e pin already covers
+  them.
 
 ### Learned
 
@@ -70,10 +82,11 @@ fresh-as-of: 2026-09-27 · plan/ready, PHASE-01 planned · e09574cd3
   may drop it) is what `ISS-482` overturns (`RV-405` `F-1`).
 - `slice phases` accepts a `plan.toml` whose phase keys leaked into
   `[requirements]` and reports "up to date" (friction observation recorded).
+- A finding cannot name a section declared in the same batch (the concern is
+  checked against the prior map); e2e fixtures seed the section first.
 
 ### Open
 
-- `presence_note` is one string per `Presence` variant; design sec-2's
-  parenthetical is key-specific. `PHASE-01` picks variant-generic wording and
-  records it here.
-- `SubmissionExpired` had no test before `PHASE-01` VT-3.
+- The payload-contract exemplar census (`the_exemplar_reaches_every_arm_of_the_model`)
+  already omitted `RequiredAtCreation` and now omits `OptionalNullRefused`
+  too; its "Presence, all three" is stale. Not fixed here (out of scope).
