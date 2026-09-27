@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0e17504a772b0818b733f002f5172"
+memory_key = "mem.fact.codex.config-no-env-interpolation-and-filtered-mcp-env"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Codex config does not interpolate env vars; MCP child env is whitelisted"
+summary = """Codex exec's `command` literally (no ${VAR} expansion) and filters MCP child env — use `sh -c` + env_vars = ["DOCTRINE_BIN"]."""
+created = "2026-09-27"
+updated = "2026-09-27"
+
+[scope]
+paths = []
+globs = [".codex/**", "src/boot.rs"]
+commands = []
+tags = ["codex", "mcp", "install", "harness", "env"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d27c4b12d29236b99d63ddedbb9a0766085b7b5c"
+ref_name = "refs/heads/edge"
+checkout_state_id = "9257e3c3750e1d219f8b61754d240729cdfc1ba721574398248056ccabf113f3"
+base_commit = "57e9f3b9bb5355c815dc940f8824dc8a69478ed2"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
