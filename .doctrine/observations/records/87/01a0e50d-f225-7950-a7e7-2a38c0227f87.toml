@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e50d-f225-7950-a7e7-2a38c0227f87"
+recorded_at = "2026-09-27T22:48:11.557315104Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-269 PHASE-05: phase planner repeated memory retrieve positional-query miss"
+detail = "Second planner in a row hit 'doctrine memory retrieve <query>' rejecting the positional form (needs --query); the planner contract example is wrong."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

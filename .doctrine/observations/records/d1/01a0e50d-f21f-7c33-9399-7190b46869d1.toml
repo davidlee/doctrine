@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e50d-f21f-7c33-9399-7190b46869d1"
+recorded_at = "2026-09-27T22:48:11.552022299Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-269 PHASE-05: design env read would break in-process review tests inside a worker"
+detail = "Design sec-4 had resolve_review_root call env_worker_set() directly. ~190 in-process review unit tests would refuse under DOCTRINE_WORKER=1 (spawn-confined.sh), and set_var is banned. The design's verification section missed it; the planner found it by reading spawn-confined.sh. Resolved with a cfg(test) thread-local seam."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

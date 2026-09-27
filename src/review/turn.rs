@@ -19,10 +19,11 @@ use super::{
 // landing DURING it). The lock serializes concurrent invocations; the CAS catches
 // out-of-band human edits the lock cannot see (no invocation ⇒ no lock).
 //
-// Locus = the parent tree's gitignored runtime state, `.doctrine/state/review/NNN/`
-// (D4/D-C7). A review verb whose resolved root is a *fork* bails — fork-invoked
-// review is IMP-024, not yet supported (the pilot invariant, enforced at root
-// resolution).
+// Locus = the resolved root's own gitignored runtime state,
+// `.doctrine/state/review/NNN/` (D4/D-C7) — the baton is a pure cache of the
+// authored ledger (ADR-007 D-C2), so any tree may carry it. Review writes are
+// refused only in a dispatch worker process (DEC-338), enforced at root
+// resolution.
 // ===========================================================================
 
 /// The runtime baton (design §6, D-C2) — gitignored, regenerable, never authored.
@@ -152,31 +153,53 @@ impl Drop for LockGuard {
     }
 }
 
-/// Resolve the project root for a review verb and ENFORCE the pilot invariant
-/// (design D4/D-C1): a verb whose resolved root is a *worker fork* bails —
-/// fork-invoked review is IMP-024, not yet supported. A fork's `WITHHELD` tier
-/// keeps it from seeing the parent's gitignored state (`worktree/mod.rs`), so it
-/// cannot co-write the baton it would need.
-///
-/// The test is the ROLE, not mere linkage (ISS-275). A dispatch *coordination*
-/// tree is a linked worktree too, but it is the sole writer of `dispatch/<NNN>`
-/// and carries its own state tier — and [`state_dir`] is root-derived, so its
-/// baton lands in its own tree with nothing to contend over. Refusing it stranded
-/// the design-gate reviews that ADR-012's topology puts there in the first place.
-///
-/// The guard lives here, in the shell, at root resolution — every verb routes
-/// through it.
-pub(super) fn resolve_review_root(path: Option<PathBuf>) -> anyhow::Result<PathBuf> {
-    let root = crate::root::find(path, &crate::root::default_markers())?;
-    let linked = crate::worktree::is_linked_worktree(&root).unwrap_or(false);
-    let branch = crate::git::current_branch(&root).unwrap_or(None);
-    if crate::worktree::classify_worktree_role(branch.as_deref(), linked) == "fork" {
+/// Review writes are refused only in a dispatch worker (DEC-338). Pure: the
+/// shell reads the worker marker and hands the bool in.
+pub(super) fn admit_review(worker: bool) -> anyhow::Result<()> {
+    if worker {
         anyhow::bail!(
-            "review verbs are not supported on a worktree fork (IMP-024): the turn \
-             baton lives in the parent tree's gitignored state, which a fork cannot \
-             co-write. Run `review` from the parent or coordination tree."
+            "review writes are refused in a dispatch worker ({}). Workers read \
+             reviews with `review show` / `review list`; the orchestrator writes \
+             the ledger.",
+            crate::worktree::WORKER_ENV_CAUSE
         );
     }
+    Ok(())
+}
+
+/// Is this process a dispatch worker? The same signal the CLI `worker_guard`
+/// reads, so the two cannot disagree.
+#[cfg(not(test))]
+fn worker_process() -> bool {
+    crate::worktree::env_worker_set()
+}
+
+// Unit tests run inside confined workers (DOCTRINE_WORKER=1), and `set_var` is
+// banned, so the test build must not read the ambient env here. It defaults to
+// "not a worker". A test that needs a worker sets this flag only through the RAII
+// guard `WorkerProcess` in `review/tests.rs`, which resets it on drop.
+#[cfg(test)]
+thread_local! {
+    pub(super) static WORKER_PROCESS: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+#[cfg(test)]
+fn worker_process() -> bool {
+    WORKER_PROCESS.with(std::cell::Cell::get)
+}
+
+/// Resolve the project root for a review verb and admit the write. Any tree is
+/// admitted — primary, coordination, solo fork, adopted capsule — unless this
+/// process is a dispatch worker (DEC-338). The baton is root-derived
+/// ([`state_dir`]), so it lands in the resolved tree's own state.
+///
+/// This is the ONLY review-level check, and it matters: the MCP review tools call
+/// `review::run_*` directly and so bypass the CLI `worker_guard`. Every write
+/// verb routes through here first — root, then admission — before any id is
+/// allocated.
+pub(super) fn resolve_review_root(path: Option<PathBuf>) -> anyhow::Result<PathBuf> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    admit_review(worker_process())?;
     Ok(root)
 }
 

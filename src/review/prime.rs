@@ -144,8 +144,8 @@ pub(super) const SKIPPED_NON_FILE_SELECTOR_PREFIX: &str = "skipped non-file sele
 /// resolved to concrete files (a literal passes through if it names a regular
 /// file or is absent; a glob expands against `git ls-files`), the union is
 /// hashed via `contentset::compute`, and `cache.toml` is written. The selector
-/// read is committed authored slice TOML in the parent tree — review verbs
-/// already refuse fork roots, so it is fork-safe.
+/// read is the committed authored slice TOML at the resolved root; like every
+/// review write, prime is refused only in a dispatch worker (DEC-338).
 pub(crate) fn run_prime(path: Option<PathBuf>, args: &PrimeArgs) -> anyhow::Result<ReviewOutput> {
     let root = resolve_review_root(path)?;
     let id = parse_ref(&args.reference)?;
