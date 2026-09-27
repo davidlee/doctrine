@@ -2129,6 +2129,46 @@ fn review_reopen_round_trips() {
     kill(child);
 }
 
+/// SL-270 VT-6: the served `review_dispose` and `review_amend` schemas offer
+/// exactly the six routes (DEC-330). The expectation restates the set rather
+/// than reading `ROUTES`, so a drifted constant cannot pass its own oracle.
+/// This is the enum a stale PATH binary gets wrong (RV-400 F-5).
+#[test]
+fn review_route_schema_enum_is_the_six() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let list = call(&mut stdin, &mut reader, "tools/list", None);
+    let tools = list["result"]["tools"].as_array().expect("tools");
+    for name in ["review_dispose", "review_amend"] {
+        let tool = tools
+            .iter()
+            .find(|t| t["name"] == name)
+            .unwrap_or_else(|| panic!("{name} is registered"));
+        assert_eq!(
+            tool["inputSchema"]["properties"]["route"]["enum"],
+            serde_json::json!([
+                "review",
+                "demonstrate",
+                "probe",
+                "control",
+                "dedupe",
+                "refresh"
+            ]),
+            "{name}'s route enum"
+        );
+    }
+
+    kill(child);
+}
+
 #[test]
 fn review_dispose_route_round_trips() {
     let dir = tmp();

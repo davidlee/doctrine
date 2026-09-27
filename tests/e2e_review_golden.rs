@@ -1506,7 +1506,7 @@ fn amend_and_reopen_chain_pins_ledger_after_each_step() {
     );
 
     // 3. amend --response R3 --note n2 --disposition tolerated --route
-    //    owner-fix: both are replaced.
+    //    refresh: both are replaced.
     let out = run(
         dir.path(),
         &[
@@ -1521,14 +1521,14 @@ fn amend_and_reopen_chain_pins_ledger_after_each_step() {
             "--disposition",
             "tolerated",
             "--route",
-            "owner-fix",
+            "refresh",
         ],
     );
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(stdout(&out), "Amended F-1 on RV-001 (answered)\n");
     assert_eq!(
         ledger(dir.path(), 1),
-        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"answered\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\ndisposition = \"tolerated\"\nroute = \"owner-fix\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"dispose\"\nrole = \"responder\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R1\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n1\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R2\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n2\"\ndisposition = \"tolerated\"\nroute = \"owner-fix\"\nresponse = \"R3\"\n"
+        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"answered\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\ndisposition = \"tolerated\"\nroute = \"refresh\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"dispose\"\nrole = \"responder\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R1\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n1\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R2\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n2\"\ndisposition = \"tolerated\"\nroute = \"refresh\"\nresponse = \"R3\"\n"
     );
 
     // 4. verify, then reopen --note n3: verified → contested, concluded absent.
@@ -1537,7 +1537,7 @@ fn amend_and_reopen_chain_pins_ledger_after_each_step() {
     assert_eq!(stdout(&out), "Verified F-1 on RV-001 (verified)\n");
     assert_eq!(
         ledger(dir.path(), 1),
-        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"verified\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\ndisposition = \"tolerated\"\nroute = \"owner-fix\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"dispose\"\nrole = \"responder\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R1\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n1\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R2\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n2\"\ndisposition = \"tolerated\"\nroute = \"owner-fix\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"verify\"\nrole = \"raiser\"\n"
+        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"verified\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\ndisposition = \"tolerated\"\nroute = \"refresh\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"dispose\"\nrole = \"responder\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R1\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n1\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R2\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n2\"\ndisposition = \"tolerated\"\nroute = \"refresh\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"verify\"\nrole = \"raiser\"\n"
     );
 
     let out = run(
@@ -1548,7 +1548,7 @@ fn amend_and_reopen_chain_pins_ledger_after_each_step() {
     assert_eq!(stdout(&out), "Reopened F-1 on RV-001 (contested)\n");
     assert_eq!(
         ledger(dir.path(), 1),
-        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"contested\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\ndisposition = \"tolerated\"\nroute = \"owner-fix\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"dispose\"\nrole = \"responder\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R1\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n1\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R2\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n2\"\ndisposition = \"tolerated\"\nroute = \"owner-fix\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"verify\"\nrole = \"raiser\"\n\n[[finding.turn]]\nact = \"reopen\"\nrole = \"raiser\"\nnote = \"n3\"\n"
+        "id    = 1\nslug  = \"t\"\ntitle = \"T\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\nrounds_base = 0\ncontests_base = 0\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"contested\"\nseverity = \"blocker\"\ntitle = \"T1\"\ndetail = \"D1\"\ndisposition = \"tolerated\"\nroute = \"refresh\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"dispose\"\nrole = \"responder\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R1\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n1\"\ndisposition = \"follow-up\"\nroute = \"probe\"\nresponse = \"R2\"\n\n[[finding.turn]]\nact = \"amend\"\nrole = \"responder\"\nnote = \"n2\"\ndisposition = \"tolerated\"\nroute = \"refresh\"\nresponse = \"R3\"\n\n[[finding.turn]]\nact = \"verify\"\nrole = \"raiser\"\n\n[[finding.turn]]\nact = \"reopen\"\nrole = \"raiser\"\nnote = \"n3\"\n"
     );
 }
 
@@ -2550,6 +2550,30 @@ fn status_seeded_ledger_reports_rounds_zero() {
 /// status, severity and disposition.
 const OUT_OF_VOCAB_LEDGER: &str = "id    = 1\nslug  = \"t\"\ntitle = \"T1\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"zombie\"\nseverity = \"catastrophic\"\ntitle = \"Ti1\"\ndetail = \"De1\"\ndisposition = \"whatever\"\n";
 
+/// A ledger written before SL-270 retired `owner-fix` (DEC-330): the route is
+/// legacy, not a vocabulary defect.
+const LEGACY_ROUTE_LEDGER: &str = "id    = 1\nslug  = \"t\"\ntitle = \"T1\"\n\n[review]\nfacet     = \"design\"\nraiser    = \"raiser\"\nresponder = \"responder\"\n\n[target]\nref   = \"SL-001\"\n\n[[finding]]\nid = \"F-1\"\nstatus = \"answered\"\nseverity = \"major\"\ntitle = \"Ti1\"\ndetail = \"De1\"\ndisposition = \"fix-now\"\nroute = \"owner-fix\"\nresponse = \"R1\"\n";
+
+/// SL-270 VT-7: a legacy `owner-fix` route still reads. `Route` is parsed on
+/// write only, so `show` carries the stored string verbatim and discloses
+/// nothing: no migration, and no warning for a value the ledger was allowed to
+/// hold when written.
+#[test]
+fn legacy_owner_fix_route_still_reads() {
+    let dir = tmp();
+    seed_review(dir.path(), 1, LEGACY_ROUTE_LEDGER, "# brief\n");
+
+    let out = run(dir.path(), &["show", "1", "--json"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stderr(&out), "");
+    assert!(
+        stdout(&out).contains("\"route\": \"owner-fix\""),
+        "the legacy route renders verbatim: {}",
+        stdout(&out)
+    );
+    assert!(!stdout(&out).contains("\"warnings\""), "{}", stdout(&out));
+}
+
 /// The two defect lines [`OUT_OF_VOCAB_LEDGER`] discloses, status first.
 const OUT_OF_VOCAB_WARNINGS: &str = "warning: RV-001 F-1 status `zombie` is out of vocabulary; reading as non-terminal\n\
      warning: RV-001 F-1 severity `catastrophic` is out of vocabulary; gating as blocker\n";
@@ -2873,7 +2897,7 @@ fn clap_value_refusals_pin_full_stderr() {
     assert_eq!(stdout(&out), "");
     assert_eq!(
         stderr(&out),
-        "error: invalid value 'bogus' for '--route <ROUTE>': unknown route `bogus` (known: review, demonstrate, probe, control, owner-fix)\n\nFor more information, try '--help'.\n"
+        "error: invalid value 'bogus' for '--route <ROUTE>': unknown route `bogus` (known: review, demonstrate, probe, control, dedupe, refresh)\n\nFor more information, try '--help'.\n"
     );
 
     let out = run(
@@ -2893,7 +2917,7 @@ fn clap_value_refusals_pin_full_stderr() {
     assert_eq!(stdout(&out), "");
     assert_eq!(
         stderr(&out),
-        "error: invalid value 'route:probe fix-now' for '--disposition <DISPOSITION>': route: is not part of a disposition; pass the route with --route (known routes: review, demonstrate, probe, control, owner-fix)\n\nFor more information, try '--help'.\n"
+        "error: invalid value 'route:probe fix-now' for '--disposition <DISPOSITION>': route: is not part of a disposition; pass the route with --route (known routes: review, demonstrate, probe, control, dedupe, refresh)\n\nFor more information, try '--help'.\n"
     );
 }
 

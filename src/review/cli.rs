@@ -134,7 +134,7 @@ pub(crate) enum ReviewCommand {
         disposition: Disposition,
 
         /// Where the answer routes: review | demonstrate | probe | control |
-        /// owner-fix (optional; omitted keeps the finding's current route).
+        /// dedupe | refresh (optional; omitted keeps the finding's current route).
         #[arg(long, value_parser = Route::parse)]
         route: Option<Route>,
 
@@ -179,7 +179,7 @@ pub(crate) enum ReviewCommand {
         disposition: Option<Disposition>,
 
         /// The replacement route (optional; omitted keeps the current value):
-        /// review | demonstrate | probe | control | owner-fix.
+        /// review | demonstrate | probe | control | dedupe | refresh.
         #[arg(long, value_parser = Route::parse)]
         route: Option<Route>,
 

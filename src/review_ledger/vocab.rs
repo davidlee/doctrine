@@ -245,7 +245,8 @@ pub(crate) enum Route {
     Demonstrate,
     Probe,
     Control,
-    OwnerFix,
+    Dedupe,
+    Refresh,
 }
 
 impl Route {
@@ -255,19 +256,21 @@ impl Route {
             Self::Demonstrate => "demonstrate",
             Self::Probe => "probe",
             Self::Control => "control",
-            Self::OwnerFix => "owner-fix",
+            Self::Dedupe => "dedupe",
+            Self::Refresh => "refresh",
         }
     }
 
-    /// Parse a `--route` token against the closed 5-set (design sec-2,
-    /// SL-268 D8).
+    /// Parse a `--route` token against the closed 6-set (design sec-2,
+    /// SL-268 D8; SL-270 DEC-330 split `owner-fix` into `dedupe` and `refresh`).
     pub(crate) fn parse(s: &str) -> Result<Self, String> {
         match s {
             "review" => Ok(Self::Review),
             "demonstrate" => Ok(Self::Demonstrate),
             "probe" => Ok(Self::Probe),
             "control" => Ok(Self::Control),
-            "owner-fix" => Ok(Self::OwnerFix),
+            "dedupe" => Ok(Self::Dedupe),
+            "refresh" => Ok(Self::Refresh),
             other => Err(format!(
                 "unknown route `{other}` (known: {})",
                 ROUTES.join(", ")
@@ -291,7 +294,14 @@ impl From<Route> for String {
 
 /// The `Route` known-set. Lockstep-guarded by `route_known_set_matches_variants`
 /// (`vocab.rs`'s own test module — VT-4).
-pub(crate) const ROUTES: &[&str] = &["review", "demonstrate", "probe", "control", "owner-fix"];
+pub(crate) const ROUTES: &[&str] = &[
+    "review",
+    "demonstrate",
+    "probe",
+    "control",
+    "dedupe",
+    "refresh",
+];
 
 // ---------------------------------------------------------------------------
 // Fail-safe authored reads (SL-268 D15, DEC-319)
@@ -506,12 +516,35 @@ mod tests {
             Route::Demonstrate,
             Route::Probe,
             Route::Control,
-            Route::OwnerFix,
+            Route::Dedupe,
+            Route::Refresh,
         ]
         .iter()
         .map(|r| r.as_str())
         .collect();
         assert_eq!(from_variants, ROUTES.to_vec());
+    }
+
+    /// SL-270 VT-1: `Route::parse` accepts exactly the six routes (DEC-330),
+    /// round-tripping each through `as_str`.
+    #[test]
+    fn route_parse_accepts_exactly_the_six() {
+        for known in ROUTES {
+            assert_eq!(Route::parse(known).map(Route::as_str), Ok(*known));
+        }
+        assert_eq!(ROUTES.len(), 6);
+    }
+
+    /// SL-270 VT-1: the retired `owner-fix` is refused on write, and the
+    /// refusal names the six known routes (DEC-330: split into `dedupe` and
+    /// `refresh`; a stored one still reads, since reads never parse).
+    #[test]
+    fn route_parse_refuses_the_retired_owner_fix() {
+        let err = Route::parse("owner-fix").unwrap_err();
+        assert_eq!(
+            err,
+            "unknown route `owner-fix` (known: review, demonstrate, probe, control, dedupe, refresh)"
+        );
     }
 
     /// VT-3: `Disposition::parse("route:probe fix-now")` is refused — the
@@ -520,6 +553,6 @@ mod tests {
     fn disposition_parse_refuses_a_route_prefix() {
         let err = Disposition::parse("route:probe fix-now").unwrap_err();
         assert!(err.contains("--route"), "{err}");
-        assert!(err.contains("owner-fix"), "{err}");
+        assert!(err.contains("refresh"), "{err}");
     }
 }
