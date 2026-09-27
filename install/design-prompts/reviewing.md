@@ -193,7 +193,11 @@ clears `concluded`: the raiser must conclude again, with a fresh `--basis`,
 before a `conducted` disposition is admissible. A `conducted` disposition
 already recorded stands.
 
-The route value is validated on write: the CLI accepts only the closed six. The
-rest is not. The slice close gate will not let a blocker be closed over
-unverified, which forces the verify act to happen — but no gate reads what you
-wrote, and none checks that a criterion exists.
+The route value is validated on write: the CLI accepts only the closed six. One
+thing reads it: the design-run lock refuses while a disposed `blocker` or `major`
+finding on the review carries no known route, and names each one. A missing
+route, a legacy `route:` prefix and a retired route such as `owner-fix` all
+count. The rest is not checked. The slice close gate will not let a blocker be
+closed over unverified, which forces the verify act to happen — but no gate
+reads what you wrote, and none checks that an instrument route's criterion
+exists or is met.

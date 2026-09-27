@@ -20,3 +20,5 @@ X
 Minor/nit findings take the disposition alone.
 
 Related: `reference/review-ledger.md` ("Route axis"), the design-review rules in `install/design-prompts/reviewing.md`.
+
+**The design-run lock reads it** (SL-270, DEC-326): the lock refuses while a disposed `blocker`/`major` finding on the design review has no known route (absent, a legacy `route:` prefix, or `owner-fix`), naming each as `F-n (<reason>)`. Repair: answered → `review amend RV-NNN --finding F-n --route <route> --response … --note …`; contested → dispose again with `--route`; verified → raiser reopens, responder disposes again with `--route`.
