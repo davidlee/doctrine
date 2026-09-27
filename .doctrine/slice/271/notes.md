@@ -285,6 +285,27 @@ is the back-edge + a new phase, never a reconcile edit.
 `design.md` is now diverged from the locked run `dr-01a0e17c` rev 44 — expected
 at reconcile, not damage (`mem.pattern.reconcile.edit-design-out-of-band`).
 
+## PHASE-04 (design back-edge, RV-403 F-1) — executed
+
+Design back-edge (`reconcile → design → plan → ready → started`) for the ratified
+option A remedy, then one retirement phase.
+
+- **design.md** amended: `parse_codex_hooks_feature` + `codex_project_hooks`
+  replace the capture seam; the disclosure reads `[features] hooks` from
+  `.codex/config.toml`; `write_codex_activation(hooks_enabled: Option<bool>)`;
+  `wire()` loses its runner parameter. The previously-rejected "read the project
+  file" alternative is recorded as overturned; the probe-premise risk rewritten.
+- **DEC-329** amended (choice/alternatives/rationale/consequences/body/title).
+- **PHASE-04** (`3be4df419`): `install.rs`'s `Capture`/`CommandRunner`/
+  `CaptureRunner` and `boot.rs`'s `HooksState`/`parse_codex_features`/
+  `codex_hooks_state` deleted; `parse_codex_hooks_feature` (pure) and
+  `codex_project_hooks` (fail-soft read) added; tests inverted to filesystem
+  fixtures. `RV-402` F-5 obsoleted. Boundary recorded `05547661b..3be4df419`.
+- `doctrine check gate` green; e2e 12/12, focused codex/hooks suites green.
+
+`design.md` remains diverged from the locked run `dr-01a0e17c` rev 44 — expected
+at the tail (`mem.pattern.reconcile.edit-design-out-of-band`).
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-09-27 · audit (RV-403 concluded; fork landed) · ad5754620
