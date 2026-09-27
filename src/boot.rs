@@ -19,7 +19,7 @@
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs;
-use std::io::{self, Write as _};
+use std::io::{self, ErrorKind, Write as _};
 use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
 
@@ -596,6 +596,41 @@ const MCP_REL: &str = ".mcp.json";
 /// The `mcpServers` key doctrine registers its server under in `.mcp.json` — the
 /// client-side alias, so its tools surface as `mcp__doctrine__review_*`.
 const MCP_SERVER_KEY: &str = "doctrine";
+
+/// The project-root codex config file — the codex MCP leg's write target
+/// (SL-271). The project layer is loaded by codex for TRUSTED projects only, so
+/// a written entry is never claimed active. Distinct from [`CODE_HOOKS_REL`]:
+/// codex hooks and MCP servers live in different files.
+const CODEX_CONFIG_REL: &str = ".codex/config.toml";
+
+/// The codex TOML table doctrine registers its MCP server under.
+const CODEX_MCP_TABLE: &str = "mcp_servers";
+
+/// The server key inside [`CODEX_MCP_TABLE`]. Pinned == [`MCP_SERVER_KEY`] (one
+/// server, two harnesses) rather than shared by construction; the agreement test
+/// holds them together (STD-001).
+const CODEX_MCP_SERVER_KEY: &str = "doctrine";
+
+/// The shell that reads `DOCTRINE_BIN` for the codex entry — codex execs
+/// `command` literally (no `${VAR:-default}` interpolation), so the override
+/// must run through a shell (DEC-323). That POSIX-shell dependency is declared
+/// per POL-002 facet 3 (README).
+const CODEX_MCP_SHELL: &str = "sh";
+/// The shell flag carrying the command string.
+const CODEX_MCP_SHELL_FLAG: &str = "-c";
+/// The doctrine serve args shared by both harnesses' entries.
+const CODEX_MCP_SERVE_ARGS: &str = "serve --mcp";
+/// The wrapper line doctrine emits as the codex `args[1]` — the portable env
+/// literal executed through [`CODEX_MCP_SHELL`]. `const` cannot compose, so this
+/// holds its own literal; the agreement test pins it to `PORTABLE_EXEC`.
+const CODEX_MCP_WRAPPER: &str = "exec \"${DOCTRINE_BIN:-doctrine}\" serve --mcp";
+/// Every wrapper line doctrine has ever emitted, newest first (today: one). A
+/// wording change APPENDS its predecessor, so a previously-emitted wrapper stays
+/// ours and refreshes instead of becoming foreign and nagging forever.
+const CODEX_MCP_WRAPPER_FORMS: &[&str] = &[CODEX_MCP_WRAPPER];
+/// The codex env forwarding seam — codex gives an MCP child a FILTERED
+/// environment, so `DOCTRINE_BIN` survives only if whitelisted.
+const CODEX_MCP_ENV: &str = "DOCTRINE_BIN";
 /// The portable doctrine invocation (SL-195, POL-002) — NO host abspath in a
 /// committed file; `DOCTRINE_BIN` overrides when `doctrine` is off PATH. Single
 /// source of the literal (STD-001) across two surfaces:
@@ -1693,6 +1728,14 @@ fn install_refresh(
             let extension = install_pi_extension(root, exec, dry_run)?;
             let mcp_extension = install_mcp_extension(root, exec, dry_run)?;
             let surface_extension = install_surface_extension(root, exec, dry_run)?;
+            // The MCP leg is written LAST in the arm (a different file from the
+            // hooks), and its error carries boundary context naming how far the arm
+            // got — mirroring the Claude hook loop, so an abort after the hooks and
+            // the pi extensions is not silent about what already landed (design
+            // sec-5.4).
+            let mcp = install_codex_mcp(root, dry_run).with_context(
+                || "codex MCP registration failed after the hook merge and pi extensions",
+            )?;
             Ok(RefreshReport {
                 hooks,
                 claude_scope: None,
@@ -1700,7 +1743,7 @@ fn install_refresh(
                     outcome: BaseRefOutcome::NotApplicable,
                     stranded: None,
                 },
-                mcp: RefreshOutcome::None,
+                mcp,
                 append_system,
                 extension,
                 mcp_extension,
@@ -1783,8 +1826,9 @@ struct RefreshReport {
     /// so nothing to abandon.
     claude_scope: Option<(ClaudeSettingsScope, SweepReport)>,
     baseref: BaseRefWrite,
-    /// The `.mcp.json` doctrine server registration outcome (CHR-013); pi
-    /// carries `None` (no `.mcp.json` wiring on the import-only arm).
+    /// The MCP server registration outcome (CHR-013; SL-271): the Claude arm
+    /// writes `.mcp.json`, the Codex arm `.codex/config.toml`. `None` when the
+    /// entry is already current; pi carries `None` (no MCP wiring).
     mcp: RefreshOutcome,
     /// The `.pi/APPEND_SYSTEM.md` symlink outcome (PHASE-02); Claude carries
     /// `NotApplicable`.
@@ -2173,6 +2217,210 @@ fn install_mcp(root: &Path, dry_run: bool) -> anyhow::Result<RefreshOutcome> {
         },
         other => other,
     })
+}
+
+// ---------------------------------------------------------------------------
+// Codex MCP registration leg (SL-271): a second file, the shared decision table.
+// ---------------------------------------------------------------------------
+
+/// Why a codex config could not be interpreted: unparseable TOML, an
+/// `mcp_servers` key that is neither a table nor an inline table, or a `doctrine`
+/// entry that is neither. The file is never opened for writing in that case.
+#[derive(Debug)]
+struct Malformed;
+
+/// A planned codex MCP merge: the entry class (or `Malformed`) plus the new TOML
+/// to write when the file changes.
+struct CodexMcpPlan {
+    class: Result<McpEntryClass, Malformed>,
+    new_toml: Option<String>,
+}
+
+impl CodexMcpPlan {
+    fn malformed() -> Self {
+        Self {
+            class: Err(Malformed),
+            new_toml: None,
+        }
+    }
+}
+
+/// The manual snippet for the fallback path — the `[mcp_servers.doctrine]` table
+/// in TOML, never the JSON block `mcp_fallback_snippet` emits. Rendered from the
+/// SAME item the writer inserts ([`codex_mcp_entry`]).
+fn codex_mcp_fallback_snippet() -> String {
+    let mut doc = toml_edit::DocumentMut::new();
+    let mut servers = toml_edit::Table::new();
+    // Render `[mcp_servers.doctrine]` alone, not an empty `[mcp_servers]` above it.
+    servers.set_implicit(true);
+    servers.insert(CODEX_MCP_SERVER_KEY, codex_mcp_entry());
+    doc.insert(CODEX_MCP_TABLE, toml_edit::Item::Table(servers));
+    doc.to_string()
+}
+
+/// The canonical codex server entry, built ONCE: the writer inserts this item and
+/// the snippet renders the same item standalone, so the two cannot drift.
+fn codex_mcp_entry() -> toml_edit::Item {
+    let mut entry = toml_edit::Table::new();
+    entry.insert("command", toml_edit::value(CODEX_MCP_SHELL));
+    let mut args = toml_edit::Array::new();
+    args.push(CODEX_MCP_SHELL_FLAG);
+    // Built from the shared portable prefix and serve args so the suffix has one
+    // source; the agreement test pins it byte-equal to CODEX_MCP_WRAPPER, which
+    // the ownership comparison and the emitted-forms set use.
+    args.push(format!("exec \"{PORTABLE_EXEC}\" {CODEX_MCP_SERVE_ARGS}"));
+    entry.insert("args", toml_edit::value(args));
+    let mut env = toml_edit::Array::new();
+    env.push(CODEX_MCP_ENV);
+    entry.insert("env_vars", toml_edit::value(env));
+    toml_edit::Item::Table(entry)
+}
+
+/// Trim a wrapper line and collapse internal whitespace runs to one space — the
+/// canonicalising comparison behind [`CODEX_MCP_WRAPPER_FORMS`] membership, so a
+/// re-spaced variant of an emitted wording still reads as ours.
+fn normalise(line: &str) -> String {
+    line.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Classify the existing `doctrine` entry under `mcp_servers` against the strict
+/// ownership formula (design sec-5.2). A non-table-like entry is `Malformed`
+/// (doctrine cannot interpret it); anything table-like that doctrine did not emit
+/// is `Foreign`. Every `args` index is length-guarded.
+fn classify_codex_entry(entry: &toml_edit::Item) -> Result<McpEntryClass, Malformed> {
+    let Some(table) = entry.as_table_like() else {
+        return Err(Malformed);
+    };
+    let keys_ok = table
+        .iter()
+        .all(|(k, _)| matches!(k, "command" | "args" | "env_vars"));
+    let command_ok = table.get("command").and_then(|i| i.as_str()) == Some(CODEX_MCP_SHELL);
+    let args = table.get("args").and_then(|i| i.as_array());
+    let args_ok = args.is_some_and(|a| {
+        a.len() == 2
+            && a.get(0).and_then(|v| v.as_str()) == Some(CODEX_MCP_SHELL_FLAG)
+            && a.get(1)
+                .and_then(|v| v.as_str())
+                .is_some_and(|w| CODEX_MCP_WRAPPER_FORMS.contains(&normalise(w).as_str()))
+    });
+    let env_absent_or_exact = match table.get("env_vars") {
+        None => true,
+        Some(item) => item.as_array().is_some_and(|a| {
+            a.len() == 1 && a.get(0).and_then(|v| v.as_str()) == Some(CODEX_MCP_ENV)
+        }),
+    };
+    if !(keys_ok && command_ok && args_ok && env_absent_or_exact) {
+        return Ok(McpEntryClass::Foreign);
+    }
+    // `owned`; `current` is byte-exact (no normalise) and requires the emitted
+    // `env_vars` exactly.
+    let current = args
+        .is_some_and(|a| a.get(1).and_then(|v| v.as_str()) == Some(CODEX_MCP_WRAPPER))
+        && table
+            .get("env_vars")
+            .and_then(|i| i.as_array())
+            .is_some_and(|a| {
+                a.len() == 1 && a.get(0).and_then(|v| v.as_str()) == Some(CODEX_MCP_ENV)
+            });
+    Ok(if current {
+        McpEntryClass::OwnedCurrent
+    } else {
+        McpEntryClass::OwnedStale
+    })
+}
+
+/// PURE planner for the codex `mcp_servers.doctrine` entry (SL-271). Parses the
+/// file (or starts a fresh document when absent), classifies the entry, and —
+/// for `Absent`/`OwnedStale` — plans the narrow-path insert through
+/// `as_table_like_mut`, which carries the container's spelling by construction
+/// (`Item::into_value`); an owned-but-stale entry is replaced wholesale. Any
+/// shape doctrine cannot interpret is `Malformed` and plans no write.
+fn plan_codex_mcp(existing_toml: Option<&str>) -> CodexMcpPlan {
+    let mut doc = match existing_toml {
+        None => toml_edit::DocumentMut::new(),
+        Some(text) => match text.parse::<toml_edit::DocumentMut>() {
+            Ok(doc) => doc,
+            Err(_) => return CodexMcpPlan::malformed(),
+        },
+    };
+    let class = match doc.get(CODEX_MCP_TABLE) {
+        None => McpEntryClass::Absent,
+        Some(item) => {
+            let Some(servers) = item.as_table_like() else {
+                return CodexMcpPlan::malformed();
+            };
+            match servers.get(CODEX_MCP_SERVER_KEY) {
+                None => McpEntryClass::Absent,
+                Some(entry) => match classify_codex_entry(entry) {
+                    Ok(class) => class,
+                    Err(Malformed) => return CodexMcpPlan::malformed(),
+                },
+            }
+        }
+    };
+    if matches!(class, McpEntryClass::OwnedCurrent | McpEntryClass::Foreign) {
+        return CodexMcpPlan {
+            class: Ok(class),
+            new_toml: None,
+        };
+    }
+    if let Some(item) = doc.get_mut(CODEX_MCP_TABLE) {
+        let Some(servers) = item.as_table_like_mut() else {
+            return CodexMcpPlan::malformed();
+        };
+        servers.insert(CODEX_MCP_SERVER_KEY, codex_mcp_entry());
+    } else {
+        let mut servers = toml_edit::Table::new();
+        // Implicit so the parent renders through its child (`[mcp_servers.doctrine]`),
+        // not as a bare header above it.
+        servers.set_implicit(true);
+        servers.insert(CODEX_MCP_SERVER_KEY, codex_mcp_entry());
+        doc.insert(CODEX_MCP_TABLE, toml_edit::Item::Table(servers));
+    }
+    CodexMcpPlan {
+        class: Ok(class),
+        new_toml: Some(doc.to_string()),
+    }
+}
+
+/// Register the doctrine MCP server in the project-root `.codex/config.toml`,
+/// writing only on change (unless `dry_run`). A read that is not `NotFound` is a
+/// degraded read — malformed, never absent (design sec-5.2; ISS-495 is the same
+/// defect on the Claude read, deliberately not fixed here).
+fn install_codex_mcp(root: &Path, dry_run: bool) -> anyhow::Result<RefreshOutcome> {
+    let path = root.join(CODEX_CONFIG_REL);
+    let plan = match fs::read_to_string(&path) {
+        Ok(text) => plan_codex_mcp(Some(&text)),
+        Err(e) if e.kind() == ErrorKind::NotFound => plan_codex_mcp(None),
+        Err(_) => CodexMcpPlan::malformed(),
+    };
+    let (outcome, write) = match plan.class {
+        Ok(class) => {
+            let payload = if class == McpEntryClass::Foreign {
+                codex_mcp_fallback_snippet()
+            } else {
+                CODEX_MCP_WRAPPER.to_string()
+            };
+            mcp_action(class, payload, CODEX_CONFIG_REL)
+        }
+        Err(Malformed) => (
+            RefreshOutcome::PrintedFallback {
+                hook_file: CODEX_CONFIG_REL,
+                snippet: codex_mcp_fallback_snippet(),
+            },
+            false,
+        ),
+    };
+    if write && !dry_run {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create {}", parent.display()))?;
+        }
+        if let Some(new_toml) = &plan.new_toml {
+            fsutil::write_atomic(&path, new_toml.as_bytes())?;
+        }
+    }
+    Ok(outcome)
 }
 
 /// Annotate a refresh outcome with a hook file path and a fallback snippet.
@@ -2916,28 +3164,57 @@ pub(crate) fn wire(
                     | BaseRefOutcome::PrintedFallback
                     | BaseRefOutcome::NotApplicable => {}
                 }
-                // MCP registration leg (CHR-013): report a fresh wire or a stale
-                // refresh; a foreign/malformed `.mcp.json` entry prints the manual
-                // snippet. None (current, or pi) stays silent.
+                // MCP registration leg (CHR-013; SL-271): report a fresh wire or a
+                // stale refresh for the harness's own file (`.mcp.json` for Claude,
+                // `.codex/config.toml` for Codex); a foreign / uninterpretable entry
+                // prints the manual snippet. None (current, or pi) stays silent.
+                let mcp_rel = match h {
+                    Harness::Codex => CODEX_CONFIG_REL,
+                    Harness::Claude => MCP_REL,
+                };
+                // Codex states what was WRITTEN (or would write), never activation;
+                // Claude keeps its wire/refresh verbs. One fallback wording serves
+                // both arms and both causes — the operator's next step is the same.
+                let codex_verb = if dry_run {
+                    "would write MCP server registration in"
+                } else {
+                    "wrote MCP server registration in"
+                };
                 match report.mcp {
                     RefreshOutcome::Wired(cmd) => {
-                        writeln!(
-                            stdout,
-                            "  {tag}{}: registered MCP server in {MCP_REL}: {cmd}",
-                            harness_label(h)
-                        )?;
+                        if matches!(h, Harness::Codex) {
+                            writeln!(
+                                stdout,
+                                "  {tag}{}: {codex_verb} {mcp_rel}: {cmd}",
+                                harness_label(h)
+                            )?;
+                        } else {
+                            writeln!(
+                                stdout,
+                                "  {tag}{}: registered MCP server in {mcp_rel}: {cmd}",
+                                harness_label(h)
+                            )?;
+                        }
                     }
                     RefreshOutcome::Refreshed(cmd) => {
-                        writeln!(
-                            stdout,
-                            "  {tag}{}: refreshed MCP server in {MCP_REL}: {cmd}",
-                            harness_label(h)
-                        )?;
+                        if matches!(h, Harness::Codex) {
+                            writeln!(
+                                stdout,
+                                "  {tag}{}: {codex_verb} {mcp_rel}: {cmd}",
+                                harness_label(h)
+                            )?;
+                        } else {
+                            writeln!(
+                                stdout,
+                                "  {tag}{}: refreshed MCP server in {mcp_rel}: {cmd}",
+                                harness_label(h)
+                            )?;
+                        }
                     }
                     RefreshOutcome::PrintedFallback { hook_file, snippet } => {
                         writeln!(
                             stdout,
-                            "  {}: {hook_file} has a foreign or malformed 'doctrine' entry — register manually:",
+                            "  {}: {hook_file} has a doctrine entry doctrine did not write, or could not be interpreted — left untouched. To register it manually:",
                             harness_label(h)
                         )?;
                         writeln!(stdout, "{snippet}")?;
@@ -5238,7 +5515,12 @@ mod tests {
             ]
         ));
         assert!(matches!(out.baseref.outcome, BaseRefOutcome::NotApplicable));
-        assert!(matches!(out.mcp, RefreshOutcome::None));
+        // SL-271: the Codex arm now registers the MCP server in .codex/config.toml.
+        assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
+        assert!(
+            root.join(CODEX_CONFIG_REL).exists(),
+            "the codex leg writes .codex/config.toml"
+        );
     }
 
     /// SL-250 PHASE-04 VT-2. SL-195's INV-1 — no absolute host path in a TRACKED
@@ -5523,6 +5805,213 @@ mod tests {
             RefreshOutcome::Refreshed(payload) => assert_eq!(payload, mcp_invocation()),
             other => panic!("legacy abspath must be Refreshed, got {other:?}"),
         }
+    }
+
+    // --- SL-271 PHASE-02: the codex MCP leg ---
+
+    /// A literal, current codex entry (not seeded by the installer — an ownership
+    /// fixture must be able to fail for the right reason).
+    const CODEX_CURRENT: &str = r#"
+[features]
+hooks = true
+
+[mcp_servers.doctrine]
+command = "sh"
+args = ["-c", "exec \"${DOCTRINE_BIN:-doctrine}\" serve --mcp"]
+env_vars = ["DOCTRINE_BIN"]
+"#;
+
+    fn codex_class(text: &str) -> Result<McpEntryClass, ()> {
+        plan_codex_mcp(Some(text)).class.map_err(|_| ())
+    }
+
+    fn codex_fields(
+        doc: &toml_edit::DocumentMut,
+    ) -> (Option<String>, Option<Vec<String>>, Option<Vec<String>>) {
+        let servers = doc
+            .get(CODEX_MCP_TABLE)
+            .and_then(|i| i.as_table_like())
+            .expect("mcp_servers table");
+        let entry = servers
+            .get(CODEX_MCP_SERVER_KEY)
+            .and_then(|i| i.as_table_like())
+            .expect("doctrine entry table");
+        let command = entry
+            .get("command")
+            .and_then(|i| i.as_str())
+            .map(String::from);
+        let args = entry.get("args").and_then(|i| i.as_array()).map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str())
+                .map(String::from)
+                .collect()
+        });
+        let env = entry.get("env_vars").and_then(|i| i.as_array()).map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str())
+                .map(String::from)
+                .collect()
+        });
+        (command, args, env)
+    }
+
+    #[test]
+    fn codex_constants_agree_and_pin_the_shared_key() {
+        // The wrapper literal and its composed form must not drift (const cannot
+        // compose; this is the pin).
+        assert_eq!(
+            CODEX_MCP_WRAPPER,
+            format!("exec \"{PORTABLE_EXEC}\" {CODEX_MCP_SERVE_ARGS}")
+        );
+        // Every emitted form is a FIXED POINT of normalise — else an appended
+        // wording with doubled/trailing whitespace could never match.
+        assert!(CODEX_MCP_WRAPPER_FORMS.iter().all(|w| normalise(w) == *w));
+        // One server, two harnesses.
+        assert_eq!(CODEX_MCP_SERVER_KEY, MCP_SERVER_KEY);
+    }
+
+    #[test]
+    fn codex_fallback_snippet_is_the_toml_table() {
+        let doc: toml_edit::DocumentMut = codex_mcp_fallback_snippet().parse().unwrap();
+        let (command, args, env) = codex_fields(&doc);
+        assert_eq!(command.as_deref(), Some(CODEX_MCP_SHELL));
+        assert_eq!(
+            args,
+            Some(vec![
+                CODEX_MCP_SHELL_FLAG.to_string(),
+                CODEX_MCP_WRAPPER.to_string()
+            ])
+        );
+        assert_eq!(env, Some(vec![CODEX_MCP_ENV.to_string()]));
+    }
+
+    #[test]
+    fn plan_codex_mcp_matrix() {
+        // Current: ours, byte-exact, env present -> no write.
+        let plan = plan_codex_mcp(Some(CODEX_CURRENT));
+        assert_eq!(plan.class.unwrap(), McpEntryClass::OwnedCurrent);
+        assert!(plan.new_toml.is_none(), "current => no write");
+
+        // Wrapper with env_vars absent -> dead-override refresh.
+        let no_env = CODEX_CURRENT
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("env_vars"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_eq!(codex_class(&no_env), Ok(McpEntryClass::OwnedStale));
+
+        // A spacing variant of the emitted wrapper -> canonicalising refresh.
+        let spaced = CODEX_CURRENT.replace(
+            "exec \\\"${DOCTRINE_BIN:-doctrine}\\\" serve --mcp",
+            "exec   \\\"${DOCTRINE_BIN:-doctrine}\\\"    serve --mcp",
+        );
+        assert_ne!(spaced, CODEX_CURRENT, "the fixture really changed");
+        assert_eq!(codex_class(&spaced), Ok(McpEntryClass::OwnedStale));
+
+        // A user env_vars value (extra element, wrong type) -> Foreign.
+        let extra_env = CODEX_CURRENT.replace(
+            "env_vars = [\"DOCTRINE_BIN\"]",
+            "env_vars = [\"DOCTRINE_BIN\", \"HOME\"]",
+        );
+        assert_eq!(codex_class(&extra_env), Ok(McpEntryClass::Foreign));
+        let wrong_type = CODEX_CURRENT.replace(
+            "env_vars = [\"DOCTRINE_BIN\"]",
+            "env_vars = \"DOCTRINE_BIN\"",
+        );
+        assert_eq!(codex_class(&wrong_type), Ok(McpEntryClass::Foreign));
+
+        // Short/foreign arities and programs -> Foreign, never a panic.
+        let empty_args = CODEX_CURRENT.replace(
+            "args = [\"-c\", \"exec \\\"${DOCTRINE_BIN:-doctrine}\\\" serve --mcp\"]",
+            "args = []",
+        );
+        assert_eq!(codex_class(&empty_args), Ok(McpEntryClass::Foreign));
+        let flag_only = CODEX_CURRENT.replace(
+            "args = [\"-c\", \"exec \\\"${DOCTRINE_BIN:-doctrine}\\\" serve --mcp\"]",
+            "args = [\"-c\"]",
+        );
+        assert_eq!(codex_class(&flag_only), Ok(McpEntryClass::Foreign));
+        let plain = CODEX_CURRENT.replace("command = \"sh\"", "command = \"doctrine\"");
+        assert_eq!(codex_class(&plain), Ok(McpEntryClass::Foreign));
+        let bin_sh = CODEX_CURRENT.replace("command = \"sh\"", "command = \"/bin/sh\"");
+        assert_eq!(codex_class(&bin_sh), Ok(McpEntryClass::Foreign));
+        let extra_key = CODEX_CURRENT.replace(
+            "env_vars = [\"DOCTRINE_BIN\"]",
+            "env_vars = [\"DOCTRINE_BIN\"]\nenabled = false",
+        );
+        assert_eq!(codex_class(&extra_key), Ok(McpEntryClass::Foreign));
+
+        // Malformed shapes: non-table container / entry, unparseable TOML.
+        assert_eq!(codex_class("mcp_servers = 3"), Err(()));
+        assert_eq!(codex_class("[mcp_servers]\ndoctrine = 3"), Err(()));
+        assert_eq!(codex_class("not toml ="), Err(()));
+
+        // Absent -> Wired, plans a write; siblings/comment preserved.
+        let with_siblings = "[features]\nhooks = true\n\n[mcp_servers.other]\ncommand = \"x\"\n";
+        let plan = plan_codex_mcp(Some(with_siblings));
+        assert_eq!(plan.class.unwrap(), McpEntryClass::Absent);
+        let new = plan.new_toml.expect("absent plans a write");
+        assert!(new.contains("hooks = true"), "[features] preserved");
+        assert!(new.contains("other"), "sibling server preserved");
+        let doc: toml_edit::DocumentMut = new.parse().unwrap();
+        assert_eq!(codex_fields(&doc).0.as_deref(), Some(CODEX_MCP_SHELL));
+
+        // Inline parent: the entry is written as an inline value, siblings intact.
+        let inline = "mcp_servers = { other = { command = \"x\" } }\n";
+        let new = plan_codex_mcp(Some(inline))
+            .new_toml
+            .expect("inline absent writes");
+        let doc: toml_edit::DocumentMut = new.parse().unwrap();
+        assert_eq!(codex_fields(&doc).0.as_deref(), Some(CODEX_MCP_SHELL));
+        assert!(new.contains("other"), "inline sibling preserved");
+
+        // Inline doctrine entry in the emitted shape -> content, not spelling.
+        let inline_current = r#"mcp_servers = { doctrine = { command = "sh", args = ["-c", 'exec "${DOCTRINE_BIN:-doctrine}" serve --mcp'], env_vars = ["DOCTRINE_BIN"] } }
+"#;
+        assert_eq!(
+            codex_class(&inline_current),
+            Ok(McpEntryClass::OwnedCurrent)
+        );
+    }
+
+    #[test]
+    fn install_codex_mcp_writes_dry_runs_and_survives_non_utf8() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let path = root.join(CODEX_CONFIG_REL);
+
+        // dry run: plans but writes nothing.
+        let out = install_codex_mcp(root, true).unwrap();
+        assert!(matches!(out, RefreshOutcome::Wired(_)));
+        assert!(!path.exists(), "dry run writes no config");
+
+        // real run: creates the parent dir and the file, in the emitted shape.
+        let out = install_codex_mcp(root, false).unwrap();
+        assert!(matches!(out, RefreshOutcome::Wired(_)));
+        let doc: toml_edit::DocumentMut = fs::read_to_string(&path).unwrap().parse().unwrap();
+        let (command, args, env) = codex_fields(&doc);
+        assert_eq!(command.as_deref(), Some(CODEX_MCP_SHELL));
+        assert_eq!(
+            args,
+            Some(vec![
+                CODEX_MCP_SHELL_FLAG.to_string(),
+                CODEX_MCP_WRAPPER.to_string()
+            ])
+        );
+        assert_eq!(env, Some(vec![CODEX_MCP_ENV.to_string()]));
+
+        // second run over the written file is a no-op.
+        let out = install_codex_mcp(root, false).unwrap();
+        assert!(matches!(out, RefreshOutcome::None));
+
+        // a non-UTF-8 read is malformed, never absent: bytes untouched, snippet printed.
+        fs::write(&path, [0xff, 0xfe, 0x00]).unwrap();
+        let out = install_codex_mcp(root, false).unwrap();
+        assert!(matches!(
+            out,
+            RefreshOutcome::PrintedFallback { hook_file, .. } if hook_file == CODEX_CONFIG_REL
+        ));
+        assert_eq!(fs::read(&path).unwrap(), vec![0xff, 0xfe, 0x00]);
     }
 
     // --- T6 (SL-018): the generalized seam carries a SEPARATE `memory sync` hook.
