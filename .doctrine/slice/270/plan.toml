@@ -18,7 +18,13 @@ collaborators = []
 targets      = []
 dependencies = []
 
-# One [[phase]]
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable. VT = test, VA = agent,
+# VH = human. Reference another phase's criterion phase-qualified (PHASE-03/EX-2).
+
+[[phase]]
 id        = "PHASE-01"
 name      = "Six-route set"
 objective = "Replace owner-fix with dedupe and refresh in the route vocabulary, and bring every site that states the route set into line, including the probe/control sentence (DEC-330, DEC-333; design sec-2)."
