@@ -352,6 +352,10 @@ pub(crate) fn apply(
     next.run.revision = revision;
 
     let live_acts_before = live_acts(prior);
+    // The acts whose displacement is a death not yet reported (`DEC-336`): live
+    // at `prior`, or recorded earlier in this apply. Seeded here and extended by
+    // each recording at `admit_and_record`.
+    let mut reportable = live_acts_before.clone();
     // Unfiltered by the run's review policy, on purpose: this pair feeds
     // `invalidation_rows`, which reports the death of a recorded act. Whether an
     // attestation satisfied a lane the run requires is a different question,
@@ -421,10 +425,21 @@ pub(crate) fn apply(
     // the fingerprint of the record the engine has just written, so both arrive in
     // one submission with no caller-computed digest (design `sec-4`).
     if let Some(declared) = request.agent_declaration.as_ref() {
-        pending.extend(record_declaration(&mut next, declared, derived)?);
+        pending.extend(record_declaration(
+            &mut next,
+            declared,
+            derived,
+            &mut reportable,
+        )?);
     }
     if let Some(declared) = request.checkpoint_act.as_ref() {
-        pending.extend(record_act(&mut next, declared, derived, payload_digest)?);
+        pending.extend(record_act(
+            &mut next,
+            declared,
+            derived,
+            payload_digest,
+            &mut reportable,
+        )?);
     }
 
     // Before the stage move, so a lock may be accepted and taken in one
@@ -448,6 +463,7 @@ pub(crate) fn apply(
             },
             derived,
             payload_digest,
+            &mut reportable,
         )?);
     }
 
@@ -588,6 +604,7 @@ fn record_declaration(
     next: &mut DesignSnapshot,
     declared: &AgentActDeclaration,
     derived: &DerivedInput,
+    reportable: &mut BTreeSet<(ActKind, DesignId)>,
 ) -> Result<Vec<Pending>, Refusal> {
     if declared.basis.trim().is_empty() {
         return Err(Refusal::AcceptanceBasisMissing);
@@ -607,7 +624,7 @@ fn record_declaration(
         covered: rule.and_then(|rule| covered_in(next, rule.binding.coverage)),
         fingerprint,
     };
-    admit_and_record(next, ActRecord::Agent(record), rule, derived)
+    admit_and_record(next, ActRecord::Agent(record), rule, derived, reportable)
 }
 
 /// Construct the checkpoint act this batch carries, admit it, and record it
@@ -636,6 +653,7 @@ fn record_act(
     declared: &CheckpointActDeclaration,
     derived: &DerivedInput,
     payload_digest: &str,
+    reportable: &mut BTreeSet<(ActKind, DesignId)>,
 ) -> Result<Vec<Pending>, Refusal> {
     if declared.acceptance.basis.trim().is_empty() {
         return Err(Refusal::AcceptanceBasisMissing);
@@ -693,7 +711,13 @@ fn record_act(
             )?)
         }
     };
-    let mut rows = admit_and_record(next, ActRecord::Checkpoint(record), rule, derived)?;
+    let mut rows = admit_and_record(
+        next,
+        ActRecord::Checkpoint(record),
+        rule,
+        derived,
+        reportable,
+    )?;
     rows.extend(disposed_row);
     Ok(rows)
 }
@@ -773,6 +797,11 @@ impl ActRecord {
 /// replacement takes the same id the kind gives it (`ISS-367`) — which is why
 /// the row is owed here and not by [`invalidation_rows`].
 ///
+/// "Live" is `reportable`: live at `prior` or recorded earlier in this apply
+/// (`DEC-336`). A displaced act outside it is a corpse whose coverage death was
+/// already reported, and owes no second row (`ISS-454`). Every recording joins
+/// the set, since its own displacement later in the apply is a death to report.
+///
 /// What this does **not** buy is unbypassability. `CheckpointActGroup::record`
 /// and `AgentDeclarationGroup::record` are `pub(crate)`, so the storage sinks
 /// stay reachable from anywhere in this tree; [`ActRecord::insert`] stops
@@ -798,6 +827,7 @@ fn admit_and_record(
     record: ActRecord,
     rule: Option<ActRule>,
     derived: &DerivedInput,
+    reportable: &mut BTreeSet<(ActKind, DesignId)>,
 ) -> Result<Vec<Pending>, Refusal> {
     let kind = record.kind();
     let (false, Some(rule)) = (kind.is_legacy(), rule) else {
@@ -812,10 +842,16 @@ fn admit_and_record(
     let act = PayloadTerm::token(PayloadKey::Act, record.kind().as_str())?;
     let recorded = Pending::about(ChangeEvent::ActRecorded, &id, vec![act.clone()])?;
     let displaced = record.insert(next);
+    let slot = (kind, id.clone());
     let mut rows = Vec::new();
-    if displaced {
+    // A displaced corpse — dead by coverage and reported so at its death — is
+    // not reported again (`DEC-336`, `ISS-454`).
+    if displaced && reportable.contains(&slot) {
         rows.push(Pending::about(ChangeEvent::ActInvalidated, &id, vec![act])?);
     }
+    // The act just recorded is live, so its own displacement later in this
+    // apply is a death to report.
+    reportable.insert(slot);
     rows.push(recorded);
     Ok(rows)
 }
@@ -1467,13 +1503,20 @@ fn declare_node(
     let mut lifecycle = existing.lifecycle();
     // The three sparse states, on the one prose scalar a node carries: omission
     // PERSISTS the prior question, `null` clears it, a value replaces it. A
-    // question change is not a material change (it is not a member of the closed
-    // §(d) vocabulary), so it produces no row — it is state, not delta.
+    // changed text is a recorded mutation and owes a row (`REQ-478`, `DEC-335`);
+    // a creation owes none by the same seeded-prior shape as the judgement below.
     let question = declaration
         .question_declaration()
         .clone()
         .apply(Some(existing.question().to_owned()))
         .unwrap_or_default();
+    if question != existing.question() {
+        rows.push(Pending::about(
+            ChangeEvent::NodeQuestionChanged,
+            id,
+            Vec::new(),
+        )?);
+    }
 
     match declaration.parent_declaration() {
         Sparse::Value(declared) if parent.as_ref() != Some(declared) => {
@@ -2204,6 +2247,13 @@ pub(super) fn live_reviews(
 /// ([`live_acts`]), and is emitted at the seam that performs it instead. The two
 /// cases are disjoint, so neither row can double the other and no dedup is owed:
 /// an act present on both sides is exactly the case this derivation is blind to.
+///
+/// **Disjoint across revisions too** (`DEC-336`, `ISS-454`). The act stores
+/// retain a coverage-dead act, so a later displacement of it would otherwise
+/// report the death this derivation already reported. The displacement row is
+/// gated on the same liveness this difference reads — `live_acts` at `prior`,
+/// extended by each recording in the apply — so a death reported here is never
+/// reported again there.
 fn invalidation_rows(
     acts_before: &BTreeSet<(ActKind, DesignId)>,
     acts_after: &BTreeSet<(ActKind, DesignId)>,
@@ -2473,7 +2523,14 @@ mod tests {
             fingerprint: Fingerprint::new("sha256:claim"),
         });
         assert_eq!(
-            admit_and_record(&mut run, record, None, &DerivedInput::default()).err(),
+            admit_and_record(
+                &mut run,
+                record,
+                None,
+                &DerivedInput::default(),
+                &mut BTreeSet::new()
+            )
+            .err(),
             Some(Refusal::RetiredAct {
                 kind: ActKind::BlockingSetDeclared,
             }),
@@ -3077,5 +3134,230 @@ mod tests {
             1,
             "replacement is by kind, so the run still holds one"
         );
+    }
+
+    /// `request` applied over `prior` as the next submission: the envelope is
+    /// re-pointed at `prior`'s revision under a submission id of its own.
+    fn next_apply(
+        prior: &DesignSnapshot,
+        mut request: ApplyRequest,
+        derived: &DerivedInput,
+    ) -> DesignSnapshot {
+        request.envelope.known_revision = prior.run.revision;
+        request.envelope.submission_id = format!("s{}", prior.run.revision);
+        apply(
+            prior,
+            &request,
+            &Crossing::Ordinary,
+            derived,
+            &format!("sha256:pay{}", prior.run.revision),
+            &Resolution::default(),
+        )
+        .expect("the step applies")
+        .snapshot
+    }
+
+    /// How many `event` rows the latest revision of `snapshot` wrote.
+    fn written(snapshot: &DesignSnapshot, event: ChangeEvent) -> usize {
+        rows_at(snapshot, snapshot.run.revision)
+            .iter()
+            .filter(|row| row.event == event)
+            .count()
+    }
+
+    /// A request carrying `declarations` alone.
+    fn declaring_only(prior: &DesignSnapshot, declarations: &[&str]) -> ApplyRequest {
+        ApplyRequest {
+            declare: declarations.iter().map(|json| declared(json)).collect(),
+            ..payload(prior)
+        }
+    }
+
+    /// A request recording `DesignAccepted` twice — once as the explicit act and
+    /// once as the run-level acceptance, which is what the shipped lock recipe
+    /// sends.
+    fn accepting_twice(prior: &DesignSnapshot) -> ApplyRequest {
+        ApplyRequest {
+            checkpoint_act: Some(checkpoint(ActKind::DesignAccepted, "accepted")),
+            acceptance: Some(AcceptanceDeclaration {
+                basis: "accepted".to_owned(),
+                turn: None,
+            }),
+            ..payload(prior)
+        }
+    }
+
+    /// Derived input digesting `sec-a` at `digest`, for a body edit.
+    fn digesting_sec_a(digest: &str) -> DerivedInput {
+        DerivedInput {
+            section_digests: BTreeMap::from([(id("sec-a"), Fingerprint::new(digest))]),
+            ..DerivedInput::default()
+        }
+    }
+
+    /// `SL-272` `VT-3` (`ISS-454`, `DEC-336`) — an act whose coverage death was
+    /// already reported is not reported dead again when a later recording
+    /// displaces its corpse: the act stores retain coverage-dead acts, so the
+    /// displacement seam would otherwise see a second death of the same act.
+    #[test]
+    fn a_displaced_corpse_reports_no_second_death() {
+        let none = DerivedInput::default();
+
+        // One recording over a corpse: 0 deaths.
+        let recorded = next_apply(
+            &run_with_a_map(),
+            ApplyRequest {
+                checkpoint_act: Some(checkpoint(ActKind::SufficiencyAccepted, "enough")),
+                ..payload(&run_with_a_map())
+            },
+            &none,
+        );
+        let killed = next_apply(
+            &recorded,
+            declaring_only(
+                &recorded,
+                &[r#"{"subject": "inq-1", "question": "reworded?"}"#],
+            ),
+            &none,
+        );
+        assert_eq!(
+            written(&killed, ChangeEvent::ActInvalidated),
+            1,
+            "the re-word reports the coverage death"
+        );
+        let rerecorded = next_apply(
+            &killed,
+            ApplyRequest {
+                checkpoint_act: Some(checkpoint(ActKind::SufficiencyAccepted, "again")),
+                ..payload(&killed)
+            },
+            &none,
+        );
+        assert_eq!(
+            (
+                written(&rerecorded, ChangeEvent::ActInvalidated),
+                written(&rerecorded, ChangeEvent::ActRecorded)
+            ),
+            (0, 1),
+            "the corpse's death was reported once already"
+        );
+
+        // Two recordings over a corpse: 1 death, the first recording's.
+        let accepted = next_apply(
+            &run_with_a_map(),
+            ApplyRequest {
+                checkpoint_act: Some(checkpoint(ActKind::DesignAccepted, "accepted")),
+                ..payload(&run_with_a_map())
+            },
+            &none,
+        );
+        let edited = next_apply(
+            &accepted,
+            declaring_only(
+                &accepted,
+                &[r###"{"subject": "sec-a", "body": "## sec-a\nedited\n"}"###],
+            ),
+            &digesting_sec_a("sha256:b"),
+        );
+        assert_eq!(
+            written(&edited, ChangeEvent::ActInvalidated),
+            1,
+            "the edit reports the coverage death"
+        );
+        let twice = next_apply(&edited, accepting_twice(&edited), &none);
+        assert_eq!(
+            (
+                written(&twice, ChangeEvent::ActInvalidated),
+                written(&twice, ChangeEvent::ActRecorded)
+            ),
+            (1, 2),
+            "only the first recording's death is new"
+        );
+    }
+
+    /// `SL-272` `VT-3` — the displacement gate's second arm: an act recorded
+    /// earlier in this same apply is live, so its displacement is a death to
+    /// report even though nothing was live at `prior`. A gate on `prior` alone
+    /// would report none here; with an acceptance live at `prior`, both deaths
+    /// are reported.
+    #[test]
+    fn a_double_acceptance_reports_the_first_recordings_death() {
+        let none = DerivedInput::default();
+        let prior = run_with_a_map();
+        let first = next_apply(&prior, accepting_twice(&prior), &none);
+        assert_eq!(
+            (
+                written(&first, ChangeEvent::ActInvalidated),
+                written(&first, ChangeEvent::ActRecorded)
+            ),
+            (1, 2),
+            "nothing live at prior: the first recording's death alone"
+        );
+
+        let again = next_apply(&first, accepting_twice(&first), &none);
+        assert_eq!(
+            (
+                written(&again, ChangeEvent::ActInvalidated),
+                written(&again, ChangeEvent::ActRecorded)
+            ),
+            (2, 2),
+            "an acceptance live at prior: its death and the first recording's"
+        );
+    }
+
+    /// `SL-272` `VT-4` (`ISS-488`, `DEC-335`) — a re-word of a held node's
+    /// question emits exactly one `node_question_changed` naming the node; the
+    /// same text, a creation, and an omitted question emit none; a `null` that
+    /// clears a non-empty question is a re-word too.
+    #[test]
+    fn a_reworded_question_emits_one_row() {
+        let none = DerivedInput::default();
+        let asked = |snapshot: &DesignSnapshot| -> Vec<String> {
+            rows_at(snapshot, snapshot.run.revision)
+                .iter()
+                .filter(|row| row.event == ChangeEvent::NodeQuestionChanged)
+                .filter_map(|row| row.subject.as_ref().map(ToString::to_string))
+                .collect()
+        };
+        let step = |prior: &DesignSnapshot, json: &str| {
+            next_apply(prior, declaring_only(prior, &[json]), &none)
+        };
+        let held = run_with_a_map();
+
+        let created = step(
+            &held,
+            r#"{"subject": "inq-2", "question": "new?", "blocking": false}"#,
+        );
+        assert_eq!(
+            asked(&created),
+            Vec::<String>::new(),
+            "a creation owes none"
+        );
+
+        let same = step(
+            &created,
+            r#"{"subject": "inq-1", "question": "what governs this?"}"#,
+        );
+        assert_eq!(
+            asked(&same),
+            Vec::<String>::new(),
+            "the same text is no re-word"
+        );
+
+        let omitted = step(&same, r#"{"subject": "inq-1", "lifecycle": "deferred"}"#);
+        assert_eq!(
+            asked(&omitted),
+            Vec::<String>::new(),
+            "an omission persists"
+        );
+
+        let reworded = step(
+            &omitted,
+            r#"{"subject": "inq-1", "question": "what rules this?"}"#,
+        );
+        assert_eq!(asked(&reworded), ["inq-1"], "one row, naming the node");
+
+        let cleared = step(&reworded, r#"{"subject": "inq-1", "question": null}"#);
+        assert_eq!(asked(&cleared), ["inq-1"], "a clearing `null` re-words");
     }
 }
