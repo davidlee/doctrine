@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e0c0-2ccb-7333-8eb9-8bab321df7db"
+recorded_at = "2026-09-27T02:44:45.899706636Z"
+kind = "friction"
+summary = "observation corpus: summaries cite backlog ids whose current titles do not match the cited item, so a lifted id must be re-resolved"
+detail = "Three observation summaries named backlog ids (ISS-476, IMP-350, IMP-345) whose titles are about entirely different subjects than the summary describes (ISS-476 is 'design-run review pass RV is invisible', not 'install projects skills from GitHub source'). An agent mining the observation ledger for an evidence index therefore cannot trust an id quoted in a summary: each one costs a  round to resolve, and a wrong resolution lands a false citation in a downstream artefact. Observed while compiling RFC-034 research.md."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

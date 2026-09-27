@@ -1,0 +1,8 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e0c0-6b3d-7730-80a5-14a50c04248b"
+recorded_at = "2026-09-27T02:45:01.885096324Z"
+kind = "supersession"
+old_uid = "01a0e0c0-2ccb-7333-8eb9-8bab321df7db"
+replacement_uid = "01a0e0c0-5bc5-7f31-a378-182fa1667428"
+reason = "replacement restores a backticked phrase the shell consumed"

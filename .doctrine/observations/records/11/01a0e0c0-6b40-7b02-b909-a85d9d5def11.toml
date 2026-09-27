@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e0c0-6b40-7b02-b909-a85d9d5def11"
+recorded_at = "2026-09-27T02:45:01.88817773Z"
+kind = "friction"
+summary = "shell-quoting footgun recurs on observation record --detail: a backticked phrase is command-substituted into the record"
+detail = "While recording the preceding observation I wrapped a verb name in backticks inside the --detail argument; the shell ran it as a command substitution and the recorded detail silently lost the phrase (left as 'costs a round to resolve' with a gap). The ledger already records this exact class for review verbs ('review dispose: unescaped backticks in a --response argument ran a shell command substitution, splicing a full env dump'). The defect is therefore not review-specific but general to every prose-carrying CLI flag: --title/--detail/--response/--note/--basis/--reason. A near-miss here, a credential leak there."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

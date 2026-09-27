@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e0c0-209f-7c80-977d-a70fa7c2fe4d"
+recorded_at = "2026-09-27T02:44:42.783691685Z"
+kind = "friction"
+summary = "skill research: an RFC-context research artefact has no staleness verb and no baseline, so its freshness is unprovable"
+detail = "The /research skill's staleness machinery is slice-scoped (doctrine slice research <id> mints research/baseline.toml). RFC-032/033/034 put research.md at the RFC folder, where no baseline exists and no verb can report drift. A consuming agent must re-check by hand or trust the header's compile date. RFC-033's own research.md records the same gap ('RFCs carry no baseline.toml'). Related: IMP-314 (no harvest pointer at close) covers only the slice leg."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
