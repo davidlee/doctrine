@@ -30,8 +30,8 @@ PHASE-01 six-route set ──► PHASE-02 lock check ──► audit ─► reco
   names the lock check as the route's one reader lands in PHASE-02 with the
   check.
 - **Verification ids keep the design's numbers** (sec-5): PHASE-01 holds `VT-1`,
-  `VT-6`, `VA-1`; PHASE-02 holds `VT-2`..`VT-5`. The gaps are deliberate, so a
-  criterion reads the same in the design and the plan.
+  `VT-6`, `VA-1` and the plan-added `VT-7`; PHASE-02 holds `VT-2`..`VT-5`. The
+  gaps are deliberate, so a criterion reads the same in the design and the plan.
 
 ## Routed findings (RV-400)
 
@@ -56,7 +56,13 @@ the check) is an owner follow-up at audit.
   seed needs a route to keep isolating the warning. Sweep the others with a
   full `doctrine check gate` run rather than predicting them.
 - **Reads stay open.** `Route` is parsed only on write; a legacy `owner-fix`
-  ledger still reads and renders. No migration.
+  ledger still reads and renders. No migration. PHASE-01 `VT-7` pins it, since
+  the design asserts it but sec-5 has no criterion for it.
+- **Cross-slice effect.** Once the PHASE-02 binary is installed, every design
+  run still in `reviewing` locks only after its severe disposed findings carry
+  a route — `SL-271`'s `RV-399` (its design review, mid-round) included. That
+  is the check working, but the owner of a run in flight should hear of it at
+  install.
 - **Install at close.** `DEC-334`'s build floor needs the landed binary,
   MCP server and projections current; `doctrine install` runs at close, on the
   landed tree, not in a phase.

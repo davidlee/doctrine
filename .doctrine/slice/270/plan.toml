@@ -38,7 +38,8 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "Route::parse accepts exactly the six; owner-fix is refused on write with the known list; lockstep with ROUTES holds", test_file = "src/review_ledger/vocab.rs", keywords = ["Route::Dedupe", "Route::Refresh", "\"dedupe\"", "\"refresh\"", "route_known_set_matches_variants", "owner-fix"], waived = false },
-  { id = "VT-6", expects = "the MCP review_dispose schema's route enum equals the six", test_file = "tests/e2e_mcp_server.rs", keywords = ["review_dispose", "\"dedupe\"", "\"refresh\"", "enum"], waived = false },
+  { id = "VT-6", expects = "the MCP review_dispose schema's route enum equals the six", test_file = "tests/e2e_mcp_server.rs", keywords = ["review_dispose", "\"dedupe\"", "\"refresh\"", "\"route\"", "enum"], waived = false },
+  { id = "VT-7", expects = "a hand-seeded ledger holding route = owner-fix still reads: review show prints the route verbatim and exits 0 (reads open, no migration; design sec-2 Legacy)", test_file = "tests/e2e_review_golden.rs", keywords = ["owner-fix", "\"show\"", "legacy"], waived = false },
   { id = "VA-1", text = "reviewing.md and review-ledger.md carry the six routes, the new tie-break order and the probe/control sentence; a repo-wide search (rg -n 'owner-fix|OwnerFix' and rg -in 'five routes|closed five|exactly five') finds no hit outside legacy notes, the E11-E14 evidence, REV-065's before column, and the legacy-read cases EX-4 keeps. Hits and their exclusion reason are recorded in the slice notes (notes.md), and the search is re-runnable at audit." },
 ]
 specs        = []
