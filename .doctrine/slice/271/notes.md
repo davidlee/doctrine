@@ -221,12 +221,69 @@ a non-test build (a `dead_code` warning at the zero-warning gate).
 - **Spec Revision.** Two-member `SPEC-011` Revision at reconcile; no phase cites
   its `REQ` ids.
 
+## Review repair (RV-402, 2026-09-27) — F-2/F-3/F-4 integrated
+
+The code review of the delta landed five findings on `RV-402`; three are `fix-now`
+and are integrated here, before landing. `F-1` (blocker, `design-wrong`) is owed to
+`/reconcile` — the hooks probe reads the user codex layer, not the project file the
+notice names — and `F-5` (README's host-dependency sentence) waits on `F-1` so it
+is written once.
+
+- **F-2** — `RefreshOutcome`'s doc comment now says what is true of both arms:
+  the carried string is the arm's own rendering, printed verbatim and never
+  re-appended (the Claude arm's full invocation, the Codex arm's shell wrapper
+  line). It no longer calls the payload a "hook merge" outcome.
+- **F-3** — `plan_mcp`'s `Foreign` arm returns the empty `PrintedFallback`
+  sentinel like the Malformed paths do, so the installing shell is the single
+  constructor: `install_mcp` (Claude) and `install_codex_mcp` (Codex). The eager
+  `mcp_fallback_snippet()` render whose value `install_mcp` immediately discarded
+  is gone. `PHASE-01`/`EX-2`'s sentinel convention is preserved.
+- **F-4** — `wire()`'s MCP report is one verb table and one `writeln!` instead of
+  a four-branch ladder whose two Codex branches were byte-identical. The Codex
+  single-form wording and Claude's registered/refreshed distinction are unchanged;
+  the Codex refresh-verb question stays with `F-1` at the design pass (design
+  sec-5.2 specifies one form).
+
+**Evidence.** Behaviour preservation checked against the pre-fix output, not
+recollection: all four report forms re-run live and byte-identical (`would write`
+codex, `wrote` codex, `refreshed` Claude legacy abspath, and the fallback snippet
+for both a foreign Claude entry and a foreign codex entry). Suites: `--bin doctrine
+mcp` 131, `--bin doctrine codex` 22, `e2e_codex_install` 12,
+`architecture_layering` 25; `doctrine check gate` exit 0; `cargo fmt --check` clean.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-27 · PHASE-03 (phases complete) · cfbaf73b2
 
 ### Produced
 
+- PHASE-01 `1d385ee49` (shared core), PHASE-02 `5288e108a`/`765fb99c9`/`c7e84b4fc`
+  (codex leg + e2e + `sh` declaration), PHASE-03 `e8a18a0dd`/`cfbaf73b2`
+  (probe + disclosure).
+- All 11 VT mandates PASS (`doctrine slice verify-vt 271`); `doctrine check gate`
+  green after each phase.
+- `tests/e2e_codex_install.rs` — 12 cases over the built binary.
+- Memories on trunk: `mem_01a0e1e1` (report-seam output is e2e-only; verify-vt
+  attribution waits on the completed phase delta), `mem_01a0e1f0` (`install
+  --dry-run` skips `wire`).
+- Branch `slice/SL-271-codex-mcp-registration-during-install` in
+  `.worktrees/SL-271`; not yet landed.
+
 ### Learned
 
+- `doctrine install --dry-run` is a plan-only preview and never calls `wire()`;
+  the dry-run report wording is reachable only via `boot install --dry-run`.
+- A production const/field used only by no path is dead code under `-D unused`:
+  `CODEX_MCP_SERVE_ARGS` builds the emitted wrapper live; `Capture.success` is
+  read in the Unknown reason.
+- `toml_edit::Table::set_implicit(true)` renders `[mcp_servers.doctrine]` alone.
+
 ### Open
+
+- Lifecycle is `started` with 3/3 phases — next `/audit`.
+- Close obligations: the two-member `SPEC-011` Revision is raised at reconcile
+  (close requires it landed or a waiver); `IMP-111` resolves (`promoted`) at close;
+  `IMP-497` is the post-write seam re-verification follow-up; `ISS-495` stays out
+  of scope by design.
+- The fork branch is unlanded (`doctrine worktree land --fork <branch>`); the
+  coordination tree for SL-271 does not exist, so landing is a deliberate choice.

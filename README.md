@@ -157,6 +157,24 @@ to install skills for other agents:
 npx skills add davidlee/doctrine # or your fork 
 ```
 
+### Host dependencies
+
+`doctrine install` registers the doctrine MCP server with each detected harness.
+The **Codex** registration writes a `[mcp_servers.doctrine]` entry into the
+project's `.codex/config.toml` whose command runs through a POSIX shell:
+
+```toml
+[mcp_servers.doctrine]
+command = "sh"
+args = ["-c", 'exec "${DOCTRINE_BIN:-doctrine}" serve --mcp']
+env_vars = ["DOCTRINE_BIN"]
+```
+
+Codex execs the command string literally and does not expand `${VAR:-default}`
+itself, so a POSIX `sh` must be on `PATH` (present on every Linux and macOS
+system); the `sh -c` layer is what reads `DOCTRINE_BIN`. The Claude `.mcp.json`
+entry needs no shell — Claude expands the literal itself.
+
 ## Post-Install Setup 
 
 ```zsh

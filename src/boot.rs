@@ -19,7 +19,7 @@
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs;
-use std::io::{self, Write as _};
+use std::io::{self, ErrorKind, Write as _};
 use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
 
@@ -596,6 +596,41 @@ const MCP_REL: &str = ".mcp.json";
 /// The `mcpServers` key doctrine registers its server under in `.mcp.json` — the
 /// client-side alias, so its tools surface as `mcp__doctrine__review_*`.
 const MCP_SERVER_KEY: &str = "doctrine";
+
+/// The project-root codex config file — the codex MCP leg's write target
+/// (SL-271). The project layer is loaded by codex for TRUSTED projects only, so
+/// a written entry is never claimed active. Distinct from [`CODE_HOOKS_REL`]:
+/// codex hooks and MCP servers live in different files.
+const CODEX_CONFIG_REL: &str = ".codex/config.toml";
+
+/// The codex TOML table doctrine registers its MCP server under.
+const CODEX_MCP_TABLE: &str = "mcp_servers";
+
+/// The server key inside [`CODEX_MCP_TABLE`]. Pinned == [`MCP_SERVER_KEY`] (one
+/// server, two harnesses) rather than shared by construction; the agreement test
+/// holds them together (STD-001).
+const CODEX_MCP_SERVER_KEY: &str = "doctrine";
+
+/// The shell that reads `DOCTRINE_BIN` for the codex entry — codex execs
+/// `command` literally (no `${VAR:-default}` interpolation), so the override
+/// must run through a shell (DEC-323). That POSIX-shell dependency is declared
+/// per POL-002 facet 3 (README).
+const CODEX_MCP_SHELL: &str = "sh";
+/// The shell flag carrying the command string.
+const CODEX_MCP_SHELL_FLAG: &str = "-c";
+/// The doctrine serve args shared by both harnesses' entries.
+const CODEX_MCP_SERVE_ARGS: &str = "serve --mcp";
+/// The wrapper line doctrine emits as the codex `args[1]` — the portable env
+/// literal executed through [`CODEX_MCP_SHELL`]. `const` cannot compose, so this
+/// holds its own literal; the agreement test pins it to `PORTABLE_EXEC`.
+const CODEX_MCP_WRAPPER: &str = "exec \"${DOCTRINE_BIN:-doctrine}\" serve --mcp";
+/// Every wrapper line doctrine has ever emitted, newest first (today: one). A
+/// wording change APPENDS its predecessor, so a previously-emitted wrapper stays
+/// ours and refreshes instead of becoming foreign and nagging forever.
+const CODEX_MCP_WRAPPER_FORMS: &[&str] = &[CODEX_MCP_WRAPPER];
+/// The codex env forwarding seam — codex gives an MCP child a FILTERED
+/// environment, so `DOCTRINE_BIN` survives only if whitelisted.
+const CODEX_MCP_ENV: &str = "DOCTRINE_BIN";
 /// The portable doctrine invocation (SL-195, POL-002) — NO host abspath in a
 /// committed file; `DOCTRINE_BIN` overrides when `doctrine` is off PATH. Single
 /// source of the literal (STD-001) across two surfaces:
@@ -935,7 +970,10 @@ fn ensure_boot_import(
 // Claude SessionStart hook merge: pure plan + imperative apply.
 // ---------------------------------------------------------------------------
 
-/// What the hook merge did, for reporting. The carried string is the command.
+/// What an install leg did, for reporting. The carried string is the arm's own
+/// rendering, printed verbatim by the caller and never re-appended: the full
+/// invocation (command plus args) on the Claude arm, the shell wrapper line on
+/// the Codex arm.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum RefreshOutcome {
     /// No doctrine hook existed; one was appended.
@@ -1692,6 +1730,14 @@ fn install_refresh(
             let extension = install_pi_extension(root, exec, dry_run)?;
             let mcp_extension = install_mcp_extension(root, exec, dry_run)?;
             let surface_extension = install_surface_extension(root, exec, dry_run)?;
+            // The MCP leg is written LAST in the arm (a different file from the
+            // hooks), and its error carries boundary context naming how far the arm
+            // got — mirroring the Claude hook loop, so an abort after the hooks and
+            // the pi extensions is not silent about what already landed (design
+            // sec-5.4).
+            let mcp = install_codex_mcp(root, dry_run).with_context(
+                || "codex MCP registration failed after the hook merge and pi extensions",
+            )?;
             Ok(RefreshReport {
                 hooks,
                 claude_scope: None,
@@ -1699,7 +1745,7 @@ fn install_refresh(
                     outcome: BaseRefOutcome::NotApplicable,
                     stranded: None,
                 },
-                mcp: RefreshOutcome::None,
+                mcp,
                 append_system,
                 extension,
                 mcp_extension,
@@ -1782,8 +1828,9 @@ struct RefreshReport {
     /// so nothing to abandon.
     claude_scope: Option<(ClaudeSettingsScope, SweepReport)>,
     baseref: BaseRefWrite,
-    /// The `.mcp.json` doctrine server registration outcome (CHR-013); pi
-    /// carries `None` (no `.mcp.json` wiring on the import-only arm).
+    /// The MCP server registration outcome (CHR-013; SL-271): the Claude arm
+    /// writes `.mcp.json`, the Codex arm `.codex/config.toml`. `None` when the
+    /// entry is already current; pi carries `None` (no MCP wiring).
     mcp: RefreshOutcome,
     /// The `.pi/APPEND_SYSTEM.md` symlink outcome (PHASE-02); Claude carries
     /// `NotApplicable`.
@@ -1978,6 +2025,41 @@ struct McpPlan {
     new_json: Option<String>,
 }
 
+/// Which class an MCP entry falls into — the ONE judgement the Claude and Codex
+/// arms share (DEC-328). Format-free: each arm derives it from its own parse and
+/// renders its own payload. `Malformed` is deliberately absent — it is a parse
+/// outcome each planner decides before classification, never a class.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum McpEntryClass {
+    /// No doctrine entry in the file.
+    Absent,
+    /// Ours, byte-identical to what the renderer emits.
+    OwnedCurrent,
+    /// Ours, but not current — refresh it.
+    OwnedStale,
+    /// A `doctrine`-keyed entry doctrine did not write — never touch it.
+    Foreign,
+}
+
+/// The shared decision table — class → (outcome, write?). `payload` is the arm's
+/// own rendering (the invocation for Wire/Refresh, the pass-through snippet for
+/// Fallback) and `file` names the file that snippet concerns. Format-free by
+/// construction (ADR-001): no JSON, no TOML, no caller concept.
+fn mcp_action(class: McpEntryClass, payload: String, file: &'static str) -> (RefreshOutcome, bool) {
+    match class {
+        McpEntryClass::Absent => (RefreshOutcome::Wired(payload), true),
+        McpEntryClass::OwnedCurrent => (RefreshOutcome::None, false),
+        McpEntryClass::OwnedStale => (RefreshOutcome::Refreshed(payload), true),
+        McpEntryClass::Foreign => (
+            RefreshOutcome::PrintedFallback {
+                hook_file: file,
+                snippet: payload,
+            },
+            false,
+        ),
+    }
+}
+
 fn mcp_fallback() -> McpPlan {
     McpPlan {
         outcome: RefreshOutcome::PrintedFallback {
@@ -1998,6 +2080,33 @@ fn desired_mcp_entry() -> Value {
         "command": PORTABLE_EXEC,
         "args": ["serve", "--mcp"],
     })
+}
+
+/// The full rendered invocation of the canonical entry — `command` plus its
+/// space-joined args, derived from [`desired_mcp_entry`] so the `serve --mcp`
+/// literal is written once. `Wired`/`Refreshed` carry it so `wire()` prints the
+/// invocation verbatim instead of re-appending arguments (DEC-325).
+fn mcp_invocation() -> String {
+    let entry = desired_mcp_entry();
+    let command = entry
+        .get("command")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let args = entry
+        .get("args")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .unwrap_or_default();
+    if args.is_empty() {
+        command.to_string()
+    } else {
+        format!("{command} {args}")
+    }
 }
 
 /// Whether `entry` is doctrine's own MCP server entry — the command is EITHER
@@ -2032,7 +2141,6 @@ fn is_doctrine_mcp_entry(entry: &Value) -> bool {
 /// against the abspath here made an already-env entry never no-op ⇒ thrash).
 /// Rides BESIDE the hook merge core.
 fn plan_mcp(existing_json: Option<&str>) -> McpPlan {
-    let command = PORTABLE_EXEC.to_string();
     let mut value: Value = match existing_json.map(str::trim) {
         None | Some("") => Value::Object(Map::new()),
         Some(text) => match serde_json::from_str(text) {
@@ -2050,20 +2158,34 @@ fn plan_mcp(existing_json: Option<&str>) -> McpPlan {
         // `mcpServers` present but not an object ⇒ malformed; never clobber.
         return mcp_fallback();
     };
-    let outcome = match servers.get(MCP_SERVER_KEY) {
-        None => RefreshOutcome::Wired(command),
+    let class = match servers.get(MCP_SERVER_KEY) {
+        None => McpEntryClass::Absent,
         Some(entry) if is_doctrine_mcp_entry(entry) => {
-            if entry.get("command").and_then(Value::as_str) == Some(command.as_str()) {
-                return McpPlan {
-                    outcome: RefreshOutcome::None,
-                    new_json: None,
-                };
+            if entry.get("command").and_then(Value::as_str) == Some(PORTABLE_EXEC) {
+                McpEntryClass::OwnedCurrent
+            } else {
+                McpEntryClass::OwnedStale
             }
-            RefreshOutcome::Refreshed(command)
         }
         // A `doctrine` key that is not our shape is a deliberate user entry.
-        Some(_foreign) => return mcp_fallback(),
+        Some(_foreign) => McpEntryClass::Foreign,
     };
+    // The payload is an arm's rendering of a WRITE. The classes that print a
+    // manual snippet instead leave the planner as the empty sentinel the Malformed
+    // paths return, and the installing shell (`install_mcp`, `install_codex_mcp`)
+    // is the single constructor that fills it — so `PrintedFallback` never leaves a
+    // planner half-filled, and `plan_mcp().outcome` alone is not a report.
+    let (outcome, write) = if class == McpEntryClass::Foreign {
+        mcp_action(class, String::new(), MCP_REL)
+    } else {
+        mcp_action(class, mcp_invocation(), MCP_REL)
+    };
+    if !write {
+        return McpPlan {
+            outcome,
+            new_json: None,
+        };
+    }
     servers.insert(MCP_SERVER_KEY.to_string(), desired_mcp_entry());
     match serde_json::to_string_pretty(&value) {
         Ok(json) => McpPlan {
@@ -2102,6 +2224,210 @@ fn install_mcp(root: &Path, dry_run: bool) -> anyhow::Result<RefreshOutcome> {
         },
         other => other,
     })
+}
+
+// ---------------------------------------------------------------------------
+// Codex MCP registration leg (SL-271): a second file, the shared decision table.
+// ---------------------------------------------------------------------------
+
+/// Why a codex config could not be interpreted: unparseable TOML, an
+/// `mcp_servers` key that is neither a table nor an inline table, or a `doctrine`
+/// entry that is neither. The file is never opened for writing in that case.
+#[derive(Debug)]
+struct Malformed;
+
+/// A planned codex MCP merge: the entry class (or `Malformed`) plus the new TOML
+/// to write when the file changes.
+struct CodexMcpPlan {
+    class: Result<McpEntryClass, Malformed>,
+    new_toml: Option<String>,
+}
+
+impl CodexMcpPlan {
+    fn malformed() -> Self {
+        Self {
+            class: Err(Malformed),
+            new_toml: None,
+        }
+    }
+}
+
+/// The manual snippet for the fallback path — the `[mcp_servers.doctrine]` table
+/// in TOML, never the JSON block `mcp_fallback_snippet` emits. Rendered from the
+/// SAME item the writer inserts ([`codex_mcp_entry`]).
+fn codex_mcp_fallback_snippet() -> String {
+    let mut doc = toml_edit::DocumentMut::new();
+    let mut servers = toml_edit::Table::new();
+    // Render `[mcp_servers.doctrine]` alone, not an empty `[mcp_servers]` above it.
+    servers.set_implicit(true);
+    servers.insert(CODEX_MCP_SERVER_KEY, codex_mcp_entry());
+    doc.insert(CODEX_MCP_TABLE, toml_edit::Item::Table(servers));
+    doc.to_string()
+}
+
+/// The canonical codex server entry, built ONCE: the writer inserts this item and
+/// the snippet renders the same item standalone, so the two cannot drift.
+fn codex_mcp_entry() -> toml_edit::Item {
+    let mut entry = toml_edit::Table::new();
+    entry.insert("command", toml_edit::value(CODEX_MCP_SHELL));
+    let mut args = toml_edit::Array::new();
+    args.push(CODEX_MCP_SHELL_FLAG);
+    // Built from the shared portable prefix and serve args so the suffix has one
+    // source; the agreement test pins it byte-equal to CODEX_MCP_WRAPPER, which
+    // the ownership comparison and the emitted-forms set use.
+    args.push(format!("exec \"{PORTABLE_EXEC}\" {CODEX_MCP_SERVE_ARGS}"));
+    entry.insert("args", toml_edit::value(args));
+    let mut env = toml_edit::Array::new();
+    env.push(CODEX_MCP_ENV);
+    entry.insert("env_vars", toml_edit::value(env));
+    toml_edit::Item::Table(entry)
+}
+
+/// Trim a wrapper line and collapse internal whitespace runs to one space — the
+/// canonicalising comparison behind [`CODEX_MCP_WRAPPER_FORMS`] membership, so a
+/// re-spaced variant of an emitted wording still reads as ours.
+fn normalise(line: &str) -> String {
+    line.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Classify the existing `doctrine` entry under `mcp_servers` against the strict
+/// ownership formula (design sec-5.2). A non-table-like entry is `Malformed`
+/// (doctrine cannot interpret it); anything table-like that doctrine did not emit
+/// is `Foreign`. Every `args` index is length-guarded.
+fn classify_codex_entry(entry: &toml_edit::Item) -> Result<McpEntryClass, Malformed> {
+    let Some(table) = entry.as_table_like() else {
+        return Err(Malformed);
+    };
+    let keys_ok = table
+        .iter()
+        .all(|(k, _)| matches!(k, "command" | "args" | "env_vars"));
+    let command_ok = table.get("command").and_then(|i| i.as_str()) == Some(CODEX_MCP_SHELL);
+    let args = table.get("args").and_then(|i| i.as_array());
+    let args_ok = args.is_some_and(|a| {
+        a.len() == 2
+            && a.get(0).and_then(|v| v.as_str()) == Some(CODEX_MCP_SHELL_FLAG)
+            && a.get(1)
+                .and_then(|v| v.as_str())
+                .is_some_and(|w| CODEX_MCP_WRAPPER_FORMS.contains(&normalise(w).as_str()))
+    });
+    let env_absent_or_exact = match table.get("env_vars") {
+        None => true,
+        Some(item) => item.as_array().is_some_and(|a| {
+            a.len() == 1 && a.get(0).and_then(|v| v.as_str()) == Some(CODEX_MCP_ENV)
+        }),
+    };
+    if !(keys_ok && command_ok && args_ok && env_absent_or_exact) {
+        return Ok(McpEntryClass::Foreign);
+    }
+    // `owned`; `current` is byte-exact (no normalise) and requires the emitted
+    // `env_vars` exactly.
+    let current = args
+        .is_some_and(|a| a.get(1).and_then(|v| v.as_str()) == Some(CODEX_MCP_WRAPPER))
+        && table
+            .get("env_vars")
+            .and_then(|i| i.as_array())
+            .is_some_and(|a| {
+                a.len() == 1 && a.get(0).and_then(|v| v.as_str()) == Some(CODEX_MCP_ENV)
+            });
+    Ok(if current {
+        McpEntryClass::OwnedCurrent
+    } else {
+        McpEntryClass::OwnedStale
+    })
+}
+
+/// PURE planner for the codex `mcp_servers.doctrine` entry (SL-271). Parses the
+/// file (or starts a fresh document when absent), classifies the entry, and —
+/// for `Absent`/`OwnedStale` — plans the narrow-path insert through
+/// `as_table_like_mut`, which carries the container's spelling by construction
+/// (`Item::into_value`); an owned-but-stale entry is replaced wholesale. Any
+/// shape doctrine cannot interpret is `Malformed` and plans no write.
+fn plan_codex_mcp(existing_toml: Option<&str>) -> CodexMcpPlan {
+    let mut doc = match existing_toml {
+        None => toml_edit::DocumentMut::new(),
+        Some(text) => match text.parse::<toml_edit::DocumentMut>() {
+            Ok(doc) => doc,
+            Err(_) => return CodexMcpPlan::malformed(),
+        },
+    };
+    let class = match doc.get(CODEX_MCP_TABLE) {
+        None => McpEntryClass::Absent,
+        Some(item) => {
+            let Some(servers) = item.as_table_like() else {
+                return CodexMcpPlan::malformed();
+            };
+            match servers.get(CODEX_MCP_SERVER_KEY) {
+                None => McpEntryClass::Absent,
+                Some(entry) => match classify_codex_entry(entry) {
+                    Ok(class) => class,
+                    Err(Malformed) => return CodexMcpPlan::malformed(),
+                },
+            }
+        }
+    };
+    if matches!(class, McpEntryClass::OwnedCurrent | McpEntryClass::Foreign) {
+        return CodexMcpPlan {
+            class: Ok(class),
+            new_toml: None,
+        };
+    }
+    if let Some(item) = doc.get_mut(CODEX_MCP_TABLE) {
+        let Some(servers) = item.as_table_like_mut() else {
+            return CodexMcpPlan::malformed();
+        };
+        servers.insert(CODEX_MCP_SERVER_KEY, codex_mcp_entry());
+    } else {
+        let mut servers = toml_edit::Table::new();
+        // Implicit so the parent renders through its child (`[mcp_servers.doctrine]`),
+        // not as a bare header above it.
+        servers.set_implicit(true);
+        servers.insert(CODEX_MCP_SERVER_KEY, codex_mcp_entry());
+        doc.insert(CODEX_MCP_TABLE, toml_edit::Item::Table(servers));
+    }
+    CodexMcpPlan {
+        class: Ok(class),
+        new_toml: Some(doc.to_string()),
+    }
+}
+
+/// Register the doctrine MCP server in the project-root `.codex/config.toml`,
+/// writing only on change (unless `dry_run`). A read that is not `NotFound` is a
+/// degraded read — malformed, never absent (design sec-5.2; ISS-495 is the same
+/// defect on the Claude read, deliberately not fixed here).
+fn install_codex_mcp(root: &Path, dry_run: bool) -> anyhow::Result<RefreshOutcome> {
+    let path = root.join(CODEX_CONFIG_REL);
+    let plan = match fs::read_to_string(&path) {
+        Ok(text) => plan_codex_mcp(Some(&text)),
+        Err(e) if e.kind() == ErrorKind::NotFound => plan_codex_mcp(None),
+        Err(_) => CodexMcpPlan::malformed(),
+    };
+    let (outcome, write) = match plan.class {
+        Ok(class) => {
+            let payload = if class == McpEntryClass::Foreign {
+                codex_mcp_fallback_snippet()
+            } else {
+                CODEX_MCP_WRAPPER.to_string()
+            };
+            mcp_action(class, payload, CODEX_CONFIG_REL)
+        }
+        Err(Malformed) => (
+            RefreshOutcome::PrintedFallback {
+                hook_file: CODEX_CONFIG_REL,
+                snippet: codex_mcp_fallback_snippet(),
+            },
+            false,
+        ),
+    };
+    if write && !dry_run {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create {}", parent.display()))?;
+        }
+        if let Some(new_toml) = &plan.new_toml {
+            fsutil::write_atomic(&path, new_toml.as_bytes())?;
+        }
+    }
+    Ok(outcome)
 }
 
 /// Annotate a refresh outcome with a hook file path and a fallback snippet.
@@ -2642,7 +2968,7 @@ pub(crate) fn run_install(
             return Ok(());
         }
     }
-    wire(&root, &exec, &harnesses, dry_run)
+    wire(&root, &exec, &harnesses, dry_run, &install::CaptureRunner)
 }
 
 /// Report ONE spec's hook-merge outcome. Lifted out of [`wire`] unchanged when
@@ -2681,20 +3007,90 @@ fn write_hook_outcome(
 /// the operator reasonably trusts the whole set in one `/hooks` pass (SL-263
 /// §5.6; the installer cannot read codex's trust state, so disclosure is what it
 /// can guarantee).
+/// The codex hooks-feature state, as the probe found it (SL-271). `None` at the
+/// call site means the probe did not run (dry run).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum HooksState {
+    Enabled,
+    Disabled,
+    Unknown(String),
+}
+
+/// PURE. The row whose first token is `hooks` contributes its final token:
+/// `true` -> `Some(true)`, `false` -> `Some(false)`; no row, or any other shape,
+/// is `None` (design sec-5.2). `stdout` is read regardless of exit status — a
+/// failed command that still printed a parseable row is a usable answer.
+fn parse_codex_features(stdout: &str) -> Option<bool> {
+    for line in stdout.lines() {
+        let mut tokens = line.split_whitespace();
+        if tokens.next() != Some("hooks") {
+            continue;
+        }
+        return match tokens.last() {
+            Some("true") => Some(true),
+            Some("false") => Some(false),
+            _ => None,
+        };
+    }
+    None
+}
+
+/// Run `codex features list` with `cwd` bound to the install root and classify the
+/// hooks state. Nothing is gated on the probe: any failure degrades to a named
+/// `Unknown` (design sec-5.2/5.4).
+fn codex_hooks_state(run: &dyn install::CommandRunner, cwd: &Path) -> HooksState {
+    match run.run_capture("codex", &["features", "list"], cwd) {
+        Ok(capture) => match parse_codex_features(&capture.stdout) {
+            Some(true) => HooksState::Enabled,
+            Some(false) => HooksState::Disabled,
+            None => {
+                let reason = capture.stderr.trim();
+                HooksState::Unknown(if !reason.is_empty() {
+                    reason.to_string()
+                } else if !capture.success {
+                    "codex features list exited non-zero".to_string()
+                } else {
+                    "codex features list printed no recognised hooks row".to_string()
+                })
+            }
+        },
+        Err(e) => HooksState::Unknown(format!("{e:#}")),
+    }
+}
+
+/// One activation notice per codex arm. `state` is the probe answer: `None` when
+/// the probe did not run (dry run) and step 1 prints unconditionally; `Enabled`
+/// omits step 1 (nothing said about hooks, DEC-329); `Disabled`/`Unknown` print it
+/// naming the key or the reason. Under `dry_run` the notice states what WOULD be
+/// written, never "wrote".
 fn write_codex_activation(
     stdout: &mut impl io::Write,
     h: &Harness,
     tag: &str,
+    dry_run: bool,
+    state: Option<HooksState>,
 ) -> anyhow::Result<()> {
+    let verb = if dry_run { "would write" } else { "wrote" };
     writeln!(
         stdout,
-        "  {tag}{}: wrote {CODE_HOOKS_REL}. To activate:",
+        "  {tag}{}: {verb} {CODE_HOOKS_REL}. To activate:",
         harness_label(h)
     )?;
-    writeln!(
-        stdout,
-        "    1. Ensure [features] hooks = true in .codex/config.toml."
-    )?;
+    match state {
+        Some(HooksState::Enabled) => {}
+        Some(HooksState::Disabled) => writeln!(
+            stdout,
+            "    1. Enable [features] hooks = true in .codex/config.toml (currently off)."
+        )?,
+        Some(HooksState::Unknown(reason)) => writeln!(
+            stdout,
+            "    1. Ensure [features] hooks = true in .codex/config.toml ({reason})."
+        )?,
+        None => writeln!(
+            stdout,
+            "    1. Ensure [features] hooks = true in .codex/config.toml."
+        )?,
+    }
     writeln!(
         stdout,
         "    2. Start codex in this project and accept the project trust prompt."
@@ -2754,6 +3150,7 @@ pub(crate) fn wire(
     exec: &Path,
     harnesses: &[Harness],
     dry_run: bool,
+    runner: &dyn install::CommandRunner,
 ) -> anyhow::Result<()> {
     let reference = format!("@{BOOT_REL}");
     let targets: Vec<PathBuf> = harnesses
@@ -2797,7 +3194,14 @@ pub(crate) fn wire(
                 // three codex hooks, so a per-spec repeat would say the same thing
                 // twice and still describe only one hook (SL-263 §5.6/§5.8).
                 if codex_hook_written && matches!(h, Harness::Codex) {
-                    write_codex_activation(&mut stdout, h, tag)?;
+                    // The probe fires only off a real hook write, never under dry
+                    // run, and never for Claude (DEC-329; design sec-5.4).
+                    let state = if dry_run {
+                        None
+                    } else {
+                        Some(codex_hooks_state(runner, root))
+                    };
+                    write_codex_activation(&mut stdout, h, tag, dry_run, state)?;
                 }
                 if report.spike_warning {
                     writeln!(
@@ -2845,33 +3249,60 @@ pub(crate) fn wire(
                     | BaseRefOutcome::PrintedFallback
                     | BaseRefOutcome::NotApplicable => {}
                 }
-                // MCP registration leg (CHR-013): report a fresh wire or a stale
-                // refresh; a foreign/malformed `.mcp.json` entry prints the manual
-                // snippet. None (current, or pi) stays silent.
+                let mcp_written = matches!(
+                    &report.mcp,
+                    RefreshOutcome::Wired(_) | RefreshOutcome::Refreshed(_)
+                );
+                // MCP registration leg (CHR-013; SL-271): the harness's own file
+                // (`.mcp.json` for Claude, `.codex/config.toml` for Codex); a foreign
+                // / uninterpretable entry prints the manual snippet. None (already
+                // current) stays silent.
+                let mcp_rel = match h {
+                    Harness::Codex => CODEX_CONFIG_REL,
+                    Harness::Claude => MCP_REL,
+                };
+                // One verb table, one `writeln!`: Codex states what was WRITTEN (or
+                // would write) — never activation, and a single form for both a
+                // fresh wire and a stale refresh (design sec-5.2); Claude keeps its
+                // registered/refreshed distinction. Only the written arms read it;
+                // the fallback and silent arms below print no such line.
+                let mcp_write_verb = match (h, &report.mcp) {
+                    (Harness::Codex, _) if dry_run => "would write MCP server registration in",
+                    (Harness::Codex, _) => "wrote MCP server registration in",
+                    (Harness::Claude, RefreshOutcome::Refreshed(_)) => "refreshed MCP server in",
+                    (Harness::Claude, _) => "registered MCP server in",
+                };
                 match report.mcp {
-                    RefreshOutcome::Wired(cmd) => {
+                    RefreshOutcome::Wired(cmd) | RefreshOutcome::Refreshed(cmd) => {
                         writeln!(
                             stdout,
-                            "  {tag}{}: registered MCP server in {MCP_REL}: {cmd} serve --mcp",
+                            "  {tag}{}: {mcp_write_verb} {mcp_rel}: {cmd}",
                             harness_label(h)
                         )?;
                     }
-                    RefreshOutcome::Refreshed(cmd) => {
-                        writeln!(
-                            stdout,
-                            "  {tag}{}: refreshed MCP server in {MCP_REL}: {cmd} serve --mcp",
-                            harness_label(h)
-                        )?;
-                    }
+                    // ONE wording for both arms and both causes — a foreign entry and
+                    // an uninterpretable file: the shared table cannot tell them
+                    // apart, and the operator's next step is the same either way.
                     RefreshOutcome::PrintedFallback { hook_file, snippet } => {
                         writeln!(
                             stdout,
-                            "  {}: {hook_file} has a foreign or malformed 'doctrine' entry — register manually:",
+                            "  {}: {hook_file} has a doctrine entry doctrine did not write, or could not be interpreted — left untouched. To register it manually:",
                             harness_label(h)
                         )?;
                         writeln!(stdout, "{snippet}")?;
                     }
                     RefreshOutcome::None => {}
+                }
+                // The trust caveat prints once per arm — only when the activation
+                // notice (which already carries the trust step) did not print it
+                // (design sec-5.4). A Wired report is a statement about the file,
+                // never about activation.
+                if matches!(h, Harness::Codex) && mcp_written && !dry_run && !codex_hook_written {
+                    writeln!(
+                        stdout,
+                        "  {}: note — codex loads project-scoped config only for projects you have trusted; an untrusted project's layer is skipped silently, so this registration is not active until you trust the project.",
+                        harness_label(h)
+                    )?;
                 }
                 // Append-system symlink leg (PHASE-02): pi creates a symlink so
                 // the boot snapshot is ingested as append-only context. Claude
@@ -5167,7 +5598,12 @@ mod tests {
             ]
         ));
         assert!(matches!(out.baseref.outcome, BaseRefOutcome::NotApplicable));
-        assert!(matches!(out.mcp, RefreshOutcome::None));
+        // SL-271: the Codex arm now registers the MCP server in .codex/config.toml.
+        assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
+        assert!(
+            root.join(CODEX_CONFIG_REL).exists(),
+            "the codex leg writes .codex/config.toml"
+        );
     }
 
     /// SL-250 PHASE-04 VT-2. SL-195's INV-1 — no absolute host path in a TRACKED
@@ -5411,6 +5847,254 @@ mod tests {
         let custom: Value =
             serde_json::json!({"command":"/x/doctrine","args":["serve","--mcp","--port","9"]});
         assert!(!is_doctrine_mcp_entry(&custom));
+    }
+
+    #[test]
+    fn mcp_action_maps_each_class_to_one_outcome_and_write_decision() {
+        // The shared table (DEC-328): exactly one (outcome, write?) per class.
+        let (outcome, write) = mcp_action(McpEntryClass::Absent, "inv".into(), MCP_REL);
+        assert!(matches!(outcome, RefreshOutcome::Wired(ref s) if s == "inv"));
+        assert!(write, "absent => write");
+
+        let (outcome, write) = mcp_action(McpEntryClass::OwnedCurrent, "inv".into(), MCP_REL);
+        assert!(matches!(outcome, RefreshOutcome::None));
+        assert!(!write, "current => no write");
+
+        let (outcome, write) = mcp_action(McpEntryClass::OwnedStale, "inv".into(), MCP_REL);
+        assert!(matches!(outcome, RefreshOutcome::Refreshed(ref s) if s == "inv"));
+        assert!(write, "stale => write");
+
+        let (outcome, write) = mcp_action(McpEntryClass::Foreign, "snippet".into(), MCP_REL);
+        assert!(matches!(
+            outcome,
+            RefreshOutcome::PrintedFallback { hook_file, ref snippet }
+                if hook_file == MCP_REL && snippet == "snippet"
+        ));
+        assert!(!write, "foreign => no write");
+    }
+
+    #[test]
+    fn plan_mcp_carries_the_full_invocation() {
+        // The payload is the invocation, not just the command: `wire` prints it
+        // verbatim and re-appends nothing (DEC-325).
+        assert_eq!(mcp_invocation(), format!("{PORTABLE_EXEC} serve --mcp"));
+        match plan_mcp(None).outcome {
+            RefreshOutcome::Wired(payload) => assert_eq!(payload, mcp_invocation()),
+            other => panic!("absent entry must be Wired, got {other:?}"),
+        }
+        // A stale legacy abspath refreshes carrying the same full invocation.
+        let stale = r#"{"mcpServers":{"doctrine":{"command":"/old/abs/doctrine","args":["serve","--mcp"]}}}"#;
+        match plan_mcp(Some(stale)).outcome {
+            RefreshOutcome::Refreshed(payload) => assert_eq!(payload, mcp_invocation()),
+            other => panic!("legacy abspath must be Refreshed, got {other:?}"),
+        }
+    }
+
+    // --- SL-271 PHASE-02: the codex MCP leg ---
+
+    /// A literal, current codex entry (not seeded by the installer — an ownership
+    /// fixture must be able to fail for the right reason).
+    const CODEX_CURRENT: &str = r#"
+[features]
+hooks = true
+
+[mcp_servers.doctrine]
+command = "sh"
+args = ["-c", "exec \"${DOCTRINE_BIN:-doctrine}\" serve --mcp"]
+env_vars = ["DOCTRINE_BIN"]
+"#;
+
+    fn codex_class(text: &str) -> Result<McpEntryClass, ()> {
+        plan_codex_mcp(Some(text)).class.map_err(|_| ())
+    }
+
+    fn codex_fields(
+        doc: &toml_edit::DocumentMut,
+    ) -> (Option<String>, Option<Vec<String>>, Option<Vec<String>>) {
+        let servers = doc
+            .get(CODEX_MCP_TABLE)
+            .and_then(|i| i.as_table_like())
+            .expect("mcp_servers table");
+        let entry = servers
+            .get(CODEX_MCP_SERVER_KEY)
+            .and_then(|i| i.as_table_like())
+            .expect("doctrine entry table");
+        let command = entry
+            .get("command")
+            .and_then(|i| i.as_str())
+            .map(String::from);
+        let args = entry.get("args").and_then(|i| i.as_array()).map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str())
+                .map(String::from)
+                .collect()
+        });
+        let env = entry.get("env_vars").and_then(|i| i.as_array()).map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str())
+                .map(String::from)
+                .collect()
+        });
+        (command, args, env)
+    }
+
+    #[test]
+    fn codex_constants_agree_and_pin_the_shared_key() {
+        // The wrapper literal and its composed form must not drift (const cannot
+        // compose; this is the pin).
+        assert_eq!(
+            CODEX_MCP_WRAPPER,
+            format!("exec \"{PORTABLE_EXEC}\" {CODEX_MCP_SERVE_ARGS}")
+        );
+        // Every emitted form is a FIXED POINT of normalise — else an appended
+        // wording with doubled/trailing whitespace could never match.
+        assert!(CODEX_MCP_WRAPPER_FORMS.iter().all(|w| normalise(w) == *w));
+        // One server, two harnesses.
+        assert_eq!(CODEX_MCP_SERVER_KEY, MCP_SERVER_KEY);
+    }
+
+    #[test]
+    fn codex_fallback_snippet_is_the_toml_table() {
+        let doc: toml_edit::DocumentMut = codex_mcp_fallback_snippet().parse().unwrap();
+        let (command, args, env) = codex_fields(&doc);
+        assert_eq!(command.as_deref(), Some(CODEX_MCP_SHELL));
+        assert_eq!(
+            args,
+            Some(vec![
+                CODEX_MCP_SHELL_FLAG.to_string(),
+                CODEX_MCP_WRAPPER.to_string()
+            ])
+        );
+        assert_eq!(env, Some(vec![CODEX_MCP_ENV.to_string()]));
+    }
+
+    #[test]
+    fn plan_codex_mcp_matrix() {
+        // Current: ours, byte-exact, env present -> no write.
+        let plan = plan_codex_mcp(Some(CODEX_CURRENT));
+        assert_eq!(plan.class.unwrap(), McpEntryClass::OwnedCurrent);
+        assert!(plan.new_toml.is_none(), "current => no write");
+
+        // Wrapper with env_vars absent -> dead-override refresh.
+        let no_env = CODEX_CURRENT
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("env_vars"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_eq!(codex_class(&no_env), Ok(McpEntryClass::OwnedStale));
+
+        // A spacing variant of the emitted wrapper -> canonicalising refresh.
+        let spaced = CODEX_CURRENT.replace(
+            "exec \\\"${DOCTRINE_BIN:-doctrine}\\\" serve --mcp",
+            "exec   \\\"${DOCTRINE_BIN:-doctrine}\\\"    serve --mcp",
+        );
+        assert_ne!(spaced, CODEX_CURRENT, "the fixture really changed");
+        assert_eq!(codex_class(&spaced), Ok(McpEntryClass::OwnedStale));
+
+        // A user env_vars value (extra element, wrong type) -> Foreign.
+        let extra_env = CODEX_CURRENT.replace(
+            "env_vars = [\"DOCTRINE_BIN\"]",
+            "env_vars = [\"DOCTRINE_BIN\", \"HOME\"]",
+        );
+        assert_eq!(codex_class(&extra_env), Ok(McpEntryClass::Foreign));
+        let wrong_type = CODEX_CURRENT.replace(
+            "env_vars = [\"DOCTRINE_BIN\"]",
+            "env_vars = \"DOCTRINE_BIN\"",
+        );
+        assert_eq!(codex_class(&wrong_type), Ok(McpEntryClass::Foreign));
+
+        // Short/foreign arities and programs -> Foreign, never a panic.
+        let empty_args = CODEX_CURRENT.replace(
+            "args = [\"-c\", \"exec \\\"${DOCTRINE_BIN:-doctrine}\\\" serve --mcp\"]",
+            "args = []",
+        );
+        assert_eq!(codex_class(&empty_args), Ok(McpEntryClass::Foreign));
+        let flag_only = CODEX_CURRENT.replace(
+            "args = [\"-c\", \"exec \\\"${DOCTRINE_BIN:-doctrine}\\\" serve --mcp\"]",
+            "args = [\"-c\"]",
+        );
+        assert_eq!(codex_class(&flag_only), Ok(McpEntryClass::Foreign));
+        let plain = CODEX_CURRENT.replace("command = \"sh\"", "command = \"doctrine\"");
+        assert_eq!(codex_class(&plain), Ok(McpEntryClass::Foreign));
+        let bin_sh = CODEX_CURRENT.replace("command = \"sh\"", "command = \"/bin/sh\"");
+        assert_eq!(codex_class(&bin_sh), Ok(McpEntryClass::Foreign));
+        let extra_key = CODEX_CURRENT.replace(
+            "env_vars = [\"DOCTRINE_BIN\"]",
+            "env_vars = [\"DOCTRINE_BIN\"]\nenabled = false",
+        );
+        assert_eq!(codex_class(&extra_key), Ok(McpEntryClass::Foreign));
+
+        // Malformed shapes: non-table container / entry, unparseable TOML.
+        assert_eq!(codex_class("mcp_servers = 3"), Err(()));
+        assert_eq!(codex_class("[mcp_servers]\ndoctrine = 3"), Err(()));
+        assert_eq!(codex_class("not toml ="), Err(()));
+
+        // Absent -> Wired, plans a write; siblings/comment preserved.
+        let with_siblings = "[features]\nhooks = true\n\n[mcp_servers.other]\ncommand = \"x\"\n";
+        let plan = plan_codex_mcp(Some(with_siblings));
+        assert_eq!(plan.class.unwrap(), McpEntryClass::Absent);
+        let new = plan.new_toml.expect("absent plans a write");
+        assert!(new.contains("hooks = true"), "[features] preserved");
+        assert!(new.contains("other"), "sibling server preserved");
+        let doc: toml_edit::DocumentMut = new.parse().unwrap();
+        assert_eq!(codex_fields(&doc).0.as_deref(), Some(CODEX_MCP_SHELL));
+
+        // Inline parent: the entry is written as an inline value, siblings intact.
+        let inline = "mcp_servers = { other = { command = \"x\" } }\n";
+        let new = plan_codex_mcp(Some(inline))
+            .new_toml
+            .expect("inline absent writes");
+        let doc: toml_edit::DocumentMut = new.parse().unwrap();
+        assert_eq!(codex_fields(&doc).0.as_deref(), Some(CODEX_MCP_SHELL));
+        assert!(new.contains("other"), "inline sibling preserved");
+
+        // Inline doctrine entry in the emitted shape -> content, not spelling.
+        let inline_current = r#"mcp_servers = { doctrine = { command = "sh", args = ["-c", 'exec "${DOCTRINE_BIN:-doctrine}" serve --mcp'], env_vars = ["DOCTRINE_BIN"] } }
+"#;
+        assert_eq!(
+            codex_class(&inline_current),
+            Ok(McpEntryClass::OwnedCurrent)
+        );
+    }
+
+    #[test]
+    fn install_codex_mcp_writes_dry_runs_and_survives_non_utf8() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let path = root.join(CODEX_CONFIG_REL);
+
+        // dry run: plans but writes nothing.
+        let out = install_codex_mcp(root, true).unwrap();
+        assert!(matches!(out, RefreshOutcome::Wired(_)));
+        assert!(!path.exists(), "dry run writes no config");
+
+        // real run: creates the parent dir and the file, in the emitted shape.
+        let out = install_codex_mcp(root, false).unwrap();
+        assert!(matches!(out, RefreshOutcome::Wired(_)));
+        let doc: toml_edit::DocumentMut = fs::read_to_string(&path).unwrap().parse().unwrap();
+        let (command, args, env) = codex_fields(&doc);
+        assert_eq!(command.as_deref(), Some(CODEX_MCP_SHELL));
+        assert_eq!(
+            args,
+            Some(vec![
+                CODEX_MCP_SHELL_FLAG.to_string(),
+                CODEX_MCP_WRAPPER.to_string()
+            ])
+        );
+        assert_eq!(env, Some(vec![CODEX_MCP_ENV.to_string()]));
+
+        // second run over the written file is a no-op.
+        let out = install_codex_mcp(root, false).unwrap();
+        assert!(matches!(out, RefreshOutcome::None));
+
+        // a non-UTF-8 read is malformed, never absent: bytes untouched, snippet printed.
+        fs::write(&path, [0xff, 0xfe, 0x00]).unwrap();
+        let out = install_codex_mcp(root, false).unwrap();
+        assert!(matches!(
+            out,
+            RefreshOutcome::PrintedFallback { hook_file, .. } if hook_file == CODEX_CONFIG_REL
+        ));
+        assert_eq!(fs::read(&path).unwrap(), vec![0xff, 0xfe, 0x00]);
     }
 
     // --- T6 (SL-018): the generalized seam carries a SEPARATE `memory sync` hook.
@@ -6638,13 +7322,33 @@ mod tests {
 
     const FAKE_EXEC: &str = "/fake/doctrine";
 
+    /// A capture runner reporting the hooks feature ENABLED — the default for
+    /// wire-level tests that do not exercise the probe.
+    #[derive(Debug)]
+    struct FakeCaptureRunner;
+
+    impl install::CommandRunner for FakeCaptureRunner {
+        fn run_capture(
+            &self,
+            _program: &str,
+            _args: &[&str],
+            _cwd: &Path,
+        ) -> anyhow::Result<install::Capture> {
+            Ok(install::Capture {
+                success: true,
+                stdout: "hooks  stable  true\n".to_string(),
+                stderr: String::new(),
+            })
+        }
+    }
+
     #[test]
     fn wire_adds_import_and_hook_then_is_idempotent() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let exec = Path::new(FAKE_EXEC);
 
-        wire(root, exec, &[Harness::Claude], false).unwrap();
+        wire(root, exec, &[Harness::Claude], false, &FakeCaptureRunner).unwrap();
 
         let claude_md = fs::read_to_string(root.join("CLAUDE.md")).unwrap();
         assert_eq!(claude_md.matches(REF).count(), 1, "import ref wired once");
@@ -6660,7 +7364,7 @@ mod tests {
         assert_eq!(parsed["worktree"]["baseRef"], Value::String("head".into()));
 
         // re-run: import Present, still no hook, baseRef idempotent.
-        wire(root, exec, &[Harness::Claude], false).unwrap();
+        wire(root, exec, &[Harness::Claude], false, &FakeCaptureRunner).unwrap();
         let claude_md = fs::read_to_string(root.join("CLAUDE.md")).unwrap();
         assert_eq!(
             claude_md.matches(REF).count(),
@@ -6680,7 +7384,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
 
-        wire(root, Path::new(FAKE_EXEC), &[Harness::Claude], true).unwrap();
+        wire(
+            root,
+            Path::new(FAKE_EXEC),
+            &[Harness::Claude],
+            true,
+            &FakeCaptureRunner,
+        )
+        .unwrap();
         assert!(!root.join("CLAUDE.md").exists(), "dry-run wrote no import");
         assert!(
             !root.join(SETTINGS_PROJECT_REL).exists(),
@@ -6704,6 +7415,7 @@ mod tests {
             Path::new(FAKE_EXEC),
             &[Harness::Claude, Harness::Codex],
             false,
+            &FakeCaptureRunner,
         )
         .unwrap();
 
@@ -7852,7 +8564,7 @@ weight = 0
     #[test]
     fn codex_activation_notice_names_all_three_hooks() {
         let mut buf = Vec::new();
-        write_codex_activation(&mut buf, &Harness::Codex, "").unwrap();
+        write_codex_activation(&mut buf, &Harness::Codex, "", false, None).unwrap();
         let text = String::from_utf8(buf).unwrap();
         assert!(text.contains("SessionStart"), "{text}");
         assert!(text.contains("Bash"), "{text}");
@@ -7861,6 +8573,117 @@ weight = 0
             !text.contains("trust the doctrine hook."),
             "the singular form is gone: {text}"
         );
+    }
+
+    #[test]
+    fn codex_activation_notice_is_dry_run_and_probe_aware() {
+        // Dry run: no probe (None), step 1 prints, and the verb is "would write".
+        let mut buf = Vec::new();
+        write_codex_activation(&mut buf, &Harness::Codex, "[dry-run] ", true, None).unwrap();
+        let text = String::from_utf8(buf).unwrap();
+        assert!(text.contains("would write"), "{text}");
+        assert!(!text.contains("wrote "), "no 'wrote' under dry run: {text}");
+        assert!(
+            text.contains("Ensure [features] hooks = true"),
+            "step 1 prints with no probe: {text}"
+        );
+
+        // Enabled probe: step 1 is omitted, the rest still prints.
+        let mut buf = Vec::new();
+        let state = Some(HooksState::Enabled);
+        write_codex_activation(&mut buf, &Harness::Codex, "", false, state).unwrap();
+        let text = String::from_utf8(buf).unwrap();
+        assert!(
+            !text.contains("Ensure [features] hooks = true"),
+            "step 1 omitted when Enabled: {text}"
+        );
+        assert!(text.contains("Start codex"), "step 2 still prints: {text}");
+    }
+
+    #[test]
+    fn parse_codex_features_reads_the_hooks_row() {
+        assert_eq!(parse_codex_features("hooks  stable  true\n"), Some(true));
+        assert_eq!(parse_codex_features("hooks  stable  false\n"), Some(false));
+        assert_eq!(
+            parse_codex_features("name  state  value\nhooks  x  true\n"),
+            Some(true)
+        );
+        assert_eq!(parse_codex_features("hooks  stable  maybe\n"), None);
+        assert_eq!(parse_codex_features("other  x  true\n"), None);
+        assert_eq!(parse_codex_features(""), None);
+    }
+
+    /// A runner returning one fixed capture (or a spawn error).
+    #[derive(Debug)]
+    struct FixedCapture(Result<install::Capture, &'static str>);
+
+    impl install::CommandRunner for FixedCapture {
+        fn run_capture(
+            &self,
+            _program: &str,
+            _args: &[&str],
+            _cwd: &Path,
+        ) -> anyhow::Result<install::Capture> {
+            match &self.0 {
+                Ok(c) => Ok(c.clone()),
+                Err(e) => anyhow::bail!("{e}"),
+            }
+        }
+    }
+
+    fn capture(success: bool, stdout: &str, stderr: &str) -> install::Capture {
+        install::Capture {
+            success,
+            stdout: stdout.to_string(),
+            stderr: stderr.to_string(),
+        }
+    }
+
+    #[test]
+    fn codex_hooks_state_degrades_to_named_unknown() {
+        let root = Path::new("/proj");
+        let enabled = FixedCapture(Ok(capture(true, "hooks  stable  true\n", "")));
+        assert_eq!(codex_hooks_state(&enabled, root), HooksState::Enabled);
+        let disabled = FixedCapture(Ok(capture(true, "hooks  stable  false\n", "")));
+        assert_eq!(codex_hooks_state(&disabled, root), HooksState::Disabled);
+        // success with no parseable row -> Unknown, non-empty reason.
+        let empty = FixedCapture(Ok(capture(true, "", "")));
+        assert!(matches!(codex_hooks_state(&empty, root), HooksState::Unknown(r) if !r.is_empty()));
+        // non-zero exit that still printed a parseable row -> the parsed answer.
+        let nonzero = FixedCapture(Ok(capture(false, "hooks  stable  true\n", "warn")));
+        assert_eq!(codex_hooks_state(&nonzero, root), HooksState::Enabled);
+        // a failure carrying a useful reason -> Unknown naming it.
+        let failed = FixedCapture(Ok(capture(false, "", "boom: no config\n")));
+        assert_eq!(
+            codex_hooks_state(&failed, root),
+            HooksState::Unknown("boom: no config".to_string())
+        );
+        // a spawn error -> Unknown, non-empty.
+        let spawn_err = FixedCapture(Err("no such file or directory"));
+        assert!(
+            matches!(codex_hooks_state(&spawn_err, root), HooksState::Unknown(r) if r.contains("no such file"))
+        );
+    }
+
+    #[test]
+    fn codex_hooks_state_probes_the_install_root() {
+        #[derive(Debug)]
+        struct CwdRunner(std::sync::Mutex<Option<PathBuf>>);
+        impl install::CommandRunner for CwdRunner {
+            fn run_capture(
+                &self,
+                _program: &str,
+                _args: &[&str],
+                cwd: &Path,
+            ) -> anyhow::Result<install::Capture> {
+                *self.0.lock().unwrap() = Some(cwd.to_path_buf());
+                Ok(capture(true, "hooks  stable  true\n", ""))
+            }
+        }
+        let runner = CwdRunner(std::sync::Mutex::new(None));
+        let root = Path::new("/the/install/root");
+        assert_eq!(codex_hooks_state(&runner, root), HooksState::Enabled);
+        assert_eq!(runner.0.lock().unwrap().as_deref(), Some(root));
     }
 
     // =======================================================================
