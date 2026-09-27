@@ -780,7 +780,8 @@ impl fmt::Display for Refusal {
             Refusal::SubmissionReplayed { submission } => write!(
                 f,
                 "submission id `{submission}` was already applied with different bytes — \
-                 a retry must carry the same payload"
+                 a retry must carry the same payload; submit a correction under a fresh \
+                 `submission_id`"
             ),
             // Reworded for the verb (`SL-261` `EX-4`): the basis is `--expect`, not
             // a declared marker map, and the remedy is the reviewed path

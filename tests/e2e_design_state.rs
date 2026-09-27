@@ -733,7 +733,40 @@ fn reused_submission_id_with_changed_payload_is_refused() {
         error.contains("already applied with different bytes"),
         "{error}"
     );
+    // The refusal names the way out for a correction (ISS-361): the guard is
+    // deliberate, not a dead end.
+    assert!(error.contains("fresh `submission_id`"), "{error}");
     assert_eq!(fixture.bytes(), landed, "and still no advance");
+}
+
+/// ISS-361 — a payload that does not parse lands nothing: the snapshot stays
+/// byte-identical and no receipt is written, so the corrected payload is
+/// admissible under the SAME submission id.
+#[test]
+fn unparseable_payload_lands_nothing_and_leaves_its_id_free() {
+    let fixture = Fixture::start();
+    let before = fixture.bytes();
+    let revision = fixture.revision();
+    let corrected = format!(
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\",\"blocking\":false}}]}}",
+        fixture.envelope("sub-1")
+    );
+
+    let error = fixture.refuse(&corrected[..corrected.len() - 1]);
+    assert!(error.contains("parse the apply payload as JSON"), "{error}");
+    assert_eq!(
+        fixture.bytes(),
+        before,
+        "byte-identical after a parse failure"
+    );
+
+    let applied = fixture.apply(&corrected);
+    assert!(!applied.contains("resumed submission"), "{applied}");
+    assert_eq!(
+        fixture.revision(),
+        revision + 1,
+        "the correction advances the run"
+    );
 }
 
 /// EX-4 — receipt eviction is bounded, but can never remove the latest receipt

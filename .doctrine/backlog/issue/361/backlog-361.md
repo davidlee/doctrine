@@ -112,3 +112,23 @@ The 5.0 value anchor was set on the reported description ("outranks everything i
 it reproduces"). This reading makes the severe reading less likely, so the anchor
 is superseded at 3.0 — the residual is a real but bounded refusal-wording gap plus
 an unreproduced tail.
+
+## Resolution, 2026-09-27 — fixed (residual only)
+
+The severe reading does not hold on current code. `apply` parses through
+`parse_payload` (`src/commands/design.rs`) before `admit` or any write, and since
+`SL-259` it also refuses unknown keys before deserialisation — closing the
+"malformed payload parses and lands" path the reconstruction relied on.
+
+Residual fixed:
+
+- `SubmissionReplayed` now names its remedy: submit a correction under a fresh
+  `submission_id`.
+- Pinned the failure contract: `unparseable_payload_lands_nothing_and_leaves_its_id_free`
+  (`tests/e2e_design_state.rs`) — a truncated payload leaves the snapshot
+  byte-identical, writes no receipt, and the corrected payload lands under the
+  same id.
+
+Sibling not taken: `SubmissionExpired` also names no remedy, but its correct
+remedy is less obvious (a blind resubmit could double-apply an
+already-landed payload) — left for `cluster:design-run` triage.
