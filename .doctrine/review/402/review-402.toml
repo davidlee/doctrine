@@ -1,0 +1,241 @@
+id    = 402
+slug  = "code-review-of-sl-271-implementation-delta"
+title = "code review of SL-271 implementation delta"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+RV-402 examined the SL-271 implementation delta (12 commits on slice/SL-271-codex-mcp-registration-during-install in .worktrees/SL-271: src/boot.rs +915/-47, src/install.rs +36, tests/e2e_codex_install.rs +320, README prose) against the locked design dr-01a0e17c rev 44 sec-5.2/5.3/5.4, plan.toml PHASE-01..03 EX/VT rows, and the governance they cite (ADR-001, POL-002 facet 3, POL-003, STD-001, DEC-323/325/328/329/332). Prior review depth (RV-399, 44 design findings) was taken as read: this pass attacked the implementation of the accepted decisions and the implementation's own seams rather than re-litigating the decisions.
+
+Five findings, all verified: F-1 blocker (the hooks probe answers for the user codex layer, not the project file the notice names, because the project layer is trust-gated and install runs pre-trust — design-wrong, evidence a 2x2 codex 0.155.1 trust experiment plus a live install run); F-2 minor (RefreshOutcome's doc comment, EX-7's required refresh, documents Claude's payload as the enum's contract); F-3 minor (three construction sites, two representations, for the MCP PrintedFallback outcome); F-4 nit (the Codex report ladder's four-branch duplication and identical Wired/Refreshed lines); F-5 nit (README's Host dependencies section does not declare that install executes codex). Three code paths were probed and found sound: the strict ownership formula and its index guards (classify_codex_entry, including args arity, extra keys, non-table entries, inline parents), the edit-preserving write (comments/siblings/[features] preserved, byte-stable second run, non-UTF-8 left untouched), and the Claude payload refactor's behaviour preservation (payload derived from desired_mcp_entry, printed once, plan_mcp_* suite unchanged). Evidence ran as executables, not recollection: cargo test --bin doctrine codex (22 pass), --test e2e_codex_install (12 pass), --test architecture_layering (25 pass), plus live boot install runs in scratch roots in dry, real, idempotent, non-UTF-8 and foreign states."""
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-271"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "The hooks probe answers for the user codex layer, not the project file the notice names — `Enabled` suppresses step 1 for a project that disables hooks"
+detail = '''
+EXPECTED. PHASE-03's objective is "Probe codex hooks state from the harness itself … fold the answer into the install disclosure"; design sec-5.2 says the probe's `cwd` is "the install root, so the probe answers for the project being installed"; PHASE-03/EX-4 runs `codex features list` with cwd bound to the install root. The disclosure step 1 the probe gates is about the PROJECT file: "Ensure [features] hooks = true in .codex/config.toml" (`src/boot.rs:3073-3084`).
+
+OBSERVED. `codex features list` (codex-cli 0.155.1) applies the project layer `.codex/config.toml` only when the project is TRUSTED. At install time it never is: the notice's own step 2 is "Start codex in this project and accept the project trust prompt", and the trust caveat this slice adds (`src/boot.rs:3309-3314`) states "codex loads project-scoped config only for projects you have trusted; an untrusted project's layer is skipped silently". So the probe's answer is the USER layer (`$CODEX_HOME/config.toml`), not the file the notice names.
+
+Evidence — a 2x2 run in the jail, codex-cli 0.155.1, cwd = a project whose `.codex/config.toml` is exactly `[features]\nhooks = false`:
+
+  control   (CODEX_HOME config has no [projects] entry)                -> `hooks  stable  true`
+  treatment (CODEX_HOME config adds [projects."/tmp/ptest"] trust_level = "trusted") -> `hooks  stable  false`
+
+Same cwd, same project file, same binary; only the trust entry moved the answer. The project layer is trust-gated, and install runs before trust.
+
+Consequence, observed live on a fresh root (`boot install --agent codex -y -p <tmp>`):
+
+    codex: wrote .codex/hooks.json. To activate:
+      2. Start codex in this project and accept the project trust prompt.
+      3. Run /hooks in codex to trust all three doctrine hooks — the
+
+Step 1 is absent because the probe said `Enabled` (the user layer's value). For a project whose `.codex/config.toml` disables hooks, the operator is therefore never told to check `[features] hooks = true`; once they follow step 2 the project layer takes effect and the doctrine hooks stay off, silently. That is precisely the failure POL-003 facet 3 and DEC-329 exist to prevent, and the probe's premise is invalidated by the very next step the notice prescribes: the answer is a snapshot of the pre-trust state that step 2 changes.
+
+The `Disabled` arm is wrong in the other direction too: its remedy names the project file ("Enable [features] hooks = true in .codex/config.toml (currently off)") while the finding it reports is the user layer's.
+
+WHY NO TEST CAUGHT IT. PHASE-03/VT-2 exercises injected-runner fakes only — the fake supplies the answer, so nothing can observe what real codex would have said for a given project; VT-3 pins only the PATH-empty failure. No unit or e2e case plants a project `.codex/config.toml` with `[features] hooks = false` and asks what the probe reports.
+
+DISPOSITION SOUGHT. `design-wrong`: the code implements PHASE-03/EX-4 as written; the defect is the probe's input choice in DEC-329 / design sec-5.2, whose stated intent ("the probe answers for the project being installed") is falsified by the trust gate. A code-only fix is not available — either the probe reads the project file's `[features] hooks` key directly (doctrine reads that file already) or step 1 stops being probe-gated pre-trust; both are design changes, and either way the design's claim must be amended before this slice closes, or canon ships a disclosure rule that is wrong in the case it was written for.'''
+disposition = "design-wrong"
+response = """
+Accepted in full, and the evidence is decisive — the 2x2 is not explicable any other way than the trust gate, and the design's own sentence ("the probe answers for the project being installed") is the thing that is false.
+
+This is `design-wrong`, not `fix-now`: PHASE-03/EX-4 is implemented exactly as authored, so there is nothing to edit in the code without first deciding what the probe should mean. The decision to reconcile is DEC-329's input choice in design sec-5.2/5.4, and the design's stated intent must be corrected whether or not the mechanism changes.
+
+Route for reconcile (my recommendation; the design pass owns the decision):
+(a) Read the project file's `[features] hooks` key directly — doctrine already reads and writes `.codex/config.toml`, so the disclosure question becomes a file question with no trust dependency and no subprocess. Cost: the probe seam, `CaptureRunner` and the captured `codex features list` shell lose their reason to exist; PHASE-03 shrinks instead of growing. It also removes F-5's host-tool dependency by construction.
+(b) Keep the probe, drop the gate: always print step 1 with the probe's answer as a rider ("hooks are currently enabled in your user codex config"), which states what the probe can actually know and never suppresses the instruction.
+(c) Keep the probe and `cwd`, and amend sec-5.2 to say what it truly answers (the user layer, pre-trust), accepting the silent-hooks hole.
+
+I do not favour (c): it keeps the defect and only corrects the documentation, which is the failure mode the review exists to prevent. Recommendation is (a), with (b) acceptable; (c) only with a stated rationale.
+
+Also required by this finding, whatever the mechanism: a test that plants a project `.codex/config.toml` with `[features] hooks = false` and asserts the step-1 instruction is still delivered. The existing VT-2/VT-3 cannot fail on this because the fakes inject the answer.
+
+No design change is recorded here — this is the responder's position on the disposition, and /reconcile writes it."""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Accepted in full, and the evidence is decisive — the 2x2 is not explicable any other way than the trust gate, and the design's own sentence ("the probe answers for the project being installed") is the thing that is false.
+
+This is `design-wrong`, not `fix-now`: PHASE-03/EX-4 is implemented exactly as authored, so there is nothing to edit in the code without first deciding what the probe should mean. The decision to reconcile is DEC-329's input choice in design sec-5.2/5.4, and the design's stated intent must be corrected whether or not the mechanism changes.
+
+Route for reconcile (my recommendation; the design pass owns the decision):
+(a) Read the project file's `[features] hooks` key directly — doctrine already reads and writes `.codex/config.toml`, so the disclosure question becomes a file question with no trust dependency and no subprocess. Cost: the probe seam, `CaptureRunner` and the captured `codex features list` shell lose their reason to exist; PHASE-03 shrinks instead of growing. It also removes F-5's host-tool dependency by construction.
+(b) Keep the probe, drop the gate: always print step 1 with the probe's answer as a rider ("hooks are currently enabled in your user codex config"), which states what the probe can actually know and never suppresses the instruction.
+(c) Keep the probe and `cwd`, and amend sec-5.2 to say what it truly answers (the user layer, pre-trust), accepting the silent-hooks hole.
+
+I do not favour (c): it keeps the defect and only corrects the documentation, which is the failure mode the review exists to prevent. Recommendation is (a), with (b) acceptable; (c) only with a stated rationale.
+
+Also required by this finding, whatever the mechanism: a test that plants a project `.codex/config.toml` with `[features] hooks = false` and asserts the step-1 instruction is still delivered. The existing VT-2/VT-3 cannot fail on this because the fakes inject the answer.
+
+No design change is recorded here — this is the responder's position on the disposition, and /reconcile writes it."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Accepted. The disposition is right — code conforms to EX-4 as authored, so the defect lives in DEC-329's input choice and the design's sec-5.2 claim. Verified on the strength of the 2x2 evidence and the admission that the criterion was met. Recommendation (a) — read the project file — recorded with the raise so /reconcile has something concrete to work from; the required regression test (a project file with hooks = false still delivers step 1) is the acceptance condition I will hold the reconcile to."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "RefreshOutcome's doc comment (EX-7's required refresh) documents Claude's payload as the enum's contract; the Codex arm carries only the shell wrapper line"
+detail = """
+EXPECTED. PHASE-02/EX-7: "The stale doc comments the design names are refreshed to describe both harnesses: RefreshOutcome (src/boot.rs:940), RefreshReport.mcp (:1787), the wire() MCP block comment (:2851)."
+
+OBSERVED. `src/boot.rs:973-974` reads: "What the hook merge did, for reporting. The carried string is the full rendered invocation (command plus args), never re-appended by the caller."
+
+That is true of the Claude arm only. The Codex arm carries `CODEX_MCP_WRAPPER` — the shell's `args[1]` alone (`src/boot.rs:2395-2399`), i.e. `exec "${DOCTRINE_BIN:-doctrine}" serve --mcp` — which is neither the command (`sh`) nor command-plus-args (`sh -c '...'`). The design's own message contract (sec-5.2) shows `<wrapper line>` for Codex, so the code is right and the comment is wrong.
+
+IMPACT. The comment is the guard against the exact defect DEC-325/PHASE-01 fixed (a caller re-appending ` serve --mcp`); it now documents one arm's meaning as the enum's invariant on a `pub(crate)` enum whose two consumers disagree. The `RefreshReport.mcp` comment (EX-7's other line) was refreshed correctly for both harnesses — this one was not.
+
+FIX. State that the payload is the arm's own rendered string, printed verbatim by the caller: the Claude arm's full invocation, the Codex arm's shell wrapper line."""
+disposition = "fix-now"
+response = """Accepted. One doc comment, and EX-7 is the criterion that asked for exactly this refresh, so it is a fix before the phase batch closes rather than a follow-up. Replacement wording: "What an install leg did, for reporting. The carried string is the arm's own rendering, printed verbatim by the caller and never re-appended: the full invocation (command plus args) for the Claude arm, the shell wrapper line for the Codex arm." Also drop the stale "hook merge" framing while the line is open — `RefreshOutcome` is also the baseref/mcp/extension outcome."""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """Accepted. One doc comment, and EX-7 is the criterion that asked for exactly this refresh, so it is a fix before the phase batch closes rather than a follow-up. Replacement wording: "What an install leg did, for reporting. The carried string is the arm's own rendering, printed verbatim by the caller and never re-appended: the full invocation (command plus args) for the Claude arm, the shell wrapper line for the Codex arm." Also drop the stale "hook merge" framing while the line is open — `RefreshOutcome` is also the baseref/mcp/extension outcome."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Accepted; wording agreed, one comment edit inside the current unit of work. Holds only if the codex payload keeps its wrapper form — which the design's message contract requires."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "The MCP PrintedFallback outcome has three construction sites and two representations; the Claude Foreign render is immediately discarded"
+detail = """
+EXPECTED. PHASE-01/EX-2: "Malformed remains the PrintedFallback sentinel decided before classification" — one representation per outcome, made meaningful at one place. PHASE-01/EX-4: "The PrintedFallback arm and install_mcp keep their behaviour."
+
+OBSERVED. The MCP `PrintedFallback` outcome is now constructed in three places, in two mutually incompatible representations:
+
+1. `plan_mcp`'s Foreign arm fills it eagerly — `mcp_action(class, mcp_fallback_snippet(), MCP_REL)` (`src/boot.rs:2172`).
+2. `install_mcp` then discards that value and re-renders the identical one (`src/boot.rs:2214-2217`): `RefreshOutcome::PrintedFallback { .. } => PrintedFallback { hook_file: MCP_REL, snippet: mcp_fallback_snippet() }`.
+3. The Malformed paths keep the empty sentinel `mcp_fallback()` (`src/boot.rs:2061-2068`, returned at `:2146`, `:2150`, `:2157`, `:2188`), and `install_codex_mcp`'s Malformed arm builds the variant inline instead (`src/boot.rs:2406-2411`).
+
+So `plan_mcp(x).outcome` is not a well-formed report on its own: for the same variant, `hook_file`/`snippet` are correct-and-then-thrown-away in one branch and empty in three others, discriminated only by whether the caller re-stamps. The Foreign branch's eager render is dead work by construction — `mcp_action(class, String::new(), MCP_REL)` would produce the same net result — and the boundary is a second, unchecked construction site for values the planner already knew.
+
+IMPACT. This is the drift class the slice itself acted on (`DEC-332`): two sources for one value, reconciled by a caller's re-stamp that nothing enforces. A future planner arm that forgets the boundary re-stamp reports an empty snippet rather than failing.
+
+FIX. Pick one convention — either the sentinel is always empty and the boundary alone annotates (then drop the eager render at `:2172`), or every planner fills it and the boundary stops re-stamping — and make the boundary the single constructor for both arms."""
+disposition = "fix-now"
+response = """Accepted; the finding is exact (the Foreign render at `:2172` is dead by construction, and `install_mcp` is a second unchecked constructor). Cheapest coherent fix, keeping the sentinel convention PHASE-01/EX-2 named: `plan_mcp`'s Foreign arm becomes `mcp_action(class, String::new(), MCP_REL)` alongside the other sentinel returns, and `install_mcp` stays the single boundary that annotates. That leaves one representation and one construction site per arm. Worth doing now because the alternative — filling at plan time everywhere — would re-open EX-2's "sentinel decided before classification" wording, which is the design's call, not ours."""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """Accepted; the finding is exact (the Foreign render at `:2172` is dead by construction, and `install_mcp` is a second unchecked constructor). Cheapest coherent fix, keeping the sentinel convention PHASE-01/EX-2 named: `plan_mcp`'s Foreign arm becomes `mcp_action(class, String::new(), MCP_REL)` alongside the other sentinel returns, and `install_mcp` stays the single boundary that annotates. That leaves one representation and one construction site per arm. Worth doing now because the alternative — filling at plan time everywhere — would re-open EX-2's "sentinel decided before classification" wording, which is the design's call, not ours."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Accepted; the sentinel-preserving fix is the right one and keeps EX-2 intact. The test suite (plan_mcp_foreign_doctrine_key_not_clobbered plus the e2e codex foreign case) is the proof the outcome is unchanged."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "The Codex MCP report ladder duplicates the writeln! four ways, and its Wired and Refreshed lines are identical"
+detail = """
+EXPECTED. PHASE-02/EX-6: "For Codex the wrote-line prints iff report.mcp is Wired or Refreshed AND not dry_run, stating what was written" — and the report is the operator's only signal for what the leg did.
+
+OBSERVED. `src/boot.rs:3266-3299`: the `Wired` and `Refreshed` arms each branch on `matches!(h, Harness::Codex)`. The two Codex branches are byte-identical — both print `"  {tag}{}: {codex_verb} {mcp_rel}: {cmd}"` with the same `codex_verb` — so refreshing a stale entry is reported exactly as a fresh registration. Claude keeps "registered" vs "refreshed"; Codex loses the distinction while paying four `writeln!` call sites for two messages (the pre-change code used two).
+
+The output itself is per contract (design sec-5.2 shows only the "wrote" form for Codex), so this is raised on the code shape and the lost signal, not on conformance.
+
+FIX. Fold the ladder to one writeln! over a computed `(verb, line)` per harness, and decide whether Codex should keep the wire/refresh distinction its Claude sibling has (a stale entry silently healed is worth saying, since it means the operator's own edit was overwritten)."""
+disposition = "fix-now"
+response = """
+Accepted on the code shape; the four-branch ladder is avoidable and the two Codex branches are literally the same statement. Fix as suggested: compute the line once (`match h` gives the verb phrase; `match report.mcp` gives the tail) and emit a single writeln!.
+
+On the lost distinction I am deliberately NOT changing the output in this pass: design sec-5.2's contract shows one "wrote" line for Codex, so adding a refresh form would be a design divergence made unilaterally. Recommend the design pass take it up with F-1 (both are the Codex disclosure's precision), and if it says yes the second verb is a one-line change."""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted on the code shape; the four-branch ladder is avoidable and the two Codex branches are literally the same statement. Fix as suggested: compute the line once (`match h` gives the verb phrase; `match report.mcp` gives the tail) and emit a single writeln!.
+
+On the lost distinction I am deliberately NOT changing the output in this pass: design sec-5.2's contract shows one "wrote" line for Codex, so adding a refresh form would be a design divergence made unilaterally. Recommend the design pass take it up with F-1 (both are the Codex disclosure's precision), and if it says yes the second verb is a one-line change."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Accepted; folding the ladder is in scope and the output stays as the design's contract specifies. The deferred refresh-verb question is properly handed to the design pass alongside F-1 rather than decided unilaterally here — that is the answer I wanted, not an escape."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = """README's "Host dependencies" section declares the MCP runtime's `sh` but not that install executes `codex`"""
+detail = """
+EXPECTED. POL-002 facet 3 — no *silent* host-tool dependency; PHASE-02/EX-9 chose README's post-install prose as the declaring home, and the "Host dependencies" section (`README.md:160-176`) is that home.
+
+OBSERVED. That section declares only the MCP runtime's `sh`. The install path now also EXECUTES `codex features list` on the installing machine — `codex_hooks_state` (`src/boot.rs:3034-3040`) called from `wire` (`src/boot.rs:3189-3198`) — which is a host-tool dependency of the install command, not of the harness's runtime. It is announced only when it fails (the `Unknown(reason)` arm, e.g. "Failed to run 'codex'…"); the ordinary success is silent. It also mutates user-global codex state: `~/.codex/tmp/arg0` (codex's private helper dir) was rewritten while running `boot install --agent codex -y -p <fresh tmp>` and nothing else (mtime advanced across the single run).
+
+This is a nit rather than more because the dependency is confined to `--agent codex`, where codex is the thing being installed for, and every failure path is disclosed with a reason.
+
+FIX. One sentence in the existing "Host dependencies" section: `boot install --agent codex` probes `codex features list` to report the hooks feature state, and degrades to an explicit "unknown" reason when codex is absent."""
+disposition = "fix-now"
+response = 'Accepted: one sentence in the section that already exists for this. Note the coupling — if F-1 resolves by reading the project file, the subprocess disappears and this sentence becomes untrue, so the fix should land with (or after) F-1 rather than being written into README twice. If F-1 resolves by keeping the probe, the sentence is: "`boot install --agent codex` also runs `codex features list` to report the hooks feature state; when codex is absent the notice says so explicitly and the install continues."'
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = 'Accepted: one sentence in the section that already exists for this. Note the coupling — if F-1 resolves by reading the project file, the subprocess disappears and this sentence becomes untrue, so the fix should land with (or after) F-1 rather than being written into README twice. If F-1 resolves by keeping the probe, the sentence is: "`boot install --agent codex` also runs `codex features list` to report the hooks feature state; when codex is absent the notice says so explicitly and the install continues."'
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Accepted, with the coupling noted: the sentence is written once, after F-1 settles the mechanism, not twice."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e1f6-c868-74e0-822b-f61ce993e29a"
+recorded_at = "2026-09-27T08:24:01.896668286Z"
+kind = "friction"
+summary = "code-review: an unlanded fork cannot host its own RV, so prime hashes the wrong tree"
+detail = "SL-271's implementation lives only on slice/SL-271-... in .worktrees/SL-271, but review turn verbs refuse a worktree fork, so RV-402 had to be opened and driven from the primary tree. review prime then hashed the 230 selector paths in the PRE-change primary tree (src/boot.rs unchanged since 0da371b37), so the staleness signal for a 915-line delta was meaningless by construction and had to be disclaimed in the Brief. The reviewer had to read every artefact twice (primary copy for the ledger, fork copy for the truth), and the primary tree's SL-271 slice metadata is itself a plan-amendment behind (status plan vs audit). Cost: a fork cannot be reviewed where it is; the workable paths are land-first (inverts the review/land order) or review-blind against a stale tree."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
