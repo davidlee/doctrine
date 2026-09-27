@@ -1,0 +1,59 @@
+id    = 401
+slug  = "reconciliation-review-of-sl-270"
+title = "reconciliation review of SL-270"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-270"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Design sec-3 remedy omits --response; the shipped refusal requires it"
+detail = "Expected: design sec-3's remedy for an answered unrouted finding matches the shipped refusal. Observed: sec-3 reads `review amend <RV> --finding F-n --route <route> --note …`; `review amend` requires `--response`, so src/design_run/gate.rs (Cause::SevereFindingsUnrouted Display) renders `… --route <route> --response … --note …`. The code is right (VT-4 exercises amend with --response); the design prose lags. Recorded in notes.md PHASE-02."
+disposition = "design-wrong"
+response = "Code is correct; design.md sec-3 lags. Reconciliation Brief (review-401.md) per-slice item: add `--response …` to sec-3's answered-status remedy."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "ADR-007 D-C5 and SPEC-032 still state the five-route set and that an unknown route gates nothing"
+detail = "Expected: governance states the shipped six-route set and the lock's route-presence read. Observed: `rg owner-fix` hits .doctrine/adr/007/adr-007.md and .doctrine/spec/tech/032/spec-032.md; SPEC-032 says an unknown route gates nothing, which DEC-326's lock check makes untrue for the design-run lock. REV-065 (approved) carries the change, deferred to reconcile by design."
+disposition = "design-wrong"
+response = "Governance lags the shipped code, as planned. Reconciliation Brief (review-401.md) governance item: apply REV-065 (ADR-007 D-C5 and SPEC-032 route set; SPEC-032 lock exception)."
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "major"
+title = "Lock check covers less than the trial counts; long-term behaviour undecided (RV-400 F-1 carry)"
+detail = "Expected (design sec-6, owner 2026-09-27): audit decides whether leaving open majors at lock, findings on superseded passes, and findings disposed after lock outside the route-presence check is the wanted long-term behaviour, or needs a backlog item. Observed: unrouted_severe (src/review_ledger/gate.rs) reads the current pass once, at lock, disposed findings only — as designed. A severe finding answered after lock, or left open past it (reviewing.md permits this), can still be answered bare. DEC-334 reports these apart for the trial; nothing owns the question beyond the trial."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "DEC-334 build floor cannot pass on `doctrine install` alone: the PATH binary predates --route"
+detail = """Expected (design sec-4): this slice lands sec-2/sec-3 and installs the result so CHR-082's build floor (CLI help and MCP review_dispose schema list six routes) passes on window open. Observed: the PATH binary is the nix-store 0.45.0 build; `doctrine review dispose --help` there shows no --route at all, and .mcp.json launches ${DOCTRINE_BIN:-doctrine}. `doctrine install` refreshes projected skills from the running binary; it does not replace the PATH binary. The floor needs a rebuilt PATH/nix doctrine (or DOCTRINE_BIN pinned) as well — design sec-4 says only "install the result"."""
+disposition = "design-wrong"
+response = "Design sec-4 understates the obligation. Reconciliation Brief (review-401.md) per-slice item: sec-4 names both a rebuilt PATH binary (nix/cargo install) or a pinned DOCTRINE_BIN, and `doctrine install`. The act itself is a /close step; the user owns the PATH binary."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "slice conformance reports 10 undeclared paths, none of them SL-270 scope creep"
+detail = "Expected: undeclared cell empty or explained. Observed: 6 are SL-271's (plan.md/plan.toml/notes/slice toml, IMP-497), from foreign commits 461c5142e, d4dd6e66d, 0da371b37 inside the recorded phase ranges; 3 are SL-270's own bookkeeping (notes.md, slice-270.toml); 1 is memory.toml, the sister tier of the declared, conformant memory.md (EX-7 edit + re-verify). Undelivered: 0. Conformant: 17."
+disposition = "tolerated"
+response = "No selector change. The SL-271 paths came from another slice's commits landing between SL-270's phase commits on the shared edge branch; declaring them would misstate SL-270's design. Own bookkeeping and memory.toml (the sister tier of a conformant memory.md) are not design targets. The undeclared cell stays non-empty, and this finding records why."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

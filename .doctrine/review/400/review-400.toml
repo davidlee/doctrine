@@ -254,7 +254,7 @@ note = "sec-2 lists golden tests, the memory, reviewing.md 118 and 190, REV-065;
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Disposed set disagrees with DEC-138 on contested and unknown status; remedy incomplete"
 detail = """
