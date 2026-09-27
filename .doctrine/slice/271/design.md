@@ -230,7 +230,7 @@ from failure: `ErrorKind::NotFound` is `None`; every other read error
 (permissions, a non-UTF-8 byte — i.e. not valid TOML) is malformed, never absent.
 `install_mcp` currently reads with a blanket `.ok()` (`boot.rs:2089`), which turns
 a non-UTF-8 or unreadable `.mcp.json` into "absent" and replaces the whole file;
-applying the same distinction there is a recorded follow-up (backlog), not done
+applying the same distinction there is a recorded follow-up, ISS-495, not done
 silently here.
 
 The snippet and the write share one builder (above): `toml_edit` renders a new
@@ -251,7 +251,7 @@ owned = t.keys ⊆ {command, args, env_vars}
      && t.args.len() == 2 && t.args[0] == CODEX_MCP_SHELL_FLAG
      && CODEX_MCP_WRAPPER_FORMS.contains(&normalise(t.args[1]))
      && (t.env_vars is absent || t.env_vars == [CODEX_MCP_ENV])
-current = t.args[1] == CODEX_MCP_WRAPPER && t.env_vars == [CODEX_MCP_ENV]
+current = owned && t.args[1] == CODEX_MCP_WRAPPER && t.env_vars == [CODEX_MCP_ENV]
 ```
 
 The length check precedes every index: `args = []` and `args = ["-c"]` are
@@ -309,7 +309,7 @@ apart, and the operator's next step is the same either way.
 registered MCP server in .mcp.json: <invocation>                    (Claude)
 wrote MCP server registration in .codex/config.toml: <wrapper line>
 would write MCP server registration in .codex/config.toml: <wrapper line>   (dry_run)
-<file> has a doctrine entry doctrine did not write, or could not be read —
+<file> has a doctrine entry doctrine did not write, or could not be interpreted —
 left untouched. To register it manually:
 ```
 
@@ -330,11 +330,13 @@ env_vars = ["DOCTRINE_BIN"]
   otherwise it lands adjacent to `mcp_servers`, not at the end of the file.
 - **Spelling.** Both `mcp_servers` and the entry are reached through
   `as_table_like`/`as_table_like_mut`, so a table and an inline table are the
-  same thing to this leg. The entry is built once and inserted in the
-  *container's* spelling — an `Item::Table` under a `[mcp_servers]` table
-  (rendering as the block above), an inline value under an inline parent. The
-  adapter is not cosmetic: `InlineTable`'s `TableLike::insert` unwraps its
-  argument to a `Value`, so handing a `Table` to an inline parent PANICS. An
+  same thing to this leg. ONE insert carries the container's spelling by
+  construction: the entry is built once as an `Item::Table`, and
+  `InlineTable`'s `TableLike::insert` passes it through `Item::into_value`
+  (`item.rs:132-142`), whose `Item::Table` arm converts it with
+  `Table::into_inline_table` (`table.rs:52`) — so a `[mcp_servers]` table gets
+  the subtable the block above shows, and an inline parent gets an inline value,
+  with no adapter and no panic (`Item::None` is the only `Err`). An
   owned-but-stale entry is replaced wholesale, the Claude leg's precedent.
 - **Preservation.** Unrelated keys, tables and comments are preserved: the edit
   is narrow-path, not a typed round-trip. The claim is scoped to preservation,
@@ -409,10 +411,11 @@ Ordering and disclosure rules:
   - the **trust caveat** prints iff `h == Codex && the MCP entry was written &&
     !dry_run && !codex_hook_written` — i.e. only when the activation notice (which
     already carries the trust step) did not print it. Once per arm, never twice.
-- The probe's result folds into the activation notice: its "ensure `[features]
-  hooks = true`" step is printed only when the state is not `Enabled` — `Disabled`
-  names the key, `Unknown(reason)` names the reason. On `Enabled` nothing is said
-  about hooks, per DEC-329.
+- The probe's result folds into the activation notice, which takes
+  `state: Option<HooksState>`: `None` means the probe did not run (dry run) and
+  step 1 prints as it does today, unconditionally; `Some(Enabled)` omits step 1
+  (nothing said about hooks, per DEC-329); `Some(Disabled)` prints it naming the
+  key; `Some(Unknown(reason))` prints it naming the reason.
 - The trust caveat states that codex loads project-scoped config only for trusted
   projects and that an untrusted project's layer is skipped silently, so a
   `Wired` report is a statement about the file, never about activation.
@@ -465,7 +468,7 @@ Ordering and disclosure rules:
 | `/bin/sh`, or a wrapped baked abspath | `Foreign`, file untouched |
 | our shape plus an extra key or a third argument | `Foreign`, file untouched |
 | `mcp_servers` present but neither a table nor an inline table | `PrintedFallback`, file untouched |
-| `mcp_servers` an inline table, `doctrine` absent | entry inserted inline, siblings intact |
+| `mcp_servers` an inline table, `doctrine` absent | entry written as an inline value (`Item::into_value`), siblings intact |
 | `doctrine` an inline table in the emitted shape | `None` — content, not spelling, decides |
 | TOML does not parse, or the file is unreadable / not UTF-8 | `PrintedFallback`, bytes untouched |
 | file carries `[features] hooks = true` and comments | both preserved |
@@ -496,7 +499,7 @@ remains is placement, observation, and recorded follow-ups:
 - **`.mcp.json` read errors.** `install_mcp` reads with a blanket `.ok()`
   (`boot.rs:2089`), so a non-UTF-8 or unreadable `.mcp.json` is treated as absent
   and replaced. The codex leg's `NotFound`-vs-error split is the pattern;
-  applying it to the Claude leg is a recorded follow-up (backlog item), not
+  applying it to the Claude leg is ISS-495 (open, linked to this slice), not
   silently done here.
 - **`codex features list` scope.** Resolved by construction: the probe runs with
   `root` as its working directory, so it answers for the project being installed
@@ -520,7 +523,7 @@ the alternatives considered, not the chronology.
 
 The ownership set was narrowed during the adversarial pass (RV-399 F-7): the plain literal is foreign-by-design, not a migration input. The third pass (RV-399 F-32/F-33) named the emitted-forms set as the mechanism behind "an earlier wording refreshes", and tightened `env_vars` to absent-or-exact so a refresh can never clobber a user's own list; DEC-332 was amended to match.
 
-Rejected alternative (F-37): refusing to write into an inline `mcp_servers` or an inline `doctrine` entry. It is safe but fails to register in a config codex reads identically. The chosen path mutates in place, because the alternative is to report a legal config as unregisterable.
+Rejected alternative (F-37): refusing to write into an inline `mcp_servers` or an inline `doctrine` entry. It is safe but fails to register in a config codex reads identically. The chosen path inserts through `as_table_like_mut`, because the alternative is to report a legal config as unregisterable.
 
 Rejected alternatives, kept because they will be proposed again: baking an
 absolute path (POL-002, and untracked-vs-tracked is unresolvable without a
@@ -562,8 +565,9 @@ extra element, a wrong type) → `Foreign`; `command = "sh"` with `args = []` or
 → `Foreign`; wrapped baked abspath → `Foreign`; our shape plus an extra key or a
 third argument → `Foreign`; `mcp_servers` neither a table nor an inline table →
 `Malformed`; unparseable
-TOML → `Malformed`; an inline `mcp_servers` parent (entry inserted inline,
-siblings intact) and an inline `doctrine` entry in the emitted shape (`None` —
+TOML → `Malformed`; an inline `mcp_servers` parent (entry converted to an inline
+value by `Item::into_value`, siblings intact) and an inline `doctrine` entry in
+the emitted shape (`None` —
 content, not spelling, decides); sibling servers and `[features]` preserved.
 Assertions are on PARSED values, never on the bytes §5.3 shows — `toml_edit`
 writes the wrapper as a single-quoted literal. The fallback unit case asserts the
@@ -586,8 +590,10 @@ matches by wildcard — a report-seam change, not a classification one.
 **Unit — constants agreement.** `CODEX_MCP_WRAPPER` equals
 `format!("exec \"{}\" {}", PORTABLE_EXEC, CODEX_MCP_SERVE_ARGS)`; the args suffix
 is built from `CODEX_MCP_SERVE_ARGS`; `CODEX_MCP_ENV` occurs inside
-`PORTABLE_EXEC`; and `CODEX_MCP_SERVER_KEY == MCP_SERVER_KEY`, pinned with the
-reason (one server, two harnesses) rather than shared by construction.
+`PORTABLE_EXEC`; every member of `CODEX_MCP_WRAPPER_FORMS` is a FIXED POINT of
+`normalise` (else an appended wording with doubled or trailing whitespace could
+never match anything); and `CODEX_MCP_SERVER_KEY == MCP_SERVER_KEY`, pinned with
+the reason (one server, two harnesses) rather than shared by construction.
 
 **Unit — probe.** `parse_codex_features` against the verified shape
 (`hooks  stable  true` / `false`), an absent row, unexpected columns and garbage.
@@ -612,9 +618,10 @@ Cases (i)–(iii) inject the runner. Additional assertions: the probe fires on a
 hook write even when the MCP entry was already current, and does not fire when
 only the MCP entry was refreshed; a foreign entry's second-run output is stable
 (not a fresh instruction); and no `dry_run` output contains the word "wrote" —
-for the MCP line **and** the hook activation notice. Ownership fixtures are
-seeded literally, and every absence assertion carries a positive control in the
-same test.
+for the MCP line **and** the hook activation notice; and that under `dry_run`
+the notice's step 1 still prints unconditionally (no probe ran). Ownership
+fixtures are seeded literally, and every absence assertion carries a positive
+control in the same test.
 
 **Verification alignment.**
 
@@ -633,7 +640,7 @@ same test.
 
 | path | change |
 |---|---|
-| `src/boot.rs` | the codex constants (incl. `CODEX_MCP_WRAPPER_FORMS`); `McpEntryClass` + `mcp_action`; the `plan_mcp` refactor onto them (behaviour-preservation: existing `plan_mcp_*` suite unchanged); `plan_codex_mcp` / `install_codex_mcp` / `codex_mcp_entry` / `codex_mcp_fallback_snippet`; the read's `NotFound`-vs-error split; the spelling-aware write; `parse_codex_features` / `codex_hooks_state`; the Codex arm's `mcp` outcome and its error boundary; `wire()`'s runner parameter, per-harness file name, wrote/would-write wording, one fallback wording, the three disclosure conditions and dry-run gating; `write_codex_activation`'s `HooksState` parameter and conditional step 1; `run_install:2645`; three stale doc comments (`RefreshOutcome:940`, `RefreshReport.mcp:1787`, the `wire` MCP block `:2851`) |
+| `src/boot.rs` | the codex constants (incl. `CODEX_MCP_WRAPPER_FORMS`); `McpEntryClass` + `mcp_action`; the `plan_mcp` refactor onto them (behaviour-preservation: existing `plan_mcp_*` suite unchanged); `plan_codex_mcp` / `install_codex_mcp` / `codex_mcp_entry` / `codex_mcp_fallback_snippet`; the read's `NotFound`-vs-error split; the table-like write; `parse_codex_features` / `codex_hooks_state`; the Codex arm's `mcp` outcome and its error boundary; `wire()`'s runner parameter, per-harness file name, wrote/would-write wording, one fallback wording, the three disclosure conditions and dry-run gating; `write_codex_activation`'s `Option<HooksState>` parameter and conditional step 1; `run_install:2645`; three stale doc comments (`RefreshOutcome:940`, `RefreshReport.mcp:1787`, the `wire` MCP block `:2851`) |
 | `src/install.rs` | `CaptureRunner` (`Command::output()` with `current_dir(cwd)`) and the default-injection point; `wire`'s production call site `install::run:414` |
 | `src/boot.rs` (tests) | the codex planner matrix, the decision-table test, the constants-agreement test, the five probe cases (one asserting the probe's `cwd`), the wire-level Claude-only assertion, the three disclosure-condition assertions, the dry-run wording assertion, the four existing `wire` call sites (`:6647`, `:6663`, `:6683`, `:6702`) and the `:5170` flip |
 | `tests/e2e_codex_install.rs` (new) | preservation + idempotence, create-from-absent, non-UTF-8 no-clobber, empty-`PATH` `Unknown(reason)` with the real runner |

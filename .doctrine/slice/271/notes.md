@@ -158,6 +158,25 @@ with step 1 omitted under `Enabled`; and whether `CODEX_MCP_WRAPPER_FORMS`
 membership survives a future wording change to a non-superset form (a different
 shell, say).
 
+### Fourth pass (RV-399 rounds 4, 2026-09-27) — check of the round-3 repairs
+
+The reviewer checked the repairs rather than the design: 10 verified, F-37
+contested, 2 new (F-43 minor, F-44 nit).
+
+- **F-37 contested, and rightly.** The round-3 repair added a hazard claim —
+  "InlineTable's `TableLike::insert` unwraps its argument to a `Value`, so
+  handing a `Table` to an inline parent PANICS" — and built a spelling adapter on
+  it. It is false: `Item::into_value` (item.rs:132-142) converts a `Table` with
+  `into_inline_table()` (table.rs:52); only `Item::None` errs. A single
+  `as_table_like_mut().insert(...)` already yields the container's spelling. The
+  sentence and the adapter are deleted. Lesson: do not infer a panic from a bare
+  `.unwrap()` — read the enum's other arms, the same depth the findings demand.
+- **F-43** folded in: `write_codex_activation` takes `Option<HooksState>`, where
+  `None` is the dry-run case and prints step 1 unconditionally.
+- **F-44** nits: `current = owned && ...` restored; a `CODEX_MCP_WRAPPER_FORMS`
+  normalise fixed-point assertion added; ISS-495 cited by id; the fallback
+  wording is "could not be interpreted".
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>

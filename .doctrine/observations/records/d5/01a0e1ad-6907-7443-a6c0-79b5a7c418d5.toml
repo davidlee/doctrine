@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e1ad-6907-7443-a6c0-79b5a7c418d5"
+recorded_at = "2026-09-27T07:03:53.351321607Z"
+kind = "friction"
+summary = "feedback: a source-derived hazard claim went into the design before the enum's other arms were checked"
+detail = "Answering RV-399 F-37, I read toml_edit's InlineTable TableLike::insert (inline_table.rs:585: 'self.insert(key, value.into_value().unwrap())') and inferred from the bare .unwrap() that an Item::Table would panic, then wrote that claim into design.md §5.3 and built a spelling adapter on it. The raiser contested it; Item::into_value (item.rs:132-142) has an Item::Table arm that converts via into_inline_table(), so only Item::None can reach the unwrap. The claim and the adapter were deleted. Reading one call site of a two-function pair is not verification; the cost was a false claim committed into an artefact and a contested round."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

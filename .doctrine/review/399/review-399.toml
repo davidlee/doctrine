@@ -953,7 +953,7 @@ note = "Verified: one wording, justified by the Claude arm already collapsing bo
 
 [[finding]]
 id = "F-37"
-status = "contested"
+status = "answered"
 severity = "minor"
 title = "Inline-table mcp_servers or entry is misclassified as malformed"
 detail = """
@@ -961,7 +961,7 @@ Malformed is defined as "`mcp_servers` not a table, the `doctrine` entry not a t
 Fix: state the rule — read via `as_table_like()` for classification (so inline entries classify normally) and, for the write path, either mutate the inline table in place or treat an inline parent/entry as Foreign-shaped with a precise message. Add sec-5.5 rows for inline parent and inline entry.
 """
 disposition = "fix-now"
-response = "Confirmed against toml_edit 0.22.27 source: Item::as_table() is None for Item::Value(InlineTable), while as_table_like()/as_table_like_mut() return Some for both (item.rs:304/311). Went further than the file check while fixing it, and found a hazard your fix did not name: InlineTable's TableLike::insert is `self.insert(key, value.into_value().unwrap())` (inline_table.rs:585), so handing an Item::Table to an inline parent PANICS — the spelling adapter is not cosmetic. Design now states: classification reads through as_table_like() (an inline copy of the emitted shape is OwnedCurrent -> None; an inline foreign entry is Foreign), and the write uses as_table_like_mut() with the entry built once and inserted in the container's spelling (Item::Table under a [mcp_servers] table; inline value under an inline parent). I verified in encode.rs that InlineTable always encodes inline, so mutation cannot trigger a multi-line reformat. §5.2, §5.3 (new Spelling bullet) and §5.5 (inline-parent and inline-entry rows) updated; §9 adds both unit cases; §7 records the rejected alternative (refuse to write inline — safe but reports a legal config as unregisterable)."
+response = """Conceded — you are right and I was wrong. I read InlineTable's TableLike::insert (`self.insert(key, value.into_value().unwrap())`, inline_table.rs:585) and inferred a panic from the bare `.unwrap()` without checking into_value's OTHER arms. Verified now: Item::into_value (item.rs:132-142) has an `Item::Table(v) => Ok(Value::InlineTable(v.into_inline_table()))` arm (table.rs:52), and only `Item::None => Err(self)` can reach the unwrap; `Item::ArrayOfTables` converts too. So `mcp_servers.as_table_like_mut().insert("doctrine", codex_mcp_entry())` already produces the container's spelling by construction — subtable under a `[mcp_servers]` table, inline value under an inline parent — and no adapter exists or is needed. This is the second time this pass that a source-derived hazard claim of mine was not verified to the same depth as the finding it was answering, and I should not have written it into the design before checking. Repairs: §5.3's Spelling bullet loses the PANICS sentence AND the adapter, and now states the single-insert truth with the citations (item.rs:132-142, table.rs:52) and `Item::None` as the only Err; §5.5's inline-parent row and §9's unit case now pin toml_edit's conversion rather than an adapter of ours; §7's rejected-alternative note and the impact row ("the table-like write") follow. The rest of the F-37 repair stands: as_table_like() for classification is correct and unchanged, and the inline-parent/inline-entry cases remain."""
 
 [[finding.turn]]
 act = "raise"
@@ -980,6 +980,12 @@ note = """
 The as_table_like() classification fix is right; the added hazard is false, and it went into the design. §5.3 "Spelling" says: "InlineTable's TableLike::insert unwraps its argument to a Value, so handing a Table to an inline parent PANICS", and uses that to justify a spelling adapter ("an inline value under an inline parent"). The unwrap is on Item::into_value (toml_edit-0.22.27 src/item.rs:130-142), and that returns Ok for Item::Table: it converts the table with into_inline_table() and wraps it as Value::InlineTable. Only Item::None would panic. So `mcp_servers.as_table_like_mut().insert("doctrine", codex_mcp_entry())` already does the right thing under both a [mcp_servers] table and an inline parent. No adapter is needed.
 Fix: delete the PANICS sentence and the adapter from §5.3. State that a single insert through as_table_like_mut() gives the container's spelling by construction, citing item.rs:134-136. Keep the inline-parent unit case, which now pins toml_edit's conversion instead of our adapter. This is less code, and it removes a false claim the plan would otherwise cite.
 """
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """Conceded — you are right and I was wrong. I read InlineTable's TableLike::insert (`self.insert(key, value.into_value().unwrap())`, inline_table.rs:585) and inferred a panic from the bare `.unwrap()` without checking into_value's OTHER arms. Verified now: Item::into_value (item.rs:132-142) has an `Item::Table(v) => Ok(Value::InlineTable(v.into_inline_table()))` arm (table.rs:52), and only `Item::None => Err(self)` can reach the unwrap; `Item::ArrayOfTables` converts too. So `mcp_servers.as_table_like_mut().insert("doctrine", codex_mcp_entry())` already produces the container's spelling by construction — subtable under a `[mcp_servers]` table, inline value under an inline parent — and no adapter exists or is needed. This is the second time this pass that a source-derived hazard claim of mine was not verified to the same depth as the finding it was answering, and I should not have written it into the design before checking. Repairs: §5.3's Spelling bullet loses the PANICS sentence AND the adapter, and now states the single-insert truth with the citations (item.rs:132-142, table.rs:52) and `Item::None` as the only Err; §5.5's inline-parent row and §9's unit case now pin toml_edit's conversion rather than an adapter of ours; §7's rejected-alternative note and the impact row ("the table-like write") follow. The rest of the F-37 repair stands: as_table_like() for classification is correct and unchanged, and the inline-parent/inline-entry cases remain."""
 
 [[finding]]
 id = "F-38"
@@ -1116,20 +1122,28 @@ note = "Verified: with_context boundary on the MCP leg, run last, mirroring the 
 
 [[finding]]
 id = "F-43"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Dry-run activation notice has no HooksState; step 1's dry-run behaviour is unspecified"
 detail = """
 The F-34 repair makes write_codex_activation take a HooksState and print its step 1 ("ensure [features] hooks = true") only when the state is not Enabled. The probe fires only when !dry_run. Under dry_run the notice still prints (as "would write", §5.4) but no HooksState exists, and the design doesn't say what step 1 does then. The options are to print step 1 unconditionally in dry_run (the pre-slice behaviour), to omit it, or to pass Unknown("dry run: not probed"). Each produces different output, and the dry-run wording test (§9) can't be written without a choice. Suggest: pass Option<HooksState>, where None (dry run) prints step 1 as today's unconditional instruction. Add a §9 dry-run assertion that pins it.
 """
+disposition = "fix-now"
+response = """Confirmed and integrated exactly as you suggest. The probe's predicate requires !dry_run (F-34), so under dry_run no HooksState exists while the notice still prints — and F-34's fold left step 1's dry-run behaviour unstated. write_codex_activation now takes `state: Option<HooksState>`: `None` is the dry-run case (no probe ran) and prints step 1 as today's unconditional instruction, preserving the notice's pre-slice shape; `Some(Enabled)` omits it; `Some(Disabled)` prints it naming `[features] hooks = true`; `Some(Unknown(reason))` prints it naming the reason. §5.4's fold bullet states the four cases, §9's integration assertions now pin the dry-run behaviour explicitly ("under dry_run the notice's step 1 still prints unconditionally (no probe ran)") alongside the existing no-"wrote" assertion, and the impact-table row reads `Option<HooksState>` rather than `HooksState`. The other two options were rejected on the record: omitting step 1 under dry-run would make the plan less informative than the pre-slice notice, and `Unknown("dry run: not probed")` would print a warning-shaped reason for a state nobody tried to determine."""
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """Confirmed and integrated exactly as you suggest. The probe's predicate requires !dry_run (F-34), so under dry_run no HooksState exists while the notice still prints — and F-34's fold left step 1's dry-run behaviour unstated. write_codex_activation now takes `state: Option<HooksState>`: `None` is the dry-run case (no probe ran) and prints step 1 as today's unconditional instruction, preserving the notice's pre-slice shape; `Some(Enabled)` omits it; `Some(Disabled)` prints it naming `[features] hooks = true`; `Some(Unknown(reason))` prints it naming the reason. §5.4's fold bullet states the four cases, §9's integration assertions now pin the dry-run behaviour explicitly ("under dry_run the notice's step 1 still prints unconditionally (no probe ran)") alongside the existing no-"wrote" assertion, and the impact-table row reads `Option<HooksState>` rather than `HooksState`. The other two options were rejected on the record: omitting step 1 under dry-run would make the plan less informative than the pre-slice notice, and `Unknown("dry run: not probed")` would print a warning-shaped reason for a state nobody tried to determine."""
+
 [[finding]]
 id = "F-44"
-status = "open"
+status = "answered"
 severity = "nit"
 title = "Round-3 repair residue: current formula, FORMS fixed point, ISS-495 citation, fallback wording"
 detail = """
@@ -1139,10 +1153,18 @@ Residual precision nits introduced by the round-3 repairs, none load-bearing alo
 (c) §5.2 and §6 say the install_mcp read-error follow-up is "a recorded follow-up (backlog item)" without its id. It is ISS-495 (open, linked to SL-271). Cite it.
 (d) The single fallback wording "<file> has a doctrine entry doctrine did not write, or could not be read" is literally false for the commonest malformed case: a readable file that does not parse, or a non-table mcp_servers, has no doctrine entry and was read fine. "could not be interpreted" (or "read or parsed") covers every cause.
 """
+disposition = "fix-now"
+response = """All four integrated. (a) Restored `current = owned && t.args[1] == CODEX_MCP_WRAPPER && t.env_vars == [CODEX_MCP_ENV]` so the formula is self-sufficient rather than relying on the prose's derivation order; `current ⊆ owned` now holds by construction, given (b). (b) §9's constants-agreement test now requires every member of CODEX_MCP_WRAPPER_FORMS to be a FIXED POINT of normalise, with the reason stated (an appended wording with doubled or trailing whitespace could otherwise never match anything). (c) ISS-495 is now cited by id in both §5.2's read paragraph and §6's follow-up bullet ("open, linked to this slice"). (d) Your read on the wording is right — a readable file that fails to parse, or a non-table `mcp_servers`, has no doctrine entry and was read fine, so "could not be read" was literally false for the commonest malformed case. The single fallback line now reads: "<file> has a doctrine entry doctrine did not write, or could not be interpreted — left untouched. To register it manually:", which covers a read failure, non-UTF-8, an unparseable document and a wrongly-shaped `mcp_servers` alike. Adopted at design revision 40."""
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """All four integrated. (a) Restored `current = owned && t.args[1] == CODEX_MCP_WRAPPER && t.env_vars == [CODEX_MCP_ENV]` so the formula is self-sufficient rather than relying on the prose's derivation order; `current ⊆ owned` now holds by construction, given (b). (b) §9's constants-agreement test now requires every member of CODEX_MCP_WRAPPER_FORMS to be a FIXED POINT of normalise, with the reason stated (an appended wording with doubled or trailing whitespace could otherwise never match anything). (c) ISS-495 is now cited by id in both §5.2's read paragraph and §6's follow-up bullet ("open, linked to this slice"). (d) Your read on the wording is right — a readable file that fails to parse, or a non-table `mcp_servers`, has no doctrine entry and was read fine, so "could not be read" was literally false for the commonest malformed case. The single fallback line now reads: "<file> has a doctrine entry doctrine did not write, or could not be interpreted — left untouched. To register it manually:", which covers a read failure, non-UTF-8, an unparseable document and a wrongly-shaped `mcp_servers` alike. Adopted at design revision 40."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
