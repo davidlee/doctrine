@@ -137,7 +137,13 @@ The four cases, per slot:
 | dead, already reported | 2 | 1 (first recording) |
 
 In every row each death is reported once, and between two deaths of a slot
-there is an `act_recorded` — `DEC-336`'s invariant. An act live at `prior`,
+there is an `act_recorded` — `DEC-336`'s invariant, with one pre-existing
+exception: a **revival**. An act dead by coverage whose coverage is restored
+(the section edited back) becomes live again with no row, so its next death is
+reported with no `act_recorded` between. This slice neither causes nor closes
+it (sec-6).
+
+An act live at `prior`,
 killed by a declare earlier in the same apply and then re-recorded, is absent
 from the coverage difference (the replacement fills the slot) and reported
 once, by displacement.
@@ -160,11 +166,12 @@ the act voided without its cause.
   (`DEC-239`). `payload_terms` is empty: the subject is the node, and subject
   plus kind is complete (`DEC-237`). No term means no change to the widest
   payload, so the projection-bounds arithmetic does not move.
-- **Emission.** In the node-update arm of `declare_node`, after the sparse
-  question resolves: one row when the resolved text differs from
-  `existing.question()`. None for a same-text re-declaration; none at creation
-  (`node_created` covers it). A `null` question clears the text, which is a
-  change and emits the row.
+- **Emission.** In `declare_node`'s one create-or-update path (`DEC-248`),
+  after the sparse question resolves: one row when the resolved text differs
+  from `existing.question()`. The rule needs no creation branch: a new node's
+  `existing` is seeded from its own declaration, so its question never differs
+  (`node_created` covers creation). None for a same-text re-declaration; a
+  `null` emits only when it clears a non-empty question.
 - **The stale comment** at `run.rs:1467-1470` ("state, not delta") is replaced
   with a pointer to `DEC-335`.
 
@@ -179,15 +186,14 @@ parses. No stored state type changes.
 |---|---|
 | `src/design_run/refusal.rs` | `Refusal::FindingBlockingNull { id }` and its text; `SubmissionExpired`'s remedy clause |
 | `src/design_run/submission.rs` | `Declaration::finding_blocking_null()`; `Batch::validate` calls it after `inert_at_state`; docs of `finding_blocks` and `nulled_keys` corrected |
-| `src/design_run/run.rs` | `reportable` set threaded through `record_act` / `record_declaration` → `admit_and_record`, gating and extending on each recording; `invalidation_rows` doc; `rehearse_proposal` doc; `declare_node` emits `NodeQuestionChanged` on changed text; the stale "state, not delta" comment |
+| `src/design_run/run.rs` | unit criteria for the displacement gate and the re-word row, in its test module beside `run_with_a_map()` and the existing displacement tests; `reportable` set threaded through `record_act` / `record_declaration` → `admit_and_record`, gating and extending on each recording; `invalidation_rows` doc; `rehearse_proposal` doc; `declare_node` emits `NodeQuestionChanged` on changed text; the stale "state, not delta" comment |
 | `src/design_run/change_log.rs` | `ChangeEvent::NodeQuestionChanged` — `READABLE`, `EMITTABLE`, `as_str`, `payload_terms` (empty) |
 | `src/design_run/payload_contract.rs` | `Presence::OptionalNullRefused` and its rendering; the finding-home `blocking` row uses it |
 | `install/design-payload-contract.md` | regenerated from the renderer |
-| `src/design_run/tests.rs` | unit criteria for the displacement gate and the re-word row |
 | `tests/e2e_design_state.rs` | payload-path criteria for both refusals; `every_event_fixture` gains a re-word apply |
 | `tests/e2e_design_delegation.rs` | `a_proposal_may_send_a_findings_blocking_null` inverted: the proposal is refused and not stored |
 
-Design-target selectors: the nine paths above.
+Design-target selectors: the eight paths above.
 
 <!-- doctrine:section sec-5 -->
 ## Verification
@@ -230,8 +236,10 @@ Each criterion fails before its fix (red first).
 - **Signature widening.** `record_act` / `record_declaration` gain a parameter.
   Private to `run.rs`; no public surface moves.
 - **A revived act.** An act dead at `prior` whose coverage is later restored
-  (content edited back) becomes live again with no row. Pre-existing, outside
-  this slice; noted, not fixed.
+  (content edited back) becomes live again with no row, so its next death
+  follows its last with no `act_recorded` between — the one exception to
+  `DEC-336`'s invariant (sec-3). Pre-existing, outside this slice; noted, not
+  fixed.
 - **Residual in the cluster.** `IDE-057` (traversal rows) remains the open case
   of `REQ-478`; batch fold order (`ISS-356`/`ISS-360`) is `RFC-031` clump 2.
 

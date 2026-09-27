@@ -204,7 +204,7 @@ note = "Verified. Presence has four arms (payload_contract.rs:492-515); every Op
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "DEC-336 invariant overclaims: a revived act can die twice with no act_recorded between"
 detail = '''
@@ -213,14 +213,26 @@ Expected: the invariant SL-272 sec-3 and DEC-336 state -- 'between two deaths of
 Observed: sec-6 names the revival residual (an act dead at prior whose coverage is restored becomes live again with no row) but does not reconcile it with the invariant, which it breaks. live_acts (run.rs:2120-2156) is a pure function of current fingerprints, so: r1 act A live; r2 edit a covered section -> A leaves live_acts, invalidation_rows reports act_invalidated; r3 edit it back -> A re-enters live_acts silently; r4 edit again -> A in live_acts(prior) \ live_acts(next), a second act_invalidated for the same (kind, id) with no act_recorded between. The reportable set also seeds from live_acts_before, so a displacement at r4 would report it the same way. Behaviour is pre-existing and out of scope; the defect is the claim.
 
 Repair: qualify the invariant in sec-3 and DEC-336 ('absent revival, sec-6'), or name revival as the invariant's known exception. No code change.'''
+disposition = "fix-now"
+response = """
+Verified: revival makes an act live with no row, so its next coverage death follows the last with no act_recorded between. Repaired (design rev 27): sec-3 states the invariant with revival as its one pre-existing exception, sec-6 connects the revival residual to that claim, and DEC-336 carries the same limit.
+"""
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Verified: revival makes an act live with no row, so its next coverage death follows the last with no act_recorded between. Repaired (design rev 27): sec-3 states the invariant with revival as its one pre-existing exception, sec-6 connects the revival residual to that claim, and DEC-336 carries the same limit.
+"""
+
 [[finding]]
 id = "F-6"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "node_question_changed sited in an 'update arm' declare_node no longer has"
 detail = """
@@ -229,24 +241,48 @@ Expected: sec-3's emission site matches declare_node's shape.
 Observed: sec-3 puts emission 'in the node-update arm of declare_node'. There is no update arm: DEC-248 made declare_node one row-producing diff over two priors (run.rs:1440-1464), and for a new node the prior is created_prior, which seeds the question from the declaration (run.rs:1414-1417). Comparing the resolved question with existing.question() on that one path already emits nothing at creation, which is how needs_added was fixed (ISS-450). An implementer who follows the text and gates on held.is_some() brings back the create/update split DEC-248 removed. Also, 'a null question clears the text, which is a change and emits the row' holds only when the held text is non-empty; the text-difference rule handles that case, but the sentence says otherwise.
 
 Repair: site the emission on the one diff path, compared with the prior, and say no row at creation follows from created_prior's seeding. Reword the null sentence to 'clearing a non-empty question is a change'."""
+disposition = "fix-now"
+response = """
+Verified: declare_node has one create-or-update path (run.rs:1450-1475, DEC-248); a new node's existing is seeded from its declaration, so the differs rule already emits nothing at creation. Repaired (design rev 27): sec-3 places emission on that one path with no creation branch, and the null sentence now says a null emits only when it clears a non-empty question.
+"""
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Verified: declare_node has one create-or-update path (run.rs:1450-1475, DEC-248); a new node's existing is seeded from its declaration, so the differs rule already emits nothing at creation. Repaired (design rev 27): sec-3 places emission on that one path with no creation branch, and the null sentence now says a null emits only when it clears a non-empty question.
+"""
+
 [[finding]]
 id = "F-7"
-status = "open"
+status = "answered"
 severity = "nit"
 title = "Displacement-gate unit criteria filed under tests.rs; VT-3's fixture lives in run.rs"
 detail = """
 Observed: sec-4 lists src/design_run/tests.rs for 'unit criteria for the displacement gate', but VT-3 is written over run_with_a_map(), a private helper in run.rs's #[cfg(test)] mod tests (run.rs:2369), where the ISS-367 displacement tests also sit. The criteria can't be written in tests.rs as specified without moving or duplicating the fixture.
 
 Repair: point the sec-4 row for the displacement gate (and VT-3) at run.rs's test module. run.rs is already a selector."""
+disposition = "fix-now"
+response = """
+Verified: run_with_a_map is private to run.rs's test module (run.rs:2369), beside the ISS-367 displacement tests. Repaired (design rev 27): sec-4 files both unit criteria (displacement gate, re-word row) in run.rs's test module; tests.rs is dropped from code impact and from the design-target selectors.
+"""
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Verified: run_with_a_map is private to run.rs's test module (run.rs:2369), beside the ISS-367 displacement tests. Repaired (design rev 27): sec-4 files both unit criteria (displacement gate, re-word row) in run.rs's test module; tests.rs is dropped from code impact and from the design-target selectors.
+"""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.

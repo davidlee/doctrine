@@ -35,10 +35,6 @@ selector = "src/design_run/change_log.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/design_run/tests.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "tests/e2e_design_delegation.rs"
 intent = "design-target"
 
