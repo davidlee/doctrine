@@ -1141,6 +1141,13 @@ fn every_event_fixture() -> Fixture {
         "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"blocking\":true}}]}}",
         fixture.envelope("block")
     ));
+    // node_question_changed (`SL-272` sec-3, `DEC-335`) — a re-word of a held
+    // node. Before any act is recorded, so the re-faced map voids nothing the
+    // later rungs rely on.
+    fixture.apply(&format!(
+        "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q, reworded\"}}]}}",
+        fixture.envelope("reword")
+    ));
     // review_attested
     fixture.apply(&format!(
         "{{{},\"declare\":[{{\"subject\":\"att-1\",\"attests\":\"sec-1\"}}]}}",

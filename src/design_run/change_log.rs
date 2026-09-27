@@ -162,6 +162,15 @@ pub(crate) enum ChangeEvent {
     /// construction (a snapshot keeps no history to diff) and *which way* the mark
     /// moved is what the next reader of the feed is asking.
     NodeBlockingChanged,
+    /// A held node's question was re-worded (`SL-272` sec-3, `DEC-335`,
+    /// `REQ-478`).
+    ///
+    /// Emitted only when the resolved text differs from the held text, never at
+    /// creation — [`ChangeEvent::NodeCreated`] covers that. Term-free: the
+    /// subject is the node, and subject plus kind is complete (`DEC-237`). Under
+    /// `DEC-301` a re-word re-faces the user's acts, so without this row the log
+    /// would show an act voided with no cause.
+    NodeQuestionChanged,
     NeedsAdded,
     NeedsRemoved,
     StageMoved,
@@ -241,11 +250,12 @@ impl ChangeEvent {
     /// within the payload budget, so the widest-name assert and the containment
     /// check both quantify over this roster rather than over what a writer may
     /// still produce ([`ChangeEvent::EMITTABLE`], `sec-2`).
-    pub(crate) const READABLE: [ChangeEvent; 24] = [
+    pub(crate) const READABLE: [ChangeEvent; 25] = [
         ChangeEvent::NodeCreated,
         ChangeEvent::NodeLifecycle,
         ChangeEvent::NodeReparented,
         ChangeEvent::NodeBlockingChanged,
+        ChangeEvent::NodeQuestionChanged,
         ChangeEvent::NeedsAdded,
         ChangeEvent::NeedsRemoved,
         ChangeEvent::StageMoved,
@@ -281,11 +291,12 @@ impl ChangeEvent {
     /// Written out rather than derived from `READABLE`: a const-block copy trips
     /// `clippy::indexing_slicing`, and the subset assert is what holds the two
     /// declarations together.
-    pub(crate) const EMITTABLE: [ChangeEvent; 23] = [
+    pub(crate) const EMITTABLE: [ChangeEvent; 24] = [
         ChangeEvent::NodeCreated,
         ChangeEvent::NodeLifecycle,
         ChangeEvent::NodeReparented,
         ChangeEvent::NodeBlockingChanged,
+        ChangeEvent::NodeQuestionChanged,
         ChangeEvent::NeedsAdded,
         ChangeEvent::NeedsRemoved,
         ChangeEvent::StageMoved,
@@ -323,6 +334,7 @@ impl ChangeEvent {
             ChangeEvent::NodeLifecycle => "node_lifecycle",
             ChangeEvent::NodeReparented => "node_reparented",
             ChangeEvent::NodeBlockingChanged => "node_blocking_changed",
+            ChangeEvent::NodeQuestionChanged => "node_question_changed",
             ChangeEvent::NeedsAdded => "needs_added",
             ChangeEvent::NeedsRemoved => "needs_removed",
             ChangeEvent::StageMoved => "stage_moved",
@@ -422,9 +434,13 @@ impl ChangeEvent {
             ChangeEvent::FindingRaised | ChangeEvent::FindingDisposed => {
                 &[(PayloadKey::Section, ValueKind::Token)]
             }
-            // Run-wide and term-free: an acceptance has no run-local id at all —
-            // its basis and authority are snapshot state, not delta.
-            ChangeEvent::LegacyAcceptanceAttested => &[],
+            // Term-free, for two reasons. The legacy acceptance is run-wide: it
+            // has no run-local id at all, and its basis and authority are
+            // snapshot state, not delta. A re-word's subject is the node, and
+            // subject plus kind is the whole answer (`DEC-237`, `DEC-335`); the
+            // text is snapshot state, and no term leaves the widest payload
+            // where it was.
+            ChangeEvent::LegacyAcceptanceAttested | ChangeEvent::NodeQuestionChanged => &[],
             // Both policies are closed tokens rendered by name, so the row reads
             // as the change it is — `human-only → adversarial-only` — rather than
             // requiring the reader to fetch the run to learn what moved.

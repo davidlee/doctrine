@@ -1503,13 +1503,20 @@ fn declare_node(
     let mut lifecycle = existing.lifecycle();
     // The three sparse states, on the one prose scalar a node carries: omission
     // PERSISTS the prior question, `null` clears it, a value replaces it. A
-    // question change is not a material change (it is not a member of the closed
-    // §(d) vocabulary), so it produces no row — it is state, not delta.
+    // changed text is a recorded mutation and owes a row (`REQ-478`, `DEC-335`);
+    // a creation owes none by the same seeded-prior shape as the judgement below.
     let question = declaration
         .question_declaration()
         .clone()
         .apply(Some(existing.question().to_owned()))
         .unwrap_or_default();
+    if question != existing.question() {
+        rows.push(Pending::about(
+            ChangeEvent::NodeQuestionChanged,
+            id,
+            Vec::new(),
+        )?);
+    }
 
     match declaration.parent_declaration() {
         Sparse::Value(declared) if parent.as_ref() != Some(declared) => {
@@ -3296,5 +3303,61 @@ mod tests {
             (2, 2),
             "an acceptance live at prior: its death and the first recording's"
         );
+    }
+
+    /// `SL-272` `VT-4` (`ISS-488`, `DEC-335`) — a re-word of a held node's
+    /// question emits exactly one `node_question_changed` naming the node; the
+    /// same text, a creation, and an omitted question emit none; a `null` that
+    /// clears a non-empty question is a re-word too.
+    #[test]
+    fn a_reworded_question_emits_one_row() {
+        let none = DerivedInput::default();
+        let asked = |snapshot: &DesignSnapshot| -> Vec<String> {
+            rows_at(snapshot, snapshot.run.revision)
+                .iter()
+                .filter(|row| row.event == ChangeEvent::NodeQuestionChanged)
+                .filter_map(|row| row.subject.as_ref().map(ToString::to_string))
+                .collect()
+        };
+        let step = |prior: &DesignSnapshot, json: &str| {
+            next_apply(prior, declaring_only(prior, &[json]), &none)
+        };
+        let held = run_with_a_map();
+
+        let created = step(
+            &held,
+            r#"{"subject": "inq-2", "question": "new?", "blocking": false}"#,
+        );
+        assert_eq!(
+            asked(&created),
+            Vec::<String>::new(),
+            "a creation owes none"
+        );
+
+        let same = step(
+            &created,
+            r#"{"subject": "inq-1", "question": "what governs this?"}"#,
+        );
+        assert_eq!(
+            asked(&same),
+            Vec::<String>::new(),
+            "the same text is no re-word"
+        );
+
+        let omitted = step(&same, r#"{"subject": "inq-1", "lifecycle": "deferred"}"#);
+        assert_eq!(
+            asked(&omitted),
+            Vec::<String>::new(),
+            "an omission persists"
+        );
+
+        let reworded = step(
+            &omitted,
+            r#"{"subject": "inq-1", "question": "what rules this?"}"#,
+        );
+        assert_eq!(asked(&reworded), ["inq-1"], "one row, naming the node");
+
+        let cleared = step(&reworded, r#"{"subject": "inq-1", "question": null}"#);
+        assert_eq!(asked(&cleared), ["inq-1"], "a clearing `null` re-words");
     }
 }
