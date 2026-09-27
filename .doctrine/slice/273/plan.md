@@ -55,6 +55,13 @@ audit's work, not a phase.
 
 ## Notes
 
+- **Doctor on this repo.** The leg walks our own `.doctrine/**`, so SL-273's
+  design examples (`lib:reference/glossary.md#x`, `lib:reference/x.md`, …) will
+  show as `LibCitation` warnings. Warnings do not fail `doctor`'s exit code or
+  `just validate`; they are the check working, and PHASE-01 VA-1 records them.
+- **Mode-000 fixture** (PHASE-01 EX-9) relies on a non-root test run; the jail
+  runs uid 1000.
+
 - A handover before PHASE-03 is expected; phases 3–4 run on DeepSeek workers.
 - If PHASE-02 proves too large for one sitting, the natural split is the
   Revision + rename + repair versus the owner-map cuts and teaching. Splitting
