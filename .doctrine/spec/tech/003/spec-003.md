@@ -36,6 +36,11 @@ The system decomposes into these containers:
   context.
 - **Dispatch & worktree** (SPEC-012) — the isolation and orchestrator-sole-writer
   machinery for concurrent work.
+- **Design run engine** (SPEC-029) — the durable, recoverable coordination state
+  behind a slice's design workflow: stage gates, attested acts, and a bounded
+  read model.
+- **Review ledger** (SPEC-032) — the turn-based adversarial review ledger: its
+  act table, derived status, and the blocker gates other kinds close on.
 - **Priority engine** (SPEC-001) — the derived, explainable "what next" view over
   the entity graph.
 - **Reconciliation** (SPEC-002) — the two-tier authored-status-vs-observed-coverage

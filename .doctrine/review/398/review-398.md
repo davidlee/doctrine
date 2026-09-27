@@ -76,3 +76,24 @@ undetectable.
   wording; SPEC-003 container inventory gains SPEC-029 and SPEC-032).
 - `F-4`: SPEC-032 — status `draft` → `active` (authored directly, REV-035
   precedent; anchors resolve).
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- Selector registry: removed design-target selectors `src/commands/show.rs` and
+  `plugins/doctrine/skills/walkthrough/SKILL.md`; design.md sec-7 row mirrored
+  (`F-1`). `slice conformance 268` reports no undelivered selector.
+- design.md sec-3: `FindingState { status: Vocab<FindingStatus> }`; `warnings`
+  omitted when empty. sec-5: `Primed.skipped`, special files excluded, an
+  all-skipped slice not degraded. sec-6: IMP-479 closed `wont-do` (`F-3`).
+
+### REVs completed
+- REV-064: approved, applied, `done`. ADR-007 D-C5/D-C8/D-C10 and knock-ons;
+  SPEC-003 inventory gains SPEC-029 and SPEC-032 (`F-4`). Narrative in
+  revision-064.md.
+- SPEC-032: `draft` → `active` (`F-4`).
+
+### Aligned / follow-up
+- `F-2` aligned (no write). `F-5` follow-up: ISS-494.
+
+Reconcile pass complete — handoff to /close.

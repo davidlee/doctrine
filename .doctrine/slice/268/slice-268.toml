@@ -63,10 +63,6 @@ selector = "src/input.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/commands/show.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "src/main.rs"
 intent = "design-target"
 
@@ -120,10 +116,6 @@ intent = "design-target"
 
 [[selector]]
 selector = "plugins/doctrine/skills/plan/SKILL.md"
-intent = "design-target"
-
-[[selector]]
-selector = "plugins/doctrine/skills/walkthrough/SKILL.md"
 intent = "design-target"
 
 [[selector]]

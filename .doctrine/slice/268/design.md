@@ -302,8 +302,8 @@ only the additive `defects` field (below).
 
 **Unknown status (D15).** `FindingStatus::parse(&str) -> Result<FindingStatus,
 Unknown>` replaces `parse_finding_status`. The derived reads hold a
-`FindingState { status: Option<FindingStatus>, raw }`, where `None` is out of
-vocabulary:
+`FindingState { status: Vocab<FindingStatus> }`, where `Unknown(raw)` is out
+of vocabulary:
 
 - it reads **non-terminal**: it keeps the review `active` and counts toward
   every blocker predicate as non-terminal;
@@ -336,7 +336,7 @@ vocabulary; gating as blocker"*. Each read surface renders it on its caller's
 channel:
 
 - `review show`/`status`: a `warning:` line per defect in `formatted`, plus a
-  `warnings` array in JSON and MCP output;
+  `warnings` array in JSON and MCP output, omitted when there are none;
 - `review list`: the list output carries a structured `warnings` array, each
   entry naming the RV (RV-396 `F-2`). The CLI prints it to stderr so the table
   cells stay single-valued. `--json` and the MCP `review_list` response carry it
@@ -451,7 +451,7 @@ this conclude ran.
 In both cases, under the prime lock, it removes any `cache.toml` left by an
 earlier successful prime, so `status` reports no cache instead of a stale
 `current` (RV-396 `F-6`). It then returns `Primed { tracked_count: 0, degraded:
-Some(reason), cleared: bool }`, and prints `primed nothing: <reason>` (plus
+Some(reason), cleared: bool, skipped }`, and prints `primed nothing: <reason>` (plus
 `removed the previous cache` when one existed) on stdout, exit 0 (STD-003:
 disclosed, not silent). The MCP output carries `degraded`. A primed
 slice with selectors behaves as today.
@@ -463,10 +463,12 @@ filter:
 |---|---|
 | absent on disk | kept (absence ⇒ stale, R1) |
 | a regular file | kept |
-| a directory, or a symlink (to anything) | excluded, and listed on a `skipped non-file selector:` line in the prime output |
+| a directory, a symlink (to anything), or another special file (fifo, socket, device) | excluded, and listed on a `skipped non-file selector:` line in the prime output |
 
 The check uses `symlink_metadata` on the invoking tree, so a symlink is never
-followed.
+followed. A slice whose selectors are all skipped is not degraded: it writes
+an empty cache and lists the skips. `Primed.skipped` carries that list and is
+omitted when empty.
 
 D-C10 is amended to this selector model in the REV (sec-6). The prose tier and
 `domain_map` are retired.
@@ -495,7 +497,8 @@ D-C10 is amended to this selector model in the REV (sec-6). The prose tier and
 
 It is applied at reconcile.
 
-**D12.** `IMP-479` (the reverse index) is closed as not needed until measured.
+**D12.** `IMP-479` (the reverse index) is closed `wont-do`: not needed until
+measured, and it reopens on measurement.
 
 **Guidance, and the bounded review (DEC-320).** Phase work edits:
 
@@ -543,7 +546,7 @@ design-target`):
 | `src/mcp_server/tools.rs` | `review_*` schemas and arms: `basis`, `note`, `route`, aliases, `review_amend`, `review_reopen`, `warnings` |
 | `src/commands/cli.rs` | `Command::Review` import path |
 | `src/commands/design.rs` | import paths; prints `PassFacts.defects` warnings in the projection and gate admission |
-| `src/commands/guard.rs`, `src/commands/show.rs` | import paths; `guard`'s write-class table gains `amend`/`reopen` |
+| `src/commands/guard.rs` | import paths; `guard`'s write-class table gains `amend`/`reopen` |
 | `src/main.rs` | write-class test table |
 | `src/slice.rs` | close gate: import path; renders `BlockerRef.reason` |
 | `src/catalog/scan.rs` | import path; the status overlay pushes defect diagnostics |

@@ -378,3 +378,13 @@ Name the containers Doctrine is composed of — the entity engine, spec composit
 - **Priority engine** (SPEC-001) — the derived, explainable "what next" view over
   the entity graph.
 ````
+
+## Reconcile narrative
+
+- [RV-398 `F-4`]: ADR-007 still described the v1 ledger. The D-C5, D-C8 and
+  D-C10 replacements and the D-C2, D-C4, schema-shape, transition-graph and
+  close-gate knock-ons were landed verbatim from the After blocks above.
+- [RV-398 `F-4`]: SPEC-003's `responsibilities[0]` and Overview bullets gained
+  the design run engine (SPEC-029) and the review ledger (SPEC-032).
+- SPEC-032 moved `draft` → `active` by direct edit (not a change row; REV-035
+  precedent).
