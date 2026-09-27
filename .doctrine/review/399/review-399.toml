@@ -22,6 +22,11 @@ act = "conclude"
 role = "raiser"
 note = "Second adversarial pass over the revised design (rev 31 -> 36), attacking the first pass's fixes and the notes' 'further pass would probe' list: 1 blocker (concat! cannot compose over consts), 7 major (harness-blind disclosure predicate; strict-ownership contradictions; unguarded args indexing; whitespace-fragile wrapper pattern duplicating is_doctrine_program; abspath-vs-foreign contradiction; classifier not wired into the Claude arm; unnamed CaptureRunner and missing call sites), 7 minor, 2 nit. All 17 disposed fix-now and verified at rev 38."
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Third adversarial pass over design.md (post rounds-2 revision), attacking the fixes and the notes' third-pass probe list: 4 major (ownership formula collapses to equality so the Refreshed edge rows are unreachable; env_vars refresh clobbers user lists; hooks probe keyed to the MCP outcome not the hook write; read errors unspecified so an unreadable config.toml is overwritten), 6 minor, 1 nit. F-32..F-42 open for the responder."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-271"
 
@@ -796,6 +801,167 @@ response = "Applied: a codex-edge `CODEX_MCP_SERVER_KEY` is defined, with the co
 act = "verify"
 role = "raiser"
 note = "Verified at design rev 38: Applied: a codex-edge `CODEX_MCP_SERVER_KEY` is defined, with the constants test pinning it equal to `MCP_SERVER_KEY` and recording why they must match (one server, two harnesses) "
+
+[[finding]]
+id = "F-32"
+status = "open"
+severity = "major"
+title = "Ownership formula reduces to string equality; the Refreshed edge rows are unreachable"
+detail = '''
+sec-5.2's formula makes `is_doctrine_wrapper_line(normalise(l))` true iff `normalise(l) == format!("exec \"{}\" {}", PORTABLE_EXEC, CODEX_MCP_SERVE_ARGS)` (program "must BE PORTABLE_EXEC"), i.e. iff `normalise(l) == CODEX_MCP_WRAPPER`. `current` then re-tests the same equality. Consequences, each contradicting sec-5.5's edge table and sec-9's unit list:
+(a) "wrapper from an earlier doctrine wording -> Refreshed" is unreachable: any other wording fails the owned test, so it is Foreign. This is exactly the false negative the notes' pass-1 probe list warned of (stranding our own older wording); the first time doctrine changes the wrapper, every installed entry becomes "foreign" and nags forever.
+(b) "wrapper with stray whitespace -> Refreshed" is also wrong: normalise makes it equal, so it is OwnedCurrent -> None, no write (arguably fine, but the table and sec-9 assert Refreshed; a test written to the table fails against an implementation written to the formula).
+(c) The quoted-span "program extraction" is dead machinery: with the abspath arm gone it reduces to string equality after normalise.
+So the only reachable OwnedStale input is a bad env_vars. Fix: decide explicitly. Either (1) ownership = normalised equality with a named set of historic wordings (today: just the current one), current = byte-equality of args[1] AND env_vars — then whitespace variants refresh, and future wording changes add to the set; or (2) drop "earlier wording" and "whitespace -> Refreshed" from the tables and delete the extraction step. Either way the formula, sec-5.5 table and sec-9 list must agree.
+'''
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-33"
+status = "open"
+severity = "major"
+title = "env_vars: a stale refresh clobbers a user's list; extra elements tolerated"
+detail = """
+Ownership admits any `env_vars` value (keys subset of {command,args,env_vars}); `current` requires "an array containing CODEX_MCP_ENV". Two inconsistencies with Principle 4 ("strict ownership ... doctrine heals its own output, never a user's edit"):
+(a) Clobber: `env_vars = ["FOO"]`, `env_vars = "DOCTRINE_BIN"` (wrong type) or `env_vars = []` classify OwnedStale and are rewritten to `["DOCTRINE_BIN"]`, silently dropping the user's forwarded variable. Doctrine never emitted any of these; they are user edits.
+(b) Looseness: `env_vars = ["DOCTRINE_BIN", "FOO"]` is OwnedCurrent — an extra element is tolerated while an extra key is foreign. Strict for keys, loose for elements, and destructive when the element is missing.
+The only env_vars doctrine has ever emitted is absent (none, pre-this-slice) or exactly ["DOCTRINE_BIN"]. Proposal: owned requires env_vars absent OR exactly equal to the emitted array; anything else is Foreign (left alone, snippet printed). current requires exact equality. That keeps the missing-whitelist refresh (the Dead-override risk mitigation) without rewriting a user's list. Update sec-5.2 formula, sec-5.5 table ("env_vars missing/short -> Refreshed" becomes "missing -> Refreshed; any other value -> Foreign") and sec-9.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-34"
+status = "open"
+severity = "major"
+title = "Hooks probe is keyed to the MCP outcome, not the hook write; activation notice left contradictory"
+detail = """
+sec-5.4's disclosure predicate fires the hooks probe iff `h == Codex && report.mcp in {Wired, Refreshed} && !dry_run`. But `[features] hooks` gates codex HOOKS, not MCP servers, and DEC-329's own warning text is "the SessionStart/PreToolUse hooks this install just wired will not fire". The trigger is keyed to the wrong leg:
+- hooks.json newly wired, config.toml entry already current -> no probe, no warning, though the hooks just written are dead;
+- hooks.json already current, MCP entry refreshed -> probe and warn about hooks nobody just wired.
+wire() already computes the right signal: `codex_hook_written` (boot.rs:2788-2799), which gates write_codex_activation.
+Second, the design leaves write_codex_activation (boot.rs:2684) unchanged, whose step 1 unconditionally says "Ensure [features] hooks = true in .codex/config.toml" and step 2 names the trust prompt. On a first install the operator gets that instruction, plus the new trust caveat (duplicating step 2), plus a hooks warning — and when the probe says Enabled, DEC-329 says "say nothing", yet step 1 still says it. Proposal: key the probe on `codex_hook_written` and fold the probe result into the activation notice (step 1 printed only when the state is not Enabled, with the reason when Unknown); the MCP leg prints its wrote-line and, only if the activation notice did not already print, the trust caveat. Update sec-5.1 diagram, sec-5.4 predicate, sec-9 wire-level cases, and the impact table (write_codex_activation changes shape, not just dry-run wording).
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-35"
+status = "open"
+severity = "major"
+title = "Read errors unspecified; mirroring install_mcp's .ok() overwrites an unreadable config.toml"
+detail = """
+The design specifies the read only as "read (absent -> None)" (sec-5.4) and says the leg mirrors plan_mcp/install_mcp. install_mcp does `fs::read_to_string(&path).ok()` (boot.rs:2089): ANY read error becomes None, i.e. "file absent". For .mcp.json that is tolerable; for .codex/config.toml — a user-owned file holding model, profiles, [features], other servers — it is a clobber path: a config.toml containing a non-UTF-8 byte (read_to_string -> InvalidData), or any other non-NotFound error followed by a successful write, plans Absent -> Wired and write_atomic replaces the whole file with a single [mcp_servers.doctrine] table. That violates Invariant 4 ("a file that does not parse ... is never rewritten"; non-UTF-8 is not valid TOML) and Principle 5.
+Fix: specify that only ErrorKind::NotFound maps to None; every other read error is Malformed (PrintedFallback, file untouched, reason disclosed). Add a sec-5.5 edge row and a unit/integration case (write a file with an invalid UTF-8 byte; assert bytes unchanged + fallback line). Worth the same fix on install_mcp as a noted follow-up (backlog), not silently.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-36"
+status = "open"
+severity = "minor"
+title = "PrintedFallback cannot carry the foreign-vs-malformed wording the design prescribes"
+detail = """
+sec-5.4 prescribes two wordings — malformed: "PrintedFallback with a TOML snippet"; foreign: "the same path with the 'left untouched' wording" — while also saying "The outcome type is unchanged; the design adds no ... variant". RefreshOutcome::PrintedFallback carries only { hook_file, snippet } (boot.rs:948), and install_codex_mcp collapses both into it, so wire() cannot tell which wording to print. Either the plan invents a discriminator ad hoc (a parallel channel), or both cases print one wording and the sec-5.2 message list is unimplementable. Also unstated: whether the Claude arm's existing "foreign or malformed 'doctrine' entry" wording (boot.rs:2869) changes.
+Related: a Foreign entry prints "register manually if it is not yours" plus the snippet on EVERY install. Under the strict rule (extra key => foreign), a user who adds `startup_timeout_sec` or `enabled = false` to our entry — i.e. it IS theirs-from-ours — gets a perpetual instruction that is wrong for them. "Stable" is not the same as "useful".
+Fix: pick one — (a) one neutral wording for both ("... has a doctrine entry doctrine did not write, or the file could not be read — left untouched; to register:") and say so; or (b) a reason field on PrintedFallback, justified as a type change with the Claude arm's call sites. And state whether a foreign entry is re-announced each run.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-37"
+status = "open"
+severity = "minor"
+title = "Inline-table mcp_servers or entry is misclassified as malformed"
+detail = """
+Malformed is defined as "`mcp_servers` not a table, the `doctrine` entry not a table" (sec-5.2). In toml_edit an inline table (`mcp_servers = { other = { command = "x" } }`, or `[mcp_servers]` with `doctrine = { command = "sh", args = [...], env_vars = [...] }`) is Item::Value(InlineTable), not Item::Table: `as_table()` is None. Both are valid TOML that codex reads identically. Read literally, the design reports them as malformed and prints "register manually" — including for an inline copy of our exact emitted shape, which would then never be recognised as current. Fail-soft holds, but the classification is false and the disclosure misdescribes the file.
+Fix: state the rule — read via `as_table_like()` for classification (so inline entries classify normally) and, for the write path, either mutate the inline table in place or treat an inline parent/entry as Foreign-shaped with a precise message. Add sec-5.5 rows for inline parent and inline entry.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-38"
+status = "open"
+severity = "minor"
+title = "toml_edit emits the wrapper as a literal string; 'exactly' and the snippet will drift"
+detail = '''
+sec-5.3 says "The emitted table, exactly:" and shows `args = ["-c", "exec \"${DOCTRINE_BIN:-doctrine}\" serve --mcp"]`; sec-9 integration (i) asserts "the emitted entry equals sec-5.3". toml_edit 0.22 renders a new String value via toml_write's `as_default()`, which tries basic-pretty first and rejects it for any embedded double quote, then chooses a LITERAL string. The file will actually contain `'exec "${DOCTRINE_BIN:-doctrine}" serve --mcp'` (single-quoted). Semantically identical, but a byte/text assertion written to sec-5.3 fails, and a hand-written codex_mcp_fallback_snippet (sec-5.2) copied from sec-5.3 will disagree with what install writes.
+Fix: state that equality is on parsed values (the test parses and compares `command`/`args`/`env_vars`), and require the fallback snippet to be rendered by the same toml_edit construction as the write (one builder, two uses), so the snippet cannot drift from the write — the same DRY the constants-agreement test exists for.
+'''
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-39"
+status = "open"
+severity = "minor"
+title = "Revision timing contradicts itself: raised at reconcile vs scheduled before a citing phase"
+detail = """
+The Revision's timing contradicts itself. sec-8 ("The Revision is raised at reconcile"), sec-9 ("The two-member Specification Revision is raised at reconcile") and the impact table (spec/tech/011 "touched only at reconcile, by the two-member Revision — never by a phase") put it at reconcile. sec-6 and sec-9's last clause say "The plan schedules the Revision before the phase that cites its REQ ids, so nothing cites an id that does not yet exist" — which requires minting before some phase, i.e. before reconcile. Both cannot hold unless "raised" and "minted/applied" are distinct steps, and the design never says which step mints the REQ ids. A planner reading this will either schedule a pre-phase Revision (contradicting three statements) or have no phase cite a REQ (making the sec-6 clause dead).
+Fix: say which. Simplest consistent reading: no phase cites the new REQ ids; the Revision is created and applied at reconcile; phases trace to IMP-111 and the design. Delete the "schedules the Revision before the phase" clause, or else move the raise earlier and drop "at reconcile".
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-40"
+status = "open"
+severity = "minor"
+title = "Hooks probe runs in the process cwd, not root; the seam has no cwd"
+detail = """
+`CommandRunner::run_capture(program, args)` has no working-directory parameter, and sec-6 lists "whether `codex features list` is cwd-sensitive" as unverified. codex's effective config includes the PROJECT layer (that is the whole premise of this leg), which it resolves from cwd. install targets `root`, which need not be the process cwd (`--path`, or install run from a subdirectory/another repo). The probe will then answer for whichever project the shell happens to be in — possibly a different trusted project with hooks enabled — and report Enabled for a root where they are off. The unknown is cheap to eliminate rather than record: give the seam a cwd (`run_capture(program, args, cwd)`, or CaptureRunner constructed with root) and run the probe in `root`. Update sec-5.2's trait, sec-6 (drop the open question or narrow it), and add a sec-9 fake-runner assertion that the probe received `root` as cwd.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-41"
+status = "open"
+severity = "minor"
+title = "Shared classifier shares the trivial part; divergence-prone mapping stays per-arm"
+detail = """
+Principle 3 and the "Parallel planner divergence" risk claim the shared classifier removes the risk of "two hand-maintained copies of what is stale vs foreign". But the design shares only `classify_mcp_entry(present, owned, current) -> McpEntryClass` — a four-line mapping over three bools. The judgement that can actually diverge stays per-arm: each arm computes `owned` and `current` itself (is_doctrine_mcp_entry vs the sh/args/env_vars formula), and each arm maps the class to (RefreshOutcome, write?) itself. The bool signature also admits illegal states (present=false,owned=true; owned=false,current=true) that the design waves as "unreachable by construction" while the function must still return something for them.
+Not a correctness bug; a cohesion one. Either share what diverges — the class -> (outcome, write?) mapping, e.g. `fn mcp_action(class, rendered: String) -> (RefreshOutcome, bool)` — and type the input so illegal states are unrepresentable (`Option<Ownership>` with `Ownership { Current, Stale, Foreign }`), or drop the claim and let each planner match directly. As written, the refactor of plan_mcp is cost (touching tested code) for little protection.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-42"
+status = "open"
+severity = "nit"
+title = "MCP leg error aborts the codex arm and drops the hook report; impact-table path slip"
+detail = """
+sec-5.2: `mcp: install_codex_mcp(root, dry_run)?`. The codex arm has already written .codex/hooks.json and the pi extensions by the time this runs (it would sit after them in install_refresh). An Err here (create_dir_all / write_atomic failure) aborts the arm; wire() isolates it per-harness and prints the error, but the accumulated RefreshReport is dropped — the hook lines and the activation notice for hooks that WERE written never print. The Claude arm handles the same class with explicit context naming how far it got (boot.rs:1732). The design should say where the MCP leg sits in the codex arm and either give the error the same boundary context or run it last with the hook outcomes preserved. Also nit: the impact table lists `run_install:2645` under src/install.rs; it is src/boot.rs:2645 (install.rs has only the :414 call).
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
