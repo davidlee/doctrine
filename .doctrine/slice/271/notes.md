@@ -123,6 +123,41 @@ the `plan_mcp` refactor's behaviour preservation against hand-built JSON edge
 cases the existing suite may not cover; and the `CaptureRunner` default wiring at
 both production call sites.
 
+### Third pass (RV-399 rounds 3, 2026-09-27) — outcome and what a fourth would probe
+
+An 11-finding pass (4 major, 6 minor, 1 nit) attacked the second pass's fixes. All
+11 disposed `fix-now`. The two that needed a decision rather than an edit:
+
+- **F-32/F-33 (ownership).** "Ownership is normalised string equality against one
+  constant" collapsed the Refreshed rows onto nothing — the only reachable
+  OwnedStale was a bad `env_vars`. Decision: ownership is membership of the
+  normalised line in `CODEX_MCP_WRAPPER_FORMS` (today one element; a wording change
+  appends its predecessor), `current` is byte-exact, and `env_vars` must be absent
+  or exactly the emitted array. DEC-332 amended — the narrowing itself unreopened.
+- **F-34 (probe trigger).** The hooks probe was keyed to the MCP outcome; it is
+  about hooks. Decision: trigger on `codex_hook_written`, fold the result into the
+  activation notice (step 1 printed only when not `Enabled`), and let the trust
+  caveat print once per arm. DEC-329 not reopened — it never fixed a trigger, and
+  its rejected alternative argues for this keying.
+
+Also folded: F-35 (`NotFound` vs any other read error; the same defect in
+`install_mcp` recorded as ISS-495, not silently fixed), F-36 (one fallback wording
+for both arms and both causes), F-37 (inline tables via `as_table_like*` — and
+`InlineTable`'s `TableLike::insert` PANICS on an `Item::Table`), F-38 (`toml_write`
+emits the wrapper as a literal string; assert on parsed values, one builder),
+F-39 (Revision raised at reconcile; no phase cites its ids), F-40 (`cwd` on the
+capture seam), F-41 (`mcp_action` shares the class -> action judgement; the bool
+triple is deleted), F-42 (MCP leg last, with boundary context; impact-table path
+slip fixed).
+
+A fourth pass would probe: the `mcp_action` `payload`/`file` parameters (two are
+unused on the Wire/Refresh path — a real implementation may chafe at the shape);
+whether `plan_mcp`'s carried string becoming the full invocation perturbs any
+consumer beyond `wire()`; whether the folded activation notice still reads cleanly
+with step 1 omitted under `Enabled`; and whether `CODEX_MCP_WRAPPER_FORMS`
+membership survives a future wording change to a non-superset form (a different
+shell, say).
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
