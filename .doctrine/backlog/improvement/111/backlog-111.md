@@ -156,6 +156,38 @@ exec path stamped" wording predates SL-195 and is stale.
 - OQ-3 Ownership predicate: same shape test as Claude (command file-name
   `doctrine` + args `["serve","--mcp"]`), adapted to codex's entry layout.
 
+## Design decisions to settle (pre-assessment, 2026-09-27)
+
+Read against the code: the remainder is design, not discovery. Three of these are
+precedent *conflicts* — a wrong pick yields a parallel implementation or the
+install-thrash class SL-195 already suffered.
+
+- **D1 Report seam.** `RefreshReport.mcp: RefreshOutcome` means "the Claude
+  `.mcp.json` outcome" and `wire()` hardcodes `MCP_REL` in the message. Precedent
+  both ways: parallel per-surface fields (`extension` / `mcp_extension` /
+  `surface_extension`) vs one field parameterised by its rel path. Pinned by
+  `boot.rs` tests at 5121/5129/5157/5170.
+- **D2 Policy vs rendering.** `plan_mcp` fuses the decision table (absent → wire,
+  ours+current → no-op, ours+stale → migrate, foreign/malformed → fallback) with
+  JSON rendering. Share the classification and render per-arm, or two planners?
+  ADR-001's "a shared core does not acquire a caller's domain concept" is the
+  precedent for the hook core's abstract `CommandForm` axis.
+- **D3 Ownership predicate + emitted-form set — the real risk.** The codex `args`
+  live inside the shell string, so ownership is a string comparison against our
+  wrapper line, and the no-op comparator must track *every* form we can emit
+  (`sh` vs `/bin/sh`, plain `command = "doctrine"`, a baked abspath). SL-195's
+  F-1 was precisely a comparator testing the wrong form ⇒ rewrite every install.
+  Fix the emitted-form set before writing the predicate; model the suite on the
+  eight `plan_mcp_*` cases.
+- **D4 Portable or baked.** The Claude MCP leg is form-blind (always
+  `PORTABLE_EXEC`); the hook leg is form-aware (`CommandForm::{Baked, Portable}`,
+  `baked ⟺ gitignored`, SL-195 D2). Portable ⇒ the `sh -c` + `env_vars` shape and
+  OQ-6's shell cost; baked ⇒ plain abspath, no shell, no whitelist, but only if
+  `.codex/config.toml` is untracked — install's `[gitignore].entries` add nothing
+  for `.codex`, so a client repo tracks it.
+- **D5 Disclose the trust-gated skip** (STD-003) and decide whether install also
+  ensures `[features] hooks = true` now that it writes the file.
+
 ## Pointers
 
 - `src/boot.rs` — `install_refresh` (the `Harness::Codex` arm to flip),
