@@ -5,10 +5,10 @@ id = 377
 slug = "review-dispose-accepts-response-from-file-or-stdin"
 title = "Review dispose accepts response from file or stdin"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-08-01"
-updated = "2026-08-01"
+updated = "2026-09-27"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

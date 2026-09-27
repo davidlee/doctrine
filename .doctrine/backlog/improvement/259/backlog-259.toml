@@ -5,10 +5,10 @@ id = 259
 slug = "review-prime-support-non-slice-targets-spec-adr-design-artefacts"
 title = "review prime: support non-slice targets (SPEC, ADR, design artefacts)"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-07-04"
-updated = "2026-07-20"
+updated = "2026-09-27"
 tags = ["area:review", "cluster:review-system"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

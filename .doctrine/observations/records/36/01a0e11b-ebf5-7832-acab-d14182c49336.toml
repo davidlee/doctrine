@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e11b-ebf5-7832-acab-d14182c49336"
+recorded_at = "2026-09-27T04:24:58.613261261Z"
+kind = "friction"
+summary = "[close; SL-268] capsule-landed slice reads 0/10 on edge at close"
+detail = "Phase runtime state (phase sheets, boundaries.toml) was adopted into .worktrees/SL-268-c20 by oubliette back and never reached edge; the audit ran on edge after merge, so edge's rollup read 0/10 and bare slice conformance reported no recorded deltas. Fixed by copying .doctrine/state/slice/268 from the capsule worktree. Same gap as IMP-240 defect 2; SL-269 OQ-2 (landing a declared tree)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

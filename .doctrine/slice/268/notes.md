@@ -51,21 +51,26 @@ Design run `dr-01a0dc9c`. Evidence: `research/research.md` (tier 5) and RFC-032
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-26 · design (reviewing, pre-lock) · 8922d2e77
+fresh-as-of: 2026-09-27 · close · 13756e66b
 
 ### Produced
-- design.md drafted and revised for RV-396 (commits 810fef9dd..8922d2e77 on edge; run dr-01a0dc9c)
-- minted: DEC-317..DEC-322 — inquiry answers; IMP-492 — doctor install-doc CLI check; IMP-493 — doctor status/last-turn check; ISS-492 — catalog callers drop warning diagnostics; RV-396 — design review
-- design goes past the frontier: top-level `review_ledger` module; `raise`/`reopen` clear `concluded` (user ruling, RV-396 F-4)
+- design locked after RV-396 (run dr-01a0dc9c); DEC-317..DEC-322
+- ten phases via capsule c gen 20, merged to edge at 39212685a; check gate green on edge at close (9 015 tests)
+- SPEC-032 (active); REV-064 (done: ADR-007, SPEC-003); RV-397 (guidance review); RV-398 (audit)
+- resolved: ISS-314, ISS-366, ISS-280, ISS-485, ISS-059, IMP-029, IMP-377, IMP-433, IMP-259, IMP-336, CHR-001; IMP-479 closed wont-do; IMP-068 partial, left open
+- minted: IMP-492, IMP-493, ISS-492, ISS-493, ISS-494 (resolved), IMP-495 (secret scanning)
 
 ### Learned
 - mem_01a0062ebd7375f3a2f67ed833307283 — layering gate skips sub-classified out-edges; split engine units top-level
 - mem_01a0dd0af5367eb39223bb694e390380 — design sections materialise in lexical id order
+- mem.pattern.review.done-requires-concluded, mem.pattern.review.reopen-to-revise-verified — v2 ledger rules
+- mem_019f97fcab2e77a28902371f80743605, mem_019fdfe379b67e53857735b88c394b52 — updated for D1/D2
+- capsule-landed phase state stays in the landing worktree (observation at close; scripts/oubliette.sh advice; SL-269 OQ-2) — no memory: SL-269 retires it
 
 ### Open
-- DEC-317..DEC-322 — shape the slice; cite in plan
-- RV-396 pass disposition, section review, design acceptance — awaiting user
-- notes "Design review passes" — two probes deferred to the split and D2 phases
+- SL-269 — review-capable worktree locus (RV-398 F-5, IMP-240)
+- IMP-068 (partial), IMP-492, IMP-493, ISS-492, IMP-495
+- RFC-032 slices 2–4 (read surface, design-run binding, identity & locus)
 
 ## PHASE-08 test-suite flips (D11)
 

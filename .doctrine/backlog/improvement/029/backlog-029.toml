@@ -5,10 +5,10 @@ id = 29
 slug = "rv-review-verb-family-black-box-e2e-cli-golden-audit-pilot-coverage"
 title = "RV review verb family: black-box e2e CLI golden + /audit pilot coverage"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-06-11"
-updated = "2026-07-20"
+updated = "2026-09-27"
 tags = ["area:coverage", "area:review", "area:testing", "cluster:review-system"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

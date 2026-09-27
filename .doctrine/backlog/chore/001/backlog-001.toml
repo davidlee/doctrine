@@ -5,10 +5,10 @@ id = 1
 slug = "rv-ledger-robustness-baton-note-lock-scope-domain-map-path-component-guard-unknown-severity-fail-safe-close-gate"
 title = "RV ledger robustness: baton-note lock scope, domain_map path-component guard, unknown-severity fail-safe close-gate"
 kind = "chore"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-06-11"
-updated = "2026-07-20"
+updated = "2026-09-27"
 tags = ["area:correctness", "area:review", "cluster:review-system"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

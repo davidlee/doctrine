@@ -5,10 +5,10 @@ id = 59
 slug = "review-prime-fails-on-a-directorysymlink-to-dir-slice-selector-cannot-hash-a-non-file-fileset-member"
 title = "review prime fails on a directory/symlink-to-dir slice selector — cannot hash a non-file fileset member"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-30"
-updated = "2026-06-30"
+updated = "2026-09-27"
 tags = ["area:review", "footgun"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

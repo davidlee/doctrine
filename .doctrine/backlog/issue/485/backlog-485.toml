@@ -5,10 +5,10 @@ id = 485
 slug = "review-amend-reopen-path"
 title = "No review amend or reopen: a stale response or out-of-band verify is unrecoverable"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-09-25"
-updated = "2026-09-25"
+updated = "2026-09-27"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
