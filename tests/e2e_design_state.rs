@@ -50,7 +50,7 @@ use design_run::bounds::{DESIGN_ID_BYTES, DESIGN_STAGE_LABEL_BYTES};
 use design_run::change_log::{
     ChangeEvent, ChangeRow, PayloadTerm, StoredRow, Unreadable, ValueKind,
 };
-use design_run::ids::{DesignId, IdKind};
+use design_run::ids::{DesignId, IdKind, SubjectState};
 use design_run::refusal::Refusal;
 use design_run::render::{ELISION_MARKER_UNDER_TEST, ENVELOPE_PAYLOAD_BYTES_UNDER_TEST};
 use design_run::snapshot::{self, DesignSnapshot};
@@ -737,6 +737,126 @@ fn reused_submission_id_with_changed_payload_is_refused() {
     // deliberate, not a dead end.
     assert!(error.contains("fresh `submission_id`"), "{error}");
     assert_eq!(fixture.bytes(), landed, "and still no advance");
+}
+
+/// `SL-272` `VT-3` (`IMP-499`) — an unknown submission id asserting a revision
+/// below the receipt floor is refused, and the refusal names the only safe way
+/// forward: the run's bounded history cannot say whether the original landed,
+/// so the caller checks current state and resubmits only what is absent.
+#[test]
+fn a_submission_below_the_replay_window_names_its_remedy() {
+    let fixture = Fixture::start();
+    for step in 0..40 {
+        fixture.empty_apply(&format!("q{step}"));
+    }
+    let floor = fixture.read().receipts.floor;
+    assert!(floor > 1, "the receipt floor rose with the window: {floor}");
+    let before = fixture.bytes();
+
+    let error = fixture.refuse(&format!("{{{}}}", fixture.envelope_at(1, "unseen")));
+    assert_eq!(
+        refusal_line(&error),
+        Refusal::SubmissionExpired { known: 1, floor }.to_string()
+    );
+    assert!(
+        error.contains("fresh `submission_id`"),
+        "the remedy names a fresh id: {error}"
+    );
+    assert_eq!(
+        fixture.bytes(),
+        before,
+        "an expired submission lands nothing"
+    );
+}
+
+/// The refusal a failed verb reports, without the CLI's framing.
+fn refusal_line(stderr: &str) -> &str {
+    stderr
+        .trim_end()
+        .strip_prefix("Error: ")
+        .unwrap_or_else(|| panic!("stderr is one framed refusal: {stderr}"))
+}
+
+/// A run holding `sec-1`, for a finding to concern.
+fn fixture_with_a_section() -> Fixture {
+    let fixture = Fixture::start();
+    fixture.apply(&fixture.payload(
+        "sec",
+        &json!({ "declare": [{ "subject": "sec-1", "body": FIRST_SECTION_BODY }] }),
+    ));
+    fixture
+}
+
+/// A payload raising `fnd-1` over `sec-1`, spelling `blocking` as given —
+/// `None` omits the key.
+fn finding_payload(fixture: &Fixture, submission: &str, blocking: Option<Value>) -> String {
+    let mut finding = json!({ "subject": "fnd-1", "concerns": "sec-1", "summary": "a concern" });
+    if let Some(blocking) = blocking {
+        finding["blocking"] = blocking;
+    }
+    fixture.payload(submission, &json!({ "declare": [finding] }))
+}
+
+/// The finding the run holds as `fnd-1`, if any.
+fn held_finding(fixture: &Fixture) -> Option<design_run::snapshot::Finding> {
+    let fnd = DesignId::parse("fnd-1").unwrap();
+    fixture
+        .read()
+        .review
+        .findings
+        .into_iter()
+        .find(|f| f.id == fnd)
+}
+
+/// `SL-272` `VT-1` (`ISS-482`) — a finding raised with `"blocking": null` is
+/// refused by name, not read as the omission; `true` and an omitted key still
+/// land blocking and non-blocking; and a held finding's `null` keeps its
+/// state-axis refusal, because the key is inert there whatever it carries.
+#[test]
+fn a_findings_blocking_null_is_refused_at_creation() {
+    let fixture = fixture_with_a_section();
+    let before = fixture.bytes();
+    let error = fixture.refuse(&finding_payload(&fixture, "null", Some(Value::Null)));
+    assert_eq!(
+        refusal_line(&error),
+        Refusal::FindingBlockingNull {
+            id: DesignId::parse("fnd-1").unwrap()
+        }
+        .to_string()
+    );
+    assert_eq!(fixture.bytes(), before, "a refused batch lands nothing");
+
+    let omitted = fixture_with_a_section();
+    omitted.apply(&finding_payload(&omitted, "omitted", None));
+    assert!(
+        !held_finding(&omitted)
+            .expect("an omitted judgement lands")
+            .blocking,
+        "omission raises a non-blocking finding"
+    );
+
+    fixture.apply(&finding_payload(&fixture, "true", Some(json!(true))));
+    assert!(
+        held_finding(&fixture)
+            .expect("a stated judgement lands")
+            .blocking,
+        "`true` raises a blocking finding"
+    );
+
+    let held = fixture.refuse(&fixture.payload(
+        "held-null",
+        &json!({ "declare": [{ "subject": "fnd-1", "blocking": null }] }),
+    ));
+    assert_eq!(
+        refusal_line(&held),
+        Refusal::InertAtState {
+            subject: DesignId::parse("fnd-1").unwrap(),
+            key: "blocking",
+            honoured_when: SubjectState::Absent,
+        }
+        .to_string(),
+        "a held finding's `null` is refused on the state axis first"
+    );
 }
 
 /// ISS-361 — a payload that does not parse lands nothing: the snapshot stays

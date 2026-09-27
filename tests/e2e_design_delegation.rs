@@ -53,7 +53,9 @@ mod design_run;
 use design_run::Stage;
 use design_run::attestation::{ActKind, AgentAct, AgentActKind, ReviewPolicy};
 use design_run::delegation::{Delegation, DelegationState};
+use design_run::ids::DesignId;
 use design_run::inquiry::DispositionForm;
+use design_run::refusal::Refusal;
 use design_run::snapshot::{self, DesignSnapshot};
 use design_run::submission::ApplyRequest;
 use design_run::traversal::Posture;
@@ -725,15 +727,18 @@ fn a_proposal_creating_an_unjudged_inquiry_is_refused_at_propose() {
     );
 }
 
-/// At a finding `blocking: null` reads as absent — the direct apply stores it —
-/// so a proposal storing it loses nothing and must not be refused as though it
-/// cleared a field (`RV-389` F-18).
+/// A finding raised with `blocking: null` is refused at `propose` with the
+/// direct apply's refusal, and nothing is stored (`SL-272` `VT-2`, `ISS-482`).
+///
+/// The inversion of the `RV-389` F-18 premise that a finding's `null` reads as
+/// absent: a stored proposal would lose the `null` before `accept` applied it,
+/// so the rule sits on the one seam both routes cross.
 #[test]
-fn a_proposal_may_send_a_findings_blocking_null() {
+fn a_proposal_may_not_send_a_findings_blocking_null() {
     let fixture = Fixture::inquiring();
     fixture.export();
 
-    fixture.apply(&fixture.payload(
+    let stderr = fixture.refuse(&fixture.payload(
         "propose-finding-null",
         &proposing(&json!([{
             "subject": "fnd-1",
@@ -742,8 +747,18 @@ fn a_proposal_may_send_a_findings_blocking_null() {
             "blocking": null,
         }])),
     ));
+    assert_eq!(
+        stderr.trim_end(),
+        format!(
+            "Error: {}",
+            Refusal::FindingBlockingNull {
+                id: DesignId::parse("fnd-1").unwrap()
+            }
+        ),
+        "the refusal is the direct apply's"
+    );
     assert!(
-        fixture.delegation().proposal().is_some(),
-        "a finding's null judgement is no clearing, so the proposal is stored"
+        fixture.delegation().proposal().is_none(),
+        "a refused proposal is not stored"
     );
 }

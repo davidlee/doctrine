@@ -342,6 +342,14 @@ pub(crate) enum Refusal {
     /// being `null` would be `SL-259`'s disease (success reported, nothing moved)
     /// one layer up.
     BlockingJudgementWithdrawn { id: DesignId },
+    /// A finding raised with `blocking: null` (`SL-272` sec-2, `ISS-482`).
+    ///
+    /// Not [`Refusal::BlockingJudgementWithdrawn`]: that remedy — omit the key to
+    /// leave the held judgement as it is — is false where a finding is raised,
+    /// since nothing is held and omission means non-blocking. Read as absence,
+    /// the `null` would be success reported for input the engine did not honour
+    /// as written (`SL-259`).
+    FindingBlockingNull { id: DesignId },
     /// A forward edge carries a runbook and it is not fully discharged
     /// (`EX-8`).
     ///
@@ -775,7 +783,11 @@ impl fmt::Display for Refusal {
                 f,
                 "submission expired: it asserts revision {known}, below the retained \
                  replay window which starts at revision {floor} — Doctrine can no longer \
-                 tell a retry from a new submission, so it refuses rather than guess"
+                 tell a retry from a new submission, so it refuses rather than guess — \
+                 whether the original landed cannot be read from the run's history; check \
+                 the current run state (`design show`: the map and sections, not the change \
+                 log) for the effect you intended, and resubmit only what is absent, at the \
+                 current revision, under a fresh `submission_id`"
             ),
             Refusal::SubmissionReplayed { submission } => write!(
                 f,
@@ -896,6 +908,11 @@ impl fmt::Display for Refusal {
                 "{id} sends `blocking: null` — a judgement can be changed, by sending the \
                  other value, but not withdrawn; omit the key to leave the held judgement \
                  as it is"
+            ),
+            Refusal::FindingBlockingNull { id } => write!(
+                f,
+                "{id} sends `blocking: null` — a finding's blocking judgement is set when it \
+                 is raised: send `true` or `false`, or omit the key for a non-blocking finding"
             ),
             Refusal::AttestationSubjectMissing { id } => {
                 write!(f, "attestation {id} names no section this run holds")
