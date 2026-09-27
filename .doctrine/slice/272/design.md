@@ -71,9 +71,10 @@ is refused rather than read as absence — carries the new rule. It renders as
 `optional` with the annotation `(omit means absent · null refused)` — the note
 is one string per presence state, so it states the rule rather than this key's
 default — beside the inquiry row's existing annotation. None of the four
-existing states says it: `Optional` accepts `null` as absence, `Sparse` reads it as clear, and
-`RequiredAtCreation` demands the key at creation. The shipped document is
-regenerated from the renderer, to which it is pinned byte-for-byte.
+existing states says it: `Optional` accepts `null` as absence, `Sparse` reads
+it as clear, and `RequiredAtCreation` demands the key at creation. The shipped
+document is regenerated from the renderer, to which it is pinned
+byte-for-byte.
 
 ### `SubmissionExpired` names its remedy (`IMP-499`)
 
