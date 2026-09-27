@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e238-9f8b-7833-bd73-caf533168c31"
+recorded_at = "2026-09-27T09:35:56.811919559Z"
+kind = "friction"
+summary = "execute (solo): land --no-ff then phase completed — auto delta capture refuses the merge HEAD"
+detail = "SL-272 PHASE-01. /execute's solo recipe says land the fork (git merge --no-ff) then flip the phase completed; completion captures code_end_oid = HEAD, which is now the merge commit, and the non-merge guard skips the capture with a warning. Needed manual 'slice record-delta --start <base> --end <last code commit>'. Either flip completed inside the fork before land, or have the capture resolve a merge HEAD to its fork parent."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
