@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e2d6-7a43-7720-bf63-26087d74aaec"
+recorded_at = "2026-09-27T12:28:21.955920066Z"
+kind = "friction"
+summary = "capsule-orchestrator/phase-planner: slice notes is create-only, no read verb"
+detail = "SL-269 PHASE-02 planner: 'doctrine slice notes SL-269' reads like a read verb but creates ('Refusing to overwrite'); no read verb for notes, fell back to cat."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

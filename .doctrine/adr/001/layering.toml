@@ -70,7 +70,7 @@ vtgate = "leaf"             # out=0: SL-170 S3 pure VT existence/shape gate — 
 # Import engines + leaves; do NOT import command modules. Core domain model,
 # entity-kind handler scaffold, shared infrastructure.
 entity = "engine"           # → fsutil only; the hub — kind-agnostic directory-entity scaffold
-reserve = "engine"          # SL-148: claim-backend selection seam; → entity/git/dtoml (out=3)
+reserve = "engine"          # SL-148: claim-backend selection seam; → entity/git/dtoml/kinds/corpus_guard (out=5; SL-269: kinds for Kind, corpus_guard for the .doctrine root name)
 meta = "engine"             # → entity only; shared metadata-list substrate
 relation = "engine"         # → entity, kinds; relation vocabulary leaf (design: engine-tier relation rules)
 state = "engine"            # → fsutil, install, plan; runtime state; install→ upward baselined

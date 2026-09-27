@@ -2064,11 +2064,8 @@ pub(crate) fn create_record(
     on_reserved: impl FnMut(u32, &str) -> anyhow::Result<()>,
 ) -> anyhow::Result<(u32, PathBuf)> {
     let trunk_ids = crate::git::trunk_entity_ids(root, record_kind.kind().dir)?;
-    let (backend, mut reserved) = crate::reserve::backend(
-        root,
-        record_kind.kind().prefix,
-        crate::install::prompt_confirm,
-    )?;
+    let (backend, mut reserved) =
+        crate::reserve::backend(root, record_kind.kind(), crate::install::prompt_confirm)?;
     let date = crate::clock::today();
     let out = entity::materialise_fresh_hooked(
         record_kind.kind(),

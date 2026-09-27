@@ -2,27 +2,28 @@
 //! `reserve` — claim-backend selection for fresh-id allocation (SL-148).
 //!
 //! [`backend`] is the single seam that resolves which [`Claim`](crate::entity::Claim)
-//! backend a Fresh-allocating materialise site uses, and the matching re-fetching
+//! backend a Fresh-allocating materialise site uses, and the matching
 //! scan source ([`ScanSource`]) the claim loop unions into its candidate set. It is
-//! the SOLE LocalFs-vs-[`GitRef`] selector: it loads `[reservation]`, performs the
-//! reachability fetch, and decides degradation per design D8 (§5.4). Routing the 11
+//! the SOLE selector (`LocalFs` / [`CloneRef`] / [`GitRef`]): it loads `[reservation]`,
+//! performs the reachability fetch, and decides degradation per design D8 (§5.4). Routing the 11
 //! Fresh call sites through one helper — rather than a literal `&LocalFs` at each — is
 //! what lets the second backend drop in behind a single signature (design §5.2, F-3).
 //!
 //! Layering (ADR-001): `reserve` is engine. It reaches `entity` (engine, same tier)
-//! and the leaf seams `git`/`dtoml` (downward). The interactive D8 y/N prompt is NOT
-//! imported (that would be an upward edge to `install` = command); instead the prompt
-//! is injected as a `PromptFn` from the command-tier caller (the pure/imperative split
-//! — the impurity is passed in), keeping `[reservation]`'s config + `GitRef` inside this
-//! one already-classified module so no new `layering.toml` entry is needed (R9).
+//! and the leaf seams `git`/`dtoml`/`kinds`/`corpus_guard` (downward). The
+//! interactive D8 y/N prompt is NOT imported (that would be an upward edge to
+//! `install` = command); instead the prompt is injected as a `PromptFn` from the
+//! command-tier caller (the pure/imperative split — the impurity is passed in).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use serde::Deserialize;
 
+use crate::corpus_guard::DOCTRINE_PATHSPEC;
 use crate::entity::{Acquired, Claim, ClaimCtx, LocalFs};
 use crate::git;
+use crate::kinds::Kind;
 
 /// The re-fetching scan source returned alongside the backend — owned so it can
 /// outlive [`backend`] and be borrowed `&mut` into `entity::materialise`'s
@@ -117,10 +118,6 @@ const RESERVATION_REF_PREFIX: &str = "refs/doctrine/reservation";
 /// The clone-local reservation namespace (SL-269): claims arbitrated by this clone's
 /// own ref store when the remote is out of reach. Same `<prefix>/<NNN>` layout as
 /// [`RESERVATION_REF_PREFIX`]; never fetched, never pushed.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "CloneRef scan: SL-269 PHASE-02")
-)]
 const RESERVATION_LOCAL_REF_PREFIX: &str = "refs/doctrine/reservation-local";
 /// The `[reservation]` config key opting into local fallback when the remote is
 /// unreachable — named once for the declined error and the fallback prompt (STD-001).
@@ -182,9 +179,58 @@ impl Claim for GitRef {
     }
 }
 
+// ---------------------------------------------------------------------------
+// CloneRef backend (SL-269)
+// ---------------------------------------------------------------------------
+
+/// The local-reach backend inside a git repository: [`GitRef`] without the remote.
+/// The claim linearizes on a zero-oid create CAS over
+/// `refs/doctrine/reservation-local/{prefix}/{id:03}` in the clone's COMMON git dir,
+/// so it arbitrates across every worktree of the clone (SL-269 design sec-2, DEC-337).
+struct CloneRef {
+    root: PathBuf,
+    prefix: String,
+    holder_name: String,
+    holder_email: String,
+}
+
+impl CloneRef {
+    /// The clone-local reservation ref for candidate `id`.
+    fn refname(&self, id: u32) -> String {
+        format!("{RESERVATION_LOCAL_REF_PREFIX}/{}/{id:03}", self.prefix)
+    }
+}
+
+impl Claim for CloneRef {
+    fn claim(&self, ctx: &ClaimCtx<'_>) -> anyhow::Result<Acquired> {
+        let refname = self.refname(ctx.id);
+        let canonical = format!("{}-{:03}", self.prefix, ctx.id);
+        let new_oid = git::commit_empty_tree_as(
+            &self.root,
+            &canonical,
+            &self.holder_name,
+            &self.holder_email,
+        )
+        .with_context(|| format!("Failed to build reservation commit for {canonical}"))?;
+        match git::update_ref_cas(&self.root, &refname, &new_oid, git::ZERO_OID)
+            .with_context(|| format!("Failed to create reservation {refname}"))?
+        {
+            // An existing dir is a ref-less writer's claim (a pre-slice binary, or by
+            // hand): the id is burnt, retry the next one.
+            git::RefCas::Updated => seat_claimed_dir(ctx.dir, &canonical, OnExisting::AlreadyHeld),
+            // Another tree of this clone created the ref first — retry.
+            git::RefCas::Moved { .. } => Ok(Acquired::AlreadyHeld),
+        }
+    }
+
+    #[cfg(test)]
+    fn arbiter(&self) -> crate::entity::Arbiter {
+        crate::entity::Arbiter::CloneRef
+    }
+}
+
 /// What an already-existing dir means once the reservation CAS has been won — the
 /// one per-backend difference in [`seat_claimed_dir`] (SL-269 design sec-2).
-#[expect(dead_code, reason = "CloneRef arm: SL-269 PHASE-02")]
 #[derive(Clone, Copy)]
 enum OnExisting {
     /// The dir is a same-clone rival's claim: lost the race, recompute and retry.
@@ -227,24 +273,149 @@ fn seat_claimed_dir(
     }
 }
 
-/// Build the `GitRef` scan source for `prefix`'s id-space: re-fetch the reservation
-/// namespace and union THIS KIND's remote ids with the passed local dirs each call
-/// (design EX-4, F-V6). The scan MUST be scoped to `prefix` — enumerating the whole
-/// namespace pools every kind's ids and drives `next_id` to the global max+1 (ISS-221).
-fn gitref_scan_source(root: &Path, remote: &str, prefix: &str) -> ScanSource {
+/// The ONE scan source both git backends (`CloneRef`, `GitRef`) use (SL-269 design
+/// sec-2): per call, `local` (this tree's dirs, own ids first) ∪ `siblings` (the
+/// sibling worktrees' dirs, read once at construction) ∪ this kind's
+/// `reservation-local` refs ∪ its `reservation` refs. With `fetch = Some(remote)` the
+/// remote namespace is re-fetched first, so a rival's post-`AlreadyHeld` ref widens
+/// this iteration's set. Both ref reads are scoped to `prefix` — pooling kinds drives
+/// `next_id` to the global max+1 (ISS-221).
+fn composed_scan_source(
+    root: &Path,
+    prefix: &str,
+    siblings: Vec<u32>,
+    fetch: Option<String>,
+) -> ScanSource {
     let root = root.to_path_buf();
-    let remote = remote.to_owned();
     let prefix = prefix.to_owned();
     Box::new(move |local: &[u32]| {
-        // Re-fetch so a rival's post-`AlreadyHeld` ref widens this iteration's set.
-        // The refspec fetches every kind's refs (one round-trip); the id read below
-        // narrows to `prefix`.
-        git::fetch_refspec(&root, &remote, RESERVATION_REFSPEC)
-            .with_context(|| format!("Failed to fetch reservations from {remote}"))?;
+        if let Some(remote) = &fetch {
+            git::fetch_refspec(&root, remote, RESERVATION_REFSPEC)
+                .with_context(|| format!("Failed to fetch reservations from {remote}"))?;
+        }
         let mut ids: Vec<u32> = local.to_vec();
+        ids.extend_from_slice(&siblings);
+        ids.extend(reservation_ids(
+            &root,
+            RESERVATION_LOCAL_REF_PREFIX,
+            &prefix,
+        )?);
         ids.extend(reservation_ids(&root, RESERVATION_REF_PREFIX, &prefix)?);
         Ok(ids)
     })
+}
+
+/// Where a doctrine project sits in its git worktree (SL-269): the worktree top
+/// level, and the project root relative to it (`<rel>`, empty in the usual case).
+struct GitLocus {
+    toplevel: PathBuf,
+    rel: PathBuf,
+}
+
+impl GitLocus {
+    /// The doctrine project root inside worktree `tree` (`<tree>/<rel>`). An empty
+    /// `<rel>` yields `tree` itself — `Path::join("")` would add a trailing separator
+    /// that leaks into the skip warning.
+    fn project_in(&self, tree: &Path) -> PathBuf {
+        if self.rel.as_os_str().is_empty() {
+            tree.to_path_buf()
+        } else {
+            tree.join(&self.rel)
+        }
+    }
+}
+
+/// The project's [`GitLocus`], or `None` when `root` is outside any git worktree —
+/// the one git-vs-plain-dir decision for the local arms.
+fn git_locus(root: &Path) -> anyhow::Result<Option<GitLocus>> {
+    Ok(git::toplevel_and_prefix(root)
+        .with_context(|| format!("Failed to locate {} in git", root.display()))?
+        .map(|(toplevel, rel)| GitLocus { toplevel, rel }))
+}
+
+/// Sibling worktrees' ids for one kind, and the siblings that could not be read
+/// (STD-003: "found nothing" and "could not read" stay distinguishable).
+#[derive(Debug, Default)]
+struct SiblingScan {
+    ids: Vec<u32>,
+    /// `(sibling project root, reason)` per sibling not scanned.
+    skipped: Vec<(PathBuf, String)>,
+}
+
+/// Read `<sibling>/<rel>/<kind dir>/NNN` across the clone's live worktrees, the
+/// invoking tree excluded (its dirs arrive through the scan's `local` ids). Live =
+/// not bare, not prunable, path present (the `git::live_worktree_for_ref` rule). A
+/// sibling with no doctrine root at `<rel>`, or whose kind dir cannot be read, goes
+/// on `skipped`; one with a root but no kind dir contributes nothing. A failing
+/// `git worktree list` is a hard error — it is not a per-sibling fault.
+fn read_siblings(locus: &GitLocus, kind: &Kind) -> anyhow::Result<SiblingScan> {
+    let records = git::list_worktrees(&locus.toplevel).with_context(|| {
+        format!(
+            "Failed to list the worktrees of {}",
+            locus.toplevel.display()
+        )
+    })?;
+    let own = std::fs::canonicalize(&locus.toplevel)
+        .with_context(|| format!("Failed to resolve {}", locus.toplevel.display()))?;
+    let mut scan = SiblingScan::default();
+    for record in records.iter().filter(|r| !r.bare && !r.prunable) {
+        let tree = match std::fs::canonicalize(&record.path) {
+            Ok(tree) => tree,
+            // A listed path that is gone is not a live tree.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => {
+                scan.skipped
+                    .push((locus.project_in(&record.path), format!("{e}")));
+                continue;
+            }
+        };
+        if tree == own {
+            continue;
+        }
+        let project = locus.project_in(&tree);
+        if !project.join(DOCTRINE_PATHSPEC).is_dir() {
+            let reason = format!("no doctrine root at {}", display_rel(&locus.rel));
+            scan.skipped.push((project, reason));
+            continue;
+        }
+        match crate::entity::scan_ids(&project.join(kind.dir)) {
+            Ok(ids) => scan.ids.extend(ids),
+            Err(e) => scan.skipped.push((project, format!("{e:#}"))),
+        }
+    }
+    Ok(scan)
+}
+
+/// `<rel>` for a message: the worktree top level reads as `./`, not an empty string.
+fn display_rel(rel: &Path) -> String {
+    if rel.as_os_str().is_empty() {
+        "./".to_owned()
+    } else {
+        rel.display().to_string()
+    }
+}
+
+/// The stderr warning for a sibling worktree left out of the id scan (STD-003).
+fn sibling_skip_warning(project: &Path, reason: &str) -> String {
+    format!(
+        "doctrine: worktree {} not scanned for reserved ids ({reason})",
+        project.display()
+    )
+}
+
+/// [`read_siblings`] with each skipped sibling warned on stderr (never stdout); the
+/// allocation proceeds on the ids that could be read.
+fn sibling_ids_warned(locus: &GitLocus, kind: &Kind) -> anyhow::Result<Vec<u32>> {
+    use std::io::Write;
+    let scan = read_siblings(locus, kind)?;
+    for (project, reason) in &scan.skipped {
+        drop(writeln!(
+            std::io::stderr(),
+            "{}",
+            sibling_skip_warning(project, reason)
+        ));
+    }
+    Ok(scan.ids)
 }
 
 /// The reserved ids in this clone's ref store under `namespace` FOR `prefix` — parse
@@ -275,59 +446,60 @@ fn local_scan_source() -> ScanSource {
 // ---------------------------------------------------------------------------
 
 /// Resolve the claim backend + scan source for a fresh-id allocation under `root`,
-/// for the kind whose canonical id-space is `prefix` (`SL`/`ASM`/… — the reservation
-/// ref segment, F-V7). Loads `[reservation]`, then delegates to [`resolve_backend`]
-/// — the SOLE LocalFs-vs-GitRef selector (design EX-3). `prompt` injects the D8 y/N
+/// for `kind` — its `prefix` keys the reservation ref segment (F-V7), its `dir` the
+/// sibling-worktree scan (SL-269). Loads `[reservation]`, then delegates to
+/// [`resolve_backend`] — the SOLE backend selector (design EX-3). `prompt` injects the D8 y/N
 /// confirmation (the command-tier caller passes `install::prompt_confirm`).
 pub(crate) fn backend(
     root: &Path,
-    prefix: &str,
+    kind: &Kind,
     prompt: PromptFn,
 ) -> anyhow::Result<(Box<dyn Claim>, ScanSource)> {
     let cfg = load_reservation_config(root)?;
     // The ONE ambient-env read (ISS-483): selection below is a function of its inputs.
-    resolve_backend(root, prefix, &cfg, env_fallback_optin(), prompt)
+    resolve_backend(root, kind, &cfg, env_fallback_optin(), prompt)
 }
 
-/// The SOLE LocalFs-vs-GitRef selector / reachability probe / degradation decider
-/// (design EX-3, D8). The reachability fetch *is* the probe; its ids seed the `GitRef`
-/// scan. Degradation:
-/// - `local` ⇒ `LocalFs`, the remote is never touched (EX-5).
+/// The SOLE backend selector / reachability probe / degradation decider (design
+/// EX-3, D8). The reachability fetch *is* the probe; its ids seed the `GitRef`
+/// scan. "Local" below is [`local_backend`]: `CloneRef` in a git repo, else `LocalFs`
+/// (SL-269). Degradation:
+/// - `local` ⇒ local, the remote is never touched (EX-5).
 /// - `shared` ⇒ `GitRef`; a fetch failure hard-errors, no fallback (shared is shared).
-/// - `auto` + **no remote configured** ⇒ `LocalFs` + a one-time stderr signal (the
+/// - `auto` + **no remote configured** ⇒ local + a one-time stderr signal (the
 ///   genuine single-tree fallback).
 /// - `auto` + **configured remote that fails** ⇒ hard error by default; the operator
 ///   opts into local fallback per allocation via the env opt-in / config
 ///   `allow_local_fallback` / the interactive y/N `prompt` (TTY) — on accept ⇒
-///   `LocalFs` + the one-time signal.
+///   local + the one-time signal.
 ///
 /// `fallback_optin` is the env opt-in, read once by [`backend`] and passed in — never
 /// read here, so selection is hermetic by construction (ISS-483, SL-269).
 fn resolve_backend(
     root: &Path,
-    prefix: &str,
+    kind: &Kind,
     cfg: &ReservationConfig,
     fallback_optin: bool,
     prompt: PromptFn,
 ) -> anyhow::Result<(Box<dyn Claim>, ScanSource)> {
     match cfg.reach {
-        Reach::Local => Ok((Box::new(LocalFs), local_scan_source())),
+        Reach::Local => local_backend(root, kind),
         Reach::Shared => {
             let remote = require_remote(root, cfg, "shared")?;
             // Reachability probe (this fetch is also the GitRef scan's first fetch).
             probe_reachability(root, &remote).with_context(|| {
                 format!("reach=shared: reservation remote {remote} unreachable")
             })?;
-            Ok(gitref(root, prefix, &remote))
+            gitref(root, kind, &remote)
         }
-        Reach::Auto => resolve_auto(root, prefix, cfg, fallback_optin, prompt),
+        Reach::Auto => resolve_auto(root, kind, cfg, fallback_optin, prompt),
     }
 }
 
 /// The `auto` degradation decision (D8).
 fn resolve_auto(
     root: &Path,
-    prefix: &str,
+    kind: &Kind,
     cfg: &ReservationConfig,
     fallback_optin: bool,
     prompt: PromptFn,
@@ -335,15 +507,15 @@ fn resolve_auto(
     let Some(remote) = configured_remote(root, cfg)? else {
         // Structurally single-tree: the genuine PRD-005 fallback case.
         signal_local_fallback("no remote configured");
-        return Ok((Box::new(LocalFs), local_scan_source()));
+        return local_backend(root, kind);
     };
     match probe_reachability(root, &remote) {
-        Ok(()) => Ok(gitref(root, prefix, &remote)),
+        Ok(()) => gitref(root, kind, &remote),
         Err(e) => {
             // Configured remote that FAILS: fail-closed unless the operator opts in.
             if fallback_optin || cfg.allow_local_fallback || prompt_fallback(&remote, prompt)? {
                 signal_local_fallback(&format!("remote {remote} unreachable: {e}"));
-                Ok((Box::new(LocalFs), local_scan_source()))
+                local_backend(root, kind)
             } else {
                 Err(e).with_context(|| {
                     format!(
@@ -357,17 +529,46 @@ fn resolve_auto(
     }
 }
 
-/// Construct the `GitRef` backend + its re-fetching scan source for `remote`.
-fn gitref(root: &Path, prefix: &str, remote: &str) -> (Box<dyn Claim>, ScanSource) {
+/// Construct the `GitRef` backend + its re-fetching composed scan for `remote`.
+/// Sibling worktrees are read here, once (design sec-2).
+fn gitref(root: &Path, kind: &Kind, remote: &str) -> anyhow::Result<(Box<dyn Claim>, ScanSource)> {
+    // A reachable remote implies a repo; a root outside one has no siblings.
+    let siblings = match git_locus(root)? {
+        Some(locus) => sibling_ids_warned(&locus, kind)?,
+        None => Vec::new(),
+    };
     let (holder_name, holder_email) = git::resolve_holder(root);
     let backend = GitRef {
         root: root.to_path_buf(),
-        prefix: prefix.to_owned(),
+        prefix: kind.prefix.to_owned(),
         remote: remote.to_owned(),
         holder_name,
         holder_email,
     };
-    (Box::new(backend), gitref_scan_source(root, remote, prefix))
+    let scan = composed_scan_source(root, kind.prefix, siblings, Some(remote.to_owned()));
+    Ok((Box::new(backend), scan))
+}
+
+/// The ONE local-reach backend, for every local arm (`reach = local`, `auto` with no
+/// remote, `auto` with accepted fallback): `CloneRef` + the composed scan (no fetch)
+/// when `root` is inside a git worktree, else `LocalFs` + the identity scan (SL-269
+/// EX-1). Sibling worktrees are read here, once.
+fn local_backend(root: &Path, kind: &Kind) -> anyhow::Result<(Box<dyn Claim>, ScanSource)> {
+    let Some(locus) = git_locus(root)? else {
+        return Ok((Box::new(LocalFs), local_scan_source()));
+    };
+    let siblings = sibling_ids_warned(&locus, kind)?;
+    let (holder_name, holder_email) = git::resolve_holder(root);
+    let backend = CloneRef {
+        root: root.to_path_buf(),
+        prefix: kind.prefix.to_owned(),
+        holder_name,
+        holder_email,
+    };
+    Ok((
+        Box::new(backend),
+        composed_scan_source(root, kind.prefix, siblings, None),
+    ))
 }
 
 /// Resolve the configured remote (explicit `[reservation] remote` else
@@ -626,7 +827,29 @@ mod tests {
     /// `root`'s config and resolve for the `TK` id-space with a declining prompt.
     fn select(root: &Path, optin: bool) -> anyhow::Result<(Box<dyn Claim>, ScanSource)> {
         let cfg = load_reservation_config(root)?;
-        resolve_backend(root, "TK", &cfg, optin, decline)
+        resolve_backend(root, &TK, &cfg, optin, decline)
+    }
+
+    /// The test kind: id-space `TK`, tree `.doctrine/tk` under the project root.
+    const TK: Kind = Kind {
+        dir: ".doctrine/tk",
+        prefix: "TK",
+        stem: "tk",
+    };
+
+    /// A test kind for id-space `prefix` (the ref segment is all the remote tests read).
+    fn kind(prefix: &'static str) -> Kind {
+        Kind { prefix, ..TK }
+    }
+
+    /// ISS-281 guard: a test that needs a NON-git root asserts it rather than
+    /// trusting `TMPDIR` to sit outside every repository.
+    fn assert_outside_git(root: &Path) {
+        assert!(
+            git_locus(root).unwrap().is_none(),
+            "precondition: {} must be outside any git worktree (ISS-281)",
+            root.display()
+        );
     }
 
     fn git(dir: &Path, args: &[&str]) -> std::process::Output {
@@ -719,7 +942,7 @@ mod tests {
         let env = Substrate::new(2);
 
         // Clone 0 reserves id 1 (the first candidate over an empty namespace).
-        let (b0, _s0) = gitref(env.clone(0), "TK", env.remote());
+        let (b0, _s0) = gitref(env.clone(0), &kind("TK"), env.remote()).unwrap();
         let dir0 = env.clone(0).join("tree/001");
         std::fs::create_dir_all(env.clone(0).join("tree")).unwrap();
         let won0 = b0.claim(&ClaimCtx { dir: &dir0, id: 1 }).unwrap();
@@ -727,7 +950,7 @@ mod tests {
 
         // Clone 1 computes the same candidate (1) — its create-push must be rejected
         // (the ref already exists on the remote): a lost race, not a duplicate.
-        let (b1, mut s1) = gitref(env.clone(1), "TK", env.remote());
+        let (b1, mut s1) = gitref(env.clone(1), &kind("TK"), env.remote()).unwrap();
         std::fs::create_dir_all(env.clone(1).join("tree")).unwrap();
         let dir1a = env.clone(1).join("tree/001");
         let lost = b1.claim(&ClaimCtx { dir: &dir1a, id: 1 }).unwrap();
@@ -770,7 +993,7 @@ mod tests {
         hold(&env, 0, "RSK", 2);
 
         // The RSK scan must return ONLY the RSK id (2), never the SL id (148).
-        let (_b, mut scan) = gitref(env.clone(0), "RSK", env.remote());
+        let (_b, mut scan) = gitref(env.clone(0), &kind("RSK"), env.remote()).unwrap();
         let ids = scan(&[]).unwrap();
         assert_eq!(ids, vec![2], "RSK scan is scoped to RSK reservations only");
         // ⇒ the next RSK id is 3, not 149 (no cross-kind pooling).
@@ -815,7 +1038,7 @@ mod tests {
     #[test]
     fn vt4_gitref_claim_is_content_free() {
         let env = Substrate::new(1);
-        let (b, _s) = gitref(env.clone(0), "SL", env.remote());
+        let (b, _s) = gitref(env.clone(0), &kind("SL"), env.remote()).unwrap();
         std::fs::create_dir_all(env.clone(0).join("tree")).unwrap();
         let dir = env.clone(0).join("tree/148");
         assert!(matches!(
@@ -852,8 +1075,8 @@ mod tests {
         let (b, _s) = select(root, false).expect("local backend");
         assert_eq!(
             b.arbiter(),
-            Arbiter::Dir,
-            "local backend must be LocalFs (no remote contact)"
+            Arbiter::CloneRef,
+            "local backend in a clone must be CloneRef (no remote contact)"
         );
 
         // shared with an unreachable remote: hard error (no fallback).
@@ -897,7 +1120,7 @@ mod tests {
         );
     }
 
-    /// VT-3 / EX-3: `auto` + **no remote configured** degrades to LocalFs (the genuine
+    /// VT-3 / EX-3: `auto` + **no remote configured** degrades to local (the genuine
     /// single-tree fallback); `auto` + a **configured remote that fails** hard-errors by
     /// default (D8 fail-closed) and accepts local fallback only on explicit opt-in.
     #[test]
@@ -905,10 +1128,14 @@ mod tests {
         let env = Substrate::new(1);
         let root = env.clone(0);
 
-        // auto + no remote configured (and none in .git/config) ⇒ LocalFs.
+        // auto + no remote configured (and none in .git/config) ⇒ local (CloneRef).
         env.write_config(0, "[reservation]\nreach = \"auto\"\n");
         let (b, _s) = select(root, false).expect("auto no-remote backend");
-        assert_eq!(b.arbiter(), Arbiter::Dir, "auto + no remote ⇒ LocalFs");
+        assert_eq!(
+            b.arbiter(),
+            Arbiter::CloneRef,
+            "auto + no remote ⇒ CloneRef in a clone"
+        );
 
         // auto + a configured remote that FAILS, prompt declines ⇒ hard error.
         env.write_config(
@@ -920,7 +1147,7 @@ mod tests {
             "auto + failing configured remote hard-errors when fallback declined"
         );
 
-        // Same, but config opt-in (allow-local-fallback) ⇒ LocalFs (never silent).
+        // Same, but config opt-in (allow-local-fallback) ⇒ local (never silent).
         env.write_config(
             0,
             "[reservation]\nreach = \"auto\"\nremote = \"/no/such/remote\"\nallow-local-fallback = true\n",
@@ -928,8 +1155,8 @@ mod tests {
         let (b, _s) = select(root, false).expect("opt-in fallback backend");
         assert_eq!(
             b.arbiter(),
-            Arbiter::Dir,
-            "explicit opt-in ⇒ LocalFs fallback"
+            Arbiter::CloneRef,
+            "explicit opt-in ⇒ local (CloneRef) fallback"
         );
     }
 
@@ -942,7 +1169,10 @@ mod tests {
     #[test]
     fn vt2_default_auto_in_a_non_git_dir_degrades_to_localfs() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let (b, _s) = backend(tmp.path(), "TK", decline).expect("auto non-git ⇒ LocalFs");
+        assert_outside_git(tmp.path());
+        let cfg = ReservationConfig::default();
+        let (b, _s) =
+            resolve_backend(tmp.path(), &TK, &cfg, false, decline).expect("auto non-git ⇒ LocalFs");
         assert_eq!(
             b.arbiter(),
             Arbiter::Dir,
@@ -955,7 +1185,7 @@ mod tests {
     #[test]
     fn vt5_split_state_hard_errors_with_reseat_hint() {
         let env = Substrate::new(1);
-        let (b, _s) = gitref(env.clone(0), "SL", env.remote());
+        let (b, _s) = gitref(env.clone(0), &kind("SL"), env.remote()).unwrap();
         // Pre-create the local dir as a FILE so create_dir fails after the push wins.
         std::fs::create_dir_all(env.clone(0).join("tree")).unwrap();
         let dir = env.clone(0).join("tree/009");
@@ -982,7 +1212,7 @@ mod tests {
     #[test]
     fn post_cas_mkdir_io_error_keeps_cause_without_reseat_hint() {
         let env = Substrate::new(1);
-        let (b, _s) = gitref(env.clone(0), "SL", env.remote());
+        let (b, _s) = gitref(env.clone(0), &kind("SL"), env.remote()).unwrap();
         // No `tree/` parent: create_dir(tree/009) fails with NotFound after the win.
         let dir = env.clone(0).join("tree/009");
         let err = b.claim(&ClaimCtx { dir: &dir, id: 9 }).unwrap_err();
@@ -995,8 +1225,8 @@ mod tests {
         );
     }
 
-    /// VT-6 (back-compat seam): a `local` backend never contacts a remote and its
-    /// scan is the identity — the materialise loop behaves bit-for-bit as today.
+    /// VT-6 (back-compat seam): a `local` backend never contacts a remote, and with
+    /// no refs and no siblings its scan returns the own dirs unchanged.
     #[test]
     fn vt6_local_backend_is_back_compatible() {
         let env = Substrate::new(1);
@@ -1004,10 +1234,10 @@ mod tests {
         let (b, mut s) = select(env.clone(0), false).expect("default backend");
         assert_eq!(
             b.arbiter(),
-            Arbiter::Dir,
-            "no [reservation] ⇒ LocalFs (EX-5)"
+            Arbiter::CloneRef,
+            "no [reservation] in a clone ⇒ CloneRef (EX-5)"
         );
-        // The scan source is the identity (no remote union).
+        // No refs, no siblings: the scan returns the own dirs, in order.
         assert_eq!(s(&[3, 7]).unwrap(), vec![3, 7]);
     }
 
@@ -1027,7 +1257,206 @@ mod tests {
             "auto + unreachable remote, opt-in off ⇒ hard error"
         );
         let (b, _s) = select(root, true).expect("opt-in on ⇒ local fallback");
-        assert_eq!(b.arbiter(), Arbiter::Dir, "opt-in on ⇒ LocalFs");
+        assert_eq!(
+            b.arbiter(),
+            Arbiter::CloneRef,
+            "opt-in on ⇒ local (CloneRef)"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // SL-269 PHASE-02: clone-wide local reservation (CloneRef + composed scan),
+    // over one clone with two linked worktrees and no remote.
+    // -----------------------------------------------------------------------
+
+    use crate::test_support::LinkedTrees;
+
+    /// `reach = local`, the arm every clone-wide test selects through.
+    fn local_cfg() -> ReservationConfig {
+        ReservationConfig {
+            reach: Reach::Local,
+            ..ReservationConfig::default()
+        }
+    }
+
+    /// Create `root`'s `TK` tree and return it.
+    fn tk_tree(root: &Path) -> PathBuf {
+        let tree = root.join(TK.dir);
+        std::fs::create_dir_all(&tree).unwrap();
+        tree
+    }
+
+    /// Claim `id` in `tree` through `backend`.
+    fn claim_at(backend: &dyn Claim, tree: &Path, id: u32) -> anyhow::Result<Acquired> {
+        backend.claim(&ClaimCtx {
+            dir: &tree.join(format!("{id:03}")),
+            id,
+        })
+    }
+
+    /// VT-1: the `CloneRef` CAS in the common git dir arbitrates across worktrees —
+    /// two trees computing the same candidate cannot both win it.
+    #[test]
+    fn two_linked_trees_allocating_one_kind_get_distinct_ids() {
+        let lt = LinkedTrees::new("");
+        let (a, b) = (lt.root(&lt.a), lt.root(&lt.b));
+        let (ba, _sa) = resolve_backend(&a, &TK, &local_cfg(), false, decline).unwrap();
+        let (bb, mut sb) = resolve_backend(&b, &TK, &local_cfg(), false, decline).unwrap();
+        assert_eq!(ba.arbiter(), Arbiter::CloneRef);
+        let (ta, tb) = (tk_tree(&a), tk_tree(&b));
+
+        assert!(matches!(
+            claim_at(ba.as_ref(), &ta, 1).unwrap(),
+            Acquired::Won
+        ));
+        assert!(
+            matches!(
+                claim_at(bb.as_ref(), &tb, 1).unwrap(),
+                Acquired::AlreadyHeld
+            ),
+            "tree b loses id 1 to tree a"
+        );
+        assert!(!tb.join("001").exists(), "the loser seats no dir");
+
+        let next = crate::entity::next_id(&sb(&[]).unwrap(), &[]);
+        assert_eq!(next, 2, "b's scan sees a's ref, so it recomputes to 2");
+        assert!(matches!(
+            claim_at(bb.as_ref(), &tb, 2).unwrap(),
+            Acquired::Won
+        ));
+
+        let rows = git::for_each_ref(&lt.main, "refs/doctrine/reservation-local/TK/").unwrap();
+        let ids: Vec<&str> = rows
+            .iter()
+            .filter_map(|r| r.refname.rsplit('/').next())
+            .collect();
+        assert_eq!(ids, vec!["001", "002"], "one clone-local ref per id");
+    }
+
+    /// VT-2: a sibling tree's uncommitted entity dir (a pre-slice or hand-made mint)
+    /// is in the candidate set, so it is never reissued.
+    #[test]
+    fn scan_sees_a_sibling_trees_uncommitted_entity_dir() {
+        let lt = LinkedTrees::new("");
+        std::fs::create_dir_all(lt.root(&lt.a).join(TK.dir).join("005")).unwrap();
+        let (_b, mut s) =
+            resolve_backend(&lt.root(&lt.b), &TK, &local_cfg(), false, decline).unwrap();
+        assert!(
+            s(&[]).unwrap().contains(&5),
+            "sibling a's TK-005 is scanned"
+        );
+    }
+
+    /// Optional hardening: `<rel>` is honoured — the sibling's kind dir is read under
+    /// its doctrine root below the worktree top level, not at the top level.
+    #[test]
+    fn scan_honours_the_doctrine_root_below_the_worktree_top() {
+        let lt = LinkedTrees::new("proj/");
+        std::fs::create_dir_all(lt.root(&lt.a).join(TK.dir).join("006")).unwrap();
+        let b = lt.root(&lt.b);
+        let locus = git_locus(&b).unwrap().expect("b is in git");
+        let scan = read_siblings(&locus, &TK).unwrap();
+        assert!(
+            scan.skipped.is_empty(),
+            "every tree has proj/.doctrine: {scan:?}"
+        );
+        let (_b, mut s) = resolve_backend(&b, &TK, &local_cfg(), false, decline).unwrap();
+        assert!(
+            s(&[]).unwrap().contains(&6),
+            "a's proj/.doctrine/tk/006 is scanned"
+        );
+    }
+
+    /// VT-3: the scan reads both ref namespaces, each scoped to the kind's prefix —
+    /// a clone that switches reach stays collision-free, and ISS-221 does not regress.
+    #[test]
+    fn scan_sees_both_ref_namespaces_scoped_to_prefix() {
+        let lt = LinkedTrees::new("");
+        for refname in [
+            format!("{RESERVATION_LOCAL_REF_PREFIX}/TK/004"),
+            format!("{RESERVATION_REF_PREFIX}/TK/007"),
+            format!("{RESERVATION_LOCAL_REF_PREFIX}/OT/050"),
+        ] {
+            git_ok(&lt.main, &["update-ref", &refname, "HEAD"]);
+        }
+        let (_b, mut s) =
+            resolve_backend(&lt.root(&lt.a), &TK, &local_cfg(), false, decline).unwrap();
+        let ids = s(&[]).unwrap();
+        assert!(ids.contains(&4), "reservation-local/TK: {ids:?}");
+        assert!(ids.contains(&7), "reservation/TK: {ids:?}");
+        assert!(
+            !ids.contains(&50),
+            "another kind's ref never leaks: {ids:?}"
+        );
+    }
+
+    /// VT-4: once the `CloneRef` CAS is won, an existing dir is a ref-less writer's
+    /// claim — `AlreadyHeld` (retry the next id), the ref kept (burnt, not rolled
+    /// back). Any other mkdir failure keeps its cause, names the id, and has no
+    /// `reseat` hint (RV-406 `F-3`).
+    #[test]
+    fn clone_ref_existing_dir_is_already_held() {
+        let lt = LinkedTrees::new("");
+        let a = lt.root(&lt.a);
+        let (b, _s) = resolve_backend(&a, &TK, &local_cfg(), false, decline).unwrap();
+        let tree = tk_tree(&a);
+        std::fs::create_dir(tree.join("003")).unwrap();
+        assert!(matches!(
+            claim_at(b.as_ref(), &tree, 3).unwrap(),
+            Acquired::AlreadyHeld
+        ));
+        let held = git::for_each_ref(&a, "refs/doctrine/reservation-local/TK/003").unwrap();
+        assert_eq!(held.len(), 1, "the ref stays held (burnt, not rolled back)");
+
+        // No parent dir: the post-CAS mkdir fails with an io error, not AlreadyExists.
+        let err = claim_at(b.as_ref(), &a.join("no-such-parent"), 4).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("No such file"), "keeps the io cause: {msg}");
+        assert!(msg.contains("TK-004"), "names the burnt id: {msg}");
+        assert!(!msg.contains("reseat"), "no reseat hint: {msg}");
+    }
+
+    /// VT-5: a sibling with no doctrine root at `<rel>` is not scanned, is named on
+    /// the skipped list and in its warning, and the allocation still proceeds.
+    #[test]
+    fn sibling_without_doctrine_root_is_warned_not_scanned() {
+        let lt = LinkedTrees::new("");
+        std::fs::remove_dir_all(lt.b.join(DOCTRINE_PATHSPEC)).unwrap();
+        let a = lt.root(&lt.a);
+
+        let locus = git_locus(&a).unwrap().expect("a is in git");
+        let scan = read_siblings(&locus, &TK).unwrap();
+        let b_canon = std::fs::canonicalize(&lt.b).unwrap();
+        assert_eq!(scan.skipped.len(), 1, "only b is skipped: {scan:?}");
+        let (path, reason) = &scan.skipped[0];
+        assert_eq!(path, &b_canon, "the skipped sibling is b");
+        assert!(reason.contains("no doctrine root"), "{reason}");
+        let warning = sibling_skip_warning(path, reason);
+        assert!(
+            warning.contains(&format!("worktree {} not scanned", b_canon.display())),
+            "names b's path exactly, no trailing separator: {warning}"
+        );
+        assert!(warning.contains(reason), "{warning}");
+
+        let (b, _s) = resolve_backend(&a, &TK, &local_cfg(), false, decline).unwrap();
+        assert!(matches!(
+            claim_at(b.as_ref(), &tk_tree(&a), 1).unwrap(),
+            Acquired::Won
+        ));
+    }
+
+    /// VT-6: `reach = local` is a plain `mkdir` outside git and the clone-wide ref CAS
+    /// inside it.
+    #[test]
+    fn local_reach_is_clone_ref_in_git_and_dir_outside() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        assert_outside_git(tmp.path());
+        let (b, _s) = resolve_backend(tmp.path(), &TK, &local_cfg(), false, decline).unwrap();
+        assert_eq!(b.arbiter(), Arbiter::Dir, "non-git root keeps LocalFs");
+
+        let lt = LinkedTrees::new("");
+        let (b, _s) = resolve_backend(&lt.root(&lt.a), &TK, &local_cfg(), false, decline).unwrap();
+        assert_eq!(b.arbiter(), Arbiter::CloneRef, "git root takes CloneRef");
     }
 
     /// SL-269 EX-5: the fallback prompt says the id is clone-scoped and names both
@@ -1049,8 +1478,8 @@ mod tests {
     // -----------------------------------------------------------------------
 
     /// Reserve `id` under `prefix` from clone `c` so the survey has something to read.
-    fn hold(env: &Substrate, c: usize, prefix: &str, id: u32) {
-        let (b, _s) = gitref(env.clone(c), prefix, env.remote());
+    fn hold(env: &Substrate, c: usize, prefix: &'static str, id: u32) {
+        let (b, _s) = gitref(env.clone(c), &kind(prefix), env.remote()).unwrap();
         let tree = env.clone(c).join("tree");
         std::fs::create_dir_all(&tree).unwrap();
         let dir = tree.join(format!("{id:03}"));

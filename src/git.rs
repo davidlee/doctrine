@@ -584,6 +584,30 @@ pub(crate) fn git_opt(root: &Path, args: &[&str]) -> Result<Option<String>, Capt
     Ok(Some(text.trim().to_string()))
 }
 
+/// Where `root` sits in its git worktree: `(toplevel, prefix)`, the worktree top
+/// level and `root`'s path relative to it (empty at the top level). `None` when
+/// `root` is not inside a git worktree. One `rev-parse` spawn (SL-269).
+///
+/// # Errors
+///
+/// Returns [`CaptureError::Git`] if git cannot be spawned.
+pub(crate) fn toplevel_and_prefix(root: &Path) -> Result<Option<(PathBuf, PathBuf)>, CaptureError> {
+    Ok(
+        git_opt(root, &["rev-parse", "--show-toplevel", "--show-prefix"])?
+            .as_deref()
+            .and_then(parse_toplevel_and_prefix),
+    )
+}
+
+/// Parse `rev-parse --show-toplevel --show-prefix` output (PURE). [`git_opt`] trims,
+/// so an empty prefix drops the second line entirely — a lone line reads as prefix `""`.
+fn parse_toplevel_and_prefix(out: &str) -> Option<(PathBuf, PathBuf)> {
+    let mut lines = out.lines();
+    let toplevel = lines.next().filter(|l| !l.is_empty())?;
+    let prefix = lines.next().unwrap_or("");
+    Some((PathBuf::from(toplevel), PathBuf::from(prefix)))
+}
+
 /// Apply a unified-diff `patch` into the index via `git apply --3way --index`,
 /// NON-committing (SL-056 PHASE-07 import: the orchestrator commits separately,
 /// ADR-006 D7). The patch is streamed on stdin as RAW BYTES — `git apply`
@@ -4955,6 +4979,22 @@ mod tests {
             listing.is_empty(),
             "reservation tree carries no entries: {listing:?}"
         );
+    }
+
+    /// SL-269 A1: the trimmed `--show-toplevel --show-prefix` output parses with and
+    /// without a prefix line; empty output is "not in a worktree".
+    #[test]
+    fn parse_toplevel_and_prefix_handles_a_trimmed_empty_prefix() {
+        use super::parse_toplevel_and_prefix;
+        assert_eq!(
+            parse_toplevel_and_prefix("/r/tree\nproj/"),
+            Some((PathBuf::from("/r/tree"), PathBuf::from("proj/")))
+        );
+        assert_eq!(
+            parse_toplevel_and_prefix("/r/tree"),
+            Some((PathBuf::from("/r/tree"), PathBuf::new()))
+        );
+        assert_eq!(parse_toplevel_and_prefix(""), None);
     }
 
     /// SL-148 EX-1/VT-4: the dangling reservation commit carries the empty tree

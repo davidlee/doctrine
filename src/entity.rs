@@ -66,7 +66,6 @@ pub(crate) trait Claim {
 /// discriminator ([`Claim::arbiter`]).
 #[cfg(test)]
 #[derive(Debug, PartialEq, Eq)]
-#[expect(dead_code, reason = "constructed by CloneRef, SL-269 PHASE-02")]
 pub(crate) enum Arbiter {
     /// The local filesystem: the `mkdir` is the claim (`LocalFs`).
     Dir,

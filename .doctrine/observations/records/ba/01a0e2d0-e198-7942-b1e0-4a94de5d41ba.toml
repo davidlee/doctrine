@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e2d0-e198-7942-b1e0-4a94de5d41ba"
+recorded_at = "2026-09-27T12:22:15.192401182Z"
+kind = "friction"
+summary = "capsule-orchestrator/worker: gate warnings bury the real error"
+detail = "SL-269 PHASE-01 worker: doctrine check gate printed many repo-wide 'unresolved citation' and 'linked slices terminal' warnings that buried a single clippy error; had to rerun with captured output to find it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

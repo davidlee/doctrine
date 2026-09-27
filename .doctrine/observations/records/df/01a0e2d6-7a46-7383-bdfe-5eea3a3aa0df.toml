@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e2d6-7a46-7383-bdfe-5eea3a3aa0df"
+recorded_at = "2026-09-27T12:28:21.958750378Z"
+kind = "friction"
+summary = "capsule-orchestrator/phase-planner: research drift flags plan additions"
+detail = "SL-269 PHASE-01/02 planners: 'doctrine slice research' reports drift solely because plan.md/plan.toml were added after the research baseline; noise every phase-plan. Also memory-retrieve positional-arg friction recurred in PHASE-02 planner (already recorded)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

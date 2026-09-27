@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e34c-f103-73e1-9e39-2c2fe1a33bc1"
+recorded_at = "2026-09-27T14:37:45.603983973Z"
+kind = "friction"
+summary = "capsule-orchestrator/capsule-worker SL-269 PHASE-02: 35KB reserve.rs diff spilled to file on resume"
+detail = "Resuming an interrupted worker's uncommitted partial delta meant reviewing a 35KB git diff; it spilled and the worker reviewed by outline plus range reads instead. Interrupted-worker resumes cost a full re-review of the partial."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
