@@ -10,6 +10,54 @@ tags = ["area:review", "area:governance", "rfc-026"]
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
+[[selector]]
+selector = "src/review_ledger/vocab.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review_ledger/gate.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review_ledger/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/design.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/run.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/gate.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/design_run/fixture.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/mcp_server/tools.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review/tests.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/design-prompts/reviewing.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/review-ledger.md"
+intent = "design-target"
+
 [[relation]]
 label = "references"
 role = "concerns"
