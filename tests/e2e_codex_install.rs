@@ -223,7 +223,7 @@ fn codex_dry_run_says_would_write_and_writes_nothing() {
 }
 
 #[test]
-fn codex_probe_fires_on_a_hook_write_even_when_the_mcp_entry_is_current() {
+fn codex_notice_fires_on_a_hook_write_even_when_the_mcp_entry_is_current() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     boot_install(root, "codex", false);
@@ -233,7 +233,7 @@ fn codex_probe_fires_on_a_hook_write_even_when_the_mcp_entry_is_current() {
     let out = boot_install(root, "codex", false);
     assert!(
         out.contains("To activate:"),
-        "the hook write fires the notice/probe: {out}"
+        "the hook write fires the notice: {out}"
     );
     assert!(
         !out.contains("MCP server registration"),
@@ -246,7 +246,7 @@ fn codex_probe_fires_on_a_hook_write_even_when_the_mcp_entry_is_current() {
 }
 
 #[test]
-fn codex_probe_does_not_fire_when_only_the_mcp_entry_refreshed() {
+fn codex_notice_does_not_fire_when_only_the_mcp_entry_refreshed() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     boot_install(root, "codex", false);
@@ -257,7 +257,7 @@ fn codex_probe_does_not_fire_when_only_the_mcp_entry_refreshed() {
     assert!(out.contains(WROTE_LINE), "the MCP leg wrote: {out}");
     assert!(
         !out.contains("To activate:"),
-        "a hook-clean run prints no activation notice, so no probe: {out}"
+        "a hook-clean run prints no activation notice: {out}"
     );
     assert!(
         out.contains("not active until you trust"),
@@ -266,29 +266,35 @@ fn codex_probe_does_not_fire_when_only_the_mcp_entry_refreshed() {
 }
 
 #[test]
-fn codex_probe_degrades_to_a_named_unknown_with_a_real_runner() {
+fn codex_activation_notice_reads_the_project_hooks_key() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
 
-    // The REAL CaptureRunner: an empty PATH makes `codex` unresolvable, so the
-    // probe fails and the notice must carry a non-empty Unknown(reason).
-    let out = common::doctrine_cmd(root)
-        .args(["boot", "install", "--agent", "codex", "-y", "-p"])
-        .arg(root)
-        .env("PATH", "")
-        .output()
-        .expect("spawn doctrine");
+    // Seed the project file with hooks OFF. The hook leg writes a fresh
+    // `.codex/hooks.json`, firing the activation notice; RV-403 F-1's case is
+    // that the pre-trust probe suppressed step 1 here, and the project-file read
+    // must not.
+    fs::create_dir_all(root.join(".codex")).unwrap();
+    let config = root.join(CONFIG_REL);
+    fs::write(&config, "[features]\nhooks = false\n").unwrap();
+
+    let out = boot_install(root, "codex", false);
+    assert!(out.contains("To activate:"), "{out}");
     assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
+        out.contains("Enable [features] hooks = true"),
+        "hooks = false still prints step 1: {out}"
     );
-    let stdout = String::from_utf8(out.stdout).expect("utf8 stdout");
-    assert!(stdout.contains("To activate:"), "{stdout}");
+
+    // Flip the project file to enabled: step 1 is omitted, the rest still prints.
+    fs::write(&config, "[features]\nhooks = true\n").unwrap();
+    fs::remove_file(root.join(".codex/hooks.json")).unwrap();
+    let out = boot_install(root, "codex", false);
+    assert!(out.contains("To activate:"), "{out}");
     assert!(
-        stdout.contains("Failed to run 'codex'"),
-        "the Unknown reason names the failure: {stdout}"
+        !out.contains("hooks = true in .codex/config.toml"),
+        "hooks = true omits step 1: {out}"
     );
+    assert!(out.contains("Start codex"), "step 2 still prints: {out}");
 }
 
 #[test]

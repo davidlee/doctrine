@@ -411,7 +411,7 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
             &mut all_yes,
         )?
     {
-        if let Err(e) = crate::boot::wire(root, exec, &harnesses, false, &CaptureRunner) {
+        if let Err(e) = crate::boot::wire(root, exec, &harnesses, false) {
             writeln!(io::stdout(), "  boot wire failed: {e:#}")?;
         }
     }
@@ -1728,40 +1728,6 @@ impl Runner for ProcessRunner {
             .status()
             .with_context(|| format!("Failed to run '{program}' (is {} installed?)", self.name))?;
         Ok(status.success())
-    }
-}
-
-/// Captured output of a probed subprocess (SL-271).
-#[derive(Debug, Clone)]
-pub(crate) struct Capture {
-    pub(crate) success: bool,
-    pub(crate) stdout: String,
-    pub(crate) stderr: String,
-}
-
-/// A capture-capable subprocess seam, distinct from [`Runner`]: that one inherits
-/// stdio and answers only success, while the codex hooks probe needs stdout,
-/// stderr and a bound working directory (SL-271 design sec-5.2).
-pub(crate) trait CommandRunner: std::fmt::Debug {
-    fn run_capture(&self, program: &str, args: &[&str], cwd: &Path) -> anyhow::Result<Capture>;
-}
-
-/// The production capture runner: `Command::output()` with `cwd` bound.
-#[derive(Debug)]
-pub(crate) struct CaptureRunner;
-
-impl CommandRunner for CaptureRunner {
-    fn run_capture(&self, program: &str, args: &[&str], cwd: &Path) -> anyhow::Result<Capture> {
-        let out = std::process::Command::new(program)
-            .args(args)
-            .current_dir(cwd)
-            .output()
-            .with_context(|| format!("Failed to run '{program}'"))?;
-        Ok(Capture {
-            success: out.status.success(),
-            stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
-        })
     }
 }
 
