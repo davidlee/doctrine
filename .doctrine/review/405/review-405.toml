@@ -10,13 +10,21 @@ raiser    = "raiser"
 responder = "responder"
 rounds_base = 0
 contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Reviewed SL-272 design sections sec-1 through sec-6 against SL-272 scope, research, REQ-478, DEC-335, DEC-336, DEC-237, DEC-239, DEC-249, DEC-301, ISS-482, IMP-499, ISS-454 and ISS-488. Traced direct and delegated declaration routes, within-apply act ordering, change-log derivation, event rendering and bounds, replay/change-log retention, payload contract publication and the named unit/e2e verification. Raised F-1 through F-4 with file:line evidence; no source or design file was edited.
+"""
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-272"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Finding null is still accepted through delegated proposals"
 detail = """
@@ -26,14 +34,26 @@ Observed: SL-272 sec-2 changes only `declare_finding` (`run.rs:1747-1761`). A `d
 
 The design must cover proposal-time refusal and replace that test. Its six design-target selectors omit `tests/e2e_design_delegation.rs`; VT-1 exercises only direct creation and cannot catch this route.
 """
+disposition = "fix-now"
+response = """
+Verified: rehearse_proposal rehearses only inquiry subjects (run.rs:1270-1289); nulled_keys deliberately excludes blocking on the premise that a finding null reads as absent (submission.rs:835-838, RV-389 F-18) — the premise ISS-482 overturns; tests/e2e_design_delegation.rs:728-749 pins the acceptance. Repair: sec-2 covers the proposal route — refuse a finding's blocking:null at propose (extend the rehearsal or nulled_keys, whichever keeps one rule), flip the pinned delegation test, add tests/e2e_design_delegation.rs to the design-target selectors, and widen VT-1 to both routes.
+"""
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Verified: rehearse_proposal rehearses only inquiry subjects (run.rs:1270-1289); nulled_keys deliberately excludes blocking on the premise that a finding null reads as absent (submission.rs:835-838, RV-389 F-18) — the premise ISS-482 overturns; tests/e2e_design_delegation.rs:728-749 pins the acceptance. Repair: sec-2 covers the proposal route — refuse a finding's blocking:null at propose (extend the rehearsal or nulled_keys, whichever keeps one rule), flip the pinned delegation test, add tests/e2e_design_delegation.rs to the design-target selectors, and widen VT-1 to both routes.
+"""
+
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expired-submission remedy relies on unavailable history"
 detail = """
@@ -43,14 +63,26 @@ Observed: SL-272 sec-2 says "check `design show` for whether the original landed
 
 The prescribed check can therefore tell a caller to resubmit an already-applied operation under a fresh id, the duplicate-apply risk IMP-499 exists to avoid. Wording and VT-2 need a remedy that states the uncertainty and forbids resubmission unless the intended effect is independently verified missing; if it cannot be established, the caller needs a reconciliation path rather than an inference from the bounded log.
 """
+disposition = "fix-now"
+response = """
+Verified: the refusal fires only below the receipt floor, which advances on the same CHANGE_LOG_REVISIONS window as the change log (snapshot.rs:141-151), and ChangeRow carries no submission id (change_log.rs:801-819) — so design show can neither prove nor disprove that the original landed. The sec-2 remedy is unsafe as written. Repair: reword to state the uncertainty and direct the caller to verify the intended effect against current run state (the map/sections, not the bounded log) before resubmitting under a fresh id at the current revision; VT-2 asserts the corrected wording.
+"""
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Verified: the refusal fires only below the receipt floor, which advances on the same CHANGE_LOG_REVISIONS window as the change log (snapshot.rs:141-151), and ChangeRow carries no submission id (change_log.rs:801-819) — so design show can neither prove nor disprove that the original landed. The sec-2 remedy is unsafe as written. Repair: reword to state the uncertainty and direct the caller to verify the intended effect against current run state (the map/sections, not the bounded log) before resubmitting under a fresh id at the current revision; VT-2 asserts the corrected wording.
+"""
+
 [[finding]]
 id = "F-3"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Prior-liveness gate misreports a second same-kind recording in one apply"
 detail = """
@@ -60,14 +92,26 @@ Observed: one request may carry both `checkpoint_act: {act: design-accepted, ...
 
 The design needs to define and test this allowed double-recording route: refuse two DesignAccepted inputs, coalesce them, or track the displaced record's actual liveness while avoiding the already-dead prior-act duplicate. VT-3's single-recording sequence does not exercise it.
 """
+disposition = "fix-now"
+response = """
+Verified: one request may carry both checkpoint_act design-accepted and run-level acceptance; apply records the explicit act, then the acceptance through the same record_act seam (run.rs:426-451), so the second displaces an act recorded moments earlier in the same apply. A fixed before-set gate then misreports both ways. Repair: sec-3 defines the predicate over the displaced act's actual liveness at displacement (or refuses/coalesces the double DesignAccepted input — the design picks one and amends DEC-336 if the predicate changes); VT-3 gains the double-recording case in both prior states.
+"""
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Verified: one request may carry both checkpoint_act design-accepted and run-level acceptance; apply records the explicit act, then the acceptance through the same record_act seam (run.rs:426-451), so the second displaces an act recorded moments earlier in the same apply. A fixed before-set gate then misreports both ways. Repair: sec-3 defines the predicate over the displaced act's actual liveness at displacement (or refuses/coalesces the double DesignAccepted input — the design picks one and amends DEC-336 if the predicate changes); VT-3 gains the double-recording case in both prior states.
+"""
+
 [[finding]]
 id = "F-4"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Finding-null refusal is absent from the published payload contract"
 detail = """
@@ -77,10 +121,22 @@ Observed: SL-272 sec-4 targets only refusal/submission/run/change-log/unit/e2e p
 
 The design needs a contract representation of the finding-home null refusal, regeneration of the shipped contract, and selectors/verification for those paths. Otherwise the implementation can pass VT-1 while leaving the caller-facing contract silent on the changed wire rule.
 """
+disposition = "fix-now"
+response = """
+Verified: the contract models finding blocking as Presence::Optional (payload_contract.rs:1474-1497) and the shipped install/design-payload-contract.md:60 renders it as plain optional; the doc is pinned byte-for-byte to the renderer. Repair: sec-2/sec-4 add a contract representation of the finding-home null refusal, regenerate the shipped contract, and add payload_contract.rs and install/design-payload-contract.md to the design-target selectors, with a render pin in verification.
+"""
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Verified: the contract models finding blocking as Presence::Optional (payload_contract.rs:1474-1497) and the shipped install/design-payload-contract.md:60 renders it as plain optional; the doc is pinned byte-for-byte to the renderer. Repair: sec-2/sec-4 add a contract representation of the finding-home null refusal, regenerate the shipped contract, and add payload_contract.rs and install/design-payload-contract.md to the design-target selectors, with a render pin in verification.
+"""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
