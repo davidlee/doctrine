@@ -1,0 +1,60 @@
+Read-only research in the doctrine repo. Do not edit, create, or commit anything.
+
+BLINDNESS. Do not read anything under `.doctrine/rfc/026/` except the ledgers'
+own output named below, do not read `.doctrine/slice/270/`, and do not read the
+knowledge records QUE-224 or QUE-225. Other raters have classified these
+findings; you must not see their labels. If a ledger finding carries a `route`
+field or its disposition or response names a route, ignore it.
+
+TOOLS. Use the CLI, not raw files: `./target/debug/doctrine review show RV-NNN --json`.
+Check `--help` for flags; do not guess them.
+
+QUESTION. A routing convention is in use on design-review ledgers, where each
+blocker or major finding is assigned one route from a closed set of five. Your
+job: assign each severe finding on the design-review ledgers below a route, and say plainly
+where none fits.
+
+THE FIVE ROUTES. Assign exactly one, or the literal `none`.
+
+| route | the question behind the finding | what settles it |
+|---|---|---|
+| `review` | should we accept this commitment and its consequences? | design judgement and adversarial review |
+| `demonstrate` | can these parts connect as proposed? | a thin implementation exercising the disputed connection — "it compiles" is not the bar |
+| `probe` | does the mechanism withstand the adversary? | a stated adversary, then a hostile probe |
+| `control` | would the planned check notice failure? | a negative control: name the concrete incorrect candidate the check must reject, and observe it rejected |
+| `owner-fix` | do two accounts of one fact disagree? | remove the duplicate, verify the surviving owner, sweep the affected class |
+
+When more than one route fits, route on the claim whose failure would make the
+rest of the finding moot.
+
+`none` means: the finding is real and severe, but none of the five route
+questions is the question it is actually asking. Use `none` when it is the
+honest answer, and say in <=12 words what question the finding *is* asking. Do
+not strain to fit a route, and do not invent a sixth route.
+
+SECOND LABEL. For every row you route `owner-fix` or `none`, add exactly one:
+  `duplicate` — two live accounts of one fact exist; settled by deleting one.
+  `stale`     — a record lags the thing it describes; settled by editing it.
+  `neither`   — both descriptions are wrong for this finding.
+Leave it blank on other rows.
+
+POPULATION. Every blocker and major finding on these 14 design-review ledgers,
+all of them, no sampling — 155 findings in total. If your count differs, say so
+and list what you found. The ledgers are long; cover every finding rather than
+summarising, and if you cannot finish, state exactly which you covered.
+
+  RV-325 RV-370 RV-307 RV-314 RV-349 RV-358 RV-365 RV-359 RV-355 RV-347 RV-344
+  RV-374 RV-382 RV-377
+
+OUTPUT (markdown, compact, no preamble):
+
+ 1. One flat table, complete, one row per severe finding:
+    ledger | F-N | severity | route-or-none | second-label | <=12-word reason.
+ 2. Count per route, the `none` count, and the second-label counts.
+ 3. How often you hesitated between two routes, with the F-N ids and the two
+    candidates, and how often you were near `none` but assigned a route anyway.
+ 4. At most 10 lines of caveats.
+
+RULES. Classify from the finding's own text and its disposition, not from the
+slice title. Do not summarise the designs. Do not recommend anything. Do not
+speculate; write "unknown" rather than guess.
