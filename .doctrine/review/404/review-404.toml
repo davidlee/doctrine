@@ -1,0 +1,116 @@
+id    = 404
+slug  = "re-audit-sl-271-after-the-phase-04-probe-retirement-rv-403-f-1"
+title = "Re-audit SL-271 after the PHASE-04 probe retirement (RV-403 F-1)"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Re-audited SL-271 at audit after the design back-edge and PHASE-04. Held the retirement to the ratified option A, grepped the retired symbols to exhaustion, re-ran conformance/verify-vt/gate and the focused suites, and dispositioned four findings: one design-wrong routed to reconcile, one fix-now fixed in-audit, two aligned."
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-271"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "PHASE-04 retirement leaves the PHASE-03 VT mandates unverifiable; design sec-9 does not record the supersession"
+detail = "doctrine slice verify-vt 271 now reports PHASE-03 VT-1..VT-4 FAIL: their mandated keywords (parse_codex_features, codex_hooks_state, Unknown, HooksState) are the symbols PHASE-04 retired under RV-403 F-1 option A. The plan criteria are immutable-append, so the mandate cannot be re-pointed. The retirement is correct and PHASE-04 VT-1..VT-4 pass; what is missing is the record: design sec-9 names the :5170 flip but not that the PHASE-03 probe VTs are historically satisfied and superseded by PHASE-04. Reconcile: design sec-9 records the supersession so the current-tree FAIL reads as expected rather than as un-dispositioned red."
+disposition = "design-wrong"
+response = "Agreed and routed to reconcile. verify-vt confirms PHASE-03 VT-1..VT-4 fail on the current tree because the mandate names retired symbols; PHASE-04 VT-1..VT-4 pass. The plan criteria are immutable-append, so the disposition lands in design sec-9, not the criterion. Reconcile brief item: design sec-9 records PHASE-03 VT-1..VT-4 as satisfied at execution and superseded by PHASE-04 VT-1/VT-2."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Agreed and routed to reconcile. verify-vt confirms PHASE-03 VT-1..VT-4 fail on the current tree because the mandate names retired symbols; PHASE-04 VT-1..VT-4 pass. The plan criteria are immutable-append, so the disposition lands in design sec-9, not the criterion. Reconcile brief item: design sec-9 records PHASE-03 VT-1..VT-4 as satisfied at execution and superseded by PHASE-04 VT-1/VT-2."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "PHASE-04 VT-3 mandated keyword was absent from the e2e case it named"
+detail = "verify-vt reported PHASE-04 VT-3 FAIL because the keyword Ensure [features] hooks was absent from tests/e2e_codex_install.rs. The case covered [features] hooks = false (Enable ...) and = true (step 1 omitted) but not the absent-key fallback, the branch that emits the unconditional Ensure instruction. Fixed in-audit: the test now also seeds a config with no [features] hooks key and asserts the Ensure line; verify-vt PHASE-04 reads 4/4 PASS."
+disposition = "fix-now"
+response = "Agreed and fixed in-audit. The e2e test now seeds a config with no [features] hooks key and asserts the unconditional Ensure [features] hooks = true line; verify-vt PHASE-04 reads 4/4 PASS and the e2e suite 12/12."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Agreed and fixed in-audit. The e2e test now seeds a config with no [features] hooks key and asserts the unconditional Ensure [features] hooks = true line; verify-vt PHASE-04 reads 4/4 PASS and the e2e suite 12/12."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "The two undeclared deltas are slice-level plan/status bookkeeping"
+detail = "slice conformance 271 reports undeclared: .doctrine/slice/271/plan.toml (the PHASE-04 append) and .doctrine/slice/271/slice-271.toml (the lifecycle transitions). Both are slice-level governance bookkeeping, not scope creep; the RV-403 F-5 class. conformance also reads conformant 4, undelivered 0."
+disposition = "aligned"
+response = "Agreed, aligned. Both paths are slice-level plan/status bookkeeping, the same class RV-403 F-5 dispositioned."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "aligned"
+response = "Agreed, aligned. Both paths are slice-level plan/status bookkeeping, the same class RV-403 F-5 dispositioned."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "README Host-dependencies is accurate after the retirement; RV-402 F-5 obsoleted"
+detail = "README Host-dependencies declares only the POSIX sh the codex entry runs through. The codex features list subprocess that RV-402 F-5 wanted declared is retired by PHASE-04, so no codex-execution statement is owed and the section is accurate. Verified by grep: no codex execution claim in README."
+disposition = "aligned"
+response = "Agreed, aligned. No codex-execution statement is owed post-retirement; RV-402 F-5 is obsoleted."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "aligned"
+response = "Agreed, aligned. No codex-execution statement is owed post-retirement; RV-402 F-5 is obsoleted."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

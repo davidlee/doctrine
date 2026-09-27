@@ -645,6 +645,12 @@ control in the same test.
   that a Claude-only run emits neither the codex caveat nor the hooks warning.
 - A no-host-abspath assertion extends the existing portable-command discipline to
   the codex file.
+- **PHASE-03's probe VT mandates are superseded, not un-met** (`RV-404` F-1).
+  `PHASE-03` VT-1..VT-4 pinned `parse_codex_features` / `codex_hooks_state` /
+  `HooksState`, which PHASE-04 retires, so `slice verify-vt 271` reads PHASE-03
+  FAIL against the current tree. The criteria are immutable-append; the mandates
+  were satisfied at PHASE-03's execution and are replaced by PHASE-04 VT-1/VT-2,
+  which pass. The red is an expected supersession, recorded here, not drift.
 - `doctrine check gate` at close (a fresh binary against the real corpus).
 - The two-member Specification Revision is raised at reconcile; **close requires
   it landed or a recorded waiver**, while phases proceed without waiting on it

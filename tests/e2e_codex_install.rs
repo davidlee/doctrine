@@ -295,6 +295,16 @@ fn codex_activation_notice_reads_the_project_hooks_key() {
         "hooks = true omits step 1: {out}"
     );
     assert!(out.contains("Start codex"), "step 2 still prints: {out}");
+
+    // A config without a `[features] hooks` key falls back to the unconditional
+    // instruction.
+    fs::write(&config, "# no features table\n").unwrap();
+    fs::remove_file(root.join(".codex/hooks.json")).unwrap();
+    let out = boot_install(root, "codex", false);
+    assert!(
+        out.contains("Ensure [features] hooks = true"),
+        "an absent key still prints step 1: {out}"
+    );
 }
 
 #[test]

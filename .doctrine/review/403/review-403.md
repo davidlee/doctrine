@@ -236,3 +236,53 @@ Consequences the reconciler must carry, not re-decide:
 4. The design-back-edge move is refused while a live `dispatch/<slice>`
    coordination worktree exists and the slice is only movable out of a terminal
    status — neither applies (`SL-271` is at `audit`, no coordination tree).
+
+## Reconciliation Outcome
+
+Reconcile pass for SL-271, consuming RV-403's brief. Written across two passes:
+F-2/F-3/F-4 landed first, then the F-1 blocker via the design back-edge.
+
+### Direct edits applied
+
+- **design.md sec-5.4** — `RV-403` F-3: the "exact disclosure predicate"'s MCP
+  wrote-line restated harness-scoped (Claude `registered`/`refreshed`, Codex a
+  single `wrote`/`would write`), settling `RV-402` F-4's deferred question.
+- **design.md sec-5.4** — `RV-403` F-2: the `REQ-186` citation re-pointed to
+  `REQ-484` (the codex registration requirement); **sec-3**'s governance row now
+  names `REQ-483`/`REQ-484`, with the `REQ-186` merge posture demoted to in-repo
+  precedent.
+- **slice-271.toml** — `RV-403` F-4: the undeclared/undelivered `install/**`
+  `design-target` selector dropped (`doctrine slice selector rm`); README is the
+  `sh` declaration's home.
+- **design.md sec-1/5.1/5.2/5.4/5.5/5.6/5.7/5.8/5.9** and **DEC-329** — `RV-403`
+  F-1: the probe premise corrected, then (after the user-ratified option A
+  back-edge) the disclosure re-designed to read `[features] hooks` from the
+  project `.codex/config.toml`, and the probe retired.
+
+### REVs completed
+
+- **REV-066** (`reconcile-sl-271`): done — two `introduce` rows (`FR-012` →
+  `REQ-483`, the Claude `.mcp.json` registration; `FR-013` → `REQ-484`, the
+  codex `[mcp_servers.doctrine]` registration) plus a `modify SPEC-011` landing
+  the Overview scope enumeration, the responsibilities list and prose, the `boot
+  install` mechanism paragraph, and the Concerns/D6 fail-soft language (covers
+  `RV-403` F-2). Rationale in `revision-066.md`.
+
+### Escalated to design, then resolved
+
+- **`RV-403` F-1** (blocker, design-wrong) — escalated `reconcile → design` for
+  the user-ratified option A remedy, which owes code. Design + `DEC-329`
+  amended; `PHASE-04` appended and executed (`3be4df419`); re-audited as `RV-404`
+  (`F-1` records the PHASE-03 VT supersession, now written into design sec-9).
+  The blocker is resolved — no open blocker remains.
+
+### Obsoleted
+
+- **`RV-402` F-5** — the README host-dependency sentence. Option A removed the
+  `codex` subprocess from the install path, so the declared dependency is again
+  `sh`-only; the README Host-dependencies section is accurate unchanged.
+
+### Tolerated / carried
+
+- `verify-vt` reads PHASE-03 VT-1..VT-4 FAIL against the current tree: an
+  expected supersession recorded in design sec-9 (`RV-404` F-1), not drift.
