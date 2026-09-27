@@ -37,7 +37,8 @@ The design must cover proposal-time refusal and replace that test. Its six desig
 disposition = "fix-now"
 response = """
 Verified: rehearse_proposal rehearses only inquiry subjects (run.rs:1270-1289); nulled_keys deliberately excludes blocking on the premise that a finding null reads as absent (submission.rs:835-838, RV-389 F-18) — the premise ISS-482 overturns; tests/e2e_design_delegation.rs:728-749 pins the acceptance. Repair: sec-2 covers the proposal route — refuse a finding's blocking:null at propose (extend the rehearsal or nulled_keys, whichever keeps one rule), flip the pinned delegation test, add tests/e2e_design_delegation.rs to the design-target selectors, and widen VT-1 to both routes.
-"""
+ Repaired (design rev 22, sec-2/4/5): the rule moved to Batch::validate, the seam both the direct apply and rehearse_proposal cross, as Declaration::finding_blocking_null after inert_at_state; the delegation test is inverted; tests/e2e_design_delegation.rs joins the selectors; VT-1 covers both routes."""
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -50,6 +51,16 @@ disposition = "fix-now"
 response = """
 Verified: rehearse_proposal rehearses only inquiry subjects (run.rs:1270-1289); nulled_keys deliberately excludes blocking on the premise that a finding null reads as absent (submission.rs:835-838, RV-389 F-18) — the premise ISS-482 overturns; tests/e2e_design_delegation.rs:728-749 pins the acceptance. Repair: sec-2 covers the proposal route — refuse a finding's blocking:null at propose (extend the rehearsal or nulled_keys, whichever keeps one rule), flip the pinned delegation test, add tests/e2e_design_delegation.rs to the design-target selectors, and widen VT-1 to both routes.
 """
+
+[[finding.turn]]
+act = "amend"
+role = "responder"
+note = "route set; repair recorded at design revision 22"
+disposition = "fix-now"
+route = "review"
+response = """
+Verified: rehearse_proposal rehearses only inquiry subjects (run.rs:1270-1289); nulled_keys deliberately excludes blocking on the premise that a finding null reads as absent (submission.rs:835-838, RV-389 F-18) — the premise ISS-482 overturns; tests/e2e_design_delegation.rs:728-749 pins the acceptance. Repair: sec-2 covers the proposal route — refuse a finding's blocking:null at propose (extend the rehearsal or nulled_keys, whichever keeps one rule), flip the pinned delegation test, add tests/e2e_design_delegation.rs to the design-target selectors, and widen VT-1 to both routes.
+ Repaired (design rev 22, sec-2/4/5): the rule moved to Batch::validate, the seam both the direct apply and rehearse_proposal cross, as Declaration::finding_blocking_null after inert_at_state; the delegation test is inverted; tests/e2e_design_delegation.rs joins the selectors; VT-1 covers both routes."""
 
 [[finding]]
 id = "F-2"
@@ -66,7 +77,8 @@ The prescribed check can therefore tell a caller to resubmit an already-applied 
 disposition = "fix-now"
 response = """
 Verified: the refusal fires only below the receipt floor, which advances on the same CHANGE_LOG_REVISIONS window as the change log (snapshot.rs:141-151), and ChangeRow carries no submission id (change_log.rs:801-819) — so design show can neither prove nor disprove that the original landed. The sec-2 remedy is unsafe as written. Repair: reword to state the uncertainty and direct the caller to verify the intended effect against current run state (the map/sections, not the bounded log) before resubmitting under a fresh id at the current revision; VT-2 asserts the corrected wording.
-"""
+ Repaired (design rev 22, sec-2/5): the wording now states that the history cannot say whether the original landed and directs a check of the intended effect against current run state (map, sections), not the change log, before resubmitting only what is absent; VT-2 asserts it."""
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -79,6 +91,16 @@ disposition = "fix-now"
 response = """
 Verified: the refusal fires only below the receipt floor, which advances on the same CHANGE_LOG_REVISIONS window as the change log (snapshot.rs:141-151), and ChangeRow carries no submission id (change_log.rs:801-819) — so design show can neither prove nor disprove that the original landed. The sec-2 remedy is unsafe as written. Repair: reword to state the uncertainty and direct the caller to verify the intended effect against current run state (the map/sections, not the bounded log) before resubmitting under a fresh id at the current revision; VT-2 asserts the corrected wording.
 """
+
+[[finding.turn]]
+act = "amend"
+role = "responder"
+note = "route set; repair recorded at design revision 22"
+disposition = "fix-now"
+route = "review"
+response = """
+Verified: the refusal fires only below the receipt floor, which advances on the same CHANGE_LOG_REVISIONS window as the change log (snapshot.rs:141-151), and ChangeRow carries no submission id (change_log.rs:801-819) — so design show can neither prove nor disprove that the original landed. The sec-2 remedy is unsafe as written. Repair: reword to state the uncertainty and direct the caller to verify the intended effect against current run state (the map/sections, not the bounded log) before resubmitting under a fresh id at the current revision; VT-2 asserts the corrected wording.
+ Repaired (design rev 22, sec-2/5): the wording now states that the history cannot say whether the original landed and directs a check of the intended effect against current run state (map, sections), not the change log, before resubmitting only what is absent; VT-2 asserts it."""
 
 [[finding]]
 id = "F-3"
@@ -95,7 +117,8 @@ The design needs to define and test this allowed double-recording route: refuse 
 disposition = "fix-now"
 response = """
 Verified: one request may carry both checkpoint_act design-accepted and run-level acceptance; apply records the explicit act, then the acceptance through the same record_act seam (run.rs:426-451), so the second displaces an act recorded moments earlier in the same apply. A fixed before-set gate then misreports both ways. Repair: sec-3 defines the predicate over the displaced act's actual liveness at displacement (or refuses/coalesces the double DesignAccepted input — the design picks one and amends DEC-336 if the predicate changes); VT-3 gains the double-recording case in both prior states.
-"""
+ Repaired (design rev 22, sec-3/5): the gate reads a reportable set, seeded from live_acts_before and extended with each act recorded in the apply, so a displacement reports exactly a death not yet reported; the double-recording route is kept (the shipped lock recipe uses it). DEC-336 predicate amended, invariant unchanged. VT-3 covers the four-case table."""
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -108,6 +131,16 @@ disposition = "fix-now"
 response = """
 Verified: one request may carry both checkpoint_act design-accepted and run-level acceptance; apply records the explicit act, then the acceptance through the same record_act seam (run.rs:426-451), so the second displaces an act recorded moments earlier in the same apply. A fixed before-set gate then misreports both ways. Repair: sec-3 defines the predicate over the displaced act's actual liveness at displacement (or refuses/coalesces the double DesignAccepted input — the design picks one and amends DEC-336 if the predicate changes); VT-3 gains the double-recording case in both prior states.
 """
+
+[[finding.turn]]
+act = "amend"
+role = "responder"
+note = "route set; repair recorded at design revision 22"
+disposition = "fix-now"
+route = "review"
+response = """
+Verified: one request may carry both checkpoint_act design-accepted and run-level acceptance; apply records the explicit act, then the acceptance through the same record_act seam (run.rs:426-451), so the second displaces an act recorded moments earlier in the same apply. A fixed before-set gate then misreports both ways. Repair: sec-3 defines the predicate over the displaced act's actual liveness at displacement (or refuses/coalesces the double DesignAccepted input — the design picks one and amends DEC-336 if the predicate changes); VT-3 gains the double-recording case in both prior states.
+ Repaired (design rev 22, sec-3/5): the gate reads a reportable set, seeded from live_acts_before and extended with each act recorded in the apply, so a displacement reports exactly a death not yet reported; the double-recording route is kept (the shipped lock recipe uses it). DEC-336 predicate amended, invariant unchanged. VT-3 covers the four-case table."""
 
 [[finding]]
 id = "F-4"
@@ -124,7 +157,8 @@ The design needs a contract representation of the finding-home null refusal, reg
 disposition = "fix-now"
 response = """
 Verified: the contract models finding blocking as Presence::Optional (payload_contract.rs:1474-1497) and the shipped install/design-payload-contract.md:60 renders it as plain optional; the doc is pinned byte-for-byte to the renderer. Repair: sec-2/sec-4 add a contract representation of the finding-home null refusal, regenerate the shipped contract, and add payload_contract.rs and install/design-payload-contract.md to the design-target selectors, with a render pin in verification.
-"""
+ Repaired (design rev 22, sec-2/4/5): new Presence::OptionalNullRefused for the finding-home blocking row, rendered with null refused; the shipped contract is regenerated; payload_contract.rs and install/design-payload-contract.md join the selectors; VT-6 pins the render."""
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -137,6 +171,16 @@ disposition = "fix-now"
 response = """
 Verified: the contract models finding blocking as Presence::Optional (payload_contract.rs:1474-1497) and the shipped install/design-payload-contract.md:60 renders it as plain optional; the doc is pinned byte-for-byte to the renderer. Repair: sec-2/sec-4 add a contract representation of the finding-home null refusal, regenerate the shipped contract, and add payload_contract.rs and install/design-payload-contract.md to the design-target selectors, with a render pin in verification.
 """
+
+[[finding.turn]]
+act = "amend"
+role = "responder"
+note = "route set; repair recorded at design revision 22"
+disposition = "fix-now"
+route = "review"
+response = """
+Verified: the contract models finding blocking as Presence::Optional (payload_contract.rs:1474-1497) and the shipped install/design-payload-contract.md:60 renders it as plain optional; the doc is pinned byte-for-byte to the renderer. Repair: sec-2/sec-4 add a contract representation of the finding-home null refusal, regenerate the shipped contract, and add payload_contract.rs and install/design-payload-contract.md to the design-target selectors, with a render pin in verification.
+ Repaired (design rev 22, sec-2/4/5): new Presence::OptionalNullRefused for the finding-home blocking row, rendered with null refused; the shipped contract is regenerated; payload_contract.rs and install/design-payload-contract.md join the selectors; VT-6 pins the render."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.

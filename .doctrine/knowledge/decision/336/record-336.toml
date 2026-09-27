@@ -3,7 +3,7 @@ version = 1
 
 id = 336
 slug = "act-displacement-reports-only-a-live-act"
-title = "Act displacement reports only a live act"
+title = "Act displacement reports each death once"
 record_kind = "decision"
 status = "accepted"
 created = "2026-09-27"

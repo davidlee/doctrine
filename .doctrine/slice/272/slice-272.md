@@ -18,25 +18,32 @@ four residual defects of that class, grouped there as clump 1:
 
 Close all four, each with a behavioural test:
 
-1. **Refusals** — refuse `null` `blocking` at the finding home; give
+1. **Refusals** — refuse `null` `blocking` at the finding home, on both the
+   direct and the delegated-proposal route, and say so in the published
+   payload contract; give
    `SubmissionExpired` a remedy that routes the caller to check whether the
    original landed before resubmitting (a blind resubmit could double-apply).
    Specifics in item 3.
 2. **Change rows** — suppress the displacement `act_invalidated` row when the
-   displaced act was not live before the apply (`DEC-336`); add a term-free
+   displaced act's death was already reported — neither live before the apply
+   nor recorded earlier in it (`DEC-336`); add a term-free
    `node_question_changed` member to the emittable `ChangeEvent` vocabulary,
    emitted only when a declared question's text differs from the held text,
    never at creation (`DEC-335`), and driven by the fixture ladder (`REQ-478`'s
    roster criterion).
 3. **Refusal specifics** (settled at inquiry, non-durable) — the finding-home
    `null` refusal is a new variant, not `BlockingJudgementWithdrawn`, whose
-   remedy is false at a finding's creation; `SubmissionExpired`'s remedy is:
-   check `design show` for whether the original landed, then resubmit only what
-   is missing, at the current revision, under a fresh `submission_id`.
+   remedy is false at a finding's creation; `SubmissionExpired`'s remedy
+   states that the run's bounded history cannot say whether the original
+   landed, and directs a check of the intended effect against current run
+   state before resubmitting only what is absent, at the current revision,
+   under a fresh `submission_id`.
 
 Affected surface: `src/design_run/{run.rs, refusal.rs, change_log.rs,
-submission.rs, snapshot.rs}`, `src/design_run/render/change_row.rs`, the
-design-run fixture ladder, `tests/e2e_design_state.rs`.
+submission.rs, payload_contract.rs, snapshot.rs}`,
+`src/design_run/render/change_row.rs`, `install/design-payload-contract.md`,
+the design-run fixture ladder, `tests/e2e_design_state.rs`,
+`tests/e2e_design_delegation.rs`.
 
 ## Non-Goals
 

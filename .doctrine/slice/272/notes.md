@@ -40,6 +40,16 @@ Evidence: `research/research.md` (runtime tier; ✓ rows load-bearing).
 `REQ-478`, `DEC-237`, `DEC-239`, `DEC-249`, `DEC-301`, `STD-001`, `ADR-001`.
 Not applicable, with reasons: research Thread 1.
 
+## Further review (after `RV-405` repairs, design rev 23)
+
+A second pass would probe only what the repairs introduced: that
+`Batch::validate` is the single seam every finding declaration crosses (direct,
+proposal rehearsal, accept); that the `reportable` set cannot over-report when
+a declare coverage-kills an act recorded earlier in the same apply (it cannot:
+declarations run before acts); and that `Presence::OptionalNullRefused` is not
+a parallel state to an existing one. All three are checkable by `VT-1`, `VT-3`
+and `VT-6` at implementation; no further design pass is recommended.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-09-27 · design/reviewing rev 21 · a62fcb2db
