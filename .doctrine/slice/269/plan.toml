@@ -1,0 +1,157 @@
+# Implementation plan for SL-269 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-269"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Reservation primitives"
+objective = "Harden the pieces the clone-wide backend composes, before it exists: update_ref_cas tells a rival from a failure, the post-CAS mkdir runs through one outcome helper, the ref reader is namespace-parameterised, the test-only arbiter replaces is_remote, and reach selection stops reading the environment (design sec-2; RV-406 F-3, F-4; ISS-483)."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-269 design locked (revision 34); plan approved." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "git::update_ref_cas returns Moved only when the ref no longer equals expected_old; an update-ref failure that leaves it at expected_old (for a create, still absent) is an error carrying git's stderr and the ref name (RV-406 F-4)." },
+  { id = "EX-2", text = "One private post-CAS mkdir helper in reserve.rs implements the sec-2 outcome table for GitRef: created → Won; already exists → hard error naming doctrine reseat; any other I/O error → hard error carrying the cause, saying the id is burnt, with no reseat hint (RV-406 F-3). The helper is parameterised so PHASE-02's CloneRef maps already-exists to AlreadyHeld through the same code." },
+  { id = "EX-3", text = "RESERVATION_LOCAL_REF_PREFIX = \"refs/doctrine/reservation-local\" beside RESERVATION_REF_PREFIX; remote_reservation_ids becomes reservation_ids(root, namespace, prefix), prefix-scoped (ISS-221)." },
+  { id = "EX-4", text = "Test-only Claim::arbiter() -> Arbiter { Dir, CloneRef, RemoteRef } replaces is_remote(); vt2/vt3/vt6 assert arbiter()." },
+  { id = "EX-5", text = "backend reads DOCTRINE_RESERVATION_FALLBACK once and passes a bool to resolve_backend/resolve_auto, which never read the environment; the TTY prompt reads 'Allocate this id in this clone only?' and names both persistent levers (sec-2 text block)." },
+  { id = "EX-6", text = "Behaviour preservation: existing reserve, entity and dispatch suites green unchanged (dispatch holds 7 update_ref_cas callers); vt5 (file squat → reseat hint) green unchanged. doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "update_ref_cas against an unwritable ref store errors with stderr instead of Moved; a real rival still yields Moved", test_file = "src/git.rs", keywords = ["update_ref_cas_errors_when_the_ref_store_refuses", "update_ref_cas_succeeds_only_at_expected_old"], waived = false },
+  { id = "VT-2", expects = "GitRef post-CAS mkdir: non-exists I/O error keeps its cause and omits the reseat hint; squat still names reseat", test_file = "src/reserve.rs", keywords = ["post_cas_mkdir_io_error_keeps_cause_without_reseat_hint", "vt5_split_state_hard_errors_with_reseat_hint"], waived = false },
+  { id = "VT-3", expects = "reservation_ids reads each namespace scoped to its prefix", test_file = "src/reserve.rs", keywords = ["RESERVATION_LOCAL_REF_PREFIX", "fn reservation_ids", "reservation_ids_is_scoped_to_namespace_and_prefix"], waived = false },
+  { id = "VT-4", expects = "reach selection asserts arbiter() and passes with the env opt-in set ambiently", test_file = "src/reserve.rs", keywords = ["arbiter()", "Arbiter::RemoteRef", "reach_selection_ignores_ambient_fallback_env"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Clone-wide local reservation"
+objective = "Add the CloneRef backend and the composed scan so trees of one clone cannot mint the same id under local reach, and pass the Kind into reserve::backend at all 11 fresh-id sites (design sec-2; DEC-337; ISS-279)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: update_ref_cas error split, post-CAS helper, reservation_ids, arbiter() in place." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "CloneRef: holder-stamped empty commit (git::commit_empty_tree_as), zero-oid create CAS on refs/doctrine/reservation-local/<PREFIX>/<NNN> via update_ref_cas, then the shared post-CAS helper with already-exists → AlreadyHeld. It replaces LocalFs in every local arm when the root is inside a git repo; a non-git root keeps LocalFs." },
+  { id = "EX-2", text = "One composed scan source for CloneRef and GitRef returns own dirs ∪ sibling live worktrees' <sibling>/<rel>/<kind dir>/NNN (read once at construction; prunable and missing paths excluded; invoking tree skipped) ∪ reservation-local refs ∪ reservation refs (both re-read every retry; GitRef re-fetches first)." },
+  { id = "EX-3", text = "A sibling with no doctrine root at <rel>, or an unreadable kind dir, is not scanned and is named in a stderr warning; the allocation proceeds (STD-003; RV-406 F-1). A sibling with a root but no kind dir contributes nothing silently." },
+  { id = "EX-4", text = "reserve::backend(root, &Kind, prompt); all 11 fresh-id call sites pass the Kind. .doctrine/adr/001/layering.toml declares reserve → kinds; the architecture layering test is green." },
+  { id = "EX-5", text = "A test fixture composes one clone with two linked worktrees and no remote, reusable by PHASE-03." },
+  { id = "EX-6", text = "Existing entity and reserve suites green unchanged; doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "two linked trees allocating one kind get distinct ids", test_file = "src/reserve.rs", keywords = ["CloneRef", "two_linked_trees_allocating_one_kind_get_distinct_ids"], waived = false },
+  { id = "VT-2", expects = "scan sees a sibling tree's uncommitted entity dir", test_file = "src/reserve.rs", keywords = ["scan_sees_a_sibling_trees_uncommitted_entity_dir"], waived = false },
+  { id = "VT-3", expects = "scan sees both reservation-local and reservation refs, scoped to the kind's prefix", test_file = "src/reserve.rs", keywords = ["scan_sees_both_ref_namespaces_scoped_to_prefix"], waived = false },
+  { id = "VT-4", expects = "CloneRef post-CAS mkdir: dir already exists → retries the next id", test_file = "src/reserve.rs", keywords = ["clone_ref_existing_dir_is_already_held"], waived = false },
+  { id = "VT-5", expects = "a sibling with no doctrine root at <rel> is warned and the allocation proceeds", test_file = "src/reserve.rs", keywords = ["sibling_without_doctrine_root_is_warned_not_scanned"], waived = false },
+  { id = "VT-6", expects = "non-git root under local reach keeps plain mkdir", test_file = "src/reserve.rs", keywords = ["Arbiter::Dir", "Arbiter::CloneRef"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "reseat claims its destination"
+objective = "reseat reads its slug leniently and claims its destination through the reservation backend, committing by renaming the staged copy over the claimed empty dir with a cleanup boundary at the commit point (design sec-3; ISS-277; RV-406 F-5)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: CloneRef, composed scan and the two-linked-tree fixture exist." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "meta::read_slug(tree_root, stem, id, prefix) beside read_id, both through one private generic reader (IdOnly, SlugOnly); read_meta still requires status." },
+  { id = "EX-2", text = "entity::claim_fresh_id splits into claim_next_id(claim, tree_root, trunk_ids, scan) -> (id, dir) plus the existing midpoint/build/cleanup; the 11 fresh-id sites see no change." },
+  { id = "EX-3", text = "run_reseat takes prompt: PromptFn (supplied from src/commands/cli.rs); refusals not depending on the destination (source resolution, live phase state) run before any claim; default destination via claim_next_id through reserve::backend; --to refused when it equals src or appears in scan ∪ trunk, otherwise claimed once (AlreadyHeld → refuse). layering.toml declares integrity → reserve." },
+  { id = "EX-4", text = "Commit: the staged dir is renamed over the claimed empty dir. Before the rename, failure removes the claim with remove_dir only (a populated dir is kept and named). After the rename, failure is a committed move: nothing rolled back, the destination never removed, the error names the partial state." },
+  { id = "EX-5", text = "Existing reseat e2e tests and read_meta_still_hard_fails_on_a_missing_status green unchanged; doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "read_slug returns the slug from a status-less toml", test_file = "src/meta.rs", keywords = ["fn read_slug", "SlugOnly", "read_slug_reads_a_statusless_toml"], waived = false },
+  { id = "VT-2", expects = "reseat renumbers a review", test_file = "tests/e2e_integrity.rs", keywords = ["reseat_renumbers_a_review"], waived = false },
+  { id = "VT-3", expects = "--to onto a sibling tree's dir or a held local ref is refused, source untouched; default reseat skips a sibling's ids", test_file = "src/integrity.rs", keywords = ["reseat_to_a_sibling_held_id_refuses", "reseat_default_skips_sibling_ids"], waived = false },
+  { id = "VT-4", expects = "refusal on live phase state leaves no claim behind", test_file = "tests/e2e_integrity.rs", keywords = ["reseat_refuses_live_runtime_phase_state", "reseat_refusal_leaves_no_claim"], waived = false },
+  { id = "VT-5", expects = "populated claimed dir survives a staging failure; a post-rename alias failure leaves the destination seated", test_file = "src/integrity.rs", keywords = ["reseat_keeps_a_populated_claim_dir", "reseat_post_commit_failure_leaves_destination"], waived = false },
+  { id = "VT-6", expects = "claim_next_id exists and claim_fresh_id delegates to it", test_file = "src/entity.rs", keywords = ["fn claim_next_id", "claim_next_id("], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Dangler report as a worklist"
+objective = "scan_danglers walks .doctrine/ without following symlinks over *.md and *.toml, lists unreadable files, and states its bound, so reseat's report is a usable rewrite worklist (design sec-3; ISS-292 faults 1, 3, 4; ISS-496; STD-003; RV-406 F-6, F-7, F-8)."
+entrance_criteria = [
+  { id = "EN-1", text = "Plan approved. Independent of PHASE-01..03 in code; ordered after PHASE-03 because both edit run_reseat." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "scan_danglers uses walkdir over .doctrine/ with follow_links(false), skips symlink entries, and reads *.md and *.toml; glob is no longer used there." },
+  { id = "EX-2", text = "Walk and read failures are collected with path and cause, printed under their own heading, and make reseat exit non-zero." },
+  { id = "EX-3", text = "The report header states its bound: '(*.md, *.toml; symlinks not followed) — rewrite by hand; source outside .doctrine/ is not scanned'." },
+  { id = "EX-4", text = "is_disposable_prose unchanged and applied to the walked path; scan_danglers_skips_disposable_prose green unchanged; doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "a .toml citation ([[source]] ref) is reported", test_file = "src/integrity.rs", keywords = ["dangler_scan_reports_a_toml_citation"], waived = false },
+  { id = "VT-2", expects = "a file reached through an NNN-slug alias is reported once; the phases symlink's runtime sheet is not reported", test_file = "src/integrity.rs", keywords = ["dangler_scan_reports_alias_file_once", "dangler_scan_ignores_phases_symlink"], waived = false },
+  { id = "VT-3", expects = "an unreadable authored file is listed with its cause", test_file = "src/integrity.rs", keywords = ["dangler_scan_lists_unreadable_files"], waived = false },
+  { id = "VT-4", expects = "an external dir symlink and a symlink loop are not entered", test_file = "src/integrity.rs", keywords = ["follow_links(false)", "dangler_scan_does_not_enter_symlinked_dirs"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Worker-only review admission"
+objective = "Review writes are refused only in a dispatch worker process; every other tree, including solo forks and adopted capsule worktrees, is admitted (design sec-4; DEC-338; ISS-494; IMP-240)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: clone-wide reservation lands before admission widens (design sec-1 ordering)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Pure admit_review(worker: bool) in src/review/turn.rs; resolve_review_root feeds it crate::worktree::env_worker_set() and drops the classify_worktree_role branch-shape test. The refusal cites WORKER_ENV_CAUSE and points workers at review show / review list." },
+  { id = "EX-2", text = "classify_worktree_role keeps its other callers unchanged; src/commands/design.rs unchanged (ASM-012)." },
+  { id = "EX-3", text = "Comment in src/review/prime.rs and the review_new description in src/mcp_server/tools.rs say 'refuses in a dispatch worker'." },
+  { id = "EX-4", text = "doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "admit_review(false) admits; admit_review(true) refuses with the worker cause", test_file = "src/review/tests.rs", keywords = ["admit_review(false)", "admit_review(true)"], waived = false },
+  { id = "VT-2", expects = "vt10 inverted: a solo linked tree is admitted and its baton lands in its own state dir; vt10b coord tree still admitted", test_file = "src/review/tests.rs", keywords = ["vt10_solo_linked_tree_admitted", "vt10b_coord_worktree_admitted_and_baton_in_its_own_state"], waived = false },
+  { id = "VT-3", expects = "a worker process refuses review new before allocating an id (driven through the bool)", test_file = "src/review/tests.rs", keywords = ["review_new_in_a_worker_refuses_before_allocating"], waived = false },
+  { id = "VT-4", expects = "an RV opened in a solo linked tree runs raise → dispose → verify → conclude to done", test_file = "src/review/tests.rs", keywords = ["solo_linked_tree_review_lifecycle"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Guidance and memories"
+objective = "Every surface stating the fork ban or per-tree reservation states the new rules: any non-worker tree may write reviews, one writer per RV at a time, local reach means this clone (design sec-5)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02..05 complete: guidance describes shipped behaviour." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/review-ledger.md 'Parent-tree caveat' becomes 'Where reviews run'; audit and inquisition skills and scripts/oubliette.sh state the worker-only rule and one writer per RV; install/doctrine.toml.example [reservation] says local = this clone. Generated skill copies refreshed via doctrine install, never hand-edited." },
+  { id = "EX-2", text = "Memories: mem.pattern.review.rv-verbs-refuse-on-worktree-fork and the fork-ban half of mem.pattern.worktree.primary-tree-resolver-and-contextual-review-fork-ban superseded by one memory stating the worker-only rule; mem.pattern.doctrine.jail-reservation-fallback narrowed." },
+  { id = "EX-3", text = "No remaining shipped text claims review verbs refuse a fork or that local reach is single-tree (positive-controlled grep)." },
+  { id = "EX-4", text = "doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "review-ledger guidance carries the new section", test_file = "install/review-ledger.md", keywords = ["Where reviews run", "one writer per RV"], waived = false },
+  { id = "VA-1", expects = "audit and inquisition skills, oubliette advice and doctrine.toml.example state the rules; a grep for the old fork-ban phrasing (with a positive control) finds no shipped survivor." },
+  { id = "VA-2", expects = "memory supersession recorded via doctrine memory verbs; doctrine memory validate clean." },
+]
+specs        = []
+requirements = []

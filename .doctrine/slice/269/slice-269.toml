@@ -130,6 +130,11 @@ intent = "design-target"
 selector = "src/review/tests.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/git.rs"
+intent = "design-target"
+note = "RV-406 F-4: update_ref_cas error split"
+
 [[relation]]
 label = "fulfils"
 target = "IMP-240"
