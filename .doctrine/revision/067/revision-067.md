@@ -75,8 +75,7 @@ text.
    *Ownership by material type* below). A pull-reference is only *visible* to a
    client if a skill, a memory or the boot digest **points at it**: reference docs
    are published, not projected (ADR-019), read with `doctrine library show
-   reference/<name>.md`, and a doc nothing cites is read by no one — the
-   `AGENTS.md` lesson. The set:
+   reference/<name>.md`, and a doc nothing cites is read by no one. The set:
 ````
 
 ### Add tier 4 and the ownership table — insert after tier 3
