@@ -1437,36 +1437,7 @@ fn vt9_status_rebuilds_the_baton() {
 /// worktree to exercise `is_linked_worktree`.
 #[test]
 fn vt10_fork_root_refused_and_baton_in_parent_state() {
-    use std::process::Command;
-    let tmp = tempfile::tempdir().unwrap();
-    let main = tmp.path().join("main");
-    std::fs::create_dir_all(&main).unwrap();
-    let git = |dir: &Path, args: &[&str]| {
-        let ok = Command::new("git")
-            .arg("-C")
-            .arg(dir)
-            .args(args)
-            .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00 +0000")
-            .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00 +0000")
-            .output()
-            .unwrap();
-        assert!(
-            ok.status.success(),
-            "git {args:?}: {}",
-            String::from_utf8_lossy(&ok.stderr)
-        );
-    };
-    git(&main, &["init", "-b", "main"]);
-    git(&main, &["config", "user.name", "T"]);
-    git(&main, &["config", "user.email", "t@t.invalid"]);
-    plant_slice_target(&main, 1);
-    run_new(Some(main.clone()), &new_args(Facet::Design, "SL-001")).unwrap();
-    std::fs::write(main.join("seed"), "x").unwrap();
-    git(&main, &["add", "."]);
-    git(&main, &["commit", "-m", "seed"]);
-    // Add a linked worktree (the fork).
-    let fork = tmp.path().join("fork");
-    git(&main, &["worktree", "add", fork.to_str().unwrap()]);
+    let (_tmp, main, fork) = repo_with_linked_tree(None);
 
     // A verb resolved at the fork root bails (IMP-024).
     let err = run_raise(
@@ -1507,45 +1478,7 @@ fn vt10_fork_root_refused_and_baton_in_parent_state() {
 /// sketches live.
 #[test]
 fn vt10b_coord_worktree_admitted_and_baton_in_its_own_state() {
-    use std::process::Command;
-    let tmp = tempfile::tempdir().unwrap();
-    let main = tmp.path().join("main");
-    std::fs::create_dir_all(&main).unwrap();
-    let git = |dir: &Path, args: &[&str]| {
-        let ok = Command::new("git")
-            .arg("-C")
-            .arg(dir)
-            .args(args)
-            .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00 +0000")
-            .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00 +0000")
-            .output()
-            .unwrap();
-        assert!(
-            ok.status.success(),
-            "git {args:?}: {}",
-            String::from_utf8_lossy(&ok.stderr)
-        );
-    };
-    git(&main, &["init", "-b", "main"]);
-    git(&main, &["config", "user.name", "T"]);
-    git(&main, &["config", "user.email", "t@t.invalid"]);
-    plant_slice_target(&main, 1);
-    run_new(Some(main.clone()), &new_args(Facet::Design, "SL-001")).unwrap();
-    std::fs::write(main.join("seed"), "x").unwrap();
-    git(&main, &["add", "."]);
-    git(&main, &["commit", "-m", "seed"]);
-    // The coordination worktree: a linked worktree on `dispatch/<NNN>`.
-    let coord = tmp.path().join("coord");
-    git(
-        &main,
-        &[
-            "worktree",
-            "add",
-            "-b",
-            "dispatch/001",
-            coord.to_str().unwrap(),
-        ],
-    );
+    let (_tmp, main, coord) = repo_with_linked_tree(Some("dispatch/001"));
 
     // The verb is ADMITTED at the coord root (contrast VT-10's fork).
     run_raise(
@@ -1566,6 +1499,63 @@ fn vt10b_coord_worktree_admitted_and_baton_in_its_own_state() {
     assert!(
         !main.join(".doctrine/state/review/001/baton.toml").exists(),
         "no baton in the parent tree"
+    );
+}
+
+/// A committed repo at `main` holding RV-001, plus a linked worktree at `tree`
+/// on `branch` — a fork when `None`. The fixture the locus-guard tests share;
+/// the `TempDir` must outlive both paths.
+fn repo_with_linked_tree(branch: Option<&str>) -> (tempfile::TempDir, PathBuf, PathBuf) {
+    use std::process::Command;
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("main");
+    std::fs::create_dir_all(&main).unwrap();
+    let git = |args: &[&str]| {
+        let ok = Command::new("git")
+            .arg("-C")
+            .arg(&main)
+            .args(args)
+            .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00 +0000")
+            .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00 +0000")
+            .output()
+            .unwrap();
+        assert!(
+            ok.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&ok.stderr)
+        );
+    };
+    git(&["init", "-b", "main"]);
+    git(&["config", "user.name", "T"]);
+    git(&["config", "user.email", "t@t.invalid"]);
+    plant_slice_target(&main, 1);
+    run_new(Some(main.clone()), &new_args(Facet::Design, "SL-001")).unwrap();
+    std::fs::write(main.join("seed"), "x").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-m", "seed"]);
+    let tree = tmp.path().join("tree");
+    let tree_arg = tree.to_str().unwrap();
+    match branch {
+        Some(b) => git(&["worktree", "add", "-b", b, tree_arg]),
+        None => git(&["worktree", "add", tree_arg]),
+    }
+    (tmp, main, tree)
+}
+
+/// ISS-484: `review new` obeys the same locus guard as the rest of the verb
+/// family, and refuses BEFORE allocating — no id claimed, no entity written, so
+/// a fork cannot mint an RV every later verb then refuses.
+#[test]
+fn review_new_on_a_fork_refuses_before_allocating() {
+    let (_tmp, _main, fork) = repo_with_linked_tree(None);
+    let err = run_new(Some(fork.clone()), &new_args(Facet::Design, "SL-001")).unwrap_err();
+    assert!(
+        err.to_string().contains("worktree fork"),
+        "fork guard: {err}"
+    );
+    assert!(
+        !fork.join(REVIEW_DIR).join("002").exists(),
+        "no RV-002 allocated in the fork"
     );
 }
 

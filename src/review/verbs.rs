@@ -75,9 +75,10 @@ pub(crate) struct NewArgs {
 /// and write its authored ledger (empty findings) plus the `## Brief` md. The
 /// `[target].ref` is validated up front (design §7): a dangling / unknown-prefix
 /// ref is refused BEFORE any id is claimed, so a bad edge never mints an entity.
-/// The empty-ledger RV is the real `Active`/await=`Raiser` state (D-C8).
+/// The empty-ledger RV is the real `Active`/await=`Raiser` state (D-C8). The
+/// locus guard runs first, so a refused tree never claims an id (ISS-484).
 pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<ReviewOutput> {
-    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let root = resolve_review_root(path)?;
     mint_review(&root, args, entity::no_midpoint())
 }
 

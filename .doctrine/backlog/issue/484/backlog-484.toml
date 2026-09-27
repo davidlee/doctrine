@@ -5,10 +5,10 @@ id = 484
 slug = "review-new-bypasses-locus-guard"
 title = "review new bypasses the review-locus guard the other verbs enforce"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-09-25"
-updated = "2026-09-25"
+updated = "2026-09-27"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
