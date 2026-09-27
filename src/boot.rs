@@ -970,8 +970,10 @@ fn ensure_boot_import(
 // Claude SessionStart hook merge: pure plan + imperative apply.
 // ---------------------------------------------------------------------------
 
-/// What the hook merge did, for reporting. The carried string is the full
-/// rendered invocation (command plus args), never re-appended by the caller.
+/// What an install leg did, for reporting. The carried string is the arm's own
+/// rendering, printed verbatim by the caller and never re-appended: the full
+/// invocation (command plus args) on the Claude arm, the shell wrapper line on
+/// the Codex arm.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum RefreshOutcome {
     /// No doctrine hook existed; one was appended.
@@ -2168,8 +2170,13 @@ fn plan_mcp(existing_json: Option<&str>) -> McpPlan {
         // A `doctrine` key that is not our shape is a deliberate user entry.
         Some(_foreign) => McpEntryClass::Foreign,
     };
+    // The payload is an arm's rendering of a WRITE. The classes that print a
+    // manual snippet instead leave the planner as the empty sentinel the Malformed
+    // paths return, and the installing shell (`install_mcp`, `install_codex_mcp`)
+    // is the single constructor that fills it — so `PrintedFallback` never leaves a
+    // planner half-filled, and `plan_mcp().outcome` alone is not a report.
     let (outcome, write) = if class == McpEntryClass::Foreign {
-        mcp_action(class, mcp_fallback_snippet(), MCP_REL)
+        mcp_action(class, String::new(), MCP_REL)
     } else {
         mcp_action(class, mcp_invocation(), MCP_REL)
     };
@@ -3246,53 +3253,36 @@ pub(crate) fn wire(
                     &report.mcp,
                     RefreshOutcome::Wired(_) | RefreshOutcome::Refreshed(_)
                 );
-                // MCP registration leg (CHR-013; SL-271): report a fresh wire or a
-                // stale refresh for the harness's own file (`.mcp.json` for Claude,
-                // `.codex/config.toml` for Codex); a foreign / uninterpretable entry
-                // prints the manual snippet. None (current, or pi) stays silent.
+                // MCP registration leg (CHR-013; SL-271): the harness's own file
+                // (`.mcp.json` for Claude, `.codex/config.toml` for Codex); a foreign
+                // / uninterpretable entry prints the manual snippet. None (already
+                // current) stays silent.
                 let mcp_rel = match h {
                     Harness::Codex => CODEX_CONFIG_REL,
                     Harness::Claude => MCP_REL,
                 };
-                // Codex states what was WRITTEN (or would write), never activation;
-                // Claude keeps its wire/refresh verbs. One fallback wording serves
-                // both arms and both causes — the operator's next step is the same.
-                let codex_verb = if dry_run {
-                    "would write MCP server registration in"
-                } else {
-                    "wrote MCP server registration in"
+                // One verb table, one `writeln!`: Codex states what was WRITTEN (or
+                // would write) — never activation, and a single form for both a
+                // fresh wire and a stale refresh (design sec-5.2); Claude keeps its
+                // registered/refreshed distinction. Only the written arms read it;
+                // the fallback and silent arms below print no such line.
+                let mcp_write_verb = match (h, &report.mcp) {
+                    (Harness::Codex, _) if dry_run => "would write MCP server registration in",
+                    (Harness::Codex, _) => "wrote MCP server registration in",
+                    (Harness::Claude, RefreshOutcome::Refreshed(_)) => "refreshed MCP server in",
+                    (Harness::Claude, _) => "registered MCP server in",
                 };
                 match report.mcp {
-                    RefreshOutcome::Wired(cmd) => {
-                        if matches!(h, Harness::Codex) {
-                            writeln!(
-                                stdout,
-                                "  {tag}{}: {codex_verb} {mcp_rel}: {cmd}",
-                                harness_label(h)
-                            )?;
-                        } else {
-                            writeln!(
-                                stdout,
-                                "  {tag}{}: registered MCP server in {mcp_rel}: {cmd}",
-                                harness_label(h)
-                            )?;
-                        }
+                    RefreshOutcome::Wired(cmd) | RefreshOutcome::Refreshed(cmd) => {
+                        writeln!(
+                            stdout,
+                            "  {tag}{}: {mcp_write_verb} {mcp_rel}: {cmd}",
+                            harness_label(h)
+                        )?;
                     }
-                    RefreshOutcome::Refreshed(cmd) => {
-                        if matches!(h, Harness::Codex) {
-                            writeln!(
-                                stdout,
-                                "  {tag}{}: {codex_verb} {mcp_rel}: {cmd}",
-                                harness_label(h)
-                            )?;
-                        } else {
-                            writeln!(
-                                stdout,
-                                "  {tag}{}: refreshed MCP server in {mcp_rel}: {cmd}",
-                                harness_label(h)
-                            )?;
-                        }
-                    }
+                    // ONE wording for both arms and both causes — a foreign entry and
+                    // an uninterpretable file: the shared table cannot tell them
+                    // apart, and the operator's next step is the same either way.
                     RefreshOutcome::PrintedFallback { hook_file, snippet } => {
                         writeln!(
                             stdout,
