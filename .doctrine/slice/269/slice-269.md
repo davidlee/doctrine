@@ -34,10 +34,14 @@ allocating (ISS-484, commit `120b8b321`).
    `update-ref` CAS in the clone's common git dir, under its own prefix
    `refs/doctrine/reservation-local/<PREFIX>/<id>`. Allocation scans both the
    local and shared namespaces whatever reach is configured. Fixes the class
-   for every kind (ISS-279).
-2. **D9 alongside — `reseat` can renumber a review** by reading the alias slug
-   through the lenient reader (ISS-277), so existing collisions are repairable
-   by verb.
+   for every kind (ISS-279). The scan also reads every live worktree's entity
+   dirs, covering ids minted before D9 (DEC-337).
+2. **D9 alongside — `reseat`** reads the alias slug through the lenient reader
+   (ISS-277), and claims its destination id through the reservation backend so
+   its pick sees sibling trees.
+2a. **Reservation hygiene.** The fallback env opt-in is read once at the shell
+   edge and passed in, so reserve tests are hermetic (ISS-483); the TTY
+   fallback prompt names the persistent levers and says "this clone only".
 3. **D7 — three locus tiers, one table, evaluated once** in the review verb
    dispatcher:
    - read (`show`, `list`, `findings`): any tree, including a confined worker;
@@ -47,10 +51,11 @@ allocating (ISS-484, commit `120b8b321`).
      `.doctrine/review/`; refused in a confined dispatch worker (the
      `DOCTRINE_WORKER` marker / read-only authored tier).
    Replaces the branch-shape test; no host branch format is recognised
-   (POL-002).
-4. **Every RV mint path obeys the authored tier**, including the design run's
-   `mint_review` call (`src/commands/design.rs:1487`), which today skips the
-   guard.
+   (POL-002). Simplified by DEC-338: the single test is worker mode
+   (`DOCTRINE_WORKER`), refusing the whole guarded set in a worker.
+4. **Every RV mint path obeys the guard.** The design run's `mint_review` call
+   (`src/commands/design.rs:1487`) is covered by the CLI worker guard, since it
+   has no MCP surface (ASM-012); no code change.
 5. **Guidance.** `/audit` and `review-ledger.md` say where an audit can run
    (IMP-190), and state the rule "one writer per RV at a time; git merge is a
    best-effort backstop".
@@ -76,25 +81,23 @@ audited before landing.
 
 ## Risks & Open Questions
 
-- **R1 — D1 not landed.** `D7`'s rationale assumes RFC-032 `D1` (a per-finding
-  turn journal making the baton derivable from authored state). `D1` belongs
-  to RFC-032 slice 1, which has not started. Without it, a tree's baton
-  (gitignored) does not travel when the tree lands; `review status` rebuilds a
-  baton from the authored ledger. `/design` must confirm that rebuild is
-  sufficient for sequential tree-then-land use, or take a dependency on slice 1.
+- **R1 — D1 not landed (retired).** The baton is already a pure cache
+  (`src/review/turn.rs:35-58`; SL-268 put turns in the ledger), so a review
+  worked in a linked tree loses nothing on landing (DEC-338).
 - **R2 — reservation contract change.** `reach = local` changes meaning; clones
   holding existing per-tree claims must not re-mint them.
-- **OQ-1 — landing.** After an audit in a linked tree lands, does phase status
-  reach the parent, or is close run in that tree?
+- **OQ-1 — landing (answered).** Audit and close in the linked tree, then
+  land; phase status is not needed after close.
 
 ## Verification
 
 - VT: two linked trees of one clone allocating concurrently get distinct ids.
-- VT: allocation sees claims in both reservation namespaces.
-- VT: `reseat` renumbers a colliding review.
-- VT: the authored tier admits primary, coord and solo linked trees; refuses a
-  worker (marker or read-only authored tier); read verbs work in a worker.
-- VT: the design run's review mint refuses where `review new` refuses.
+- VT: allocation sees claims in both reservation namespaces, and ids in a
+  sibling live worktree's entity dirs.
+- VT: `reseat` renumbers a review; an explicit `--to` onto a claimed id refuses.
+- VT: reserve tests pass with `DOCTRINE_RESERVATION_FALLBACK` set (ISS-483).
+- VT: the review guard admits primary, coord and solo linked trees and refuses
+  a worker; read verbs work in a worker.
 - VT: an RV opened in a solo linked tree runs raise → dispose → verify →
   conclude to `done`, and lands.
 - VA: audit skill and `review-ledger.md` state the rule; REV recorded.

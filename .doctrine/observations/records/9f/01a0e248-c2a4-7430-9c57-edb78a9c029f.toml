@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e248-c2a4-7430-9c57-edb78a9c029f"
+recorded_at = "2026-09-27T09:53:34.37262832Z"
+kind = "friction"
+summary = "[design; SL-269] design apply takes one discharge per payload; four runbook steps cost four applies with hand-threaded known_revision"
+detail = "Discharging explore.research/canon/memory/triage needed four sequential design apply calls, each bumping the revision, so known_revision had to be threaded by hand (a shell counter). DischargeDeclaration is singular in the ApplyRequest contract; an array would make it one call. Inline JSON on argv also needed escaping; --input <path> or '-' with a quoted heredoc avoids it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

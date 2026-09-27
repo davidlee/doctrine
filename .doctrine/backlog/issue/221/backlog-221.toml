@@ -5,10 +5,10 @@ id = 221
 slug = "reservation-global-id-scan"
 title = "Reservation id scan reads all prefixes → global counter"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-08"
-updated = "2026-07-20"
+updated = "2026-09-27"
 tags = ["area:entity"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
