@@ -223,10 +223,26 @@ a non-test build (a `dead_code` warning at the zero-warning gate).
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-27 · PHASE-01 · b9960bf0c
 
 ### Produced
 
+- PHASE-01 `feat(SL-271)` `1d385ee49` — `McpEntryClass` + `mcp_action` + `plan_mcp`
+  refactor; full-invocation payload (`src/boot.rs`). Plan correction `deb279725`;
+  lifecycle `b9960bf0c`. `doctrine check gate` green; PHASE-01 `VT-1`/`VT-2` PASS
+  (`verify-vt`). All `plan_mcp_*` assertions unchanged.
+- Memory `mem_01a0e1e1` recorded on trunk (report-seam output is e2e-only;
+  `verify-vt` attribution waits on the completed phase delta).
+
 ### Learned
 
+- `wire()` has no unit stdout seam — message wording is asserted by a subprocess
+  e2e (`common::doctrine_cmd`), never a unit test. See `mem_01a0e1e1`.
+- `slice verify-vt` reports UNATTRIBUTABLE until the phase is flipped `completed`
+  (the source-delta row is written there), even on a green tree.
+
 ### Open
+
+- PHASE-02 (codex leg) and PHASE-03 (probe + disclosure) pending. PHASE-02 must
+  carry the Claude-line-once stdout assertion (`VT-4`).
+- The `imperative` `install_mcp` read-error split (`ISS-495`) remains out of scope.
