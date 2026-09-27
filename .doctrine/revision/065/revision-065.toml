@@ -1,7 +1,7 @@
 id      = 65
 slug    = "six-routes-and-the-lock-route-check"
 title   = "Six routes and the lock route check"
-status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
+status = "done"
 approval = "approved"
 updated = "2026-09-27"
 tags    = []

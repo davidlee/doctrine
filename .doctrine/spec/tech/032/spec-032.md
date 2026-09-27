@@ -142,7 +142,7 @@ against.
 | `FindingStatus` | `open` `answered` `contested` `verified` `withdrawn` (the last two terminal) | the act table |
 | `Severity` | `blocker` `major` `minor` `nit` | `raise` |
 | `Disposition` | `aligned` `fix-now` `design-wrong` `follow-up` `tolerated` | `dispose`, `amend` |
-| `Route` | `review` `demonstrate` `probe` `control` `owner-fix` | `dispose`, `amend` (optional) |
+| `Route` | `review` `demonstrate` `probe` `control` `dedupe` `refresh` | `dispose`, `amend` (optional) |
 | `Role` | `raiser` `responder` | every act's turn row |
 | `ReviewStatus` | `active` `done` | derived, never written |
 | `Await` | `raiser` `responder` `none` | derived, never written |
@@ -157,8 +157,14 @@ parsers and constants, so both write paths are closed the same way.
 
 Disposition and route are **closed on write, open on read**: a legacy
 free-text value in an existing ledger stays readable and is rendered verbatim.
-It is not a defect and gates nothing. Status and severity are also read without
-a fallback, but they gate, so they are read fail-safe (below).
+It is not a defect and gates nothing in the ledger. One reader outside the
+ledger gates on route: the design-run lock refuses while a severe
+(`blocker`/`major`, or unknown severity) finding whose status is not open or
+withdrawn (an out-of-vocabulary status counts), and that is not already an
+undisposed blocker, carries no known route — absent, a legacy `route:`
+disposition prefix, or an out-of-vocabulary value, each named (DEC-326). Status
+and severity are also read without a fallback, but they gate, so they are read
+fail-safe (below).
 
 ## Act table
 
@@ -321,7 +327,8 @@ never substitutes a known value for it, and never lets it weaken a gate.
   classification the three blocker predicates share. `outstanding_by_severity`
   counts it in the `blocker` bucket.
 - **Unknown disposition, route, act or role** in a finding or turn is rendered
-  verbatim, gates nothing and, for turns, still counts as a turn. These are not
+  verbatim and gates nothing in the ledger (route: see the design-run lock
+  exception above) and, for turns, still counts as a turn. These are not
   defects.
 
 **Disclosure (DEC-319, STD-003).** `derive::vocabulary_defects` names each

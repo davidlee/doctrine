@@ -121,7 +121,7 @@ refuses* and *what to show*.
 **The refusal** renders *severe findings carry no route: F-3 (no route),
 F-7 (unknown route owner-fix)* and is capped like the other list causes
 (`carries_a_list`, `cut`). Its remedy names the repair per status:
-answered, `review amend <RV> --finding F-n --route <route> --note …`;
+answered, `review amend <RV> --finding F-n --route <route> --response … --note …`;
 contested, dispose again with `--route`; verified, the raiser reopens and the
 responder disposes again with `--route`; an out-of-vocabulary status, repair
 the status by hand, as the blocker check already requires.
@@ -148,8 +148,10 @@ Amended on RV-400 F-1, F-3, F-4, F-5 and F-9. In short:
 | reading | no pass mark, descriptive only; presence checked on the gated population (final pass at lock) and the rest reported apart; headline L against E12 (same-ledger 50-61%, the only baseline), scope difference stated |
 
 `CHR-082` runs it and reports `RFC-026` `E15`. This slice's only obligation to
-it is to land sec-2 and sec-3 and to install the result, so the build floor can
-pass on the day the window opens.
+it is to land sec-2 and sec-3 and make the result the one agents are served:
+the `doctrine` on PATH rebuilt (or `DOCTRINE_BIN` pinned to a current build, which
+the MCP server honours), then `doctrine install`, so the build floor can pass on
+the day the window opens.
 <!-- doctrine:section sec-5 -->
 ## Verification
 

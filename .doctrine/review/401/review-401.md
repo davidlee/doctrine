@@ -68,3 +68,22 @@ Standing risks:
 - F-2 — apply REV-065: ADR-007 D-C5 and SPEC-032 list the six routes, and
   SPEC-032 names the design-run lock as the one reader that an unknown route
   gates.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- design.md sec-3: the answered-status remedy now names `--response …` (F-1).
+- design.md sec-4: the obligation to CHR-082 names a rebuilt PATH doctrine (or
+  a pinned `DOCTRINE_BIN`) plus `doctrine install` (F-4). Both are out-of-band
+  edits to a locked run, by design.
+
+### REVs completed
+- REV-065 (`six-routes-and-the-lock-route-check`): done. ADR-007 D-C5 and
+  SPEC-032 list the six routes, and SPEC-032 names the design-run lock as the
+  one reader that gates on route (F-2). Narrative in revision-065.md.
+
+### Follow-up / tolerated
+- F-3: follow-up, IMP-498 (after CHR-082).
+- F-5: tolerated; conformance undeclared cell explained in the disposition.
+
+Reconcile pass complete; hand off to /close.

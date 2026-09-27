@@ -29,3 +29,9 @@ Decisions: `DEC-330` (route split), `DEC-326` (lock check, as amended by
 | vocabulary table, `Route` row | `review` `demonstrate` `probe` `control` `owner-fix` | `review` `demonstrate` `probe` `control` `dedupe` `refresh` |
 | "closed on write, open on read" paragraph | It is not a defect and gates nothing. | It is not a defect and gates nothing in the ledger. One reader outside the ledger gates on route: the design-run lock refuses while a severe (`blocker`/`major`, or unknown severity) finding whose status is not open or withdrawn (an out-of-vocabulary status counts), and that is not already an undisposed blocker, carries no known route — absent, a legacy `route:` disposition prefix, or an out-of-vocabulary value, each named (DEC-326). |
 | "Unknown disposition, route, act or role" bullet | … is rendered verbatim, gates nothing … | … is rendered verbatim and gates nothing in the ledger (route: see the design-run lock exception above) … |
+
+## Reconcile narrative
+
+- [RV-401 F-2]: ADR-007 D-C5 and SPEC-032 stated the five-route set and that
+  an unknown route gates nothing. Amendments 1 and 2 landed by hand as approved
+  above, at SL-270 reconciliation (2026-09-27).
