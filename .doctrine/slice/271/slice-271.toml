@@ -12,7 +12,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/boot.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/install.rs"
@@ -25,6 +25,18 @@ intent = "scope-relevant"
 [[selector]]
 selector = "tests/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_codex_install.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "README.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/**"
+intent = "design-target"
 
 [[relation]]
 label = "references"
