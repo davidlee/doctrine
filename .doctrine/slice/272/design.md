@@ -68,9 +68,10 @@ creation, where nothing is held and omission means non-blocking. Wording:
 `install/design-payload-contract.md` publishes it as plain `optional`. A fifth
 presence state, `Presence::OptionalNullRefused` — absent means absent, `null`
 is refused rather than read as absence — carries the new rule. It renders as
-`optional` with the annotation `(omit → non-blocking · null refused)`, beside
-the inquiry row's existing annotation. None of the four existing states says
-it: `Optional` accepts `null` as absence, `Sparse` reads it as clear, and
+`optional` with the annotation `(omit means absent · null refused)` — the note
+is one string per presence state, so it states the rule rather than this key's
+default — beside the inquiry row's existing annotation. None of the four
+existing states says it: `Optional` accepts `null` as absence, `Sparse` reads it as clear, and
 `RequiredAtCreation` demands the key at creation. The shipped document is
 regenerated from the renderer, to which it is pinned byte-for-byte.
 
@@ -188,12 +189,13 @@ parses. No stored state type changes.
 | `src/design_run/submission.rs` | `Declaration::finding_blocking_null()`; `Batch::validate` calls it after `inert_at_state`; docs of `finding_blocks` and `nulled_keys` corrected |
 | `src/design_run/run.rs` | unit criteria for the displacement gate and the re-word row, in its test module beside `run_with_a_map()` and the existing displacement tests; `reportable` set threaded through `record_act` / `record_declaration` → `admit_and_record`, gating and extending on each recording; `invalidation_rows` doc; `rehearse_proposal` doc; `declare_node` emits `NodeQuestionChanged` on changed text; the stale "state, not delta" comment |
 | `src/design_run/change_log.rs` | `ChangeEvent::NodeQuestionChanged` — `READABLE`, `EMITTABLE`, `as_str`, `payload_terms` (empty) |
+| `src/design_run/tests.rs` | `a_term_constructed_at_an_undeclared_kind_is_refused` counts a term-free event as one admitted cell (`DEC-335`), not a defect |
 | `src/design_run/payload_contract.rs` | `Presence::OptionalNullRefused` and its rendering; the finding-home `blocking` row uses it |
 | `install/design-payload-contract.md` | regenerated from the renderer |
 | `tests/e2e_design_state.rs` | payload-path criteria for both refusals; `every_event_fixture` gains a re-word apply |
 | `tests/e2e_design_delegation.rs` | `a_proposal_may_send_a_findings_blocking_null` inverted: the proposal is refused and not stored |
 
-Design-target selectors: the eight paths above.
+Design-target selectors: the nine paths above.
 
 <!-- doctrine:section sec-5 -->
 ## Verification

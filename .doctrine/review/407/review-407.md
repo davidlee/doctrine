@@ -78,3 +78,25 @@ invariant; `IDE-057` remains `REQ-478`'s open case.
 ### Governance/spec (REV)
 
 - None.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- F-1: `doctrine slice selector add --intent design-target 272
+  src/design_run/tests.rs` (load-bearing; `slice conformance` now 9
+  conformant, 0 undeclared, 0 undelivered). Mirrored in design.md sec-4: a
+  `tests.rs` row, and "the eight paths" → "the nine paths".
+- F-2: design.md sec-2 — the `OptionalNullRefused` annotation now reads
+  `(omit means absent · null refused)`, with why (one note per presence
+  state).
+
+Both edits land out of band on the locked design run; the fingerprint
+divergence is expected at reconcile. User agreed to both in session.
+
+### REVs completed
+- None — the brief carried no governance/spec items.
+
+### Withdrawn / tolerated
+- None. F-3 was fixed in audit (`b0d8f9963`).
+
+Reconcile pass complete — handoff to /close.

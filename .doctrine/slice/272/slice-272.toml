@@ -46,6 +46,10 @@ intent = "design-target"
 selector = "install/design-payload-contract.md"
 intent = "design-target"
 
+[[selector]]
+selector = "src/design_run/tests.rs"
+intent = "design-target"
+
 [[relation]]
 label = "fulfils"
 target = "ISS-454"
