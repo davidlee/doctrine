@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e1b0-2ebb-7581-9e1d-ba886ca9e146"
+recorded_at = "2026-09-27T07:06:55.035892047Z"
+kind = "friction"
+summary = "[plan; SL-270] plan.toml with phase keys stranded under [requirements] passes validate"
+detail = "A hand edit commented out the first [[phase]] header, so PHASE-01's id/name/objective/criteria parsed as keys of [requirements]. doctrine validate reported 'corpus clean' and slice phases materialised only PHASE-02 with no warning. Caught only by noticing phase-01.md missing. Unknown keys in plan.toml tables should be refused (STD-003 no silent skip)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

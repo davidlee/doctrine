@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e171-dac3-7880-8102-8ea2fed03922"
+recorded_at = "2026-09-27T05:58:50.307788348Z"
+kind = "friction"
+summary = "[knowledge; QUE-224] knowledge edit <ID> question drops the ID silently"
+detail = "doctrine knowledge edit QUE-224 question --answer ... refused with 'required arguments were not provided: <ID>' — the parent's optional [ID] slot accepts the id, then the subverb demands its own. Correct form is knowledge edit question QUE-224. The refusal does not say the id was seen in the wrong slot."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

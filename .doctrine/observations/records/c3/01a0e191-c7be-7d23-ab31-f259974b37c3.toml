@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e191-c7be-7d23-ab31-f259974b37c3"
+recorded_at = "2026-09-27T06:33:42.590368342Z"
+kind = "friction"
+summary = "design: dispose adopt accepts only knowledge records"
+detail = "SL-270 design inq-8 was answered by minting a backlog chore (CHR-082); dispose {form:adopt, record:CHR-082} refused 'unknown record prefix CHR (expected ASM/DEC/QUE/CON/EVD/HYP/CPT)'. Fell back to non-durable with a note naming the chore, which loses the structured link from the inquiry to the entity that answers it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

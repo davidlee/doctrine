@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e156-a71b-70b3-a3e9-792dbe79164d"
+recorded_at = "2026-09-27T05:29:07.611217968Z"
+kind = "friction"
+summary = "[review-of-review; SL-270] slice link error lists 'references' thrice and omits that roles ride --role"
+detail = "doctrine link SL-270 concerns RFC-026 refused with 'Legal labels: references, references, references, ...' — the duplicate entries are the three roles collapsed to their label; the refusal never names --role, so the fix needs a --help read."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
