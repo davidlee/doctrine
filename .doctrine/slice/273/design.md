@@ -104,3 +104,382 @@ teaching is split by access tier (DEC-342):
 | pull (authors) | `lib:reference/shipped-corpus-authoring.md` | writing citations in shipped text; cites `using-doctrine.md` rather than restating it |
 
 The push rule is two or three lines; everything else is reachable through it.
+<!-- doctrine:section sec-3 -->
+## 4. The resolution check
+
+One pure core, two callers (DEC-339). The core knows nothing about files; each
+caller owns its file set and how it reports.
+
+```mermaid
+flowchart LR
+  subgraph engine
+    LC["lib_citation.rs<br/>scan · unresolved · bare_mentions"]
+    PUB["publication.rs<br/>PublicationManifest · LogicalAddress · LIB_PREFIX"]
+  end
+  T["in-crate test<br/>shipped roots"] --> LC
+  D["doctor leg<br/>client .doctrine/**"] --> LC
+  S["library show"] --> PUB
+  LC --> PUB
+```
+
+The core depends only on the admitted manifest, not on the resolver's
+adapter: whether a declared address has bytes behind it is already pinned by
+`publication.rs`'s `every_shipped_entry_resolves_and_is_mit`. ADR-001 layering
+holds — `lib_citation` is engine, its callers are a test and a command-layer
+check.
+
+### 4.1 Core — `src/lib_citation.rs`
+
+```rust
+/// One `lib:` citation found in text; `address` excludes the marker.
+pub(crate) struct LibCitation<'t> { pub address: &'t str, pub line: usize }
+
+/// A bare mention of a library doc outside any `lib:` citation.
+pub(crate) struct BareMention<'t> { pub name: &'t str, pub line: usize }
+
+/// Every citation in `text`, per the section 3.1 grammar (code spans and
+/// fences included).
+pub(crate) fn scan(text: &str) -> Vec<LibCitation<'_>>;
+
+/// Citations whose address is malformed or not declared in `manifest`.
+pub(crate) fn unresolved<'t>(cites: &[LibCitation<'t>], manifest: &PublicationManifest)
+  -> Vec<(LibCitation<'t>, Unresolved)>;          // Unresolved::{Malformed, Undeclared}
+
+/// The library-doc basenames the bare report looks for.
+pub(crate) fn bare_targets(manifest: &PublicationManifest) -> BTreeSet<&str>;
+
+/// Occurrences of `targets` in `text` not inside a `lib:` citation.
+pub(crate) fn bare_mentions<'t>(text: &'t str, targets: &BTreeSet<&str>) -> Vec<BareMention<'t>>;
+```
+
+- `PublicationManifest` gains `declares_address(&LogicalAddress) -> bool`,
+  beside the existing `declares_backing`.
+- **`bare_targets`** = basenames of the manifest's `reference/*.md` entries,
+  minus a named exemption set `BARE_EXEMPT = ["governance.md"]` — it is also the
+  client's own `.doctrine/governance.md` (DEC-343). Templates and `AGENTS.md`
+  are never targets: their basenames mean slice artefacts and repo files far
+  more often than library assets (DEC-341). Derived from the manifest, so the
+  rename (section 5) and the `boot-footer.md` retirement need no edit here.
+- **`bare_mentions`** matches a target preceded by start-of-text or a
+  character outside `[A-Za-z0-9_-]` — so the path forms `install/glossary.md`,
+  `.doctrine/glossary.md` and `doctrine library show reference/glossary.md` are
+  all reported (each is a pre-`lib:` form), while `my-glossary.md` is not.
+
+### 4.2 Caller 1 — the build-repo test (the sweep's finish line)
+
+An in-crate `#[cfg(test)]` module in `lib_citation.rs` — in-crate because the
+core is `pub(crate)`; an integration test under `tests/` cannot reach it. It
+walks the shipped prose roots, a named constant
+`SHIPPED_PROSE_ROOTS = ["plugins/doctrine/skills", "install"]` under
+`CARGO_MANIFEST_DIR`, every `*.md`, against `PublicationManifest::load()`.
+
+| test | from | asserts |
+|---|---|---|
+| `every_shipped_lib_citation_resolves` | phase 1 | no `unresolved` result across the roots |
+| `no_bare_library_mention_in_shipped_prose` | phase 1 as `#[ignore]`, un-ignored in phase 4 | no `bare_mentions` result across the roots |
+
+The ignored test is runnable on demand (`cargo test -- --ignored`) and prints
+every mention by file and line — the working list during the sweep. Removing
+the `#[ignore]` is the act that makes the bare report enforcing.
+
+Rust string literals (`src/**`) are not prose and are not in the test roots;
+the sweep inventory covers them (section 6).
+
+### 4.3 Caller 2 — the doctor leg
+
+`doctor_checks::lib_citation_findings(root)`, wired in `src/commands/doctor.rs`
+beside `prose_cite_findings`. It walks `.doctrine/**/*.md` (the same anchor as
+`prose_cite`, skipping `.doctrine/state/`), runs `scan` + `unresolved`, and
+emits one finding per unresolved citation under a new
+`Category::LibCitation` at `Severity::Warning`, doctor's convention for prose
+checks. The message names the file, line, address and reason, and the fix
+(`doctrine library tree` lists what exists).
+
+- **No bare report in clients.** A client's prose may legitimately say
+  `glossary.md`; only a citation that claims to be a library citation is held
+  to resolving.
+- **Load failure is disclosed.** If the embedded manifest does not admit, the
+  leg emits one finding saying the check could not run, never silence
+  (STD-003).
+
+### 4.4 Test cases (core)
+
+- `scan` finds a citation in a code span, in a fence, at end of sentence
+  (trailing `.` trimmed), and none in `lib:<address>` or `xlib:foo.md`.
+- `unresolved` classifies a traversal address as malformed and an undeclared
+  one as undeclared; a declared address passes.
+- `bare_mentions` reports `glossary.md`, `install/glossary.md` and
+  `reference/glossary.md` outside a citation; ignores the same name inside
+  `lib:reference/glossary.md`, and ignores `my-glossary.md` and `governance.md`.
+<!-- doctrine:section sec-4 -->
+## 5. Library consolidation
+
+Each rule or concept gets exactly one owning doc; every other surface cites it.
+The load-bearing change is the boot digest's identity.
+
+### 5.1 The boot onboarding summary
+
+`routing-process.md` is already the boot's static digest: `src/boot.rs` embeds
+it whole as the "Routing & Process" section, and it carries the routing table,
+postures, core process, guardrails, reference forms and the reference-docs
+register. Its second life as a published doc is incidental — every asset is
+published. The defect is framing and name, not duplication (DEC-344).
+
+**Rename** `install/routing-process.md` → `install/essentials.md`, published
+as `reference/essentials.md`, boot section heading "Essentials". (Not
+`onboarding.md`: boot already has an `## Onboarding` section fed by
+`project-orientation.md`.) Its first line states its role: the compact
+summary every session carries; each block it does not own ends with a cue to
+its owner.
+
+```mermaid
+flowchart TB
+  E["essentials.md<br/>(boot, every session)"]
+  G["glossary.md"]
+  U["using-doctrine.md"]
+  E -- "reference forms: summary + cue" --> G
+  E -- "storage tiers, read via show, lib: model: summary + cue" --> U
+  U -- "reference forms: citation" --> G
+```
+
+Arrows point from a summary or citation to the owner; nothing points back.
+
+| block in `essentials.md` | status | owner |
+|---|---|---|
+| route-before-you-act, routing table, postures, mid-flight rules | owned | here |
+| core process | owned | here |
+| guardrails | owned; its storage-tier clause is a summary | here / `using-doctrine.md` |
+| reference forms, criteria modes | summary + cue | `glossary.md` |
+| the library: `lib:` rule, mandatory retrieval, register of docs | rule and register owned | here; model in `using-doctrine.md` |
+
+**Compactness.** ADR-005's push test decides each line: does an agent need it
+before it would invoke any skill? A line that fails moves to its owner.
+Budget: the renamed file is no longer than today's 88 lines, the new `lib:`
+and mandatory-retrieval lines included.
+
+### 5.2 Owner map and cuts
+
+| concept | owner | duplicates cut to a `lib:` citation |
+|---|---|---|
+| reference forms, criteria modes, first-use qualification (C5, moved in) | `glossary.md` | `using-doctrine.md` § edit-preserving rules; four templates' header comments |
+| storage tiers, read via `show` | `using-doctrine.md` | — (`essentials.md` keeps its summary) |
+| publication model, `lib:` form (new §) | `using-doctrine.md` | — (new) |
+| reference-docs register | `essentials.md` | `using-doctrine.md` § pointers |
+| authority ranking | `authority.md` + `authority-model.md` (gloss) | — (already subordinated) |
+| review ledger, harvest, dispatch mechanics | their docs | skill copies — restate audit (section 6) |
+
+### 5.3 Retirements and fixes
+
+- **`boot-footer.md`** — manifest entry and asset removed (DEC-343). Nothing
+  reads it; SL-242 untracks the projected copy.
+- **`shipped-corpus-authoring.md`** — teaches `lib:` for shipped citations and
+  cites `using-doctrine.md` § publication for the model (DEC-343).
+- **`governance.md`** — untouched (QUE-228).
+
+### 5.4 Governance change
+
+The rename and the digest's stated role change governing text, so they go
+through one Revision (ADR-013) before the rename lands:
+
+- **ADR-005** — the one-workflow-doc invariant names `essentials.md` and
+  describes it as the boot onboarding summary; the push-tier description and
+  affected-surface line follow; the anticipated rename is recorded as done.
+- **ADR-024** — line 135's pointer to `install/routing-process.md`.
+- **SPEC-011** — line 76's reference to the embedded digest.
+
+One shipped memory lists `routing-process.md` as a published example
+(`mem_019ec92b0ffc79d294a49559db9aa12a`); the rename would leave it naming a
+retired address, so its one mention is updated. That is repairing breakage this
+slice causes, not the memory rewrite RFC-033 S2 owns.
+
+### 5.5 Mechanics
+
+`publication/manifest.toml` entry (address and backing), the
+`SourceKind::Static` name and heading in `src/boot.rs` (and its test at
+`boot.rs:3620`), then `doctrine boot` to regenerate. Edits under `install/`
+are invisible to boot and `library show` until rebuilt.
+<!-- doctrine:section sec-5 -->
+## 6. The sweep and restate audit
+
+One inventory drives both the citation sweep (DEC-341) and the restate-line
+audit (DEC-345). Enumeration, judgement and editing are separate acts by
+separate hands, so nothing is rewritten on an unreviewed call and nothing is
+missed for want of a list.
+
+```mermaid
+sequenceDiagram
+  participant W as DeepSeek worker
+  participant O as Orchestrator
+  participant T as Check (section 4)
+  W->>O: phase 3 — inventory.toml, every occurrence + recommendation
+  O->>O: adjudicate each row (verdict), log ownerless rows to IMP-500, commit
+  O->>W: phase 4 — apply accepted / amended rows only
+  W->>O: working-tree diff
+  O->>T: un-ignore bare test; run both tests
+  O->>O: verify diff row by row against the inventory
+  Note over W,O: audit — second DeepSeek pass, same brief, fresh inventory
+```
+
+### 6.1 The inventory — `.doctrine/slice/273/inventory.toml`
+
+Tracked (authored tier), so the audit can re-derive every disposition.
+Structured rows in TOML per the storage rule; the brief and any narrative sit in
+`notes.md`.
+
+```toml
+[[row]]
+id        = "C-014"                 # C- citation, R- restate; append-only, never renumbered
+file      = "plugins/doctrine/skills/audit/SKILL.md"
+line      = 42                      # informational — lines drift; apply by excerpt
+excerpt   = "see `review-ledger.md` for the turn protocol"
+class     = "library-doc"
+recommend = "convert"
+target    = "`lib:reference/review-ledger.md`"
+reason    = "names the published review-ledger protocol"
+verdict   = ""                      # orchestrator: accept | amend | reject
+resolved  = ""                      # orchestrator: final target / wording when amended
+```
+
+| section | `class` | `recommend` |
+|---|---|---|
+| citation (C-) | `library-doc`, `library-path` (the `library show reference/…` / `install/…` / `.doctrine/…` forms), `template`, `slice-artefact`, `client-file`, `repo-file`, `other` | `convert` \| `leave` |
+| restate (R-) | `flag-shape`, `owned-concept`, `ownerless-concept` | `cut-to-help` \| `cut-to-lib` \| `log` |
+
+**Roots.** `plugins/doctrine/skills/**`, `install/**` (reference docs,
+templates, hymns, integration assets), and prose-bearing string literals in
+`src/**` (boot and CLI-emitted guidance) — wider than the test's roots
+(section 4.2), which are the part a machine can hold afterwards.
+
+**What is an occurrence.** Every `*.md` token and every library path form, in
+any context, whatever its class — the worker enumerates, it does not filter.
+For restate: flag syntax, option or enum tables, and prose restating a
+concept a library doc (section 5.2) or `--help` owns.
+
+### 6.2 Adjudication
+
+The orchestrator sets `verdict` on every row, amending `resolved` where the
+recommendation is wrong. Rules it applies:
+
+- `convert` only where the text means the library asset. `template` and
+  `slice-artefact` rows are `leave` unless the sentence is plainly about the
+  published template.
+- `governance.md`, `AGENTS.md` → `leave` unless plainly the library copy.
+- `ownerless-concept` → `log`: the file and line are appended to IMP-500's body;
+  the text stays.
+- Addresses use the post-rename names (`reference/essentials.md`).
+
+No row is applied with an empty verdict. The adjudicated inventory is committed
+before phase 4 starts.
+
+### 6.3 Implementation and verification
+
+The phase 4 worker applies exactly the `accept` and `amend` rows, locating each
+by file and excerpt, and nothing else. The orchestrator then:
+
+1. removes the `#[ignore]` on `no_bare_library_mention_in_shipped_prose`;
+   both section 4.2 tests pass;
+2. checks the diff row by row: every applied row changed as adjudicated, no
+   hunk lacks a row;
+3. confirms every `log` row is in IMP-500.
+
+If the diff is too large to verify in one pass, phase 4 splits into two
+dispatches along the C-/R- boundary; the design is unchanged.
+
+### 6.4 Audit re-pass
+
+During `/audit`, a fresh DeepSeek worker runs the phase 3 brief against the
+landed tree and writes `inventory-audit.toml`. Any row that is neither a
+`leave` in the first inventory nor already in the target form is a finding on
+the audit ledger.
+<!-- doctrine:section sec-6 -->
+## 7. Invariants, edge cases and risks
+
+### 7.1 Invariants
+
+- **I1 — every shipped `lib:` citation resolves** to a declared publication
+  address. Enforced from phase 1 by `every_shipped_lib_citation_resolves`.
+- **I2 — no bare library-doc mention in shipped prose** outside a `lib:`
+  citation, `governance.md` exempt. Enforced from phase 4.
+- **I3 — one owner per rule or concept**; summaries in `essentials.md` end with
+  a cue to their owner; no owner points back to a summary.
+- **I4 — `essentials.md` stays within today's 88 lines.**
+- **I5 — no sweep edit without an adjudicated inventory row.**
+- **I6 — the marker is one constant** (`LIB_PREFIX`); the exemption set and
+  test roots are named constants (STD-001).
+
+### 7.2 Edge cases
+
+- **Library doc discussing citations.** `shipped-corpus-authoring.md` and
+  `using-doctrine.md` must show the form. Examples use the placeholder
+  `lib:<address>` (not a citation) or a real, resolving address — never a
+  plausible fake.
+- **A bare mention that must stay** (a doc naming a file as a filename). If one
+  survives adjudication as `leave` for a target basename, I2 fails; the fix is
+  rewording, not an allowlist. If rewording is wrong, that is a `/consult`,
+  not a silent exemption.
+- **Self-reference.** A library doc naming itself is a bare mention like any
+  other.
+- **Client-side citations to templates.** The doctor leg resolves
+  `lib:templates/…` like any address; only the bare report excludes templates.
+- **Retired address still cited in a client's prose.** Doctor reports it as
+  undeclared — the intended signal after the rename and the `boot-footer.md`
+  retirement.
+- **Nested worktree copies** under `.dispatch/`, `.worktrees/` are outside
+  `.doctrine/**`; `.doctrine/state/` is skipped.
+
+### 7.3 Risks
+
+| risk | mitigation |
+|---|---|
+| R1 sweep false positives — collisions rewritten to `lib:` | no edit without an adjudicated row (I5); I1 fails any mint that does not resolve |
+| R2 targets move under the sweep | consolidation and rename land in phase 2, before the inventory |
+| R3 looser worker misses or over-rewrites | exhaustive enumeration, adjudication, two-way diff check, audit re-pass |
+| R4 cited guidance skipped — a retrieval is a tool call agents sometimes skip | boot mandate; per-message essentials stay resident; structural fix is IDE-060 |
+| R5 stale embed — `install/` edits invisible until rebuild | verification after `cargo build`; `doctrine boot` after the rename |
+| R6 ownerless concepts stay restated | logged in IMP-500 with locations; accepted until owners exist |
+<!-- doctrine:section sec-7 -->
+## 8. Verification and code impact
+
+### 8.1 Verification
+
+| claim | mode | evidence |
+|---|---|---|
+| `scan` / `unresolved` / `bare_mentions` behave per section 4.4 | VT | unit tests in `lib_citation.rs` |
+| every shipped `lib:` citation resolves (I1) | VT | `every_shipped_lib_citation_resolves` |
+| no bare library mention in shipped prose (I2) | VT | `no_bare_library_mention_in_shipped_prose`, un-ignored |
+| `library show lib:<address>` equals `library show <address>` | VT | `library.rs` round-trip test |
+| doctor reports an unresolved client citation and discloses a load failure | VT | `doctor_checks` tests |
+| boot carries the `lib:` rule and mandatory-retrieval line under "Essentials" | VT | `boot.rs` assertion |
+| one owner per concept (I3); `essentials.md` ≤ 88 lines (I4) | VA | owner map in section 5.2 checked against the landed docs; `wc -l` |
+| every inventory row adjudicated and applied as adjudicated (I5) | VA | two-way diff check, section 6.3 |
+| audit re-pass finds nothing unrecorded | VA | `inventory-audit.toml` vs `inventory.toml` |
+| governing text names `essentials.md` | VA | the Revision applied to ADR-005, ADR-024, SPEC-011 |
+| `doctrine check gate` green | VT | close |
+
+### 8.2 Code impact
+
+| path | change |
+|---|---|
+| `src/lib_citation.rs` | new: scanner, resolution and bare-mention core; shipped-corpus tests |
+| `src/publication.rs` | `LIB_PREFIX`; `PublicationManifest::declares_address` |
+| `src/commands/library.rs` | `show_with` strips `LIB_PREFIX`; test |
+| `src/doctor_checks.rs`, `src/commands/doctor.rs`, `src/finding.rs` | `lib_citation_findings`; wiring; `Category::LibCitation` |
+| `src/boot.rs` | static source renamed to `essentials.md`, heading "Essentials"; test |
+| `src/lib.rs` or `src/main.rs` | module declaration |
+| `publication/manifest.toml` | rename entry; remove `boot-footer.md` |
+| `install/routing-process.md` → `install/essentials.md` | rename, compactness pass, `lib:` rule, mandatory retrieval |
+| `install/glossary.md`, `install/using-doctrine.md`, `install/shipped-corpus-authoring.md` | owner map cuts; C5; publication section; `lib:` teaching |
+| `install/boot-footer.md` | deleted |
+| `install/templates/**`, `install/hymns/**`, `plugins/doctrine/skills/**` | citations and restate cuts, per the inventory |
+| prose literals in `src/**` | citations, per the inventory |
+| `memory/mem_019ec92b0ffc79d294a49559db9aa12a` | one mention of the renamed doc |
+| ADR-005, ADR-024, SPEC-011 | via Revision |
+| `.doctrine/slice/273/inventory.toml`, `inventory-audit.toml` | new, tracked |
+| IMP-500 | ownerless-table locations |
+
+### 8.3 Decisions
+
+Shaped by DEC-339 (check shape), DEC-340 (SL-242 overlap), DEC-341 (sweep
+process), DEC-342 (`lib:` teaching split, `library show` prefix), DEC-343 (stale
+docs), DEC-344 (boot summary and rename), DEC-345 (restate depth, mandatory
+retrieval), DEC-346 (phasing). Read any with `doctrine show DEC-NNN`.
