@@ -1,0 +1,304 @@
+id    = 400
+slug  = "design-review-of-sl-270"
+title = "design review of SL-270"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "SL-270 design sec-1..6 and scope; DEC-326/327/330/331/333/334, DEC-276, QUE-224, CHR-082; ADR-007 D-C5, ADR-001 tiers, SPEC-032 vocab table; RFC-026 P10, E12 report (L row), E14 report (kappa by population); code: review_ledger vocab.rs Route/ROUTES, derive.rs vocabulary_defects, gate.rs undisposed_blockers/PassFacts/observe_pass, transition.rs can, review verbs.rs effective_route/gate, commands/design.rs observed_review, design_run gate.rs disposition_causes/Cause/carries_a_list, attestation.rs ReviewPass, prompt.rs embedding, mcp tools.rs route enum; owner-fix sweep across src, tests, install, plugins, .agents, memory, spec, adr."
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-270"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "major"
+title = "Lock check does not force 100% route presence on the trial population DEC-334 counts"
+detail = """
+Observation. DEC-334 item 6 says "the lock forces 100%, so a miss is a gate failure", and its consequences say "Presence can no longer be a finding of the trial". The check in design sec-3 does not cover the trial population that DEC-334 and RFC-026 P10 define:
+
+1. Open majors at lock. sec-3 exempts them ("open majors are admissible at lock today"), and install/design-prompts/reviewing.md:163-167 ("When a finding may stay open past the gate") explicitly permits a severe finding to remain open past the gate. A major disposed after lock is never read by any check, so it can be answered bare.
+2. Superseded passes. A pass is "minted on entry to reviewing and replaced, never reopened" (src/design_run/attestation.rs:522-527); observed_review reads only the RV named by the disposition (src/commands/design.rs ~3197-3215), and disposition_causes compares it to the current pass (src/design_run/gate.rs:1683-1690). Severe findings on an earlier pass's RV are never checked. RFC-026 P10's trial text says "every design ledger they generate is included", and DEC-334 item 4 counts per ledger.
+3. Anything disposed or re-disposed after the run locks (e.g. a reopen and re-dispose during /plan when instrument-routed findings are verified after slice phases, reviewing.md:176-181) is outside the lock's reach.
+
+So the trial can still record unrouted severe findings, and DEC-334 would misread them as gate failures when they are by-design gaps.
+
+What would settle it. Either (a) narrow DEC-334's population explicitly to severe findings disposed on the locking pass before lock, and require the chore to count and report the rest (open-at-lock majors, superseded-pass findings, post-lock dispositions) as a separate out-of-gate stratum; or (b) widen the check (e.g. refuse lock while a major is open, read every pass RV the run minted). Either way, sec-3's "Not covered" list must name superseded passes, and DEC-334 item 6's 100% claim must match whatever is chosen.
+"""
+disposition = "fix-now"
+route = "review"
+response = "Accepted, and not widened. DEC-334 item 6 now checks presence only on its gated population, severe findings disposed on the final review pass at lock, where the lock forces 100 percent. Findings open at lock, on superseded passes, or disposed after lock are counted and reported apart, never folded into presence. Design sec-6 records it as a risk and carries a follow-up to audit, per the owner 2026-09-27: decide whether this is the behaviour wanted long-term, or needs closer review or a backlog item."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted, and not widened. DEC-334 item 6 now checks presence only on its gated population, severe findings disposed on the final review pass at lock, where the lock forces 100 percent. Findings open at lock, on superseded passes, or disposed after lock are counted and reported apart, never folded into presence. Design sec-6 records it as a risk and carries a follow-up to audit, per the owner 2026-09-27: decide whether this is the behaviour wanted long-term, or needs closer review or a backlog item."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "Route-set change and legacy-route gating contradict ADR-007 D-C5 and SPEC-032; no revision named"
+detail = """
+Observation. The design changes two things that accepted governance states differently:
+
+- ADR-007 D-C5 (.doctrine/adr/007/adr-007.md:91-93) enumerates the route set as review | demonstrate | probe | control | owner-fix. SPEC-032's closed-vocabularies table (.doctrine/spec/tech/032/spec-032.md:145) lists the same five.
+- SPEC-032 (spec-032.md:~155-158) says disposition and route are closed on write, open on read, and a legacy value "is not a defect and gates nothing". Design sec-2 and sec-3 make a legacy or unknown route value gate the design-run lock.
+
+DEC-331's choice says "No revision to ADR-007 or SPEC-032 is raised by SL-270", and neither the design nor the scope names a revision or a spec edit. After SL-270 lands, both binding documents (boot Authority tier 2) contradict the shipped code. Under ADR-013 a governance dependency routes through a Revision.
+
+What would settle it. The design names the governance change: a REV amending ADR-007 D-C5's route list and SPEC-032's Route row and its "gates nothing" sentence (or a recorded decision why these edits do not need a revision), and DEC-331's consequence line is corrected so it does not claim no revision is needed.
+"""
+disposition = "fix-now"
+route = "owner-fix"
+response = "Accepted. REV-065 (approved by the owner 2026-09-27, applied at reconciliation) modifies ADR-007 D-C5 and SPEC-032: six routes, and a stated exception that the design-run lock gates on route while the ledger itself still does not. DEC-331 narrowed to facet scope; DEC-330 names REV-065. Surviving owner: ADR-007 and SPEC-032 after REV-065. Class swept: every governance statement of the route set (ADR-007 D-C5, SPEC-032 vocabulary table and both gates-nothing sentences)."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "owner-fix"
+response = "Accepted. REV-065 (approved by the owner 2026-09-27, applied at reconciliation) modifies ADR-007 D-C5 and SPEC-032: six routes, and a stated exception that the design-run lock gates on route while the ledger itself still does not. DEC-331 narrowed to facet scope; DEC-330 names REV-065. Surviving owner: ADR-007 and SPEC-032 after REV-065. Class swept: every governance statement of the route set (ADR-007 D-C5, SPEC-032 vocabulary table and both gates-nothing sentences)."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "major"
+title = "Headline L has a missing baseline (E11 never measured L) and an undefined scope and window"
+detail = """
+Observation. DEC-334 item 6 makes "L on routed findings against E12's window (50-61%) and E11's converged ledgers" the headline. Three problems, each grounded:
+
+1. E11 has no L. The E12 report's rater table (.doctrine/rfc/026/p10-trial/report.md:141) records L for E11 as "not measured". One of the two named baselines does not exist; comparing against it would require a new rating chosen after the window's data exists, which is the post-hoc lever DEC-334 is meant to remove.
+2. L's scope and window are undefined. E12's L is "repair drew a later finding in the same ledger" (report.md:141). DEC-334 item 3 says "whether the repair was later contested or drew a related finding" with no ledger scope or time window. Instrument-routed findings are by design not repaired in prose and are verified after slice phases (reviewing.md:141-150, 176-181; P10 text), so a same-ledger L falls for them by construction, independent of whether the mechanism works. If L instead extends to phase execution and audit, that must be said now, with where related findings are looked for.
+3. With three slices (E12: 18 severe findings) split across six routes and kappa in the 0.4s, the design does not state what size of L difference would be read as anything. "No pass mark" is honest, but sec-4 still calls L a headline without saying it is descriptive only.
+
+What would settle it. DEC-334 defines L precisely (scope: same ledger, or ledger plus phase criteria plus audit; window: until lock, until close), states that same-ledger L is mechanically lowered for instrument routes and reports instrument routes and prose routes apart, drops E11 as an L baseline (or fixes now how E11's L would be rated, blind, before the window opens), and states the headline is descriptive at this n.
+"""
+disposition = "fix-now"
+route = "review"
+response = "Accepted. DEC-334 item 3 defines L as a related finding or contest drawn by the repair or instrument obligation in the same ledger, a later design pass, or the slice audit ledger, up to slice close, and says why same-ledger L alone would fall by construction. Item 6 names E12 as the only baseline (E11 did not measure L), states the scope difference, and calls the headline descriptive."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted. DEC-334 item 3 defines L as a related finding or contest drawn by the repair or instrument obligation in the same ledger, a later design pass, or the slice audit ledger, up to slice close, and says why same-ledger L alone would fall by construction. Item 6 names E12 as the only baseline (E11 did not measure L), states the scope difference, and calls the headline descriptive."
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "major"
+title = "Eligibility ordering, in-flight slices and parked slices are left to post-hoc choice"
+detail = """
+Observation. DEC-334 item 1: "the next 3 code-changing slices whose design run conducts a review, taken consecutively after SL-270 closes, not selected". The ordering key is not fixed:
+
+- By slice id, slice creation, design start, review start, or review conclusion? SL-271 is already in design review now (RV-399, commits 5ad426a60, e91699d90), created before SL-270 closes; slices in flight at window open are neither included nor excluded by the text.
+- RFC-026 P10's trial text says "a parked or abandoned slice stays in the count". DEC-334 only handles a waived review; a slice parked or abandoned before its design review conducts is undefined (is it counted as one of the 3, or skipped?).
+- A slice whose design start precedes the build-floor check at window open is undefined.
+
+Each of these is a choice the chore owner would make while outcomes are visible, which is the lever DEC-276's rationale (carried forward by DEC-334) exists to remove.
+
+What would settle it. DEC-334 names the ordering event (e.g. the design run's review pass mint, in time order, first event after SL-270 closes and the window-open floor check passes), states whether slices already in design at window open are excluded, and states how parked or abandoned slices count, consistent with P10's text or with a stated departure from it.
+"""
+disposition = "fix-now"
+route = "review"
+response = "Accepted. DEC-334 item 1: eligible when the slice design run mints a review pass after the window opens, the first 3 in minting order; in-flight slices are decided by that same test; waived reviews recorded and skipped; parked or abandoned slices stay in the count with their status."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted. DEC-334 item 1: eligible when the slice design run mints a review pass after the window opens, the first 3 in minting order; in-flight slices are decided by that same test; waived reviews recorded and skipped; parked or abandoned slices stay in the count with their status."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "minor"
+title = "Build floor skills check names a nonexistent verb and misses where route prose is served"
+detail = """
+Observation. DEC-334 item 2's third floor check is "installed skills are fresh (doctrine install check or equivalent)". There is no install check verb: ./target/debug/doctrine install --help lists only --path, --agent, --skill, --domain, --only-memory, --global, --dry-run, --yes, --color. "or equivalent" leaves the check to be invented at run time.
+
+It is also aimed at the wrong surface for the route prose. install/design-prompts/reviewing.md is embedded in the binary and served by the design run (src/design_run/prompt.rs:4-14, "The shell resolves the key against the embedded corpus"), so its freshness is the binary's, not the installed skills'. Meanwhile the installed skills in this very repo are already stale on routing: .agents/skills/plan/SKILL.md:45 still describes a disposition that begins route:demonstrate, while plugins/doctrine/skills/plan/SKILL.md:45 describes the route field.
+
+What would settle it. Name each floor check as a concrete command with its pass condition, e.g. the design reviewing fragment digest emitted by design resume matches the SL-270 build; install --dry-run reports no pending skill changes; the MCP review_dispose schema's route enum equals the six. Say which binary each check runs against (CLI on PATH, DOCTRINE_BIN, the MCP server).
+"""
+disposition = "fix-now"
+route = "control"
+response = "Accepted. The floor now reads: CLI help and the MCP review_dispose schema each list six routes (they carry the embedded reviewing.md, so they cover the route prose); doctrine install is run at window open and the projections recorded current. The fault the floor must reject: an MCP server launched from a stale PATH binary that offers the five-route enum. Criterion to assert: the recorded floor check fails for that server and passes after it is rebuilt. Host: the CHR-082 window-open step, not an SL-270 phase."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "control"
+response = "Accepted. The floor now reads: CLI help and the MCP review_dispose schema each list six routes (they carry the embedded reviewing.md, so they cover the route prose); doctrine install is run at window open and the projections recorded current. The fault the floor must reject: an MCP server launched from a stale PATH binary that offers the five-route enum. Criterion to assert: the recorded floor check fails for that server and passes after it is rebuilt. Host: the CHR-082 window-open step, not an SL-270 phase."
+
+[[finding]]
+id = "F-6"
+status = "answered"
+severity = "minor"
+title = "Route sweep omits golden tests, a teaching memory and the closed-five sentences"
+detail = """
+Observation. Design sec-2 lists the edit sites as vocab.rs, tools.rs:143, cli.rs:137,182, reviewing.md and review-ledger.md. A repo sweep for owner-fix outside .doctrine records finds sites the design omits:
+
+- tests/e2e_review_golden.rs:1509-1551 (route fixtures and a comment naming owner-fix) and :2876 (golden refusal text "known: review, demonstrate, probe, control, owner-fix"). These break when ROUTES changes; the design's verification section does not mention them.
+- the local memory mem_01a0d91d7a0d75f1853c505d08237451 (memory.md:1,7,14) teaches --route owner-fix as the worked example. It is agent-facing guidance and is covered by neither the build floor nor VA-1.
+- reviewing.md:118 ("The closed set is exactly five") and :190 ("accepts only the closed five"). VA-1 checks that owner-fix is gone and six routes appear, but a stale "five" survives both checks.
+- ADR-007 and SPEC-032 (raised separately).
+
+What would settle it. sec-2 lists these sites; VA-1 also asserts no remaining count of five in the route prose; the memory is edited or superseded as part of the slice.
+"""
+disposition = "fix-now"
+route = "owner-fix"
+response = "Accepted. Design sec-2 adds tests/e2e_review_golden.rs, memory mem_01a0d91d7a0d75f1853c505d08237451, the exactly-five and closed-five sentences at reviewing.md 118 and 190, and ADR-007/SPEC-032 via REV-065; both files added as selectors. VA-1 widened to a repo-wide search for owner-fix and a five-route count, with named exclusions. Duplicate removed: the old five-route statements. Class swept: every site that states the route set."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "owner-fix"
+response = "Accepted. Design sec-2 adds tests/e2e_review_golden.rs, memory mem_01a0d91d7a0d75f1853c505d08237451, the exactly-five and closed-five sentences at reviewing.md 118 and 190, and ADR-007/SPEC-032 via REV-065; both files added as selectors. VA-1 widened to a repo-wide search for owner-fix and a five-route count, with named exclusions. Duplicate removed: the old five-route statements. Class swept: every site that states the route set."
+
+[[finding]]
+id = "F-7"
+status = "answered"
+severity = "minor"
+title = "Disposed set disagrees with DEC-138 on contested and unknown status; remedy incomplete"
+detail = """
+Observation. sec-3 defines disposed as status not known open or withdrawn, so contested and unknown statuses count. The existing sibling on the same condition, undisposed_blockers (src/review_ledger/gate.rs, the fn after the DEC-138 comment block, lines 134-146), classifies contested and unknown status as undisposed. So a contested or unknown-status blocker with no route is listed under two causes of review-disposition-attested at once: BlockersUndisposed ("blocking findings hold the edge: F-3") and the new SevereFindingsUnrouted ("F-3 (no route)"), one calling it undisposed and one disposed. VT-2/VT-3 do not pin which is intended.
+
+The remedy text covers answered (amend) and verified (reopen, re-dispose) but not contested (dispose again with --route, admissible per src/review_ledger/transition.rs:113-115). For an unknown status, no verb can move the finding: gate() refuses UnknownStatus before any act (src/review/verbs.rs:664-672), so the named remedy cannot work and the only path is a hand edit, which the refusal does not say.
+
+What would settle it. Either define the new predicate's disposed set so a finding already in undisposed_blockers is not also listed (or state that double-listing is intended and test it), name the contested repair in the remedy, and state the hand-edit path for an out-of-vocabulary status.
+"""
+disposition = "fix-now"
+route = "review"
+response = "Accepted. DEC-326 and design sec-3: disposed means known answered, contested or verified; an unknown status is excluded (disclosed already, and no verb can act on it); a finding already listed as an undisposed blocker is excluded. The remedy names the repair per status, including contested. VT-2 and VT-3 updated."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted. DEC-326 and design sec-3: disposed means known answered, contested or verified; an unknown status is excluded (disclosed already, and no verb can act on it); a finding already listed as an undisposed blocker is excluded. The remedy names the repair per status, including contested. VT-2 and VT-3 updated."
+
+[[finding]]
+id = "F-8"
+status = "answered"
+severity = "minor"
+title = "DEC-330 claims vocabulary_defects discloses legacy routes; it does not (contradicts DEC-326)"
+detail = """
+Observation. DEC-330's choice says a legacy owner-fix value "reads as an unknown route, disclosed by vocabulary_defects". vocabulary_defects covers status and severity only (src/review_ledger/derive.rs:128-150). DEC-326 says exactly that and that the gate carries the disclosure itself; design sec-2 agrees with DEC-326. The two accepted decisions contradict each other, and commit 18f25be9a corrected only DEC-326.
+
+Consequence beyond bookkeeping: before the lock refuses, no read surface discloses a legacy route. review show prints it raw, and amend without --route silently re-snapshots it through effective_route (src/review/verbs.rs:327-338), so a responder repairing response text gets no signal until the lock.
+
+What would settle it. Correct DEC-330's claim to match DEC-326, or, if disclosure on read is wanted, extend vocabulary_defects to route and record that (which also changes SPEC-032's "not a defect" sentence).
+"""
+disposition = "fix-now"
+route = "owner-fix"
+response = "Accepted. DEC-330 corrected: a legacy owner-fix stays readable and verbatim, and the lock refusal is what names it; vocabulary_defects covers status and severity only. Surviving owner: DEC-326. Class swept: DEC-330, DEC-326 and design sec-2 and sec-3 now agree."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "owner-fix"
+response = "Accepted. DEC-330 corrected: a legacy owner-fix stays readable and verbatim, and the lock refusal is what names it; vocabulary_defects covers status and severity only. Surviving owner: DEC-326. Class swept: DEC-330, DEC-326 and design sec-2 and sec-3 now agree."
+
+[[finding]]
+id = "F-9"
+status = "answered"
+severity = "minor"
+title = "Kappa baseline 0.44-0.56 mixes in the audit/code-review population"
+detail = """
+Observation. DEC-334 item 5 and design sec-4 and sec-6 compare the window's kappa "against 0.44-0.56". In RFC-026 E14 (.doctrine/rfc/026/route-rerate/report.md:27-28), 0.56 is population T (audit and code-review, 47 findings) and 0.44 is population D (design review, 155). The trial is design-review only, so its baseline is 0.44; the range mixes in a population the trial excludes. Also the E14 raters worked without the tie-break (DEC-333 context), and the window's second rater gets it plus the new probe/control sentence and the five-to-six split, so a kappa change cannot be attributed to any one of these.
+
+What would settle it. State the baseline as E14 design facet kappa 0.44 (probe/control 26 of 70 disagreements), and note that the rater prompt differs from E14's in three ways, so the comparison is descriptive.
+"""
+disposition = "fix-now"
+route = "review"
+response = "Accepted. DEC-334 item 5: kappa compared with 0.44, the design-review value; the three prompt differences from E14 are named and a kappa change is not attributed to any one of them."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted. DEC-334 item 5: kappa compared with 0.44, the design-review value; the three prompt differences from E14 are named and a kappa change is not attributed to any one of them."
+
+[[finding]]
+id = "F-10"
+status = "answered"
+severity = "nit"
+title = "Scope diagram names the trial report E14; it is E15"
+detail = """
+Observation. SL-270's scope diagram (Scope and Objectives, step 5) says the window reports as "RFC-026 E14". E14 is the pre-registered re-rate already in RFC-026; design sec-4 and CHR-082 say the report is E15.
+
+What would settle it. Correct the scope diagram to E15.
+"""
+disposition = "fix-now"
+response = "Fixed: the scope diagram now reads RFC-026 E15 via CHR-082, and shows the current steps."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed: the scope diagram now reads RFC-026 E15 via CHR-082, and shows the current steps."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

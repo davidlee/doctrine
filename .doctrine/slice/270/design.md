@@ -30,6 +30,10 @@ It ships three things:
  └──────────────────────────────────────────┘     └─────────────────────────┘
 ```
 
+Governance follows through `REV-065` (approved, applied at reconciliation):
+`ADR-007` D-C5 and `SPEC-032` list the route set, and `SPEC-032` says an unknown
+route gates nothing, which the lock check makes untrue for one reader.
+
 Out of scope, with the decision that removed each: refusing `--route` outside
 design review (`DEC-331`), and writing counters at `conclude` (`DEC-327`: they
 are already journal-derived).
@@ -66,7 +70,15 @@ are edited by hand.
 - the response-form bullets and the prose-settled sentence name `dedupe` and
   `refresh` where they named `owner-fix`.
 
+- "exactly five" (`:118`) and "only the closed five" (`:190`) say six; the
+  closing paragraph names the lock check as the one thing that reads the route.
+
 `install/review-ledger.md`'s route-axis entry lists the six.
+
+**Other sites** (RV-400 F-6): the golden tests in `tests/e2e_review_golden.rs`
+that write or render `owner-fix`; the memory
+`mem_01a0d91d7a0d75f1853c505d08237451`, which teaches `--route owner-fix`; and
+`ADR-007` / `SPEC-032` through `REV-065`.
 
 **Legacy.** A client ledger carrying `owner-fix` keeps it: reads are open
 (`Route` is parsed only on write), `review show` prints the raw string, and the
@@ -92,8 +104,10 @@ a finding is listed iff
 
 - it is **severe**: severity is not known `minor` or `nit` (an unknown severity
   counts, as `gates_as_blocker` does for blockers);
-- it is **disposed**: status is not known `open` or `withdrawn` (answered,
-  contested, verified, and any unknown status count); and
+- it is **disposed**: status is known `answered`, `contested` or `verified`.
+  An unknown status is excluded: `vocabulary_defects` already discloses it and
+  no review verb can act on it. A finding already listed as an undisposed
+  blocker is excluded, so no finding is reported twice (RV-400 F-7); and
 - it is **unrouted**, for one of three reasons, each named in the entry:
   - `no route` — the `route` field is absent;
   - `legacy route: prefix` — absent, and the disposition starts `route:`;
@@ -106,12 +120,13 @@ refuses* and *what to show*.
 
 **The refusal** renders *severe findings carry no route: F-3 (no route),
 F-7 (unknown route owner-fix)* and is capped like the other list causes
-(`carries_a_list`, `cut`). Its remedy names the two repair paths:
-`review amend <RV> --finding F-n --route <route> --note …` for an answered
-finding; for a verified one, the raiser reopens and the responder disposes
-again with `--route`.
+(`carries_a_list`, `cut`). Its remedy names the repair per status:
+answered, `review amend <RV> --finding F-n --route <route> --note …`;
+contested, dispose again with `--route`; verified, the raiser reopens and the
+responder disposes again with `--route`.
 
-**Not covered, on purpose.** Open findings (open blockers already refuse; open
+**Not covered, on purpose.** Findings on superseded passes and findings
+disposed after lock (the lock reads the current pass, once); open findings (open blockers already refuse; open
 majors are admissible at lock today); withdrawn findings; a waived review
 disposition, which never reads the ledger. The check is not facet-filtered: a
 design run's review pass is the only ledger the lock reads.
@@ -120,16 +135,16 @@ design run's review pass is the only ledger the lock reads.
 
 `DEC-334` fixes the second window before any eligible slice opens, and
 supersedes `DEC-276`: its capture rule by `DEC-327`, its procedure by itself.
-In short:
+Amended on RV-400 F-1, F-3, F-4, F-5 and F-9. In short:
 
 | item | rule |
 |---|---|
-| eligibility | next 3 code-changing slices with a conducted design review, consecutive after SL-270 closes; waived reviews recorded and skipped |
-| build floor | at window open and each eligible design start: CLI help lists six routes; MCP `review_dispose` schema offers six; installed skills fresh. A failure holds the slice |
-| per finding | route; instrument evidence produced (instrument routes); L - repair contested or drew a related finding |
+| eligibility | the first 3 code-changing slices whose design run mints a review pass after the window opens, in minting order; waived reviews recorded and skipped; parked or abandoned slices stay in, with status |
+| build floor | at window open and each eligible design start: CLI help and the MCP `review_dispose` schema list six routes (they carry the embedded `reviewing.md`); `doctrine install` run at window open and projections recorded current. A failure holds the slice |
+| per finding | route; instrument evidence produced (instrument routes); L - the repair or obligation drew a related finding or contest in the ledger, a later design pass, or the audit ledger, up to slice close |
 | per ledger | rounds, contests (journal), artefact-prose findings, findings against repair text, design growth, later audit findings, completion |
-| second rater | blind, six-route prompt with tie-break and the probe/control sentence; kappa against 0.44-0.56; probe/control reported apart |
-| reading | no pass mark; presence is a manipulation check; headline is L against E12 (50-61%) and E11's converged ledgers |
+| second rater | blind, six-route prompt with tie-break and the probe/control sentence; kappa against 0.44 (design review); prompt changes named, not attributed; probe/control reported apart |
+| reading | no pass mark, descriptive only; presence checked on the gated population (final pass at lock) and the rest reported apart; headline L against E12 (same-ledger 50-61%, the only baseline), scope difference stated |
 
 `CHR-082` runs it and reports `RFC-026` `E15`. This slice's only obligation to
 it is to land sec-2 and sec-3 and to install the result, so the build floor can
@@ -140,12 +155,12 @@ pass on the day the window opens.
 | id | mode | asserts |
 |---|---|---|
 | VT-1 | test | `Route::parse` accepts exactly the six; `owner-fix` is refused on write with the known list; lockstep with `ROUTES` holds |
-| VT-2 | test | `unrouted_severe` lists an answered major with no route (`no route`), an answered blocker whose disposition starts `route:` (`legacy`), and a verified major with route `owner-fix` (`unknown route`); omits a routed one, an open one, a withdrawn one, and a minor |
-| VT-3 | test | an unknown severity and an unknown status each count (fail closed) |
+| VT-2 | test | `unrouted_severe` lists an answered major with no route (`no route`), an answered blocker whose disposition starts `route:` (`legacy`), a verified major with route `owner-fix` (`unknown route`), and a contested major with no route; omits a routed one, an open one, a withdrawn one, a minor, and an open route-less blocker (already an undisposed blocker) |
+| VT-3 | test | an unknown severity counts as severe; an unknown status is excluded |
 | VT-4 | test | the lock refuses on a concluded, blocker-free pass with one unrouted major, naming it; the same run locks once the finding is amended with a route |
 | VT-5 | test | `Cause::SevereFindingsUnrouted` is a capped list cause (joins `carries_a_list`) |
 | VT-6 | test | the MCP `review_dispose` schema's route enum equals the six |
-| VA-1 | agent | `reviewing.md` and `review-ledger.md` carry the six routes, the new tie-break order and the probe/control sentence; no `owner-fix` remains outside legacy notes |
+| VA-1 | agent | `reviewing.md` and `review-ledger.md` carry the six routes, the new tie-break order and the probe/control sentence; a repo-wide search finds no `owner-fix` and no "five" route count outside legacy notes, E11-E14 evidence and `REV-065`'s before column |
 
 The gate test needs a fixture pass with a route-less answered major; the
 existing fixtures in `src/review/tests.rs` build ledgers with findings and
@@ -156,6 +171,11 @@ extend to it.
 - **A verified unrouted finding is awkward to repair** (reopen, then dispose
   again). Accepted: it arises only when the rule was skipped, and the refusal
   names the path.
+- **The gate covers less than the trial counts** (RV-400 F-1): open majors,
+  superseded passes and post-lock dispositions escape it. `DEC-334` reports
+  them apart rather than widen the gate. Carried to audit as a follow-up: decide
+  whether this is the behaviour wanted long-term, or needs closer review or a
+  backlog item (owner, 2026-09-27).
 - **The check is permanent code on a provisional axis** (`DEC-268`). If
   `CHR-082`'s trial kills `P10`, the check and the route vocabulary go with it.
 - **Stale projections.** An agent served by an old binary, MCP server or

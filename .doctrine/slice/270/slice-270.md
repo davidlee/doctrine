@@ -77,9 +77,9 @@ confound.
 
 ```text
  1 settle taxonomy ──► 2 enforce form ──► 3 freeze protocol ──► 4 window ──► 5 report
-   (P11, neutral        (presence gate,     (DEC: eligibility,     (next N      (RFC-026
-    re-rate)             facet gate,         reading rules,         design      E14)
-                         auto-capture)       binary floor)          slices)
+   (P11 split,          (lock route         (DEC-334:              (next 3      (RFC-026
+    six routes;          check; REV-065)     eligibility,           design      E15,
+    E14)                                     reading, floor)        slices)     CHR-082)
 ```
 
 1. **Settle the taxonomy before the window.** Done in research: the unsteered

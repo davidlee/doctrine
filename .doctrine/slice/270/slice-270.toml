@@ -58,6 +58,14 @@ intent = "design-target"
 selector = "install/review-ledger.md"
 intent = "design-target"
 
+[[selector]]
+selector = "tests/e2e_review_golden.rs"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/memory/items/mem_01a0d91d7a0d75f1853c505d08237451/memory.md"
+intent = "design-target"
+
 [[relation]]
 label = "references"
 role = "concerns"
@@ -72,6 +80,11 @@ target = "CHR-077"
 label = "references"
 role = "concerns"
 target = "QUE-224"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "REV-065"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis. Slices carry no typed STRUCTURAL
