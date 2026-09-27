@@ -32,6 +32,11 @@ act = "conclude"
 role = "raiser"
 note = "Fourth pass: checked the round-3 repairs (F-32..F-42) against the revised design.md and toml_edit 0.22.27 source. 10 verified. F-37 contested because its added panic claim is false (Item::into_value converts a Table to an InlineTable), so the spelling adapter is unnecessary. 2 new: F-43 minor (dry-run HooksState unspecified), F-44 nit (repair residue)."
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Fifth pass: checked the round-4 repairs (F-37, F-43, F-44) against the rev-40 design diff and the toml_edit source. All three verified. No new findings."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-271"
 
@@ -953,7 +958,7 @@ note = "Verified: one wording, justified by the Claude arm already collapsing bo
 
 [[finding]]
 id = "F-37"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Inline-table mcp_servers or entry is misclassified as malformed"
 detail = """
@@ -986,6 +991,11 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = """Conceded — you are right and I was wrong. I read InlineTable's TableLike::insert (`self.insert(key, value.into_value().unwrap())`, inline_table.rs:585) and inferred a panic from the bare `.unwrap()` without checking into_value's OTHER arms. Verified now: Item::into_value (item.rs:132-142) has an `Item::Table(v) => Ok(Value::InlineTable(v.into_inline_table()))` arm (table.rs:52), and only `Item::None => Err(self)` can reach the unwrap; `Item::ArrayOfTables` converts too. So `mcp_servers.as_table_like_mut().insert("doctrine", codex_mcp_entry())` already produces the container's spelling by construction — subtable under a `[mcp_servers]` table, inline value under an inline parent — and no adapter exists or is needed. This is the second time this pass that a source-derived hazard claim of mine was not verified to the same depth as the finding it was answering, and I should not have written it into the design before checking. Repairs: §5.3's Spelling bullet loses the PANICS sentence AND the adapter, and now states the single-insert truth with the citations (item.rs:132-142, table.rs:52) and `Item::None` as the only Err; §5.5's inline-parent row and §9's unit case now pin toml_edit's conversion rather than an adapter of ours; §7's rejected-alternative note and the impact row ("the table-like write") follow. The rest of the F-37 repair stands: as_table_like() for classification is correct and unchanged, and the inline-parent/inline-entry cases remain."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at rev 40. §5.3 drops the panic claim and the adapter. It now says a single as_table_like_mut insert gives the container's spelling via Item::into_value (item.rs:132-142) and Table::into_inline_table (table.rs:52); I checked both citations in the toml_edit 0.22.27 source. The §5.5 row, the §9 case, the §7 note and the impact row all follow."
 
 [[finding]]
 id = "F-38"
@@ -1122,7 +1132,7 @@ note = "Verified: with_context boundary on the MCP leg, run last, mirroring the 
 
 [[finding]]
 id = "F-43"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Dry-run activation notice has no HooksState; step 1's dry-run behaviour is unspecified"
 detail = """
@@ -1141,9 +1151,14 @@ role = "responder"
 disposition = "fix-now"
 response = """Confirmed and integrated exactly as you suggest. The probe's predicate requires !dry_run (F-34), so under dry_run no HooksState exists while the notice still prints — and F-34's fold left step 1's dry-run behaviour unstated. write_codex_activation now takes `state: Option<HooksState>`: `None` is the dry-run case (no probe ran) and prints step 1 as today's unconditional instruction, preserving the notice's pre-slice shape; `Some(Enabled)` omits it; `Some(Disabled)` prints it naming `[features] hooks = true`; `Some(Unknown(reason))` prints it naming the reason. §5.4's fold bullet states the four cases, §9's integration assertions now pin the dry-run behaviour explicitly ("under dry_run the notice's step 1 still prints unconditionally (no probe ran)") alongside the existing no-"wrote" assertion, and the impact-table row reads `Option<HooksState>` rather than `HooksState`. The other two options were rejected on the record: omitting step 1 under dry-run would make the plan less informative than the pre-slice notice, and `Unknown("dry run: not probed")` would print a warning-shaped reason for a state nobody tried to determine."""
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: write_codex_activation takes Option<HooksState>. None (dry run) prints step 1 unconditionally as it does today, and the three Some cases are stated. §9 pins the dry-run behaviour, and the impact row matches."
+
 [[finding]]
 id = "F-44"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Round-3 repair residue: current formula, FORMS fixed point, ISS-495 citation, fallback wording"
 detail = """
@@ -1165,6 +1180,11 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = """All four integrated. (a) Restored `current = owned && t.args[1] == CODEX_MCP_WRAPPER && t.env_vars == [CODEX_MCP_ENV]` so the formula is self-sufficient rather than relying on the prose's derivation order; `current ⊆ owned` now holds by construction, given (b). (b) §9's constants-agreement test now requires every member of CODEX_MCP_WRAPPER_FORMS to be a FIXED POINT of normalise, with the reason stated (an appended wording with doubled or trailing whitespace could otherwise never match anything). (c) ISS-495 is now cited by id in both §5.2's read paragraph and §6's follow-up bullet ("open, linked to this slice"). (d) Your read on the wording is right — a readable file that fails to parse, or a non-table `mcp_servers`, has no doctrine entry and was read fine, so "could not be read" was literally false for the commonest malformed case. The single fallback line now reads: "<file> has a doctrine entry doctrine did not write, or could not be interpreted — left untouched. To register it manually:", which covers a read failure, non-UTF-8, an unparseable document and a wrongly-shaped `mcp_servers` alike. Adopted at design revision 40."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified all four: current = owned && ... (so current is a subset of owned by construction); FORMS members are fixed points of normalise, pinned in the constants-agreement test; ISS-495 is cited in §5.2 and §6; the fallback wording is 'could not be interpreted'."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
