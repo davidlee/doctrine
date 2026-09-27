@@ -24,19 +24,111 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "install/review-ledger.md"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "scripts/oubliette.sh"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/reserve.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/design.rs"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/entity.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/backlog.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/concept_map.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/knowledge.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/spec.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review/verbs.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/requirement.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/governance.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/revision.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/rec.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/meta.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/integrity.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review/turn.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review/prime.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/mcp_server/tools.rs"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "install/doctrine.toml.example"
+intent = "design-target"
+
+[[selector]]
+selector = ".agents/skills/audit/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = ".agents/skills/inquisition/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_integrity.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review/tests.rs"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"

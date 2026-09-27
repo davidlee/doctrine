@@ -42,17 +42,12 @@ allocating (ISS-484, commit `120b8b321`).
 2a. **Reservation hygiene.** The fallback env opt-in is read once at the shell
    edge and passed in, so reserve tests are hermetic (ISS-483); the TTY
    fallback prompt names the persistent levers and says "this clone only".
-3. **D7 — three locus tiers, one table, evaluated once** in the review verb
-   dispatcher:
-   - read (`show`, `list`, `findings`): any tree, including a confined worker;
-   - runtime (`prime`, `status`, `unlock`): any tree with a writable state tier;
-   - authored (`new`, `raise`, `dispose`, `contest`, `verify`, `withdraw`,
-     `amend`, `reopen`, `conclude`): any tree that can durably write
-     `.doctrine/review/`; refused in a confined dispatch worker (the
-     `DOCTRINE_WORKER` marker / read-only authored tier).
-   Replaces the branch-shape test; no host branch format is recognised
-   (POL-002). Simplified by DEC-338: the single test is worker mode
-   (`DOCTRINE_WORKER`), refusing the whole guarded set in a worker.
+3. **D7 — review writes refused only in a worker process** (DEC-338). Every
+   verb routed through `resolve_review_root` (`new`, the turn verbs, `prime`,
+   `status`, `unlock`) is refused when `DOCTRINE_WORKER` is set, and admitted in
+   every other tree — primary, coordination, solo fork, adopted capsule. Read
+   verbs (`show`, `list`, `findings`) work anywhere, a worker included. Replaces
+   the branch-shape test; no host branch format is recognised (POL-002).
 4. **Every RV mint path obeys the guard.** The design run's `mint_review` call
    (`src/commands/design.rs:1487`) is covered by the CLI worker guard, since it
    has no MCP surface (ASM-012); no code change.
@@ -61,9 +56,9 @@ allocating (ISS-484, commit `120b8b321`).
    best-effort backstop".
 6. **Consumer.** `scripts/oubliette.sh back` advice returns to "audit here"
    (project-local; validates the change).
-7. **Governance.** A REV amends ADR-007 D-C1/D-C7 (tiers; "one tree" → "one
-   writer per RV at a time") and revises PRD-005 / SPEC-008 (`reach = local`
-   means "this clone").
+7. **Governance.** A REV amends ADR-007 D-C1/D-C7/D-C10 (worker-only refusal;
+   "one tree" → "one writer per RV at a time") and revises PRD-005 / SPEC-008
+   (`reach = local` means "this clone"; `reseat` claims its destination).
 
 ## Non-Goals
 
