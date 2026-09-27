@@ -1,0 +1,64 @@
+id = 269
+slug = "review-capable-worktree-locus"
+title = "Review-capable worktree locus"
+status = "design"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/review/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/worktree/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "plugins/doctrine/skills/audit/SKILL.md"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/review-ledger.md"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "scripts/oubliette.sh"
+intent = "scope-relevant"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-240"
+
+[[relation]]
+label = "fulfils"
+target = "ISS-484"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-190"
+
+[[relation]]
+label = "governed_by"
+target = "POL-002"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-007"
+
+[[relation]]
+label = "related"
+target = "RV-398"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis. Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-NNN
+#   doctrine link SL-NNN governed_by ADR-NNN
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
