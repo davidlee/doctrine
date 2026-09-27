@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e26f-2189-7fa3-9cb3-7bf6a6b7cf5c"
+recorded_at = "2026-09-27T10:35:29.03362459Z"
+kind = "friction"
+summary = "design skill: node create + its checkpoint disposal in one design apply submission refuses 'unknown node'"
+detail = "SL-269 reviewing, rev 27: a declare batch with inq-12 (new) and cp-12 disposing inq-12 failed 'Error: unknown node: inq-12'. Split into two submissions it worked. The contract does not say a checkpoint cannot reference a node created in the same batch; one wasted turn."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
