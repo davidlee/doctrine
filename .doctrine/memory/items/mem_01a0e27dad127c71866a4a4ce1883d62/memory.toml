@@ -1,0 +1,49 @@
+memory_uid = "mem_01a0e27dad127c71866a4a4ce1883d62"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "One design apply can record DesignAccepted twice"
+summary = "checkpoint_act design-accepted plus run-level acceptance in one request records the act twice; the shipped lock recipe sends both"
+created = "2026-09-27"
+updated = "2026-09-27"
+
+[scope]
+paths = ["src/design_run/run.rs"]
+globs = []
+commands = []
+tags = ["design-run", "change-log"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "82c33cb2db64a8468e60bbd88822c8378ab72e43"
+ref_name = "refs/heads/edge"
+checkout_state_id = "dfaed95fadf2e31942611adc58b708fcda2489a9a3ed9aab578c27f58a5c686b"
+base_commit = "1044601017aa3ecd630ec7ddd9770441703e97f1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-272"
+
+[[source]]
+kind = "review"
+ref = "RV-405"
+

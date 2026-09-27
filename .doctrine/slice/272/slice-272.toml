@@ -1,7 +1,7 @@
 id = 272
 slug = "apply-truth-residue"
 title = "Apply truth residue"
-status = "reconcile"
+status = "done"
 created = "2026-09-27"
 updated = "2026-09-27"
 tags = ["area:design-run", "cluster:design-run"]

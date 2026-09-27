@@ -1,0 +1,45 @@
+memory_uid = "mem_01a0e27dad637e43bdaf8bff62f474c8"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "A finding cannot name a section declared in the same batch"
+summary = "design apply checks a finding's concern against the prior map; e2e fixtures must seed the section in an earlier apply"
+created = "2026-09-27"
+updated = "2026-09-27"
+
+[scope]
+paths = ["tests/e2e_design_state.rs"]
+globs = []
+commands = []
+tags = ["design-run", "testing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "82c33cb2db64a8468e60bbd88822c8378ab72e43"
+ref_name = "refs/heads/edge"
+checkout_state_id = "4b243a5a15747ab9bf6d07b6c6be21e95e627a21064ada98a2716b58a1de18c6"
+base_commit = "1044601017aa3ecd630ec7ddd9770441703e97f1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "minor"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-272"
+
