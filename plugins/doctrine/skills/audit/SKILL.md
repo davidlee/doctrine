@@ -166,6 +166,21 @@ and is recorded separately — do not mutate a finding to `fixed`/`remediated`.
      conformance` reads (`slice-NNN.toml`). `design.md §6` is only the human
      mirror — a prose-only brief item leaves conformance red. Name the `slice
      selector` verb as the load-bearing change; cite the §6 edit as its mirror.
+
+   **Human-facing synthesis.** When the audit has consequential material, give
+   the human a short route through the participating systems, one important
+   behaviour and its implementation, the tests that bear on it, and a remaining
+   risk. For consequential Doctrine sources cited in a decision, name why each
+   matters and give its exact `doctrine <kind> show <ID>` command. If deeper
+   inspection would help, offer `/walkthrough` or `/pair` without requiring it.
+   A focused question about which risk concerns the human may improve the
+   synthesis; use the answer if asked, and do not turn it into a comprehension
+   check. When a real finding supports it, an optional short mock peer challenge
+   can help rehearse a decision or test its rationale. Keep the source and
+   whether the objection is historical or simulated clear. A new substantive
+   defect belongs on the RV ledger; the human's ability to answer is neither a
+   finding nor an acceptance condition. Respect the project's engagement
+   default and the human's verbal changes.
 6. **Harvest (audit tail).** Sweep durable risks, decisions, and gotchas from the
    disposable runtime **phase sheets** into `notes.md` — the audit-specific lens —
    then drive the rest of the harvest (legs and sinks) per `harvest.md`.

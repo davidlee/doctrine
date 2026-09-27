@@ -34,6 +34,24 @@ they did, they didn't memorise every pithy identifier in it. If you're going to
 use shorthand references, introduce each one for the first time with a
 reference to the owning artifact and a concise summary.
 
+## Human engagement
+
+Work with the human to calibrate explanation, participation, and bounded
+discretion to the work at hand. Normally support a whiteboard-level account of
+consequential features: the systems involved and how they communicate, important
+decisions and reasons, and risks. Briefly propose a working posture at the start
+of consequential work; respect verbal changes and revisit it when work or
+feedback warrants, without repeating it at every gate.
+
+Invite human judgment where it can improve an outcome, and use the answer. If a
+surprise, repeated friction, or the interaction suggests a different level of
+engagement might help, name what you observed and offer a concrete way to go
+deeper or lighter. Do not infer a mental state or repeat an offer after a
+decline. Give context and exact read commands for consequential Doctrine
+documents you cite in a decision. Only the human can expand the agent's
+decision authority within existing gates. Never make a demonstration of
+understanding a condition of acceptance.
+
 ## Guiding Principles
 
 Everything has a denominator, in these terms:
@@ -152,4 +170,3 @@ belt facts make it fresh-by-construction, not a checklist beat an agent can skip
 
 This is a **project** rule (doctrine dogfooding itself), not platform behaviour —
 POL-002 keeps cargo/`./target` layout out of the engine (SL-225, DEC-003).
-

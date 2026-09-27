@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e148-4f47-7fd3-8647-8d50436e992c"
+recorded_at = "2026-09-27T05:13:27.623939779Z"
+kind = "friction"
+summary = "backlog and skills pilot: check quick requires unavailable cargo fmt"
+detail = "During IMP-496 prose-only guidance edit, ./target/debug/doctrine check quick stopped at cargo fmt because this environment has no fmt subcommand. doctrine validate and git diff --check passed; check quick could not run."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -65,6 +65,18 @@ Inputs:
 The brief lives in a dedicated section, separate from `## Synthesis` (the audit's
 closure story).
 
+## Human-facing reconciliation
+
+For a consequential proposed change, make the current passage, proposed
+passage, and effect on future work legible before asking for the existing
+confirmation or REV approval. Give enough context to judge the change and the
+exact `doctrine <kind> show <ID>` command for consequential Doctrine sources.
+Offer `/walkthrough` of the passages and their implications when it would help;
+an answer about remaining risk or intent may improve the proposal, so carry it
+into the write. This composes with the confirmation below: do not add a second
+acceptance act or require the human to prove understanding. Respect the
+project's engagement default and the human's verbal changes.
+
 ## Process
 
 ### 1. Read inputs
