@@ -867,7 +867,7 @@ ordering.
 | **hymns cascade** (`SPEC-023`) | bands `preamble → harness → model → role → stage → project`; trait-keyed model band; `seal`/`expose` sidecars; precedence **band → specificity → provenance → alpha**; `replaces` is the only suppression | `install/manifest.toml` declares `seal = ["preamble/core","stage/design"]`, `expose = ["harness/claude","harness/cursor","model/anthropic/claude-sonnet-4","model/deepseek/_default","role/worker"]`; on-disk `.doctrine/hymns/` currently ships `harness/claude`, `harness/cursor`, `model/adherence/low`, `model/anthropic/claude-sonnet-4`, `model/deepseek/_default`, `preamble/core`, `role/orchestrator`, `role/worker` — **no `stage/` dir on disk** (the sealed `stage/design` lives only in the embed) |
 | `install/hymns/stage/design.md` | **"Design stage invariants… These hold for every turn of a managed design run, whatever the next obligation is."** | sealed — a user twin at that slot is dropped before matching ✓ |
 | design-prompt assets (`install/design-prompts/`) | `.toml` runbook steps + `.md` stage lenses, embedded and rendered through `src/design_run/prompt.rs` (`asset_key`, `contract_store`) | step ids are API and digest-bound; authoring rule (step iff a project could legitimately differ); no project extension interface yet (`IMP-375`) |
-| boot snapshot + `boot-footer.md` | `doctrine boot` writes the resident prefix; `.doctrine/boot-footer.md` is injected as `## Onboarding` | RFC-033's frame makes the boot carry **pointers, not restatements**; `boot --check` |
+| boot snapshot + `.doctrine/governance.md` | `doctrine boot` writes the resident prefix; the project's `.doctrine/governance.md` body is read from disk (`src/boot.rs::GOVERNANCE_REL`) and becomes the `## Governance (project)` section plus the project-local sections after it. It is **published, not eagerly projected** — a base install writes no `governance.md` (NF-005); it is reachable on demand as `reference/governance.md` and takes effect on disk when present. ⚠ **Correction to an earlier draft of this file:** `.doctrine/boot-footer.md` is **not** boot-injected — its round-trip was **retired by `SL-187`**; the `## Onboarding` section is now populated from `onboarding`-tagged memories only (`src/boot.rs`, "the footer round-trip is retired"). `boot-footer.md` survives only as a published reference entry (`reference/boot-footer.md`) whose own header comment still claims an injection that no longer happens. | RFC-033's frame makes the boot carry **pointers, not restatements**; `boot --check` |
 | harness hooks | `plugins/doctrine/hooks/hooks.json` — `SessionStart → doctrine boot --emit`, `PreToolUse → memory surface`, `WorktreeCreate → worktree create-fork`; Claude writes hooks directly into `.claude/settings.json` (`[install] claude-settings-scope`) | POL-003 harness independence; command form `${DOCTRINE_BIN:-doctrine}` |
 | `doctrine prompt resolve --role worker|orchestrator [--stage …]` | the composed cascade | `--role` is required and accepts only those two (`ISS-308`); an unknown `--model` is accepted silently (`ISS-491`); `IMP-489` proposes a cascade review; `IDE-042` proposes model-tiered worker prompts |
 
@@ -877,7 +877,36 @@ already has a **`stage` band** with a sealed design-stage fragment delivered
 every design turn. `IDE-029` (*Lifecycle-stage hymn seams for project
 customisation*) is the open item that would generalise the second.
 
-### 7.1 Where generic vs lifecycle-doctrine content may live
+### 7.1 Project-specific override surfaces for prose and behaviour
+
+RFC-034's seed proposes "a project setting with local override". Doctrine already
+has a small, closed set of such seams — and one surface that looks like one but
+is not. All verified this pass.
+
+| surface | mechanism | what a project may change |
+|---|---|---|
+| **`.doctrine/governance.md`** (155 lines here) | read from disk by `doctrine boot` (`src/boot.rs`, `GOVERNANCE_REL`) and injected as the resident `## Governance (project)` region | project-wide resident behaviour guidance, every session. Published, not eagerly projected (NF-005) — the file is created by hand/the user, not by install |
+| **hymns `project/` band** | user-provenance snippet at any slot under `.doctrine/hymns/`; sidecar `.toml` pins selector axes | project-authored prompt text, composed by `doctrine prompt resolve` |
+| **hymns `expose` + `replaces`** | `install/manifest.toml` `expose` writes an editable starter to disk **and** a self-`replaces` sidecar, making the user twin the strict top of its slot | whole-snippet *replacement* of a framework hymn (`harness/claude`, `harness/cursor`, `model/anthropic/claude-sonnet-4`, `model/deepseek/_default`, `role/worker` at this baseline) |
+| **hymns `seal`** | framework snippet authoritative; a user-provenance twin at that slot is dropped **before** matching | **nothing** — `preamble/core` and `stage/design` are deliberately un-overridable |
+| `.doctrine/doctrine.toml` | parsed by `src/dtoml.rs` | declarative behaviour config: `[conduct]` posture, `[verification]` check argv, `[dispatch]`, `[reservation]`, `[capsule]`, `[priority]`, `[install]` |
+| `.doctrine/templates/*` | projected templates | entity authoring scaffolds |
+| `.doctrine/project-orientation.md` | base backing, write-if-absent | the project orientation seed |
+| **`doctrine library`** (`list`/`tree`/`show`, `reference/*`) | framework **publication**: read-only, logical-address space, `publication validate` admits the shipped manifest | **nothing.** It is a *read* surface (ADR-024: addresses a client can resolve), **not** an override seam. The design-prompt assets a project might want to change are published *here* and are un-overridable — the tension `IMP-375` (no project extension interface) and `IDE-029` name. |
+| **skills** | canonical masters embedded from `plugins/`; projections are gitignored copies | **no project override path.** `RFC-021` settled that lifecycle skills may require the binary; `IDE-029` proposes per-stage hymn seams precisely *instead of* per-skill hook files |
+| **design-prompt assets** (`install/design-prompts/*`) | embedded runbook `.toml` + lens `.md`, rendered via `src/design_run/prompt.rs` | **no project interface yet** (`IMP-375`). The runbook *authoring rule* anticipates substituting a step's verifier while keeping its id, but that seam is unbuilt |
+
+Two things this closes for RFC-034. **(a) The override vocabulary is
+snippet-shaped, not rule-shaped:** a project can replace a whole hymn at an
+exposed slot, add snippets at any band, or edit `governance.md` — but there is no
+seam that overrides a *rule* (a gate condition, a runbook step, a skill's
+procedure) short of the sealed/unsealed decision. **(b) A "local override" for an
+understanding posture has a natural home in two places and not a third:** the
+advisory project config (`[conduct]`-style) and the prompt corpus (a hymn or
+`governance.md`); it cannot live in the library or in a skill's body without a
+new interface.
+
+### 7.2 Where generic vs lifecycle-doctrine content may live
 
 RFC-021 (resolved) settled the boundary: lifecycle skills may require the binary
 and act as activation stubs; **`pair` and `walkthrough` are deliberately
@@ -1076,6 +1105,12 @@ Each row states a verified absence. It is deliberately not a proposal list.
 12. **`[conduct]` exists as a declarative per-state posture and is explicitly
     advisory** — the nearest incumbent to a dial, with a stated reason it cannot
     gate.
+13. **The project override vocabulary is snippet-shaped, not rule-shaped**
+    (§7.1). A project may replace a whole hymn at an *exposed* slot, add snippets
+    at any band, or edit the resident `governance.md` — but no seam substitutes a
+    *rule* (a gate condition, a runbook step, or a skill's procedure), and the
+    published library is read-only (ADR-024). Anything a project must not change
+    and anything it must change therefore land in different surfaces.
 
 ---
 
