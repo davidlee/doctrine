@@ -26,6 +26,20 @@ Every hit is excluded, for one of these reasons:
 - **Not about routes**: the "5-set" hits in `vocab.rs` are the finding-status
   and disposition vocabularies, which really are five.
 
+## PHASE-02 notes (2026-09-27)
+
+- **EX-4 had no fallout.** No existing fixture locks over a disposed severe
+  finding with no route. `defect_warning_printed_gate_unchanged`, predicted to
+  break, exercises disposition admission, not the lock, and passes unchanged.
+- **Remedy text departs from design sec-3.** `review amend` requires
+  `--response`, so the refusal reads `review amend <RV> --finding F-n --route
+  <route> --response … --note …`. The design's version omits `--response`.
+- **Remedy placement.** `design_run` has no per-cause remedy (`Contract::remedy`
+  is per condition, rendered from the rule), so the per-status repair is in
+  `Cause::SevereFindingsUnrouted`'s display text.
+- **Control for RV-400 F-7, observed.** With the "already an undisposed
+  blocker" filter removed, VT-2 fails and lists F-9 in both lists. Restored.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-09-27 · design locked · b196d9183
