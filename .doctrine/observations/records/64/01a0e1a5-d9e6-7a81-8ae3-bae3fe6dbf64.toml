@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e1a5-d9e6-7a81-8ae3-bae3fe6dbf64"
+recorded_at = "2026-09-27T06:55:37.958611917Z"
+kind = "friction"
+summary = "edit tool: one mismatched oldText fails the whole multi-edit batch, reporting only an index"
+detail = "A 4-edit call to design.md failed with 'Could not find edits[2]' and applied nothing, although edits 0, 1 and 3 matched. Recovering required re-sending the whole batch (or bisecting), so a single bad pattern costs a full retry of every oldText in the call. The failure names only the index, not which field of the pattern diverged (here: I had added backticks around Command::output() that the file did not have), so the diagnostic did not localise the mismatch."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

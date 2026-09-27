@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e1a5-d9e6-78b0-bcb5-c7bd246755d1"
+recorded_at = "2026-09-27T06:55:37.958611877Z"
+kind = "friction"
+summary = "feedback: the lawful write path for a design run in 'reviewing' is not discoverable from the run status"
+detail = "Responding to RV-399 on SL-271 (design run still in 'reviewing', not locked) required reverse-engineering whether to mutate via 'design apply' + 'materialise' or edit design.md directly + 'design adopt'. 'design show 271 --format status' reports the stage and revision but not which write path is open, and does not mention adopt; 'design adopt --help' says it is the sole lawful crossing for an out-of-band edit but says nothing about which stages permit it; and 'design tree' (no arg) defaulted to a different slice (SL-270), so the SL-271 run state had to be read by inspecting .doctrine/state/slice/271/design.toml by hand. Cost: several exploratory calls before the first edit."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
