@@ -1,8 +1,8 @@
 id      = 67
 slug    = "adr-005-names-an-owner-per-material-type"
 title   = "ADR-005 names an owner per material type"
-status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
-approval = "none"      # SEPARATE axis, orthogonal to status: none | requested | approved | rejected
+status = "done"
+approval = "approved"
 updated = "2026-09-27"
 tags    = []
 
