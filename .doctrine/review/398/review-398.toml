@@ -1,0 +1,156 @@
+id    = 398
+slug  = "reconciliation-review-of-sl-268"
+title = "reconciliation review of SL-268"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "author"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Examined: check gate on the landed tree; verify-vt for all ten phases; slice conformance (undeclared/undelivered); design sec-12, sec-2..sec-5 against src/review_ledger/, src/review/, src/input.rs, src/commands/design.rs, src/slice.rs; named test flips in the phase sheets; SPEC-032, REV-064 and RV-397.
+"""
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-268"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Design-target selectors should match delivered edits; show.rs and the walkthrough skill matched none"
+detail = """
+Expected: every design-target selector matches an edit (design sec-7). Observed: `slice conformance 268` reports two undelivered selectors, `src/commands/show.rs` and `plugins/doctrine/skills/walkthrough/SKILL.md`. Neither needed a change: show.rs calls `crate::review::run_show`/`print_review`, which stayed on the command-tier path (sec-12 keeps verbs on `crate::review`), and the walkthrough skill cites neither `--note` nor the `route:` token (grep shows only a harvest reference).
+"""
+disposition = "design-wrong"
+response = "Reconcile brief (per-slice): 'slice selector rm' both selectors; mirror in design.md sec-7. Neither path needed a change."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Reconcile brief (per-slice): 'slice selector rm' both selectors; mirror in design.md sec-7. Neither path needed a change."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "Undeclared edits should be in-scope; nine code and test paths sit outside the design-target set"
+detail = """
+Expected: edits confined to design-target selectors. Observed undeclared: src/authored_status.rs, src/design_run/gate.rs, src/design_run/render/envelope.rs (doc-comment path updates for the split); src/priority/graph.rs (fixture-setup: `concluded = true` line, the D2 class design sec-8 permits); tests/e2e_design_forward.rs (`conclude --basis`, forced by D2), tests/e2e_estimate_non_blocking.rs (allowlist paths after the split), tests/e2e_design_review.rs and tests/e2e_mcp_server.rs (the plan's named VT tests plus named flips, recorded in the phase-05/06 sheets). Also governance-phase outputs under .doctrine/ (SPEC-032, REV-064, RV-397, IMP-479, ISS-493, memories) and shipped-guidance fixes from RV-397 (feedback skill, memory mem_019ed279). Design sec-7 lists src/authored_status.rs as out of slice; its change is comment-only.
+"""
+disposition = "aligned"
+response = "Every undeclared path is a comment-path update for the split, a fixture-setup or flip the design and phase sheets name, a governance-phase output, or an RV-397 guidance fix. No behaviour change outside scope; authored_status.rs is comment-only, consistent with DEC-318's wording."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "aligned"
+response = "Every undeclared path is a comment-path update for the split, a fixture-setup or flip the design and phase sheets name, a governance-phase output, or an RV-397 guidance fix. No behaviour change outside scope; authored_status.rs is comment-only, consistent with DEC-318's wording."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Design should describe what landed; four choices were recorded only in runtime phase sheets"
+detail = """
+Expected: design.md matches the implementation (DEC-321 binds the spec to what landed; the design is the per-slice record). Observed, from the disposable phase sheets:
+(a) PHASE-03 D1: `FindingState.status` is `Vocab<FindingStatus>`, not sec-3's `Option<FindingStatus>` plus `raw`.
+(b) PHASE-03 D2: the `warnings` JSON/MCP field is omitted when empty (`skip_serializing_if`), which sec-3 does not say.
+(c) PHASE-08 P2/P4/P5: `Primed` gains a `skipped` list; a slice whose selectors are all skipped non-files is not degraded (writes an empty cache); fifos, sockets and devices are excluded with directories and symlinks. Sec-5 names only `degraded`/`cleared` and directories/symlinks.
+(d) PHASE-10: IMP-479 closed `wont-do` (sec-6 says "closed as not needed").
+SPEC-032 already describes (a)-(c) as landed.
+"""
+disposition = "design-wrong"
+response = "Reconcile brief (per-slice): design.md sec-3 (Vocab in FindingState; warnings omitted when empty), sec-5 (skipped list, all-skipped not degraded, special files excluded), sec-6 (IMP-479 closed wont-do). Also lifted into notes.md."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Reconcile brief (per-slice): design.md sec-3 (Vocab in FindingState; warnings omitted when empty), sec-5 (skipped list, all-skipped not degraded, special files excluded), sec-6 (IMP-479 closed wont-do). Also lifted into notes.md."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Governance should describe v2; ADR-007 D-C5, D-C8, D-C10 and the SPEC-003 inventory still describe v1"
+detail = """
+Expected at closure (design sec-6, sec-8 Closure): REV applied at reconcile; the new tech spec live. Observed: REV-064 is `proposed`, approval none, carrying the ADR-007 D-C5/D-C8/D-C10 rewrites, knock-on wording, and the SPEC-003 container-inventory addition of SPEC-029 and SPEC-032. SPEC-032 is `draft` with two `[[source]]` anchors (src/review_ledger/mod.rs, src/review/mod.rs), both present in the tree.
+"""
+disposition = "design-wrong"
+response = "Reconcile brief (governance): approve and apply REV-064; move SPEC-032 draft -> active."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Reconcile brief (governance): approve and apply REV-064; move SPEC-032 draft -> active."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "An adopted capsule worktree should be auditable; review verbs refuse it as a fork"
+detail = """
+Expected: capsule-adopt's instruction "Audit here, not on edge" is followable. Observed: `resolve_review_root` (src/review/turn.rs:169) classifies any linked worktree whose branch is not `dispatch/<NNN>` as a fork, so `review status/raise/...` on `capsule/SL-268/c20` bail with the IMP-024 message. The audit had to merge the capsule into edge first (39212685a). Separately, the adopted worktree lacks the gitignored `web/map/dist/`, so `check gate` fails to compile there until it is copied in. Pre-existing tooling, not introduced by SL-268; observation 01a0e021 records it.
+"""
+disposition = "follow-up"
+response = "Pre-existing tooling outside SL-268's scope; filed ISS-494 (capsule-adopt vs the review fork guard, plus missing web/map/dist)."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "follow-up"
+response = "Pre-existing tooling outside SL-268's scope; filed ISS-494 (capsule-adopt vs the review fork guard, plus missing web/map/dist)."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

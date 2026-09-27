@@ -96,3 +96,32 @@ Golden (`tests/e2e_review_golden.rs`, "T7 — prime / status cache" block):
   a `skipped non-file selector: src` line — same fixture, same selector).
 - new: `prime_degraded_clears_previous_cache` (D11, RV-396 `F-6` — a degraded
   prime removes an earlier `cache.toml`, and `status` stops reporting it).
+
+## Audit harvest (2026-09-27, RV-398)
+
+Lifted from the runtime phase sheets before they are discarded.
+
+- **Design divergences** (RV-398 `F-3`, reconciled into design.md):
+  - PHASE-03 D1: `FindingState.status` is `Vocab<FindingStatus>`, not
+    `Option<FindingStatus>` plus `raw`. Same information, one representation.
+  - PHASE-03 D2: the JSON/MCP `warnings` field is omitted when empty
+    (`skip_serializing_if`, IMP-114 precedent), so clean-ledger output is
+    byte-identical.
+  - PHASE-03 D3/D4: CLI `list` writes warnings to stderr in both formats; every
+    warning line names the RV.
+  - PHASE-08 P2/P4/P5: `Primed` gains `skipped`; an all-skipped slice is not
+    degraded (empty cache, skip lines); fifo/socket/device literals are excluded.
+  - PHASE-10: IMP-479 closed `wont-do`; it reopens on measurement.
+- **Test flips.** Every changed pre-existing assertion is named in its phase
+  sheet: PHASE-04 (`note_is_handoff_chatter…` replaced by `note_lands_in_turn`),
+  PHASE-05 (D8 fixture inputs: disposition `fixed` → closed vocab; MCP tool
+  count 29 → 31), PHASE-06 (U1–U14, G1–G5: the D2 `done`/`active` flips and
+  `concluded = true` fixture lines), PHASE-07 (declared-label role refusal),
+  PHASE-08 (above).
+- **Accepted risks.** Legacy corpus RVs now read `active` until concluded
+  (design R2; do not bulk-conclude them). The baton `awaiting` of an
+  all-terminal unconcluded ledger is `raiser` (was `none`); only tests read it.
+  A typo'd severity on an open finding now holds a design-run lock edge and a
+  slice close (intended teeth).
+- **Audit-locus friction.** Review verbs refuse an adopted capsule worktree;
+  the capsule was merged into edge (`39212685a`) to run the audit. ISS-494.
