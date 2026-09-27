@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e229-f49b-70e0-98b2-fb9258304232"
+recorded_at = "2026-09-27T09:19:55.547576023Z"
+kind = "friction"
+summary = "[plan; SL-272] slice phases silently accepted a plan with PHASE-01 keys absorbed into [requirements]"
+detail = "An agent splice put PHASE-01's [[phase]] header inside a comment, so id/name/objective/criteria parsed as unknown keys of [requirements]. slice phases materialised only PHASE-02 and reported 'Phases up to date.' — no refusal for unknown keys in plan.toml tables. Caught only because the phase-01 sheet was missing at /phase-plan."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

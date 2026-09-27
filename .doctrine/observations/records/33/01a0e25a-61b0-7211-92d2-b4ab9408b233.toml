@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e25a-61b0-7211-92d2-b4ab9408b233"
+recorded_at = "2026-09-27T10:12:49.20018107Z"
+kind = "friction"
+summary = "research: read-only thread contract is unenforced, and multi-agent tree churn makes research inputs unattributable"
+detail = """Running the /research round for SL-269 via scripts/pi-scout and scripts/pi-research: the research skill mandates 'spawn the project's research agents, one per thread, read-only', but .pi/agents/scout.md and .pi/agents/researcher.md both declare tools: read, write, grep, find, ls, bash — so the read-only property is a prompt instruction, not a constraint. During the round a tracked shipped-corpus file (memory/mem_019e9a11b3797af3a8833c67acfa69bf/memory.toml) was mutated in the working tree (tags ["onboarding"] -> []) at a mtime inside the thread window; a concurrent agent was also editing .doctrine/memory/items and adding .doctrine/slice/269/notes.md, so provenance could not be established. Cost: attribution time plus a judgement call on whether to restore, on a tree where the AGENTS rule is 'never discard uncommitted work'. Suggest either dropping write/bash from the research profiles or having the skill state the profiles are advisory."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

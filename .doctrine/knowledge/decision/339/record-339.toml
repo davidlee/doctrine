@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 339
+slug = "citation-resolution-check-one-lib-two-callers"
+title = "Citation resolution check: one lib, two callers"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-273 introduces the lib: citation form and a DeepSeek citation sweep; the sweep needs a finish line, and client repos need the same resolution check over their own .doctrine/** prose."
+choice = "One pure library — a lib: citation scanner plus the publication resolver — with two callers: a build-repo test over shipped files (the sweep's finish line) and a doctor check over client .doctrine/**."
+alternatives = ["doctor leg only (IMP-309 shape)", "test-side scan only (e2e_no_shipped_couplings.rs precedent)", "two separate implementations"]
+rationale = "The shipped corpus and client authored prose need the same resolution rule; one pure core avoids a parallel implementation while each caller owns only its file set and reporting."
+consequences = ["the scanner and resolver sit beside the publication register and stay pure", "the build test gates the sweep's completion", "doctor gains a citation-resolution leg"]
+decided_by = "user"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-273"

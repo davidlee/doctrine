@@ -8,7 +8,7 @@ record_kind = "question"
 status = "open"
 created = "2026-09-27"
 updated = "2026-09-27"
-tags = ["authority", "governance", "library", "override"]
+tags = ["authority", "governance", "library", "next", "override"]
 
 [facet]                         # every field typed; seeded empty (captured later)
 question = "When project governance (tier 2) disagrees with a rule in the published reference library (tier 3) what pathway lets the project override it so that an agent reading the library doc sees the override"
