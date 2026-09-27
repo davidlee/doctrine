@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0e1fc-d4ee-7423-aa00-cdcc78b55952"
+date = "2026-09-27"
+
+[[judgement]]
+uid = "01a0e1fc-d4ee-7423-aa00-cddb98f2d0bd"
+seq = 0
+a = "ISS-482"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.5
+rater = "agent"
+by = "design-run-triage-2026-09-27"
+note = "Clump 1 (apply-truth residue, RFC-031 T1): Sparse already staged, refusal missing."
+date = "2026-09-27"
+basis = "RFC-031"

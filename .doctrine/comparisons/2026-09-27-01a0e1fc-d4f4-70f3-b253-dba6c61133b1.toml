@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0e1fc-d4f4-70f3-b253-dba6c61133b1"
+date = "2026-09-27"
+
+[[judgement]]
+uid = "01a0e1fc-d4f4-70f3-b253-dbb4033ce182"
+seq = 0
+a = "ISS-440"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 1.5
+rater = "agent"
+by = "design-run-triage-2026-09-27"
+note = "Independent conformance-tooling fix; misleading advice but rarely followed."
+date = "2026-09-27"
+basis = "RFC-031"

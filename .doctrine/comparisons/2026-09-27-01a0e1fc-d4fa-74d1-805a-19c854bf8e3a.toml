@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0e1fc-d4fa-74d1-805a-19c854bf8e3a"
+date = "2026-09-27"
+
+[[judgement]]
+uid = "01a0e1fc-d4fa-74d1-805a-19d3d415a92c"
+seq = 0
+a = "ISS-282"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 1.0
+rater = "agent"
+by = "design-run-triage-2026-09-27"
+note = "Clump 3 (legibility): wart is constant, fragment receipt store still unwritten."
+date = "2026-09-27"
+basis = "RFC-031"

@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0e1fc-d4f2-7ac3-99bd-96cf74b68e40"
+date = "2026-09-27"
+
+[[judgement]]
+uid = "01a0e1fc-d4f2-7ac3-99bd-96dd83430b7a"
+seq = 0
+a = "IMP-499"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 1.5
+rater = "agent"
+by = "design-run-triage-2026-09-27"
+note = "Clump 1 tail: refusal-remedy wording; remedy needs care (double-apply risk)."
+date = "2026-09-27"
+basis = "RFC-031"

@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0e1fc-d4ec-7693-a457-8c4379d7e612"
+date = "2026-09-27"
+
+[[judgement]]
+uid = "01a0e1fc-d4ec-7693-a457-8c5aac796512"
+seq = 0
+a = "ISS-454"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.5
+rater = "agent"
+by = "design-run-triage-2026-09-27"
+note = "Clump 1 (apply-truth residue, RFC-031 T1): spurious second invalidation row."
+date = "2026-09-27"
+basis = "RFC-031"

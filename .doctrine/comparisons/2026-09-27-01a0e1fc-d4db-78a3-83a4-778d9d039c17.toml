@@ -1,0 +1,22 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0e1fc-d4db-78a3-83a4-778d9d039c17"
+date = "2026-09-27"
+
+[[judgement]]
+uid = "01a0e1fc-d4db-78a3-83a4-7793898a719c"
+seq = 0
+a = "ISS-360"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 3.0
+supersedes = "01a00449-2524-7793-bbac-4390dbe90586"
+rater = "agent"
+by = "design-run-triage-2026-09-27"
+note = "Clump 2 (batch ordering), shares root cause with ISS-356; cheap, unblocks inquiry-map edges."
+date = "2026-09-27"
+basis = "RFC-031"

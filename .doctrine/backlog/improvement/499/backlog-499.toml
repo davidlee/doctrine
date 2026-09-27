@@ -1,19 +1,19 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 360
-slug = "batch-declare-refuses-an-in-batch-parent-chain"
-title = "Batch declare refuses an in-batch parent chain"
-kind = "issue"
+id = 499
+slug = "expired-submission-refusal-names-no-remedy"
+title = "Expired-submission refusal names no remedy"
+kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
-created = "2026-08-15"
-updated = "2026-08-15"
-tags = ["area:cli", "area:design-run", "cluster:design-run"]
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = ["area:design-run", "cluster:design-run"]
 
-# outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
+# outbound-only. Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
-# uniform `[[relation]]` rows (SL-048 "the cut") — author them with
+# uniform `[[relation]]` rows — author them with
 # `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
@@ -23,10 +23,5 @@ triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
 label = "references"
-role = "concerns"
-descriptor = "a mechanical obstacle to authoring parent edges — confounds the under-featured/under-used reading"
-target = "QUE-218"
-
-[[relation]]
-label = "related"
-target = "ISS-356"
+role = "originates_from"
+target = "ISS-361"

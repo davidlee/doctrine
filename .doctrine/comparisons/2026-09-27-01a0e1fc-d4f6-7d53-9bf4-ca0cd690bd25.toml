@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0e1fc-d4f6-7d53-9bf4-ca0cd690bd25"
+date = "2026-09-27"
+
+[[judgement]]
+uid = "01a0e1fc-d4f6-7d53-9bf4-ca16e1bfb7c9"
+seq = 0
+a = "ISS-300"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 1.5
+rater = "agent"
+by = "design-run-triage-2026-09-27"
+note = "Clump 4 (map honesty, RFC-031 T4)."
+date = "2026-09-27"
+basis = "RFC-031"

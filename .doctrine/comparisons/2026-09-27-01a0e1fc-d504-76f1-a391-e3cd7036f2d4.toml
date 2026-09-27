@@ -1,0 +1,22 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0e1fc-d504-76f1-a391-e3cd7036f2d4"
+date = "2026-09-27"
+
+[[judgement]]
+uid = "01a0e1fc-d504-76f1-a391-e3d9ee93b944"
+seq = 0
+a = "ISS-359"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 1.0
+supersedes = "01a00449-2536-7cb1-9f73-1df5b7eafd4a"
+rater = "agent"
+by = "design-run-triage-2026-09-27"
+note = "Clump 5 (governance drift, RFC-031 T5): design-heavy, cost with ISS-357."
+date = "2026-09-27"
+basis = "RFC-031"

@@ -6,7 +6,7 @@ slug = "design-run-fitness"
 title = "Design run fitness"
 status = "open"
 created = "2026-09-11"
-updated = "2026-09-25"
+updated = "2026-09-27"
 tags = ["area:design-run", "cluster:design-run"]
 
 [relationships]
@@ -81,4 +81,28 @@ target = "IMP-471"
 [[relation]]
 label = "related"
 target = "SL-264"
+
+[[relation]]
+label = "related"
+target = "ISS-454"
+
+[[relation]]
+label = "related"
+target = "ISS-482"
+
+[[relation]]
+label = "related"
+target = "ISS-488"
+
+[[relation]]
+label = "related"
+target = "IMP-499"
+
+[[relation]]
+label = "related"
+target = "ISS-356"
+
+[[relation]]
+label = "related"
+target = "ISS-360"
 

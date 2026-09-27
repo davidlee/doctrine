@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0e1fc-d4f0-7e03-8ab2-75372148d30c"
+date = "2026-09-27"
+
+[[judgement]]
+uid = "01a0e1fc-d4f0-7e03-8ab2-75419938d12c"
+seq = 0
+a = "ISS-488"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.5
+rater = "agent"
+by = "design-run-triage-2026-09-27"
+note = "Clump 1 (apply-truth residue): re-word is load-bearing under DEC-301 yet emits no row."
+date = "2026-09-27"
+basis = "RFC-031"

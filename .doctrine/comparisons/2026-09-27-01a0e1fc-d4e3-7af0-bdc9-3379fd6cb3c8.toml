@@ -1,0 +1,22 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0e1fc-d4e3-7af0-bdc9-3379fd6cb3c8"
+date = "2026-09-27"
+
+[[judgement]]
+uid = "01a0e1fc-d4e3-7af0-bdc9-3388b7946de4"
+seq = 0
+a = "ISS-356"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 3.0
+supersedes = "01a00449-2528-76e2-b683-d78bbbb6f0c9"
+rater = "agent"
+by = "design-run-triage-2026-09-27"
+note = "Clump 2 (batch ordering), shares root cause with ISS-360; half 1 already true, half 2 is the id-string fold."
+date = "2026-09-27"
+basis = "RFC-031"

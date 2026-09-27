@@ -5,10 +5,10 @@ id = 362
 slug = "act-admissible-at-the-wrong-stage-silently-no-ops"
 title = "Act admissible at the wrong stage silently no-ops"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "obsolete"
 created = "2026-08-15"
-updated = "2026-08-15"
+updated = "2026-09-27"
 tags = ["area:correctness", "area:design-run", "cluster:design-run", "footgun"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

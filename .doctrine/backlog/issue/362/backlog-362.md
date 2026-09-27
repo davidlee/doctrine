@@ -74,3 +74,11 @@ One detail of the original report does still hold: a `dispose` aimed at an
 `inq-` subject **is** refused (`SL-249`'s key-home table), naming the subject
 kind it is honoured for. Resolution routes through a `cp-` subject carrying
 `disposes`. That is a refusal working, not the failure reported here.
+
+## Resolution, 2026-09-27 — obsolete
+
+Resolved at the `cluster:design-run` triage (`RFC-031`). The defect as written
+does not exist: `SL-259` reproduced both acts at `stage = exploring` and each
+landed with its change row (see *Premise disproved* above). The surviving
+question — whether stage should guard these acts at all — is a state-machine
+scoping question, not an apply-truth defect, and is not carried by this item.
