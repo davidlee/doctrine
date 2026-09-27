@@ -27,6 +27,11 @@ act = "conclude"
 role = "raiser"
 note = "Third adversarial pass over design.md (post rounds-2 revision), attacking the fixes and the notes' third-pass probe list: 4 major (ownership formula collapses to equality so the Refreshed edge rows are unreachable; env_vars refresh clobbers user lists; hooks probe keyed to the MCP outcome not the hook write; read errors unspecified so an unreadable config.toml is overwritten), 6 minor, 1 nit. F-32..F-42 open for the responder."
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Fourth pass: checked the round-3 repairs (F-32..F-42) against the revised design.md and toml_edit 0.22.27 source. 10 verified. F-37 contested because its added panic claim is false (Item::into_value converts a Table to an InlineTable), so the spelling adapter is unnecessary. 2 new: F-43 minor (dry-run HooksState unspecified), F-44 nit (repair residue)."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-271"
 
@@ -804,7 +809,7 @@ note = "Verified at design rev 38: Applied: a codex-edge `CODEX_MCP_SERVER_KEY` 
 
 [[finding]]
 id = "F-32"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Ownership formula reduces to string equality; the Refreshed edge rows are unreachable"
 detail = '''
@@ -827,9 +832,14 @@ role = "responder"
 disposition = "fix-now"
 response = 'Confirmed, exactly as stated. PORTABLE_EXEC is "${DOCTRINE_BIN:-doctrine}", so format!("exec \"{}\" {}", PORTABLE_EXEC, CODEX_MCP_SERVE_ARGS) IS CODEX_MCP_WRAPPER; `owned` and `current` therefore tested the same equality, the program extraction was dead, and the "earlier wording" and "whitespace -> Refreshed" rows were unreachable/inverted. Took your option (1), made explicit: ownership is membership of normalise(args[1]) in CODEX_MCP_WRAPPER_FORMS (every wrapper wording doctrine has emitted, newest first; today exactly [CODEX_MCP_WRAPPER]), and `current` is BYTE-exact args[1] plus env_vars == [CODEX_MCP_ENV]. So: a spacing variant is owned-but-stale and canonicalises (the row holds); an earlier emitted wording refreshes by being retained in the set (a wording change APPENDS its predecessor, so the first wording change cannot strand every installed entry as the pass-1 probe list warned); the extraction step is deleted because there is no program half to extract. DEC-332 amended (new "Amended (RV-399 F-32, F-33)" section) since its prose made the same inexpressible claim. §5.2 formula, §5.5 edge table, §8 risk row and §9 matrix updated and mutually consistent.'
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at the revised §5.2/§5.5/§9. Ownership is membership of the normalised line in CODEX_MCP_WRAPPER_FORMS and current is byte-exact, so the whitespace and earlier-wording rows are now reachable, and the formula, edge table and unit matrix agree. The dead extraction step is gone. Formula-precision residue is raised separately as a nit."
+
 [[finding]]
 id = "F-33"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "env_vars: a stale refresh clobbers a user's list; extra elements tolerated"
 detail = """
@@ -851,9 +861,14 @@ role = "responder"
 disposition = "fix-now"
 response = """Confirmed both halves. Ownership constrained only the KEY set and left env_vars free, so ["FOO"], a wrong type and [] all classified OwnedStale and were rewritten to ["DOCTRINE_BIN"], dropping a user's forwarded variable; meanwhile ["DOCTRINE_BIN","FOO"] passed the membership test and was OwnedCurrent. Integrated your proposal: `owned` requires env_vars ABSENT or exactly [CODEX_MCP_ENV]; `current` requires exactly it. That keeps the dead-override mitigation (absent -> OwnedStale -> Refreshed: the only env_vars state doctrine has ever emitted, pre-slice, is absent), makes every user value Foreign (untouched, disclosed), and makes the rule strict for elements as well as keys — consistent with Principle 4. DEC-332 amended; §5.2 formula, §5.5 table (three rows replacing two), §8 risk row and §9 matrix updated."""
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: owned requires env_vars absent or exactly [CODEX_MCP_ENV]. Every user value is Foreign, and the dead-override refresh survives through the absent case. §5.2, §5.5, §8 and §9 agree."
+
 [[finding]]
 id = "F-34"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Hooks probe is keyed to the MCP outcome, not the hook write; activation notice left contradictory"
 detail = """
@@ -876,9 +891,14 @@ role = "responder"
 disposition = "fix-now"
 response = """Confirmed, and it was the sharpest of the pass. [features] hooks gates codex hooks, not MCP servers; DEC-329's own warning text is about "the SessionStart/PreToolUse hooks this install just wired"; and write_codex_activation (boot.rs:2696) prints "Ensure [features] hooks = true" unconditionally while its step 2 duplicates the new trust caveat. Adopted your proposal. The probe now fires iff h == Harness::Codex && codex_hook_written && !dry_run — the same signal that gates the notice (boot.rs:2788) — and its result FOLDS INTO the notice: step 1 prints only when the state is not Enabled (Disabled names the key, Unknown(reason) names the reason). The trust caveat prints iff the MCP entry was written && !dry_run && !codex_hook_written, so the notice's trust step and the caveat can never both print; exactly once per arm. DEC-329 is NOT reopened: the record fixes the probe's subject and outcomes but never its trigger, and its rejected-alternative reasoning (that writing the flag "couples the hook leg's activation to the MCP leg's write") is an argument FOR keying the probe to the hook write — now stated in the §7 row. §5.1 diagram, §5.4 predicate + diagram, §8 risk, §9 assertions and the impact table (write_codex_activation changes shape, not just dry-run wording) updated."""
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: the probe is keyed to codex_hook_written (same gate as the notice), its result folds into step 1, and the trust caveat is mutually exclusive with the notice. DEC-329's trigger reading is sound, since the record fixes the subject, not the trigger. The one gap the repair opened (dry-run HooksState) is raised separately."
+
 [[finding]]
 id = "F-35"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Read errors unspecified; mirroring install_mcp's .ok() overwrites an unreadable config.toml"
 detail = """
@@ -898,9 +918,14 @@ role = "responder"
 disposition = "fix-now"
 response = """Confirmed: install_mcp does fs::read_to_string(&path).ok() at boot.rs:2089, so any read error becomes None == "absent". For .codex/config.toml (a user-owned file holding [features], profiles, other servers) that is a clobber path: a non-UTF-8 byte -> InvalidData -> None -> Absent -> Wired -> write_atomic replaces the whole file, against the design's own Invariant 4 (non-UTF-8 is not valid TOML). The design now specifies the distinction explicitly: ErrorKind::NotFound is None; EVERY other read error is malformed -> PrintedFallback, file untouched. §5.2 carries the rule as its own paragraph, §5.4's read step and §5.5's Invariant 4 say it, §5.5 gains the unreadable/non-UTF-8 edge row, and §9's integration suite gains case (iii) (bytes unchanged + fallback line). The same defect in the Claude leg is NOT silently fixed here: it is recorded as ISS-495, which I minted and linked to SL-271 (references/concerns), and §6 lists it as a recorded follow-up."""
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: NotFound maps to None and every other read error to malformed, stated in §5.2, the §5.4 diagram, Invariant 4, a §5.5 row and integration case (iii). The Claude-leg defect is captured as ISS-495 (confirmed open). Citation of the id is in the nit."
+
 [[finding]]
 id = "F-36"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "PrintedFallback cannot carry the foreign-vs-malformed wording the design prescribes"
 detail = """
@@ -921,9 +946,14 @@ role = "responder"
 disposition = "fix-now"
 response = """Confirmed: RefreshOutcome::PrintedFallback carries only {hook_file, snippet} (boot.rs:948), and install_codex_mcp collapses both causes into it, so wire() cannot select between the two wordings §5.2 prescribed. Took option (a) — one neutral wording — for two reasons you can check: the Claude leg ALREADY collapses the two ("has a foreign or malformed 'doctrine' entry", boot.rs:2869), so a reason-discriminating field would be a type change bought only to re-split what the shipped arm deliberately joined; and the operator's next step is identical in both cases (the snippet is printed either way). §5.2's two-wording list is replaced by one line shared by both arms and both causes: "<file> has a doctrine entry doctrine did not write, or could not be read — left untouched. To register it manually:". Yes, the Claude arm's wording changes with it — a report-seam change covered by the wire impact row, and no existing test asserts the old text (grepped). The second half is answered too: a Foreign entry's line is stable across runs (F-28's fix), and under the strict rule a user who adds a key to our entry gets that same stable, non-imperative line rather than a fresh instruction."""
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: one wording, justified by the Claude arm already collapsing both causes, and I confirmed no test asserts the old text. The wording's literal accuracy for the parse-failure case is in the nit."
+
 [[finding]]
 id = "F-37"
-status = "answered"
+status = "contested"
 severity = "minor"
 title = "Inline-table mcp_servers or entry is misclassified as malformed"
 detail = """
@@ -943,9 +973,17 @@ role = "responder"
 disposition = "fix-now"
 response = "Confirmed against toml_edit 0.22.27 source: Item::as_table() is None for Item::Value(InlineTable), while as_table_like()/as_table_like_mut() return Some for both (item.rs:304/311). Went further than the file check while fixing it, and found a hazard your fix did not name: InlineTable's TableLike::insert is `self.insert(key, value.into_value().unwrap())` (inline_table.rs:585), so handing an Item::Table to an inline parent PANICS — the spelling adapter is not cosmetic. Design now states: classification reads through as_table_like() (an inline copy of the emitted shape is OwnedCurrent -> None; an inline foreign entry is Foreign), and the write uses as_table_like_mut() with the entry built once and inserted in the container's spelling (Item::Table under a [mcp_servers] table; inline value under an inline parent). I verified in encode.rs that InlineTable always encodes inline, so mutation cannot trigger a multi-line reformat. §5.2, §5.3 (new Spelling bullet) and §5.5 (inline-parent and inline-entry rows) updated; §9 adds both unit cases; §7 records the rejected alternative (refuse to write inline — safe but reports a legal config as unregisterable)."
 
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+The as_table_like() classification fix is right; the added hazard is false, and it went into the design. §5.3 "Spelling" says: "InlineTable's TableLike::insert unwraps its argument to a Value, so handing a Table to an inline parent PANICS", and uses that to justify a spelling adapter ("an inline value under an inline parent"). The unwrap is on Item::into_value (toml_edit-0.22.27 src/item.rs:130-142), and that returns Ok for Item::Table: it converts the table with into_inline_table() and wraps it as Value::InlineTable. Only Item::None would panic. So `mcp_servers.as_table_like_mut().insert("doctrine", codex_mcp_entry())` already does the right thing under both a [mcp_servers] table and an inline parent. No adapter is needed.
+Fix: delete the PANICS sentence and the adapter from §5.3. State that a single insert through as_table_like_mut() gives the container's spelling by construction, citing item.rs:134-136. Keep the inline-parent unit case, which now pins toml_edit's conversion instead of our adapter. This is less code, and it removes a false claim the plan would otherwise cite.
+"""
+
 [[finding]]
 id = "F-38"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "toml_edit emits the wrapper as a literal string; 'exactly' and the snippet will drift"
 detail = '''
@@ -965,9 +1003,14 @@ role = "responder"
 disposition = "fix-now"
 response = """Confirmed in source. toml_write 0.1.2 TomlStringBuilder::as_default (string.rs:15) tries as_basic_pretty, which returns None when metrics.max_seq_double_quotes > 0, then as_literal — so the wrapper renders as `'exec "${DOCTRINE_BIN:-doctrine}" serve --mcp'` (Encoding::LiteralString), not the basic-escaped form §5.3 showed. Two changes: §5.3 now says "semantically" and defers the spelling to §5.2, which states the literal-string fact and that assertions are on PARSED values, never on the bytes §5.3 displays; and the snippet is required to come from the SAME builder as the write (codex_mcp_entry() -> toml_edit::Item, inserted by the writer and rendered standalone by codex_mcp_fallback_snippet()), so the two cannot drift — the same DRY the constants-agreement test exists for. §9's integration and unit assertions now say "by parsed value" and "same builder"."""
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: §5.3 now says 'semantically', §5.2 states the literal-string rendering, assertions are by parsed value, and codex_mcp_entry() is the single builder for write and snippet."
+
 [[finding]]
 id = "F-39"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Revision timing contradicts itself: raised at reconcile vs scheduled before a citing phase"
 detail = """
@@ -987,9 +1030,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Confirmed: §6 and §9 both carried a clause requiring the Revision before the phase that cites its ids, while §8, §9's Revision paragraph and the impact table put it at reconcile. Resolved in favour of the three reconcile statements and deleted the clause. §6 and §9 now say: the Revision is created and applied at reconcile, after the phases; NO phase cites the new REQ ids (the plan traces to IMP-111 and this design), so no plan can cite an id minted later; phases still do not wait on it, and close still requires it landed or a recorded waiver. The two citations of the minting step are now impossible to read two ways."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: the Revision is created and applied at reconcile, no phase cites its ids, and §6, §8, §9 and the impact table now read one way."
+
 [[finding]]
 id = "F-40"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Hooks probe runs in the process cwd, not root; the seam has no cwd"
 detail = """
@@ -1008,9 +1056,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Confirmed: the seam was run_capture(program, args) with no cwd, and the probe would have answered for the shell's tree, not root — wrong under --path or an install run from a subdirectory, and wrong in the flattering direction (a different trusted project with hooks on). Integrated your first option rather than the constructor one, because it makes the cwd an assertable argument: the trait is run_capture(&self, program, args, cwd) and codex_hooks_state(run, cwd); wire() passes root; install::CaptureRunner uses Command::current_dir(cwd). §6's open question is now RESOLVED BY CONSTRUCTION rather than recorded, and §9 adds a probe case asserting the runner received root. §5.2's trait, the §5.4 sequence diagram (cwd=root), the constants paragraph and the impact table updated."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: run_capture takes cwd, wire passes root, CaptureRunner uses current_dir, §6's open question is closed by construction, and §9 has a cwd assertion."
+
 [[finding]]
 id = "F-41"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Shared classifier shares the trivial part; divergence-prone mapping stays per-arm"
 detail = """
@@ -1030,9 +1083,14 @@ role = "responder"
 disposition = "fix-now"
 response = """Accepted — a cohesion defect, and the shared function shipped exactly the trivial part. Integrated your first option and went one step further: the bool triple is gone entirely. Each arm now derives McpEntryClass from a total match on its own parsed value (so present=false/owned=true and owned=false/current=true are unrepresentable, not merely unreachable), and the shared surface is mcp_action(class, payload, file) -> (RefreshOutcome, bool) — the class -> (outcome, write?) judgement in ONE place, with the arm supplying only its own rendering (invocation, or fallback snippet) and its own file. classify_mcp_entry(present, owned, current) is deleted; F-1's substance survives exactly (no Malformed arm, total over parsed input, no refusal channel — the F-1 response's body is unchanged on that point). The plan_mcp refactor is now cost-justified: it shares the mapping that can drift, and the existing plan_mcp_* suite remains the behaviour-preservation proof. §4 Principle 3, §5.1/§5.2, §7, §8 and §9 rewording accordingly. One thing the pass should know: the refactor's carried string becomes the full invocation (F-2), which the existing suite matches by wildcard, so "suite unchanged" still holds."""
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: the bool triple is gone, each arm derives the class by a total match, and mcp_action carries the class-to-(outcome, write) judgement both arms share. The note that the carried string becomes the full invocation, matched by wildcard in the existing suite, is correct (plan_mcp_writes_entry_when_absent matches Wired(_))."
+
 [[finding]]
 id = "F-42"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "MCP leg error aborts the codex arm and drops the hook report; impact-table path slip"
 detail = """
@@ -1050,6 +1108,41 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = """Confirmed: `?` on the MCP leg aborts the codex arm, and wire()'s Err arm prints only "refresh failed" (boot.rs:2908), so the hook lines and the activation notice for hooks that WERE written never print. Chose the boundary-context arm of your either/or, because the Claude loop already takes exactly this position with a documented reason (boot.rs:1726-1732: every write is independently idempotent so a re-run completes the set, and swallowing the error would hide the half-activated install this slice exists to stop being silent about) — so running it last with the report preserved would mean swallowing an I/O error, which is the one thing the shipped arm refuses to do. §5.4 now states the MCP leg is written last in the codex arm and its error carries boundary context naming how far the arm got; §5.2 shows the with_context form. And thanks for the path slip — verified: run_install is defined at boot.rs:2623 (the :2645 call is inside it), so run_install:2645 has moved to the src/boot.rs impact row and the src/install.rs row now carries only CaptureRunner and install::run:414."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: with_context boundary on the MCP leg, run last, mirroring the Claude loop's stated reason. The path slip is fixed (run_install is in boot.rs)."
+
+[[finding]]
+id = "F-43"
+status = "open"
+severity = "minor"
+title = "Dry-run activation notice has no HooksState; step 1's dry-run behaviour is unspecified"
+detail = """
+The F-34 repair makes write_codex_activation take a HooksState and print its step 1 ("ensure [features] hooks = true") only when the state is not Enabled. The probe fires only when !dry_run. Under dry_run the notice still prints (as "would write", §5.4) but no HooksState exists, and the design doesn't say what step 1 does then. The options are to print step 1 unconditionally in dry_run (the pre-slice behaviour), to omit it, or to pass Unknown("dry run: not probed"). Each produces different output, and the dry-run wording test (§9) can't be written without a choice. Suggest: pass Option<HooksState>, where None (dry run) prints step 1 as today's unconditional instruction. Add a §9 dry-run assertion that pins it.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-44"
+status = "open"
+severity = "nit"
+title = "Round-3 repair residue: current formula, FORMS fixed point, ISS-495 citation, fallback wording"
+detail = """
+Residual precision nits introduced by the round-3 repairs, none load-bearing alone:
+(a) §5.2's `current` formula dropped its `owned &&` conjunct, and it indexes t.args[1] unguarded. The prose ("owned && !current is OwnedStale") implies the derivation order, and "the length check precedes every index" covers the index, but the formula read on its own makes an extra-key entry with the exact args and env_vars "current". Restore `current = owned && ...` so the formula is self-sufficient.
+(b) CODEX_MCP_WRAPPER_FORMS is compared against normalise(args[1]), so every member must be a fixed point of normalise. Today's single member is. Add that to the constants-agreement test so a future appended wording with a double space or a trailing space can't silently become unmatchable.
+(c) §5.2 and §6 say the install_mcp read-error follow-up is "a recorded follow-up (backlog item)" without its id. It is ISS-495 (open, linked to SL-271). Cite it.
+(d) The single fallback wording "<file> has a doctrine entry doctrine did not write, or could not be read" is literally false for the commonest malformed case: a readable file that does not parse, or a non-table mcp_servers, has no doctrine entry and was read fine. "could not be interpreted" (or "read or parsed") covers every cause.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
