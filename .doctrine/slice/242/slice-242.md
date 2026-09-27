@@ -155,9 +155,9 @@ residue that model left behind in this repo.
   client assets — IDE-030, still filed and now unenabled.
 - **Changing the projection/publication split.** ADR-019 is accurate and is a
   premise, not a target. `governance.md` being created-on-need is settled.
-- **`boot-footer.md`'s retirement** — SL-144 objective 2 owns the deletion of the
-  dead asset. This slice untracks its *projected copy* along with the other
-  residue; whether the master survives is SL-144's call.
+- **`boot-footer.md`'s retirement** — SL-273 retires the dead asset (DEC-343;
+  SL-144, which first owned it, is abandoned). This slice untracks its
+  *projected copy* along with the other residue.
 - **New entity kinds, CLI verbs, or memory-engine changes.**
 
 ## Non-Goals

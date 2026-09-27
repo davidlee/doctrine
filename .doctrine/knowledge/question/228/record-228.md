@@ -51,3 +51,15 @@ project has overridden, without either source being wrong.
   override mechanism.
 
 Not in RFC-033's scope; raised during REV-067 review (2026-09-27).
+
+
+## Concrete case: `governance.md` (SL-273 research C3)
+
+`reference/governance.md` opens "YOURS to edit. Loaded into system prompt by
+`doctrine boot`". Boot does load `.doctrine/governance.md` when present
+(confirmed by the user 2026-09-27), but install never creates it, so the library
+doc is the only copy of the default and its "yours to edit" framing points at a
+file the client does not have. What governance.md should be — seeded override
+surface, created-on-need hook, or library-only default — is an instance of this
+question. SL-273 deliberately leaves it untouched (DEC-343); the user judges
+this question wants answering soon.

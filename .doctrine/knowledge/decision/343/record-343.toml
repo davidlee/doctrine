@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 343
+slug = "stale-library-docs-retire-fix-defer"
+title = "Stale library docs: retire, fix, defer"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Research conflicts C2-C4: boot-footer.md describes the Onboarding mechanism SL-187 retired and nothing reads it (its deletion owner SL-144 is abandoned); shipped-corpus-authoring.md, ADR-024's client-reaching copy, teaches the pre-lib: form; governance.md says 'YOURS to edit, loaded by boot' while install never creates .doctrine/governance.md (boot does load it when present)."
+choice = "Retire boot-footer.md here (manifest entry and asset; SL-242 keeps untracking the projected copy). Fix shipped-corpus-authoring.md here (objective 2, author side citing DEC-342's using-doctrine.md section). Leave governance.md untouched; its role is recorded as a concrete case on QUE-228."
+alternatives = ["sweep boot-footer.md instead of retiring it", "reword governance.md now"]
+rationale = "Retiring a dead, unread asset is cheaper than sweeping it and nothing else owns it. C2 is a hard defect in ADR-024's delivery copy. governance.md's correct role is the open override-pathway question (QUE-228); rewording it now would decide that by accident."
+consequences = ["SL-242 out-of-scope line updated to name SL-273", "DEC-341 inventory marks governance.md occurrences as leave", "QUE-228 carries the governance.md case; user judges it wants answering soon"]
+decided_by = "user"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-273"
