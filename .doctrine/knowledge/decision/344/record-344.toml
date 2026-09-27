@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 344
+slug = "routing-processmd-becomes-the-boot-onboarding-summary"
+title = "routing-process.md becomes the boot onboarding summary"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "routing-process.md is embedded whole in boot and also published, and carries copies of glossary.md and using-doctrine.md rules (reference forms, storage tiers). ADR-005 wants those resident (PUSH) and allows exactly one workflow doc, no parallel summary; it anticipated a rename."
+choice = "Recast routing-process.md explicitly as the boot's compact onboarding summary, and rename it. It owns what only it holds (routing table, postures, core process, guardrails). For glossary.md / using-doctrine.md essentials (reference forms, storage tiers, read via show, the DEC-342 lib: rule) it carries only per-message essentials, each block ending with a lib: cue to its owner. A compactness pass applies ADR-005's before-any-skill test; the rest moves to owners. C5's first-use qualification rule moves to glossary.md as owner. Other duplicates (using-doctrine.md vs glossary.md, templates) are cut to lib: citations; skill duplicates belong to the restate audit. ADR-005's text changes through a Revision in this slice. The new name is settled at drafting."
+alternatives = ["keep routing-process.md, compact derived copies, no rename", "generate PUSH copies from owners mechanically", "cut PUSH copies to citations only", "new parallel onboarding summary beside routing-process.md"]
+rationale = "The file already is the onboarding digest; its dual role is a framing and naming defect, not duplication. A name that states the role tells future authors what belongs in it. The sweep already rewrites every citation, so the rename's marginal churn is small; a parallel summary would violate ADR-005."
+consequences = ["a REV against ADR-005 (file name, framing)", "boot.rs Static embed, manifest, and citations follow the rename", "boot token budget visible in one file"]
+decided_by = "user"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-273"
