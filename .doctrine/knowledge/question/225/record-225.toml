@@ -13,7 +13,7 @@ tags = []
 [facet]                         # every field typed; seeded empty (captured later)
 question = "Should the route set become a code-backed closed vocabulary?"
 why_matters = "Available if the trial validates the convention; foreclosed during SL-260 by its no-src tripwire, and taking it newly binds three standards. Argument: SL-260 design §6 Q4; unenforced clauses it would close: CON-006. Owned and settled by CHR-077."
-answer = "Answered by events, not by the trial. SL-268 (Review ledger v2, closed 2026-09-27) shipped exactly this: a validated closed Route enum written through --route, single-sourced with a canary, with the CLI refusing a route: prefix in --disposition. It therefore landed mid-trial rather than after a validating result — DEC-266's sequencing inverted — and is recorded as E12 confound 1. The question as written is historical; the surviving question, whether taking the code-backing before the trial reported was the right call, rests on E12. Owner ruling, 2026-09-27."
+answer = "Yes, and already done. SL-268 (closed 2026-09-27) shipped a validated closed Route enum written through --route, and refuses a route: prefix in --disposition. It landed mid-trial, before a validating result, inverting DEC-266 sequencing (RFC-026 E12 confound 1). Being code-backed, the set now changes in code: E14 resolves P11 to splitting owner-fix, which SL-270 carries through the Route enum, ROUTES and reviewing.md before the second trial window opens, so the set is fixed before that window rather than during it. Owner ruling 2026-09-27, revised the same day on the owner approving the E14 analysis."
 answered_by = "owner"
 answered_on = "2026-09-27"
 

@@ -13,7 +13,7 @@ tags = []
 [facet]                         # every field typed; seeded empty (captured later)
 question = "Should the route axis extend beyond design-review ledgers to /audit and /code-review passes?"
 why_matters = "The trial scoped routing to design reviews so its population is defined. Extending it is a decision for trial conclusion, not an automatic consequence of a good result. Argument: SL-260 design §6 Q2. Owned and settled by CHR-077."
-answer = "Not extended. E13's transferability test over 47 severe audit and code-review findings put owner-fix at 21 (44.7%), and 13 of 25 on reconciliation alone (52%), in both blind raters independently; both identified the influx as stale-account drift rather than duplication. Reconciliation narrowly fails a ≥3-routes/modal-≤50% discrimination reading and code-review passes. Extending would carry a term that no longer discriminates, so the gap is in owner-fix rather than in the axis: RFC-026 P11 takes the split-or-name question up. Owner ruling, 2026-09-27."
+answer = "Not extended. Routes choose the instrument that settles a finding before code exists; reconciliation and code-review findings arise after it, where a stale record is simply edited (as /reconcile already does), so routing adds no instrument there. The earlier ground, that owner-fix stops discriminating outside design review, does not hold: E13 rater prompt steered toward owner-fix, and unsteered the taxonomy discriminates on the same 47 findings (owner-fix 33.0 percent; RFC-026 E14). SL-270 makes the scope structural by refusing --route outside the design facet. Owner ruling 2026-09-27, revised the same day on the owner approving the E14 analysis."
 answered_by = "owner"
 answered_on = "2026-09-27"
 
