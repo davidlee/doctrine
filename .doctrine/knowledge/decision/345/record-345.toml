@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 345
+slug = "restate-audit-depth-and-mandatory-retrieval"
+title = "Restate audit depth and mandatory retrieval"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "ADR-005's restate-line rule: skills do not reproduce flag syntax, option tables, or mechanics another surface owns. Offenders fall in three classes: flag/option shapes (owned by --help), concepts with a library owner, concepts with no owner yet (IMP-500 gaps). Cutting inline guidance to a citation adds a tool call an agent may skip."
+choice = "Cut flag/option shapes to --help pointers and owned concepts to lib: citations. Leave ownerless concept tables in place, recording each location (skill, line) in IMP-500, with no inline markers in shipped text. The boot onboarding summary (DEC-344) states, beside the DEC-342 lib: rule, that a retrieval a skill or reference doc specifies is mandatory, not optional reading. Deterministic inlining of lib: references is deferred to IDE-060."
+alternatives = ["inline 'pending owner (IMP-500)' notes in skills (repo-private id in shipped text, ADR-024)", "flag shapes only, defer owned-concept cuts"]
+rationale = "Completes DEC-344's consolidation on the skill side without inventing owners. Agents do not comply 100%; a boot-resident mandate raises compliance but cannot guarantee it, so the structural fix is recorded for later."
+consequences = ["residual risk: some cited retrievals will be skipped; managed by the boot mandate and by keeping per-message essentials in the boot summary", "IMP-500 body gains the ownerless-table locations", "IDE-060 carries the deterministic-inlining follow-up (relates RFC-033)"]
+decided_by = "user"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-273"
