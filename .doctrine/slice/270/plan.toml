@@ -1,0 +1,69 @@
+# Implementation plan for SL-270 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-270"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]]
+id        = "PHASE-01"
+name      = "Six-route set"
+objective = "Replace owner-fix with dedupe and refresh in the route vocabulary, and bring every site that states the route set into line, including the probe/control sentence (DEC-330, DEC-333; design sec-2)."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked; slice status plan or later." },
+  { id = "EN-2", text = "doctrine check gate green on the starting tree." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Route in src/review_ledger/vocab.rs has variants Review, Demonstrate, Probe, Control, Dedupe, Refresh; ROUTES lists the six in that order; route_known_set_matches_variants covers all six; OwnerFix is gone." },
+  { id = "EX-2", text = "Route::parse refuses owner-fix on write, naming the six known routes. Reads stay open: a stored owner-fix still reads and renders verbatim (design sec-2, Legacy)." },
+  { id = "EX-3", text = "Hand-written route lists name the six: the review_show description (src/mcp_server/tools.rs) and the --route help on dispose and amend (src/review/cli.rs)." },
+  { id = "EX-4", text = "tests/e2e_review_golden.rs: the amend step that writes owner-fix writes a six-set route instead, and the two error goldens list the six. Any case asserting that a stored legacy owner-fix still reads keeps owner-fix, as legacy." },
+  { id = "EX-5", text = "install/design-prompts/reviewing.md: owner-fix row replaced by dedupe and refresh rows (design sec-2 table); tie-break order dedupe, refresh, control, probe, demonstrate; the probe/control sentence after the tie-break; the refresh response-form bullet says a refresh whose described thing is itself wrong routes review; response-form bullets and the prose-settled sentence name dedupe and refresh; 'exactly five' and 'only the closed five' say six." },
+  { id = "EX-6", text = "install/review-ledger.md's route-axis entry lists the six." },
+  { id = "EX-7", text = "Memory mem_01a0d91d7a0d75f1853c505d08237451 no longer teaches --route owner-fix; it is edited through the memory write seam and re-verified." },
+  { id = "EX-8", text = "doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "Route::parse accepts exactly the six; owner-fix is refused on write with the known list; lockstep with ROUTES holds", test_file = "src/review_ledger/vocab.rs", keywords = ["Route::Dedupe", "Route::Refresh", "\"dedupe\"", "\"refresh\"", "route_known_set_matches_variants", "owner-fix"], waived = false },
+  { id = "VT-6", expects = "the MCP review_dispose schema's route enum equals the six", test_file = "tests/e2e_mcp_server.rs", keywords = ["review_dispose", "\"dedupe\"", "\"refresh\"", "enum"], waived = false },
+  { id = "VA-1", text = "reviewing.md and review-ledger.md carry the six routes, the new tie-break order and the probe/control sentence; a repo-wide search (rg -n 'owner-fix|OwnerFix' and rg -in 'five routes|closed five|exactly five') finds no hit outside legacy notes, the E11-E14 evidence, REV-065's before column, and the legacy-read cases EX-4 keeps. Hits and their exclusion reason are recorded in the slice notes (notes.md), and the search is re-runnable at audit." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Route-presence check at lock"
+objective = "Refuse the design-run lock while a disposed severe finding on the design review carries no known route, as a second list on the existing review observation (DEC-326; design sec-3)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: owner-fix is an unknown route, which VT-2's legacy case depends on." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A pure unrouted_severe(doc) in src/review_ledger/gate.rs, beside undisposed_blockers, lists a finding iff it is severe (severity not known minor or nit), disposed (status not known open or withdrawn; out-of-vocabulary counts), not already an undisposed blocker, and unrouted. Each entry renders F-n (<reason>), reason one of: no route; legacy route: prefix; unknown route <raw>." },
+  { id = "EX-2", text = "PassFacts carries unrouted_severe; ObservedReview carries it through commands/design.rs as opaque labels (ADR-001: design_run stays leaf)." },
+  { id = "EX-3", text = "The review-disposition-attested condition in src/design_run/gate.rs pushes Cause::SevereFindingsUnrouted { findings } when the list is non-empty, beside BlockersUndisposed. It renders 'severe findings carry no route: …', is capped like the other list causes, and its remedy names the repair per status (answered: review amend --route; contested: dispose again with --route; verified: raiser reopens, responder disposes again with --route; out-of-vocabulary status: repair by hand)." },
+  { id = "EX-4", text = "Existing fixtures that lock over a severe route-less disposed finding are given a route so they keep testing what they tested. In particular defect_warning_printed_gate_unchanged (tests/e2e_design_review.rs) seeds a verified crit finding with no route; the seed gains a route, since its claim is that the defect warning feeds no predicate and an unrouted severe finding now does." },
+  { id = "EX-5", text = "reviewing.md's closing paragraph names the lock check as the one thing that reads the route, and says no gate checks whether an instrument route's obligation is met (design sec-6, DEC-103)." },
+  { id = "EX-6", text = "doctrine check gate green." },
+]
+verification = [
+  { id = "VT-2", expects = "unrouted_severe lists an answered route-less major (no route), an answered blocker whose disposition starts route: (legacy), a verified major routed owner-fix (unknown route) and a contested route-less major; omits a routed one, an open one, a withdrawn one, a minor, and a contested route-less blocker, which is listed once, as an undisposed blocker (RV-400 F-7: fault rejected is a predicate listing that blocker in both lists)", test_file = "src/review/tests.rs", keywords = ["unrouted_severe", "no route", "legacy route: prefix", "unknown route owner-fix", "contested"], waived = false },
+  { id = "VT-3", expects = "an unknown severity counts as severe; a route-less major with an unknown status is listed (fail closed, RV-400 F-11)", test_file = "src/review/tests.rs", keywords = ["unrouted_severe", "crit"], waived = false },
+  { id = "VT-4", expects = "the lock refuses on a concluded, blocker-free pass with one unrouted major, naming it; the same run locks once the finding is amended with a route", test_file = "tests/e2e_design_review.rs", keywords = ["severe findings carry no route", "--route", "amend"], waived = false },
+  { id = "VT-5", expects = "Cause::SevereFindingsUnrouted is a capped list cause (joins carries_a_list)", test_file = "src/design_run/tests.rs", keywords = ["SevereFindingsUnrouted"], waived = false },
+]
+specs        = []
+requirements = []
