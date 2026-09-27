@@ -10,7 +10,7 @@ raiser    = "raiser"
 responder = "responder"
 rounds_base = 0
 contests_base = 0
-concluded = false
+concluded = true
 
 [[review.turn]]
 act = "conclude"
@@ -18,6 +18,11 @@ role = "raiser"
 note = """
 Reviewed SL-272 design sections sec-1 through sec-6 against SL-272 scope, research, REQ-478, DEC-335, DEC-336, DEC-237, DEC-239, DEC-249, DEC-301, ISS-482, IMP-499, ISS-454 and ISS-488. Traced direct and delegated declaration routes, within-apply act ordering, change-log derivation, event rendering and bounds, replay/change-log retention, payload contract publication and the named unit/e2e verification. Raised F-1 through F-4 with file:line evidence; no source or design file was edited.
 """
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Second pass complete at design rev 27: F-1..F-7 verified against source; no further findings."
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-272"
@@ -204,7 +209,7 @@ note = "Verified. Presence has four arms (payload_contract.rs:492-515); every Op
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "DEC-336 invariant overclaims: a revived act can die twice with no act_recorded between"
 detail = '''
@@ -230,9 +235,14 @@ response = """
 Verified: revival makes an act live with no row, so its next coverage death follows the last with no act_recorded between. Repaired (design rev 27): sec-3 states the invariant with revival as its one pre-existing exception, sec-6 connects the revival residual to that claim, and DEC-336 carries the same limit.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at 41b17a1e6: sec-3 names revival as the invariant's one pre-existing exception, sec-6 links the residual back to it, and DEC-336 carries the same limit. The disjointness claim now stands as qualified."
+
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "node_question_changed sited in an 'update arm' declare_node no longer has"
 detail = """
@@ -258,9 +268,14 @@ response = """
 Verified: declare_node has one create-or-update path (run.rs:1450-1475, DEC-248); a new node's existing is seeded from its declaration, so the differs rule already emits nothing at creation. Repaired (design rev 27): sec-3 places emission on that one path with no creation branch, and the null sentence now says a null emits only when it clears a non-empty question.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: sec-3 now sites emission on declare_node's single create-or-update path (DEC-248), explains that created_prior's seeding keeps creation silent without a branch, and limits the null case to clearing a non-empty question. Matches run.rs:1408-1475."
+
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Displacement-gate unit criteria filed under tests.rs; VT-3's fixture lives in run.rs"
 detail = """
@@ -283,6 +298,11 @@ disposition = "fix-now"
 response = """
 Verified: run_with_a_map is private to run.rs's test module (run.rs:2369), beside the ISS-367 displacement tests. Repaired (design rev 27): sec-4 files both unit criteria (displacement gate, re-word row) in run.rs's test module; tests.rs is dropped from code impact and from the design-target selectors.
 """
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: sec-4 files the displacement-gate and re-word unit criteria in run.rs's test module beside run_with_a_map(); tests.rs is gone from code impact and from the slice's design-target selectors (8 remain plus the src/design_run/** scope glob), matching the updated count."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
