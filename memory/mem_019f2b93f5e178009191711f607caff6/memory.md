@@ -18,7 +18,7 @@ sharp edges. Two tiers, by access pattern:
 | Importing a delta / verifying the funnel | 3-way import, scoped verify, build-artifact provisioning |
 | Deciding a fork is spent (gc/cleanup) | landed-oracle, patch-id, squash, gc |
 | Landing / integrating on a shared trunk | close-integrate, trunk-race, dirty-worktree |
-| Auditing or closing a dispatched slice | audit fork-ban, distrust-green-claim, candidate-detach |
+| Auditing or closing a dispatched slice | review admission (worker-only), distrust-green-claim, candidate-detach |
 | On a specific arm (claude / codex / pi) | arm-routing, subagent-identity, RPC hygiene |
 
 ## Notes

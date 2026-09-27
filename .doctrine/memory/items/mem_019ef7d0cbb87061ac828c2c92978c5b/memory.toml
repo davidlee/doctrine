@@ -7,7 +7,7 @@ status = "active"
 title = "Jail id reservation: repo config is local; the env-fallback workaround is retired"
 summary = 'Superseded context: since 2026-07-03 .doctrine/doctrine.toml sets [reservation] reach="local" with allow-local-fallback=true, so id-reserving verbs work in the jail WITHOUT DOCTRINE_RESERVATION_FALLBACK — and the flake no longer exports it (2026-09-25).'
 created = "2026-06-24"
-updated = "2026-09-25"
+updated = "2026-09-27"
 
 [scope]
 paths = []

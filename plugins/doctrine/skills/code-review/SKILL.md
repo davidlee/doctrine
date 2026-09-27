@@ -93,7 +93,7 @@ lands on the **RV review ledger** — the RV kind (`RV-NNN`) — so each
 finding outlives the conversation as an append-only, field-owned, queryable raise
 instead of evaporating into chat scrollback. The shared ledger mechanics (subject
 and target ladder, open + prime, raise, dispose + resolve, severity and
-disposition vocab, synthesis, harvest, the close-gate, the parent-tree caveat)
+disposition vocab, synthesis, harvest, the close-gate, where reviews run)
 live in `review-ledger.md` — **read it; this skill does not repeat the verbs.**
 What follows is the *lens*: the voice, the axes, the review process, and how this
 skill's emoji severities and prose headings map onto the ledger.

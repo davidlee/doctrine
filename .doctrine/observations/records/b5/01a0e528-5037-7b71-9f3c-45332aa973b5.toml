@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e528-5037-7b71-9f3c-45332aa973b5"
+recorded_at = "2026-09-27T23:16:59.575804009Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-269 PHASE-06: worker dropped raise from refused-verb list"
+detail = "The worker's rewrite of review-ledger.md 'Where reviews run' enumerated the turn verbs without raise; caught in orchestrator diff review; needed a second worker spawn for a one-word fix."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

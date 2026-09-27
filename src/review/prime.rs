@@ -12,7 +12,7 @@ use super::{
 // D9, D-C10). The cache is the reviewer's *learned* model — runtime, regenerable,
 // never authored, DECOUPLED from any LLM token cache (T-b: doctrine makes no
 // attempt to observe token-cache warmth). It lives beside the baton/lock in the
-// parent tree's gitignored state.
+// resolved tree's gitignored state.
 //
 // Shape (§9, SL-147 PHASE-05): the resolved `paths` fileset (the target slice's
 // selectors expanded against the tracked file set) and a `[hashes]` table = the
@@ -52,7 +52,7 @@ impl Cache {
 }
 
 /// The `cache.toml` path for a review id — beside `baton.toml`/`lock` in the
-/// parent tree's gitignored state subtree (§6/§9).
+/// resolved tree's gitignored state subtree (§6/§9).
 fn cache_path(root: &Path, id: u32) -> PathBuf {
     state_dir(root, id).join("cache.toml")
 }

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e528-5035-73f2-8de9-ff7f53020520"
+recorded_at = "2026-09-27T23:16:59.573478166Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-269 PHASE-06: planner assumed confined worker; memory work misassigned"
+detail = "Planner split PHASE-06 into worker file edits and orchestrator memory verbs, assuming a confined worker refused memory verbs. capsule-workers run unconfined in the main tree, and the orchestrator must not author content; the orchestrator had to re-scope the brief. The planner contract should state the worker's confinement."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

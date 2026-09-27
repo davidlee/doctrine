@@ -6,7 +6,7 @@ status = "active"
 title = "Dispatch mechanics — funnel model and mid-operation traps"
 summary = "Orientation for dispatch/worktree funnel mechanics: read dispatch-mechanics.md for the model, retrieve trap memories mid-operation"
 created = "2026-07-04"
-updated = "2026-07-04"
+updated = "2026-09-27"
 
 [scope]
 paths = [".doctrine/dispatch-mechanics.md"]
