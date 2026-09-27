@@ -28,12 +28,20 @@ Promoted from `IMP-501`.
 
 ## Scope & Objectives
 
-1. **Ranked retrieval over observations.** Observation records join
-   `doctrine search`'s BM25 corpus, so one ranked query reaches prior friction
-   alongside entities.
+1. **Ranked retrieval over observations.** Observation records become reachable
+   from a ranked query alongside entities, so prior friction surfaces without
+   hand-reading the ledger. *Which* surface carries the ranking — the federated
+   `doctrine search` entry point, or the observation read surface itself — is
+   `OQ-6`; research (`research.md` `F-2`/`F-3`) shows the two answers carry
+different governance work.
 2. **Derived corroboration count.** A read-time projection — how many active
    observations share a subject — surfaced where an observation is read. Derived,
-   never authored.
+   never authored. **Prerequisite, from research:** the corpus carries no subject
+   signal (`related_observations` is populated in 0 of 699 records), so "subject"
+   must be defined before anything can be counted; the grouping key is most
+   plausibly derived from objective 1's ranked read, which couples the two
+   objectives more tightly than first scoped. See `research.md` `F-1` and
+   design-input delta 3.
 
 These are one change: both need the same corpus identity answer and both hinge on
 the same `DEC-030` boundary question. If design triage splits them (`R1`, `OQ-1`),
@@ -56,13 +64,17 @@ the ranked read ships first.
 ## Affected surface
 
 - `src/search.rs` — corpus construction, `KindSelector`, the per-entity `LexDoc`
-  build; the source-selection seam.
+  build; the source-selection seam. Research: no source abstraction exists here
+  (`src/search.rs:338-346`), and the output layer drops any hit with no catalog
+  entity (`src/search.rs:411-413`).
 - `src/observation/query.rs` — the Boolean matcher, to be kept as the collection
   interface or superseded by the ranked path (`OQ-3`).
-- `src/observation/wire.rs` — `CorrelationFacet.related_observations`, the
-  corroboration substrate.
-- `src/lexical.rs` — `Bm25Ranker` reuse; no new ranker.
-- `src/listing.rs` — the results table's identity column (`OQ-4`).
+- `src/observation/wire.rs` — `CorrelationFacet.related_observations`: **empty in
+  the whole corpus** (0/699), so it is not a usable grouping key as it stands.
+- `src/lexical.rs` — `Bm25Ranker` reuse; no new ranker. Research: corpus-agnostic,
+  reusable unchanged, but with no per-source weighting in the trait contract.
+- `src/listing.rs` — the results table's identity column (`OQ-4`); no identity
+  primitive exists, the first column is identity by convention only.
 
 ## Risks & assumptions
 
@@ -84,15 +96,36 @@ the ranked read ships first.
 ## Open questions
 
 - **OQ-1** — Does a derived read-time count stay inside `DEC-030`'s boundary ("V1
-  does not provide aggregation, counts or grouping")? If it needs its own decision,
-  that is a Revision (`ADR-013`) of `DEC-030`; `SPEC-028`'s "without embedding
-  aggregation or reporting policy" is the second surface to reconcile.
+  does not provide aggregation, counts or grouping")? Research answers *outside as
+  written, inside the reserved space*: `DEC-030` routes the excluded concerns to "a
+  follow-up capability" and sanctions analytical consumers over the collection
+  interface. **Not a Revision** — the `revises` rule admits only
+  `{SPEC,PRD,REQ,ADR,POL,STD}`, so a `DEC` is off-target; the vehicles are a new
+  `DEC` superseding `DEC-030`, an in-place `knowledge edit`, or no authoring (the
+  `SL-137` precedent). What remains open is the **scope** of that forward decision:
+  it must cover both objectives, and it must define the count's *semantics* — what
+  a subject is, whether retracted observations count, whether the number may
+  filter (`DEC-030` left all of that undefined).
+- **OQ-6** — Which surface carries objective 1's ranking? Federated
+  `doctrine search` (ride `SPEC-026`'s search-provider seam — `REQ-377` — and amend
+  `SPEC-026`'s corpus set) or the observation read surface (amend `DEC-051`'s
+  "Boolean, deterministic, and unranked" and `REQ-408` AC3's "without aggregation,
+  relevance ranking")? Research shows these are different governance work, not two
+  designs of one thing.
 - **OQ-2** — Does the observation corpus reuse `Bm25Ranker` unchanged, or does the
-  envelope need per-field weighting (summary vs detail vs facets)?
+  envelope need per-field weighting (summary vs detail vs facets)? Research answers
+  *structurally no weighting is available*: the trait fits one `avgdl`/IDF over
+  whatever corpus it is handed, so per-source weighting needs a new trait shape, not
+  a parameter. That is an argument for per-provider ranking (`OQ-6`) over one merged
+  corpus.
 - **OQ-3** — Is the Boolean collection interface kept alongside the ranked path, or
-  replaced? Two matchers over one corpus is the duplication this repo bans.
+  replaced? Two matchers over one corpus is the duplication this repo bans. Research
+  leans *keep both* — `DEC-051` binds the Boolean one on the observation surface,
+  and `REQ-377` puts a provider in front of each corpus rather than replacing one.
+  Not settled; design owns it.
 - **OQ-4** — Hit identity in the results table: uid, subject, or a synthesised
-  handle.
+  handle. Research sharpens the failure: today an id with no catalog entity is
+  silently dropped, so an identity gap presents as an empty result set.
 - **OQ-5** — Does this slice need `IMP-154`, or does the observation source land
   independently and leave `IMP-154` for loose documents?
 
@@ -109,7 +142,7 @@ the ranked read ships first.
 
 ## Follow-Ups
 
-Pre-design research round (`/research`) is the next act: it must establish how
-`related_observations` is actually populated (`A2`/`R2`), the current
-`kind_lex_doc`/`LexDoc` build shape in `src/search.rs`, and the `DEC-030` count
-boundary's governance reach.
+Pre-design research round is **complete** — `research/` (`research.md` +
+`raw/`), distilled from two threads and verified. Design consumes the ✓ rows of
+`research.md` before the scope card's own framing, which research partly
+supersedes (`F-1`, `F-2`, design-input deltas 1–3).
