@@ -1,0 +1,65 @@
+# Implementation plan for SL-272 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-272"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]]
+id        = "PHASE-01"
+name      = "Refusals"
+objective = "Close ISS-482 and IMP-499 (design sec-2): a finding created with blocking null is refused on the direct and the delegated-proposal route via Batch::validate, the payload contract publishes the rule as Presence::OptionalNullRefused, and SubmissionExpired names a remedy that checks current state before any resubmission."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-272 design locked (run revision 30) and slice status is ready." },
+  { id = "EN-2", text = "doctrine check gate green on the starting tree." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Refusal::FindingBlockingNull exists with the design sec-2 wording; Declaration::finding_blocking_null is called by Batch::validate after inert_at_state; finding_blocks and nulled_keys docs corrected (the RV-389 F-18 premise removed)." },
+  { id = "EX-2", text = "A direct apply of a new finding with blocking null is refused and leaves the snapshot byte-identical; blocking true and an omitted key still land blocking and non-blocking; a held finding's null keeps its InertAtState refusal." },
+  { id = "EX-3", text = "A delegation.propose carrying a new finding with blocking null is refused and stores no proposal; a_proposal_may_send_a_findings_blocking_null is replaced by its inversion." },
+  { id = "EX-4", text = "Presence::OptionalNullRefused renders the finding-home blocking row as optional with null refused; install/design-payload-contract.md regenerated via regen_payload_contract_writes_the_shipped_file and the published-contract pin green." },
+  { id = "EX-5", text = "SubmissionExpired's text states the history cannot say whether the original landed and directs a check of current run state before resubmitting only what is absent, at the current revision, under a fresh submission_id." },
+  { id = "EX-6", text = "doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "e2e direct route (design VT-1): new finding with blocking null refused naming true/false/omit, snapshot byte-identical; true and omitted still land", test_file = "tests/e2e_design_state.rs", keywords = ["a_findings_blocking_null_is_refused_at_creation", "blocking\": null"], waived = false },
+  { id = "VT-2", expects = "e2e proposal route (design VT-1): propose with a finding's blocking null is refused and no proposal is stored", test_file = "tests/e2e_design_delegation.rs", keywords = ["a_proposal_may_not_send_a_findings_blocking_null"], waived = false },
+  { id = "VT-3", expects = "e2e (design VT-2): a submission below the replay window is refused and the text names the check against current state; first test of SubmissionExpired", test_file = "tests/e2e_design_state.rs", keywords = ["a_submission_below_the_replay_window_names_its_remedy", "fresh `submission_id`"], waived = false },
+  { id = "VT-4", expects = "unit (design VT-6): the finding-home blocking row renders null refused; the shipped contract matches the renderer", test_file = "src/design_run/payload_contract.rs", keywords = ["OptionalNullRefused", "null refused"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Change rows"
+objective = "Close ISS-454 and ISS-488 (design sec-3): the displacement row is gated on a reportable set (live at prior, or recorded earlier in this apply), and a question re-word emits one term-free node_question_changed row."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete and committed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "apply seeds a reportable set from live_acts_before and threads it through record_act and record_declaration to admit_and_record, which emits act_invalidated only for a member and then inserts the act it recorded; invalidation_rows doc states why disjointness holds across revisions." },
+  { id = "EX-2", text = "ChangeEvent::NodeQuestionChanged (token node_question_changed) is in READABLE and EMITTABLE with empty payload_terms; declare_node emits it on its single create-or-update path when the resolved question differs from the held one; the stale state-not-delta comment at the re-word site points to DEC-335." },
+  { id = "EX-3", text = "every_event_fixture re-words a node, so the REQ-478 roster test covers the new event." },
+  { id = "EX-4", text = "doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "unit (design VT-3): the four-case table of design sec-3 over run_with_a_map, counting act_invalidated and act_recorded, plus the ISS-367 positive control", test_file = "src/design_run/run.rs", keywords = ["a_displaced_corpse_reports_no_second_death", "a_double_acceptance_reports_the_first_recordings_death"], waived = false },
+  { id = "VT-2", expects = "unit (design VT-4): a re-word emits exactly one node_question_changed; same text emits none; creation emits none; null emits only over a non-empty question", test_file = "src/design_run/run.rs", keywords = ["a_reworded_question_emits_one_row", "NodeQuestionChanged"], waived = false },
+  { id = "VT-3", expects = "e2e (design VT-5): every_material_event_kind_persists_a_change_row red on adding the variant, green once every_event_fixture re-words a node", test_file = "tests/e2e_design_state.rs", keywords = ["every_material_event_kind_persists_a_change_row", "node_question_changed"], waived = false },
+]
+specs        = []
+requirements = []
