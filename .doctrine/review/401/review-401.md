@@ -47,7 +47,7 @@ Standing risks:
 
 - **Coverage gap** (F-3): the check reads the current pass once, at lock.
   Majors left open past lock, superseded passes and post-lock dispositions
-  escape it.
+  escape it. Owner chose follow-up: IMP-498, sequenced after CHR-082.
 - **Stale served binary** (F-4): until the PATH doctrine is rebuilt, agents see
   no `--route` at all, and CHR-082's build floor holds every eligible slice.
 - **Provisional axis** (DEC-268): if CHR-082 kills RFC-026 P10, the check and

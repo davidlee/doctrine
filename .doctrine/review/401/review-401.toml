@@ -8,6 +8,14 @@ title = "reconciliation review of SL-270"
 facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "auditor"
 responder = "responder"
+rounds_base = 15
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Conformance audit of SL-270 at 7f7667b7f: code vs design sec-2/sec-3, VT-1..VT-7, VA-1 sweep re-run, slice conformance, check gate green, RV-400 carried findings; brief written"
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-270"
@@ -32,10 +40,12 @@ response = "Governance lags the shipped code, as planned. Reconciliation Brief (
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Lock check covers less than the trial counts; long-term behaviour undecided (RV-400 F-1 carry)"
 detail = "Expected (design sec-6, owner 2026-09-27): audit decides whether leaving open majors at lock, findings on superseded passes, and findings disposed after lock outside the route-presence check is the wanted long-term behaviour, or needs a backlog item. Observed: unrouted_severe (src/review_ledger/gate.rs) reads the current pass once, at lock, disposed findings only — as designed. A severe finding answered after lock, or left open past it (reviewing.md permits this), can still be answered bare. DEC-334 reports these apart for the trial; nothing owns the question beyond the trial."
+disposition = "follow-up"
+response = "Owner decision 2026-09-27: follow-up. IMP-498 (sequenced after CHR-082) owns it: if RFC-026 P10 survives the trial, decide whether to enforce route presence at dispose/amend for severe design-facet findings. Until then the gap stays as designed, and DEC-334 reports the escapes apart. This is a code-behaviour question, not a spec or governance edit, so follow-up is the right route."
 
 [[finding]]
 id = "F-4"
