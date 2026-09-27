@@ -30,17 +30,29 @@ intent = "scope-relevant"
 selector = "scripts/oubliette.sh"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "src/reserve.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/design.rs"
+intent = "scope-relevant"
+
 [[relation]]
 label = "fulfils"
 target = "IMP-240"
 
 [[relation]]
 label = "fulfils"
-target = "ISS-484"
+target = "IMP-190"
 
 [[relation]]
 label = "fulfils"
-target = "IMP-190"
+target = "ISS-279"
+
+[[relation]]
+label = "fulfils"
+target = "ISS-277"
 
 [[relation]]
 label = "governed_by"
@@ -53,6 +65,10 @@ target = "ADR-007"
 [[relation]]
 label = "related"
 target = "RV-398"
+
+[[relation]]
+label = "related"
+target = "RFC-032"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis. Slices carry no typed STRUCTURAL
