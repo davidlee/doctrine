@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e27c-f424-7891-bc0d-fd0c722c3102"
+recorded_at = "2026-09-27T10:50:34.916600679Z"
+kind = "friction"
+summary = "research skill: detached pi agents killed at tool-call end, silent empty output"
+detail = "Launched pi-research/pi-scout via ( cmd & ) inside one Bash call; processes died when the call returned, leaving 0-byte raw files and empty .err. A pgrep wait loop exited immediately. Fix: launch with harness run_in_background and wait, not detached subshells."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
