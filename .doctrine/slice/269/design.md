@@ -252,7 +252,41 @@ command tier (`src/commands/cli.rs:1807`) as the 11 sites already do. This adds 
 declared `integrity → reserve` edge, both engine tier and acyclic (`reserve` does
 not reach `integrity`); `.doctrine/adr/001/layering.toml:89` is updated.
 
-Out of scope: `scan_danglers` ignores `.toml` edges (ISS-496).
+### Dangler report (ISS-292 faults 1, 3, 4)
+
+After the move, `reseat` prints the inbound citations of the old ref and exits
+non-zero. `scan_danglers` (`src/integrity.rs:415`) is meant to be the rewrite
+worklist, but three of its faults make it unusable as one:
+
+| fault | now | target |
+|---|---|---|
+| structured tier invisible | globs `.doctrine/**/*.md` only, so relation edges, memory `[[source]]` refs and `plan.toml` criteria are missed | globs `*.md` and `*.toml` under `.doctrine/` |
+| alias symlinks double-count | the glob walks `NNN/` and its `NNN-slug` alias, reporting each file twice | each path is canonicalised and de-duplicated before matching |
+| disposability defeated by a symlink | `is_disposable_prose` tests path components, so `slice/NNN/phases/…` (a symlink into `.doctrine/state/`) reads as authored | the test runs on the canonical path |
+
+The whole-token matcher (`line_cites`) is unchanged; a TOML value such as
+`ref = "RV-323"` matches as a token. `is_disposable_prose` itself is unchanged —
+`doctor_checks` shares it; only `scan_danglers` passes it the canonical path.
+
+The report states its bound, so it is not read as exhaustive:
+
+```text
+inbound citations to RV-320 in .doctrine/ (*.md, *.toml) — rewrite by hand; source outside .doctrine/ is not scanned:
+```
+
+Still out of scope, in ISS-292: scanning outside `.doctrine/` (fault 2), slash-
+compressed id lists such as `DEC-099/101` (fault 5), and rewriting structured
+edges automatically.
+
+### Review runtime state
+
+A review's runtime dir (`.doctrine/state/review/<NNN>/`, the turn baton) is a
+pure cache keyed by id. `reseat` does not move it: the reseated RV starts cold and
+rebuilds its baton on next use. A stale baton at the old id is harmless unless
+that id is allocated again — possible only for an RV minted before this slice,
+which holds no reservation ref — and then the first turn heals it and asks for a
+re-run (the entry hash check, ADR-007 D-C2). Removing it would need per-kind
+runtime knowledge in `reseat` that nothing else requires.
 
 <!-- doctrine:section sec-4 -->
 ## Review admission
@@ -358,7 +392,8 @@ the audit no longer moves.
 - **ISS-277** (reseat strict slug), **ISS-483** (non-hermetic reserve tests),
   **ISS-494** and IMP-240 defect 2 (review refuses capsule / solo trees),
   **IMP-190** (where an audit can run): fulfilled.
-- **ISS-496** (reseat dangler scan ignores `.toml` edges): unchanged, out of scope.
+- **ISS-496** (dangler scan ignores `.toml` edges): fulfilled; it is ISS-292's fault 1.
+- **ISS-292** (dangler report unusable as a worklist): partly fulfilled — faults 1, 3, 4. Faults 2 and 5 and automatic structured-edge rewrite stay open there.
 
 ### Memories
 
@@ -393,7 +428,7 @@ restates the fork refusal and would otherwise be left false.
 | `src/entity.rs` | `claim_fresh_id` split: `claim_next_id` (pick, claim, retry) + the existing midpoint/build/cleanup; test-only `Claim::arbiter() -> Arbiter` replaces `is_remote()` |
 | 11 fresh-id sites (`backlog`, `concept_map`, `knowledge`, `slice`, `spec`, `review/verbs`, `requirement`, `governance`, `revision`, `rec` ×2) | pass the `Kind`, not its prefix |
 | `src/meta.rs` | `SlugOnly`, `read_slug`; `read_id` and `read_slug` share one private reader |
-| `src/integrity.rs` | `run_reseat`: lenient slug read; `prompt` param; destination via `claim_next_id` or scan-checked single claim; commit rename over the claimed empty dir; refusals reordered before the claim |
+| `src/integrity.rs` | `run_reseat`: lenient slug read; `prompt` param; destination via `claim_next_id` or scan-checked single claim; commit rename over the claimed empty dir; refusals reordered before the claim; `scan_danglers` globs `*.md` + `*.toml`, canonicalises and de-duplicates paths, tests disposability on the canonical path, and prints its bound |
 | `src/commands/cli.rs` | pass `install::prompt_confirm` to `run_reseat` |
 | `src/review/turn.rs` | `admit_review(worker)`; `resolve_review_root` drops the branch-shape test |
 | `src/review/prime.rs`, `src/mcp_server/tools.rs` | comment / tool description text |
@@ -433,6 +468,10 @@ worktrees**, each able to hold entity dirs, and no remote. The multi-clone
 | `--to` onto an id held as a sibling tree's dir, or as a local ref | refused, source untouched |
 | default reseat in a clone with a sibling tree | destination skips the sibling's ids |
 | refusal on live phase state | leaves no claim behind |
+| dangler scan over a `.toml` citation (`[[source]] ref`) | reported |
+| dangler scan through a `NNN-slug` alias | each file reported once |
+| dangler scan through the `phases` symlink | runtime phase sheet not reported |
+| existing `scan_danglers_skips_disposable_prose` | green unchanged |
 
 ### Review admission (`src/review/tests.rs`)
 
@@ -476,4 +515,7 @@ Worker-process cases drive the predicate with the bool, not by setting
 - **`rename` over an empty dir is POSIX behaviour.** `reseat`'s commit point
   relies on it; a platform without it would fail the rename loudly, not corrupt
   state.
+- **Dangler report still bounded.** Citations outside `.doctrine/` and in
+  slash-compressed id lists are still missed (ISS-292 faults 2, 5); the report
+  now says so in its header.
 

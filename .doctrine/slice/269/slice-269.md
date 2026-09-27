@@ -38,7 +38,9 @@ allocating (ISS-484, commit `120b8b321`).
    dirs, covering ids minted before D9 (DEC-337).
 2. **D9 alongside — `reseat`** reads the alias slug through the lenient reader
    (ISS-277), and claims its destination id through the reservation backend so
-   its pick sees sibling trees.
+   its pick sees sibling trees. Its dangler report scans `.toml` as well as
+   `.md`, collapses alias symlinks, and tests disposability on the resolved path
+   (ISS-292 faults 1, 3, 4; ISS-496).
 2a. **Reservation hygiene.** The fallback env opt-in is read once at the shell
    edge and passed in, so reserve tests are hermetic (ISS-483); the TTY
    fallback prompt names the persistent levers and says "this clone only".

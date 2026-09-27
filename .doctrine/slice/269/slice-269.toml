@@ -151,6 +151,15 @@ label = "fulfils"
 target = "ISS-483"
 
 [[relation]]
+label = "fulfils"
+target = "ISS-496"
+
+[[relation]]
+label = "fulfils"
+degree = "partial"
+target = "ISS-292"
+
+[[relation]]
 label = "governed_by"
 target = "POL-002"
 
