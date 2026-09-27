@@ -208,12 +208,86 @@ fn codex_dry_run_says_would_write_and_writes_nothing() {
     let root = dir.path();
 
     let out = boot_install(root, "codex", true);
-    // The assertion scopes to the MCP line: the pre-existing hook activation
-    // notice still says "wrote" under dry_run until PHASE-03 flips it.
     assert!(out.contains(WOULD_LINE), "dry-run codex MCP line: {out}");
     assert!(
         !root.join(CONFIG_REL).exists(),
         "dry run writes no codex config"
+    );
+    // After PHASE-03 the activation notice also says "would write", so NO dry-run
+    // output line contains "wrote" at all.
+    assert!(out.contains("would write .codex/hooks.json"), "{out}");
+    assert!(
+        !out.contains("wrote"),
+        "no dry-run line says 'wrote': {out}"
+    );
+}
+
+#[test]
+fn codex_probe_fires_on_a_hook_write_even_when_the_mcp_entry_is_current() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    boot_install(root, "codex", false);
+    // Keep the config current, force a fresh hook write.
+    fs::remove_file(root.join(".codex/hooks.json")).unwrap();
+
+    let out = boot_install(root, "codex", false);
+    assert!(
+        out.contains("To activate:"),
+        "the hook write fires the notice/probe: {out}"
+    );
+    assert!(
+        !out.contains("MCP server registration"),
+        "the MCP entry was already current: {out}"
+    );
+    assert!(
+        !out.contains("not active until you trust"),
+        "the activation notice already carries the trust step: {out}"
+    );
+}
+
+#[test]
+fn codex_probe_does_not_fire_when_only_the_mcp_entry_refreshed() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    boot_install(root, "codex", false);
+    // Keep the hooks current, force the MCP leg to write.
+    fs::remove_file(root.join(CONFIG_REL)).unwrap();
+
+    let out = boot_install(root, "codex", false);
+    assert!(out.contains(WROTE_LINE), "the MCP leg wrote: {out}");
+    assert!(
+        !out.contains("To activate:"),
+        "a hook-clean run prints no activation notice, so no probe: {out}"
+    );
+    assert!(
+        out.contains("not active until you trust"),
+        "the trust caveat prints once, since the notice did not: {out}"
+    );
+}
+
+#[test]
+fn codex_probe_degrades_to_a_named_unknown_with_a_real_runner() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+
+    // The REAL CaptureRunner: an empty PATH makes `codex` unresolvable, so the
+    // probe fails and the notice must carry a non-empty Unknown(reason).
+    let out = common::doctrine_cmd(root)
+        .args(["boot", "install", "--agent", "codex", "-y", "-p"])
+        .arg(root)
+        .env("PATH", "")
+        .output()
+        .expect("spawn doctrine");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8(out.stdout).expect("utf8 stdout");
+    assert!(stdout.contains("To activate:"), "{stdout}");
+    assert!(
+        stdout.contains("Failed to run 'codex'"),
+        "the Unknown reason names the failure: {stdout}"
     );
 }
 
@@ -234,6 +308,10 @@ fn claude_only_run_prints_the_invocation_once_and_no_codex_line() {
     assert!(
         !out.contains(".codex/config.toml"),
         "a Claude-only run emits no codex line: {out}"
+    );
+    assert!(
+        !out.contains("To activate:") && !out.contains("not active until you trust"),
+        "a Claude-only run emits neither the hooks notice nor the codex trust caveat: {out}"
     );
     assert!(
         !root.join(CONFIG_REL).exists(),
