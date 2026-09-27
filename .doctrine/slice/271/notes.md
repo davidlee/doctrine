@@ -102,6 +102,27 @@ would focus on what the fixes themselves introduced or left open:
 No further pass is required to lock: every one of these is a refinement of an
 accepted decision (DEC-323/325/328/329/332), not an open question.
 
+### Second pass (RV-399 rounds 2, 2026-09-27) — outcome and what a third would probe
+
+A second fresh pass attacked the fixes rather than the design, and found 17
+turther issues — including a genuine compile blocker (`concat!` cannot compose
+over `const`s) and seven majors: the disclosure predicate was harness-blind (a
+Claude install would have probed codex), the ownership formula contradicted its
+own edge table on extra keys/args, `args` indexing could panic on a short entry,
+the wrapper pattern was whitespace-fragile and duplicated `is_doctrine_program`,
+"a baked abspath is foreign" contradicted the pattern that accepted one, the
+shared classifier was never wired into the Claude arm, and `CommandRunner` had no
+concrete implementation while the impact table missed five call sites. All are
+fixed; the Claude `plan_mcp` refactor is now explicit with the existing suite as
+the behaviour-preservation proof.
+
+A third pass would probe: the `normalise` + quoted-span extraction against
+pathological lines; whether the strict "extra key ⇒ foreign" rule surprises a
+user who adds `enabled = false` (a disclosure question, not a correctness one);
+the `plan_mcp` refactor's behaviour preservation against hand-built JSON edge
+cases the existing suite may not cover; and the `CaptureRunner` default wiring at
+both production call sites.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>

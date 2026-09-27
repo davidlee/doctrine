@@ -106,21 +106,26 @@ SPEC-011 Revision is owed at close (see §6, §9).
 <!-- doctrine:section sec-4 -->
 ## 4. Guiding Principles
 
-1. **Portable, not baked.** The entry names no machine path. The override that a
-   host needs rides `DOCTRINE_BIN`, and where a shell is required to read it, the
+1. **Portable, not baked.** The entry names no machine path. The override a host
+   needs rides `DOCTRINE_BIN`, and where a shell is required to read it, the
    dependency is declared rather than assumed.
 2. **The comparator tracks what is written.** A no-op branch compares the stored
    entry against the constants the installer emits, never against a
    hand-spelled variant — the failure mode this codebase has already paid for.
 3. **Judgement shared, formats bespoke.** The classification of an existing entry
-   (absent / ours-current / ours-stale / foreign / malformed) is one pure function
-   both arms call. Parsing, mutating and rendering stay per-arm.
-4. **Never clobber, never pretend.** A file doctrine cannot interpret is left
-   alone and a snippet is printed; a degraded read names its reason; a skip is
-   reported as a skip, distinct from nothing-to-do.
-5. **Impurity at the edge.** The planner is pure over text; the file read, the
+   (absent / ours-current / ours-stale / foreign) is one pure function, and
+   **both arms call it**: `plan_codex_mcp` from the start, and `plan_mcp`
+   refactored onto it, with the existing `plan_mcp_*` suite unchanged as the
+   behaviour-preservation proof. Parsing, mutating and rendering stay per-arm.
+4. **Strict ownership.** An entry is ours only in the exact emitted shape. A
+   doctored variant — an extra key, an extra argument, a different program — is
+   foreign and left alone; doctrine heals its own output, never a user's edit.
+5. **Never clobber, never pretend.** A file doctrine cannot interpret is left
+   alone and a snippet is printed; a degraded read names its reason; a soft
+   failure is disclosed; no line claims activation.
+6. **Impurity at the edge.** The planner is pure over text; the file read, the
    atomic write and the harness probe are shell seams, injectable so tests need
-   neither a real codex nor a real file.
+   neither a real codex nor a real config file.
 
 <!-- doctrine:section sec-5 -->
 ## 5. Proposed Design
@@ -133,13 +138,14 @@ refresh and receives the resulting report.
 
 ```mermaid
 flowchart TD
-  install["boot install"] --> wire["wire()"]
+  install["boot install"] --> wire["wire(runner)"]
   wire --> refresh["install_refresh(Codex)"]
   refresh --> hooks["codex hook merge<br/>.codex/hooks.json"]
   refresh --> mcp["install_codex_mcp<br/>.codex/config.toml"]
   refresh --> pi["pi extension legs"]
   mcp --> plan["plan_codex_mcp (pure)"]
   plan --> classify["classify_mcp_entry (pure, shared)"]
+  monkey["plan_mcp (Claude, refactored)"] --> classify
   mcp --> write["toml_edit + write_atomic"]
   refresh --> report["RefreshReport.mcp"]
   report --> wire
@@ -147,35 +153,35 @@ flowchart TD
   wire --> out["stdout: wrote-line, trust caveat, hooks warning"]
 ```
 
-The classification function is the only shared element with the Claude leg; it
-takes booleans, returns a class, and knows nothing about JSON or TOML.
+The classification function is the one shared element between the arms: it takes
+booleans, returns a class, and knows nothing about JSON or TOML.
 
 ### 5.2 Interfaces & Contracts
 
-New constants beside `MCP_REL` (STD-001). The emitted table key references the
-existing `MCP_SERVER_KEY`; the wrapper is composed with `concat!` over named
-fragments where possible, and a test pins the copies together where `const`
-cannot compose them:
+New constants beside `MCP_REL` (STD-001). `const` cannot compose strings, so the
+constants each hold their own literal and **the test pins them together**:
 
 ```rust
 const CODEX_CONFIG_REL: &str = ".codex/config.toml";
 const CODEX_MCP_TABLE: &str = "mcp_servers";
+const CODEX_MCP_SERVER_KEY: &str = "doctrine";   // pinned == MCP_SERVER_KEY
 const CODEX_MCP_SHELL: &str = "sh";
 const CODEX_MCP_SHELL_FLAG: &str = "-c";
 const CODEX_MCP_SERVE_ARGS: &str = "serve --mcp";
-const CODEX_MCP_WRAPPER: &str = concat!("exec \"", PORTABLE_EXEC, "\" ", CODEX_MCP_SERVE_ARGS);
+const CODEX_MCP_WRAPPER: &str = "exec \"${DOCTRINE_BIN:-doctrine}\" serve --mcp";
 const CODEX_MCP_ENV: &str = "DOCTRINE_BIN";
 const CODEX_HOOKS_FEATURE: &str = "hooks";
 ```
 
-Shared classification — **total over parsed input**, with no `Malformed` arm:
+Shared classification — **total over parsed input**, with no `Malformed` arm and
+no refusal channel:
 
 ```rust
 pub(crate) enum McpEntryClass { Absent, OwnedCurrent, OwnedStale, Foreign }
 
-/// Absent: the key is missing (then `owned`/`current` are false).
-/// OwnedCurrent: owned && current. OwnedStale: owned && !current.
-/// Foreign: present && !owned. Malformed is NOT here — it is a parse outcome,
+/// `owned` is derived by the caller FROM presence, so `Absent` with `owned` is
+/// unreachable by construction; the function maps the reachable combinations and
+/// has no error path of its own. Malformed is NOT here — it is a parse outcome,
 /// decided by each planner before classification (the `plan_mcp` sentinel shape).
 fn classify_mcp_entry(present: bool, owned: bool, current: bool) -> McpEntryClass;
 ```
@@ -183,63 +189,76 @@ fn classify_mcp_entry(present: bool, owned: bool, current: bool) -> McpEntryClas
 Codex planner and shell. Malformed is planned, not classified:
 
 ```rust
-/// Malformed covers: unparseable TOML, `mcp_servers` not a table, the
-/// `doctrine` entry not a table. In that case `new_toml` is None and the file is
-/// never opened for writing.
+/// Malformed covers: unparseable TOML, `mcp_servers` not a table, the `doctrine`
+/// entry not a table. In that case `new_toml` is None and the file is never
+/// opened for writing. No path indexes `args` without a length check first.
 struct CodexMcpPlan { class: Result<McpEntryClass, Malformed>, new_toml: Option<String> }
 
 fn plan_codex_mcp(existing_toml: Option<&str>) -> CodexMcpPlan;
 fn install_codex_mcp(root: &Path, dry_run: bool) -> anyhow::Result<RefreshOutcome>;
+
+/// The manual snippet for the fallback path — the `[mcp_servers.doctrine]`
+/// table in TOML, never the JSON block `mcp_fallback_snippet` emits.
+fn codex_mcp_fallback_snippet() -> String;
 ```
 
-Ownership is stated as a formula, not prose. With `line = args[1]` when
-`command == CODEX_MCP_SHELL && args[0] == CODEX_MCP_SHELL_FLAG`:
+Ownership is strict and stated as a formula. With `t` the entry table:
 
 ```text
-owned   = command == "sh" && args[0] == "-c" && is_doctrine_wrapper_line(line)
-current = owned && env_vars contains CODEX_MCP_ENV && line == CODEX_MCP_WRAPPER
+owned = t has keys ⊆ {command, args, env_vars}
+     && t.command == "sh"
+     && t.args.len() == 2 && t.args[0] == "-c"
+     && is_doctrine_wrapper_line(normalise(t.args[1]))
+current = owned
+     && t.env_vars is an array containing CODEX_MCP_ENV
+     && normalise(t.args[1]) == CODEX_MCP_WRAPPER
 
-is_doctrine_wrapper_line(l) = l starts with "exec " && the quoted program is
-  PORTABLE_EXEC or a path whose file_name is "doctrine" && l ends with
-  " serve --mcp"
+normalise(l) = l.trim() with internal whitespace runs collapsed to one space
+is_doctrine_wrapper_line(l) = l == format!("exec \"{}\" {}", program, CODEX_MCP_SERVE_ARGS)
+    where `program` is extracted from the single quoted span and must BE
+    PORTABLE_EXEC (the abspath arm is deliberately absent — this leg has only
+    ever emitted the portable form)
 ```
 
-`owned && !current` is `OwnedStale` — which is exactly the wrapper whose
-`env_vars` is missing or short, or whose wording is from an earlier doctrine. The
-predicate owns **only** the wrapper shape: a plain `command = "doctrine"`, a
-`/bin/sh` executable, and a baked abspath are deliberately **foreign** (a
-hand-written entry may be deliberate; doctrine has never emitted these forms from
-this leg), so they are left untouched with a printed snippet.
+The length check precedes every index: `args = []` and `args = ["-c"]` are
+`Foreign`, never a panic. Extra keys or a third argument make the entry foreign —
+doctrine heals its own output, never a user's edit. `owned && !current` is
+`OwnedStale`: a wrapper missing the whitelist, or carrying an earlier wording,
+refreshes.
 
-The probe, split pure/imperative, with a capture-capable seam that the existing
-installer runner cannot provide (it inherits stdio):
+The probe, split pure/imperative, over a capture-capable seam that the existing
+installer runner cannot provide (it uses `.status()` and inherits stdio):
 
 ```rust
+struct Capture { success: bool, stdout: String, stderr: String }
+
+/// The seam `wire()` takes as a parameter. `install::CaptureRunner` is the
+/// default implementation (Command::output()); tests inject a fake.
+trait CommandRunner { fn run_capture(&self, program: &str, args: &[&str]) -> anyhow::Result<Capture>; }
+
 enum HooksState { Enabled, Disabled, Unknown(String) }
 
 /// Pure. The row whose first token is `hooks` contributes its final token:
 /// "true" -> Some(true), "false" -> Some(false); no row or any other shape -> None.
+/// `stdout` is read regardless of `success`: a failed command that still printed
+/// a parseable row is a usable answer, and `stderr` is available for the reason.
 fn parse_codex_features(stdout: &str) -> Option<bool>;
-
-/// The seam `wire()` takes as a parameter. Lives beside the existing installer
-/// runner; the shell supplies the default implementation and tests inject a fake.
-trait CommandRunner { fn run_capture(&self, program: &str, args: &[&str]) -> anyhow::Result<String>; }
-
 fn codex_hooks_state(run: &dyn CommandRunner) -> HooksState;
 ```
 
 `install_refresh`'s Codex arm replaces `mcp: RefreshOutcome::None` with
-`mcp: install_codex_mcp(root, dry_run)?`.
-
-**Reporting.** `wire()` selects the reported file from the harness it holds
-(`Harness::Codex => CODEX_CONFIG_REL`, otherwise `MCP_REL`) and carries the full
-rendered invocation in `Wired`/`Refreshed`, so neither arm re-appends arguments.
-The codex messages state what was **written**, not that the harness has activated
-it:
+`mcp: install_codex_mcp(root, dry_run)?`. `wire()` gains the runner parameter and
+selects the reported file from the harness it holds (`Harness::Codex =>
+CODEX_CONFIG_REL`, otherwise `MCP_REL`), carrying the full rendered invocation so
+neither arm re-appends arguments. The codex messages state what was **written**,
+not that the harness has activated it:
 
 ```text
-registered MCP server in .mcp.json: <invocation>          (Claude, unchanged)
+registered MCP server in .mcp.json: <invocation>                    (Claude)
 wrote MCP server registration in .codex/config.toml: <wrapper line>
+would write MCP server registration in .codex/config.toml: <wrapper line>   (dry_run)
+an existing doctrine entry in .codex/config.toml was left untouched —
+register manually if it is not yours
 ```
 
 ### 5.3 Data, State & Ownership
@@ -258,13 +277,12 @@ env_vars = ["DOCTRINE_BIN"]
   parent table is absent the new table is appended at the document's end;
   otherwise it lands adjacent to `mcp_servers`, not at the end of the file.
 - **Preservation.** Unrelated keys, tables and comments are preserved: the edit
-  is narrow-path, not a typed round-trip. `[features]`, `[projects]`, user
-  comments and sibling servers survive; the claim is scoped to preservation, not
-  to byte-for-byte identity of the whole file.
-- **Ownership.** The installer owns the key `doctrine` under `mcp_servers` in the
-  single wrapper shape §5.2 defines. Everything else is user-owned: other keys,
-  other tables, and any `doctrine` entry that is not our wrapper (including the
-  naive plain-command form) are never modified.
+  is narrow-path, not a typed round-trip. The claim is scoped to preservation,
+  not to byte-for-byte identity of the whole file.
+- **Ownership.** Strict (§5.2): the exact emitted shape only. Other keys, other
+  tables, and any `doctrine` entry that is not our wrapper — including the naive
+  plain-command form, `/bin/sh`, a baked abspath, or our shape plus an extra key —
+  are user-owned and never modified.
 - **No `Baked` variant.** The entry is portable unconditionally, mirroring
   `plan_mcp`, which is likewise form-blind. This departs deliberately from the
   codex *hook* leg's hardcoded `Baked`: there is no tracking-status resolver to
@@ -276,26 +294,26 @@ env_vars = ["DOCTRINE_BIN"]
 
 ```mermaid
 sequenceDiagram
-  participant W as wire()
+  participant W as wire(runner)
   participant I as install_refresh (Codex arm)
   participant P as plan_codex_mcp (pure)
   participant F as .codex/config.toml
-  participant C as codex CLI (injected runner)
+  participant C as CommandRunner (install::CaptureRunner)
   W->>I: refresh(harness, root, exec, dry_run)
   I->>F: read (absent -> None)
   I->>P: plan_codex_mcp(existing)
   P->>P: parse -> classify -> render
   alt class is OwnedCurrent
-    Note over I: RefreshOutcome::None, no write
+    Note over I: RefreshOutcome::None, no write, no output
   else class is Absent or OwnedStale
     I->>F: write_atomic (skipped when dry_run)
-  else Err(Malformed)
+  else Err(Malformed) or Foreign
     Note over I: PrintedFallback + TOML snippet, file untouched
   end
   I-->>W: RefreshReport { mcp }
-  alt outcome is Wired or Refreshed, and not dry_run
+  alt h is Codex AND outcome is Wired or Refreshed AND not dry_run
     W->>C: codex features list (fail-soft)
-    C-->>W: stdout | error | absent
+    C-->>W: Capture { success, stdout, stderr }
     W->>W: print wrote-line + trust caveat; warn unless Enabled
   end
 ```
@@ -304,24 +322,27 @@ Ordering and disclosure rules:
 
 - The MCP leg is **independent** of the hook merge: it writes a different file,
   so no ordering guard is needed between them. The disclosure of a soft failure
-  is carried by `PrintedFallback` (the file was not written) as distinct from
-  `None` (already current); the outcome type is unchanged and the design adds no
-  variant for "did not attempt" — the existing pair already carries that
+  is carried by `PrintedFallback` (nothing was written) as distinct from `None`
+  (already current). The outcome type is unchanged; the design adds no
+  "did not attempt" variant, because the existing pair already carries the
   distinction.
 - A malformed file yields `PrintedFallback` with a TOML snippet and no write.
   Install continues and the run ends green: the leg's failure mode is disclosure,
-  not error (SPEC-011 REQ-186).
+  not error (SPEC-011 REQ-186). A foreign entry yields the same path with the
+  "left untouched" wording, and a repeat install produces the same stable line
+  rather than a fresh instruction.
 - **Exact disclosure predicate.** The probe and both riders fire iff
-  `matches!(mcp, Wired | Refreshed)` and `!dry_run`. The probe warns only when the
-  state is not `Enabled`: `Disabled` warns naming `[features] hooks = true`;
-  `Unknown(reason)` warns with the reason. Under `dry_run` no probe runs and the
-  line follows the existing planned-write convention; the trust caveat is not
-  printed for a write that did not happen.
-- The trust caveat states that codex loads project-scoped config only for
-  trusted projects and that an untrusted project's layer is skipped silently, so
-  a `Wired` report is a statement about the file, never about activation.
-- A second install over an unchanged file produces `RefreshOutcome::None` and no
-  write, and prints nothing.
+  `h == Harness::Codex && matches!(report.mcp, Wired | Refreshed) && !dry_run`.
+  The probe warns only when the state is not `Enabled`: `Disabled` warns naming
+  `[features] hooks = true`; `Unknown(reason)` warns with the reason. No probe
+  runs for a Claude install, and none under `dry_run`.
+- The trust caveat states that codex loads project-scoped config only for trusted
+  projects and that an untrusted project's layer is skipped silently, so a
+  `Wired` report is a statement about the file, never about activation.
+- Under `dry_run` both this line and the pre-existing hook activation notice say
+  **would write**; no output under `dry_run` contains "wrote".
+- A second install over an unchanged file produces `RefreshOutcome::None`, no
+  write, and no output.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -329,13 +350,14 @@ Ordering and disclosure rules:
 
 1. The written entry contains no host absolute path (POL-002 facets 1–2).
 2. The no-op comparator compares against the same constants the renderer uses.
-3. An entry doctrine does not own as its wrapper — including a hand-written plain
-   command — is never modified.
+3. An entry that is not exactly our emitted shape is never modified.
 4. A file that does not parse, or whose `mcp_servers` shape is not a table, is
    never rewritten.
-5. The leg's outcome is reported, and a soft failure is disclosed as such.
-6. No install path writes the user layer (`~/.codex/config.toml`).
-7. No output line claims activation; the report states what was written.
+5. No planner path indexes `args` without checking its length, and no input
+   aborts the install.
+6. The leg's outcome is reported, and a soft failure is disclosed as such.
+7. No install path writes the user layer (`~/.codex/config.toml`).
+8. No output line claims activation, and none says "wrote" under `dry_run`.
 
 **Assumptions** (probe-verified on codex 0.155.1 unless noted)
 
@@ -343,11 +365,11 @@ Ordering and disclosure rules:
   layer. Re-verification against the live reference is a follow-up (POL-003
   facet 2 records the seam as a version delta).
 - `sh` resolves through the PATH codex gives the server (its whitelisted
-  environment), **decided** rather than assumed away: the only shadowing vector
-  is a PATH entry containing the project directory, which the install caveat
-  names as a residual.
+  environment) — **decided**, not assumed away: the only shadowing vector is a
+  PATH entry containing the project directory, which the install caveat names as
+  a residual.
 - codex executes `command` literally and forwards only whitelisted env. The
-  installer can only assert the emitted string; the runtime fallback behaviour of
+  installer asserts only the emitted string; the runtime behaviour of
   `${DOCTRINE_BIN:-doctrine}` is codex's, and is not testable from doctrine.
 
 **Edge cases** the suite must pin
@@ -357,11 +379,12 @@ Ordering and disclosure rules:
 | file absent | file created (parent dir ensured), entry written, `Wired` |
 | file present, no `mcp_servers` | table added, siblings and comments intact |
 | entry present and current | `None`, no write, no output |
-| entry present, right command but `env_vars` missing/short | `Refreshed` |
-| entry is a wrapper from an earlier doctrine wording | `Refreshed` |
-| entry is a plain `command = "doctrine"` | `PrintedFallback`, file untouched |
-| entry uses `/bin/sh` or a baked abspath | `PrintedFallback`, file untouched |
-| entry with a different command, args, or extra keys | `PrintedFallback`, file untouched |
+| wrapper, right command, `env_vars` missing/short | `Refreshed` |
+| wrapper from an earlier doctrine wording or whitespace | `Refreshed` |
+| `command = "sh"`, `args = []` or `["-c"]` | `Foreign`, no panic, file untouched |
+| plain `command = "doctrine"` | `Foreign`, "left untouched" line, file untouched |
+| `/bin/sh`, or a wrapped baked abspath | `Foreign`, file untouched |
+| our shape plus an extra key or a third argument | `Foreign`, file untouched |
 | `mcp_servers` present but not a table | `PrintedFallback`, file untouched |
 | TOML does not parse | `PrintedFallback`, file untouched |
 | file carries `[features] hooks = true` and comments | both preserved |
@@ -372,23 +395,22 @@ Ordering and disclosure rules:
 ## 6. Open Questions & Unknowns
 
 None blocking. The five design questions IMP-111 carried are settled (§7). What
-remains is placement, observation, and two recorded follow-ups:
+remains is placement, observation, and recorded follow-ups:
 
 - **Where the shell declaration lands.** POL-002 facet 3 requires the `sh`
   dependency be named in README/install documentation. The site is a plan-level
   choice (which document, which wording), not a design question.
-- **The Revision's shape.** One Specification Revision introducing **two**
-  members — one retro-covering the shipped Claude `.mcp.json` arm, one for the
-  codex `mcp_servers` leg — with their durable `REQ` ids minted by the Revision.
-  The design deliberately names no doc-local membership label as if it were an
-  id.
-- **ADR-013 position.** The slice does not wait on that change: the Revision
-  retro-describes behaviour that ships here, so the slice carries no `needs REV`
-  anchor. Recorded rather than left implicit.
+- **The Revision's shape and timing.** One Specification Revision introducing
+  **two** members — one retro-covering the shipped Claude `.mcp.json` arm, one for
+  the codex `mcp_servers` leg — with their durable `REQ` ids minted by the
+  Revision. Phases do **not** wait on it; close requires it landed or a recorded
+  waiver (the ADR-013 obligation is discharged at the boundary that owns it).
+  The plan cites the ids only once minted, so it schedules the Revision before
+  the phase that must cite it.
 - **Post-write verification.** Whether a later phase adds a harness-side check
-  that the written table is the one codex reads (a `codex mcp get doctrine`
-  probe) is a follow-up, not part of this leg: the shape is a versioned seam
-  (POL-003 facet 2), and the report is worded to claim only what doctrine wrote.
+  that the written table is the one codex reads (`codex mcp get doctrine`) is a
+  follow-up, not part of this leg: the shape is a versioned seam (POL-003
+  facet 2), and the report claims only what doctrine wrote.
 - **`codex features list` scope.** Whether the output is cwd-sensitive is
   unverified; the probe treats unrecognised output as `Unknown`, so the answer
   cannot change the design.
@@ -425,75 +447,90 @@ owner-locked hook merge core rather than sitting beside it.
 
 | risk | why it bites | mitigation |
 |---|---|---|
-| Comparator/migration thrash | A no-op branch testing a form the renderer does not emit rewrites the file on every install — the SL-195 `F-1` failure. | The comparator reads the emitted constants; the owned set is exactly one shape; the emitted-form matrix is a named unit-test set (§9). |
-| Parallel planner divergence | Two hand-maintained copies of "what is stale vs foreign" drift silently. | One shared classification function, total over parsed input; a table-driven test over its inputs, including the absent/owned-inconsistency refusal. |
-| Clobbering a user-owned file | `.codex/config.toml` holds `[features]`, comments and user keys. | Narrow-path `toml_edit` mutation; non-wrapper `doctrine` entries are *foreign* by construction; an e2e preservation assertion. |
-| False activation claim | A written table that codex ignores (renamed key, untrusted project) would still read as success. | The report states what was written; the trust caveat names the untrusted-project skip; the write seam is recorded as a version delta with a post-write verification follow-up (POL-003 facets 2–3). |
-| Resting on an incidental seam | `.codex/config.toml`'s shape and `features list`'s output are both version-varying. | Unrecognised probe output degrades to a named `Unknown`; nothing is gated on the probe; the planner fails soft; the write seam is a recorded delta. |
-| Dead override | Without `env_vars` the wrapper silently falls back to PATH `doctrine` — the stale read-only binary in the jail. | `env_vars` membership is part of the `current` test, so a wrapper without it refreshes. |
+| Comparator/migration thrash | A no-op branch testing a form the renderer does not emit rewrites the file on every install — the SL-195 `F-1` failure. | The comparator reads the emitted constants; ownership is one strict shape; the emitted-form matrix and the constants-agreement test make drift fail loudly. |
+| Parallel planner divergence | Two hand-maintained copies of "what is stale vs foreign" drift silently. | One shared classifier both arms call, with the existing `plan_mcp_*` suite as the unchanged behaviour-preservation proof. |
+| Panic instead of fail-soft | Indexing `args` on a hand-written short entry aborts `install_refresh` — the opposite of the never-clobber posture. | Every index is length-guarded; short arities are `Foreign`; unit cases pin `args = []` and `["-c"]`. |
+| Clobbering a user-owned file | `.codex/config.toml` holds `[features]`, comments and user keys. | Narrow-path `toml_edit` mutation; only the exact emitted shape is owned; an e2e preservation assertion. |
+| False or stale claim in output | A written table that codex ignores, a dry-run that says "wrote", or a repeat "register manually" line all misdescribe the state. | The report states what was written; `dry_run` renders "would write"; a foreign entry's repeat output is stable; the trust caveat names the untrusted-project skip. |
+| Resting on an incidental seam | `.codex/config.toml`'s shape and `features list`'s output are both version-varying. | Unrecognised probe output degrades to a named `Unknown`; nothing is gated on the probe; the write seam is a recorded version delta with a post-write verification follow-up. |
+| Dead override | Without `env_vars` the wrapper silently falls back to the stale PATH binary (IMP-249). | `env_vars` membership is part of `current`, so a wrapper without it refreshes. |
 | Undeclared host dependency | The `sh` wrapper acquires a POSIX shell on the default path. | Declared per POL-002 facet 3 (§6). |
-| Test fixtures that cannot fail | An absence assertion over an unwritten file, or an ownership fixture seeded by a real installer, passes for the wrong reason. | Positive controls in the same test; ownership fixtures seeded literally with a `doctrine`-named program; the e2e injects the probe runner. |
+| Requirements gap treated as closed | The Revision is raised at reconcile; a reconcile that skips it would close the slice with the surface permanently undelivered. | Close requires the two-member Revision landed or a recorded waiver; phases are allowed to proceed first (SL-250 / RV-350 precedent). |
+| Test fixtures that cannot fail | An absence assertion over an unwritten file, a tautological agreement test, or an ownership fixture seeded by a real installer passes for the wrong reason. | Positive controls in the same test; the agreement test compares against a `format!` expectation built from the inputs; ownership fixtures seeded literally; the probe injected. |
 
 <!-- doctrine:section sec-9 -->
 ## 9. Quality Engineering & Validation
 
-**Unit — planner**, mirroring the `plan_mcp_*` cases one-to-one plus the
-emitted-form matrix: absent → `Wired` (file created, parent dir ensured); current
-→ `None`; wrapper with missing/short `env_vars` → `Refreshed`; wrapper from an
-earlier wording → `Refreshed`; plain `doctrine` command → malformed-style
-`PrintedFallback` with the file untouched; `/bin/sh` → `PrintedFallback`; baked
-abspath → `PrintedFallback`; different args or extra keys → `PrintedFallback`;
-`mcp_servers` non-table → `PrintedFallback`; unparseable TOML → `PrintedFallback`;
-sibling servers and `[features]` preserved.
+**Unit — codex planner**, mirroring the `plan_mcp_*` cases plus the emitted-form
+matrix: absent → `Wired` (file created, parent dir ensured); current → `None`;
+wrapper with missing/short `env_vars` → `Refreshed`; wrapper with earlier wording
+or stray whitespace → `Refreshed`; `command = "sh"` with `args = []` or `["-c"]`
+→ `Foreign` (no panic); plain `doctrine` command → `Foreign`; `/bin/sh` → `Foreign`;
+wrapped baked abspath → `Foreign`; our shape plus an extra key or a third argument
+→ `Foreign`; `mcp_servers` non-table → `Malformed`; unparseable TOML → `Malformed`;
+sibling servers and `[features]` preserved. The fallback unit case asserts the
+snippet is the TOML table (§5.2's `codex_mcp_fallback_snippet`), not the Claude
+JSON block.
 
-**Unit — shared classification.** Table-driven over every reachable
-`(present, owned, current)` combination, asserting that `Absent` with `owned` is
-refused as an input inconsistency and that each class maps to exactly one
-outcome. No `Malformed` case: that state is asserted at the planner, where it
-originates.
+**Unit — shared classification**, table-driven over the reachable
+`(present, owned, current)` combinations, asserting each maps to exactly one
+class. `Absent + owned` is asserted unreachable by construction (the caller
+derives `owned` from presence), so the function needs no refusal channel.
+`Malformed` is asserted at the planner, where it originates.
 
-**Unit — constants agreement.** The composed wrapper equals
-`exec "${DOCTRINE_BIN:-doctrine}" serve --mcp` built from `PORTABLE_EXEC` and
-`CODEX_MCP_SERVE_ARGS`, and the emitted table key equals `MCP_SERVER_KEY`, so the
-copies STD-001 cannot collapse by `const` composition cannot drift undetected.
+**Unit — Claude behaviour preservation.** The refactored `plan_mcp` keeps the
+existing `plan_mcp_*` suite green **unchanged** (boot.rs:5292-5416); that suite,
+not a new one, is the proof that moving the decision table into
+`classify_mcp_entry` changed no behaviour.
+
+**Unit — constants agreement.** `CODEX_MCP_WRAPPER` equals
+`format!("exec \"{}\" {}", PORTABLE_EXEC, CODEX_MCP_SERVE_ARGS)`; the args suffix
+is built from `CODEX_MCP_SERVE_ARGS`; `CODEX_MCP_ENV` occurs inside
+`PORTABLE_EXEC`; and `CODEX_MCP_SERVER_KEY == MCP_SERVER_KEY`, pinned with the
+reason (one server, two harnesses) rather than shared by construction.
 
 **Unit — probe.** `parse_codex_features` against the verified shape
 (`hooks  stable  true` / `false`), an absent row, unexpected columns and garbage.
-`codex_hooks_state` through an injected runner with **four** cases: success
+`codex_hooks_state` through an injected runner over **five** cases: success
 carrying `hooks ... true` → `Enabled`; success carrying `hooks ... false` →
-`Disabled`; success with empty stdout → `Unknown`; runner error → `Unknown` with
-a non-empty reason. No test requires a real codex on `PATH`.
+`Disabled`; success with empty stdout → `Unknown`; **non-zero exit carrying a
+parseable row** → the parsed answer; runner error with useful `stderr` →
+`Unknown` naming that reason. No test requires a real codex on `PATH`.
 
-**Integration — codex install.** Two cases, both with the probe runner injected:
-(i) a project whose `.codex/config.toml` carries `[features] hooks = true` and a
-comment — assert the emitted entry equals §5.3, that the pre-existing keys and
-comment survive, and that a second run reports nothing to do;
-(ii) a project with no `.codex/config.toml` — assert the file and its parent
-directory are created. A third case runs with an empty `PATH` to pin the
-`Unknown(reason)` line end-to-end. Ownership fixtures are seeded literally, and
-every absence assertion carries a positive control in the same test.
+**Integration — codex install.** Three cases. (i) A project whose
+`.codex/config.toml` carries `[features] hooks = true` and a comment: assert the
+emitted entry equals §5.3, the pre-existing keys and comment survive, and a
+second run reports nothing to do; (ii) a project with no `.codex/config.toml`:
+assert the file and parent directory are created; (iii) `PATH` emptied: this case
+uses the **real** `CaptureRunner` (no injection), so the empty `PATH` is what
+makes the probe fail, and it asserts the warning carries a non-empty reason.
+Cases (i) and (ii) inject the runner. Additional assertions: a foreign entry's
+second-run output is stable (not a fresh instruction), and no `dry_run` output
+contains the word "wrote" — for the MCP line **and** the pre-existing hook
+activation notice. Ownership fixtures are seeded literally, and every absence
+assertion carries a positive control in the same test.
 
 **Verification alignment.**
 
-- Existing Claude assertions (`boot.rs:5121`, `:5129`, `:5157`) are unchanged by
-  design; the only flip is the codex-arm expectation at `:5170`.
+- Existing Claude assertions (`boot.rs:5121`, `:5129`, `:5157`) keep their
+  meaning; the codex-arm expectation at `:5170` flips, and a new assertion pins
+  that a Claude-only run emits neither the codex caveat nor the hooks warning.
 - A no-host-abspath assertion extends the existing portable-command discipline to
   the codex file.
 - `doctrine check gate` at close (a fresh binary against the real corpus).
-- The Specification Revision (two members, §6) is raised at reconcile and its
-  `REQ` ids cited from the plan; while it is absent, coverage reports the surface
-  undelivered — expected, not a defect, and not a reason to halt the slice
-  (ADR-013's `needs` anchor is for work that must *wait*, and this slice does
-  not).
+- The two-member Specification Revision is raised at reconcile; **close requires
+  it landed or a recorded waiver**, while phases proceed without waiting on it
+  (SL-250 / RV-350 precedent). The plan schedules the Revision before the phase
+  that cites its `REQ` ids, so nothing cites an id that does not yet exist.
 
 **Impact.**
 
 | path | change |
 |---|---|
-| `src/boot.rs` | constants; `McpEntryClass` + `classify_mcp_entry`; `plan_codex_mcp` / `is_doctrine_codex_mcp_entry` / `install_codex_mcp`; `parse_codex_features` / `codex_hooks_state`; the Codex arm's `mcp` outcome; `wire()`'s per-harness file name, wrote-line wording and dry-run gating; three stale doc comments (`RefreshOutcome:940`, `RefreshReport.mcp:1787`, the `wire` MCP block `:2851`) |
-| `src/install.rs` | the capture-capable `CommandRunner` seam beside the existing installer runner, and the default implementation `wire()` receives |
-| `src/boot.rs` (tests) | the mirrored planner suite, the classification table test, the constants-agreement test, the four probe cases, and the flip of `:5170` |
-| `tests/e2e_codex_install.rs` (new) | three cases: preservation + idempotence, create-from-absent, empty-`PATH` `Unknown(reason)` |
+| `src/boot.rs` | the codex constants; `McpEntryClass` + `classify_mcp_entry`; the `plan_mcp` refactor onto it (behaviour-preservation: existing suite unchanged); `plan_codex_mcp` / `is_doctrine_wrapper_line` / `install_codex_mcp` / `codex_mcp_fallback_snippet`; `parse_codex_features` / `codex_hooks_state`; the Codex arm's `mcp` outcome; `wire()`'s runner parameter, per-harness file name, wrote/would-write wording, foreign wording and dry-run gating; the hook activation notice's dry-run wording; three stale doc comments (`RefreshOutcome:940`, `RefreshReport.mcp:1787`, the `wire` MCP block `:2851`) |
+| `src/install.rs` | `CaptureRunner` (`Command::output()`) and the default-injection point; `wire`'s two production call sites (`install::run:414`, `run_install:2645`) |
+| `src/boot.rs` (tests) | the codex planner matrix, the classification table test, the constants-agreement test, the five probe cases, the wire-level Claude-only assertion, the dry-run wording assertion, the four existing `wire` call sites (`:6647`, `:6663`, `:6683`, `:6702`) and the `:5170` flip |
+| `tests/e2e_codex_install.rs` (new) | preservation + idempotence, create-from-absent, empty-`PATH` `Unknown(reason)` with the real runner |
 | `README.md`, `install/` docs | the POL-002 facet 3 declaration of the `sh` dependency |
 | `.doctrine/spec/tech/011/**` | touched only at reconcile, by the two-member Revision — never by a phase |
 

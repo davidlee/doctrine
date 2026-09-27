@@ -17,6 +17,11 @@ act = "conclude"
 role = "raiser"
 note = "Adversarial pass over design.md rev 29 (before review fixes: rev 25/27 draft). One blocker and nine major findings, four minor, all raised on this ledger; the codex MCP leg's shared-classification contract, report seam, probe seam, e2e hermeticity, SPEC-011 citations, ownership formula, emitted-form set, activation wording, outcome vocabulary and Revision shape were all attacked. Every finding disposed fix-now and verified against the materialised design at rev 29."
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Second adversarial pass over the revised design (rev 31 -> 36), attacking the first pass's fixes and the notes' 'further pass would probe' list: 1 blocker (concat! cannot compose over consts), 7 major (harness-blind disclosure predicate; strict-ownership contradictions; unguarded args indexing; whitespace-fragile wrapper pattern duplicating is_doctrine_program; abspath-vs-foreign contradiction; classifier not wired into the Claude arm; unnamed CaptureRunner and missing call sites), 7 minor, 2 nit. All 17 disposed fix-now and verified at rev 38."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-271"
 
@@ -383,6 +388,414 @@ response = "Applied. The e2e gains a second case starting with no `.codex/config
 act = "verify"
 role = "raiser"
 note = "Verified in rev 29: the e2e gains the create-from-absent case; the sh resolution is decided and disclosed; both diagrams are corrected; the DOCTRINE_BIN case moved to Assumptions."
+
+[[finding]]
+id = "F-15"
+status = "verified"
+severity = "blocker"
+title = "concat! cannot compose over consts: the wrapper constant does not compile"
+detail = 'sec-5 declares `const CODEX_MCP_WRAPPER: &str = concat!("exec \"", PORTABLE_EXEC, "\" ", CODEX_MCP_SERVE_ARGS);`. `concat!` accepts only literals, so both identifiers are rejected (`expected a literal`). The section simultaneously claims `concat!` composition and a test to pin copies `const` cannot compose — the fix contradicts itself.'
+disposition = "fix-now"
+response = 'Applied: the wrapper is a single literal constant and the agreement test compares it against `format!("exec \"{}\" {}", PORTABLE_EXEC, CODEX_MCP_SERVE_ARGS)` — a real expectation that fails when either input changes. The `concat!` claim is deleted from sec-5 and sec-9.'
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = 'Applied: the wrapper is a single literal constant and the agreement test compares it against `format!("exec \"{}\" {}", PORTABLE_EXEC, CODEX_MCP_SERVE_ARGS)` — a real expectation that fails when either input changes. The `concat!` claim is deleted from sec-5 and sec-9.'
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = 'Verified at design rev 38: Applied: the wrapper is a single literal constant and the agreement test compares it against `format!("exec \"{}\" {}", PORTABLE_EXEC, CODEX_MCP_SERVE_ARGS)` — a real expectation t'
+
+[[finding]]
+id = "F-16"
+status = "verified"
+severity = "major"
+title = "The disclosure predicate is harness-blind: a Claude install would run the codex probe"
+detail = "sec-5's predicate is `matches!(mcp, Wired | Refreshed) && !dry_run`, but `wire()` loops every harness and the Claude `.mcp.json` leg also returns `Wired` (boot.rs:2852-2858), so a Claude-only install would shell `codex features list` and print a codex trust caveat for a Claude project."
+disposition = "fix-now"
+response = "Applied: the predicate is now `h == Harness::Codex && matches!(report.mcp, Wired | Refreshed) && !dry_run`, and sec-9 adds a wire-level assertion that a Claude-only run emits no codex caveat or warning."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied: the predicate is now `h == Harness::Codex && matches!(report.mcp, Wired | Refreshed) && !dry_run`, and sec-9 adds a wire-level assertion that a Claude-only run emits no codex caveat or warning."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at design rev 38: Applied: the predicate is now `h == Harness::Codex && matches!(report.mcp, Wired | Refreshed) && !dry_run`, and sec-9 adds a wire-level assertion that a Claude-only run emits no co"
+
+[[finding]]
+id = "F-17"
+status = "verified"
+severity = "major"
+title = "Ownership formula and edge table disagree about extra keys and extra args"
+detail = 'The formula inspects only command, args[0], the line and env_vars, so a wrapper with an extra key (`cwd`, `enabled`) or `args = ["-c", line, "extra"]` is `OwnedCurrent` and no-ops — while the table and the unit list require `PrintedFallback`.'
+disposition = "fix-now"
+response = "Applied: ownership is STRICT — `args.len() == 2` exactly and no keys beyond `command`, `args`, `env_vars`. Anything extra is foreign: untouched, disclosed by the snippet. The formula, the edge table and the unit list now say the same thing, and the classification matrix pins it."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied: ownership is STRICT — `args.len() == 2` exactly and no keys beyond `command`, `args`, `env_vars`. Anything extra is foreign: untouched, disclosed by the snippet. The formula, the edge table and the unit list now say the same thing, and the classification matrix pins it."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at design rev 38: Applied: ownership is STRICT — `args.len() == 2` exactly and no keys beyond `command`, `args`, `env_vars`. Anything extra is foreign: untouched, disclosed by the snippet. The formu"
+
+[[finding]]
+id = "F-18"
+status = "verified"
+severity = "major"
+title = "Unguarded args indexing panics the planner on a short entry"
+detail = '`args[0]`/`args[1]` are read whenever the command matches, so `command = "sh"` with `args = []` or `["-c"]` panics and aborts `install_refresh` (boot.rs:1671) instead of failing soft — the opposite of the never-clobber posture.'
+disposition = "fix-now"
+response = 'Applied: the predicate checks `args.len() == 2` before any index; every other arity is `Foreign`. Unit cases added for `args = []` and `args = ["-c"]`.'
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = 'Applied: the predicate checks `args.len() == 2` before any index; every other arity is `Foreign`. Unit cases added for `args = []` and `args = ["-c"]`.'
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = 'Verified at design rev 38: Applied: the predicate checks `args.len() == 2` before any index; every other arity is `Foreign`. Unit cases added for `args = []` and `args = ["-c"]`.'
+
+[[finding]]
+id = "F-19"
+status = "verified"
+severity = "major"
+title = "The wrapper-line pattern is whitespace-fragile and duplicates is_doctrine_program"
+detail = """`starts with "exec "` + `ends with " serve --mcp"` fails on doubled spaces, tabs or surrounding whitespace, silently stranding doctrine's own stale wrapper as foreign; and the program half re-derives the file_name check that `is_doctrine_program` (boot.rs:1059-1067) already owns — the second-predicate divergence class this repo has paid for."""
+disposition = "fix-now"
+response = "Applied: the line is normalised (trimmed, internal whitespace runs collapsed) before matching; the suffix is built from `CODEX_MCP_SERVE_ARGS`; and the program half delegates to `is_doctrine_program` (boot.rs:1064). sec-5 states the normalisation explicitly."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied: the line is normalised (trimmed, internal whitespace runs collapsed) before matching; the suffix is built from `CODEX_MCP_SERVE_ARGS`; and the program half delegates to `is_doctrine_program` (boot.rs:1064). sec-5 states the normalisation explicitly."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at design rev 38: Applied: the line is normalised (trimmed, internal whitespace runs collapsed) before matching; the suffix is built from `CODEX_MCP_SERVE_ARGS`; and the program half delegates to `i"
+
+[[finding]]
+id = "F-20"
+status = "verified"
+severity = "major"
+title = '"A baked abspath is foreign" contradicts the predicate accepting a path named doctrine'
+detail = """The predicate accepts `PORTABLE_EXEC` or "a path whose file_name is doctrine" inside the wrapper, so `sh -c 'exec "/opt/doctrine" serve --mcp'` is owned and can be rewritten to portable — while the prose and table call a baked abspath foreign."""
+disposition = "fix-now"
+response = "Applied: the abspath arm is removed. Ownership requires the program half to BE `PORTABLE_EXEC`; a wrapped abspath is foreign. This matches the prose, the table and the fact that this leg has only ever emitted the portable form."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied: the abspath arm is removed. Ownership requires the program half to BE `PORTABLE_EXEC`; a wrapped abspath is foreign. This matches the prose, the table and the fact that this leg has only ever emitted the portable form."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at design rev 38: Applied: the abspath arm is removed. Ownership requires the program half to BE `PORTABLE_EXEC`; a wrapped abspath is foreign. This matches the prose, the table and the fact that th"
+
+[[finding]]
+id = "F-21"
+status = "verified"
+severity = "major"
+title = 'The shared classifier is not wired into the Claude arm, so "both arms call it" is false or the impact table is short'
+detail = "`plan_mcp` keeps its own table and `is_doctrine_mcp_entry` unless the design refactors it, yet sec-4/sec-5 claim one shared classifier both arms call. As written the classifier is codex-only and the D2 no-parallel-planner goal is unmet; the impact table also omits the refactor."
+disposition = "fix-now"
+response = "Applied: the design commits to refactoring `plan_mcp` onto `classify_mcp_entry`, with the existing `plan_mcp_*` suite (boot.rs:5292-5416) as the unchanged behaviour-preservation proof. The refactor is a named row in the sec-9 impact table."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied: the design commits to refactoring `plan_mcp` onto `classify_mcp_entry`, with the existing `plan_mcp_*` suite (boot.rs:5292-5416) as the unchanged behaviour-preservation proof. The refactor is a named row in the sec-9 impact table."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at design rev 38: Applied: the design commits to refactoring `plan_mcp` onto `classify_mcp_entry`, with the existing `plan_mcp_*` suite (boot.rs:5292-5416) as the unchanged behaviour-preservation pr"
+
+[[finding]]
+id = "F-22"
+status = "verified"
+severity = "major"
+title = "CommandRunner has no concrete default and the impact table misses the call sites"
+detail = 'The trait is named but no capture-capable implementation is; the existing `ProcessRunner` (install.rs:1724-1728) uses `.status()` and inherits stdio, so "the shell supplies the default" is undefined. Neither production caller (boot.rs:2645, install.rs:414) nor the four wire tests (boot.rs:6647, :6663, :6683, :6702) appear in the impact table.'
+disposition = "fix-now"
+response = "Applied: sec-5 names `install::CaptureRunner` using `Command::output()`, with its constructor and the default-injection point stated; sec-9 enumerates the two production call sites and the four test call sites."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied: sec-5 names `install::CaptureRunner` using `Command::output()`, with its constructor and the default-injection point stated; sec-9 enumerates the two production call sites and the four test call sites."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at design rev 38: Applied: sec-5 names `install::CaptureRunner` using `Command::output()`, with its constructor and the default-injection point stated; sec-9 enumerates the two production call sites"
+
+[[finding]]
+id = "F-23"
+status = "verified"
+severity = "minor"
+title = "run_capture loses a usable result on non-zero exit, and stdout-only discards stderr"
+detail = "The contract returns a bare `String`, so an implementation that bails on non-zero exit discards a parseable `hooks ... true` row printed on a failed command, and useful stderr is unreachable."
+disposition = "fix-now"
+response = "Applied: the seam returns `Capture { success, stdout, stderr }` and the design states which parts the parser reads; sec-9 adds two cases — non-zero exit with parseable stdout, and useful output on stderr."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied: the seam returns `Capture { success, stdout, stderr }` and the design states which parts the parser reads; sec-9 adds two cases — non-zero exit with parseable stdout, and useful output on stderr."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at design rev 38: Applied: the seam returns `Capture { success, stdout, stderr }` and the design states which parts the parser reads; sec-9 adds two cases — non-zero exit with parseable stdout, and "
+
+[[finding]]
+id = "F-24"
+status = "verified"
+severity = "minor"
+title = "The empty-PATH e2e cannot pin Unknown(reason) while the runner is injected"
+detail = "With the runner injected PATH is inert, so the third case would exercise the fake rather than the real spawn; without injection it is not the same harness as the first two."
+disposition = "fix-now"
+response = "Applied: sec-9 states that the third integration case uses the REAL CaptureRunner (no injection) so the empty-PATH condition is meaningful, and that only the first two inject."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied: sec-9 states that the third integration case uses the REAL CaptureRunner (no injection) so the empty-PATH condition is meaningful, and that only the first two inject."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at design rev 38: Applied: sec-9 states that the third integration case uses the REAL CaptureRunner (no injection) so the empty-PATH condition is meaningful, and that only the first two inject."
+
+[[finding]]
+id = "F-25"
+status = "verified"
+severity = "minor"
+title = 'Under dry_run the codex line still says "wrote", and so does the pre-existing hook notice'
+detail = 'The message text and invariant 7 collide with the existing convention of printing planned writes verbatim: `write_codex_activation` prints "wrote .codex/hooks.json. To activate:" (boot.rs:2691) even when dry-run planned but did not write (boot.rs:2333).'
+disposition = "fix-now"
+response = 'Applied: both texts render "would write" under dry_run, and sec-9 asserts the dry-run output contains no "wrote". The hook-notice change is a row in the impact table since it touches shared code.'
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = 'Applied: both texts render "would write" under dry_run, and sec-9 asserts the dry-run output contains no "wrote". The hook-notice change is a row in the impact table since it touches shared code.'
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = 'Verified at design rev 38: Applied: both texts render "would write" under dry_run, and sec-9 asserts the dry-run output contains no "wrote". The hook-notice change is a row in the impact table since it touch'
+
+[[finding]]
+id = "F-26"
+status = "verified"
+severity = "minor"
+title = "No TOML fallback snippet function is named; reusing the Claude helper prints JSON"
+detail = "`install_mcp` fills `PrintedFallback.snippet` from `mcp_fallback_snippet()`, which emits a JSON `mcpServers` block (boot.rs:2079-2085) that `wire` prints raw (boot.rs:2867-2872). A codex user would be handed JSON for a TOML file."
+disposition = "fix-now"
+response = "Applied: `codex_mcp_fallback_snippet()` is named in sec-5, emitting the `[mcp_servers.doctrine]` TOML table, and its shape is asserted in the fallback unit case."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied: `codex_mcp_fallback_snippet()` is named in sec-5, emitting the `[mcp_servers.doctrine]` TOML table, and its shape is asserted in the fallback unit case."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at design rev 38: Applied: `codex_mcp_fallback_snippet()` is named in sec-5, emitting the `[mcp_servers.doctrine]` TOML table, and its shape is asserted in the fallback unit case."
+
+[[finding]]
+id = "F-27"
+status = "verified"
+severity = "minor"
+title = "classify_mcp_entry has no channel to refuse Absent + owned"
+detail = "A function returning the enum directly cannot refuse an input inconsistency; the requirement implies a panic or `debug_assert`, which is untestable through the stated signature and would abort install instead of failing soft."
+disposition = "fix-now"
+response = "Applied: the refusal requirement is dropped. sec-5 states the combination is unreachable by construction (the caller derives `owned` from presence) and the matrix test asserts the mapping over reachable inputs only."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied: the refusal requirement is dropped. sec-5 states the combination is unreachable by construction (the caller derives `owned` from presence) and the matrix test asserts the mapping over reachable inputs only."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at design rev 38: Applied: the refusal requirement is dropped. sec-5 states the combination is unreachable by construction (the caller derives `owned` from presence) and the matrix test asserts the "
+
+[[finding]]
+id = "F-28"
+status = "verified"
+severity = "minor"
+title = 'A foreign doctrine entry yields a fresh "register manually" instruction on every install'
+detail = "A deliberate hand-written entry triggers `PrintedFallback`, and `wire` prints the snippet unconditionally (boot.rs:2867-2872), so a repeat install re-instructs the user rather than reporting a stable state — while the idempotence invariant is asserted only for the owned-current case."
+disposition = "fix-now"
+response = """Applied: the message is reworded to "an existing doctrine entry was left untouched — register manually if it is not yours", and sec-9 adds a second-run assertion that the foreign case's output is stable rather than a fresh instruction."""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """Applied: the message is reworded to "an existing doctrine entry was left untouched — register manually if it is not yours", and sec-9 adds a second-run assertion that the foreign case's output is stable rather than a fresh instruction."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = 'Verified at design rev 38: Applied: the message is reworded to "an existing doctrine entry was left untouched — register manually if it is not yours", and sec-9 adds a second-run assertion that the foreign c'
+
+[[finding]]
+id = "F-29"
+status = "verified"
+severity = "minor"
+title = """"The slice does not wait" converts ADR-013's close obligation into an optional one"""
+detail = 'sec-9 says the Revision is raised at reconcile, coverage stays red, and that this is "not a reason to halt the slice" — which also lets a reconcile that fails to raise it close with the surface permanently undelivered. Separately a plan cannot cite REQ ids the Revision has not minted.'
+disposition = "fix-now"
+response = "Applied: the claims are split. Phases do not wait on the Revision; CLOSE requires the two-member Revision landed (or a recorded waiver); and the plan cites REQ ids only once the Revision has minted them. The SL-250/RV-350 precedent justifies phase-first, not close-without."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied: the claims are split. Phases do not wait on the Revision; CLOSE requires the two-member Revision landed (or a recorded waiver); and the plan cites REQ ids only once the Revision has minted them. The SL-250/RV-350 precedent justifies phase-first, not close-without."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at design rev 38: Applied: the claims are split. Phases do not wait on the Revision; CLOSE requires the two-member Revision landed (or a recorded waiver); and the plan cites REQ ids only once the Re"
+
+[[finding]]
+id = "F-30"
+status = "verified"
+severity = "nit"
+title = "CO DEX_MCP_ENV and the serve-args suffix re-spell literals the agreement test does not cover"
+detail = '`CODEX_MCP_ENV = "DOCTRINE_BIN"` duplicates the name inside `PORTABLE_EXEC`, and the inline `" serve --mcp"` suffix re-spells `CODEX_MCP_SERVE_ARGS`; the test as described covers only the wrapper and table key.'
+disposition = "fix-now"
+response = "Applied: the suffix is built from `CODEX_MCP_SERVE_ARGS`, and the agreement test additionally asserts `CODEX_MCP_ENV` occurs inside `PORTABLE_EXEC`."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied: the suffix is built from `CODEX_MCP_SERVE_ARGS`, and the agreement test additionally asserts `CODEX_MCP_ENV` occurs inside `PORTABLE_EXEC`."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at design rev 38: Applied: the suffix is built from `CODEX_MCP_SERVE_ARGS`, and the agreement test additionally asserts `CODEX_MCP_ENV` occurs inside `PORTABLE_EXEC`."
+
+[[finding]]
+id = "F-31"
+status = "verified"
+severity = "nit"
+title = "Reusing MCP_SERVER_KEY for the codex table couples two independent namespaces"
+detail = "`MCP_SERVER_KEY` is documented as the `.mcp.json` client alias (boot.rs:596-598); the codex `mcp_servers` id is a different namespace, so forcing equality makes a future divergence a silent rename — against POL-003 facet 1."
+disposition = "fix-now"
+response = "Applied: a codex-edge `CODEX_MCP_SERVER_KEY` is defined, with the constants test pinning it equal to `MCP_SERVER_KEY` and recording why they must match (one server, two harnesses) rather than sharing the constant."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied: a codex-edge `CODEX_MCP_SERVER_KEY` is defined, with the constants test pinning it equal to `MCP_SERVER_KEY` and recording why they must match (one server, two harnesses) rather than sharing the constant."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at design rev 38: Applied: a codex-edge `CODEX_MCP_SERVER_KEY` is defined, with the constants test pinning it equal to `MCP_SERVER_KEY` and recording why they must match (one server, two harnesses) "
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.

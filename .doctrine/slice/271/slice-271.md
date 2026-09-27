@@ -87,7 +87,7 @@ D1–D5 from IMP-111 are settled; the run holds them, one accepted `DEC` per nod
 |---|---|---|
 | command form | portable env literal through `sh -c` + `env_vars = ["DOCTRINE_BIN"]`; declare the shell dependency | DEC-323 |
 | ownership + emitted-form set | own the wrapper shape only (`command = "sh"` + our line; `env_vars` part of current); plain literal, `/bin/sh` and baked abspaths are foreign | DEC-332 (supersedes the second half of DEC-324) |
-| sharing boundary | separate planner + shell per arm; one shared classification enum + decision table | DEC-328 |
+| sharing boundary | separate planner + shell per arm; one shared classification enum + decision table, with `plan_mcp` refactored onto it (existing suite = behaviour-preservation proof) | DEC-328 |
 | report seam | one `mcp` field; `wire()` names the file from the harness | DEC-325 |
 | disclosure + file ownership | MCP registration only; probe `codex features list` for the hooks state and warn; disclose the trust skip | DEC-329 |
 
@@ -102,11 +102,15 @@ members — one retro-covering the shipped Claude `.mcp.json` arm, one for the c
 `mcp_servers` leg — with their `REQ` ids minted by the revision. No MCP
 registration requirement exists for either harness today.
 
-The adversarial design pass (`RV-399`, rev 29) landed 14 findings, all disposed
-`fix-now` and verified. The material changes to scope: the ownership narrowing
-above, the report now stating what was *written* rather than claiming activation,
-and the two-member revision shape. See `.doctrine/slice/271/notes.md` for what a
-further pass would probe.
+The adversarial design pass (`RV-399`) ran **two rounds**: 14 findings, then a
+second fresh pass attacking the fixes, finding 17 more (1 blocker, 7 major). All
+31 disposed `fix-now` and verified; material design changes across the two rounds:
+the ownership narrowing above, strict ownership (extra key or argument ⇒ foreign),
+a length-guarded predicate, the report stating what was *written* rather than
+claiming activation, the `plan_mcp` refactor onto the shared classifier, a named
+`install::CaptureRunner` seam, and a two-member revision shape whose **close** is
+gated on it landing. See `.doctrine/slice/271/notes.md` for what a third pass
+would probe.
 
 ## Verification / closure intent
 
