@@ -1,0 +1,265 @@
+id    = 403
+slug  = "audit-of-sl-271-codex-mcp-registration-during-install"
+title = "audit of SL-271 — codex MCP registration during install"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+RV-403 audited SL-271 at slice/SL-271-codex-mcp-registration-during-install head 21620b316 in .worktrees/SL-271 (solo, unlanded; the primary tree holds another agent's untracked work so `worktree land` refuses tree-unclean). Conformance mode, facet reconciliation, self-audit driving both roles, ledger driven from the primary tree.
+
+Examined: the three phases' exit criteria and their verification evidence (11/11 VT PASS via `slice verify-vt 271`; the three VA-1 agent checks discharged by hand); mechanical conformance (`slice conformance 271`: 2 undeclared, 1 undelivered, 4 conformant) with every cell dispositioned; design dr-01a0e17c rev 44 sec-5.2/5.3/5.4 held against the implementation (the disclosure predicate, the message contract, dry-run verbs, the trust caveat's placement, the ordering rules, placement and spelling claims, the ownership matrix); governance coverage for the surface (SPEC-011 and a corpus-wide requirement search); and the full gate (`doctrine check gate` exit 0) plus the focused suites and live installs in dry, real, idempotent, non-UTF-8, foreign and legacy-refresh states.
+
+Six findings, all verified: F-1 blocker design-wrong (the hooks probe answers for the user codex layer, not the project file the notice names — carried from RV-402 F-1, mechanism decision delegated); F-2 major design-wrong (SPEC-011 governs no MCP registration requirement and design sec-5.4 cites REQ-186, the Claude hook-set merge, for it → two-member REV); F-3 minor design-wrong (sec-5.4's "exact disclosure predicate" omits the Claude wrote-line sec-5.2 requires, which the code prints); F-4 minor design-wrong (the undelivered install/** design-target against the design naming install/ docs as a home for the sh declaration — a decision, both branches briefed); F-5 minor aligned (the two undeclared deltas are the slice's own lifecycle bookkeeping); F-6 nit aligned (the three VA-1 records live in a disposable phase sheet or nowhere; substance discharged by this audit).
+
+The four non-aligned findings carry a Reconciliation Brief (per-slice direct edits; one SPEC-011 REV; and further deliverables named as outside reconcile's write surfaces, because the F-1 remedy may imply code). No code defect was found: the audit's own review of the ownership predicate, the edit-preserving write and the payload refactor found nothing to raise."""
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-271"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "The hooks probe answers for the user codex layer, not the project file the notice names (carried from RV-402 F-1)"
+detail = '''
+Carried from RV-402 F-1 (`doctrine show RV-402`), whose evidence this audit re-checked rather than re-derived.
+
+EXPECTED. Design sec-5.2: the probe's `cwd` is "the install root, so the probe answers for the project being installed — `--path`, or install run from a subdirectory, must not probe another tree". PHASE-03/EX-4 implements that literally. The instruction it gates (step 1 of the activation notice) is about the PROJECT file: "Ensure [features] hooks = true in .codex/config.toml".
+
+OBSERVED. `codex features list` (codex-cli 0.155.1) applies a project's `.codex/config.toml` layer only when that project is TRUSTED. Install always runs pre-trust — the notice's own step 2 is "Start codex in this project and accept the project trust prompt", and the trust caveat this slice adds (`src/boot.rs:3309`) states the project layer "is skipped silently" until then. So the probe's answer is the USER layer (`$CODEX_HOME/config.toml`), not the file the notice names.
+
+2x2, cwd = a project whose `.codex/config.toml` is exactly `[features]\nhooks = false`, same binary:
+  control   (CODEX_HOME config with no [projects] entry)                             -> `hooks  stable  true`
+  treatment (CODEX_HOME config + [projects."<dir>"] trust_level = "trusted")          -> `hooks  stable  false`
+
+Live consequence on a fresh root: the notice printed steps 2 and 3 with step 1 ABSENT, so a project that disables hooks gets no instruction and its hooks stay off silently — the failure POL-003 facet 3 / `DEC-329` exist to prevent. The `Disabled` arm is wrong in the other direction: it names the project file while reporting the user layer's value.
+
+No VT can see this: PHASE-03/VT-2 injects the probe's answer through a fake runner, and VT-3 pins only the PATH-empty failure.
+
+Consequence for this audit: `PHASE-03` EX-4 is satisfied as written, so the defect is the design premise, not the code. Remediation is the design pass's (three options are recorded in RV-402 F-1's response — my recommendation is to read the project file's `[features] hooks` key directly, which also removes the `codex` subprocess and F-5's undeclared dependency). If the chosen option changes the mechanism, a code change follows, which reconcile does not write: that is a further deliverable (a phase or a follow-up item), and the brief says so.
+
+Acceptance condition for the repair, from RV-402 F-1: a test that plants a project `.codex/config.toml` with `[features] hooks = false` and asserts the step-1 instruction is still delivered.'''
+disposition = "design-wrong"
+response = """
+Delegated to /reconcile. The observation stands on the 2x2 and the live run, and PHASE-03/EX-4 is met as written, so the defect is the design premise, not the code — there is no audit-scope code fix to make.
+
+Reconciliation-brief entry: "Per-slice (direct edit)" — design.md sec-5.2 (the probe paragraph) and sec-5.4 (the probe's disclosure bullet), plus the DEC-329 record they descend from: correct the claim that the probe "answers for the project being installed"; a pre-trust codex features list answers for the user layer. Name the chosen remedy (three options and the recommendation are in RV-402 F-1's response).
+
+Explicitly flagged for reconcile, not absorbed: if the chosen remedy changes the probe's mechanism, a code change follows and reconcile does not write code — the brief carries it under "Further deliverables" as a phase or a follow-up item. Acceptance condition: a test that plants a project .codex/config.toml with [features] hooks = false and asserts step 1 is still delivered."""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Delegated to /reconcile. The observation stands on the 2x2 and the live run, and PHASE-03/EX-4 is met as written, so the defect is the design premise, not the code — there is no audit-scope code fix to make.
+
+Reconciliation-brief entry: "Per-slice (direct edit)" — design.md sec-5.2 (the probe paragraph) and sec-5.4 (the probe's disclosure bullet), plus the DEC-329 record they descend from: correct the claim that the probe "answers for the project being installed"; a pre-trust codex features list answers for the user layer. Name the chosen remedy (three options and the recommendation are in RV-402 F-1's response).
+
+Explicitly flagged for reconcile, not absorbed: if the chosen remedy changes the probe's mechanism, a code change follows and reconcile does not write code — the brief carries it under "Further deliverables" as a phase or a follow-up item. Acceptance condition: a test that plants a project .codex/config.toml with [features] hooks = false and asserts step 1 is still delivered."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: the brief entry for the design correction exists (Per-slice direct edit), the mechanism decision is explicitly carried as a further deliverable rather than absorbed, and the acceptance test is named. Remedy genuinely deferred to reconcile, not dodged."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "SPEC-011 governs no MCP registration requirement, and design sec-5.4 cites REQ-186 — the Claude hook set — for a leg it does not govern"
+detail = """
+EXPECTED. A slice that adds behaviour to `boot install` writes against the requirement that governs that surface, and design sec-5.4 correctly reaches for a requirement when it fixes the leg's failure mode ("the leg's failure mode is disclosure, not error (SPEC-011 REQ-186)").
+
+OBSERVED. `SPEC-011` — the boot-install harness-wiring contract — contains no requirement covering MCP server registration, for either harness. Its `boot install` requirement set is REQ-185 (import prepend), REQ-186 (Claude hook-set merge), REQ-476 (Claude settings scope/form), REQ-477 (abandoned-scope eviction), REQ-479 (codex hook registry), REQ-480 (pi extensions). A corpus-wide requirement search (`doctrine search -k REQ "MCP server registration .mcp.json mcp_servers boot install harness"`) returns no requirement for `.mcp.json` or `[mcp_servers]`; SPEC-011's own scope enumeration (`doctrine show SPEC-011`, opening clause) lists the import, both hook registries and the pi extensions, and omits the MCP leg entirely.
+
+So the surface is ungoverned twice over: the pre-existing Claude `.mcp.json` leg (added by CHR-013, a closed chore — a backlog item, never a REQ) and the codex `[mcp_servers]` leg this slice adds. And design sec-5.4's citation is to the wrong requirement: REQ-186 governs the Claude *hook set* merge into the settings file, a different leg in a different file; it cannot carry the MCP leg's failure-mode contract. `doctrine coverage` therefore cannot see this behaviour at all.
+
+Consequence: `boot install`'s MCP behaviour — ownership predicate, edit-preservation, the one-wording fallback, the disclosure — has no acceptance criterion outside this slice's own artefacts.
+
+Remediation is a governance write (/reconcile): a REV against SPEC-011 with the two members the plan already owes — a Claude `.mcp.json` registration requirement retro-covering shipped behaviour, and a codex `[mcp_servers]` registration requirement (plan.toml documents the two-member Revision; no phase cites its ids). Extend the spec's scope enumeration to include the leg while there."""
+disposition = "design-wrong"
+response = """
+Delegated to /reconcile. A requirement gap is a governance write, which the audit must never turn into a `follow-up` (it would land the obligation in the backlog instead of canon).
+
+Reconciliation-brief entries: "Governance/spec (REV)" — one SPEC-011 Revision, two members (a Claude .mcp.json registration requirement retro-covering the shipped CHR-013 behaviour; a codex [mcp_servers] registration requirement for this leg), plus the spec's scope enumeration extended to include the leg. "Per-slice (direct edit)" — design.md sec-5.4's citation of REQ-186 re-pointed at the requirement the REV creates.
+
+No plan criterion is disturbed: no phase cites the REV's member ids, and the plan's EX/VT rows are immutable-append in any case."""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Delegated to /reconcile. A requirement gap is a governance write, which the audit must never turn into a `follow-up` (it would land the obligation in the backlog instead of canon).
+
+Reconciliation-brief entries: "Governance/spec (REV)" — one SPEC-011 Revision, two members (a Claude .mcp.json registration requirement retro-covering the shipped CHR-013 behaviour; a codex [mcp_servers] registration requirement for this leg), plus the spec's scope enumeration extended to include the leg. "Per-slice (direct edit)" — design.md sec-5.4's citation of REQ-186 re-pointed at the requirement the REV creates.
+
+No plan criterion is disturbed: no phase cites the REV's member ids, and the plan's EX/VT rows are immutable-append in any case."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: the REV entry exists with both members and the scope-enumeration extension, and the citation fix is on the direct-edit surface. This is the audit's own governance finding, and the plan already owed the Revision."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = """design sec-5.4's "exact disclosure predicate" omits the Claude MCP wrote-line that sec-5.2 and the code both require"""
+detail = """
+EXPECTED. Design sec-5.4 heads its disclosure rules "**Exact disclosure predicate.** Three separate conditions, because they answer three different questions", and the first reads: "the MCP **wrote-line** prints iff `h == Codex && matches!(report.mcp, Wired | Refreshed) && !dry_run`".
+
+OBSERVED. Taken literally, no Claude MCP line ever prints. But design sec-5.2's own message contract lists one ("registered MCP server in .mcp.json: <invocation> (Claude)"), and the implementation prints it: verified live on built `21620b316`, `claude: registered MCP server in .mcp.json: ${DOCTRINE_BIN:-doctrine} serve --mcp` on a fresh install and `claude: refreshed MCP server in .mcp.json: ...` over a legacy abspath entry. So the design contradicts itself across two adjacent sections, and the code follows sec-5.2.
+
+The predicate is the artefact an auditor is told to hold the implementation to, so a self-contradiction here is not cosmetic — it is the reason this audit had to choose between two design sentences. Phase ids/criteria are immutable-append, so this is a prose correction, not a criterion change.
+
+Remediation (/reconcile, per-slice direct edit): restate the condition harness-scoped — the Claude arm prints its registered/refreshed line, the Codex arm its single wrote/would-write form — which is also where RV-402 F-4's deferred "should Codex distinguish a refresh from a fresh wire?" question belongs."""
+disposition = "design-wrong"
+response = """
+Delegated to /reconcile. The code follows sec-5.2 and is verified live on both harnesses, so the correction is to the sec-5.4 predicate prose, not to behaviour.
+
+Reconciliation-brief entry: "Per-slice (direct edit)" — restate the first disclosure condition harness-scoped (Claude prints its registered/refreshed line; Codex its single wrote/would-write form), and decide there the coupled RV-402 F-4 question of whether Codex should distinguish a refresh from a fresh wire. Recorded in the brief so the coupling is not lost between ledgers."""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Delegated to /reconcile. The code follows sec-5.2 and is verified live on both harnesses, so the correction is to the sec-5.4 predicate prose, not to behaviour.
+
+Reconciliation-brief entry: "Per-slice (direct edit)" — restate the first disclosure condition harness-scoped (Claude prints its registered/refreshed line; Codex its single wrote/would-write form), and decide there the coupled RV-402 F-4 question of whether Codex should distinguish a refresh from a fresh wire. Recorded in the brief so the coupling is not lost between ledgers."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: brief entry exists; the correction is prose, and it is where the RV-402 F-4 coupling is resolved."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "`install/**` is a declared design-target that delivered nothing, while the design names install/ docs as a home for the sh declaration"
+detail = """
+`doctrine slice conformance 271` (run in the fork; the source-delta registry resolves to the primary tree) reports **undelivered (1): `install/**`** — a declared `design-target` selector that matched no actual edit — while design.md:647 names "`README.md`, `install/` docs" as the home for the POL-002 facet 3 `sh` declaration, and `install/claude-activation.md` is a SHIPPED doc about exactly this activation surface (it discusses `.mcp.json`, `boot install` and the `sh`/`DOCTRINE_BIN` override at lines 17, 59, 73-79, 89, 106).
+
+What landed is the README sentence (EX-9 pinned README; VA-1 verified it; confirmed by reading it). So the design permits either home and the implementation chose one — but that leaves two loose ends the audit should not leave implicit:
+1. the `install/**` selector in `slice-271.toml` is now a stale declaration that dilutes the review-prime path-set;
+2. the shipped corpus — the surface a CLIENT reads, since `install/` is what `doctrine install` projects — carries nothing about the `sh` dependency the client's own `.codex/config.toml` will need, so a client who never reads doctrine's upstream README has the dependency undeclared.
+
+Neither is a correctness defect; both are decisions that must be made rather than drifted. Remediation (/reconcile): either drop `install/**` from the selectors and record that README is the declaration's home, or keep the selector and owe the shipped-corpus sentence as a further deliverable — a docs change reconcile does not write, so it would be a phase or a follow-up item, not a direct edit. Name which in the reconciliation outcome."""
+disposition = "design-wrong"
+response = """
+Delegated to /reconcile — but the disposition is a decision, not a repair, so the response has to keep both branches live rather than pick one unilaterally.
+
+Reconciliation-brief entry: "Per-slice (direct edit)" — either drop the install/** design-target from slice-271.toml and record README as the declaration's home, or keep the selector and owe the shipped-corpus sentence. If the second, the brief's "Further deliverables" carries the docs change, because reconcile's two write surfaces (per-slice artefacts, governance REV) do not include the shipped corpus.
+
+What the audit settles: EX-9 and VA-1 pinned README, README has the sentence, and nothing was dropped that any plan criterion required. What is left open is whether a client who never reads doctrine's upstream README should learn the sh requirement from the corpus projected into their repo."""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Delegated to /reconcile — but the disposition is a decision, not a repair, so the response has to keep both branches live rather than pick one unilaterally.
+
+Reconciliation-brief entry: "Per-slice (direct edit)" — either drop the install/** design-target from slice-271.toml and record README as the declaration's home, or keep the selector and owe the shipped-corpus sentence. If the second, the brief's "Further deliverables" carries the docs change, because reconcile's two write surfaces (per-slice artefacts, governance REV) do not include the shipped corpus.
+
+What the audit settles: EX-9 and VA-1 pinned README, README has the sentence, and nothing was dropped that any plan criterion required. What is left open is whether a client who never reads doctrine's upstream README should learn the sh requirement from the corpus projected into their repo."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified as a delegated decision with both branches in the brief. I considered whether leaving a two-branch entry stalls reconcile — it does not: the entry names the decision and the surface for each branch, which is what the brief is for. Tolerating a stale selector without deciding would have been the drift."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "The two undeclared deltas are the slice's own lifecycle bookkeeping, not scope creep"
+detail = """
+`doctrine slice conformance 271` reports **undeclared (2)**: `.doctrine/slice/271/plan.toml` and `.doctrine/slice/271/slice-271.toml`.
+
+Both are the slice's own workflow bookkeeping, not source: the PHASE-01 plan correction (the payload test renamed `plan_mcp_carries_the_full_invocation`, the stdout check moved to PHASE-02) and the lifecycle transitions plan -> ready -> started -> audit. Every slice in this repo edits its own slice/plan/notes files as it moves, and no `design-target` selector could sensibly declare them — a selector exists to bound the changed *surface*, not to enumerate the slice's own diary.
+
+No scope creep, no foreign work (the delta is scoped to the fork branch; the primary tree's registry holds nothing from another slice for these paths). No change needed — recorded so the undeclared cell is dispositioned rather than carried as an open lead."""
+disposition = "aligned"
+response = "No change needed. The two undeclared paths are the slice's own plan correction and lifecycle transitions; a design-target selector bounds the changed surface, not the slice's bookkeeping. Recorded so the conformance cell is dispositioned rather than carried."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "aligned"
+response = "No change needed. The two undeclared paths are the slice's own plan correction and lifecycle transitions; a design-target selector bounds the changed surface, not the slice's bookkeeping. Recorded so the conformance cell is dispositioned rather than carried."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: the observation was correct and the no-change rationale holds."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "nit"
+title = "The three VA-1 agent checks are recorded in the disposable phase sheet or nowhere, not in the slice notes the plan names"
+detail = """
+Each of the three phases carries a `VA-1` agent check whose text ends "the agent records the diff check / the sentence and its location / the review **in the slice notes**". None is recorded there:
+
+- PHASE-01/VA-1 (no `plan_mcp_*` / `is_doctrine_mcp_entry_*` assertion edited) — the only record is in the DISPOSABLE runtime sheet, `.doctrine/state/slice/271/phases/phase-01.md:31`, which `rm -rf .doctrine/state` erases; `notes.md` mentions behaviour preservation (`:117`) but not the check.
+- PHASE-02/VA-1 (the `sh` sentence and its location recorded) — the notes name "the `sh` declaration" in the harvest lines (`:191`, `:261`) without the sentence or the location.
+- PHASE-03/VA-1 (the three disclosure conditions reviewed against design sec-5.4) — recorded nowhere.
+
+SUBSTANCE, discharged by this audit rather than assumed. PHASE-01: `git diff 0da371b37..HEAD -- src/boot.rs` shows the `plan_mcp_*` / `is_doctrine_mcp_entry_*` block to be additions only; the single modified assertion in that region is `assert!(matches!(out.mcp, RefreshOutcome::None))` -> `Wired(_)` at the codex-arm test (src/boot.rs:5608), which PHASE-02/EX-8 sanctions. PHASE-02: `README.md:160-176` names the POSIX-shell requirement and does not claim its absence is silent. PHASE-03: the three conditions (MCP wrote-line, probe trigger, trust caveat) are exercised by PHASE-03/VT-3 and VT-4.
+
+So the substance holds; the plan's recording instruction does not. No change needed — this ledger is now the durable record, and the sheets are disposable by design — but a slice's VA records belong in `notes.md`, and the next one should say so."""
+disposition = "aligned"
+response = "No change needed: the substance of all three VA-1 checks is discharged above and now durably recorded on this ledger, which is the sink the plan's recording instruction was reaching for. The lesson is for the next slice, not this one — VA records belong in notes.md, because the phase sheets are disposable by design and PHASE-01's was in one."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "aligned"
+response = "No change needed: the substance of all three VA-1 checks is discharged above and now durably recorded on this ledger, which is the sink the plan's recording instruction was reaching for. The lesson is for the next slice, not this one — VA records belong in notes.md, because the phase sheets are disposable by design and PHASE-01's was in one."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: substance discharged, recording gap acknowledged as a forward lesson."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.
