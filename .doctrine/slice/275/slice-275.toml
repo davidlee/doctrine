@@ -1,0 +1,45 @@
+id = 275
+slug = "memory-search-default-page-retrieval-floor-and-a-zero-evidence-signal"
+title = "Memory search: default page, retrieval floor, and a zero-evidence signal"
+status = "design"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/retrieve.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/memory.rs"
+intent = "scope-relevant"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-001"
+
+[[relation]]
+label = "governed_by"
+target = "STD-001"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "ISS-465"
+
+[[relation]]
+label = "related"
+target = "SL-274"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis. Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-NNN
+#   doctrine link SL-NNN governed_by ADR-NNN
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
