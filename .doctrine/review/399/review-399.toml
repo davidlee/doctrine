@@ -1,0 +1,388 @@
+id    = 399
+slug  = "design-review-of-sl-271"
+title = "design review of SL-271"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Adversarial pass over design.md rev 29 (before review fixes: rev 25/27 draft). One blocker and nine major findings, four minor, all raised on this ledger; the codex MCP leg's shared-classification contract, report seam, probe seam, e2e hermeticity, SPEC-011 citations, ownership formula, emitted-form set, activation wording, outcome vocabulary and Revision shape were all attacked. Every finding disposed fix-now and verified against the materialised design at rev 29."
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-271"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Shared classification type cannot express the class it declares"
+detail = """
+sec-5.2 types `classify_mcp_entry(present, owned, current) -> McpEntryClass` and lists `Malformed` as a member, but malformed is a PARSE outcome (bad TOML, non-table `mcp_servers`, non-table entry) taken before any ownership test — exactly as `plan_mcp` returns `mcp_fallback()` at boot.rs:2042/2050/2054 ahead of classification. The signature therefore has an unreachable arm and every implementor must invent where Malformed originates, which is the divergence the shared function exists to prevent.
+"""
+disposition = "fix-now"
+response = "Applied. The shared function is total over PARSED input and loses the `Malformed` arm: `enum McpEntryClass { Absent, OwnedCurrent, OwnedStale, Foreign }`. Malformed becomes an input-side outcome owned by each planner (`CodexMcpPlan { class: Result<McpEntryClass, Malformed>, new_toml }`), mirroring `mcp_fallback`'s pre-classification sentinel. sec-5.2 and sec-8 updated."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied. The shared function is total over PARSED input and loses the `Malformed` arm: `enum McpEntryClass { Absent, OwnedCurrent, OwnedStale, Foreign }`. Malformed becomes an input-side outcome owned by each planner (`CodexMcpPlan { class: Result<McpEntryClass, Malformed>, new_toml }`), mirroring `mcp_fallback`'s pre-classification sentinel. sec-5.2 and sec-8 updated."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified in rev 29: sec-5.2 now types the shared function total over parsed input (no Malformed arm) and Malformed is a planner-level Err."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "wire() renders the codex registration as a Claude command line"
+detail = """
+sec-5.2 specifies only that wire() selects the FILE name. Its Wired/Refreshed arms bake the Claude command shape into the format string — `"registered MCP server in {MCP_REL}: {cmd} serve --mcp"` (boot.rs:2855) and `:2862` — so a codex `Wired(CODEX_MCP_SHELL)` prints `.codex/config.toml: sh serve --mcp`. The design never states what string the codex leg carries in Wired/Refreshed nor that the suffix must differ per arm.
+"""
+disposition = "fix-now"
+response = "Applied. The codex leg carries the RENDERED invocation (the wrapper line) and the design specifies the per-harness message: the literal ` serve --mcp` suffix is dropped from both arms and the carried string is the full invocation, so neither arm re-appends args. sec-5.2 states the carried string and the message text for each harness; sec-9's impact row covers the format-string change."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied. The codex leg carries the RENDERED invocation (the wrapper line) and the design specifies the per-harness message: the literal ` serve --mcp` suffix is dropped from both arms and the carried string is the full invocation, so neither arm re-appends args. sec-5.2 states the carried string and the message text for each harness; sec-9's impact row covers the format-string change."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified in rev 29: sec-5.2 specifies the carried string and both harness messages; the literal ' serve --mcp' suffix is dropped from the Claude arm too."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "No seam carries the probe runner into wire(), and the existing Runner cannot capture stdout"
+detail = """
+wire() is `fn wire(root, exec, harnesses, dry_run)` (boot.rs:2752) with no runner parameter, called from run_install (boot.rs:2645), install::run (install.rs:414) and three tests. The design names a `CommandRunner` but never its home, its capture signature, or how a default is chosen; and the existing seam `install::Runner` (install.rs:1713-1726) returns `anyhow::Result<bool>` and inherits stdio, so it cannot capture `codex features list` output. src/install.rs is absent from the code-impact table.
+"""
+disposition = "fix-now"
+response = "Applied. sec-5.2 now names the seam: a capture-capable trait (`fn run_capture(&self, program: &str, args: &[&str]) -> anyhow::Result<String>`) living beside the existing installer runner, with a default implementation selected in the shell and an injected fake in tests; `wire()` takes the runner as a parameter. `src/install.rs` added to the impact table (sec-9)."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied. sec-5.2 now names the seam: a capture-capable trait (`fn run_capture(&self, program: &str, args: &[&str]) -> anyhow::Result<String>`) living beside the existing installer runner, with a default implementation selected in the shell and an injected fake in tests; `wire()` takes the runner as a parameter. `src/install.rs` added to the impact table (sec-9)."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified in rev 29: sec-5.2 defines CommandRunner::run_capture with its home and injection; src/install.rs is in the sec-9 impact table."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "The new codex e2e is non-hermetic against the probe"
+detail = """
+sec-9 claims 'No test requires a real codex on PATH' while its integration e2e drives the real install path, which reaches the probe and spawns `codex` from the host PATH (existence, output and hang behaviour all uncontrolled). Only the unit-level state test injects a runner. The design never says how the e2e neutralises the probe.
+"""
+disposition = "fix-now"
+response = "Applied. With the runner threaded (finding 3) the e2e injects a fake runner; the design states this explicitly and keeps a second case that runs with an empty PATH to pin the `Unknown(reason)` line, so the hermetic claim is true by construction rather than by omission."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied. With the runner threaded (finding 3) the e2e injects a fake runner; the design states this explicitly and keeps a second case that runs with an empty PATH to pin the `Unknown(reason)` line, so the hermetic claim is true by construction rather than by omission."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified in rev 29: sec-9 injects the runner in both e2e cases, adds an empty-PATH case for Unknown(reason), and no longer claims a hermeticity it does not have."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "SPEC-011 citations are misapplied; the authority table does not say what the design claims"
+detail = """
+Verified against the requirement texts: REQ-185 is the `@`-import dedupe requirement, NOT a pure-plan/imperative-apply split (that is SPEC-011 prose, spec-011.md:89); REQ-477 is the abandoned-scope eviction sweep, NOT a generic per-leg reporting duty; REQ-479 is the codex hook-registry merge, a PRECEDENT for a codex-specific leg, NOT a rule that a codex leg gets its own member. Two of the three obligations the design attributes to them do not exist as stated.
+"""
+disposition = "fix-now"
+response = "Applied. sec-3 now cites REQ-186 for the ownership-predicate merge posture, the SPEC-011 responsibilities prose for the plan/apply split, REQ-479 explicitly as precedent, and REQ-480 for the per-leg reporting pattern. The 'codex leg gets its own member' claim is restated as a design choice, sourced from the per-harness member precedent rather than asserted as REQ-479's rule."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied. sec-3 now cites REQ-186 for the ownership-predicate merge posture, the SPEC-011 responsibilities prose for the plan/apply split, REQ-479 explicitly as precedent, and REQ-480 for the per-leg reporting pattern. The 'codex leg gets its own member' claim is restated as a design choice, sourced from the per-harness member precedent rather than asserted as REQ-479's rule."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified in rev 29: sec-3 cites REQ-186/REQ-480, marks REQ-479 as precedent and the plan/apply split as responsibilities prose (REQ-185/477 dropped)."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Ownership predicate prose contradicts the design's own edge-case table"
+detail = """
+sec-5.2 says the wrapper trio is current and 'anything else is foreign', while sec-5.5 requires 'current command but env_vars missing/short -> Refreshed'. A `sh` entry with the right args but no `env_vars` is thus both foreign (prose) and stale (table). An implementor cannot satisfy both without inventing the rule — the SL-195 F-1 class this design sets out to retire.
+"""
+disposition = "fix-now"
+response = 'Applied. The predicate is stated as a formula, not prose: owned = command == "sh" && args == ["-c", <line matching the doctrine wrapper pattern>]; current = owned && env_vars contains DOCTRINE_BIN && the line equals the emitted constant. A wrapper missing `env_vars` is therefore owned-but-stale (Refreshed), which is what the edge table requires.'
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = 'Applied. The predicate is stated as a formula, not prose: owned = command == "sh" && args == ["-c", <line matching the doctrine wrapper pattern>]; current = owned && env_vars contains DOCTRINE_BIN && the line equals the emitted constant. A wrapper missing `env_vars` is therefore owned-but-stale (Refreshed), which is what the edge table requires.'
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified in rev 29: sec-5.2 states owned/current as formulas; missing env_vars is owned-but-stale, matching the sec-5.5 edge table."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "Owning the never-emitted plain `doctrine` form rewrites a user's deliberate entry, and the emitted-form set silently narrows"
+detail = """
+Doctrine has never written `.codex/config.toml` (sec-2), so a plain `command = "doctrine"` entry is hand-authored and may be deliberate (no shell); the Claude predicate owns a legacy abspath only because doctrine DID emit it (boot.rs:2010-2013). Migrating the plain form silently introduces a shell wrapper. Separately, D3 named `/bin/sh` and baked abspaths as forms the comparator must model; the design owns neither and gives no rationale.
+"""
+disposition = "fix-now"
+response = 'Applied, both halves. Ownership narrows to the wrapper shape only: `command == "sh"` with a line matching the doctrine wrapper pattern (so a stale wrapper we emitted still refreshes). The plain literal, `/bin/sh`, and baked abspaths are all deliberately FOREIGN — left untouched with a printed snippet — and the design now says so explicitly with the no-clobber rationale, closing D3 rather than passing over it. DEC-324 is amended accordingly.'
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = 'Applied, both halves. Ownership narrows to the wrapper shape only: `command == "sh"` with a line matching the doctrine wrapper pattern (so a stale wrapper we emitted still refreshes). The plain literal, `/bin/sh`, and baked abspaths are all deliberately FOREIGN — left untouched with a printed snippet — and the design now says so explicitly with the no-clobber rationale, closing D3 rather than passing over it. DEC-324 is amended accordingly.'
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified in rev 29: ownership narrows to the wrapper shape only; the plain literal, /bin/sh and baked abspaths are explicitly foreign with rationale; DEC-324 amended."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "POL-003 facet 2 is quoted against itself, and the report claims activation it cannot establish"
+detail = """
+sec-3 says correctness may not rest on an incidental harness seam, yet the leg's correctness does rest on `.codex/config.toml`'s shape (it writes `[mcp_servers.doctrine]` with command/args/env_vars). The stated mitigation covers only the PROBE's stdout, not the shape doctrine writes into. If codex renames the table, doctrine writes a table codex ignores while printing 'registered MCP server in .codex/config.toml' (boot.rs:2855) — a false activation claim, which facet 3 also forbids.
+"""
+disposition = "fix-now"
+response = "Applied. sec-3 records the write seam as a documented version delta with a follow-up (facet 2's sanctioned outcome), and sec-5.4 rewords the report line to state what was WRITTEN ('wrote MCP server registration in <file>') rather than claiming activation; the trust caveat carries the residual uncertainty. A post-write harness verification is recorded as an explicit follow-up, not silently assumed."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied. sec-3 records the write seam as a documented version delta with a follow-up (facet 2's sanctioned outcome), and sec-5.4 rewords the report line to state what was WRITTEN ('wrote MCP server registration in <file>') rather than claiming activation; the trust caveat carries the residual uncertainty. A post-write harness verification is recorded as an explicit follow-up, not silently assumed."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified in rev 29: sec-3 records the write seam as a version delta with a follow-up; sec-5.2 words the codex line as what was written, not activation."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "major"
+title = "Unbacked 'did-not-attempt' claim; probe state layer cannot exercise Enabled/Disabled"
+detail = """
+sec-5.4 claims the leg distinguishes did-not-attempt from nothing-to-do, but `RefreshOutcome` is Wired|Refreshed|PrintedFallback|None (boot.rs:940-956) with no such variant and sec-5.2 adds none. Separately, sec-9's state-layer test stubs the runner with 'success, failure and absence' all expected to be Unknown, so a wrong `Some(true) => Enabled` / `Some(false) => Disabled` match arm passes unexercised.
+"""
+disposition = "fix-now"
+response = "Applied. The claim is deleted: the disclosure is carried by `PrintedFallback` (file unreadable or foreign) versus `None` (already current), and sec-5.4 says exactly that. The probe test now includes success cases returning `hooks ... true` -> Enabled and `hooks ... false` -> Disabled, with empty-stdout success as the separate Unknown case."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied. The claim is deleted: the disclosure is carried by `PrintedFallback` (file unreadable or foreign) versus `None` (already current), and sec-5.4 says exactly that. The probe test now includes success cases returning `hooks ... true` -> Enabled and `hooks ... false` -> Disabled, with empty-stdout success as the separate Unknown case."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified in rev 29: the did-not-attempt claim is gone (PrintedFallback vs None), and the probe test gains Enabled/Disabled success cases."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "major"
+title = "The Revision plan contradicts the per-harness member principle and leaves ADR-013 unapplied"
+detail = """
+sec-3 says a codex leg is not folded into a Claude-arm requirement, while sec-9 plans ONE Specification Revision whose member the research describes as covering both harnesses. `FR-012` is also a doc-local label, not the durable id, and the slice knowingly proceeds under an absent requirement without the `needs REV-NNN` anchor ADR-013 specifies.
+"""
+disposition = "fix-now"
+response = "Applied. sec-9 specifies the Revision's shape: one REV introducing TWO members — one retro-covering the shipped Claude `.mcp.json` arm, one for the codex `mcp_servers` leg — with the durable REQ ids minted by the Revision (the design stops naming a doc-local label). sec-6/§9 state the ADR-013 position explicitly: the slice does not WAIT on the change (the Revision retro-describes shipped and new behaviour), so it carries no `needs` anchor, and the reason is recorded rather than left implicit."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied. sec-9 specifies the Revision's shape: one REV introducing TWO members — one retro-covering the shipped Claude `.mcp.json` arm, one for the codex `mcp_servers` leg — with the durable REQ ids minted by the Revision (the design stops naming a doc-local label). sec-6/§9 state the ADR-013 position explicitly: the slice does not WAIT on the change (the Revision retro-describes shipped and new behaviour), so it carries no `needs` anchor, and the reason is recorded rather than left implicit."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified in rev 29: sec-6/sec-9 specify one Revision with two members and REQ ids minted by it; the ADR-013 non-wait rationale is recorded."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "minor"
+title = "Disclosure predicate ambiguity, dry-run overclaim, and overstated toml_edit claims"
+detail = """
+sec-5.2 says the caveat prints 'when the harness ran and something was wired' while sec-5.4 says 'when the leg produced something to report' — differing on PrintedFallback and None. The sequence shows the caveat and warning firing under dry-run, where nothing was written. sec-5.3 claims the block is 'appended after existing tables' and that unrelated content survives 'byte-for-byte' — stronger than a `toml_edit` narrow-path insert guarantees.
+"""
+disposition = "fix-now"
+response = "Applied. One explicit predicate: the probe and both riders fire iff the outcome is Wired or Refreshed and `dry_run` is false; the probe additionally warns only when the state is not Enabled. Under dry-run the line follows the existing convention for planned writes and no probe runs. sec-5.3 states the real placement rule (the table is inserted at the `mcp_servers` narrow path; when the parent table is absent it is appended at the document's end) and scopes preservation to 'unrelated keys, tables and comments are preserved' rather than byte-for-byte."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied. One explicit predicate: the probe and both riders fire iff the outcome is Wired or Refreshed and `dry_run` is false; the probe additionally warns only when the state is not Enabled. Under dry-run the line follows the existing convention for planned writes and no probe runs. sec-5.3 states the real placement rule (the table is inserted at the `mcp_servers` narrow path; when the parent table is absent it is appended at the document's end) and scopes preservation to 'unrelated keys, tables and comments are preserved' rather than byte-for-byte."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified in rev 29: sec-5.4 gives one exact disclosure predicate and dry-run gating; sec-5.3 states the real placement rule and scopes preservation."
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "minor"
+title = "Authority-table hygiene: an analogy cited as a constraint and evidence-tier material in the authority table"
+detail = """
+ADR-019 governs doctrine's projected asset set, not edits to a client-owned file, so citing it as a binding constraint imports authority it does not carry; PRD-006's never-overwrite refined by SPEC-011's ownership-aware merge is the governing pair. IMP-249 is a tier-5 backlog item and cannot sit in a binding-authority table.
+"""
+disposition = "fix-now"
+response = "Applied. ADR-019 is restated as an analogy in the rationale, with PRD-006 plus the Claude leg's in-repo precedent as the authority; the IMP-249 row moves to a 'motivating evidence' list beneath the authority table. Impact row added for the three stale report-seam doc comments (RefreshOutcome:940, RefreshReport.mcp:1787, the wire MCP block:2851)."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied. ADR-019 is restated as an analogy in the rationale, with PRD-006 plus the Claude leg's in-repo precedent as the authority; the IMP-249 row moves to a 'motivating evidence' list beneath the authority table. Impact row added for the three stale report-seam doc comments (RefreshOutcome:940, RefreshReport.mcp:1787, the wire MCP block:2851)."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified in rev 29: ADR-019 is an analogy in sec-3, PRD-006 + precedent carry the authority, IMP-249 moved to motivating evidence, doc-comment rows added."
+
+[[finding]]
+id = "F-13"
+status = "verified"
+severity = "minor"
+title = "Constant duplication weakens STD-001 at the point that matters"
+detail = """
+`CODEX_MCP_WRAPPER` re-types `${DOCTRINE_BIN:-doctrine}` (PORTABLE_EXEC, boot.rs:613) and `serve --mcp` (boot.rs:1998) — a third copy of the invocation — and the emitted table key re-types `MCP_SERVER_KEY` (boot.rs:598). `const` cannot compose strings, so perfect single-sourcing is impossible, but the tension should be named and drift made detectable.
+"""
+disposition = "fix-now"
+response = "Applied. The emitted table key references `MCP_SERVER_KEY`; the wrapper is built with `concat!` over named fragments where possible; and sec-9 adds an agreement assertion test pinning the wrapper string against PORTABLE_EXEC and the args constants so the copies cannot drift undetected."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied. The emitted table key references `MCP_SERVER_KEY`; the wrapper is built with `concat!` over named fragments where possible; and sec-9 adds an agreement assertion test pinning the wrapper string against PORTABLE_EXEC and the args constants so the copies cannot drift undetected."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified in rev 29: the table key references MCP_SERVER_KEY, the wrapper composes with concat!, and sec-9 adds a constants-agreement test."
+
+[[finding]]
+id = "F-14"
+status = "verified"
+severity = "minor"
+title = "Remaining test and hygiene gaps"
+detail = """
+The codex e2e seeds only the file-present branch, leaving the from-absent create path (and parent-dir creation) unpinned; the `sh` shadowing question (OQ-6) is carried as an assumption when a project-local `sh` on PATH would be a code-execution vector; sec-5.4's diagram labels the branch with RefreshOutcome names while sec-5.2's classes are McpEntryClass values, and the system-model edges imply the report drives wire(); and the `DOCTRINE_BIN`-unset runtime fallback is listed as a case the suite must pin although only codex's runtime can honour it.
+"""
+disposition = "fix-now"
+response = "Applied. The e2e gains a second case starting with no `.codex/config.toml`, asserting file and parent-dir creation. The `sh` shadowing is decided rather than assumed: the entry resolves `sh` through PATH from codex's whitelisted environment, which is stated in sec-5.5 with the single vector (a PATH entry containing the project directory) named, and the residual is disclosed in the install output's caveat sentence. Both diagrams are corrected — the branch is labelled with McpEntryClass values and the flow is drawn run_install -> install_refresh -> report -> wire. The DOCTRINE_BIN case moves to Assumptions, with the emitted string as the only testable assertion."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Applied. The e2e gains a second case starting with no `.codex/config.toml`, asserting file and parent-dir creation. The `sh` shadowing is decided rather than assumed: the entry resolves `sh` through PATH from codex's whitelisted environment, which is stated in sec-5.5 with the single vector (a PATH entry containing the project directory) named, and the residual is disclosed in the install output's caveat sentence. Both diagrams are corrected — the branch is labelled with McpEntryClass values and the flow is drawn run_install -> install_refresh -> report -> wire. The DOCTRINE_BIN case moves to Assumptions, with the emitted string as the only testable assertion."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified in rev 29: the e2e gains the create-from-absent case; the sh resolution is decided and disclosed; both diagrams are corrected; the DOCTRINE_BIN case moved to Assumptions."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

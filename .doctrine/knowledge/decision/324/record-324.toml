@@ -5,7 +5,7 @@ id = 324
 slug = "codex-mcp-ownership-predicate-and-emitted-form-set"
 title = "Codex MCP ownership predicate and emitted-form set"
 record_kind = "decision"
-status = "accepted"
+status = "superseded"
 created = "2026-09-27"
 updated = "2026-09-27"
 tags = []
@@ -26,7 +26,7 @@ notes       = []
 
 [relationships]                 # verb-written edges (set by doctrine supersede)
 supersedes    = []   # record ids this one replaces (set by doctrine supersede)
-superseded_by = []   # set on superseded predecessor (verb-written)
+superseded_by = ["DEC-332"]   # set on superseded predecessor (verb-written)
 
 [[relation]]
 label = "shapes"

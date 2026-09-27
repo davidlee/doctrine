@@ -86,7 +86,7 @@ D1–D5 from IMP-111 are settled; the run holds them, one accepted `DEC` per nod
 | node | decision | record |
 |---|---|---|
 | command form | portable env literal through `sh -c` + `env_vars = ["DOCTRINE_BIN"]`; declare the shell dependency | DEC-323 |
-| ownership + emitted-form set | own the wrapper trio *and* the plain literal as stale; `env_vars` clause load-bearing; comparator tracks the emitted constants | DEC-324 |
+| ownership + emitted-form set | own the wrapper shape only (`command = "sh"` + our line; `env_vars` part of current); plain literal, `/bin/sh` and baked abspaths are foreign | DEC-332 (supersedes the second half of DEC-324) |
 | sharing boundary | separate planner + shell per arm; one shared classification enum + decision table | DEC-328 |
 | report seam | one `mcp` field; `wire()` names the file from the harness | DEC-325 |
 | disclosure + file ownership | MCP registration only; probe `codex features list` for the hooks state and warn; disclose the trust skip | DEC-329 |
@@ -97,8 +97,16 @@ literal), so the portable form is chosen *unconditionally*, mirroring `plan_mcp`
 and POL-002 facet 3 makes the `sh` dependency a declaration duty rather than a
 taste call.
 
-Still owed at close (not a design question): a SPEC-011 revision (`FR-012`) — no
-MCP registration requirement exists for either harness today.
+Still owed at close (not a design question): a SPEC-011 revision introducing **two**
+members — one retro-covering the shipped Claude `.mcp.json` arm, one for the codex
+`mcp_servers` leg — with their `REQ` ids minted by the revision. No MCP
+registration requirement exists for either harness today.
+
+The adversarial design pass (`RV-399`, rev 29) landed 14 findings, all disposed
+`fix-now` and verified. The material changes to scope: the ownership narrowing
+above, the report now stating what was *written* rather than claiming activation,
+and the two-member revision shape. See `.doctrine/slice/271/notes.md` for what a
+further pass would probe.
 
 ## Verification / closure intent
 

@@ -74,6 +74,34 @@ Full evidence: `research/research.md` (✓ rows only are load-bearing) and IMP-1
 D1–D5 above, plus OQ-6 (project-local `sh` / `cwd` pickup) — OQ-6 resolves with
 D4 (portable), where the declaration duty is POL-002 facet 3.
 
+### Review pass (RV-399, 2026-09-27) — what a further pass would probe
+
+Written after the last pass (adversarial review of design.md rev 25/27, fixes
+materialised at rev 29; 14 findings, all `fix-now` + verified). A further pass
+would focus on what the fixes themselves introduced or left open:
+
+1. **The `is_doctrine_wrapper_line` pattern.** It is now the pivot of ownership — a
+   stale-but-ours wrapper refreshes, everything else is foreign. Probe it with
+   adversarial line shapes: extra whitespace, a quoted program containing
+   `doctrine` in a path component (`/opt/doctrine-tools/bin/other`), an
+   env-prefixed line, a trailing comment, and a wrapper whose program is the
+   literal `${DOCTRINE_BIN:-doctrine}` re-quoted differently. A false positive
+   rewrites a user entry; a false negative strands our own older wording.
+2. **The `env_vars` clause.** Check it cannot be satisfied accidentally by a
+   sibling key, and that a codex-canonical ordering/spelling variant of the same
+   whitelist is not read as stale (repeated refresh thrash).
+3. **The probe seam.** Verify the injected-runner seam cannot be satisfied by
+   `install::Runner` (stdio-inheriting) by accident, and that the empty-`PATH`
+   e2e really pins `Unknown(reason)` rather than a generic failure.
+4. **The Rewording obligation.** The report now says "wrote"; check no other line
+   (docs, help text, the trust caveat) still claims activation, and that the
+   caveat is not printed on `dry_run` or on `PrintedFallback`.
+5. **`concat!` composition.** Confirm the constants-agreement test actually fails
+   when `PORTABLE_EXEC` changes wording, i.e. it is not a tautology.
+
+No further pass is required to lock: every one of these is a refinement of an
+accepted decision (DEC-323/325/328/329/332), not an open question.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
