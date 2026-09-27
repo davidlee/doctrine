@@ -43,11 +43,37 @@ sessions.
   CLI-side, file-free alternative; rejected as the install posture (it lives in
   the harness invocation, not in the repo install artefacts).
 
+### Trust gate — OQ-4 answered (operator testing, 2026-09-27)
+
+Local (project-scoped) MCP config **just works**: no trust/approval step at
+startup. Only *hooks* need the explicit pass (`[features] hooks = true` +
+`/hooks`), which is why the codex arm discloses those three manual steps and
+still cannot assume the MCP path needs company. So the MCP writer needs no
+install-time caveat beyond the usual malformed/foreign-entry fallback.
+
+### Same-file interaction (new)
+
+`.codex/config.toml` is not virgin territory for this repo's *documentation*, and
+under this item it becomes doctrine-*written* for the first time:
+
+- `boot.rs` `write_codex_activation` today **instructs** the user to "Ensure
+  `[features] hooks = true` in `.codex/config.toml`" — doctrine already depends on
+  this file existing and user-edited, while writing only `.codex/hooks.json`
+  (`CODE_HOOKS_REL`, JSON).
+- So the MCP merge must preserve user stanzas (`[features]`, comments, unrelated
+  keys) — reinforcing OQ-2's `toml_edit` edit-preserving choice — and must create
+  the file/parent dir when absent. Whether install should *also* ensure
+  `[features] hooks = true` once it owns the file is a scope call, not an
+  incidental — record it here rather than smuggling it in.
+
 ## Wanted
 
 Register the doctrine MCP server with codex during install, mirroring the Claude
 arm's posture: idempotent additive merge, no-clobber of a foreign/customised
-entry, fail-soft on malformed config, absolute exec path stamped.
+entry, fail-soft on malformed config. Command form follows the Claude arm's
+**current** shape — the portable env literal (`PORTABLE_EXEC`), never a host
+abspath (POL-002, SL-195); IMP-111's original "absolute exec path stamped"
+wording predates SL-195 and is stale.
 
 - Add a codex MCP planner/installer beside `plan_mcp`/`install_mcp` (or
   generalise the existing core if the merge shape is close enough — watch for a
@@ -59,13 +85,14 @@ entry, fail-soft on malformed config, absolute exec path stamped.
 
 - OQ-1 **Answered →** project-local `.codex/config.toml`, mirroring the Claude
   arm's posture (see *Surface confirmed* above). No global write.
-- OQ-4 Trust gate: codex reads project-scoped config only for *trusted*
-  projects. Is that a documented install-time caveat (report it in the install
-  summary) or a non-issue because a repo running `doctrine install` is already
-  the user's own? Also confirm `mcp_servers` is *not* in the set of keys a
-  project layer may not override (the reference names machine-local provider /
-  auth / telemetry keys — `mcp_servers` does not appear among them, but verify
-  against the live docs before relying on it).
+- OQ-4 **Answered →** no trust caveat needed; project-local MCP applies at once
+  (operator testing), unlike hooks (see *Trust gate* above).
+- OQ-5 Env expansion: the Claude entry relies on `${DOCTRINE_BIN:-doctrine}`
+  (`PORTABLE_EXEC`, SL-195). Does codex expand that syntax inside
+  `mcp_servers.<id>.command`, or must the codex entry use a literal `doctrine`
+  (PATH-resolved) with `env_vars`/`env` carrying `DOCTRINE_BIN`? Settle by
+  inspecting codex's config handling, not by analogy — a non-expanding codex
+  would silently exec a literal `${DOCTRINE_BIN:-doctrine}`.
 - OQ-2 TOML merge: codex config is TOML, not JSON — the `serde_json::Value`
   narrow-path mutate in `plan_mcp` does not transfer. A `toml_edit`-based
   edit-preserving merge is the likely shape (don't clobber comments/other keys).
