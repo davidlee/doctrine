@@ -1270,7 +1270,8 @@ fn delegate(
 /// Two checks, in this order. First the proposal is rehearsed over a scratch
 /// copy of the map through the direct path's own seams — [`Batch::validate`] and
 /// [`declare_node`] — so an inquiry-home rule (`blocking` owed at creation,
-/// never withdrawn) refuses here exactly as a direct apply refuses it. Then any
+/// never withdrawn) and the finding home's `blocking: null` refusal (`SL-272`)
+/// refuse here exactly as a direct apply refuses them. Then any
 /// sparse `null` the direct path would honour is refused, because a stored
 /// proposal cannot hold one ([`Declaration::nulled_keys`]).
 ///

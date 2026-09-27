@@ -180,9 +180,10 @@ pub(crate) struct Declaration {
     /// `Sparse<bool>` and deliberately **not** `Option<bool>`: absence and `null`
     /// have to stay distinct through parsing, because they mean different things
     /// at the inquiry home (`null` is refused — a judgement can be changed but
-    /// not withdrawn) and the same thing at the finding home (`null` reads as
-    /// absence, `ISS-482`). An `Option` collapses the two at the wire, which is
-    /// the distinction this field exists to carry.
+    /// not withdrawn) and different things again at the finding home, where
+    /// absence is non-blocking and `null` is refused
+    /// ([`Declaration::finding_blocking_null`], `SL-272`). An `Option` collapses
+    /// the two at the wire, which is the distinction this field exists to carry.
     #[serde(default, skip_serializing_if = "Sparse::is_omitted")]
     blocking: Sparse<bool>,
     /// How a finding was disposed. Its presence, with content, is what
@@ -536,9 +537,10 @@ impl Declaration {
 
     /// Whether this finding blocks the lock gate, defaulting to non-blocking.
     ///
-    /// The **finding** home's reading, and deliberately the one it has always
-    /// had: `null` reads exactly as absence does. That sibling of the inquiry
-    /// home's refusal is `ISS-482`, out of this slice's scope.
+    /// The **finding** home's reading. `null` cannot reach it:
+    /// [`Batch::validate`] refuses a finding's `null` on every route
+    /// ([`Declaration::finding_blocking_null`]), so the only fold left is
+    /// omission → non-blocking.
     pub(crate) const fn finding_blocks(&self) -> bool {
         matches!(self.blocking, Sparse::Value(true))
     }
@@ -837,9 +839,10 @@ impl Declaration {
     /// `IMP-483`). Pinned to the contract's sparse key set by
     /// `every_sparse_key_is_reported_when_null`.
     ///
-    /// `blocking` is not among them: its inquiry-home `null` is refused by the
-    /// direct path's own rule, and at a finding `null` reads as absent, so
-    /// dropping it changes nothing (`RV-389` F-18).
+    /// `blocking` is not among them: its `null` is refused before this is read,
+    /// at both homes — the inquiry home's by `declare_node`, the finding home's
+    /// by [`Batch::validate`] ([`Declaration::finding_blocking_null`], `SL-272`,
+    /// overturning the `RV-389` F-18 premise that it read as absent).
     pub(crate) fn nulled_keys(&self) -> Vec<&'static str> {
         [
             (KEY_QUESTION, self.question.is_null()),
@@ -880,6 +883,23 @@ impl Declaration {
                 KeyHome::At(_) | KeyHome::Universal => None,
             })
             .collect()
+    }
+
+    /// A finding raised with `blocking: null`, as the refusal a caller should
+    /// see (`SL-272` sec-2).
+    ///
+    /// Pure, and scoped to the finding home: the inquiry home refuses its own
+    /// `null` in `declare_node`. [`Batch::validate`] calls it after the state
+    /// axis, so a **held** finding's `null` is refused there first — the key is
+    /// inert on a held finding whatever it carries. Here rather than in
+    /// `declare_finding` because a delegated proposal is stored, and a stored
+    /// `null` reads back omitted: only the seam both routes cross sees it.
+    pub(crate) fn finding_blocking_null(&self) -> Option<Refusal> {
+        (self.subject.kind() == IdKind::Finding && self.blocking.is_null()).then(|| {
+            Refusal::FindingBlockingNull {
+                id: self.subject.clone(),
+            }
+        })
     }
 
     /// The first key this declaration carries that is inert in its subject's
@@ -1572,6 +1592,9 @@ impl Batch {
             }
             if let Some(inert) = declaration.inert_at_state(state_of(declaration.subject())) {
                 return Err(inert);
+            }
+            if let Some(null) = declaration.finding_blocking_null() {
+                return Err(null);
             }
             let subject = declaration.subject().clone();
             if candidate.insert(subject.clone(), declaration).is_some() {

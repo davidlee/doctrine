@@ -57,7 +57,7 @@ type Declaration  unknown-keys: refused   (a misspelt key is refused)
   reviewer    Reviewer                     att-  optional
   concerns    id(sec-)                     fnd-  optional
   summary     text                         fnd-  optional
-  blocking    boolean                      fnd-  optional
+  blocking    boolean                      fnd-  optional   (omit means absent · null refused)
   blocking    boolean                      inq-  required-at-creation   (required on creation · omit persists · null refused)
   resolution  text                         fnd-  optional
   disposes    id(inq-)                     cp-   optional

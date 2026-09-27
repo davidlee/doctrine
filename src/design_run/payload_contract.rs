@@ -481,13 +481,15 @@ pub(crate) enum Tagging {
     Untagged,
 }
 
-/// Whether a key may be omitted, and what omission means. **Four states.**
+/// Whether a key may be omitted, and what omission means. **Five states.**
 ///
 /// `Sparse<T>` is the run's editing idiom and it is invisible from a type
 /// signature: omitting `parent` persists the existing value, sending `null`
 /// clears it. A key that is **owed where its subject is born** and optional
 /// afterwards is a fourth reading again, and folding it into any of the three
 /// below would state something false — see [`Presence::RequiredAtCreation`].
+/// A key whose omission means absence but whose `null` is refused is a fifth —
+/// see [`Presence::OptionalNullRefused`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Presence {
     /// It must be sent.
@@ -512,6 +514,18 @@ pub(crate) enum Presence {
     /// [`Optional`]: Presence::Optional
     /// [`Sparse`]: Presence::Sparse
     RequiredAtCreation,
+    /// **Absent means absent; `null` is refused** rather than read as the
+    /// absence beside it (`SL-272` sec-2, `ISS-482`).
+    ///
+    /// The fifth state, and none of the four above can say it. [`Optional`]
+    /// accepts `null` as absence, which is the silent success this state closes.
+    /// [`Sparse`] reads `null` as *clear*. [`RequiredAtCreation`] demands the key
+    /// where the subject is born, and here omission is lawful and meaningful.
+    ///
+    /// [`Optional`]: Presence::Optional
+    /// [`Sparse`]: Presence::Sparse
+    /// [`RequiredAtCreation`]: Presence::RequiredAtCreation
+    OptionalNullRefused,
 }
 
 /// What happens to a key a struct's contract does not list — the honest
@@ -1481,7 +1495,7 @@ pub(crate) static DECLARATION: TypeContract = TypeContract {
                 key: "blocking",
                 home: Some(KeyHome::At(IdKind::Finding)),
                 ty: WireType::Boolean,
-                presence: Presence::Optional,
+                presence: Presence::OptionalNullRefused,
             },
             // The **second home** of the same key (`SL-264` sec-3, `RV-386`
             // `F-9`): a row rather than a wider first one, because the two differ
@@ -1803,12 +1817,14 @@ fn visit_wire(
 
 // --- The model's own vocabulary, spelled once each (STD-001) -----------------
 
-/// How a key's presence is spelled. **Four states** — `sparse` is not
-/// `optional`, and `required-at-creation` is neither.
+/// How a key's presence is spelled. **Five states, four tokens** — `sparse`
+/// is not `optional`, and `required-at-creation` is neither. A null-refusing
+/// optional key is still `optional`: what omission means is unchanged, and its
+/// parenthetical ([`presence_note`]) carries the refusal.
 const fn presence_token(presence: Presence) -> &'static str {
     match presence {
         Presence::Required => "required",
-        Presence::Optional => "optional",
+        Presence::Optional | Presence::OptionalNullRefused => "optional",
         Presence::Sparse => "sparse",
         Presence::RequiredAtCreation => "required-at-creation",
     }
@@ -2144,6 +2160,7 @@ const fn presence_note(presence: Presence) -> &'static str {
         Presence::Required | Presence::Optional => "",
         Presence::Sparse => "(omit persists · null clears)",
         Presence::RequiredAtCreation => "(required on creation · omit persists · null refused)",
+        Presence::OptionalNullRefused => "(omit means absent · null refused)",
     }
 }
 
@@ -4107,6 +4124,28 @@ mod tests {
     /// Asserted as a *set size* over the whole render rather than by comparing
     /// against a literal: a per-key parenthetical would still contain the right
     /// words and would fail here for the right reason.
+    /// `SL-272` `VT-4` — the finding-home `blocking` row publishes its `null`
+    /// refusal: still `optional`, glossed by [`Presence::OptionalNullRefused`]'s
+    /// parenthetical, where plain `optional` would promise `null` reads as
+    /// absence.
+    #[test]
+    fn the_finding_blocking_row_renders_null_refused() {
+        let lines = render_prompt(&extern_fixture());
+        let row = lines
+            .iter()
+            .find(|line| {
+                let mut columns = line.split_whitespace();
+                columns.next() == Some("blocking") && columns.nth(1) == Some("fnd-")
+            })
+            .expect("the finding home renders a `blocking` row");
+        let columns: Vec<&str> = row.split_whitespace().take(4).collect();
+        assert_eq!(columns, ["blocking", "boolean", "fnd-", "optional"]);
+        assert!(
+            row.ends_with("(omit means absent · null refused)"),
+            "the row glosses its `null` refusal: {row}"
+        );
+    }
+
     #[test]
     fn each_presence_parenthetical_is_one_fixed_string() {
         let lines = render_prompt(&extern_fixture());
