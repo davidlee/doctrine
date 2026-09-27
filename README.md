@@ -72,13 +72,13 @@ The separation is deliberate throughout: structured, queryable data in TOML;
 prose in Markdown; disposable runtime state in a gitignored directory, apart
 from the artifacts worth keeping.
 
+![graph terminal output using kitty graphics protocol](./assets/graph-crush.png)
+
 ## Non-Goals
 
 - SaaS integration (in core)
 - Windows support (for now)
 - Integrated TUI (for now)
-
-![graph terminal output using kitty graphics protocol](./assets/graph-crush.png)
 
 
 ## Installation
