@@ -75,7 +75,7 @@ fn tools() -> Vec<McpTool> {
     vec![
         McpTool {
             name: "review_new".to_owned(),
-            description: "Open a new adversarial review ledger targeting an entity via the `reviews` edge. Start of the adversarial review protocol — next: `review_prime` (derive the context cache from the target slice's selectors), then `review_raise` to add findings. This verb does NOT refuse a worktree fork (the turn verbs, `review_status`, `review_prime` and `review_unlock` do), so a ledger opened in a fork is stranded there — open it from the primary or coordination tree.\n\nReturns: {\"Created\": { id: int, canonical: \"RV-NNN\", dir: string }}".to_owned(),
+            description: "Open a new adversarial review ledger targeting an entity via the `reviews` edge. Start of the adversarial review protocol — next: `review_prime` (derive the context cache from the target slice's selectors), then `review_raise` to add findings. Like the turn verbs, it refuses a worktree fork before allocating an id — open it from the primary or coordination tree.\n\nReturns: {\"Created\": { id: int, canonical: \"RV-NNN\", dir: string }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
