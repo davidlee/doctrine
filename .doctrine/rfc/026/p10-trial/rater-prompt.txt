@@ -1,0 +1,68 @@
+Read-only research in the doctrine repo. Do not edit, create, or commit anything.
+Do not read `.doctrine/rfc/026/rfc-026.md`'s E12 section if present, and do not
+read `/tmp/e12-draft.md`. Classify only from the finding texts and the repo.
+
+TOOLS. Use the CLI, not raw files: `./target/debug/doctrine review show RV-NNN --json`,
+`./target/debug/doctrine slice status SL-NNN`, `./target/debug/doctrine review list`.
+Check `--help` for flags; do not guess them. Use `git log`/`git show`/`git diff` to
+read the design's revision history where you need it.
+
+QUESTION. What are these design-review findings about, and which of their targets
+were written to repair an earlier finding?
+
+POPULATION. Every blocker and major finding on these three design-facet ledgers,
+all of them, no sampling — 18 findings in total:
+  RV-374 (reviews SL-261, "Design adopt verb")
+  RV-382 (reviews SL-262, "Envelope names the next move")
+  RV-377 (reviews SL-263, "Ambient memory surfacing for pi and codex")
+
+FOR EACH LEDGER report: slice id, a one-sentence description of what the slice
+changes, design.md line count at the design lock, rounds, contests, and total
+findings by severity.
+
+FOR EVERY blocker and major finding, assign exactly ONE class:
+
+  A  COSTLY SURFACE: concerns a commitment that is expensive to reverse:
+     persisted authored format/schema or corpus migration; public CLI or skill
+     surface that agents depend on; binding governance (ADR/SPEC/POL/STD/REQ);
+     confinement or security boundary; a released artefact.
+  B  MECHANISM PREDICTION: the design asserted code-level detail (call chain,
+     type, signature, data shape, reachability, file location) that was wrong
+     or unestablished, and that compiling or implementing a thin version would
+     have exposed.
+  C  ARTEFACT PROSE: concerns the document itself: internal inconsistency,
+     stale restatement of a fact owned elsewhere, review history/notes
+     sections, citations, numbering, wording.
+  D  MISSING INTENT: could not be resolved because a human-owned input was
+     absent: no stated adversary, threat model, unacceptable outcome, scope
+     boundary, or product intent.
+  E  OTHER: say what, in under 10 words.
+
+Then mark each finding with these three flags, each independent:
+
+  R  its target text was written to repair an earlier finding in the same
+     ledger (a repair-of-a-repair). Else leave blank.
+  L  a LATER finding in the same ledger concerns the same mechanism, or the
+     text written to repair this one. Else leave blank.
+  B2 (class-B findings only) only a hostile or edge-case input would expose it:
+     a thin happy-path implementation compiles and passes ordinary tests.
+     Otherwise the finding is B1 (a compile or a thin happy-path implementation
+     would expose it).
+
+OUTPUT (markdown, compact):
+  1. One table per ledger: ledger | slice | design lines | rounds | contests |
+     findings (blocker/major/minor/nit) | count of A / B / C / D / E |
+     count marked R | count marked L.
+  2. One flat table of the classified findings: ledger | F-N | severity |
+     class | R | L | B1/B2 | <=12-word reason. This is the evidence; keep it
+     complete.
+  3. Totals across the 18: A/B/C/D/E counts and percentages; count of R; count
+     of L; of the class-B findings, how many are B1 vs B2.
+  4. At most 10 lines of caveats: ambiguous classifications (give F-N ids and
+     the two classes you hesitated between), ledgers or findings you could not
+     read, and anything that contradicts the question's premise.
+
+RULES. Classify from the finding's own text and its disposition, not from the
+slice title. When unsure between two classes, pick one and list it under
+caveats. Do not speculate; write "unknown" rather than guess. Do not summarise
+the design or recommend anything.
