@@ -18,14 +18,21 @@ four residual defects of that class, grouped there as clump 1:
 
 Close all four, each with a behavioural test:
 
-1. **Refusals** — refuse `null` `blocking` at the finding home, reusing the
-   inquiry home's refusal shape; give `SubmissionExpired` a remedy that routes
-   the caller to check whether the original landed before resubmitting (a blind
-   resubmit could double-apply).
+1. **Refusals** — refuse `null` `blocking` at the finding home; give
+   `SubmissionExpired` a remedy that routes the caller to check whether the
+   original landed before resubmitting (a blind resubmit could double-apply).
+   Specifics in item 3.
 2. **Change rows** — suppress the displacement `act_invalidated` row when the
-   displaced act was not live before the apply; add a question-changed member
-   to the emittable `ChangeEvent` vocabulary, emitted on a re-word and driven
-   by the fixture ladder (`REQ-478`'s roster criterion).
+   displaced act was not live before the apply (`DEC-336`); add a term-free
+   `node_question_changed` member to the emittable `ChangeEvent` vocabulary,
+   emitted only when a declared question's text differs from the held text,
+   never at creation (`DEC-335`), and driven by the fixture ladder (`REQ-478`'s
+   roster criterion).
+3. **Refusal specifics** (settled at inquiry, non-durable) — the finding-home
+   `null` refusal is a new variant, not `BlockingJudgementWithdrawn`, whose
+   remedy is false at a finding's creation; `SubmissionExpired`'s remedy is:
+   check `design show` for whether the original landed, then resubmit only what
+   is missing, at the current revision, under a fresh `submission_id`.
 
 Affected surface: `src/design_run/{run.rs, refusal.rs, change_log.rs,
 submission.rs, snapshot.rs}`, `src/design_run/render/change_row.rs`, the
@@ -46,10 +53,7 @@ design-run fixture ladder, `tests/e2e_design_state.rs`.
   state types are untouched.
 - **`ISS-488` reverses a code comment, not a decision.** `run.rs` records a
   question change as "state, not delta" per `SL-233`'s projection-bounds
-  sketch; `REQ-478` (accepted, later) supersedes that reasoning. The design
-  confirms this reading rather than assuming it.
-- **`ISS-454` code-vs-prose.** `RV-367` `F-1` recommends fixing the code; the
-  design settles it.
+  sketch; `REQ-478` (accepted, later) supersedes it — confirmed as `DEC-335`.
 
 ## Verification
 

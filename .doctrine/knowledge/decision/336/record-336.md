@@ -1,0 +1,3 @@
+A recorded act displaced by a same-kind recording emits `act_invalidated` only when the displaced act was live immediately before the apply. An act already dead by coverage was reported dead at the revision it died; displacing its retained corpse reports nothing.
+
+Why code, not prose (`RV-367` `F-1`): a delta reader must never see one `(ActKind, DesignId)` slot die twice with no intervening `act_recorded`. With the gate, the two death paths — coverage (derived by `invalidation_rows`) and displacement (emitted at the record seam) — are disjoint across revisions as well as within one, so the disjointness claim in `invalidation_rows`' doc becomes true rather than being retracted.
