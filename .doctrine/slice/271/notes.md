@@ -223,26 +223,31 @@ a non-test build (a `dead_code` warning at the zero-warning gate).
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-27 · PHASE-01 · b9960bf0c
+fresh-as-of: 2026-09-27 · PHASE-02 · c7e84b4fc
 
 ### Produced
 
-- PHASE-01 `feat(SL-271)` `1d385ee49` — `McpEntryClass` + `mcp_action` + `plan_mcp`
-  refactor; full-invocation payload (`src/boot.rs`). Plan correction `deb279725`;
-  lifecycle `b9960bf0c`. `doctrine check gate` green; PHASE-01 `VT-1`/`VT-2` PASS
-  (`verify-vt`). All `plan_mcp_*` assertions unchanged.
-- Memory `mem_01a0e1e1` recorded on trunk (report-seam output is e2e-only;
-  `verify-vt` attribution waits on the completed phase delta).
+- PHASE-01 `1d385ee49` — shared decision core (`McpEntryClass` + `mcp_action` +
+  `plan_mcp` refactor); PHASE-02 `5288e108a` (codex leg), `765fb99c9` (e2e),
+  `c7e84b4fc` (README `sh` declaration). All PHASE-01/02 VTs PASS; `doctrine
+  check gate` green after each.
+- `tests/e2e_codex_install.rs` — 7 cases over the built binary.
+- Memory `mem_01a0e1e1` (recorded on trunk): report-seam output is e2e-only;
+  `verify-vt` attribution waits on the completed phase delta.
 
 ### Learned
 
-- `wire()` has no unit stdout seam — message wording is asserted by a subprocess
-  e2e (`common::doctrine_cmd`), never a unit test. See `mem_01a0e1e1`.
-- `slice verify-vt` reports UNATTRIBUTABLE until the phase is flipped `completed`
-  (the source-delta row is written there), even on a green tree.
+- `install --dry-run` prints only the plan and never calls `wire()`; the dry-run
+  codex MCP line is reachable only via `boot install --dry-run`.
+- A production const used only by a test is dead code under `-D unused`: wire it
+  live. `CODEX_MCP_SERVE_ARGS` builds the emitted wrapper; a test pins it to the
+  literal `CODEX_MCP_WRAPPER`.
+- `toml_edit::Table::set_implicit(true)` on the created parent renders
+  `[mcp_servers.doctrine]` alone, not an empty `[mcp_servers]` header above it.
 
 ### Open
 
-- PHASE-02 (codex leg) and PHASE-03 (probe + disclosure) pending. PHASE-02 must
-  carry the Claude-line-once stdout assertion (`VT-4`).
-- The `imperative` `install_mcp` read-error split (`ISS-495`) remains out of scope.
+- PHASE-03 (probe + disclosure) pending: `CaptureRunner`, `parse_codex_features`,
+  `codex_hooks_state`, `write_codex_activation(Option<HooksState>)`, trust caveat,
+  and the activation notice's dry-run `would write` wording.
+- `ISS-495` (Claude read `.ok()`) remains out of scope by design.
