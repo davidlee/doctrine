@@ -83,6 +83,26 @@ selector = "src/**"
 intent = "design-target"
 note = "prose-bearing string literals, per the sweep inventory"
 
+[[selector]]
+selector = ".doctrine/memory/items/mem_019ea47314bd72c2b1f720017449a909/memory.toml"
+intent = "design-target"
+note = "rename repair: memory scope paths (RV-408 F-6)"
+
+[[selector]]
+selector = ".doctrine/memory/items/mem_019ea4f1d1ab7d508d95eaa31651143e/memory.toml"
+intent = "design-target"
+note = "rename repair: memory scope paths (RV-408 F-6)"
+
+[[selector]]
+selector = ".doctrine/memory/items/mem_019ed3fa2e0c7301a889a346105d3011/memory.toml"
+intent = "design-target"
+note = "rename repair: memory scope paths (RV-408 F-6)"
+
+[[selector]]
+selector = ".doctrine/memory/items/mem_019ed43e279d70e3b55af747dfbfb54b/memory.toml"
+intent = "design-target"
+note = "rename repair: memory scope paths (RV-408 F-6)"
+
 [[relation]]
 label = "fulfils"
 target = "CHR-023"

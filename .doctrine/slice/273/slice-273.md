@@ -88,7 +88,9 @@ anything that slipped through.
 ## Non-Goals
 
 - **Memories.** Rewriting shipped memories into pointers and sweeping their
-  citations is S2.
+  citations is S2. Exception: repairing memory references the rename and
+  `boot-footer.md` retirement leave dead (scope paths, globs, instructing
+  prose) is in scope (RV-408 F-6).
 - **Human documentation** (RFC-017's set) — S3.
 - **SL-242's ground:** untracking the projection residue, re-anchoring the four
   stale memories, settling the manifest pointer. SL-242 was amended to cede its
@@ -134,12 +136,16 @@ one slice, ordered by DEC-346.
 - The boot summary teaches `lib:` and the mandatory-retrieval rule;
   `shipped-corpus-authoring.md` teaches `lib:` (VT: boot assertion).
 - `doctrine library show lib:<address>` resolves (VT).
-- No bare library citation survives in the swept surfaces, and every `lib:`
-  citation resolves to a publication-register entry (VT: the build-repo test).
+- No bare library citation survives in any shipped file under the test roots,
+  and every `lib:` citation resolves to an entry of the on-disk publication
+  manifest (VT: the build-repo tests).
 - The doctor leg reports an unresolved `lib:` citation in client
-  `.doctrine/**` (VT).
-- Every inventory row is adjudicated and implemented as adjudicated (VA);
-  the audit re-pass finds nothing unrecorded (VA).
+  `.doctrine/**` and discloses degraded reads (VT).
+- Every inventory row is adjudicated and implemented as adjudicated, checked
+  per occurrence with `leave` rows unchanged (VA); the audit re-pass finds
+  nothing unrecorded and no unauthorised conversion (VA).
+- No live reference to `routing-process.md` or `boot-footer.md` survives
+  outside history (VA).
 - No skill violates the restate line, save ownerless tables logged in IMP-500
   (VA).
 - `doctrine check gate` green at close.

@@ -61,3 +61,13 @@ fresh-as-of: 2026-09-27 · design:inquiring · 200a9f1da
 - QUE-228 — how tier-2 project governance overrides a pulled library rule
 - A1 (notes triage) — library addresses stable except deliberate retirements
 - design questions inq-1..inq-8 live in the design run, not here
+
+## Design review (reviewing, 2026-09-27)
+
+RV-408 (codex, gpt-6-sol high): seven findings, all fix-now, all verified by
+the raiser; ledger done. **Further pass:** none needed before lock. The
+design's residual risk sits in execution, not design — the scanner grammar
+and the per-occurrence inventory check are proven by phase 1 tests and the
+phase 4 check, and the audit re-pass (DEC-346) is the planned independent look.
+A further design pass would only re-probe the scanner grammar (sections 3.1,
+4.4), which F-3/F-7 already exercised twice.
