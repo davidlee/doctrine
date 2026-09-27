@@ -52,7 +52,7 @@ and `VT-6` at implementation; no further design pass is recommended.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-27 · PHASE-02 implemented, gate green · 3dd526fcb
+fresh-as-of: 2026-09-27 · audit RV-407 done, gate green · b0d8f9963
 
 ### Produced
 
@@ -64,6 +64,8 @@ fresh-as-of: 2026-09-27 · PHASE-02 implemented, gate green · 3dd526fcb
   (payload contract). VT-1..VT-4 green under their plan names.
 - `PHASE-02`: `5d1bbd29d` (`ISS-454` displacement gate), `3dd526fcb`
   (`ISS-488` `node_question_changed`). VT-1..VT-3 green under their plan names.
+- Audit `RV-407` (F-1..F-3 verified): F-3 fixed in `b0d8f9963`; F-1, F-2
+  delegated to reconcile (per-slice brief, no REV).
 
 ### Decisions (implementation)
 
@@ -103,6 +105,8 @@ fresh-as-of: 2026-09-27 · PHASE-02 implemented, gate green · 3dd526fcb
 
 ### Open
 
-- The payload-contract exemplar census (`the_exemplar_reaches_every_arm_of_the_model`)
-  already omitted `RequiredAtCreation` and now omits `OptionalNullRefused`
-  too; its "Presence, all three" is stale. Not fixed here (out of scope).
+- `RV-407` brief: `tests.rs` design-target selector + sec-4 row (F-1);
+  sec-2 presence-note wording (F-2). Reconcile owns both.
+- The exemplar-census gap is closed (`RV-407` F-3). `census_key` read
+  `Presence` via `Debug`, so the census's "no wildcard arm" totality claim
+  did not hold for presence — worth checking in any sibling census.

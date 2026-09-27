@@ -1,0 +1,96 @@
+id    = 407
+slug  = "reconciliation-review-of-sl-272"
+title = "reconciliation review of SL-272"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Conformance audit of SL-272 on edge at 828444c96: slice conformance (8 conformant, 1 undeclared), verify-vt (7/7 pass), check gate green, code diffs of d21b571a8/94e655d92/5d1bbd29d/3dd526fcb against design sec-2..sec-4 and DEC-335/DEC-336, notes.md implementation decisions, and totality claims of the roster, term-matrix and exemplar-census tests. F-3 fixed in b0d8f9963; F-1/F-2 in the reconciliation brief."
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-272"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Expected every touched path declared; observed src/design_run/tests.rs undeclared"
+detail = "`doctrine slice conformance 272` reports one undeclared path: `M src/design_run/tests.rs` (commit `3dd526fcb`). The edit relaxes `SL-259`'s `a_term_constructed_at_an_undeclared_kind_is_refused`, which asserted every emittable event declares a term; `DEC-335` makes `node_question_changed` term-free, so the edit is a necessary consequence of the design, not scope creep. It is recorded in `notes.md` (Decisions). But design sec-4's code-impact table and the design-target selectors list eight paths and omit it, so conformance stays red."
+disposition = "design-wrong"
+response = "The touch is a necessary consequence of DEC-335 (a term-free emittable event) and is correct; the design's declared surface is what is wrong. Delegated to /reconcile: `doctrine slice selector add` a design-target selector for `src/design_run/tests.rs` (load-bearing; conformance reads the registry), mirrored by a design.md sec-4 row. See RV-407 ## Reconciliation Brief."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "The touch is a necessary consequence of DEC-335 (a term-free emittable event) and is correct; the design's declared surface is what is wrong. Delegated to /reconcile: `doctrine slice selector add` a design-target selector for `src/design_run/tests.rs` (load-bearing; conformance reads the registry), mirrored by a design.md sec-4 row. See RV-407 ## Reconciliation Brief."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Brief entry exists (Per-slice, selector add + sec-4 mirror)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = 'Expected presence note "(omit → non-blocking · null refused)"; observed "(omit means absent · null refused)"'
+detail = "Design sec-2 specifies the finding-home `blocking` row renders `optional` with the annotation `(omit → non-blocking · null refused)`. `payload_contract.rs:2163` renders `(omit means absent · null refused)`, because `presence_note` is one string per `Presence` variant (plan `EX-9`), so a key-specific wording is not expressible. The rule is as designed; only the wording differs. Recorded in `notes.md` (Decisions). Design prose is now wrong about the shipped text in `install/design-payload-contract.md`."
+disposition = "design-wrong"
+response = "The shipped wording is the right one given plan EX-9 (one presence note per variant); the design's key-specific annotation is not expressible. Delegated to /reconcile: design.md sec-2 annotation text → `(omit means absent · null refused)`. See RV-407 ## Reconciliation Brief."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "The shipped wording is the right one given plan EX-9 (one presence note per variant); the design's key-specific annotation is not expressible. Delegated to /reconcile: design.md sec-2 annotation text → `(omit means absent · null refused)`. See RV-407 ## Reconciliation Brief."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Brief entry exists (Per-slice, design.md sec-2 wording)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Expected the exemplar census to reach every Presence arm; observed it misses OptionalNullRefused (and RequiredAtCreation)"
+detail = """`payload_contract.rs` `the_exemplar_reaches_every_arm_of_the_model` claims a total statement ("every arm of every model type is exercised"), but its Presence block reads "all three" and lists only Required/Optional/Sparse. `census_key` records presence via `{:?}`, not an exhaustive match, so a new `Presence` arm is not a build failure there — the census silently lost totality when this slice added `Presence::OptionalNullRefused` (`94e655d92`). `RequiredAtCreation` was already missing (pre-existing, same cause). Flagged as Open in `notes.md` Harvest. `EXEMPLAR_ROOT` is used only by the census tests, so the fix is local: add exemplar keys carrying the two presences, list them in the expected set, and make `census_key`'s presence read exhaustive so the next arm fails the build."""
+disposition = "fix-now"
+response = "Fixed in b0d8f9963: EXEMPLAR_ROOT gains `question` (RequiredAtCreation) and `blocking` (OptionalNullRefused); the census expects all five presences; census_key matches Presence exhaustively, so the next arm is a build failure. Red observed (census missed the two arms) before the exemplar keys were added; payload_contract tests green; `doctrine check commit` green."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed in b0d8f9963: EXEMPLAR_ROOT gains `question` (RequiredAtCreation) and `blocking` (OptionalNullRefused); the census expects all five presences; census_key matches Presence exhaustively, so the next arm is a build failure. Red observed (census missed the two arms) before the exemplar keys were added; payload_contract tests green; `doctrine check commit` green."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "b0d8f9963 inspected: five presences expected, exhaustive match, exemplar keys added; tests green."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.
