@@ -424,13 +424,16 @@ pub(crate) const KINDS: &[KindRef] = &[
         kind: &IDEA_KIND,
         state_dir: None,
     },
-    // Review (SL-040) — the 2nd kind with a runtime state tree (baton/lock/cache,
-    // PHASE-03+), mirroring slice. Its authored toml is status-LESS (derived,
-    // D-C8); the scan reads `.id` via the id-only reader (D2), so a status-less
-    // ledger scans cleanly while the strict `Meta` stays untouched.
+    // Review (SL-040). Its runtime baton (`.doctrine/state/review/<NNN>/`) is a
+    // pure cache the review layer derives and rebuilds itself (ADR-007 D-C2;
+    // SL-269 design sec-3 "Review runtime state") — no phase-state tree here for
+    // `reseat` to guard (state_dir None; a stale baton at a reused id self-heals
+    // on next use). Its authored toml is status-LESS (derived, D-C8); the scan
+    // reads `.id` via the id-only reader (D2), so a status-less ledger scans
+    // cleanly while the strict `Meta` stays untouched.
     KindRef {
         kind: &REVIEW_KIND,
-        state_dir: Some(".doctrine/state/review"),
+        state_dir: None,
     },
     // REC (SL-042) — the reconciliation-record kind. Status-LESS like review
     // (D-Q3: one REC per act, no lifecycle), so the scan reads `.id` via the
@@ -601,15 +604,17 @@ mod tests {
                 "RV", "REC", "ASM", "DEC", "QUE", "CON", "EVD", "HYP", "CPT", "CM", "REV", "RFC"
             ]
         );
-        // Slice and review (SL-040) own a runtime state tree (F3 guard surface).
-        // REC (SL-042) is status-less but stateless — no runtime tree. The six
-        // knowledge kinds (SL-059) are status-ful but stateless — no runtime tree.
+        // Slice alone owns a runtime state tree (F3 guard surface). Review's
+        // baton is a pure cache the review layer derives itself (SL-269 design
+        // sec-3 "Review runtime state") — no phase-state tree for reseat to
+        // guard. REC (SL-042) is status-less but stateless — no runtime tree.
+        // The six knowledge kinds (SL-059) are status-ful but stateless too.
         let stateful: Vec<_> = KINDS
             .iter()
             .filter(|k| k.state_dir.is_some())
             .map(|k| k.kind.prefix)
             .collect();
-        assert_eq!(stateful, ["SL", "RV"]);
+        assert_eq!(stateful, ["SL"]);
     }
 
     #[test]

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e4fd-88a4-7df1-9709-6fc1c1082fe2"
+recorded_at = "2026-09-27T22:30:15.972162986Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-269 PHASE-04: planner contract shows positional memory retrieve query"
+detail = """capsule-phase-planner ran 'doctrine memory retrieve "<topic>"' per its contract example; the verb has no positional query and needs --query. Also --path-scope src/integrity.rs returned the same unrelated lint memories for any query; memory search was relevant."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

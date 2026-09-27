@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e4fd-88ae-7123-a8d2-ba728c35a69d"
+recorded_at = "2026-09-27T22:30:15.982911645Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-269 PHASE-04: sheet locked a Result signature clippy unnecessary_wraps rejects"
+detail = "Sheet said scan_danglers keeps anyhow::Result while also folding every failure into an unreadable list; the pedantic gate denies unnecessary_wraps, so the worker had to deviate. Planners should check lint consequences before fixing a signature."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -15,7 +15,9 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
+use walkdir::WalkDir;
 
+use crate::corpus_guard::DOCTRINE_PATHSPEC;
 use crate::entity::{Acquired, Claim, ClaimCtx, Kind};
 use crate::kinds::{KINDS, KindRef, parse_canonical_ref};
 use crate::{entity, fsutil, git, listing, meta, reserve, root};
@@ -336,22 +338,44 @@ pub(crate) fn run_reseat(
     let new_ref = listing::canonical_id(kind.kind.prefix, dst_id);
     writeln!(io::stdout(), "reseated {old_ref} → {new_ref}")?;
 
-    // Inbound prose citations — report, never rewrite (D4/R-3).
-    let danglers = scan_danglers(&root, &old_ref)?;
-    if danglers.is_empty() {
+    // Inbound citations — report, never rewrite (D4/R-3). The report states its
+    // bound (design sec-3 "Dangler report") so it is not read as exhaustive.
+    let danglers = scan_danglers(&root, &old_ref);
+    if danglers.hits.is_empty() && danglers.unreadable.is_empty() {
         return Ok(());
     }
-    writeln!(
-        io::stdout(),
-        "inbound citations to {old_ref} (rewrite by hand — prose relations are outbound-only):"
-    )?;
-    for d in &danglers {
-        writeln!(io::stdout(), "  {d}")?;
+    if !danglers.hits.is_empty() {
+        writeln!(
+            io::stdout(),
+            "inbound citations to {old_ref} in .doctrine/ (*.md, *.toml; symlinks not followed) — rewrite by hand; source outside .doctrine/ is not scanned:"
+        )?;
+        for hit in &danglers.hits {
+            writeln!(io::stdout(), "  {hit}")?;
+        }
     }
-    bail!(
-        "reseat: {} inbound citation(s) to {old_ref} remain",
-        danglers.len()
-    )
+    if !danglers.unreadable.is_empty() {
+        writeln!(
+            io::stdout(),
+            "unreadable under .doctrine/ (not scanned — the list above may be incomplete):"
+        )?;
+        for entry in &danglers.unreadable {
+            writeln!(io::stdout(), "  {entry}")?;
+        }
+    }
+    let mut remains = Vec::new();
+    if !danglers.hits.is_empty() {
+        remains.push(format!(
+            "{} inbound citation(s) to {old_ref} remain",
+            danglers.hits.len()
+        ));
+    }
+    if !danglers.unreadable.is_empty() {
+        remains.push(format!(
+            "{} unreadable file(s) under .doctrine/",
+            danglers.unreadable.len()
+        ));
+    }
+    bail!("reseat: {}", remains.join("; "))
 }
 
 /// The reseat core below the shell's refusals: claim the destination, stage the
@@ -556,25 +580,74 @@ fn is_symlink(path: &Path) -> bool {
     matches!(std::fs::symlink_metadata(path), Ok(m) if m.file_type().is_symlink())
 }
 
-/// Scan authored `.doctrine/**/*.md` prose for inbound citations of `needle`
-/// (a canonical ref), returning `file:line` locations. A whole-token match
-/// (`SL-031` does not match inside `SL-0310`) keeps the report honest, and
-/// disposable prose ([`is_disposable_prose`]) is skipped — a `rm -rf`-able
-/// `handover.md` or runtime phase note is not a citation a human must rewrite.
-fn scan_danglers(root: &Path, needle: &str) -> anyhow::Result<Vec<String>> {
-    let pattern = root.join(".doctrine/**/*.md");
-    let pattern = pattern
-        .to_str()
-        .with_context(|| format!("non-utf8 scan path {}", pattern.display()))?;
+/// Extensions `scan_danglers` reads for inbound citations: prose (`.md`) and
+/// structured data (`.toml`) — a memory `[[source]]` ref or a plan criterion
+/// cites just as authoritatively as a sentence does. Named so the walk's
+/// exclusion is visible, not an inline literal (STD-001).
+const DANGLER_SCAN_EXTS: &[&str] = &["md", "toml"];
 
+/// One `scan_danglers` run's two channels: `hits` are inbound citations of the
+/// scanned ref (`file:line`), `unreadable` are paths the walk could not read —
+/// each `"<path>: <cause>"` — so a failed read is tolerated (the walk
+/// continues) *and* disclosed (STD-003), never silently skipped.
+pub(crate) struct DanglerScan {
+    pub(crate) hits: Vec<String>,
+    pub(crate) unreadable: Vec<String>,
+}
+
+/// Scan authored `.doctrine/*.md` and `*.toml` for inbound citations of
+/// `needle` (a canonical ref), returning `file:line` hit locations plus any
+/// path the walk could not read. The walk does not follow symlinks
+/// (`follow_links(false)`): every symlink under `.doctrine/` is an alias
+/// (`NNN-slug`) or the `phases` link into runtime state, so nothing authored
+/// is lost, and a link loop is never entered. The disposable tier
+/// ([`is_disposable_prose`]) is pruned by its walked (lexical) path, so a
+/// runtime `phases` link or `handover.md` never reads as authored, and a
+/// permission-denied disposable subtree never reports as unreadable (out of
+/// scope). The whole-token matcher ([`line_cites`]) is unchanged. Every failure
+/// mode (a denied dir, a link loop, a bad read) is tolerated into `unreadable`
+/// rather than propagated, so this cannot itself fail.
+fn scan_danglers(root: &Path, needle: &str) -> DanglerScan {
     let mut hits = Vec::new();
-    for entry in glob::glob(pattern).context("bad glob pattern")? {
-        let path = entry.context("glob walk")?;
-        if is_disposable_prose(&path) {
+    let mut unreadable = Vec::new();
+    let walk_root = root.join(DOCTRINE_PATHSPEC);
+
+    let walk = WalkDir::new(&walk_root)
+        .follow_links(false)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_entry(|e| !is_disposable_prose(e.path()));
+
+    for entry in walk {
+        // Walk error (denied dir, loop, …): tolerate + disclose (STD-003).
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => {
+                let path = e.path().unwrap_or(walk_root.as_path());
+                unreadable.push(format!("{}: {e}", path.display()));
+                continue;
+            }
+        };
+        // `follow_links(false)` makes a symlink report its own file type, so
+        // this one check skips directories AND symlink entries (aliases, the
+        // `phases` link into runtime state) in one place.
+        if !entry.file_type().is_file() {
             continue;
         }
-        let Ok(text) = std::fs::read_to_string(&path) else {
-            continue; // non-utf8 / unreadable — not authored prose we cite
+        let path = entry.path();
+        let is_scanned = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|ext| DANGLER_SCAN_EXTS.contains(&ext));
+        if !is_scanned {
+            continue;
+        }
+        let text = match std::fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(e) => {
+                unreadable.push(format!("{}: {e}", path.display()));
+                continue;
+            }
         };
         for (i, line) in text.lines().enumerate() {
             if line_cites(line, needle) {
@@ -582,7 +655,7 @@ fn scan_danglers(root: &Path, needle: &str) -> anyhow::Result<Vec<String>> {
             }
         }
     }
-    Ok(hits)
+    DanglerScan { hits, unreadable }
 }
 
 /// True for prose in the disposable tiers a reseat must not nag about: any file
@@ -756,9 +829,121 @@ mod tests {
         plant(".doctrine/slice/001/handover.md"); // disposable → skipped
         plant(".doctrine/state/slice/001/phases/phase-01.md"); // runtime → skipped
 
-        let hits = scan_danglers(root, "SL-031").unwrap();
+        let hits = scan_danglers(root, "SL-031").hits;
         assert_eq!(hits.len(), 1, "only authored prose reported: {hits:?}");
         assert!(hits[0].ends_with("notes/x.md:1"), "{}", hits[0]);
+    }
+
+    // --- SL-269 PHASE-04: dangler report as a worklist ---
+
+    /// VT-1: the structured tier (`.toml`) is in scope — a memory `[[source]]`
+    /// ref is a citation the old glob (`*.md` only) could never see.
+    #[test]
+    fn dangler_scan_reports_a_toml_citation() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let p = root.join(".doctrine/memory/items/ab/x.toml");
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, "[[source]]\nref = \"SL-031\"\n").unwrap();
+
+        let hits = scan_danglers(root, "SL-031").hits;
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert!(hits[0].ends_with("x.toml:2"), "{}", hits[0]);
+    }
+
+    /// VT-2: an `NNN-slug` alias symlink must not double-count the citation its
+    /// target directory already reports.
+    #[test]
+    fn dangler_scan_reports_alias_file_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let real = root.join(".doctrine/slice/031");
+        std::fs::create_dir_all(&real).unwrap();
+        std::fs::write(real.join("slice-031.md"), "cites SL-099 here\n").unwrap();
+        fsutil::set_symlink(&root.join(".doctrine/slice/031-foo"), Path::new("031")).unwrap();
+
+        let hits = scan_danglers(root, "SL-099").hits;
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert!(hits[0].contains("slice/031/"), "{}", hits[0]);
+        assert!(!hits[0].contains("031-foo"), "{}", hits[0]);
+    }
+
+    /// VT-2: the `phases` symlink into runtime state must not defeat
+    /// disposability by presenting runtime prose at an authored lexical path.
+    /// Positive control: `notes/x.md` proves the walk was actually looking.
+    #[test]
+    fn dangler_scan_ignores_phases_symlink() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let state_phases = root.join(".doctrine/state/slice/031/phases");
+        std::fs::create_dir_all(&state_phases).unwrap();
+        std::fs::write(state_phases.join("phase-01.md"), "cites SL-099 here\n").unwrap();
+        let slice_dir = root.join(".doctrine/slice/031");
+        std::fs::create_dir_all(&slice_dir).unwrap();
+        fsutil::set_symlink(
+            &slice_dir.join("phases"),
+            Path::new("../../state/slice/031/phases"),
+        )
+        .unwrap();
+
+        let note = root.join(".doctrine/notes/x.md");
+        std::fs::create_dir_all(note.parent().unwrap()).unwrap();
+        std::fs::write(&note, "cites SL-099 here\n").unwrap();
+
+        let hits = scan_danglers(root, "SL-099").hits;
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert!(hits[0].ends_with("notes/x.md:1"), "{}", hits[0]);
+    }
+
+    /// VT-4: the walk does not follow a symlinked directory out of `.doctrine/`
+    /// (an external tree), nor into a link loop back on itself. Positive
+    /// control: `notes/x.md` proves the walk was actually looking.
+    #[test]
+    fn dangler_scan_does_not_enter_symlinked_dirs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let ext_tmp = tempfile::tempdir().unwrap();
+        let ext_root = ext_tmp.path();
+        std::fs::write(ext_root.join("ext.md"), "cites SL-099 here\n").unwrap();
+
+        std::fs::create_dir_all(root.join(".doctrine")).unwrap();
+        fsutil::set_symlink(&root.join(".doctrine/ext"), ext_root).unwrap();
+        fsutil::set_symlink(&root.join(".doctrine/loop"), Path::new(".")).unwrap();
+
+        let note = root.join(".doctrine/notes/x.md");
+        std::fs::create_dir_all(note.parent().unwrap()).unwrap();
+        std::fs::write(&note, "cites SL-099 here\n").unwrap();
+
+        let hits = scan_danglers(root, "SL-099").hits;
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert!(hits[0].ends_with("notes/x.md:1"), "{}", hits[0]);
+    }
+
+    /// VT-3: an unreadable file (non-UTF-8) is tolerated (the walk continues)
+    /// and disclosed (STD-003), never silently skipped.
+    #[test]
+    fn dangler_scan_lists_unreadable_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let dir = root.join(".doctrine/notes");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("bad.md"), [0xff, 0xfe, 0xfd]).unwrap();
+        std::fs::write(dir.join("ok.md"), "cites SL-099 here\n").unwrap();
+
+        let scan = scan_danglers(root, "SL-099");
+        assert_eq!(scan.hits.len(), 1, "{:?}", scan.hits);
+        assert!(scan.hits[0].ends_with("ok.md:1"), "{}", scan.hits[0]);
+        assert_eq!(scan.unreadable.len(), 1, "{:?}", scan.unreadable);
+        assert!(
+            scan.unreadable[0].contains("notes/bad.md"),
+            "{}",
+            scan.unreadable[0]
+        );
+        assert!(
+            !scan.unreadable[0].ends_with("notes/bad.md"),
+            "cause must follow the path: {}",
+            scan.unreadable[0]
+        );
     }
 
     #[test]
@@ -772,15 +957,17 @@ mod tests {
                 "RV", "REC", "ASM", "DEC", "QUE", "CON", "EVD", "HYP", "CPT", "CM", "REV", "RFC"
             ]
         );
-        // Slice and review (SL-040) own a runtime state tree (F3 guard surface).
-        // REC (SL-042) is status-less but stateless — no runtime tree. The six
-        // knowledge kinds (SL-059) are status-ful but stateless — no runtime tree.
+        // Slice alone owns a runtime state tree (F3 guard surface). Review's
+        // baton is a pure cache the review layer derives itself (SL-269 design
+        // sec-3 "Review runtime state") — no phase-state tree for reseat to
+        // guard. REC (SL-042) is status-less but stateless — no runtime tree.
+        // The six knowledge kinds (SL-059) are status-ful but stateless too.
         let stateful: Vec<_> = KINDS
             .iter()
             .filter(|k| k.state_dir.is_some())
             .map(|k| k.kind.prefix)
             .collect();
-        assert_eq!(stateful, ["SL", "RV"]);
+        assert_eq!(stateful, ["SL"]);
     }
 
     #[test]
@@ -955,6 +1142,33 @@ mod tests {
         );
     }
 
+    /// SL-269 PHASE-04 EX-2: an unreadable file under `.doctrine/` makes reseat
+    /// exit non-zero and name it — but the move itself already committed (the
+    /// dangler report runs after the claim, D4/R-3).
+    #[test]
+    fn reseat_exits_non_zero_on_unreadable_files() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_outside_git(dir.path());
+        seed_slice(dir.path(), 31);
+        std::fs::create_dir_all(dir.path().join(".doctrine/notes")).unwrap();
+        std::fs::write(
+            dir.path().join(".doctrine/notes/bad.md"),
+            [0xff, 0xfe, 0xfd],
+        )
+        .unwrap();
+
+        let err =
+            run_reseat(Some(dir.path().to_path_buf()), "SL-031", Some(45), never).unwrap_err();
+        assert!(err.to_string().contains("unreadable"), "{err:#}");
+        assert!(
+            dir.path()
+                .join(SLICE_KIND.dir)
+                .join("045/slice-045.toml")
+                .is_file(),
+            "move committed before the report"
+        );
+    }
+
     /// SL-269 VT-3: `--to` onto a sibling tree's dir, or onto an id a local
     /// reservation ref holds, is refused before any claim; the source is intact.
     #[test]
@@ -1109,5 +1323,38 @@ mod tests {
         assert!(!tree.join("045").exists());
         assert!(!tree.join(".045.tmp").exists());
         assert!(tree.join("031/slice-031.toml").is_file());
+    }
+
+    /// SL-269 PHASE-04 Task B (design sec-3 "Review runtime state"): a review's
+    /// runtime baton is a pure cache reseat does not own — it is left in place,
+    /// unmoved, and does not refuse the reseat.
+    #[test]
+    fn reseat_leaves_a_review_baton_in_place() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_outside_git(dir.path());
+        let reviews = dir.path().join(REVIEW_KIND.dir);
+        let src = reviews.join("007");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(
+            src.join("review-007.toml"),
+            "id = 7\nslug = \"probe\"\ntitle = \"fixture\"\n",
+        )
+        .unwrap();
+        std::fs::write(src.join("review-007.md"), "# fixture\n\nbody.\n").unwrap();
+        fsutil::set_symlink(&reviews.join("007-probe"), Path::new("007")).unwrap();
+
+        let baton = dir.path().join(".doctrine/state/review/007/baton.toml");
+        std::fs::create_dir_all(baton.parent().unwrap()).unwrap();
+        std::fs::write(&baton, b"known-bytes").unwrap();
+
+        run_reseat(Some(dir.path().to_path_buf()), "RV-007", Some(12), never).unwrap();
+
+        assert!(reviews.join("012/review-012.toml").is_file());
+        assert!(baton.is_file(), "baton at 007 left in place");
+        assert_eq!(std::fs::read(&baton).unwrap(), b"known-bytes");
+        assert!(
+            !dir.path().join(".doctrine/state/review/012").exists(),
+            "reseat does not create a baton at the new id"
+        );
     }
 }
