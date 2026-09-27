@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0e28806ea73b088282795d24feb76"
+memory_key = "mem.pattern.research.pi-agents-need-tracked-background"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Detached research agents die when the Bash call returns"
+summary = "Launch scripts/pi-scout and pi-research with run_in_background + wait, never ( cmd & ) inside one call"
+created = "2026-09-27"
+updated = "2026-09-27"
+
+[scope]
+paths = []
+globs = []
+commands = ["scripts/pi-research", "scripts/pi-scout"]
+tags = ["research", "pi"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "6fb27e7515b4d386f10caf4ab13ffddf33e2fc5f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d1a1a7349f5dec7c742c2439171068883a8bc094e05daa0e8404152ef2e42ec2"
+base_commit = "200a9f1dafe0d6f4a2ca66b003fc23874818889f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+

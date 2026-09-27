@@ -46,10 +46,18 @@ a stale-binary session regenerates old boot.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-27 · design:inquiring · 200a9f1da
 
 ### Produced
+- Upstream (RFC-033 descent): frame settled 2e02a6cd2; overview memory un-inlined d947dd363; REV-067 applied to ADR-005 + ADR-024 0cf1eaf21 (lib: form); SL-144 abandoned, DEC-010 accepted
+- SL-273 scoped c5a02411e; research round (gitignored `research/research.md`); triage above 9b4356984; design run at inquiring rev 10 (governance-confirmed, graph-reviewed recorded)
+- minted: ISS-497 — stale-binary `memory sync` rolls back the shipped corpus
 
 ### Learned
+- mem.pattern.research.pi-agents-need-tracked-background — detached pi agents die at tool-call end
+- observation records: uncommitted shipped-memory edit reverted by a concurrent agent (commit immediately); QUE link-label refusals
 
 ### Open
+- QUE-228 — how tier-2 project governance overrides a pulled library rule
+- A1 (notes triage) — library addresses stable except deliberate retirements
+- design questions inq-1..inq-8 live in the design run, not here
