@@ -1,0 +1,12 @@
+rows: 155 / 155; joined 155; only-x [] only-y []
+unparsed routes: []
+R1 agreement 85/155 = 54.8%, kappa 0.44
+R2 X: {'probe': 48, 'demonstrate': 31, 'owner-fix': 33, 'review': 6, 'none': 6, 'control': 31} routes-used(excl none)=5 modal=probe 31.0% discriminating=True
+   second labels on owner-fix/none: {'duplicate': 20, 'stale': 13, 'neither': 6}
+R2 Y: {'control': 66, 'demonstrate': 29, 'review': 18, 'owner-fix': 24, 'probe': 17, 'none': 1} routes-used(excl none)=5 modal=control 42.6% discriminating=True
+   second labels on owner-fix/none: {'stale': 15, 'duplicate': 9, 'neither': 1}
+R4 jointly owner-fix 19; second-label agreement 17/19 = 89.5%; jointly stale 9 (47.4%)
+   jo rows: [('RV-307/F-19', 'duplicate', 'stale'), ('RV-307/F-22', 'duplicate', 'duplicate'), ('RV-307/F-24', 'duplicate', 'duplicate'), ('RV-307/F-33', 'duplicate', 'duplicate'), ('RV-307/F-34', 'stale', 'stale'), ('RV-307/F-39', 'stale', 'stale'), ('RV-314/F-20', 'duplicate', 'duplicate'), ('RV-314/F-28', 'stale', 'stale'), ('RV-314/F-29', 'stale', 'stale'), ('RV-314/F-39', 'stale', 'stale'), ('RV-314/F-40', 'stale', 'stale'), ('RV-325/F-9', 'stale', 'duplicate'), ('RV-349/F-12', 'duplicate', 'duplicate'), ('RV-349/F-25', 'duplicate', 'duplicate'), ('RV-349/F-34', 'duplicate', 'duplicate'), ('RV-349/F-8', 'stale', 'stale'), ('RV-358/F-6', 'stale', 'stale'), ('RV-370/F-12', 'stale', 'stale'), ('RV-370/F-6', 'duplicate', 'duplicate')]
+R5 none X: ['RV-307/F-4', 'RV-307/F-5', 'RV-325/F-4', 'RV-355/F-4', 'RV-358/F-2', 'RV-370/F-11']
+R5 none Y: ['RV-325/F-16']
+disagreement pairs (X,Y): [(('probe', 'control'), 26), (('owner-fix', 'control'), 7), (('demonstrate', 'control'), 6), (('owner-fix', 'review'), 5), (('probe', 'demonstrate'), 5), (('demonstrate', 'review'), 4), (('none', 'owner-fix'), 3), (('none', 'control'), 3), (('control', 'review'), 2), (('control', 'owner-fix'), 2), (('owner-fix', 'demonstrate'), 2), (('control', 'demonstrate'), 2), (('probe', 'review'), 1), (('control', 'none'), 1), (('demonstrate', 'probe'), 1)]

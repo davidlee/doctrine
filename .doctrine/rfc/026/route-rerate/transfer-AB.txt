@@ -1,0 +1,12 @@
+rows: 47 / 47; joined 47; only-x [] only-y []
+unparsed routes: []
+R1 agreement 31/47 = 66.0%, kappa 0.56
+R2 X: {'probe': 7, 'owner-fix': 19, 'control': 10, 'demonstrate': 3, 'review': 5, 'none': 3} routes-used(excl none)=5 modal=owner-fix 40.4% discriminating=True
+   second labels on owner-fix/none: {'stale': 16, 'duplicate': 4, 'neither': 2}
+R2 Y: {'probe': 7, 'control': 17, 'owner-fix': 12, 'demonstrate': 4, 'review': 5, 'none': 2} routes-used(excl none)=5 modal=control 36.2% discriminating=True
+   second labels on owner-fix/none: {'duplicate': 3, 'neither': 5, 'stale': 6}
+R4 jointly owner-fix 11; second-label agreement 8/11 = 72.7%; jointly stale 6 (54.5%)
+   jo rows: [('RV-321/F-2', 'duplicate', 'duplicate'), ('RV-324/F-4', 'stale', 'neither'), ('RV-366/F-1', 'stale', 'stale'), ('RV-366/F-2', 'stale', 'stale'), ('RV-366/F-3', 'stale', 'stale'), ('RV-366/F-4', 'stale', 'neither'), ('RV-372/F-1', 'duplicate', 'duplicate'), ('RV-372/F-15', 'stale', 'stale'), ('RV-372/F-3', 'stale', 'stale'), ('RV-373/F-1', 'stale', 'stale'), ('RV-395/F-2', 'stale', 'neither')]
+R5 none X: ['RV-366/F-6', 'RV-372/F-13', 'RV-389/F-17']
+R5 none Y: ['RV-369/F-7', 'RV-372/F-13']
+disagreement pairs (X,Y): [(('owner-fix', 'control'), 4), (('owner-fix', 'review'), 3), (('probe', 'control'), 2), (('review', 'probe'), 1), (('control', 'probe'), 1), (('none', 'owner-fix'), 1), (('review', 'none'), 1), (('review', 'control'), 1), (('none', 'control'), 1), (('owner-fix', 'demonstrate'), 1)]
