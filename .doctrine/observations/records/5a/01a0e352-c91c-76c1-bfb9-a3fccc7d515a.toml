@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e352-c91c-76c1-bfb9-a3fccc7d515a"
+recorded_at = "2026-09-27T14:44:08.604884848Z"
+kind = "friction"
+summary = "capsule-orchestrator/capsule-phase-planner SL-269 PHASE-03: planner prompt cites nonexistent 'doctrine memory retrieve <topic>' form"
+detail = """Planner agent definition instructs 'doctrine memory retrieve "<topic>"' but retrieve rejects a positional query; one wasted call."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

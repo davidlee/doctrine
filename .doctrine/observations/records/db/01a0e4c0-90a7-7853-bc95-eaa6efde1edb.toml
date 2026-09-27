@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e4c0-90a7-7853-bc95-eaa6efde1edb"
+recorded_at = "2026-09-27T21:23:40.327112145Z"
+kind = "friction"
+summary = "capsule-driver: VM hung mid-PHASE-03, needed a reboot"
+detail = "SL-269 capsule tree (driver + orchestrator + worker, each a claude process) running cargo gate/test on a 5GB, 4-core, no-swap VM hung hard enough to need a VM reboot. Probable cause is memory exhaustion from parallel rustc/link while three claude processes were resident; the previous boot's logs couldn't be read to confirm. The first orchestrator's worker was also cut off earlier for no clear reason. PHASE-03's partial delta survived uncommitted."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

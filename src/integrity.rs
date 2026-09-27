@@ -16,8 +16,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
 
+use crate::entity::{Acquired, Claim, ClaimCtx, Kind};
 use crate::kinds::{KINDS, KindRef, parse_canonical_ref};
-use crate::{entity, fsutil, git, listing, meta, root};
+use crate::{entity, fsutil, git, listing, meta, reserve, root};
 
 // ---------------------------------------------------------------------------
 // Pure check layer — facts in, findings out. No disk (design pure/impure split).
@@ -260,24 +261,35 @@ fn extract_entity_id(msg: &str, kind: &KindRef) -> Option<String> {
 
 /// `doctrine reseat <CANONICAL_REF> [--to <NNN>]` — renumber an entity's
 /// canonical-id quad (dir name, the `<stem>-NNN.{toml,md}` filenames, the toml
-/// `id` field, the `NNN-slug` alias) to the next free trunk-aware id, or to an
-/// explicit `--to`. Guards (checked BEFORE any mutation): an occupied target is
-/// refused (no clobber, §5.3); an id with live gitignored runtime phase state is
-/// refused (F3 — reseat does not own the disposable tier). Inbound prose
+/// `id` field, the `NNN-slug` alias) to the next free id, or to an explicit
+/// `--to`. The slug is read leniently ([`meta::read_slug`]), so a status-less
+/// kind (review) reseats (ISS-277). Refusals that do not depend on the
+/// destination run BEFORE any claim, so a refused reseat leaves no claim behind:
+/// an id with live gitignored runtime state is refused (F3 — reseat does not own
+/// the disposable tier), and so is a `--to` equal to the source. Inbound prose
 /// citations are reported as danglers and force a non-zero exit; prose is never
 /// rewritten (ADR-004 outbound-only, D4/R-3).
 ///
 /// CONTRACT (SL-032 review F-4): the dangler exit is **non-zero even on
 /// a fully-completed reseat** — the mutation succeeded, the citations are the
 /// human's to fix; `reseat && commit` is therefore wrong, drive it by hand.
-/// The mutation is now staged in a sibling temp dir with a single atomic
-/// rename as the commit point (IMP-010): a mid-sequence failure before the
-/// rename leaves only an orphan `.MMM.tmp` the retry path cleans — never a
-/// half-reseated entity at the canonical id.
+///
+/// The destination is **claimed** through the reservation backend
+/// ([`reserve::backend`], SL-269), not merely picked: the default rides
+/// [`entity::claim_next_id`]; an explicit `--to` is refused when the candidate set
+/// (this tree, sibling trees, reservation refs, trunk) holds it, else claimed once
+/// (no clobber, §5.3). The mutation is staged in a sibling `.MMM.tmp` and
+/// committed by one `rename(2)` over the claimed **empty** dir (IMP-010), which
+/// is the cleanup boundary (RV-406 F-5): before it, failure removes the claim
+/// with `remove_dir` only — a populated claim is kept and named — and removes our
+/// own staging dir; any reservation ref stays (its id is skipped from then on).
+/// After it, the move is committed: nothing is rolled back, the destination is
+/// never removed, and the error names what is seated and what remains.
 pub(crate) fn run_reseat(
     path: Option<PathBuf>,
     reference: &str,
     to: Option<u32>,
+    prompt: reserve::PromptFn,
 ) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
     let (kind, src_id) = parse_canonical_ref(reference)?;
@@ -291,34 +303,12 @@ pub(crate) fn run_reseat(
         listing::canonical_id(kind.kind.prefix, src_id),
         src_dir.display()
     );
-    // Slug from the authored metadata — the alias name component.
-    let slug = meta::read_meta(&tree_root, kind.kind.stem, src_id, kind.kind.prefix)?.slug;
+    // Slug from the authored metadata — the alias name component. Lenient: a
+    // status-less kind (review) must not trip the strict `Meta` (ISS-277).
+    let slug = meta::read_slug(&tree_root, kind.kind.stem, src_id, kind.kind.prefix)?;
 
-    // The free-id pick: explicit `--to`, else the trunk-aware default (PHASE-02).
-    let dst_id = match to {
-        Some(t) => t,
-        None => entity::next_id(
-            &entity::scan_ids(&tree_root)?,
-            &git::trunk_entity_ids(&root, kind.kind.dir)?,
-        ),
-    };
-    anyhow::ensure!(
-        dst_id != src_id,
-        "{} is already seated at {src_name}",
-        listing::canonical_id(kind.kind.prefix, src_id)
-    );
-
-    let dst_name = format!("{dst_id:03}");
-    let dst_dir = tree_root.join(&dst_name);
-
-    // Guard 1 — occupied target (no clobber). `exists` resolves the numeric dir.
-    anyhow::ensure!(
-        !dst_dir.exists(),
-        "id {dst_name} is occupied — refusing to clobber {}",
-        dst_dir.display()
-    );
-    // Guard 2 — live runtime phase state (F3). Only kinds with a `state_dir`
-    // (slice) key disposable state by id; reseat does not migrate that tier.
+    // Guard — live runtime phase state (F3). Only kinds with a `state_dir` key
+    // disposable state by id; reseat does not migrate that tier.
     if let Some(state_dir) = kind.state_dir {
         let state = root.join(state_dir).join(&src_name);
         anyhow::ensure!(
@@ -328,62 +318,19 @@ pub(crate) fn run_reseat(
             state.display()
         );
     }
+    anyhow::ensure!(
+        to != Some(src_id),
+        "{} is already seated at {src_name}",
+        listing::canonical_id(kind.kind.prefix, src_id)
+    );
 
-    // Staging dir — sibling `.MMM.tmp` on the same mount, invisible until commit.
-    let tmp_dir = tree_root.join(format!(".{dst_name}.tmp"));
-    if tmp_dir.exists() {
-        std::fs::remove_dir_all(&tmp_dir)
-            .with_context(|| format!("clean stale staging dir {}", tmp_dir.display()))?;
-    }
-
-    // --- Mutation (IMP-010: staged in tmp, atomic rename = commit point) ---
-    // Step 1: copy src contents into staging dir (invisible).
-    fsutil::copy_dir_all(&src_dir, &tmp_dir)
-        .with_context(|| format!("copy {} → {}", src_dir.display(), tmp_dir.display()))?;
-
-    // Step 2–3: transform staging dir in place.
-    for ext in ["toml", "md"] {
-        let from = tmp_dir.join(format!("{}-{src_name}.{ext}", kind.kind.stem));
-        let onto = tmp_dir.join(format!("{}-{dst_name}.{ext}", kind.kind.stem));
-        if from.exists() {
-            std::fs::rename(&from, &onto)
-                .with_context(|| format!("rename {} → {}", from.display(), onto.display()))?;
-        }
-    }
-    let toml_path = tmp_dir.join(format!("{}-{dst_name}.toml", kind.kind.stem));
-    let text = std::fs::read_to_string(&toml_path)
-        .with_context(|| format!("read {}", toml_path.display()))?;
-    let mut doc = text
-        .parse::<toml_edit::DocumentMut>()
-        .with_context(|| format!("parse {}", toml_path.display()))?;
-    doc.as_table_mut()
-        .insert("id", toml_edit::value(i64::from(dst_id)));
-    fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())
-        .with_context(|| format!("write {}", toml_path.display()))?;
-
-    // Step 4: atomic commit — rename(tmp → dst_dir).
-    std::fs::rename(&tmp_dir, &dst_dir).with_context(|| {
-        format!(
-            "commit rename {} → {}",
-            tmp_dir.display(),
-            dst_dir.display()
-        )
-    })?;
-
-    // Step 5: swap aliases.
-    let old_alias = tree_root.join(format!("{src_name}-{slug}"));
-    if matches!(std::fs::symlink_metadata(&old_alias), Ok(m) if m.file_type().is_symlink()) {
-        std::fs::remove_file(&old_alias)
-            .with_context(|| format!("remove stale alias {}", old_alias.display()))?;
-    }
-    fsutil::set_symlink(
-        &tree_root.join(format!("{dst_name}-{slug}")),
-        Path::new(&dst_name),
+    // Every destination-independent refusal has run: only now build the backend
+    // (which may print the local-fallback signal or prompt) and claim.
+    let trunk_ids = git::trunk_entity_ids(&root, kind.kind.dir)?;
+    let (claim, mut scan) = reserve::backend(&root, kind.kind, prompt)?;
+    let dst_id = reseat_onto(
+        &tree_root, kind.kind, src_id, &slug, to, &*claim, &mut *scan, &trunk_ids,
     )?;
-
-    // Step 6: cleanup src_dir.
-    std::fs::remove_dir_all(&src_dir)
-        .with_context(|| format!("remove old src dir {}", src_dir.display()))?;
 
     let old_ref = listing::canonical_id(kind.kind.prefix, src_id);
     let new_ref = listing::canonical_id(kind.kind.prefix, dst_id);
@@ -405,6 +352,208 @@ pub(crate) fn run_reseat(
         "reseat: {} inbound citation(s) to {old_ref} remain",
         danglers.len()
     )
+}
+
+/// The reseat core below the shell's refusals: claim the destination, stage the
+/// renumbered copy, commit it over the claimed empty dir, then swap the alias and
+/// drop the source. Returns the seated id. `scan` maps this tree's numeric ids to
+/// the full candidate set (a [`reserve::ScanSource`]); `trunk_ids` is constant.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the shell/core seam: every input is resolved by the shell so the core runs git-free under test"
+)]
+fn reseat_onto(
+    tree_root: &Path,
+    kind: &Kind,
+    src_id: u32,
+    slug: &str,
+    to: Option<u32>,
+    claim: &dyn Claim,
+    scan: &mut dyn FnMut(&[u32]) -> anyhow::Result<Vec<u32>>,
+    trunk_ids: &[u32],
+) -> anyhow::Result<u32> {
+    let (dst_id, dst_dir) = match to {
+        None => entity::claim_next_id(claim, tree_root, kind.prefix, trunk_ids, || {
+            scan(&entity::scan_ids(tree_root)?)
+        })?,
+        Some(t) => claim_explicit(claim, tree_root, t, scan, trunk_ids)?,
+    };
+    let src_name = format!("{src_id:03}");
+    let dst_name = format!("{dst_id:03}");
+    let src_dir = tree_root.join(&src_name);
+    let old_ref = listing::canonical_id(kind.prefix, src_id);
+    let new_ref = listing::canonical_id(kind.prefix, dst_id);
+
+    // --- Pre-commit: everything up to and including the commit rename. ---
+    // Staging dir — sibling `.MMM.tmp` on the same mount, invisible until commit.
+    let tmp_dir = tree_root.join(format!(".{dst_name}.tmp"));
+    if let Err(e) = stage_and_commit(kind, src_id, dst_id, &src_dir, &tmp_dir, &dst_dir) {
+        let fate = abandon_uncommitted(&dst_dir, &tmp_dir);
+        return Err(e.context(format!(
+            "reseat {old_ref} → {new_ref} not committed; {fate}; any reservation for \
+             {new_ref} is kept (that id is skipped from now on)"
+        )));
+    }
+
+    // --- Post-commit: the move is committed; never roll back, never touch dst. ---
+    let old_alias = tree_root.join(format!("{src_name}-{slug}"));
+    let new_alias = tree_root.join(format!("{dst_name}-{slug}"));
+    if let Err(e) = finish_committed(&old_alias, &new_alias, &dst_name, &src_dir) {
+        let remaining = remaining_after_commit(&old_alias, &new_alias, &dst_name, &src_dir);
+        return Err(e.context(format!(
+            "reseat committed {old_ref} → {new_ref} at {}, but a post-commit step \
+             failed; remaining by hand: {remaining}",
+            dst_dir.display()
+        )));
+    }
+    Ok(dst_id)
+}
+
+/// Claim an explicit `--to` destination: refuse before any claim when the
+/// candidate set holds it (a sibling tree's pre-slice dir is invisible to the ref
+/// CAS), else claim once — `AlreadyHeld` refuses with the same wording.
+fn claim_explicit(
+    claim: &dyn Claim,
+    tree_root: &Path,
+    to: u32,
+    scan: &mut dyn FnMut(&[u32]) -> anyhow::Result<Vec<u32>>,
+    trunk_ids: &[u32],
+) -> anyhow::Result<(u32, PathBuf)> {
+    let dir = tree_root.join(format!("{to:03}"));
+    let occupied = || {
+        anyhow::anyhow!(
+            "id {to:03} is occupied or reserved (this tree, a sibling tree, a reservation \
+             ref, or trunk) — refusing to clobber {}",
+            dir.display()
+        )
+    };
+    let held = scan(&entity::scan_ids(tree_root)?)?;
+    if held.contains(&to) || trunk_ids.contains(&to) {
+        return Err(occupied());
+    }
+    match claim.claim(&ClaimCtx { dir: &dir, id: to })? {
+        Acquired::Won => Ok((to, dir)),
+        Acquired::AlreadyHeld => Err(occupied()),
+    }
+}
+
+/// Stage the renumbered copy in `tmp_dir` and commit it by renaming over the
+/// claimed empty `dst_dir` — the single commit point (IMP-010). `rename(2)`
+/// replaces an empty dir atomically and fails on a populated one, so a claim
+/// someone has filled is never overwritten.
+fn stage_and_commit(
+    kind: &Kind,
+    src_id: u32,
+    dst_id: u32,
+    src_dir: &Path,
+    tmp_dir: &Path,
+    dst_dir: &Path,
+) -> anyhow::Result<()> {
+    let src_name = format!("{src_id:03}");
+    let dst_name = format!("{dst_id:03}");
+    if tmp_dir.exists() {
+        std::fs::remove_dir_all(tmp_dir)
+            .with_context(|| format!("clean stale staging dir {}", tmp_dir.display()))?;
+    }
+    // Step 1: copy src contents into staging dir (invisible).
+    fsutil::copy_dir_all(src_dir, tmp_dir)
+        .with_context(|| format!("copy {} → {}", src_dir.display(), tmp_dir.display()))?;
+
+    // Step 2–3: transform staging dir in place.
+    for ext in ["toml", "md"] {
+        let from = tmp_dir.join(format!("{}-{src_name}.{ext}", kind.stem));
+        let onto = tmp_dir.join(format!("{}-{dst_name}.{ext}", kind.stem));
+        if from.exists() {
+            std::fs::rename(&from, &onto)
+                .with_context(|| format!("rename {} → {}", from.display(), onto.display()))?;
+        }
+    }
+    let toml_path = tmp_dir.join(format!("{}-{dst_name}.toml", kind.stem));
+    let text = std::fs::read_to_string(&toml_path)
+        .with_context(|| format!("read {}", toml_path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("parse {}", toml_path.display()))?;
+    doc.as_table_mut()
+        .insert("id", toml_edit::value(i64::from(dst_id)));
+    fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())
+        .with_context(|| format!("write {}", toml_path.display()))?;
+
+    // Step 4: atomic commit — rename(tmp → the claimed empty dst_dir).
+    std::fs::rename(tmp_dir, dst_dir).with_context(|| {
+        format!(
+            "commit rename {} → {}",
+            tmp_dir.display(),
+            dst_dir.display()
+        )
+    })
+}
+
+/// Pre-commit cleanup (RV-406 F-5): remove the claimed dir with `remove_dir`
+/// ONLY — never `remove_dir_all`, a populated claim is someone's and is kept —
+/// and best-effort remove our own staging dir. Returns the fate of each, naming
+/// anything left behind (STD-003).
+fn abandon_uncommitted(dst_dir: &Path, tmp_dir: &Path) -> String {
+    let claim = match std::fs::remove_dir(dst_dir) {
+        Ok(()) => format!("claimed dir {} removed", dst_dir.display()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            format!("claimed dir {} already gone", dst_dir.display())
+        }
+        Err(e) => format!("claimed dir {} kept ({e})", dst_dir.display()),
+    };
+    let staging = match std::fs::symlink_metadata(tmp_dir) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => format!("; staging dir {} not inspected ({e})", tmp_dir.display()),
+        Ok(_) => match std::fs::remove_dir_all(tmp_dir) {
+            Ok(()) => format!("; staging dir {} removed", tmp_dir.display()),
+            Err(e) => format!("; staging dir {} left behind ({e})", tmp_dir.display()),
+        },
+    };
+    format!("{claim}{staging}")
+}
+
+/// The post-commit steps: swap the alias, then drop the source dir.
+fn finish_committed(
+    old_alias: &Path,
+    new_alias: &Path,
+    dst_name: &str,
+    src_dir: &Path,
+) -> anyhow::Result<()> {
+    if is_symlink(old_alias) {
+        std::fs::remove_file(old_alias)
+            .with_context(|| format!("remove stale alias {}", old_alias.display()))?;
+    }
+    fsutil::set_symlink(new_alias, Path::new(dst_name))?;
+    std::fs::remove_dir_all(src_dir)
+        .with_context(|| format!("remove old src dir {}", src_dir.display()))
+}
+
+/// What a failed post-commit sequence left for the human, read back from disk.
+fn remaining_after_commit(
+    old_alias: &Path,
+    new_alias: &Path,
+    dst_name: &str,
+    src_dir: &Path,
+) -> String {
+    let mut left = Vec::new();
+    if is_symlink(old_alias) {
+        left.push(format!("remove stale alias {}", old_alias.display()));
+    }
+    if std::fs::read_link(new_alias).ok().as_deref() != Some(Path::new(dst_name)) {
+        left.push(format!("point alias {} at {dst_name}", new_alias.display()));
+    }
+    if std::fs::symlink_metadata(src_dir).is_ok() {
+        left.push(format!("remove source dir {}", src_dir.display()));
+    }
+    if left.is_empty() {
+        "nothing".to_owned()
+    } else {
+        left.join("; ")
+    }
+}
+
+fn is_symlink(path: &Path) -> bool {
+    matches!(std::fs::symlink_metadata(path), Ok(m) if m.file_type().is_symlink())
 }
 
 /// Scan authored `.doctrine/**/*.md` prose for inbound citations of `needle`
@@ -752,5 +901,213 @@ mod tests {
             diagnostics.is_empty(),
             "section inside a string value must not be reported: {diagnostics:?}"
         );
+    }
+
+    // --- SL-269 PHASE-03: reseat claims its destination ---
+
+    use crate::kinds::SLICE_KIND;
+    use crate::test_support::LinkedTrees;
+
+    /// The clone-local reservation namespace (`reserve`'s private constant; the
+    /// ref shape is the contract under test here).
+    const LOCAL_REF_NS: &str = "refs/doctrine/reservation-local";
+
+    /// The injected fallback prompt: never opt in (no `set_var`, ISS-483).
+    fn never(_: &str) -> anyhow::Result<bool> {
+        Ok(false)
+    }
+
+    /// Seed a status-bearing slice `id` (slug `moved`) under `root`'s slice tree.
+    fn seed_slice(root: &Path, id: u32) {
+        let name = format!("{id:03}");
+        let dir = root.join(SLICE_KIND.dir).join(&name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(format!("slice-{name}.toml")),
+            format!("id = {id}\nslug = \"moved\"\ntitle = \"T\"\nstatus = \"proposed\"\n"),
+        )
+        .unwrap();
+        std::fs::write(dir.join(format!("slice-{name}.md")), "# body\n").unwrap();
+    }
+
+    fn git_in(dir: &Path, args: &[&str]) -> std::process::Output {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .expect("spawn git");
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        out
+    }
+
+    /// ISS-281: a core-driven test needs a NON-git root; assert it rather than
+    /// trusting `TMPDIR`.
+    fn assert_outside_git(root: &Path) {
+        assert!(
+            git::toplevel_and_prefix(root).unwrap().is_none(),
+            "precondition: {} must be outside any git worktree (ISS-281)",
+            root.display()
+        );
+    }
+
+    /// SL-269 VT-3: `--to` onto a sibling tree's dir, or onto an id a local
+    /// reservation ref holds, is refused before any claim; the source is intact.
+    #[test]
+    fn reseat_to_a_sibling_held_id_refuses() {
+        let lt = LinkedTrees::new("");
+        let root_a = lt.root(&lt.a);
+        seed_slice(&root_a, 31);
+        let slices_a = root_a.join(SLICE_KIND.dir);
+
+        // Case 1: tree b holds an uncommitted `045` dir.
+        std::fs::create_dir_all(lt.root(&lt.b).join(SLICE_KIND.dir).join("045")).unwrap();
+        let err = run_reseat(Some(root_a.clone()), "SL-031", Some(45), never).unwrap_err();
+        assert!(err.to_string().contains("occupied"), "{err:#}");
+
+        // Case 2: a clone-local reservation ref holds `046`.
+        let head = String::from_utf8(git_in(&lt.main, &["rev-parse", "HEAD"]).stdout).unwrap();
+        git_in(
+            &lt.main,
+            &["update-ref", &format!("{LOCAL_REF_NS}/SL/046"), head.trim()],
+        );
+        let err = run_reseat(Some(root_a.clone()), "SL-031", Some(46), never).unwrap_err();
+        assert!(err.to_string().contains("occupied"), "{err:#}");
+
+        assert!(slices_a.join("031/slice-031.toml").is_file());
+        assert!(!slices_a.join("045").exists());
+        assert!(!slices_a.join("046").exists());
+    }
+
+    /// SL-269 VT-3: the default destination skips a sibling tree's ids, and is
+    /// claimed (a clone-local reservation ref now holds it).
+    #[test]
+    fn reseat_default_skips_sibling_ids() {
+        let lt = LinkedTrees::new("");
+        let root_a = lt.root(&lt.a);
+        seed_slice(&root_a, 31);
+        std::fs::create_dir_all(lt.root(&lt.b).join(SLICE_KIND.dir).join("050")).unwrap();
+
+        run_reseat(Some(root_a.clone()), "SL-031", None, never).unwrap();
+
+        let slices_a = root_a.join(SLICE_KIND.dir);
+        assert!(slices_a.join("051/slice-051.toml").is_file());
+        assert!(!slices_a.join("031").exists());
+        git_in(
+            &lt.main,
+            &["rev-parse", "--verify", &format!("{LOCAL_REF_NS}/SL/051")],
+        );
+    }
+
+    /// A claim double that wins by creating the dir AND populating it — someone
+    /// else's bytes landed in the claim before the commit rename.
+    struct PopulatingClaim;
+    impl Claim for PopulatingClaim {
+        fn claim(&self, ctx: &ClaimCtx<'_>) -> anyhow::Result<Acquired> {
+            std::fs::create_dir(ctx.dir)?;
+            std::fs::write(ctx.dir.join("foreign.txt"), "not ours")?;
+            Ok(Acquired::Won)
+        }
+    }
+
+    /// The identity scan: a non-git tree's candidate set is its own ids.
+    fn identity(local: &[u32]) -> anyhow::Result<Vec<u32>> {
+        Ok(local.to_vec())
+    }
+
+    /// SL-269 VT-5 (RV-406 F-5): the commit rename fails onto a populated claim;
+    /// pre-commit cleanup uses `remove_dir` only, so the foreign bytes survive and
+    /// the error names the kept dir. Our staging dir is removed; the source is intact.
+    #[test]
+    fn reseat_keeps_a_populated_claim_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_outside_git(dir.path());
+        seed_slice(dir.path(), 31);
+        let tree = dir.path().join(SLICE_KIND.dir);
+
+        let err = reseat_onto(
+            &tree,
+            &SLICE_KIND,
+            31,
+            "moved",
+            Some(45),
+            &PopulatingClaim,
+            &mut identity,
+            &[],
+        )
+        .unwrap_err();
+        let dst = tree.join("045");
+        let msg = err.to_string();
+        assert!(msg.contains("not committed"), "{err:#}");
+        assert!(msg.contains(&dst.display().to_string()), "{err:#}");
+        assert!(msg.contains("kept"), "{err:#}");
+        assert!(dst.join("foreign.txt").is_file());
+        assert!(!tree.join(".045.tmp").exists());
+        assert!(tree.join("031/slice-031.toml").is_file());
+    }
+
+    /// SL-269 VT-5: a failure after the commit rename (a regular file squats the
+    /// new alias) is a committed move — the destination stays seated, nothing is
+    /// rolled back, and the error names what remains.
+    #[test]
+    fn reseat_post_commit_failure_leaves_destination() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_outside_git(dir.path());
+        seed_slice(dir.path(), 31);
+        let tree = dir.path().join(SLICE_KIND.dir);
+        std::fs::write(tree.join("045-moved"), "squatter").unwrap();
+
+        let err = reseat_onto(
+            &tree,
+            &SLICE_KIND,
+            31,
+            "moved",
+            Some(45),
+            &entity::LocalFs,
+            &mut identity,
+            &[],
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("reseat committed SL-031 → SL-045"), "{err:#}");
+        assert!(msg.contains("remove source dir"), "{err:#}");
+        let toml = std::fs::read_to_string(tree.join("045/slice-045.toml")).unwrap();
+        assert!(toml.contains("id = 45"), "{toml}");
+        assert!(
+            tree.join("031").is_dir(),
+            "source removal follows the alias step"
+        );
+    }
+
+    /// A staging failure with the claim still empty removes the claim: no
+    /// destination dir, no staging dir, source intact.
+    #[test]
+    fn reseat_staging_failure_removes_an_empty_claim() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_outside_git(dir.path());
+        seed_slice(dir.path(), 31);
+        let tree = dir.path().join(SLICE_KIND.dir);
+        // Corrupt the source toml so the staged rewrite fails to parse.
+        std::fs::write(tree.join("031/slice-031.toml"), "id = [").unwrap();
+
+        let err = reseat_onto(
+            &tree,
+            &SLICE_KIND,
+            31,
+            "moved",
+            Some(45),
+            &entity::LocalFs,
+            &mut identity,
+            &[],
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("removed"), "{err:#}");
+        assert!(!tree.join("045").exists());
+        assert!(!tree.join(".045.tmp").exists());
+        assert!(tree.join("031/slice-031.toml").is_file());
     }
 }

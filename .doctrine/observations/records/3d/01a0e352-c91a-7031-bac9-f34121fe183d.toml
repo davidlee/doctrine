@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e352-c91a-7031-bac9-f34121fe183d"
+recorded_at = "2026-09-27T14:44:08.602633404Z"
+kind = "friction"
+summary = "capsule-orchestrator/capsule-phase-planner SL-269 PHASE-03: memory search returns near-identical irrelevant results across queries"
+detail = "doctrine memory search gave the same high-severity, off-topic hits for 'reseat', 'reservation claim', 'integrity reseat rename commit point'; the relevant memories surfaced only via 'doctrine memory list | grep'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
