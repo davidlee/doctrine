@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e4d6-797d-7c20-9ac9-6f385e2b71f8"
+recorded_at = "2026-09-27T21:47:36.189538646Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-269 PHASE-03: worker cannot write .doctrine/, EX-3 layering comment left undone"
+detail = "EX-3 says layering.toml declares integrity -> reserve, but only module tiers are declared there; edges live in comments. The capsule-worker treats .doctrine/ as off-limits and the orchestrator holds no Edit, so a one-line comment edit has no cheap owner. It was deferred to PHASE-04."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

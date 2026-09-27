@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e4d6-797b-7e72-80bf-53ed21d0357b"
+recorded_at = "2026-09-27T21:47:36.187097393Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-269 PHASE-03: check gate output buries exit status"
+detail = "doctrine check gate streams heavy fixture stderr with 'warning:' lines; the worker had to rerun the gate to get a clean exit code. Redirecting to a log file and echoing $? avoids it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
