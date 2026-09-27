@@ -5,17 +5,17 @@ id = 224
 slug = "should-the-route-axis-extend-beyond-design-review-ledgers"
 title = "Should the route axis extend beyond design-review ledgers?"
 record_kind = "question"
-status = "open"
+status = "answered"
 created = "2026-09-23"
-updated = "2026-09-23"
+updated = "2026-09-27"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 question = "Should the route axis extend beyond design-review ledgers to /audit and /code-review passes?"
 why_matters = "The trial scoped routing to design reviews so its population is defined. Extending it is a decision for trial conclusion, not an automatic consequence of a good result. Argument: SL-260 design §6 Q2. Owned and settled by CHR-077."
-answer      = ""
-answered_by = ""
-answered_on = ""
+answer = "Not extended. E13's transferability test over 47 severe audit and code-review findings put owner-fix at 21 (44.7%), and 13 of 25 on reconciliation alone (52%), in both blind raters independently; both identified the influx as stale-account drift rather than duplication. Reconciliation narrowly fails a ≥3-routes/modal-≤50% discrimination reading and code-review passes. Extending would carry a term that no longer discriminates, so the gap is in owner-fix rather than in the axis: RFC-026 P11 takes the split-or-name question up. Owner ruling, 2026-09-27."
+answered_by = "owner"
+answered_on = "2026-09-27"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []

@@ -1,0 +1,52 @@
+Read-only research in the doctrine repo. Do not edit, create, or commit anything.
+Do not read anything under `.doctrine/rfc/026/p10-trial/`, and do not read
+`.doctrine/rfc/026/rfc-026.md`'s E12 section. Classify only from the finding texts.
+
+TOOLS. Use the CLI, not raw files: `./target/debug/doctrine review show RV-NNN --json`,
+`./target/debug/doctrine review list`. Check `--help` for flags; do not guess them.
+
+QUESTION. A routing convention is in use on design-review ledgers, where each
+blocker or major finding is assigned one route from a closed set of five. The open
+question is whether that same taxonomy **transfers** to audit/reconciliation and
+code-review ledgers. Your job is to find out empirically: try to assign each severe
+finding on those ledgers a route, and say plainly where none fits.
+
+THE FIVE ROUTES. Assign exactly one, or the literal `none`.
+
+| route | the question behind the finding | what settles it |
+|---|---|---|
+| `review` | should we accept this commitment and its consequences? | design judgement and adversarial review |
+| `demonstrate` | can these parts connect as proposed? | a thin implementation exercising the disputed connection — "it compiles" is not the bar |
+| `probe` | does the mechanism withstand the adversary? | a stated adversary, then a hostile probe |
+| `control` | would the planned check notice failure? | a negative control: name the concrete incorrect candidate the check must reject, and observe it rejected |
+| `owner-fix` | do two accounts of one fact disagree? | remove the duplicate, verify the surviving owner, sweep the affected class |
+
+`none` means: the finding is real and severe, but none of the five route questions
+is the question it is actually asking — the taxonomy has no term for it. Use `none`
+when it is the honest answer, and say in <=12 words what question the finding *is*
+asking. Do **not** strain to fit a route, and do not invent a sixth route.
+
+POPULATION. Every blocker and major finding on these 24 ledgers, all of them, no
+sampling — 47 findings in total.
+
+  reconciliation facet (25): RV-366 RV-369 RV-372 RV-373 RV-379 RV-381 RV-383
+    RV-387 RV-390 RV-394 RV-395 RV-398
+  code-review facet (22): RV-317 RV-321 RV-324 RV-342 RV-367 RV-375 RV-376
+    RV-378 RV-380 RV-389 RV-392 RV-393
+
+OUTPUT (markdown, compact):
+
+ 1. One flat table, complete, one row per severe finding: ledger | facet | F-N |
+    severity | route-or-none | <=12-word reason for the route or for `none`.
+ 2. Per facet: severe count; the count per route; the `none` count and share.
+ 3. Across both facets: which routes absorb the population; the share of findings
+    taken by the single most common route; how many distinct routes were used.
+ 4. How often you hesitated between two routes, with the F-N ids and the two
+    candidates, and how often you were near `none` but assigned a route anyway.
+ 5. At most 10 lines of caveats.
+
+RULES. Classify from the finding's own text and its disposition, not from the slice
+title. Where a finding is about shipped code not matching what the design or a
+governance record says, say so and let that decide the route rather than picking
+the most severe-sounding one. Do not summarise the designs. Do not recommend
+anything. Do not speculate; write "unknown" rather than guess.

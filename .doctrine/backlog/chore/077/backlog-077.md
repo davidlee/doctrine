@@ -34,17 +34,56 @@ passes.
   contests live only in the gitignored runtime baton; once it is gone they are
   unrecoverable, and that ledger's counts are then reported as *unavailable*,
   never estimated. Why: `DEC-276`.
-- [ ] Record which slices were eligible, and why, against the scope §5 rules.
-- [ ] Run the collection procedure (`DEC-276` / design §9.4) over each eligible
-  ledger.
-- [ ] **Confound guard (`R4`, `DEC-270`):** before reading a high miss rate on
+
+  **NOT DONE — missed for all three ledgers, and left unticked rather than
+  quietly closed.** No capture was made during the window. The batons happened to
+  survive on this machine, so `RV-374`/`RV-382`/`RV-377` rounds and contests were
+  read late and are reported as late-read, not as the specified measure. `E12`
+  confound 3 discloses this. It is the register's fourth entry in spirit: an
+  obligation whose enforcement is a checklist line no gate reads.
+- [x] Record which slices were eligible, and why, against the scope §5 rules.
+  `SL-261`, `SL-262`, `SL-263` — next three code-changing by id from `70bd7d1ff`,
+  none parked, all `done`. 3 of 3. See `E12`.
+- [x] Run the collection procedure (`DEC-276` / design §9.4) over each eligible
+  ledger. Every row collected; two qualified (`rounds`/`contests` late-read,
+  `RV-377` design growth unavailable) and stated as such.
+- [x] **Confound guard (`R4`, `DEC-270`):** before reading a high miss rate on
   adversary clauses or criterion sketches as a routing failure, check the
   surrounding responses for shell truncation. `--response` is one shell
   argument, and backtick spans and dollar signs are eaten before doctrine sees
   them. A miss rate inflated that way is not evidence about routing.
-- [ ] Write the `RFC-026` evidence entry. `P10` sets no pass mark; report what
+
+  Checked and **excluded**: all 18 severe responses present, 238–872 chars, none
+  truncated. The routes are absent because they were never written.
+- [x] Write the `RFC-026` evidence entry. `P10` sets no pass mark; report what
   was observed against its three trial questions and its *would-kill* list.
-- [ ] At trial conclusion, settle the questions this chore owns (below).
+  Done: **`RFC-026` E12** (`.doctrine/rfc/026/p10-trial/report.md`), split out
+  as a separate doc because it carries the rater instrument and both
+  classifications. P10's *"no new kind, schema, or tooling"* carries a dated
+  correction rather than a rewrite.
+- [x] At trial conclusion, settle the questions this chore owns (below).
+  Both settled 2026-09-27.
+
+## Outcome
+
+**The window reported a delivery failure, not a mechanism failure.** 18 severe
+findings across the three eligible design ledgers; **0 carry a route** in the
+field the convention specified, and neither of the two recovered afterwards is an
+instrument route — so `P10`'s mechanism is untested by this window rather than
+falsified. The cause is documented contemporaneously (`SL-261`, 2026-09-24): the
+rule sat in `reviewing.md`'s tail, below where the responder stops reading, and
+nothing validated the form.
+
+**Scope was widened at conclusion, on the user's direction, beyond what the chore
+originally owed.** `QUE-224` could not be settled by waiting — nothing instructs
+an audit or code-review pass to route, so the observational population never
+arises. A transferability classification study was therefore run over 47 severe
+findings on 24 existing ledgers, with two blind raters, and recorded as **E13**
+(`.doctrine/rfc/026/route-transfer/report.md`). It grounds **P11**.
+
+**Residual, not this chore's to fix:** `--route` is not facet-gated, so the
+mechanism permits what `install/review-ledger.md` forbids; nothing enforces either
+direction. Stated in `E13`.
 
 ## Questions this chore owns
 
