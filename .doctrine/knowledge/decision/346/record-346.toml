@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 346
+slug = "sl-273-phasing-and-executors"
+title = "SL-273 phasing and executors"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "The check is the sweep's finish line (DEC-339); the rename and new owner sections (DEC-342, DEC-344) must land before the sweep or citations target moving addresses; the sweep and restate audit scan the same files and touch the same lines."
+choice = "Four phases. 1 resolver + check (pure scanner/resolver, build-repo test, doctor leg, library show accepts lib:), Claude, TDD; the bare-target report starts as a warning list. 2 teaching + consolidation (REV on ADR-005, rename, boot lib: rule and mandatory-retrieval line, using-doctrine publication section, shipped-corpus-authoring fix, C5 to glossary, triangle dedup, boot-footer retirement), Claude. 3 one combined inventory (citation occurrences per DEC-341, restate offenders per DEC-345) written by a DeepSeek pi worker with recommended dispositions, adjudicated by the orchestrator; ownerless tables logged to IMP-500. 4 DeepSeek implements the adjudicated inventory only; orchestrator verifies against it, flips the bare-target report to failing, runs the check. At audit, a second combined DeepSeek pass on a similar brief checks for anything that slipped through."
+alternatives = ["separate inventory and implementation passes for sweep and restate audit", "sweep before consolidation"]
+rationale = "One corpus read and one adjudication; avoids conflicting edits to shared lines. Phase 4 may split into two dispatches along the section boundary if the diff is too large to verify, without changing the design. The audit re-pass is an independent sweep against an agent's imperfect first pass."
+consequences = ["DeepSeek never rewrites on unadjudicated judgement", "the REV on ADR-005 lands in phase 2 before the rename", "audit carries a DeepSeek re-inventory step"]
+decided_by = "user"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-273"
