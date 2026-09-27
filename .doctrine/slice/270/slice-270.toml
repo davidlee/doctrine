@@ -1,7 +1,7 @@
 id = 270
 slug = "routing-trial-two"
 title = "Routing trial two"
-status = "reconcile"
+status = "done"
 created = "2026-09-27"
 updated = "2026-09-27"
 tags = ["area:review", "area:governance", "rfc-026"]

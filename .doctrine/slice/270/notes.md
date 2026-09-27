@@ -42,7 +42,7 @@ Every hit is excluded, for one of these reasons:
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-27 · audit RV-401 concluded · 7f7667b7f
+fresh-as-of: 2026-09-27 · closed · 7e1844cd4
 
 ### Produced
 - research + pre-registered re-rate — RFC-026 E14 (`.doctrine/rfc/026/route-rerate/`); QUE-224, QUE-225 answers revised (commits 4217bb9a4..57e9f3b9b)
@@ -52,6 +52,8 @@ fresh-as-of: 2026-09-27 · audit RV-401 concluded · 7f7667b7f
 - plan — two phases (commits 532797c62..2d27b075a)
 - PHASE-01 six-route set — f27cad64b, 078fc994e; VT-1/6/7 pass, VA-1 recorded above
 - PHASE-02 lock route check — b8d10e714, d6d85fe1d; VT-2..5 pass; gate green
+- reconcile — design sec-3/sec-4 edited; REV-065 done (ADR-007, SPEC-032) — 7e1844cd4
+- close — PATH doctrine 0.46.1 serves six routes (CLI + MCP); `doctrine install` run; memory harvest: none new (route memory already current), consciously rejected
 - audit — RV-401 (F-1..F-5 terminal; brief: design sec-3, sec-4, REV-065); RV-400 F-7 verified; minted IMP-498 (after CHR-082)
 
 ### Learned
@@ -61,10 +63,8 @@ fresh-as-of: 2026-09-27 · audit RV-401 concluded · 7f7667b7f
 - plan.toml: phase keys stranded under `[requirements]` pass `doctrine validate` (friction observation 01a0e1b0)
 
 ### Open
-- RV-401 reconciliation brief — design.md sec-3 and sec-4 edits; apply REV-065
 - RV-400 F-5 — control-routed; hosted by CHR-082's window-open step (stays answered)
 - IMP-498 — RV-400 F-1 / RV-401 F-3 coverage gap; decide after CHR-082
-- close: rebuild the PATH doctrine (nix 0.45.0 has no --route) or pin DOCTRINE_BIN, then `doctrine install`, so DEC-334's build floor can pass (RV-401 F-4)
 - tell SL-271's owner: RV-399 severe findings need routes before any re-lock
 - RV-400 carries no `route` on its own severe findings; re-locking SL-270's design would now refuse. Not needed
 - 4 untracked friction observations under `.doctrine/observations/records/` — owner to sweep
