@@ -178,3 +178,39 @@ From `RV-403` F-1..F-4 (F-5 and F-6 are `aligned`). Grouped by write surface.
   *coupled to F-1*: written once, after the mechanism is chosen. Record where it
   landed, or that F-1 obsoleted it.
 - `RV-402` F-4 — the Codex refresh-verb question, resolved by F-3 above.
+
+### Decision — user, recorded 2026-09-27
+
+**F-1's remedy is option A: disclose from the project file, drop the probe.** The
+user ratified this after the audit's synthesis, choosing:
+
+- `install_codex_mcp` (or the Codex arm) reads `[features] hooks` out of the
+  project `.codex/config.toml` — the file doctrine already reads and writes —
+  instead of shelling `codex features list`;
+- the probe machinery retires: `HooksState`, `parse_codex_features`,
+  `codex_hooks_state`, `write_codex_activation`'s `Option<HooksState>`, `wire()`'s
+  `runner` parameter, and `install.rs`'s `Capture` / `CommandRunner` /
+  `CaptureRunner`;
+- `POL-002` facet 3 improves as a by-product: no `codex` subprocess on the install
+  path, so **`RV-402` F-5 is obsoleted** (README's Host-dependencies section keeps
+  only the `sh` statement, which is already there and correct) and the
+  `~/.codex/tmp/arg0` side effect goes with it.
+
+Consequences the reconciler must carry, not re-decide:
+
+1. **This owes code, and reconcile does not write code.** The slice's design
+   back-edge (`reconcile -> design`, `doctrine slice status 271 design`) is the
+   route: amend `design.md` sec-5.2/sec-5.4 and the `DEC-329` record, extend the
+   plan with the phase that retires the probe and reads the file, then execute,
+   re-audit and reconcile again. `PHASE-03`'s `EX-4`/`EX-5` stand as history
+   (criteria are immutable-append); the new phase owns the replacement behaviour.
+2. **The acceptance test from F-1 is still owed in that phase**: a project
+   `.codex/config.toml` with `[features] hooks = false` must still deliver the
+   step-1 instruction. Under option A the natural shape inverts — the filesystem
+   fixture replaces the injected runner, so the fakes and the `PATH`-emptied e2e
+   case retire with the seam.
+3. **The two-member `SPEC-011` Revision is unaffected** and still owed as
+   briefed above; it describes the registration leg, not the probe.
+4. The design-back-edge move is refused while a live `dispatch/<slice>`
+   coordination worktree exists and the slice is only movable out of a terminal
+   status — neither applies (`SL-271` is at `audit`, no coordination tree).
