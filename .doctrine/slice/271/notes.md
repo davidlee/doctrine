@@ -253,7 +253,7 @@ mcp` 131, `--bin doctrine codex` 22, `e2e_codex_install` 12,
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-27 · PHASE-03 (phases complete) · cfbaf73b2
+fresh-as-of: 2026-09-27 · audit (RV-403 concluded; fork landed) · ad5754620
 
 ### Produced
 
@@ -261,29 +261,49 @@ fresh-as-of: 2026-09-27 · PHASE-03 (phases complete) · cfbaf73b2
   (codex leg + e2e + `sh` declaration), PHASE-03 `e8a18a0dd`/`cfbaf73b2`
   (probe + disclosure).
 - All 11 VT mandates PASS (`doctrine slice verify-vt 271`); `doctrine check gate`
-  green after each phase.
+  green after each phase and again at audit.
 - `tests/e2e_codex_install.rs` — 12 cases over the built binary.
-- Memories on trunk: `mem_01a0e1e1` (report-seam output is e2e-only; verify-vt
-  attribution waits on the completed phase delta), `mem_01a0e1f0` (`install
-  --dry-run` skips `wire`).
-- Branch `slice/SL-271-codex-mcp-registration-during-install` in
-  `.worktrees/SL-271`; not yet landed.
+- `RV-402` (code review of the delta, 5 findings) and `RV-403` (audit,
+  6 findings) — both `done`, every finding terminal. Fixes for `RV-402`
+  `F-2`/`F-3`/`F-4` landed as `21620b316`.
+- Memories: `mem_01a0e1e1` (report-seam output is e2e-only), `mem_01a0e1f0`
+  (`install --dry-run` skips `wire`), `mem.fact.codex.project-config-trust-gated`
+  (the probe's premise is false; also one friction record on the fork/RV split).
+- Fork `slice/SL-271-codex-mcp-registration-during-install` landed onto `edge`
+  (`ad5754620`, `--no-ff`).
 
 ### Learned
 
 - `doctrine install --dry-run` is a plan-only preview and never calls `wire()`;
   the dry-run report wording is reachable only via `boot install --dry-run`.
-- A production const/field used only by no path is dead code under `-D unused`:
+- A production const/field used by no path is dead code under `-D unused`:
   `CODEX_MCP_SERVE_ARGS` builds the emitted wrapper live; `Capture.success` is
   read in the Unknown reason.
 - `toml_edit::Table::set_implicit(true)` renders `[mcp_servers.doctrine]` alone.
+- codex applies a project `.codex/config.toml` only for TRUSTED projects, so a
+  pre-trust `codex features list` answers for the user layer — the reason `RV-403`
+  `F-1` is a design defect, not a bug (`mem.fact.codex.project-config-trust-gated`).
+- An unlanded fork cannot host its own RV (turn verbs refuse a worktree root) and
+  `review prime` then hashes the primary tree — the review/audit had to run from
+  the primary tree against fork evidence.
 
 ### Open
 
-- Lifecycle is `started` with 3/3 phases — next `/audit`.
-- Close obligations: the two-member `SPEC-011` Revision is raised at reconcile
-  (close requires it landed or a waiver); `IMP-111` resolves (`promoted`) at close;
-  `IMP-497` is the post-write seam re-verification follow-up; `ISS-495` stays out
-  of scope by design.
-- The fork branch is unlanded (`doctrine worktree land --fork <branch>`); the
-  coordination tree for SL-271 does not exist, so landing is a deliberate choice.
+- **`RV-403` `F-1` (blocker, `design-wrong`), remedy decided by the user: option A**
+  — read `[features] hooks` from the project `.codex/config.toml` and retire the
+  probe (`HooksState`, `parse_codex_features`, `codex_hooks_state`,
+  `write_codex_activation`'s `Option<HooksState>`, `wire()`'s runner parameter,
+  `install.rs`'s `Capture`/`CommandRunner`/`CaptureRunner`). This owes CODE, so the
+  route is the design back-edge, not a reconcile direct edit. `RV-402` `F-5` is
+  obsoleted by it. Full consequences recorded in `RV-403`'s brief.
+- `RV-403` `F-2` — one `SPEC-011` Revision, two members (Claude `.mcp.json`
+  registration retro-covered; the codex `[mcp_servers]` leg), plus the spec's scope
+  enumeration extended. Still owed.
+- `RV-403` `F-3`/`F-4` — design sec-5.4 prose corrections and the `install/**`
+  selector decision (drop it, or owe a shipped-corpus sentence). Still owed.
+- Runtime phase rollup reads `0/3` on edge: the phase sheets here say `planned`
+  while the work is done (`boundaries.toml` carries the registry). Fix before
+  close — consult `mem.pattern.doctrine.phase-complete-clobbers-boundary` first
+  (`reconcile-phases`, not a blind `phase ... completed`).
+- `IMP-111` resolves (`promoted`) at close; `IMP-497` is the post-write seam
+  re-verification follow-up; `ISS-495` stays out of scope by design.

@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0e1f027e7724096bb49095e00ad4c"
+memory_key = "mem.fact.install.dry-run-skips-wire"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "install --dry-run short-circuits before wire(); use boot install --dry-run"
+summary = "`doctrine install --dry-run` returns before any forward step and never calls wire(); assert dry-run report wording via `doctrine boot install --dry-run`."
+created = "2026-09-27"
+updated = "2026-09-27"
+
+[scope]
+paths = ["src/install.rs", "src/boot.rs", "tests/e2e_codex_install.rs"]
+globs = []
+commands = []
+tags = ["area:install", "area:boot", "testing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d008c67c3d3ca301c8471c553b24305881d35402"
+ref_name = "refs/heads/edge"
+checkout_state_id = "55476a3e7e649c37acf67987d37a42d3c263f1b7928151de6a87af85bb5c25a3"
+base_commit = "1ef7f054941fc7f3f8966decf4066e53f7e7e4f9"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "low"
+weight = 0
+
