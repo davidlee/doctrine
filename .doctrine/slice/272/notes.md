@@ -42,10 +42,20 @@ Not applicable, with reasons: research Thread 1.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-09-27 · design/reviewing rev 21 · a62fcb2db
 
 ### Produced
 
+- `DEC-335`, `DEC-336` (accepted) · `RV-405` (design review, F-1..F-4 fix-now)
+- `IMP-499` (filed pre-slice, fulfilled here)
+
 ### Learned
 
+- `DEC-336`'s predicate is incomplete: one apply can record `DesignAccepted`
+  twice (`RV-405` `F-3`) — the fix may amend `DEC-336`.
+- `RV-389` `F-18`'s premise (a finding's `null` reads as absent, so proposals
+  may drop it) is what `ISS-482` overturns (`RV-405` `F-1`).
+
 ### Open
+
+- `RV-405` `F-1`..`F-4` — design repairs owed before section review and lock.
