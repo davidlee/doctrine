@@ -2,14 +2,14 @@ schema = "doctrine.backlog"
 version = 1
 
 id = 465
-slug = "memory-search-ranking-too-poor-to-compete-with-raw-grep"
-title = "memory search ranking too poor to compete with raw grep"
+slug = "memory-search-no-default-page-no-relevance-floor-no-zero-hit-signal"
+title = "memory search: no default page, no relevance floor, no zero-hit signal"
 kind = "issue"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-09-19"
-updated = "2026-09-19"
-tags = []
+updated = "2026-09-27"
+tags = ["area:cli", "area:memory", "area:ux", "cluster:memory-system"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
