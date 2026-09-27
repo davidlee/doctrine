@@ -19,10 +19,6 @@ selector = "install/manifest.toml"
 intent = "scope-relevant"
 
 [[selector]]
-selector = "src/doctor_checks.rs"
-intent = "scope-relevant"
-
-[[selector]]
 selector = ".doctrine/*.md"
 intent = "scope-relevant"
 
@@ -64,6 +60,10 @@ target = "DEC-010"
 [[relation]]
 label = "related"
 target = "SL-144"
+
+[[relation]]
+label = "related"
+target = "SL-273"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 340
+slug = "sl-273-absorbs-sl-242s-citation-check"
+title = "SL-273 absorbs SL-242's citation check"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-242 (proposed) owned a reference-doc citation doctor check (objective 4), forbade a per-citation sweep in a Non-Goal, and described bare <name>.md as the citation form; DEC-339 puts the check and the lib: form in SL-273."
+choice = "SL-273 absorbs the check. SL-242 is amended now: objective 4 marked moved to SL-273, the sweep Non-Goal and R3 dropped, the Context bare-form line redirected to SL-273, doctor surface and selector removed, verification cites SL-273's check; SL-242 related SL-273."
+alternatives = ["merge SL-242 into SL-273", "leave SL-242 unamended, link only"]
+rationale = "Removes the only contradiction between the two slices at the cost of a prose edit to an unstarted slice; SL-242's cleanup work does not depend on SL-273 beyond the check."
+consequences = ["SL-242 keeps memory re-anchoring, residue untracking, CHR-043, DEC-010, the manifest path", "SL-242's closure evidence depends on SL-273's check"]
+decided_by = "user"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-273"

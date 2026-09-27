@@ -14,8 +14,9 @@ four surfaces that actually reach a client — shipped memory (`memory/`), skill
 (`plugins/doctrine/skills/`), install assets (`install/**`), and boot generation.
 
 The 80/20 landed in `ddd138ab` ahead of this slice: the boot sector now states the
-resolution rule once (docs are cited bare as `<name>.md`, are published not
-projected, and are read with `doctrine library show reference/<name>.md`); the two
+resolution rule once (docs are published not projected, and are read with
+`doctrine library show reference/<name>.md`; the citation form itself — bare
+`<name>.md` then, the `lib:` form now — is SL-273's, DEC-339); the two
 skills asserting `.doctrine/review-ledger.md` were corrected; five templates
 dropped the `.doctrine/` prefix from their `glossary.md` citation; and four master
 headers stopped claiming an inert installed copy exists.
@@ -68,7 +69,8 @@ residue that model left behind in this repo.
    check for a reference-doc citation. Its only reference-doc awareness is
    `prose_cite` noise suppression for `glossary.md` (IMP-252). Without a check,
    the corpus re-rots on the next delivery change — this slice's own fixes
-   included.
+   included. **SL-273 owns the remedy** (DEC-339: one citation-resolution lib,
+   a build-repo test and a doctor leg); this slice relies on it.
 
 6. **Existing clients have no removal path — and are not this slice's problem.**
    A repo installed before ADR-019 keeps its stale copies forever: `install` is
@@ -121,11 +123,9 @@ residue that model left behind in this repo.
    Each path must be classified **derived vs user-overlay before** it is ignored
    — see R1.
 
-4. **Add a doctor check** that fails on a reference-doc citation which cannot
-   resolve — a bare `<name>.md` with no published counterpart, or any surviving
-   `.doctrine/<name>.md` / `install/<name>.md` path assertion in a shipped
-   surface. This is the regression control that keeps objectives 1–3 from
-   re-rotting.
+4. ~~Add a doctor check~~ — **moved to SL-273** (2026-09-27, DEC-339). The
+   citation-resolution check is SL-273's, alongside the `lib:` form it
+   resolves; it is the regression control objectives 1–3 rely on.
 
 5. **Close CHR-043** — objective 3 actions it. Its three already-ignored entries
    are dropped as stale; the rest land in the shipped contract.
@@ -137,7 +137,6 @@ residue that model left behind in this repo.
 - `install/manifest.toml` — `[gitignore] entries` (the shipped contract), and the
   `install/` path in the comment at line 56.
 - `.gitignore` — this repo's, following from the shipped contract.
-- `src/doctor_checks.rs` (+ wherever the check registry lives) — the new check.
 - The tracked projection residue under `.doctrine/` — untracked, not deleted from
   disk (it is regenerable install output; `governance.md` retained and tracked).
 - DEC-010; CHR-043; IMP-315 (closes them).
@@ -165,9 +164,6 @@ residue that model left behind in this repo.
 
 - Deleting the untracked residue from disk. Untracking removes it from review and
   from the authored tier; it stays regenerable install output. Anyone can `rm` it.
-- Rewriting every bare `<name>.md` citation across ~20 skills to carry the
-  `library show` command. The boot sector states the rule once (`ddd138ab`);
-  duplicating it per citation is the parallel-implementation failure.
 
 ## Affected Surface
 
@@ -195,9 +191,6 @@ residue that model left behind in this repo.
 - **R2 — Untracking is not gitignoring.** A `.gitignore` entry has no effect on
   an already-tracked file. Without `git rm --cached`, objective 3 is a silent
   no-op for all sixteen paths — they are every one of them tracked today.
-- **R3 — Doctor-check false positives.** A bare `<name>.md` in prose that is not
-  a reference-doc citation (a filename in an example, a slice's own notes) must
-  not fail the check. IMP-252 already shows this surface generates noise.
 - **R4 — Re-embed footgun.** Edits under `memory/` and `install/` are invisible
   until the embedding crate recompiles (`touch src/asset_source.rs` / `src/install.rs`
   + `cargo build`), then `doctrine memory sync`. Verification that reads the
@@ -228,9 +221,8 @@ residue that model left behind in this repo.
 
 - No shipped surface — memory body, memory `scope.paths`, skill, install asset,
   or generated boot text — asserts that a reference doc exists on disk in an
-  installed project. Verified by the new doctor check, not by grep alone.
-- The doctor check fails on a reintroduced stale citation, proven by a test that
-  reintroduces one.
+  installed project. Verified by SL-273's citation-resolution check, not by grep
+  alone.
 - Every residue path carries a derived-vs-overlay verdict with its install leg
   cited; the derived ones are ignored in the shipped contract **and** untracked
   here; `.doctrine/governance.md` remains tracked.
