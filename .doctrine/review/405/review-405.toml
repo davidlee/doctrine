@@ -1,0 +1,86 @@
+id    = 405
+slug  = "design-review-of-sl-272"
+title = "design review of SL-272"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-272"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "blocker"
+title = "Finding null is still accepted through delegated proposals"
+detail = """
+Expected: ISS-482's refusal rejects a finding declaration with `blocking: null` on every accepted wire route, before any proposal containing it is stored.
+
+Observed: SL-272 sec-2 changes only `declare_finding` (`run.rs:1747-1761`). A `delegation.propose` stores `declare` entries after `rehearse_proposal` (`run.rs:1194-1205`); that rehearsal calls `declare_node` only for inquiry subjects (`run.rs:1270-1289`). Its remaining `nulled_keys` check excludes `blocking` at findings (`submission.rs:831-850`). `Sparse::Null` serializes as none (`submission.rs:79-86`), so the proposal can land and persist with the finding's null silently turned into omission before `accept` returns its declarations (`run.rs:1217-1243`). The current e2e test explicitly requires this success (`tests/e2e_design_delegation.rs:728-749`).
+
+The design must cover proposal-time refusal and replace that test. Its six design-target selectors omit `tests/e2e_design_delegation.rs`; VT-1 exercises only direct creation and cannot catch this route.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "blocker"
+title = "Expired-submission remedy relies on unavailable history"
+detail = """
+Expected: IMP-499's refusal gives a safe, actionable route when an unknown submission id asserts a revision below the retained replay window.
+
+Observed: SL-272 sec-2 says "check `design show` for whether the original landed, then resubmit only what is missing." The refusal fires precisely when `known_revision < prior.receipts.floor` and no retained receipt identifies the submission (`run.rs:236-251`). Receipts and change rows advance their floors with the same `CHANGE_LOG_REVISIONS` window (`snapshot.rs:141-151`; `change_log.rs:1038-1048`; `bounds.rs:56-64`). `design show` explicitly renders an unavailable delta below that floor (`render/envelope.rs:1517-1532,2021-2028`). Rows contain event, subject and terms, but no submission id (`change_log.rs:801-819`), so even a retained similar row cannot prove which submission landed. Absence from the retained log certainly cannot prove it did not land.
+
+The prescribed check can therefore tell a caller to resubmit an already-applied operation under a fresh id, the duplicate-apply risk IMP-499 exists to avoid. Wording and VT-2 need a remedy that states the uncertainty and forbids resubmission unless the intended effect is independently verified missing; if it cannot be established, the caller needs a reconciliation path rather than an inference from the bounded log.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "blocker"
+title = "Prior-liveness gate misreports a second same-kind recording in one apply"
+detail = """
+Expected: the displacement row reflects whether the particular act being replaced was live, and no recorded act's death silently disappears. SL-272 sec-3 claims `live_acts_before.contains((kind,id))` is exact within one apply.
+
+Observed: one request may carry both `checkpoint_act: {act: design-accepted, ...}` and the run-level `acceptance` (`submission.rs:1373-1376,1391-1396`). `apply` records the explicit act first, then maps `acceptance` to another `DesignAccepted` record through the same `record_act` seam (`run.rs:426-451`). `record.insert` then reports a displacement of the act recorded moments earlier (`run.rs:811-819`). With no live DesignAccepted at prior, the proposed fixed before-set gate suppresses that second invalidation even though its displaced act was recorded and live within this apply; `invalidation_rows` sees before empty and after the same slot, so it cannot supply the row (`run.rs:2120-2155,2206-2219`). With a live act at prior, the same before-set gate emits for both replacements, including the second act that was not live immediately before the apply, contrary to DEC-336's stated predicate.
+
+The design needs to define and test this allowed double-recording route: refuse two DesignAccepted inputs, coalesce them, or track the displaced record's actual liveness while avoiding the already-dead prior-act duplicate. VT-3's single-recording sequence does not exercise it.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "major"
+title = "Finding-null refusal is absent from the published payload contract"
+detail = """
+Expected: after ISS-482, `doctrine design contract` and its shipped copy tell callers that a finding's optional `blocking` key may be omitted or set to a boolean, but `null` is refused.
+
+Observed: SL-272 sec-4 targets only refusal/submission/run/change-log/unit/e2e paths. The contract still models finding `blocking` as `Presence::Optional` (`payload_contract.rs:1474-1497`), whose definition states only that absence means absence, while the inquiry home's `RequiredAtCreation` explicitly says `null` is refused (`payload_contract.rs:484-515`). The current `doctrine design contract --format prompt` renders the finding row as just `optional`, and `install/design-payload-contract.md:60-61` publishes that same distinction. The published document is pinned byte-for-byte to the renderer (`commands/design.rs:3730-3749`).
+
+The design needs a contract representation of the finding-home null refusal, regeneration of the shipped contract, and selectors/verification for those paths. Otherwise the implementation can pass VT-1 while leaving the caller-facing contract silent on the changed wire rule.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.
