@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0e171364e7cb39887989c4504cd40"
+memory_key = "mem.fact.codex.local-mcp-no-trust-step"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Codex: local MCP needs no trust step, hooks do"
+summary = "Codex project-local MCP config applies with no trust step; hooks require [features] hooks = true + /hooks."
+created = "2026-09-27"
+updated = "2026-09-27"
+
+[scope]
+paths = []
+globs = [".codex/**", "src/boot.rs"]
+commands = []
+tags = ["codex", "mcp", "install", "harness"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "64d7ac288446ddc7a1f138b2f0f2e421821fe2d6"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b5e36364963db6bb1a725cf1ab830b5a7ebe20b6188ada88da7181e511ba3b16"
+base_commit = "01b0af719cc97f73a6ff99d848311e455e9abf05"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
