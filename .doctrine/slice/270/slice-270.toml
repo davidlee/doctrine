@@ -1,0 +1,35 @@
+id = 270
+slug = "routing-trial-two"
+title = "Routing trial two"
+status = "proposed"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = ["area:review", "area:governance", "rfc-026"]
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "RFC-026"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "CHR-077"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "QUE-224"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis. Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-NNN
+#   doctrine link SL-NNN governed_by ADR-NNN
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
