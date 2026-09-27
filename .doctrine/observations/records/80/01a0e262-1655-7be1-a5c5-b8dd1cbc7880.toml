@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e262-1655-7be1-a5c5-b8dd1cbc7880"
+recorded_at = "2026-09-27T10:21:14.197188621Z"
+kind = "friction"
+summary = "RFC-033 knowledge capture: two link refusals to find a legal QUE label"
+detail = "doctrine link QUE-228 related X refused (QUE may not author related); then references refused without --role concerns. Second error names the fix; first lists labels but not that references needs a role — two round trips."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -21,6 +21,16 @@ reference library is the normative owner of rules and concepts, and memories
 point at it rather than restate it. This revision writes that frame into
 ADR-005.
 
+The frame lines up with ADR-023 (Authority model for agent instruction), which
+ranks reference docs at tier 3 (framework, binding) and memories at tier 5
+(evidence, never obeyed). Moving instruction out of memories into the library
+puts each rule in the tier that can actually carry it — the same reason
+ADR-023 refused to host its own elaboration in a memory. The cost is that more
+instruction now sits in a tier a project cannot edit without a fork, while
+tier 2's only override pathways are prose precedence and
+`.doctrine/governance.md`. That tension is recorded as QUE-228 and is out of
+scope here.
+
 It also corrects one stale clause. Tier 2 still describes delivery as
 "install copies `install/*` → `.doctrine/*`". Since ADR-019 and SL-227, reference
 docs are *published*, read on demand with `doctrine library show

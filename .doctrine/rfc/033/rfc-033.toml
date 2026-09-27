@@ -38,3 +38,7 @@ target = "ISS-490"
 label = "related"
 target = "CHR-023"
 
+[[relation]]
+label = "related"
+target = "QUE-228"
+

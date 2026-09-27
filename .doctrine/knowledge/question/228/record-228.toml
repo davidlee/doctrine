@@ -1,0 +1,51 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 228
+slug = "how-does-project-authority-override-a-pulled-library-rule"
+title = "How does project authority override a pulled library rule"
+record_kind = "question"
+status = "open"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = ["authority", "governance", "library", "override"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+question = "When project governance (tier 2) disagrees with a rule in the published reference library (tier 3) what pathway lets the project override it so that an agent reading the library doc sees the override"
+why_matters = "REV-067 moves instruction out of tier-5 memories into the tier-3 library; the library ships in the binary and cannot be edited without a fork; so the override burden on tier 2 grows while its only pathways remain prose precedence and .doctrine/governance.md"
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "governed_by"
+target = "ADR-023"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "DEC-102"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "IMP-372"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "IDE-029"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "REV-067"
