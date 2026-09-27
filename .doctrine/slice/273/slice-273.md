@@ -27,38 +27,63 @@ SL-144 was meant to fulfil.
 
 ## Scope & Objectives
 
+Shaped by DEC-339 … DEC-346 (inquiry, 2026-09-27).
+
 1. **Library ownership audit and consolidation.** Audit the 17 `install/*.md`
    documents as one information architecture: which rule or concept each owns,
    where they overlap, where they conflict, what is missing. Consolidate so
    each rule or concept has exactly one owning doc and the others cite it.
-   Known overlaps: `routing-process.md` (boot digest *and* published doc),
-   `using-doctrine.md`, `glossary.md`, `authority.md` / `authority-model.md`.
-2. **Introduce the `lib:` form.** Boot and `shipped-corpus-authoring.md` teach
-   `lib:<address>` in place of "cited bare as `<name>.md`" — once, in the boot
-   source that owns the reference-docs paragraph.
-3. **Citation sweep.** Rewrite every library citation in the shipped non-memory
-   corpus — skills, templates, hymns, published docs, boot sources — to the
-   `lib:` form. Classify before rewriting: a bare `<name>.md` that names a
-   *client file* (e.g. the project's own `.doctrine/governance.md`) is not a
-   library citation and stays.
-4. **Restate-line audit** (ADR-005's R-OQ-4, carried from SL-144): skills
-   reproducing flag syntax, option/enum tables, or storage-tier mechanics as
-   prose are cut to pointers.
+   - `routing-process.md` is recast as the boot's compact onboarding summary
+     and renamed (DEC-344): it owns routing table, postures, core process and
+     guardrails; for `glossary.md` / `using-doctrine.md` essentials it carries
+     per-message essentials only, each ending with a `lib:` cue to its owner.
+     ADR-005's text changes through a Revision.
+   - The first-use qualification rule (C5) moves to `glossary.md`.
+   - `boot-footer.md` is retired — manifest entry and asset (DEC-343).
+   - `using-doctrine.md` gains the publication model and `lib:` form section
+     (G7, DEC-342). The other skill-only gaps are IMP-500.
+2. **Introduce the `lib:` form.** The boot onboarding summary carries the
+   resolution rule — a `lib:<address>` citation is read with `doctrine library
+   show`, not on disk — and states that a retrieval a skill or reference doc
+   specifies is mandatory (DEC-342, DEC-345). `shipped-corpus-authoring.md`
+   teaches the author side, citing `using-doctrine.md` (DEC-343).
+   `doctrine library show` accepts the `lib:` prefix verbatim.
+3. **Citation resolution check** (DEC-339; absorbed from SL-242, DEC-340). One
+   pure scanner plus the publication resolver, two callers: a build-repo test
+   over shipped surfaces (the sweep's finish line) and a `doctor` leg over
+   client `.doctrine/**`. Fails any unresolved `lib:` address; reports bare
+   occurrences of library docs (warning until the sweep lands, then failing).
+4. **Citation sweep** (DEC-341). Rewrite every library citation in the shipped
+   non-memory corpus — skills, templates, hymns, published docs, boot sources —
+   to the `lib:` form, from an adjudicated inventory: a worker records every
+   occurrence with a recommended disposition, the orchestrator adjudicates,
+   the worker implements only the adjudicated rows, the orchestrator verifies.
+   Colliding library filenames are not renamed.
+5. **Restate-line audit** (ADR-005's R-OQ-4; DEC-345). Flag and option shapes
+   cut to `--help` pointers; concepts with a library owner cut to `lib:`
+   citations; ownerless concept tables stay, their locations logged in IMP-500.
+   Shares the sweep's inventory.
 
-**Execution note (user, 2026-09-27):** the citation sweep (objective 3) runs
-on a pi worker using DeepSeek — looser than Sonnet, but cheap and fast enough
-that a second pass, if needed, still comes out ahead. The sweep therefore
-needs a mechanical exit criterion (see OQ-1).
+**Execution (DEC-346).** Four phases: (1) resolver + check, Claude, TDD;
+(2) teaching + consolidation incl. the ADR-005 Revision and rename, Claude;
+(3) one combined inventory (citations + restate offenders) by a DeepSeek pi
+worker, adjudicated by the orchestrator; (4) DeepSeek implements the
+adjudicated inventory, the orchestrator verifies and flips the bare-occurrence
+report to failing. Audit adds a second combined DeepSeek pass to catch
+anything that slipped through.
 
 ## Affected surface
 
-- `install/*.md` — the reference library (objectives 1, 2, 3)
-- `install/templates/**`, `install/hymns/**` — citations (objective 3)
-- `plugins/doctrine/skills/**` — citations and restate line (objectives 3, 4)
-- `src/boot.rs` and any boot source strings carrying the reference-docs
-  paragraph (objective 2)
-- `publication/manifest.toml` — only if consolidation retires or renames a
-  published doc
+- `install/*.md` — the reference library (objectives 1, 2, 4)
+- `install/templates/**`, `install/hymns/**` — citations (objective 4)
+- `plugins/doctrine/skills/**` — citations and restate line (objectives 4, 5)
+- `src/boot.rs` — the renamed boot embed (objectives 1, 2)
+- the library-show command, the publication resolver, `src/doctor_checks.rs`,
+  and a build-repo test (objectives 2, 3)
+- `publication/manifest.toml` — the rename and `boot-footer.md` retirement
+- ADR-005 — via Revision (objective 1)
+- IMP-500 body — ownerless-table locations (objective 5)
+- `.doctrine/slice/273/` — the tracked sweep inventory (objectives 4, 5)
 
 ## Non-Goals
 
@@ -66,9 +91,12 @@ needs a mechanical exit criterion (see OQ-1).
   citations is S2.
 - **Human documentation** (RFC-017's set) — S3.
 - **SL-242's ground:** untracking the projection residue, re-anchoring the four
-  stale memories, settling the manifest pointer. SL-242 proceeds
-  independently; the overlap is its doctor check (OQ-2).
-- **Project override of library rules** — QUE-228.
+  stale memories, settling the manifest pointer. SL-242 was amended to cede its
+  doctor check here (DEC-340).
+- **Project override of library rules**, including what `governance.md` should
+  be — QUE-228 (DEC-343).
+- **Library owners for G1–G6, G8** — IMP-500 (DEC-342).
+- **Deterministic inlining of `lib:` references into skills** — IDE-060.
 - **Client migration** of existing installs — out of scope by RFC-033's
   already-rejected list.
 - Editing projected skill copies (`.agents/skills/`, `.claude/skills/`); only
@@ -76,39 +104,44 @@ needs a mechanical exit criterion (see OQ-1).
 
 ## Risks & assumptions
 
-- **R1 — Sweep false positives.** Bare `<name>.md` also names client files and
-  repo-local paths. A mechanical rewrite without classification would mint
-  `lib:` citations that do not resolve. Mitigation: the resolution check
-  (OQ-1) fails every such mint.
-- **R2 — Consolidation churn under the sweep.** Retiring or merging a library
-  doc changes citation targets. Mitigation: consolidate first, sweep second.
-- **R3 — Looser worker.** DeepSeek may miss or over-rewrite. Mitigation: the
-  mechanical check plus a diff review at import; re-run is cheap.
+- **R1 — Sweep false positives.** Bare `<name>.md` also names slice artefacts,
+  client files and repo-local paths. Mitigation: nothing is rewritten without
+  an adjudicated inventory row (DEC-341); the check fails any unresolved mint.
+- **R2 — Consolidation churn under the sweep.** The rename and retirements
+  change citation targets. Mitigation: consolidate first, sweep second
+  (DEC-346).
+- **R3 — Looser worker.** DeepSeek may miss or over-rewrite. Mitigation:
+  adjudicated inventory, the check, verification against the inventory, and
+  an audit re-pass.
+- **R4 — Skipped retrieval.** Guidance cut from a skill to a citation costs a
+  tool call an agent will sometimes skip. Mitigation: the boot mandate and
+  per-message essentials kept in the boot summary (DEC-345); structural fix
+  deferred to IDE-060.
+- **R5 — Embed staleness.** Edits under `install/` are invisible to boot and
+  `library show` until rebuilt; verification runs after a rebuild.
 - **A1 — Library addresses are stable** except where consolidation
-  deliberately changes them.
+  deliberately changes them (the rename, `boot-footer.md`).
 
 ## Open questions
 
-- **OQ-1** — Does the `lib:` resolution check land here, as the sweep's exit
-  criterion, rather than in S4? Recommendation: yes, a scan limited to the
-  surfaces this slice touches; S4 widens it to memories and the human set.
-- **OQ-2** — SL-242's objective 4 proposes a doctor check for bare `<name>.md`
-  citations with no published counterpart. With `lib:`, that check is the same
-  check. Does this slice absorb it (and SL-242 drop objective 4), or sequence
-  behind SL-242?
-- **OQ-3** — One slice or two? The audit/consolidation (judgement, Sonnet or
-  better) and the sweep (mechanical, DeepSeek) have different executors. They
-  are kept together here because R2 orders them; split if the design shows
-  they can ship separately.
+Settled in inquiry: OQ-1 → DEC-339; OQ-2 → DEC-340; OQ-3 (one slice or two) →
+one slice, ordered by DEC-346.
 
 ## Verification / closure intent
 
 - Each rule or concept in the library has one owning doc; the audit artefact
   records the owner map (VA).
-- Boot and `shipped-corpus-authoring.md` teach `lib:` (VT: boot assertion).
+- The boot summary teaches `lib:` and the mandatory-retrieval rule;
+  `shipped-corpus-authoring.md` teaches `lib:` (VT: boot assertion).
+- `doctrine library show lib:<address>` resolves (VT).
 - No bare library citation survives in the swept surfaces, and every `lib:`
-  citation resolves to a publication-register entry (VT: the check from OQ-1).
-- No skill violates the restate line (VA).
+  citation resolves to a publication-register entry (VT: the build-repo test).
+- The doctor leg reports an unresolved `lib:` citation in client
+  `.doctrine/**` (VT).
+- Every inventory row is adjudicated and implemented as adjudicated (VA);
+  the audit re-pass finds nothing unrecorded (VA).
+- No skill violates the restate line, save ownerless tables logged in IMP-500
+  (VA).
 - `doctrine check gate` green at close.
 
 ## Summary
