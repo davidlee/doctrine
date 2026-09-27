@@ -935,7 +935,8 @@ fn ensure_boot_import(
 // Claude SessionStart hook merge: pure plan + imperative apply.
 // ---------------------------------------------------------------------------
 
-/// What the hook merge did, for reporting. The carried string is the command.
+/// What the hook merge did, for reporting. The carried string is the full
+/// rendered invocation (command plus args), never re-appended by the caller.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum RefreshOutcome {
     /// No doctrine hook existed; one was appended.
@@ -1978,6 +1979,41 @@ struct McpPlan {
     new_json: Option<String>,
 }
 
+/// Which class an MCP entry falls into — the ONE judgement the Claude and Codex
+/// arms share (DEC-328). Format-free: each arm derives it from its own parse and
+/// renders its own payload. `Malformed` is deliberately absent — it is a parse
+/// outcome each planner decides before classification, never a class.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum McpEntryClass {
+    /// No doctrine entry in the file.
+    Absent,
+    /// Ours, byte-identical to what the renderer emits.
+    OwnedCurrent,
+    /// Ours, but not current — refresh it.
+    OwnedStale,
+    /// A `doctrine`-keyed entry doctrine did not write — never touch it.
+    Foreign,
+}
+
+/// The shared decision table — class → (outcome, write?). `payload` is the arm's
+/// own rendering (the invocation for Wire/Refresh, the pass-through snippet for
+/// Fallback) and `file` names the file that snippet concerns. Format-free by
+/// construction (ADR-001): no JSON, no TOML, no caller concept.
+fn mcp_action(class: McpEntryClass, payload: String, file: &'static str) -> (RefreshOutcome, bool) {
+    match class {
+        McpEntryClass::Absent => (RefreshOutcome::Wired(payload), true),
+        McpEntryClass::OwnedCurrent => (RefreshOutcome::None, false),
+        McpEntryClass::OwnedStale => (RefreshOutcome::Refreshed(payload), true),
+        McpEntryClass::Foreign => (
+            RefreshOutcome::PrintedFallback {
+                hook_file: file,
+                snippet: payload,
+            },
+            false,
+        ),
+    }
+}
+
 fn mcp_fallback() -> McpPlan {
     McpPlan {
         outcome: RefreshOutcome::PrintedFallback {
@@ -1998,6 +2034,33 @@ fn desired_mcp_entry() -> Value {
         "command": PORTABLE_EXEC,
         "args": ["serve", "--mcp"],
     })
+}
+
+/// The full rendered invocation of the canonical entry — `command` plus its
+/// space-joined args, derived from [`desired_mcp_entry`] so the `serve --mcp`
+/// literal is written once. `Wired`/`Refreshed` carry it so `wire()` prints the
+/// invocation verbatim instead of re-appending arguments (DEC-325).
+fn mcp_invocation() -> String {
+    let entry = desired_mcp_entry();
+    let command = entry
+        .get("command")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let args = entry
+        .get("args")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .unwrap_or_default();
+    if args.is_empty() {
+        command.to_string()
+    } else {
+        format!("{command} {args}")
+    }
 }
 
 /// Whether `entry` is doctrine's own MCP server entry — the command is EITHER
@@ -2032,7 +2095,6 @@ fn is_doctrine_mcp_entry(entry: &Value) -> bool {
 /// against the abspath here made an already-env entry never no-op ⇒ thrash).
 /// Rides BESIDE the hook merge core.
 fn plan_mcp(existing_json: Option<&str>) -> McpPlan {
-    let command = PORTABLE_EXEC.to_string();
     let mut value: Value = match existing_json.map(str::trim) {
         None | Some("") => Value::Object(Map::new()),
         Some(text) => match serde_json::from_str(text) {
@@ -2050,20 +2112,29 @@ fn plan_mcp(existing_json: Option<&str>) -> McpPlan {
         // `mcpServers` present but not an object ⇒ malformed; never clobber.
         return mcp_fallback();
     };
-    let outcome = match servers.get(MCP_SERVER_KEY) {
-        None => RefreshOutcome::Wired(command),
+    let class = match servers.get(MCP_SERVER_KEY) {
+        None => McpEntryClass::Absent,
         Some(entry) if is_doctrine_mcp_entry(entry) => {
-            if entry.get("command").and_then(Value::as_str) == Some(command.as_str()) {
-                return McpPlan {
-                    outcome: RefreshOutcome::None,
-                    new_json: None,
-                };
+            if entry.get("command").and_then(Value::as_str) == Some(PORTABLE_EXEC) {
+                McpEntryClass::OwnedCurrent
+            } else {
+                McpEntryClass::OwnedStale
             }
-            RefreshOutcome::Refreshed(command)
         }
         // A `doctrine` key that is not our shape is a deliberate user entry.
-        Some(_foreign) => return mcp_fallback(),
+        Some(_foreign) => McpEntryClass::Foreign,
     };
+    let (outcome, write) = if class == McpEntryClass::Foreign {
+        mcp_action(class, mcp_fallback_snippet(), MCP_REL)
+    } else {
+        mcp_action(class, mcp_invocation(), MCP_REL)
+    };
+    if !write {
+        return McpPlan {
+            outcome,
+            new_json: None,
+        };
+    }
     servers.insert(MCP_SERVER_KEY.to_string(), desired_mcp_entry());
     match serde_json::to_string_pretty(&value) {
         Ok(json) => McpPlan {
@@ -2852,14 +2923,14 @@ pub(crate) fn wire(
                     RefreshOutcome::Wired(cmd) => {
                         writeln!(
                             stdout,
-                            "  {tag}{}: registered MCP server in {MCP_REL}: {cmd} serve --mcp",
+                            "  {tag}{}: registered MCP server in {MCP_REL}: {cmd}",
                             harness_label(h)
                         )?;
                     }
                     RefreshOutcome::Refreshed(cmd) => {
                         writeln!(
                             stdout,
-                            "  {tag}{}: refreshed MCP server in {MCP_REL}: {cmd} serve --mcp",
+                            "  {tag}{}: refreshed MCP server in {MCP_REL}: {cmd}",
                             harness_label(h)
                         )?;
                     }
@@ -5411,6 +5482,47 @@ mod tests {
         let custom: Value =
             serde_json::json!({"command":"/x/doctrine","args":["serve","--mcp","--port","9"]});
         assert!(!is_doctrine_mcp_entry(&custom));
+    }
+
+    #[test]
+    fn mcp_action_maps_each_class_to_one_outcome_and_write_decision() {
+        // The shared table (DEC-328): exactly one (outcome, write?) per class.
+        let (outcome, write) = mcp_action(McpEntryClass::Absent, "inv".into(), MCP_REL);
+        assert!(matches!(outcome, RefreshOutcome::Wired(ref s) if s == "inv"));
+        assert!(write, "absent => write");
+
+        let (outcome, write) = mcp_action(McpEntryClass::OwnedCurrent, "inv".into(), MCP_REL);
+        assert!(matches!(outcome, RefreshOutcome::None));
+        assert!(!write, "current => no write");
+
+        let (outcome, write) = mcp_action(McpEntryClass::OwnedStale, "inv".into(), MCP_REL);
+        assert!(matches!(outcome, RefreshOutcome::Refreshed(ref s) if s == "inv"));
+        assert!(write, "stale => write");
+
+        let (outcome, write) = mcp_action(McpEntryClass::Foreign, "snippet".into(), MCP_REL);
+        assert!(matches!(
+            outcome,
+            RefreshOutcome::PrintedFallback { hook_file, ref snippet }
+                if hook_file == MCP_REL && snippet == "snippet"
+        ));
+        assert!(!write, "foreign => no write");
+    }
+
+    #[test]
+    fn plan_mcp_carries_the_full_invocation() {
+        // The payload is the invocation, not just the command: `wire` prints it
+        // verbatim and re-appends nothing (DEC-325).
+        assert_eq!(mcp_invocation(), format!("{PORTABLE_EXEC} serve --mcp"));
+        match plan_mcp(None).outcome {
+            RefreshOutcome::Wired(payload) => assert_eq!(payload, mcp_invocation()),
+            other => panic!("absent entry must be Wired, got {other:?}"),
+        }
+        // A stale legacy abspath refreshes carrying the same full invocation.
+        let stale = r#"{"mcpServers":{"doctrine":{"command":"/old/abs/doctrine","args":["serve","--mcp"]}}}"#;
+        match plan_mcp(Some(stale)).outcome {
+            RefreshOutcome::Refreshed(payload) => assert_eq!(payload, mcp_invocation()),
+            other => panic!("legacy abspath must be Refreshed, got {other:?}"),
+        }
     }
 
     // --- T6 (SL-018): the generalized seam carries a SEPARATE `memory sync` hook.
