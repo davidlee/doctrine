@@ -52,7 +52,7 @@ and `VT-6` at implementation; no further design pass is recommended.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-27 · PHASE-01 implemented, gate green · 94e655d92
+fresh-as-of: 2026-09-27 · PHASE-02 implemented, gate green · 3dd526fcb
 
 ### Produced
 
@@ -62,6 +62,8 @@ fresh-as-of: 2026-09-27 · PHASE-01 implemented, gate green · 94e655d92
 - `IMP-499` (filed pre-slice, fulfilled here)
 - `PHASE-01`: `d21b571a8` (refusals: `ISS-482`, `IMP-499`), `94e655d92`
   (payload contract). VT-1..VT-4 green under their plan names.
+- `PHASE-02`: `5d1bbd29d` (`ISS-454` displacement gate), `3dd526fcb`
+  (`ISS-488` `node_question_changed`). VT-1..VT-3 green under their plan names.
 
 ### Decisions (implementation)
 
@@ -72,6 +74,14 @@ fresh-as-of: 2026-09-27 · PHASE-01 implemented, gate green · 94e655d92
 - The refusal texts are pinned by equality in the e2e tests (VT-1, VT-2, VT-3)
   rather than by a separate unit pin of `Display`: the e2e pin already covers
   them.
+- `a_term_constructed_at_an_undeclared_kind_is_refused` (`SL-259`) asserted
+  every emittable event declares a term ("an empty shape is a defect").
+  `DEC-335` makes `node_question_changed` term-free, so an empty shape now
+  contributes one admitted cell; its keys are swept refused by
+  `a_term_carrying_a_key_its_event_does_not_declare_is_refused`. The
+  no-silent-skip property is kept.
+- `LegacyAcceptanceAttested` and `NodeQuestionChanged` share one
+  `payload_terms` arm (clippy `match_same_arms`), commented for both reasons.
 
 ### Learned
 
@@ -84,6 +94,12 @@ fresh-as-of: 2026-09-27 · PHASE-01 implemented, gate green · 94e655d92
   `[requirements]` and reports "up to date" (friction observation recorded).
 - A finding cannot name a section declared in the same batch (the concern is
   checked against the prior map); e2e fixtures seed the section first.
+- Solo `/execute`: `slice phase … completed` must run in the primary tree
+  (runtime phase state is absent in a fork), but after `worktree land` HEAD is
+  a merge commit and the delta capture refuses it. Both phases needed a manual
+  `slice record-delta --start/--end` (friction observation recorded).
+- A JSON body `"## …"` inside a Rust raw string needs `r###"…"###`: both `"#`
+  and `"##` close shorter delimiters.
 
 ### Open
 
