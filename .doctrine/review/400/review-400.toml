@@ -22,6 +22,11 @@ act = "conclude"
 role = "raiser"
 note = "Round 2: read all 10 responses (review show --json) against amended DEC-326/330/331/334, REV-065, design sec-2..sec-6 and SL-270 scope diagram; checked the F-7 exclusion against undisposed_blockers, verbs.rs gate, and commands/design.rs disclosure path. F-5 left answered (control route)."
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Round 3: read F-4, F-7, F-11 responses at e2f8181fa against DEC-334 item 1, DEC-326 choice and rationale, design sec-3 and sec-5 VT-2/VT-3, and REV-065 After text. F-5 and F-7 left answered (control routes)."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-270"
 
@@ -132,7 +137,7 @@ note = "DEC-334 item 3 defines L scope (ledger, later pass, audit ledger) and wi
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Eligibility ordering, in-flight slices and parked slices are left to post-hoc choice"
 detail = """
@@ -174,6 +179,11 @@ role = "responder"
 disposition = "fix-now"
 route = "review"
 response = "Accepted. DEC-334 item 1 and design sec-4 fix the opening event: the window opens at the first build-floor check that passes after SL-270 closes, recorded with its timestamp by CHR-082. Eligibility is then decided by pass minting after that moment, so the chore owner picks nothing."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "DEC-334 item 1 fixes window open as the first passing build-floor check after SL-270 closes, timestamped; eligibility by pass minting after it. Residual: when the first check is attempted is still the chore owner s act, acceptable given it is recorded."
 
 [[finding]]
 id = "F-5"
@@ -370,7 +380,7 @@ note = "Scope diagram now reads E15 via CHR-082."
 
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "F-7 repair makes an unknown-status major fail open at the lock, against DEC-326 rationale"
 detail = """
@@ -395,6 +405,34 @@ role = "responder"
 disposition = "fix-now"
 route = "review"
 response = "Accepted: fail closed. DEC-326 and design sec-3 now count an out-of-vocabulary status as disposed, so a route-less major with one refuses the lock; the remedy is to repair the status by hand, as the blocker check already requires. VT-3 asserts it. This restores agreement with DEC-326 rationale and puts the class inside DEC-334 gated population, so item 6 needs no separate line."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "DEC-326 choice and sec-3 now count an out-of-vocabulary status as disposed (fail closed) with a hand-edit remedy; VT-3 asserts it; consistent with the unchanged rationale."
+
+[[finding]]
+id = "F-12"
+status = "answered"
+severity = "minor"
+title = "REV-065 approved SPEC-032 text predates the F-11 fail-closed change"
+detail = """
+Observation. REV-065 was approved before the round-2 fix to RV-400 F-11. Its SPEC-032 amendment (show REV-065, line 33, "closed on write, open on read" paragraph, After column) describes the lock as refusing on a severe finding "that is answered, contested or verified, and not already an undisposed blocker". DEC-326 and design sec-3 now also count an out-of-vocabulary status as disposed (fail closed). Applied as written at reconciliation, SPEC-032 would describe a narrower gate than the code, and the approved text would drift from DEC-326. (DEC-326's trailing note also still cites only F-7 though F-11 amended it.)
+
+What would settle it. Amend REV-065's After text to read "that is not open or withdrawn (an out-of-vocabulary status counts)", matching DEC-326, and re-confirm its approval if the approval process requires it for a changed payload.
+"""
+disposition = "fix-now"
+response = "Accepted. REV-065 Amendment 2 now says the lock refuses on a severe finding whose status is not open or withdrawn (an out-of-vocabulary status counts), matching DEC-326 and sec-3. DEC-326's amendment note cites F-7 and F-11. The wording change narrows nothing the owner approved; the owner is told of it at the lock gate."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Accepted. REV-065 Amendment 2 now says the lock refuses on a severe finding whose status is not open or withdrawn (an out-of-vocabulary status counts), matching DEC-326 and sec-3. DEC-326's amendment note cites F-7 and F-11. The wording change narrows nothing the owner approved; the owner is told of it at the lock gate."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
