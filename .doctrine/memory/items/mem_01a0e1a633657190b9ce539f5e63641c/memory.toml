@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0e1a633657190b9ce539f5e63641c"
+memory_key = "mem.fact.design-run.adopt-while-reviewing"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "A `reviewing` design run accepts `design adopt` after an out-of-band edit"
+summary = "`doctrine design adopt <slice>` is lawful on a run still in `reviewing`; only a LOCKED run refuses (AdoptionLocked). Verified SL-271 (2026-09-27)."
+created = "2026-09-27"
+updated = "2026-09-27"
+
+[scope]
+paths = [".doctrine/slice"]
+globs = []
+commands = ["doctrine design adopt", "doctrine design show"]
+tags = ["design-run", "adopt", "reviewing", "feedback"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "79d4a3066cd84f81738abe0bc7ff521c1229b055"
+ref_name = "refs/heads/edge"
+checkout_state_id = "ceb36df0cc3a68f22254ea0bf392f7cc26d3ea2a86ead0847d6949b3e9abf666"
+base_commit = "e6ac0c090572923ed59bf1e99e3b24c8217bc76d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
