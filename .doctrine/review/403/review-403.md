@@ -149,7 +149,10 @@ From `RV-403` F-1..F-4 (F-5 and F-6 are `aligned`). Grouped by write surface.
   refresh from a fresh wire?) is decided.
 - **slice-271.toml** `[[selector]]` — `RV-403` F-4. Either drop the `install/**`
   `design-target` (README is the declaration's home, as `EX-9`/`VA-1` pinned) or
-  keep it and owe the shipped-corpus sentence below.
+  keep it and owe the shipped-corpus sentence below. Drop it with
+  `doctrine slice selector rm` — the conformance registry reads `slice-NNN.toml`,
+  so a hand edit of the prose leaves `slice conformance` red
+  (`mem.pattern.reconcile.edit-design-out-of-band`, two write surfaces).
 
 ### Governance/spec (REV)
 
@@ -178,6 +181,25 @@ From `RV-403` F-1..F-4 (F-5 and F-6 are `aligned`). Grouped by write surface.
   *coupled to F-1*: written once, after the mechanism is chosen. Record where it
   landed, or that F-1 obsoleted it.
 - `RV-402` F-4 — the Codex refresh-verb question, resolved by F-3 above.
+
+### Mechanics, confirmed before handover
+
+- **`design.md` is written by DIRECT EDIT at reconcile, and the resulting
+  divergence from the locked run is expected, not damage.** Read
+  `mem.pattern.reconcile.edit-design-out-of-band` (high trust) before touching it:
+  since `SL-261`, `design adopt` refuses a diverged document on a locked run and a
+  later `design materialise` refuses rather than overwrite — so do NOT run the
+  regress → hand-edit → adopt → re-lock loop here. The `review_pass RV-399 STALE`
+  reading on `dr-01a0e17c` is the normal reading of a completed slice's run, not a
+  symptom.
+- **`plan.toml` criteria are off-surface.** `EN-`/`EX-`/`VT-` ids are
+  immutable-append: an acceptance or disposition for a criterion goes in
+  `design.md` and the slice notes, never by editing the criterion.
+- **The F-1 remedy is not a reconcile edit** — it owes implementation. That is the
+  one item whose lawful resolution is the other path the brief lists:
+  `escalate to design`. If the reconciler instead judges the change tolerable as-is
+  and closes on a corrected design, that must be recorded as an explicit
+  `tolerated` with rationale, not left implicit.
 
 ### Decision — user, recorded 2026-09-27
 
