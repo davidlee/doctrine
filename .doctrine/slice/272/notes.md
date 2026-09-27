@@ -52,20 +52,28 @@ and `VT-6` at implementation; no further design pass is recommended.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-27 · design/reviewing rev 21 · a62fcb2db
+fresh-as-of: 2026-09-27 · plan/ready, PHASE-01 planned · e09574cd3
 
 ### Produced
 
-- `DEC-335`, `DEC-336` (accepted) · `RV-405` (design review, F-1..F-4 fix-now)
+- `DEC-335`, `DEC-336` (accepted; `DEC-336` amended at review) · `RV-405`
+  (design review, done: F-1..F-7 verified)
+- Design locked (run revision 30) · plan: `PHASE-01`, `PHASE-02`
 - `IMP-499` (filed pre-slice, fulfilled here)
 
 ### Learned
 
-- `DEC-336`'s predicate is incomplete: one apply can record `DesignAccepted`
-  twice (`RV-405` `F-3`) — the fix may amend `DEC-336`.
+- One apply can record `DesignAccepted` twice (checkpoint act + run-level
+  acceptance; the shipped lock recipe does it) — the displacement gate must
+  count acts recorded earlier in the apply (`RV-405` `F-3`).
 - `RV-389` `F-18`'s premise (a finding's `null` reads as absent, so proposals
   may drop it) is what `ISS-482` overturns (`RV-405` `F-1`).
+- `slice phases` accepts a `plan.toml` whose phase keys leaked into
+  `[requirements]` and reports "up to date" (friction observation recorded).
 
 ### Open
 
-- `RV-405` `F-1`..`F-4` — design repairs owed before section review and lock.
+- `presence_note` is one string per `Presence` variant; design sec-2's
+  parenthetical is key-specific. `PHASE-01` picks variant-generic wording and
+  records it here.
+- `SubmissionExpired` had no test before `PHASE-01` VT-3.
