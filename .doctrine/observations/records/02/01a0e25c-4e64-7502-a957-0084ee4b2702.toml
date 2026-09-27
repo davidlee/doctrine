@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e25c-4e64-7502-a957-0084ee4b2702"
+recorded_at = "2026-09-27T10:14:55.332965532Z"
+kind = "friction"
+summary = "RFC-033 small item: uncommitted edit to a shipped memory silently reverted by a concurrent agent"
+detail = "Edited memory/mem.signpost.doctrine.overview memory.toml (tags), ran build/sync/boot/tests; before commit the working-tree edit was gone (reverted to HEAD) while another agent merged SL-272 and committed SL-269. Commit then reported nothing to commit. Lesson: commit shipped-memory edits immediately, before long verification runs."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
