@@ -3489,6 +3489,18 @@ mod tests {
                     presence: Presence::Sparse,
                 },
                 KeyContract {
+                    key: "question",
+                    home: None,
+                    ty: WireType::Text,
+                    presence: Presence::RequiredAtCreation,
+                },
+                KeyContract {
+                    key: "blocking",
+                    home: None,
+                    ty: WireType::Boolean,
+                    presence: Presence::OptionalNullRefused,
+                },
+                KeyContract {
                     key: "sections",
                     home: None,
                     ty: WireType::Map {
@@ -3573,7 +3585,16 @@ mod tests {
 
     fn census_key(key: &'static KeyContract, seen: &mut BTreeSet<String>) {
         seen.insert(format!("key:{}", key.key));
-        seen.insert(format!("presence:{:?}", key.presence));
+        seen.insert(format!(
+            "presence:{}",
+            match key.presence {
+                Presence::Required => "Required",
+                Presence::Optional => "Optional",
+                Presence::Sparse => "Sparse",
+                Presence::RequiredAtCreation => "RequiredAtCreation",
+                Presence::OptionalNullRefused => "OptionalNullRefused",
+            }
+        ));
         census_wire(&key.ty, seen);
     }
 
@@ -3694,10 +3715,12 @@ mod tests {
             // MapKey, both.
             "map-key:of",
             "map-key:extern:knowledge::RecordKind:kind",
-            // Presence, all three.
+            // Presence, all five.
             "presence:Required",
             "presence:Optional",
             "presence:Sparse",
+            "presence:RequiredAtCreation",
+            "presence:OptionalNullRefused",
             // UnknownKeys, both — and, being struct-only, `TypeForm::Struct`.
             "unknown-keys:Refused",
             "unknown-keys:SilentlyDropped",
