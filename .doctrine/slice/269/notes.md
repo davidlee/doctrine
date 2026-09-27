@@ -4,6 +4,15 @@ Durable per-slice scratchpad — tracked in git. The place to lift anything from
 disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 `rm -rf` before the slice close-out audit harvests it.
 
+## Review passes
+
+After RV-406 (Codex adversarial pass, 8 findings, all disposed): no further pass
+needed; user agreed. A further pass would only re-probe the rewritten sec-2/sec-3
+failure paths (the post-CAS `mkdir` table, the `update_ref_cas` error split,
+reseat's pre/post-commit cleanup boundary, the no-follow dangler walk). Those are
+bounded and pinned by sec-7 tests. The residual risk is the accepted gap in
+DEC-337, which review cannot reduce.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-09-27 · design:reviewing · 0cf1eaf21

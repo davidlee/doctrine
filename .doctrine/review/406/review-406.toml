@@ -8,9 +8,259 @@ title = "design review of SL-269"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Adversarial design pass on SL-269 sec-2 through sec-4. Probed the composed id scan, clone-local Git ref CAS and split-state recovery, subdirectory and symlinked roots, legacy-writer races, reseat claim/rename/cleanup ordering, dangler glob and disposability rules, and every review CLI/MCP write path against DEC-337, DEC-338, ASM-012, ADR-001/006/007, POL-002, STD-001 and STD-003. The eight verified findings are F-1 through F-8. No finding on Git's shared-ref namespace (refs/doctrine is outside the per-worktree exceptions), packed-refs/reftable abstraction via Git plumbing, same-mount staging, exact-target refusal order, or supported MCP review and design-run mint guard coverage. A /tmp glob 0.3.3 probe confirmed external symlink traversal and repeated loop traversal. The review CLI exposes no command to edit the prose Brief, so this conclude basis records the probe scope without a forbidden direct file edit.
+"""
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-269"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "A moved Doctrine root makes the sibling scan miss a live id"
+detail = """
+Section: sec-2, “each sibling's kind dir is <sibling path>/<rel>/<kind dir>” and the scan closes ISS-279.
+Evidence: .doctrine/slice/269/design.md:117-132 fixes <rel> from the invoking tree. src/root.rs:22-50 resolves a project root independently within each tree, and src/entity.rs:242-247 treats a missing kind directory as an empty scan. src/git.rs:1807-1809 lists worktree tops, not their Doctrine roots.
+Failure: A live main tree has an uncommitted pre-SL-269 SL-270 at apps/old/.doctrine/slice/270. A linked branch moved that project's root to apps/new and still has max id 269. Invoked from apps/new, the proposed scan reads apps/new in the sibling, finds no directory, then the new ref CAS can win SL-270. The live same-clone collision that ISS-279 targets remains. Symlinked or differently rooted project paths have the same identity problem. This also makes project layout a correctness condition under POL-002.
+Repair: Discover and validate each sibling's actual Doctrine root or use an explicit stable project identity/path mapping; treat an unresolved or unreadable live sibling as a disclosed refusal on this write path. Test worktrees whose project-relative roots differ.
+"""
+disposition = "tolerated"
+route = "review"
+response = """
+The observation holds, but only for ids minted before this slice. The fix is partial. A sibling with no doctrine root at <rel>, or with an unreadable kind dir, is no longer skipped silently: a stderr warning names it (STD-003; sec-2). The remaining case, a pre-slice uncommitted id in a live sibling whose root moved, is added to DEC-337's accepted residual (sec-2 "Existing claims", sec-8, slice R2), with git merge as the backstop and reseat as the repair. Sibling-root discovery was not adopted: it is ambiguous when one repo holds several doctrine projects, and it would make layout guessing a correctness condition. The user accepted this residual widening with the design.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "tolerated"
+route = "review"
+response = """
+The observation holds, but only for ids minted before this slice. The fix is partial. A sibling with no doctrine root at <rel>, or with an unreadable kind dir, is no longer skipped silently: a stderr warning names it (STD-003; sec-2). The remaining case, a pre-slice uncommitted id in a live sibling whose root moved, is added to DEC-337's accepted residual (sec-2 "Existing claims", sec-8, slice R2), with git merge as the backstop and reseat as the repair. Sibling-root discovery was not adopted: it is ambiguous when one repo holds several doctrine projects, and it would make layout guessing a correctness condition. The user accepted this residual widening with the design.
+"""
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "A one-time sibling snapshot cannot cover concurrent legacy writers"
+detail = """
+Section: sec-2, “sibling dirs are read once because they only matter for claims that predate the ref.”
+Evidence: .doctrine/slice/269/design.md:116-132 reads sibling dirs once at backend construction, then only refs per retry. src/entity.rs:548-575 scans, computes max+1 and claims later; src/entity.rs:71-77 shows the older LocalFs writer only creates a directory and emits no ref.
+Failure: Two worktrees run different installed Doctrine versions during rollout, or one makes a hand-authored numeric dir. The new process snapshots sibling dirs; the old process then mkdirs SL-270 without a ref; the new process CAS-creates reservation-local/SL/270 and mkdirs its own SL-270. Re-reading refs on retry does not reveal the old writer. A scan immediately before CAS alone cannot make an uncooperative mkdir atomic with the ref CAS.
+Repair: State the mixed-version/manual-writer boundary and provide a rollout or reconciliation rule that prevents simultaneous unreserved writers, or a coordination mechanism they can both obey. Do not claim unconditional same-clone collision freedom while that window exists.
+"""
+disposition = "tolerated"
+route = "review"
+response = """
+Accepted as a stated boundary, not closed. A ref-less mkdir by a pre-slice binary or by hand cannot be made atomic with the ref CAS, and re-reading sibling dirs would narrow the window without closing it. The design no longer claims unconditional same-clone freedom. Its rollout rule is to upgrade every tree of a clone together and not hand-make numbered dirs (sec-2 "Existing claims", sec-8), and the residual is added to DEC-337's. The F-3 repair means CloneRef treats a same-tree occupant as AlreadyHeld. The user accepted this with the design.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "tolerated"
+route = "review"
+response = """
+Accepted as a stated boundary, not closed. A ref-less mkdir by a pre-slice binary or by hand cannot be made atomic with the ref CAS, and re-reading sibling dirs would narrow the window without closing it. The design no longer claims unconditional same-clone freedom. Its rollout rule is to upgrade every tree of a clone together and not hand-make numbered dirs (sec-2 "Existing claims", sec-8), and the residual is added to DEC-337's. The F-3 repair means CloneRef treats a same-tree occupant as AlreadyHeld. The user accepted this with the design.
+"""
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "major"
+title = "The split-state reseat hint cannot repair a missing directory"
+detail = """
+Section: sec-2, “CAS won, mkdir failed” returns a hard error naming doctrine reseat <REF> as recovery.
+Evidence: .doctrine/slice/269/design.md:105-109 explicitly copies GitRef's message. src/reserve.rs:160-171 discards the create_dir error and recommends reseat. src/integrity.rs:286-295 requires a real source directory and readable authored TOML before it can reseat.
+Failure: The ref CAS succeeds but mkdir fails because the kind parent was removed, permissions changed, or the filesystem returned I/O error. There is no source directory or entity to reseat, so the prescribed command immediately fails while the reservation ref persists. The error also hides the actual mkdir cause, making repair harder.
+Repair: Preserve the mkdir error and distinguish an occupied valid entity from an absent directory. For an absent directory, provide a CAS-checked reservation repair/release or materialisation path; suggest reseat only when its source preconditions hold.
+"""
+disposition = "fix-now"
+route = "review"
+response = """
+Observation verified (src/reserve.rs:160-171 discards the mkdir error; reseat needs a source dir, src/integrity.rs:286-295). Integrated in sec-2 "After the CAS": one post-CAS mkdir helper for both git backends with an outcome table. It keeps the I/O cause; it suggests reseat only when the dir exists (GitRef occupant); CloneRef treats an existing dir as AlreadyHeld and retries; any other error says the id is burnt and a re-run takes the next one. No repair/release verb was added: an orphan ref is a numbering gap (sec-8), so there is nothing to repair. Tests in sec-7.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = """
+Observation verified (src/reserve.rs:160-171 discards the mkdir error; reseat needs a source dir, src/integrity.rs:286-295). Integrated in sec-2 "After the CAS": one post-CAS mkdir helper for both git backends with an outcome table. It keeps the I/O cause; it suggests reseat only when the dir exists (GitRef occupant); CloneRef treats an existing dir as AlreadyHeld and retries; any other error says the id is burnt and a re-run takes the next one. No repair/release verb was added: an orphan ref is a numbering gap (sec-8), so there is nothing to repair. Tests in sec-7.
+"""
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "major"
+title = "A failed local ref update is misreported as contention"
+detail = """
+Section: sec-2, CloneRef maps git::update_ref_cas Updated/Moved to Won/AlreadyHeld and retries contention.
+Evidence: .doctrine/slice/269/design.md:69-74,90-97 chooses update_ref_cas as the arbiter. src/git.rs:1104-1116 converts every non-successful git update-ref exit into RefCas::Moved, using rev-parse only to report the current value; it does not distinguish an expected-old mismatch from lock, permission, or ref-store errors. src/entity.rs:548-582 retries AlreadyHeld and eventually gives a reseat hint.
+Failure: A writable tree with a read-only or broken common git ref store attempts a fresh local claim. git update-ref fails for a storage error, is returned as Moved { actual: None }, and the claim loop retries the same id until exhaustion, falsely advising reseat instead of naming the broken store. A confined worker has exactly a read-only common dir; its guard prevents supported mint entry points, but the backend still needs a sound error contract.
+Repair: Make update_ref_cas report real Git failures distinctly from a verified current-ref mismatch (or add a strict variant for CloneRef). Propagate storage failures with the Git stderr and ref path; only retry a confirmed rival claim.
+"""
+disposition = "fix-now"
+route = "review"
+response = """
+Verified at src/git.rs:1104-1116. Integrated: update_ref_cas returns Moved only when the ref has left expected_old; a failure leaving it at expected_old is an error with git stderr and the ref name (sec-2 "A failed CAS is not always a rival"; src/git.rs added to sec-6; test in sec-7). Fixing the primitive, not adding a strict variant, corrects every caller.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = """
+Verified at src/git.rs:1104-1116. Integrated: update_ref_cas returns Moved only when the ref has left expected_old; a failure leaving it at expected_old is an error with git stderr and the ref name (sec-2 "A failed CAS is not always a rival"; src/git.rs added to sec-6; test in sec-7). Fixing the primitive, not adding a strict variant, corrects every caller.
+"""
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "major"
+title = "Reseat cleanup must stop at the commit point and preserve a populated claim"
+detail = """
+Section: sec-3, “failure after the claim removes the claimed dir, as a failed build does.”
+Evidence: .doctrine/slice/269/design.md:215-245 claims an empty destination, renames staging over it, then prescribes removal on failure without a pre-commit boundary or empty-dir condition. src/entity.rs:567-570 is the cited failed-build precedent and uses remove_dir_all. src/integrity.rs:364-386 shows that rename is followed by fallible alias removal/creation and source cleanup.
+Failure: If a foreign process populates the empty claimed directory while staging fails, copying the failed-build remove_dir_all cleanup deletes foreign data. If cleanup also runs after a successful rename when alias creation fails, it deletes the newly seated entity. Conversely, after the rename the destination is no longer merely a disposable claim. A directory removed after claim can also make rename create a new destination, so the LocalFs exclusion must be re-established at the commit point.
+Repair: Specify a pre-commit-only cleanup guard and remove_dir (empty directory only) for the claim, preserving unexpected contents with an explicit error. Treat post-rename failures as partial committed moves requiring repair, never roll back by deleting dst. Assert the destination is still the claimed empty directory before rename, and test the populated/removed/raced destination cases.
+"""
+disposition = "fix-now"
+route = "review"
+response = """
+Accepted. sec-3 now splits failure at the commit rename. Before it: the claimed dir is removed with remove_dir (empty only), a populated dir is kept and named, and the remove_dir_all precedent is not copied. After it: a committed move, never rolled back, and the error names the partial state. Flowchart updated; tests for a populated claim and a post-rename alias failure added. A pre-rename emptiness assert was not added: rename(2) already fails ENOTEMPTY on a populated destination. A claimed dir removed and re-made empty by another writer before the rename is covered by the ref under CloneRef/GitRef; that leaves only the non-git LocalFs case, which is negligible.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = """
+Accepted. sec-3 now splits failure at the commit rename. Before it: the claimed dir is removed with remove_dir (empty only), a populated dir is kept and named, and the remove_dir_all precedent is not copied. After it: a committed move, never rolled back, and the error names the partial state. Flowchart updated; tests for a populated claim and a post-rename alias failure added. A pre-rename emptiness assert was not added: rename(2) already fails ENOTEMPTY on a populated destination. A claimed dir removed and re-made empty by another writer before the rename is covered by the ref under CloneRef/GitRef; that leaves only the non-git LocalFs case, which is negligible.
+"""
+
+[[finding]]
+id = "F-6"
+status = "answered"
+severity = "blocker"
+title = "The expanded dangler report still silently skips unreadable authored files"
+detail = """
+Section: sec-3, scan_danglers becomes the rewrite worklist over *.md and *.toml.
+Evidence: .doctrine/slice/269/design.md:255-275 changes the glob and canonicalisation but retains the scan reader. src/integrity.rs:421-435 currently continues without any diagnostic when read_to_string fails; src/integrity.rs:393-395 returns success when the resulting hits list is empty. STD-003 requires an authored-corpus read failure to be named and disclosed, and permits a write path to refuse instead of continuing.
+Failure: Reseat RV-320 while an authored review TOML containing an inbound RV-320 edge is unreadable or invalid UTF-8. The move succeeds, scan_danglers drops that file, and the command can exit successfully with an incomplete rewrite worklist. Expanding the glob to TOML makes this an explicit structured-edge integrity hole and violates STD-003's no-silent-skip rule.
+Repair: Include named read failures in the report and force a non-zero result, or preflight the full scan before committing the move. Preserve the path and underlying read error; add a fixture with one readable citation and one unreadable authored file.
+"""
+disposition = "fix-now"
+route = "review"
+response = """
+Verified: src/integrity.rs:426 continues on read failure. Integrated in sec-3's dangler table as a fourth fault: each walk or read failure is listed with its path and cause under its own heading, and reseat exits non-zero (STD-003). Test: one readable citation plus one unreadable authored file.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = """
+Verified: src/integrity.rs:426 continues on read failure. Integrated in sec-3's dangler table as a fourth fault: each walk or read failure is listed with its path and cause under its own heading, and reseat exits non-zero (STD-003). Test: one readable citation plus one unreadable authored file.
+"""
+
+[[finding]]
+id = "F-7"
+status = "answered"
+severity = "major"
+title = "Canonical paths can hide an externally symlinked runtime state tree"
+detail = """
+Section: sec-3, “is_disposable_prose itself is unchanged; only scan_danglers passes it the canonical path.”
+Evidence: .doctrine/slice/269/design.md:263-269 makes the canonical path the sole disposability input. src/integrity.rs:443-452 recognises runtime files only when adjacent path components are literally .doctrine/state. glob follows directory symlinks before yielding files (Cargo.lock:610-611 selects glob 0.3.3; its PathWrapper resolves symlinks with fs::metadata at glob-0.3.3/src/lib.rs:336-352).
+Failure: A client symlinks .doctrine/state to /tmp/doctrine-state. The proposed glob walks runtime TOML/MD through .doctrine/state, then canonicalises each path to /tmp/doctrine-state/... . The unchanged prefix test returns false, so disposable baton or phase text containing the old ref is reported as an authored citation and may make a completed reseat exit non-zero. The lexical path would have classified it correctly.
+Repair: Test both the lexical path and resolved path against the disposable rule, anchored to the project's configured state root, before matching. Include an external-state-symlink fixture alongside the normal phases symlink fixture.
+"""
+disposition = "fix-now"
+route = "review"
+response = """
+Observation accepted; prescription replaced. canonicalise-and-dedup is dropped. scan_danglers now walks .doctrine/ with walkdir, follow_links(false), and skips symlink entries. A symlinked .doctrine/state is then never entered, and is_disposable_prose keeps running on the lexical path, so the external-state case cannot arise. Every symlink under .doctrine/ is an alias for a real sibling or the phases link (inventoried with find -type l), so nothing authored is lost.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = """
+Observation accepted; prescription replaced. canonicalise-and-dedup is dropped. scan_danglers now walks .doctrine/ with walkdir, follow_links(false), and skips symlink entries. A symlinked .doctrine/state is then never entered, and is_disposable_prose keeps running on the lexical path, so the external-state case cannot arise. Every symlink under .doctrine/ is an alias for a real sibling or the phases link (inventoried with find -type l), so nothing authored is lost.
+"""
+
+[[finding]]
+id = "F-8"
+status = "answered"
+severity = "major"
+title = "Canonicalising matched files does not bound symlink traversal"
+detail = """
+Section: sec-3, “each path is canonicalised and de-duplicated before matching” and “source outside .doctrine/ is not scanned.”
+Evidence: .doctrine/slice/269/design.md:263-275 deduplicates only after glob emits a file. src/integrity.rs:415-423 uses glob::glob over .doctrine/**/*.md; the proposed second glob is likewise recursive. Cargo.lock:610-611 selects glob 0.3.3; glob-0.3.3/src/lib.rs:336-352 follows directory symlinks with fs::metadata, and :937-958 descends into them without a visited-directory set.
+Failure: A .doctrine/external symlink to a directory outside .doctrine causes the report to read and cite outside files despite its stated bound. A .doctrine/loop symlink back into .doctrine makes the walker revisit the same tree repeatedly before file-level canonicalisation/deduplication, potentially producing a huge scan or an ELOOP failure. File-level deduplication cannot prevent either traversal.
+Repair: Bound traversal at the directory level using canonical directory identities and an explicit in-scope policy; do not descend an already visited directory, and decide whether external symlink targets are excluded or expressly reported. Test an external directory symlink and a loop.
+"""
+disposition = "fix-now"
+route = "review"
+response = """
+Verified that glob follows directory symlinks. Integrated through the same change as F-7: a walkdir walk that does not follow links stays inside .doctrine/ and cannot loop, and it also removes the alias double-count without dedup. The report header states that symlinks are not followed. sec-7 tests an external dir symlink and a loop.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = """
+Verified that glob follows directory symlinks. Integrated through the same change as F-7: a walkdir walk that does not follow links stays inside .doctrine/ and cannot loop, and it also removes the alias double-count without dedup. The report header states that symlinks are not followed. sec-7 tests an external dir symlink and a loop.
+"""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.

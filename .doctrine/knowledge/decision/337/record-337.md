@@ -7,3 +7,6 @@ The candidate scan unions: the tree's own entity dirs, trunk ids (ADR-006 D3), t
 Residual accepted: a pre-D9 entity committed only on a branch with no live worktree; git merge is the backstop.
 
 Rejected: a new `reach = clone` value (keeps the per-tree footgun selectable and the default for pinned configs); scanning local branch heads (misses uncommitted dirs in a live coord tree — the ISS-279 case); placeholder dirs in other trees (ISS-279: breaks doctor, misdirects citations). Source: RFC-032 D9.
+
+
+Residual widened at SL-269 design review (RV-406 F-1, F-2; user-accepted): also a pre-D9 uncommitted id in a live sibling whose doctrine root is not at the invoking tree's relative path (warned on stderr, not scanned), and a ref-less claim made concurrently by a pre-D9 binary or by hand. Rollout rule: upgrade every tree of a clone together; do not hand-make numbered dirs.

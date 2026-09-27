@@ -39,8 +39,9 @@ allocating (ISS-484, commit `120b8b321`).
 2. **D9 alongside — `reseat`** reads the alias slug through the lenient reader
    (ISS-277), and claims its destination id through the reservation backend so
    its pick sees sibling trees. Its dangler report scans `.toml` as well as
-   `.md`, collapses alias symlinks, and tests disposability on the resolved path
-   (ISS-292 faults 1, 3, 4; ISS-496).
+   `.md`, does not follow symlinks (so aliases and the `phases` link are not
+   double-counted or misread), and lists unreadable files instead of skipping
+   them (ISS-292 faults 1, 3, 4; ISS-496; STD-003).
 2a. **Reservation hygiene.** The fallback env opt-in is read once at the shell
    edge and passed in, so reserve tests are hermetic (ISS-483); the TTY
    fallback prompt names the persistent levers and says "this clone only".
@@ -82,7 +83,10 @@ audited before landing.
   (`src/review/turn.rs:35-58`; SL-268 put turns in the ledger), so a review
   worked in a linked tree loses nothing on landing (DEC-338).
 - **R2 — reservation contract change.** `reach = local` changes meaning; clones
-  holding existing per-tree claims must not re-mint them.
+  holding existing per-tree claims must not re-mint them. Residual beyond
+  DEC-337's: a pre-slice id in a live sibling whose doctrine root sits
+  elsewhere (warned), and a ref-less claim made concurrently by a pre-slice
+  binary or by hand — rollout rule: upgrade a clone's trees together.
 - **OQ-1 — landing (answered).** Audit and close in the linked tree, then
   land; phase status is not needed after close.
 

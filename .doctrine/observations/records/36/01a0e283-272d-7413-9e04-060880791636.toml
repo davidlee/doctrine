@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e283-272d-7413-9e04-060880791636"
+recorded_at = "2026-09-27T10:57:21.197549273Z"
+kind = "friction"
+summary = "design (reviewing): runbook step discharge shape not surfaced"
+detail = "Lock submission refused 'outstanding: review.passes' after the notes statement was written. The envelope's forward line gives the step's completion condition but not that it needs a 'discharge' {step, outcome} payload field; found via design contract grep. The reviewing.md lock recipe omits the discharge too."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

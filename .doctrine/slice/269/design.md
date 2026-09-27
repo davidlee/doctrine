@@ -91,7 +91,9 @@ sequenceDiagram
     CR->>Git: update-ref CAS (zero oid)
     alt ref created
       CR->>CR: mkdir tree/NNN
-      CR-->>Loop: Won (or split-state error)
+      CR-->>Loop: Won, AlreadyHeld (dir exists), or error
+    else update-ref failed, ref still absent
+      CR-->>Loop: error (git stderr)
     else ref exists
       CR-->>Loop: AlreadyHeld → retry
     end
@@ -102,11 +104,26 @@ The sequence shows one allocation under `local` reach. The ref CAS is the
 arbiter; the `mkdir` after it keeps the claim loop's cleanup-on-failure contract
 (a `Won` claim owns its dir).
 
-**Split state.** If the CAS wins and the `mkdir` fails, `CloneRef` returns the
-same hard error `GitRef` does (`src/reserve.rs:155-176`): the ref is held, the
-dir is not, and the message names `doctrine reseat <REF>`. The two backends share
-one private helper for the post-CAS `mkdir` and its error text, so the wording
-cannot drift (STD-001).
+**After the CAS.** Both git backends run the post-CAS `mkdir` through one
+private helper, so its outcomes and error text cannot drift (STD-001). Once the
+CAS has won, the ref is held whatever the `mkdir` does next, and the id is skipped
+from then on.
+
+| `mkdir` result | `CloneRef` | `GitRef` |
+|---|---|---|
+| created | `Won` | `Won` |
+| already exists | `AlreadyHeld`: a writer that makes no ref (a pre-slice binary, or by hand) holds the dir; retry | hard error: another clone's remote claim now collides with the local occupant; names `doctrine reseat <REF>` for the occupant |
+| any other error | hard error carrying the I/O cause; says the id is burnt and a re-run allocates the next one. No `reseat` hint: there is no entity to reseat | same |
+
+Today `GitRef` discards the I/O error and always suggests `reseat`
+(`src/reserve.rs:160-171`); the helper fixes that for both.
+
+**A failed CAS is not always a rival.** `git::update_ref_cas` reports every
+non-zero `update-ref` exit as `Moved` (`src/git.rs:1104-1116`), so a lock,
+permission or ref-store error would read as contention and retry to exhaustion.
+It changes to return `Moved` only when the ref no longer equals `expected_old`; a
+failure that leaves the ref at `expected_old` (for a create, still absent) is an
+error carrying git's stderr and the ref name.
 
 **One composed scan.** Every git-backed scan source (`CloneRef` and `GitRef`)
 returns the union of:
@@ -123,7 +140,13 @@ that no longer exist — the liveness rule `git::live_worktree_for_ref` already
 applies. Each sibling's kind dir is `<sibling path>/<rel>/<kind dir>`, where `<rel>` is
 this tree's doctrine root relative to its own worktree top level (empty in the
 usual case; non-empty when the doctrine project sits in a repo subdirectory).
-The invoking tree itself is skipped: its dirs arrive through the passed-in ids. Both ref reads are prefix-scoped (ISS-221) through one reader
+The invoking tree itself is skipped: its dirs arrive through the passed-in ids.
+A sibling with a doctrine root at `<rel>` but no kind dir contributes nothing,
+as an empty kind does. A sibling with no doctrine root at `<rel>` (its branch
+predates the project or moved it), or whose kind dir cannot be read, is not
+scanned, and a warning names it on stderr (STD-003); the allocation goes on.
+
+Both ref reads are prefix-scoped (ISS-221) through one reader
 parameterised by the namespace constant; `remote_reservation_ids` becomes
 `reservation_ids(root, namespace, prefix)`. Trunk ids stay where they are, in
 `next_id`.
@@ -176,8 +199,16 @@ would keep passing while proving less.
 
 A clone upgrading to this slice holds `mkdir`-only claims and no local refs. The
 sibling-dir scan covers them in live trees; trunk ids cover committed ones. The
-residual is DEC-337's: an id minted before this slice, committed only on a branch
-with no live worktree. Git merge is the backstop there.
+residual extends DEC-337's; git merge is the backstop, and `reseat` the repair:
+
+- an id minted before this slice, committed only on a branch with no live
+  worktree (DEC-337);
+- an id minted before this slice in a live sibling whose doctrine root is not at
+  `<rel>` (the warned case above);
+- a ref-less claim made in another tree *during* an allocation, by a pre-slice
+  binary or by hand. Sibling dirs are read once, and even a re-read could not make
+  a ref-less `mkdir` atomic with the CAS. **Rollout rule:** upgrade every tree of
+  a clone together, and do not hand-make numbered dirs.
 
 <!-- doctrine:section sec-3 -->
 ## `reseat` claims its destination
@@ -225,7 +256,9 @@ flowchart TD
   D --> G["stage copy in .tmp; rename files; rewrite id"]
   G --> H["rename .tmp over the claimed empty dir"]
   H --> I["swap alias; remove src; report danglers"]
-  G -. failure .-> Y["remove claimed dir (ref stays)"]
+  G -. failure .-> Y["remove claimed dir if still empty (ref stays)"]
+  H -. failure .-> Y
+  I -. failure .-> Z["error naming the partial move; no rollback"]
 ```
 
 The flowchart shows the new order. Refusals that do not depend on the
@@ -241,9 +274,15 @@ Non-obvious edges:
   empty directory atomically, so the single-commit-point property (IMP-010)
   holds. Removing the claimed dir first would reopen the window under `LocalFs`,
   where the dir is the claim.
-- **Failure after the claim** removes the claimed dir, as a failed build does.
-  The ref, if any, stays and its id is skipped from then on — the same cost as
-  a failed `GitRef` allocation.
+- **Failure before the commit rename** (staging, or the rename itself) removes
+  the claimed dir with `remove_dir`, which only removes an empty dir. If something
+  has populated it, it is left in place and the error names it; the failed-build
+  `remove_dir_all` precedent is not copied. A populated destination also makes the
+  rename fail (`ENOTEMPTY`) rather than replace it. The ref, if any, stays and its
+  id is skipped from then on — the same cost as a failed `GitRef` allocation.
+- **Failure after the commit rename** (alias swap, source removal) is a
+  committed move. Nothing is rolled back and the destination is never removed;
+  the error names what is seated and what remains to clean up.
 
 ### Layering and signature
 
@@ -256,23 +295,33 @@ not reach `integrity`); `.doctrine/adr/001/layering.toml:89` is updated.
 
 After the move, `reseat` prints the inbound citations of the old ref and exits
 non-zero. `scan_danglers` (`src/integrity.rs:415`) is meant to be the rewrite
-worklist, but three of its faults make it unusable as one:
+worklist, but four of its faults make it unusable as one:
 
 | fault | now | target |
 |---|---|---|
-| structured tier invisible | globs `.doctrine/**/*.md` only, so relation edges, memory `[[source]]` refs and `plan.toml` criteria are missed | globs `*.md` and `*.toml` under `.doctrine/` |
-| alias symlinks double-count | the glob walks `NNN/` and its `NNN-slug` alias, reporting each file twice | each path is canonicalised and de-duplicated before matching |
-| disposability defeated by a symlink | `is_disposable_prose` tests path components, so `slice/NNN/phases/…` (a symlink into `.doctrine/state/`) reads as authored | the test runs on the canonical path |
+| structured tier invisible | globs `.doctrine/**/*.md` only, so relation edges, memory `[[source]]` refs and `plan.toml` criteria are missed | reads `*.md` and `*.toml` under `.doctrine/` |
+| alias symlinks double-count | the glob follows `NNN-slug` aliases into `NNN/`, reporting each file twice | the walk does not follow symlinks |
+| disposability defeated by a symlink | `slice/NNN/phases/…` (a symlink into `.doctrine/state/`) reads as authored | the walk does not follow symlinks |
+| unreadable files skipped silently | `read_to_string` failure is `continue` (`src/integrity.rs:426`) | each walk or read failure is listed with its path and cause, and `reseat` exits non-zero (STD-003) |
+
+**The walk.** `glob` is replaced by `walkdir` (already a dependency) over
+`.doctrine/` with `follow_links(false)`; symlink entries are skipped. Every
+symlink under `.doctrine/` is an alias for a real sibling (`NNN-slug`, memory
+slug aliases) or the `phases` link into runtime state, so nothing authored is
+lost. Not following links also keeps the walk inside `.doctrine/` and out of
+link loops, which canonicalising files after a glob would not.
 
 The whole-token matcher (`line_cites`) is unchanged; a TOML value such as
-`ref = "RV-323"` matches as a token. `is_disposable_prose` itself is unchanged —
-`doctor_checks` shares it; only `scan_danglers` passes it the canonical path.
+`ref = "RV-323"` matches as a token. `is_disposable_prose` is unchanged and runs
+on the walked (lexical) path; `doctor_checks` shares it.
 
 The report states its bound, so it is not read as exhaustive:
 
 ```text
-inbound citations to RV-320 in .doctrine/ (*.md, *.toml) — rewrite by hand; source outside .doctrine/ is not scanned:
+inbound citations to RV-320 in .doctrine/ (*.md, *.toml; symlinks not followed) — rewrite by hand; source outside .doctrine/ is not scanned:
 ```
+
+Unreadable files follow under their own heading, each with its cause.
 
 Still out of scope, in ISS-292: scanning outside `.doctrine/` (fault 2), slash-
 compressed id lists such as `DEC-099/101` (fault 5), and rewriting structured
@@ -424,11 +473,12 @@ restates the fork refusal and would otherwise be left false.
 
 | path | change |
 |---|---|
-| `src/reserve.rs` | `CloneRef` backend; `RESERVATION_LOCAL_REF_PREFIX`; shared post-CAS `mkdir` helper; one composed scan source for both git backends; `reservation_ids(root, namespace, prefix)`; sibling-worktree dir read; `backend(root, &Kind, prompt)`; env opt-in read once in `backend`, passed as `bool` to `resolve_backend`/`resolve_auto`; reworded TTY prompt; non-git root keeps `LocalFs` |
+| `src/reserve.rs` | `CloneRef` backend; `RESERVATION_LOCAL_REF_PREFIX`; shared post-CAS `mkdir` helper (outcome table in sec-2; keeps the I/O cause, `reseat` hint only for an occupied dir); one composed scan source for both git backends; `reservation_ids(root, namespace, prefix)`; sibling-worktree dir read, warning on a sibling with no root at `<rel>` or an unreadable kind dir; `backend(root, &Kind, prompt)`; env opt-in read once in `backend`, passed as `bool` to `resolve_backend`/`resolve_auto`; reworded TTY prompt; non-git root keeps `LocalFs` |
 | `src/entity.rs` | `claim_fresh_id` split: `claim_next_id` (pick, claim, retry) + the existing midpoint/build/cleanup; test-only `Claim::arbiter() -> Arbiter` replaces `is_remote()` |
 | 11 fresh-id sites (`backlog`, `concept_map`, `knowledge`, `slice`, `spec`, `review/verbs`, `requirement`, `governance`, `revision`, `rec` ×2) | pass the `Kind`, not its prefix |
+| `src/git.rs` | `update_ref_cas` returns `Moved` only when the ref has left `expected_old`; any other `update-ref` failure is an error with git's stderr |
 | `src/meta.rs` | `SlugOnly`, `read_slug`; `read_id` and `read_slug` share one private reader |
-| `src/integrity.rs` | `run_reseat`: lenient slug read; `prompt` param; destination via `claim_next_id` or scan-checked single claim; commit rename over the claimed empty dir; refusals reordered before the claim; `scan_danglers` globs `*.md` + `*.toml`, canonicalises and de-duplicates paths, tests disposability on the canonical path, and prints its bound |
+| `src/integrity.rs` | `run_reseat`: lenient slug read; `prompt` param; destination via `claim_next_id` or scan-checked single claim; commit rename over the claimed empty dir; refusals reordered before the claim; pre-commit cleanup by `remove_dir` only, post-commit failures reported as a partial move; `scan_danglers` walks `.doctrine/` with `walkdir` (no link following) over `*.md` + `*.toml`, lists unreadable files, and prints its bound |
 | `src/commands/cli.rs` | pass `install::prompt_confirm` to `run_reseat` |
 | `src/review/turn.rs` | `admit_review(worker)`; `resolve_review_root` drops the branch-shape test |
 | `src/review/prime.rs`, `src/mcp_server/tools.rs` | comment / tool description text |
@@ -436,8 +486,7 @@ restates the fork refusal and would otherwise be left false.
 | `install/review-ledger.md`, `install/doctrine.toml.example`, `.agents/skills/audit/SKILL.md`, `.agents/skills/inquisition/SKILL.md`, `scripts/oubliette.sh` | guidance text (sec-5) |
 
 No change: `src/commands/design.rs` (ASM-012), `src/worktree/shared.rs`
-(`classify_worktree_role` keeps its other callers), `src/git.rs` (every primitive
-used exists).
+(`classify_worktree_role` keeps its other callers).
 
 <!-- doctrine:section sec-7 -->
 ## Verification
@@ -454,7 +503,10 @@ worktrees**, each able to hold entity dirs, and no remote. The multi-clone
 | two linked trees allocating one kind get distinct ids | the ref CAS arbitrates across worktrees of one clone |
 | scan sees a sibling tree's uncommitted entity dir | pre-slice mints in live trees are not reused |
 | scan sees both `reservation-local/` and `reservation/` refs, scoped to the kind's prefix | mixed-reach clones stay collision-free; ISS-221 does not regress |
-| `CloneRef` split state | CAS won, `mkdir` refused → hard error naming `reseat` |
+| `CloneRef` post-CAS `mkdir` | dir already exists → retries the next id; other I/O error → hard error carrying the cause, no `reseat` hint |
+| `GitRef` post-CAS `mkdir` | dir already exists → hard error naming `reseat`; other I/O error → cause kept, no `reseat` hint |
+| `update_ref_cas` against an unwritable ref store | error with git's stderr, not `Moved`; a real rival still yields `Moved` |
+| sibling with no doctrine root at `<rel>` | warned on stderr, allocation proceeds |
 | non-git root under `local` | `arbiter() == Dir` (plain `mkdir`) |
 | reach selection (`vt2`, `vt3`, `vt6` rewritten) | asserts `arbiter()`, calls `resolve_backend` with an explicit opt-in, and passes with `DOCTRINE_RESERVATION_FALLBACK=1` set in the environment (ISS-483) |
 | existing entity and reserve suites | green unchanged across the `claim_next_id` split |
@@ -468,9 +520,13 @@ worktrees**, each able to hold entity dirs, and no remote. The multi-clone
 | `--to` onto an id held as a sibling tree's dir, or as a local ref | refused, source untouched |
 | default reseat in a clone with a sibling tree | destination skips the sibling's ids |
 | refusal on live phase state | leaves no claim behind |
+| staging fails with the claimed dir populated by another writer | the dir and its contents are left; the error names it |
+| alias swap fails after the commit rename | destination stays seated; error names the partial move |
 | dangler scan over a `.toml` citation (`[[source]] ref`) | reported |
 | dangler scan through a `NNN-slug` alias | each file reported once |
 | dangler scan through the `phases` symlink | runtime phase sheet not reported |
+| dangler scan with an unreadable authored file | the file is listed with its cause; `reseat` exits non-zero |
+| dangler scan with a symlink to a dir outside `.doctrine/`, and a symlink loop | neither is entered |
 | existing `scan_danglers_skips_disposable_prose` | green unchanged |
 
 ### Review admission (`src/review/tests.rs`)
@@ -502,10 +558,12 @@ Worker-process cases drive the predicate with the bool, not by setting
   the merge then conflicts or, worse, merges cleanly into an incoherent ledger.
   Mitigation is the stated rule and the fact that audits are single-driver in
   practice. Enforcement is IDE-021 (leases).
-- **Pre-slice claims on dead branches.** An id minted before this slice and
-  committed only on a branch with no live worktree is invisible to the scan
-  (DEC-337's accepted residual). Git merge surfaces the collision; `reseat` fixes
-  it.
+- **Claims the scan cannot see.** A pre-slice id on a branch with no live
+  worktree (DEC-337's residual), a pre-slice id in a live sibling whose doctrine
+  root is not at `<rel>` (warned), and a ref-less claim made concurrently by a
+  pre-slice binary or by hand (sec-2, "Existing claims"). Git merge surfaces the
+  collision; `reseat` fixes it. The rollout rule — upgrade a clone's trees
+  together — keeps the last case to hand-made dirs.
 - **Orphan local refs.** A claim whose build fails leaves its ref; the id is
   skipped from then on. This is a gap in numbering, never a collision.
   `doctrine reservation list` shows only the shared namespace today; surfacing
