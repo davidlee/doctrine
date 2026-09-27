@@ -10,7 +10,7 @@ raiser    = "raiser"
 responder = "responder"
 rounds_base = 0
 contests_base = 0
-concluded = true
+concluded = false
 
 [[review.turn]]
 act = "conclude"
@@ -24,7 +24,7 @@ ref   = "SL-272"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Finding null is still accepted through delegated proposals"
 detail = """
@@ -62,9 +62,14 @@ response = """
 Verified: rehearse_proposal rehearses only inquiry subjects (run.rs:1270-1289); nulled_keys deliberately excludes blocking on the premise that a finding null reads as absent (submission.rs:835-838, RV-389 F-18) — the premise ISS-482 overturns; tests/e2e_design_delegation.rs:728-749 pins the acceptance. Repair: sec-2 covers the proposal route — refuse a finding's blocking:null at propose (extend the rehearsal or nulled_keys, whichever keeps one rule), flip the pinned delegation test, add tests/e2e_design_delegation.rs to the design-target selectors, and widen VT-1 to both routes.
  Repaired (design rev 22, sec-2/4/5): the rule moved to Batch::validate, the seam both the direct apply and rehearse_proposal cross, as Declaration::finding_blocking_null after inert_at_state; the delegation test is inverted; tests/e2e_design_delegation.rs joins the selectors; VT-1 covers both routes."""
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified at design rev 22 (a0b00c797). Batch::validate is the seam both routes cross: apply run.rs:409 (direct + accepted declarations) and rehearse_proposal run.rs:1284, before storage at run.rs:1201-1203. Only call sites of validate in production; declare_finding reached only via declare at run.rs:1383 behind validate. Placing finding_blocking_null after inert_at_state keeps a held finding's InertAtState refusal (blocking is KeyWhen::Only(Absent), submission.rs:751). Delegation test inversion (tests/e2e_design_delegation.rs:728-749), selector and two-route VT-1 all present."
+
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expired-submission remedy relies on unavailable history"
 detail = """
@@ -102,9 +107,14 @@ response = """
 Verified: the refusal fires only below the receipt floor, which advances on the same CHANGE_LOG_REVISIONS window as the change log (snapshot.rs:141-151), and ChangeRow carries no submission id (change_log.rs:801-819) — so design show can neither prove nor disprove that the original landed. The sec-2 remedy is unsafe as written. Repair: reword to state the uncertainty and direct the caller to verify the intended effect against current run state (the map/sections, not the bounded log) before resubmitting under a fresh id at the current revision; VT-2 asserts the corrected wording.
  Repaired (design rev 22, sec-2/5): the wording now states that the history cannot say whether the original landed and directs a check of the intended effect against current run state (map, sections), not the change log, before resubmitting only what is absent; VT-2 asserts it."""
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified. admit (run.rs:246-251) fires only for an unknown id below receipts.floor; the new wording states the history cannot say whether the original landed and routes the check to current state (map, sections), not the bounded log, before resubmitting only what is absent at the current revision. It also reads correctly when the refused submission was new rather than a retry. VT-2 asserts it. No existing test covers SubmissionExpired at all, so VT-2 is its first pin; the e2e needs >CHANGE_LOG_REVISIONS (32) applies or a seeded snapshot, a plan-time choice."
+
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Prior-liveness gate misreports a second same-kind recording in one apply"
 detail = """
@@ -142,9 +152,14 @@ response = """
 Verified: one request may carry both checkpoint_act design-accepted and run-level acceptance; apply records the explicit act, then the acceptance through the same record_act seam (run.rs:426-451), so the second displaces an act recorded moments earlier in the same apply. A fixed before-set gate then misreports both ways. Repair: sec-3 defines the predicate over the displaced act's actual liveness at displacement (or refuses/coalesces the double DesignAccepted input — the design picks one and amends DEC-336 if the predicate changes); VT-3 gains the double-recording case in both prior states.
  Repaired (design rev 22, sec-3/5): the gate reads a reportable set, seeded from live_acts_before and extended with each act recorded in the apply, so a displacement reports exactly a death not yet reported; the double-recording route is kept (the shipped lock recipe uses it). DEC-336 predicate amended, invariant unchanged. VT-3 covers the four-case table."""
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified. apply order (run.rs:408-451): declarations, then agent_declaration, checkpoint_act, acceptance; no declaration follows a recording, so an act recorded in the apply cannot be coverage-killed later in it, and the reportable set (live_acts_before plus each recording) is exact for the four-case table. The lock recipe claim holds (install/design-prompts/reviewing.md:69-76 sends checkpoint_act design-accepted plus acceptance). DEC-336 amended to the two-arm predicate. See the new finding on the invariant's scope under revival."
+
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Finding-null refusal is absent from the published payload contract"
 detail = """
@@ -181,6 +196,57 @@ route = "review"
 response = """
 Verified: the contract models finding blocking as Presence::Optional (payload_contract.rs:1474-1497) and the shipped install/design-payload-contract.md:60 renders it as plain optional; the doc is pinned byte-for-byte to the renderer. Repair: sec-2/sec-4 add a contract representation of the finding-home null refusal, regenerate the shipped contract, and add payload_contract.rs and install/design-payload-contract.md to the design-target selectors, with a render pin in verification.
  Repaired (design rev 22, sec-2/4/5): new Presence::OptionalNullRefused for the finding-home blocking row, rendered with null refused; the shipped contract is regenerated; payload_contract.rs and install/design-payload-contract.md join the selectors; VT-6 pins the render."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified. Presence has four arms (payload_contract.rs:492-515); every Optional row is Option<T>, so null deserialises as absence there, and OptionalNullRefused is the one state saying otherwise. presence_token (1810) and the annotation match (2144) are exhaustive, so the new arm is compiler-forced into the render; the sparse/required pin tests (tests.rs:5188-5270) filter on Sparse/Required and are unaffected. Regeneration + VT-6 cover the byte pin."
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "minor"
+title = "DEC-336 invariant overclaims: a revived act can die twice with no act_recorded between"
+detail = '''
+Expected: the invariant SL-272 sec-3 and DEC-336 state -- 'between two deaths of a slot there is an act_recorded' -- is true, or is scoped to where it holds.
+
+Observed: sec-6 names the revival residual (an act dead at prior whose coverage is restored becomes live again with no row) but does not reconcile it with the invariant, which it breaks. live_acts (run.rs:2120-2156) is a pure function of current fingerprints, so: r1 act A live; r2 edit a covered section -> A leaves live_acts, invalidation_rows reports act_invalidated; r3 edit it back -> A re-enters live_acts silently; r4 edit again -> A in live_acts(prior) \ live_acts(next), a second act_invalidated for the same (kind, id) with no act_recorded between. The reportable set also seeds from live_acts_before, so a displacement at r4 would report it the same way. Behaviour is pre-existing and out of scope; the defect is the claim.
+
+Repair: qualify the invariant in sec-3 and DEC-336 ('absent revival, sec-6'), or name revival as the invariant's known exception. No code change.'''
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-6"
+status = "open"
+severity = "minor"
+title = "node_question_changed sited in an 'update arm' declare_node no longer has"
+detail = """
+Expected: sec-3's emission site matches declare_node's shape.
+
+Observed: sec-3 puts emission 'in the node-update arm of declare_node'. There is no update arm: DEC-248 made declare_node one row-producing diff over two priors (run.rs:1440-1464), and for a new node the prior is created_prior, which seeds the question from the declaration (run.rs:1414-1417). Comparing the resolved question with existing.question() on that one path already emits nothing at creation, which is how needs_added was fixed (ISS-450). An implementer who follows the text and gates on held.is_some() brings back the create/update split DEC-248 removed. Also, 'a null question clears the text, which is a change and emits the row' holds only when the held text is non-empty; the text-difference rule handles that case, but the sentence says otherwise.
+
+Repair: site the emission on the one diff path, compared with the prior, and say no row at creation follows from created_prior's seeding. Reword the null sentence to 'clearing a non-empty question is a change'."""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-7"
+status = "open"
+severity = "nit"
+title = "Displacement-gate unit criteria filed under tests.rs; VT-3's fixture lives in run.rs"
+detail = """
+Observed: sec-4 lists src/design_run/tests.rs for 'unit criteria for the displacement gate', but VT-3 is written over run_with_a_map(), a private helper in run.rs's #[cfg(test)] mod tests (run.rs:2369), where the ISS-367 displacement tests also sit. The criteria can't be written in tests.rs as specified without moving or duplicating the fixture.
+
+Repair: point the sec-4 row for the displacement gate (and VT-3) at run.rs's test module. run.rs is already a selector."""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
