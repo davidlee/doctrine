@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 324
+slug = "codex-mcp-ownership-predicate-and-emitted-form-set"
+title = "Codex MCP ownership predicate and emitted-form set"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "inq-2, SL-271, needs inq-1 (DEC-323): the emitted form is a shell line plus an env whitelist, so the Claude leg's structured `command`+`args` ownership predicate (boot.rs is_doctrine_mcp_entry) does not transfer verbatim."
+choice = "Own two shapes — the wrapper trio (current) and the plain literal (stale, migrated); classify everything else foreign or malformed; compare the no-op against the emitted constants."
+alternatives = ["Own only the exact current trio — stricter, but a hand-registered `doctrine` entry then reads as foreign and install prints a snippet instead of migrating it.", "Own any `sh -c` line mentioning doctrine — over-broad; would clobber a user's own wrapper with different args or environment policy."]
+rationale = "Mirrors the Claude leg, which owns both its current env form and the legacy abspath so an older entry migrates instead of being treated as foreign (SL-195). The `env_vars` clause is load-bearing: command and args alone can look current while the override is dead."
+consequences = ["A `sh` wrapper without the `env_vars` whitelist is stale and gets refreshed (the case the probe caught).", "The comparator's input set is the constant set, satisfying the idempotency-comparator memory (mem_019f286c92fe77a391635ba1d0743d5f).", "Migration from the plain literal is a supported upgrade path, so the predicate suite must cover it."]
+decided_by = "agent"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-271"

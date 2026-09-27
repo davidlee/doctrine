@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 323
+slug = "codex-mcp-entry-keeps-the-portable-command-behind-a-shell-wrapper"
+title = "Codex MCP entry keeps the portable command behind a shell wrapper"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "inq-1, SL-271: codex reads `mcp_servers.<id>` from project `.codex/config.toml` and does not read `.mcp.json`. The Claude leg's PORTABLE_EXEC is a shell expansion codex never performs."
+choice = 'Portable env literal executed via `sh -c`, with `env_vars = ["DOCTRINE_BIN"]` and the POSIX-shell dependency declared.'
+alternatives = ['Literal `command = "doctrine"` — no shell, but loses the DOCTRINE_BIN override (jail/dispatch PATH doctrine is the stale read-only cargo binary, IMP-249).', "Baked abspath — no shell, but writes a machine path into a file clients track (POL-002).", "Form-aware hybrid (baked when gitignored) — requires a tracking-status resolver that does not exist (the codex arm hardcodes Baked), and diverges doctrine's own tree from a client's."]
+rationale = "Preserves the Claude leg's semantics (PATH default + env override) and POL-002's no-host-path rule simultaneously; probe-verified on codex 0.155.1. POL-002 facet 3 admits the shell so long as it is declared."
+consequences = ["The emitted form is a shell command line, so the ownership predicate and comparator operate on a string pair, not a structured command+args pair (inq-2).", "POL-002 facet 3 obliges a declaration surface (README/install docs) for the `sh` dependency.", "`env_vars` is a codex adapter key and stays at the codex edge (POL-003 facet 1)."]
+decided_by = "user"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-271"

@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 328
+slug = "codex-mcp-planner-is-separate-the-classification-judgement-is-shared"
+title = "Codex MCP planner is separate; the classification judgement is shared"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "inq-3, SL-271, needs inq-1 (DEC-323): the two MCP legs run over different formats, so a single core would have to abstract over both while the classification rules must stay identical."
+choice = "Separate pure planner + shell per arm; share one classification enum and the stale/foreign decision table as a pure function."
+alternatives = ["Fully separate planner with no shared vocabulary — the house precedent (the settings-key planner written beside the owner-locked hook merge core), at the cost of two hand-maintained copies of the same judgement.", "One generic core parameterised over the format — maximum sharing and the coupling hazard ADR-001 names."]
+rationale = "Satisfies the no-parallel-implementation rule at the seam where duplication would actually cause divergence, while keeping each arm's format handling legible and independent. ADR-001 is honoured: the shared core carries no format-specific concept, and each planner owns its own rendering."
+consequences = ["The codex planner's unit suite mirrors the Claude `plan_mcp_*` cases one-to-one, which is what makes the comparator-thrash risk testable.", "A third harness reuses the classification and writes only its planner/shell.", "The shared function is pure and format-blind, so it is testable without either format."]
+decided_by = "user"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-271"

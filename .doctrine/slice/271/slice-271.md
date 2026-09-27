@@ -30,13 +30,14 @@ Register the doctrine MCP server with codex from `boot install`, in
 - no-clobber: a foreign or customised `doctrine` entry is left untouched and a
   manual snippet printed (fail-soft on malformed TOML)
 - no host path in the tracked artefact (POL-002 / SL-195) while preserving the
-  `DOCTRINE_BIN` override path
-- report the leg distinctly in the install output, and **disclose** the
-  trust-gated skip rather than implying the entry is live (POL-003 facet 3 —
-  opt-in and disclosed; research corrected the earlier STD-003 citation, whose
-  scope fence excludes client-owned harness config)
-- declare any host-tool dependency the portable form acquires (POL-002 facet 3):
-  the `sh -c` wrapper is a POSIX-shell dependency and must not be silent
+  `DOCTRINE_BIN` override path — the portable form runs through a POSIX `sh`
+  (DEC-323), so that dependency must be **declared** (POL-002 facet 3), never
+  silently acquired
+- report the leg distinctly in the install output (DEC-325: one report field, the
+  file named by the harness), and **disclose** per POL-003 facet 3: the trust-gated
+  skip, and — probed from the harness itself, `codex features list`, not from the
+  file — whether codex hooks are enabled, warning when they are off or the state
+  is unknown (DEC-329)
 - extend the Claude leg as little as the report seam requires (D1); no parallel
   planner where a shared policy pays (D2)
 
@@ -44,6 +45,9 @@ Register the doctrine MCP server with codex from `boot install`, in
 
 - No write to the **user** layer (`~/.codex/config.toml`) and no shelling of
   `codex mcp add` — the project layer is the posture.
+- No write of `[features] hooks = true`: install registers the server and *probes*
+  the hooks state (DEC-329); enabling a client tool's feature switch stays the
+  human's act.
 - No change to the Claude `.mcp.json` behaviour beyond whatever the report-seam
   refactor (D1) touches; its suite is the behaviour-preservation proof.
 - Not the codex **hooks** activation flow (`[features] hooks = true` +
@@ -75,19 +79,26 @@ portable form decision needs it); the boot install tests (unit suite in
   `trusted` project; the untrusted skip is silent (probe), hence the disclosure
   objective.
 
-## Open questions
+## Settled decisions (design run `dr-01a0e17c`)
 
-D1–D5 are carried in IMP-111's *Design decisions to settle*: the report seam;
-policy-vs-rendering; the ownership/emitted-form set; portable-vs-baked for a file
-that is **not** in the install `[gitignore].entries`; and the trust-skip
-disclosure / `[features] hooks = true` ownership call. `/design` settles them; none
-needs further research.
+D1–D5 from IMP-111 are settled; the run holds them, one accepted `DEC` per node:
+
+| node | decision | record |
+|---|---|---|
+| command form | portable env literal through `sh -c` + `env_vars = ["DOCTRINE_BIN"]`; declare the shell dependency | DEC-323 |
+| ownership + emitted-form set | own the wrapper trio *and* the plain literal as stale; `env_vars` clause load-bearing; comparator tracks the emitted constants | DEC-324 |
+| sharing boundary | separate planner + shell per arm; one shared classification enum + decision table | DEC-328 |
+| report seam | one `mcp` field; `wire()` names the file from the harness | DEC-325 |
+| disclosure + file ownership | MCP registration only; probe `codex features list` for the hooks state and warn; disclose the trust skip | DEC-329 |
 
 Research (`research/research.md`) adds two inputs: there is **no mechanism** that
 resolves a file's tracking status (the codex arm passes `CommandForm::Baked` as a
-literal), so D4's clean answer is portable *unconditionally*, mirroring `plan_mcp`;
+literal), so the portable form is chosen *unconditionally*, mirroring `plan_mcp`;
 and POL-002 facet 3 makes the `sh` dependency a declaration duty rather than a
 taste call.
+
+Still owed at close (not a design question): a SPEC-011 revision (`FR-012`) — no
+MCP registration requirement exists for either harness today.
 
 ## Verification / closure intent
 

@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 325
+slug = "the-harness-names-its-own-mcp-file-one-report-field-suffices"
+title = "The harness names its own MCP file; one report field suffices"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "inq-4, SL-271: the arms are mutually exclusive per harness (one `install_refresh` call serves one harness), but `wire()` hardcodes `.mcp.json` in its message strings, so a second MCP leg cannot report honestly through the existing shape."
+choice = "Keep one `mcp: RefreshOutcome` field; select the file name from the harness inside `wire()`."
+alternatives = ["A second `codex_mcp: RefreshOutcome` field — leaves every Claude pin untouched but duplicates the reporting block and reintroduces a hardcoded second path.", "Carry the rel path in the outcome (`Wired`/`Refreshed` variants) — most truthful, but churns the Claude leg's struct and its four pinned assertions for no behavioural gain."]
+rationale = "The reported file is a property of the arm, which `wire()` already has; one small match beats a duplicated match block or a shared-type change. It is the smallest change that keeps both legs reporting honestly."
+consequences = ["The Claude leg's outcome semantics and its four pinned assertions are untouched.", "When a third harness arrives, the match gains a row rather than a new field.", "The reporting obligation (SPEC-011 REQ-477) reads the file per arm, so a future caller must not assume one MCP file per install run."]
+decided_by = "agent"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-271"

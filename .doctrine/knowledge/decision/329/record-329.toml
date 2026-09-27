@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 329
+slug = "register-mcp-only-warn-on-hooks-using-codexs-own-cli"
+title = "Register MCP only; warn on hooks using codex's own CLI"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "inq-5, SL-271: install becomes the first doctrine writer of `.codex/config.toml`, a user-owned file whose `[features] hooks = true` key `write_codex_activation` today only instructs the human to set."
+choice = "Write the MCP registration only; probe `codex features list` for the effective hooks state and warn on false or unknown, naming the reason; disclose the trust-gated skip."
+alternatives = ["Set `[features] hooks = true` ourselves — removes a manual step but enables a client feature flag and couples the hook leg's activation to the MCP leg's write (including a fail-soft ordering hazard).", "Read the project file for the key instead of asking the CLI — wrong by construction: the effective value may come from the user layer or defaults, and it would miss the case the operator's own testing hit.", "Say nothing about hooks — loses a warning the operator explicitly asked for."]
+rationale = "The harness itself is the authority on its own effective configuration, so the CLI answers a question the file cannot. Declining to write the flag keeps doctrine out of enabling client features, and the disclosure keeps the honest-read obligation."
+consequences = ["A new host-tool invocation on the codex arm — the harness's own binary — with an absent binary handled as a named unknown rather than an error.", "The probe must be injectable so unit tests never require codex on PATH.", "An unrecognised `features list` shape degrades to a named warning, never a guess and never a failure.", "The install output gains: the registration line, the trust caveat, and (conditionally) the hooks warning."]
+decided_by = "user"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-271"
