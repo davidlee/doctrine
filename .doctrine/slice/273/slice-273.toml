@@ -1,0 +1,61 @@
+id = 273
+slug = "library-ownership-lib-citations"
+title = "Library ownership and lib: citations"
+status = "design"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = ["area:docs", "area:governance", "area:skills"]
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "install/*.md"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/templates/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/hymns/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "plugins/doctrine/skills/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/boot.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "publication/manifest.toml"
+intent = "scope-relevant"
+
+[[relation]]
+label = "fulfils"
+target = "CHR-023"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-005"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-024"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "SL-242"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis. Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-NNN
+#   doctrine link SL-NNN governed_by ADR-NNN
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
