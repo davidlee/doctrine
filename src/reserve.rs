@@ -114,6 +114,18 @@ fn env_fallback_optin() -> bool {
 /// The reservation ref namespace root. `<prefix>` keys the canonical id-space
 /// (`SL`/`ASM`/… — F-V7), NOT the shared file-stem.
 const RESERVATION_REF_PREFIX: &str = "refs/doctrine/reservation";
+/// The clone-local reservation namespace (SL-269): claims arbitrated by this clone's
+/// own ref store when the remote is out of reach. Same `<prefix>/<NNN>` layout as
+/// [`RESERVATION_REF_PREFIX`]; never fetched, never pushed.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "CloneRef scan: SL-269 PHASE-02")
+)]
+const RESERVATION_LOCAL_REF_PREFIX: &str = "refs/doctrine/reservation-local";
+/// The `[reservation]` config key opting into local fallback when the remote is
+/// unreachable — named once for the declined error and the fallback prompt (STD-001).
+/// The serde field keeps its own kebab-case rename.
+const ALLOW_LOCAL_FALLBACK_KEY: &str = "allow-local-fallback";
 /// The glob refspec the scan re-fetches every retry (design §5.3).
 const RESERVATION_REFSPEC: &str = "+refs/doctrine/reservation/*:refs/doctrine/reservation/*";
 
@@ -157,28 +169,61 @@ impl Claim for GitRef {
         match git::push_ref_cas(&self.root, &self.remote, &refname, &new_oid, git::ZERO_OID)
             .with_context(|| format!("Failed to push reservation {refname}"))?
         {
-            git::RefCas::Updated => {
-                // Same-machine exclusion + keeps the loop's H2 cleanup valid (D1).
-                match std::fs::create_dir(ctx.dir) {
-                    Ok(()) => Ok(Acquired::Won),
-                    // E1 split-state (remote won, local dir already exists / foreign):
-                    // hard error with the reseat hint, never orphan silently (R3).
-                    Err(_) => Err(anyhow::anyhow!(
-                        "reservation {canonical} pushed to the remote but its local dir \
-                         {} could not be created (split state). Run `doctrine reseat {canonical}` \
-                         and pick another id.",
-                        ctx.dir.display()
-                    )),
-                }
-            }
+            // Same-machine exclusion + keeps the loop's H2 cleanup valid (D1).
+            git::RefCas::Updated => seat_claimed_dir(ctx.dir, &canonical, OnExisting::Occupied),
             // A rival created the ref first — lost the race; recompute and retry.
             git::RefCas::Moved { .. } => Ok(Acquired::AlreadyHeld),
         }
     }
 
     #[cfg(test)]
-    fn is_remote(&self) -> bool {
-        true
+    fn arbiter(&self) -> crate::entity::Arbiter {
+        crate::entity::Arbiter::RemoteRef
+    }
+}
+
+/// What an already-existing dir means once the reservation CAS has been won — the
+/// one per-backend difference in [`seat_claimed_dir`] (SL-269 design sec-2).
+#[expect(dead_code, reason = "CloneRef arm: SL-269 PHASE-02")]
+#[derive(Clone, Copy)]
+enum OnExisting {
+    /// The dir is a same-clone rival's claim: lost the race, recompute and retry.
+    AlreadyHeld,
+    /// The dir is foreign (the `GitRef` split state): hard error with the reseat hint.
+    Occupied,
+}
+
+/// Seat the entity dir after the reservation CAS has been won — the ONE post-CAS
+/// `mkdir` outcome mapping every backend shares (SL-269, RV-406 `F-3`), so the error
+/// texts live here once. `Won` only when THIS call created `dir` (the claim loop owns
+/// and cleans it up on a later failure). An existing path maps per `on_existing`; any
+/// other io failure is a hard error that keeps the io cause and names the burnt id —
+/// never mistaken for the split state (STD-003).
+fn seat_claimed_dir(
+    dir: &Path,
+    canonical: &str,
+    on_existing: OnExisting,
+) -> anyhow::Result<Acquired> {
+    match std::fs::create_dir(dir) {
+        Ok(()) => Ok(Acquired::Won),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => match on_existing {
+            OnExisting::AlreadyHeld => Ok(Acquired::AlreadyHeld),
+            // E1 split-state (remote won, local dir already exists / foreign):
+            // hard error with the reseat hint, never orphan silently (R3).
+            OnExisting::Occupied => Err(anyhow::anyhow!(
+                "reservation {canonical} pushed to the remote but its local dir \
+                 {} could not be created (split state). Run `doctrine reseat {canonical}` \
+                 and pick another id.",
+                dir.display()
+            )),
+        },
+        Err(e) => Err(e).with_context(|| {
+            format!(
+                "reservation {canonical} is held but its dir {} could not be created; \
+                 the id is burnt, re-run to allocate the next one",
+                dir.display()
+            )
+        }),
     }
 }
 
@@ -197,19 +242,21 @@ fn gitref_scan_source(root: &Path, remote: &str, prefix: &str) -> ScanSource {
         git::fetch_refspec(&root, &remote, RESERVATION_REFSPEC)
             .with_context(|| format!("Failed to fetch reservations from {remote}"))?;
         let mut ids: Vec<u32> = local.to_vec();
-        ids.extend(remote_reservation_ids(&root, &prefix)?);
+        ids.extend(reservation_ids(&root, RESERVATION_REF_PREFIX, &prefix)?);
         Ok(ids)
     })
 }
 
-/// The reserved ids visible in the fetched LOCAL reservation namespace FOR `prefix` —
-/// parse the trailing `<NNN>` of every `refs/doctrine/reservation/<prefix>/<NNN>`
-/// (design §5.3). Scoped to `<prefix>/` so a sibling kind's ids never leak into this
-/// kind's candidate set (ISS-221) — the allocation twin of `survey`'s `held_prefix`
-/// filter. Unparseable ref names under the namespace are ignored, not fatal (E3).
-fn remote_reservation_ids(root: &Path, prefix: &str) -> anyhow::Result<Vec<u32>> {
-    let rows = git::for_each_ref(root, &format!("{RESERVATION_REF_PREFIX}/{prefix}/"))
-        .context("Failed to enumerate reservation refs")?;
+/// The reserved ids in this clone's ref store under `namespace` FOR `prefix` — parse
+/// the trailing `<NNN>` of every `<namespace>/<prefix>/<NNN>` (design §5.3). The
+/// namespace is [`RESERVATION_REF_PREFIX`] (the fetched remote claims) or
+/// [`RESERVATION_LOCAL_REF_PREFIX`] (the clone-local claims, SL-269). Scoped to
+/// `<prefix>/` so a sibling kind's ids never leak into this kind's candidate set
+/// (ISS-221) — the allocation twin of `survey`'s `held_prefix` filter. Unparseable
+/// ref names under the namespace are ignored, not fatal (E3).
+fn reservation_ids(root: &Path, namespace: &str, prefix: &str) -> anyhow::Result<Vec<u32>> {
+    let rows = git::for_each_ref(root, &format!("{namespace}/{prefix}/"))
+        .with_context(|| format!("Failed to enumerate reservation refs under {namespace}"))?;
     Ok(rows
         .iter()
         .filter_map(|r| r.refname.rsplit('/').next())
@@ -238,7 +285,8 @@ pub(crate) fn backend(
     prompt: PromptFn,
 ) -> anyhow::Result<(Box<dyn Claim>, ScanSource)> {
     let cfg = load_reservation_config(root)?;
-    resolve_backend(root, prefix, &cfg, prompt)
+    // The ONE ambient-env read (ISS-483): selection below is a function of its inputs.
+    resolve_backend(root, prefix, &cfg, env_fallback_optin(), prompt)
 }
 
 /// The SOLE LocalFs-vs-GitRef selector / reachability probe / degradation decider
@@ -252,10 +300,14 @@ pub(crate) fn backend(
 ///   opts into local fallback per allocation via the env opt-in / config
 ///   `allow_local_fallback` / the interactive y/N `prompt` (TTY) — on accept ⇒
 ///   `LocalFs` + the one-time signal.
+///
+/// `fallback_optin` is the env opt-in, read once by [`backend`] and passed in — never
+/// read here, so selection is hermetic by construction (ISS-483, SL-269).
 fn resolve_backend(
     root: &Path,
     prefix: &str,
     cfg: &ReservationConfig,
+    fallback_optin: bool,
     prompt: PromptFn,
 ) -> anyhow::Result<(Box<dyn Claim>, ScanSource)> {
     match cfg.reach {
@@ -268,7 +320,7 @@ fn resolve_backend(
             })?;
             Ok(gitref(root, prefix, &remote))
         }
-        Reach::Auto => resolve_auto(root, prefix, cfg, prompt),
+        Reach::Auto => resolve_auto(root, prefix, cfg, fallback_optin, prompt),
     }
 }
 
@@ -277,6 +329,7 @@ fn resolve_auto(
     root: &Path,
     prefix: &str,
     cfg: &ReservationConfig,
+    fallback_optin: bool,
     prompt: PromptFn,
 ) -> anyhow::Result<(Box<dyn Claim>, ScanSource)> {
     let Some(remote) = configured_remote(root, cfg)? else {
@@ -288,15 +341,14 @@ fn resolve_auto(
         Ok(()) => Ok(gitref(root, prefix, &remote)),
         Err(e) => {
             // Configured remote that FAILS: fail-closed unless the operator opts in.
-            if env_fallback_optin() || cfg.allow_local_fallback || prompt_fallback(&remote, prompt)?
-            {
+            if fallback_optin || cfg.allow_local_fallback || prompt_fallback(&remote, prompt)? {
                 signal_local_fallback(&format!("remote {remote} unreachable: {e}"));
                 Ok((Box::new(LocalFs), local_scan_source()))
             } else {
                 Err(e).with_context(|| {
                     format!(
                         "reach=auto: reservation remote {remote} unreachable and local fallback \
-                         declined. Set [reservation] allow-local-fallback=true or \
+                         declined. Set [reservation] {ALLOW_LOCAL_FALLBACK_KEY}=true or \
                          {ENV_FALLBACK}=1 to allocate locally."
                     )
                 })
@@ -350,9 +402,19 @@ fn prompt_fallback(remote: &str, prompt: PromptFn) -> anyhow::Result<bool> {
     // Prompt to STDERR (behaviour gate — stdout stays byte-identical).
     drop(write!(
         std::io::stderr(),
-        "reservation remote {remote} is unreachable. Allocate this id locally (reduced reach)? [y/N] "
+        "{}",
+        fallback_prompt_text(remote)
     ));
     prompt("")
+}
+
+/// The D8 fallback prompt (SL-269 design sec-2): says the id is scoped to this clone
+/// and names both levers that skip the prompt, from their single-source constants.
+fn fallback_prompt_text(remote: &str) -> String {
+    format!(
+        "reservation remote {remote} is unreachable. Allocate this id in this clone only? [y/N]\n\
+         (to skip this prompt: [reservation] {ALLOW_LOCAL_FALLBACK_KEY} = true, or {ENV_FALLBACK}=1)\n"
+    )
 }
 
 /// Emit the one-time-per-process stderr signal that reach degraded to local — never
@@ -452,6 +514,13 @@ mod tests {
     fn reservation_namespace_constants() {
         assert_eq!(RESERVATION_REF_PREFIX, "refs/doctrine/reservation");
         assert_eq!(
+            RESERVATION_LOCAL_REF_PREFIX,
+            "refs/doctrine/reservation-local"
+        );
+        // The remote namespace's scan root never string-prefixes the local one.
+        assert!(!RESERVATION_LOCAL_REF_PREFIX.starts_with(&format!("{RESERVATION_REF_PREFIX}/")));
+        assert_eq!(ALLOW_LOCAL_FALLBACK_KEY, "allow-local-fallback");
+        assert_eq!(
             RESERVATION_REFSPEC,
             "+refs/doctrine/reservation/*:refs/doctrine/reservation/*"
         );
@@ -546,9 +615,18 @@ mod tests {
     use std::path::PathBuf;
     use std::process::Command;
 
+    use crate::entity::Arbiter;
+
     /// A never-y prompt: declines local fallback (the default D8 posture).
     fn decline(_p: &str) -> anyhow::Result<bool> {
         Ok(false)
+    }
+
+    /// Reach selection with the env opt-in passed in, never read (ISS-483): load
+    /// `root`'s config and resolve for the `TK` id-space with a declining prompt.
+    fn select(root: &Path, optin: bool) -> anyhow::Result<(Box<dyn Claim>, ScanSource)> {
+        let cfg = load_reservation_config(root)?;
+        resolve_backend(root, "TK", &cfg, optin, decline)
     }
 
     fn git(dir: &Path, args: &[&str]) -> std::process::Output {
@@ -699,6 +777,37 @@ mod tests {
         assert_eq!(crate::entity::next_id(&ids, &[]), 3);
     }
 
+    /// SL-269 VT-3: the ref reader is scoped to one `(namespace, prefix)` — the
+    /// remote and clone-local namespaces never leak into each other, nor do kinds.
+    #[test]
+    fn reservation_ids_is_scoped_to_namespace_and_prefix() {
+        let env = Substrate::new(1);
+        let root = env.clone(0);
+        for (ns, prefix, id) in [
+            (RESERVATION_REF_PREFIX, "SL", "001"),
+            (RESERVATION_REF_PREFIX, "ASM", "002"),
+            (RESERVATION_LOCAL_REF_PREFIX, "SL", "003"),
+            (RESERVATION_LOCAL_REF_PREFIX, "ASM", "004"),
+        ] {
+            git_ok(
+                root,
+                &["update-ref", &format!("{ns}/{prefix}/{id}"), "HEAD"],
+            );
+        }
+        for (ns, prefix, want) in [
+            (RESERVATION_REF_PREFIX, "SL", 1),
+            (RESERVATION_REF_PREFIX, "ASM", 2),
+            (RESERVATION_LOCAL_REF_PREFIX, "SL", 3),
+            (RESERVATION_LOCAL_REF_PREFIX, "ASM", 4),
+        ] {
+            assert_eq!(
+                reservation_ids(root, ns, prefix).expect("read ids"),
+                vec![want],
+                "{ns}/{prefix} yields exactly its own id"
+            );
+        }
+    }
+
     /// VT-4 (e2e): the reservation commit's tree is the empty tree (no blobs); the
     /// entity record carries no coordination bytes (REQ-024, I2). The empty-tree
     /// content-freedom is asserted at the git layer; here we confirm the GitRef claim
@@ -740,9 +849,10 @@ mod tests {
             0,
             "[reservation]\nreach = \"local\"\nremote = \"/no/such/remote\"\n",
         );
-        let (b, _s) = backend(root, "TK", decline).expect("local backend");
-        assert!(
-            !b.is_remote(),
+        let (b, _s) = select(root, false).expect("local backend");
+        assert_eq!(
+            b.arbiter(),
+            Arbiter::Dir,
             "local backend must be LocalFs (no remote contact)"
         );
 
@@ -752,7 +862,7 @@ mod tests {
             "[reservation]\nreach = \"shared\"\nremote = \"/no/such/remote\"\n",
         );
         assert!(
-            backend(root, "TK", decline).is_err(),
+            select(root, false).is_err(),
             "shared + absent remote hard-errors"
         );
 
@@ -764,8 +874,12 @@ mod tests {
                 env.remote()
             ),
         );
-        let (b, _s) = backend(root, "TK", decline).expect("shared backend");
-        assert!(b.is_remote(), "shared + reachable remote selects GitRef");
+        let (b, _s) = select(root, false).expect("shared backend");
+        assert_eq!(
+            b.arbiter(),
+            Arbiter::RemoteRef,
+            "shared + reachable remote selects GitRef"
+        );
 
         // auto with a reachable remote: GitRef.
         env.write_config(
@@ -775,8 +889,12 @@ mod tests {
                 env.remote()
             ),
         );
-        let (b, _s) = backend(root, "TK", decline).expect("auto backend");
-        assert!(b.is_remote(), "auto + reachable remote selects GitRef");
+        let (b, _s) = select(root, false).expect("auto backend");
+        assert_eq!(
+            b.arbiter(),
+            Arbiter::RemoteRef,
+            "auto + reachable remote selects GitRef"
+        );
     }
 
     /// VT-3 / EX-3: `auto` + **no remote configured** degrades to LocalFs (the genuine
@@ -789,8 +907,8 @@ mod tests {
 
         // auto + no remote configured (and none in .git/config) ⇒ LocalFs.
         env.write_config(0, "[reservation]\nreach = \"auto\"\n");
-        let (b, _s) = backend(root, "TK", decline).expect("auto no-remote backend");
-        assert!(!b.is_remote(), "auto + no remote ⇒ LocalFs");
+        let (b, _s) = select(root, false).expect("auto no-remote backend");
+        assert_eq!(b.arbiter(), Arbiter::Dir, "auto + no remote ⇒ LocalFs");
 
         // auto + a configured remote that FAILS, prompt declines ⇒ hard error.
         env.write_config(
@@ -798,7 +916,7 @@ mod tests {
             "[reservation]\nreach = \"auto\"\nremote = \"/no/such/remote\"\n",
         );
         assert!(
-            backend(root, "TK", decline).is_err(),
+            select(root, false).is_err(),
             "auto + failing configured remote hard-errors when fallback declined"
         );
 
@@ -807,8 +925,12 @@ mod tests {
             0,
             "[reservation]\nreach = \"auto\"\nremote = \"/no/such/remote\"\nallow-local-fallback = true\n",
         );
-        let (b, _s) = backend(root, "TK", decline).expect("opt-in fallback backend");
-        assert!(!b.is_remote(), "explicit opt-in ⇒ LocalFs fallback");
+        let (b, _s) = select(root, false).expect("opt-in fallback backend");
+        assert_eq!(
+            b.arbiter(),
+            Arbiter::Dir,
+            "explicit opt-in ⇒ LocalFs fallback"
+        );
     }
 
     /// PHASE-05 R4 / EX-2: the shipped default (`auto`, no `[reservation]`) in a bare
@@ -821,8 +943,9 @@ mod tests {
     fn vt2_default_auto_in_a_non_git_dir_degrades_to_localfs() {
         let tmp = tempfile::TempDir::new().unwrap();
         let (b, _s) = backend(tmp.path(), "TK", decline).expect("auto non-git ⇒ LocalFs");
-        assert!(
-            !b.is_remote(),
+        assert_eq!(
+            b.arbiter(),
+            Arbiter::Dir,
             "default auto in a non-git dir must degrade to LocalFs, not error"
         );
     }
@@ -853,16 +976,72 @@ mod tests {
         );
     }
 
+    /// SL-269 VT-2 (RV-406 `F-3`): a post-CAS mkdir that fails for any reason other
+    /// than the path already existing is a hard error that keeps the io cause and
+    /// names the burnt id — never the split-state `reseat` remediation.
+    #[test]
+    fn post_cas_mkdir_io_error_keeps_cause_without_reseat_hint() {
+        let env = Substrate::new(1);
+        let (b, _s) = gitref(env.clone(0), "SL", env.remote());
+        // No `tree/` parent: create_dir(tree/009) fails with NotFound after the win.
+        let dir = env.clone(0).join("tree/009");
+        let err = b.claim(&ClaimCtx { dir: &dir, id: 9 }).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("No such file"), "keeps the io cause: {msg}");
+        assert!(msg.contains("SL-009"), "names the burnt id: {msg}");
+        assert!(
+            !msg.contains("reseat"),
+            "no reseat hint off split-state: {msg}"
+        );
+    }
+
     /// VT-6 (back-compat seam): a `local` backend never contacts a remote and its
     /// scan is the identity — the materialise loop behaves bit-for-bit as today.
     #[test]
     fn vt6_local_backend_is_back_compatible() {
         let env = Substrate::new(1);
         env.write_config(0, ""); // no [reservation] table at all
-        let (b, mut s) = backend(env.clone(0), "TK", decline).expect("default backend");
-        assert!(!b.is_remote(), "no [reservation] ⇒ LocalFs (EX-5)");
+        let (b, mut s) = select(env.clone(0), false).expect("default backend");
+        assert_eq!(
+            b.arbiter(),
+            Arbiter::Dir,
+            "no [reservation] ⇒ LocalFs (EX-5)"
+        );
         // The scan source is the identity (no remote union).
         assert_eq!(s(&[3, 7]).unwrap(), vec![3, 7]);
+    }
+
+    /// SL-269 VT-4 (ISS-483): selection is a function of its inputs — the env opt-in
+    /// arrives as a `bool`, never read inside the selector, so the ambient
+    /// `DOCTRINE_RESERVATION_FALLBACK` of the test process cannot flip the outcome.
+    #[test]
+    fn reach_selection_ignores_ambient_fallback_env() {
+        let env = Substrate::new(1);
+        let root = env.clone(0);
+        env.write_config(
+            0,
+            "[reservation]\nreach = \"auto\"\nremote = \"/no/such/remote\"\n",
+        );
+        assert!(
+            select(root, false).is_err(),
+            "auto + unreachable remote, opt-in off ⇒ hard error"
+        );
+        let (b, _s) = select(root, true).expect("opt-in on ⇒ local fallback");
+        assert_eq!(b.arbiter(), Arbiter::Dir, "opt-in on ⇒ LocalFs");
+    }
+
+    /// SL-269 EX-5: the fallback prompt says the id is clone-scoped and names both
+    /// levers that skip it, from their single-source constants.
+    #[test]
+    fn fallback_prompt_names_scope_and_both_levers() {
+        let text = fallback_prompt_text("origin");
+        assert!(
+            text.contains("reservation remote origin is unreachable"),
+            "{text}"
+        );
+        assert!(text.contains("in this clone only"), "{text}");
+        assert!(text.contains(ALLOW_LOCAL_FALLBACK_KEY), "{text}");
+        assert!(text.contains(&format!("{ENV_FALLBACK}=1")), "{text}");
     }
 
     // -----------------------------------------------------------------------

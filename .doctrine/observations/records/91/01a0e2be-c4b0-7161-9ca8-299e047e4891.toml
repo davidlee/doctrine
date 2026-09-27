@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e2be-c4b0-7161-9ca8-299e047e4891"
+recorded_at = "2026-09-27T12:02:28.144145119Z"
+kind = "friction"
+summary = "capsule-orchestrator/phase-planner: memory search ranking noisy"
+detail = "SL-269 PHASE-01 planner: 'doctrine memory search' returned '5 of 74' for most queries with bwrap/mutation-battery memories leading on unrelated terms; path-scope retrieve was more useful."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

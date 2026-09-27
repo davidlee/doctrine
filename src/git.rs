@@ -1090,17 +1090,23 @@ pub(crate) fn materialise_conflict_worktree(
 pub(crate) enum RefCas {
     /// The ref equalled `expected_old` and was advanced to the new oid.
     Updated,
-    /// The ref did **not** equal `expected_old`; nothing was written. `actual`
-    /// is the ref's current value, or `None` if it does not exist.
+    /// A rival moved the ref: it has **left** `expected_old`, so nothing was
+    /// written. `actual` is the ref's current value, or `None` if it does not
+    /// exist. Reported only when the ref has left `expected_old` — a refusal
+    /// with the ref still there is an `Err`, never a lost race (SL-269, STD-003).
     Moved { actual: Option<String> },
 }
 
 /// Compare-and-swap a ref via the native 3-arg `update-ref <ref> <new> <old>`
 /// (design §4.1, ADR-012 D4): git advances the ref only if it currently equals
 /// `expected_old`, otherwise refuses. For ref *creation*, pass the zero oid as
-/// `expected_old` (git refuses if the ref already exists). On refusal the ref is
-/// left untouched and the moved-target's actual value is reported — never forced,
-/// never auto-resolved.
+/// `expected_old` (git refuses if the ref already exists; absent ↔ zero).
+///
+/// On refusal the ref is re-read: [`RefCas::Moved`] only when the ref has left
+/// `expected_old` (a genuine rival — never forced, never auto-resolved). If it
+/// is still at `expected_old` the refusal was the ref store failing (a held
+/// lock, permissions, a corrupt store), surfaced as [`CaptureError::Git`] with
+/// git's stderr — never mistaken for a lost race (SL-269, RV-406 `F-4`).
 pub(crate) fn update_ref_cas(
     root: &Path,
     refname: &str,
@@ -1109,11 +1115,26 @@ pub(crate) fn update_ref_cas(
 ) -> Result<RefCas, CaptureError> {
     let output = run_git(root, &["update-ref", refname, new_oid, expected_old])?;
     if output.status.success() {
-        Ok(RefCas::Updated)
+        return Ok(RefCas::Updated);
+    }
+    let actual = git_opt(root, &["rev-parse", "--verify", "--quiet", refname])?;
+    let still_at_expected = match actual.as_deref() {
+        None => is_zero_oid(expected_old),
+        Some(current) => current == expected_old,
+    };
+    if still_at_expected {
+        Err(CaptureError::Git(format!(
+            "update-ref {refname}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
     } else {
-        let actual = git_opt(root, &["rev-parse", "--verify", "--quiet", refname])?;
         Ok(RefCas::Moved { actual })
     }
+}
+
+/// An all-zero oid of any hash width — the "must not exist" CAS sentinel.
+fn is_zero_oid(oid: &str) -> bool {
+    !oid.is_empty() && oid.bytes().all(|b| b == b'0')
 }
 
 /// The all-zero oid — the CAS `expected_old` sentinel for a ref *creation* (git's
@@ -4645,6 +4666,37 @@ mod tests {
             super::RefCas::Updated
         ));
         assert_eq!(repo.git(&["rev-parse", refname]), c2);
+    }
+
+    /// SL-269 VT-1 (RV-406 `F-4`): a ref store that refuses the write (here a
+    /// held `.lock`) while the ref is still at `expected_old` is a **failure**,
+    /// never a lost race — `Err` naming the ref and carrying git's stderr.
+    #[test]
+    fn update_ref_cas_errors_when_the_ref_store_refuses() {
+        let repo = ScratchRepo::new();
+        let c1 = repo.commit("a.txt", "1", "first");
+        let zero = "0".repeat(40);
+        let refname = "refs/review/x";
+        let gitdir = PathBuf::from(repo.git(&["rev-parse", "--absolute-git-dir"]));
+        let lock = gitdir.join("refs/review/x.lock");
+        std::fs::create_dir_all(lock.parent().expect("parent")).expect("mkdir");
+        std::fs::write(&lock, b"").expect("hold lock");
+
+        let err = super::update_ref_cas(repo.path(), refname, &c1, &zero)
+            .expect_err("a refused write at expected_old must be Err, not Moved");
+        let text = err.to_string();
+        assert!(text.contains(refname), "names the ref: {text}");
+        assert!(
+            text.contains("File exists") || text.contains("Unable to create"),
+            "carries git's stderr: {text}"
+        );
+        std::fs::remove_file(&lock).expect("release lock");
+        assert!(
+            super::git_opt(repo.path(), &["rev-parse", "--verify", "--quiet", refname])
+                .expect("probe")
+                .is_none(),
+            "ref still absent"
+        );
     }
 
     // --- SL-148 PHASE-02: remote ref ops + porcelain CAS classification. -----

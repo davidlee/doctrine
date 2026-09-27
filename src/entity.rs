@@ -53,14 +53,27 @@ pub(crate) trait Claim {
     /// `AlreadyHeld` if another agent won the race. Only this op arbitrates.
     fn claim(&self, ctx: &ClaimCtx<'_>) -> anyhow::Result<Acquired>;
 
-    /// Whether this backend arbitrates at a remote (the `GitRef` cross-clone
-    /// backend) vs the local filesystem (`LocalFs`). Test-only discriminator for
-    /// the reach-selection suites (SL-148 VT-2/VT-3/VT-6) — production never branches
-    /// on the backend kind (the seam exists precisely so it doesn't).
+    /// What this backend's claim arbitrates over. Test-only discriminator for the
+    /// reach-selection suites (SL-148 VT-2/VT-3/VT-6, SL-269 VT-4) — production never
+    /// branches on the backend kind (the seam exists precisely so it doesn't).
     #[cfg(test)]
-    fn is_remote(&self) -> bool {
-        false
+    fn arbiter(&self) -> Arbiter {
+        Arbiter::Dir
     }
+}
+
+/// What a [`Claim`] backend arbitrates over — the test-only reach-selection
+/// discriminator ([`Claim::arbiter`]).
+#[cfg(test)]
+#[derive(Debug, PartialEq, Eq)]
+#[expect(dead_code, reason = "constructed by CloneRef, SL-269 PHASE-02")]
+pub(crate) enum Arbiter {
+    /// The local filesystem: the `mkdir` is the claim (`LocalFs`).
+    Dir,
+    /// This clone's own ref store (`CloneRef`, SL-269).
+    CloneRef,
+    /// A remote ref, cross-clone (`GitRef`).
+    RemoteRef,
 }
 
 /// The local-filesystem backend: the `mkdir` is the claim (D1 — the dir *is*
