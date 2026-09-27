@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0e259bc387b61b4b80ea8cfedd4af"
+memory_key = "mem.pattern.review.mcp-bypasses-worker-guard"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "MCP review tools bypass the CLI worker guard — the review-level locus check is their only guard"
+summary = "commands/guard.rs worker_guard runs only on the CLI; MCP review tools call review::run_* directly, so resolve_review_root must carry any admission rule itself"
+created = "2026-09-27"
+updated = "2026-09-27"
+
+[scope]
+paths = ["src/review/turn.rs", "src/mcp_server/tools.rs"]
+globs = []
+commands = []
+tags = ["area:review", "area:mcp"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a52510a3d506d385b91f801d4d22c649d8db8631"
+ref_name = "refs/heads/edge"
+checkout_state_id = "2a9f1a9253228f5106e79de32be675c061f19ebf40fd82965bbd17049bcfe2cd"
+base_commit = "50bf9a9cf23ce142cf6b270bb36d9e3f29e3e096"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-269"
+

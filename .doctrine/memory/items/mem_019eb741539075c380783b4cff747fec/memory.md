@@ -3,13 +3,13 @@
 RV review **turn-verbs** (`raise`/`dispose`/`amend`/`verify`/`contest`/`reopen`/
 `withdraw`/`conclude`), plus `status`, `prime` and `unlock`, refuse on a git worktree fork — the turn baton lives in the **parent tree's
 gitignored runtime state**, which a fork cannot co-write (IMP-024). `review new`
-*succeeds* on a fork (it only writes the authored ledger files; `show` and `list`
-are unguarded too), which is the trap: a successful `new` is no proof you are
-outside a fork; the next turn verb fails with:
+refuses the same way, before allocating an id (ISS-484, fixed 2026-09-27);
+`show` and `list` are unguarded. Earlier builds let `new` succeed on a fork —
+if you find a stray uncommitted `.doctrine/review/NNN*` there, that is why.
 
-> review verbs are not supported on a worktree fork (IMP-024): the turn baton
-> lives in the parent tree's gitignored state, which a fork cannot co-write. Run
-> `review` from the parent or coordination tree.
+**Superseded soon:** SL-269 (DEC-338) replaces the branch-shape test with a
+worker-process test, admitting solo forks and adopted capsules. Until it
+lands, the rule below holds.
 
 **Why it bites `/audit` + `/close`:** when a slice's implementation lives on a
 worktree branch (e.g. dispatch funnel work), you cannot drive the audit RV ledger
@@ -22,9 +22,6 @@ from that worktree.
   the parent's checkout **FIRST**, then run `/audit` + `/close` coherently in one
   tree where baton, code, and `notes.md` sit together (then commit/push per plan).
   Re-run the gate on the merged tree before raising findings.
-
-If you ran `review new` on the fork by mistake, `rm -rf` the stray uncommitted
-`.doctrine/review/NNN*` from the worktree before re-creating it in the parent.
 
 Discovered during SL-042 `/audit`: work on the `sl-042-coord` worktree; merged to
 `main` (disjoint from the settled SL-043) to drive RV-003. Companion:
