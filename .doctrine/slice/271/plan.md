@@ -93,6 +93,12 @@ ledger is history, not plan input.
   `mcp_servers` leg). It is created and applied at reconcile; no phase cites
   its `REQ` ids. Close requires it landed or a recorded waiver
   (`SL-250`/`RV-350` precedent).
+- **No new module edge.** The capture seam rides the existing `boot` ↔
+  `install` command edge: `boot` already reaches `install`
+  (`install::asset_text`), and `install` already reaches `boot`
+  (`boot::wire`), so `install::CaptureRunner` used from `boot::wire` adds no
+  new module pair and does not grow the command tangle ratchet
+  (`ADR-001`; `tests/architecture_layering.rs`). Both are `command` tier.
 - **Fixture discipline.** Every ownership fixture is seeded literally, never
   through a real installer, and every absence assertion carries a positive
   control in the same test (`mem.pattern.boot.test-exec-is-not-doctrine-owned`,
