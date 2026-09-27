@@ -36,9 +36,9 @@ document's reading rules.
 | thread | population | runner | prompt |
 |---|---|---|---|
 | A | T | `pi-research` (deepseek-v4-pro) | `rater-prompt-transfer.txt` |
-| B | T | codex `gpt-6-sol`, read-only sandbox | `rater-prompt-transfer.txt` |
+| B | T | codex `gpt-6-luna` (medium effort), read-only sandbox | `rater-prompt-transfer.txt` |
 | C | D | `pi-research` | `rater-prompt-design.txt` |
-| D | D | codex `gpt-6-sol`, read-only sandbox | `rater-prompt-design.txt` |
+| D | D | codex `gpt-6-luna` (medium effort), read-only sandbox | `rater-prompt-design.txt` |
 
 Different model families per pair, so agreement is not shared-model bias.
 The route definitions are verbatim from `install/design-prompts/reviewing.md`.
@@ -85,3 +85,9 @@ Computed by the analyst from the raters' flat tables, joined on `ledger/F-N`.
 
 It does not validate `P10` (only a use trial can), sets no pass mark for the
 second window, and does not change any count in `E11`–`E13`.
+
+## Amendments before any run
+
+- 2026-09-27: raters B and D moved from `gpt-6-sol` to `gpt-6-luna` (medium
+  effort) for budget. Made before any rater ran. Model-family independence from
+  A and C is kept.
