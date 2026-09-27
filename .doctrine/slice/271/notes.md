@@ -223,31 +223,37 @@ a non-test build (a `dead_code` warning at the zero-warning gate).
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-27 · PHASE-02 · c7e84b4fc
+fresh-as-of: 2026-09-27 · PHASE-03 (phases complete) · cfbaf73b2
 
 ### Produced
 
-- PHASE-01 `1d385ee49` — shared decision core (`McpEntryClass` + `mcp_action` +
-  `plan_mcp` refactor); PHASE-02 `5288e108a` (codex leg), `765fb99c9` (e2e),
-  `c7e84b4fc` (README `sh` declaration). All PHASE-01/02 VTs PASS; `doctrine
-  check gate` green after each.
-- `tests/e2e_codex_install.rs` — 7 cases over the built binary.
-- Memory `mem_01a0e1e1` (recorded on trunk): report-seam output is e2e-only;
-  `verify-vt` attribution waits on the completed phase delta.
+- PHASE-01 `1d385ee49` (shared core), PHASE-02 `5288e108a`/`765fb99c9`/`c7e84b4fc`
+  (codex leg + e2e + `sh` declaration), PHASE-03 `e8a18a0dd`/`cfbaf73b2`
+  (probe + disclosure).
+- All 11 VT mandates PASS (`doctrine slice verify-vt 271`); `doctrine check gate`
+  green after each phase.
+- `tests/e2e_codex_install.rs` — 12 cases over the built binary.
+- Memories on trunk: `mem_01a0e1e1` (report-seam output is e2e-only; verify-vt
+  attribution waits on the completed phase delta), `mem_01a0e1f0` (`install
+  --dry-run` skips `wire`).
+- Branch `slice/SL-271-codex-mcp-registration-during-install` in
+  `.worktrees/SL-271`; not yet landed.
 
 ### Learned
 
-- `install --dry-run` prints only the plan and never calls `wire()`; the dry-run
-  codex MCP line is reachable only via `boot install --dry-run`.
-- A production const used only by a test is dead code under `-D unused`: wire it
-  live. `CODEX_MCP_SERVE_ARGS` builds the emitted wrapper; a test pins it to the
-  literal `CODEX_MCP_WRAPPER`.
-- `toml_edit::Table::set_implicit(true)` on the created parent renders
-  `[mcp_servers.doctrine]` alone, not an empty `[mcp_servers]` header above it.
+- `doctrine install --dry-run` is a plan-only preview and never calls `wire()`;
+  the dry-run report wording is reachable only via `boot install --dry-run`.
+- A production const/field used only by no path is dead code under `-D unused`:
+  `CODEX_MCP_SERVE_ARGS` builds the emitted wrapper live; `Capture.success` is
+  read in the Unknown reason.
+- `toml_edit::Table::set_implicit(true)` renders `[mcp_servers.doctrine]` alone.
 
 ### Open
 
-- PHASE-03 (probe + disclosure) pending: `CaptureRunner`, `parse_codex_features`,
-  `codex_hooks_state`, `write_codex_activation(Option<HooksState>)`, trust caveat,
-  and the activation notice's dry-run `would write` wording.
-- `ISS-495` (Claude read `.ok()`) remains out of scope by design.
+- Lifecycle is `started` with 3/3 phases — next `/audit`.
+- Close obligations: the two-member `SPEC-011` Revision is raised at reconcile
+  (close requires it landed or a waiver); `IMP-111` resolves (`promoted`) at close;
+  `IMP-497` is the post-write seam re-verification follow-up; `ISS-495` stays out
+  of scope by design.
+- The fork branch is unlanded (`doctrine worktree land --fork <branch>`); the
+  coordination tree for SL-271 does not exist, so landing is a deliberate choice.
