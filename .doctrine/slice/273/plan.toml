@@ -1,0 +1,152 @@
+# Implementation plan for SL-273 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-273"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Order is the array order. Phase and criterion ids are immutable; edits append.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Resolver and citation check"
+objective = """
+Build the `lib:` form's machine half (design sections 3.1, 3.2, 4): the \
+`LIB_PREFIX` constant and `PublicationManifest::declares_address` in \
+`src/publication.rs`; `library show` accepting the prefix verbatim; the pure \
+core `src/lib_citation.rs` (scan, unresolved, bare_targets, bare_mentions); its \
+two callers — the build-repo tests over the shipped roots and the doctor leg \
+over client `.doctrine/**`. Claude, TDD. Hosts RV-408 F-2, F-3, F-4, F-5.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-273 design locked (commit 6bd15999b); design sections 3, 4 and 7 are the contract." },
+  { id = "EN-2", text = "RV-408 F-2..F-5 control sketches read from `doctrine review show RV-408 --json` and transcribed below (EX-6..EX-9)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`LIB_PREFIX = \"lib:\"` is one named constant in `src/publication.rs` (STD-001, I6); `PublicationManifest::declares_address(&LogicalAddress) -> bool` sits beside `declares_backing`." },
+  { id = "EX-2", text = "`doctrine library show lib:<address>` emits the same bytes as `library show <address>`; `show_with` strips `LIB_PREFIX` before `LogicalAddress::parse`; the four error classes are unchanged." },
+  { id = "EX-3", text = "`src/lib_citation.rs` implements scan / unresolved (`Unresolved::{Malformed, Undeclared}`) / bare_targets (reference/*.md basenames minus `BARE_EXEMPT = [\"governance.md\"]`) / bare_mentions to the section 3.1 grammar and 4.1 boundary rule, and passes every case in design section 4.4." },
+  { id = "EX-4", text = "Build-repo tests in `lib_citation.rs`: `every_shipped_lib_citation_resolves` (enforcing) and `no_bare_library_mention_in_shipped_text` (`#[ignore]`, prints every mention by file:line). Both walk every file (not only *.md) under `SHIPPED_TEXT_ROOTS = [\"plugins/doctrine/skills\", \"install\"]`; a non-UTF-8 file fails by name (STD-003); the manifest is admitted from disk via `asset_source::publication_manifest_bytes_from_disk`. The walk is one fn taking (root, manifest) so EX-6 and EX-8 can seed it." },
+  { id = "EX-5", text = "Doctor leg `doctor_checks::lib_citation_findings(root)` wired in `src/commands/doctor.rs` beside `prose_cite_findings`; walks `.doctrine/**/*.md` skipping `.doctrine/state/`; one `Category::LibCitation` Warning per unresolved citation naming file, line, address, reason and the fix (`doctrine library tree`). No bare report in clients." },
+  { id = "EX-6", text = "RV-408 F-2 (control): a seeded fixture root holding a shipped-style TOML file with a bare `glossary.md` in a comment fails the no-bare walk, and an undeclared `lib:` citation in the same file fails the resolution walk. Test `shipped_walk_fails_on_seeded_toml_fixture`." },
+  { id = "EX-7", text = "RV-408 F-3 (control): `lib:reference/glossary.md#section` is scanned whole and reported Undeclared by `unresolved`; `lib:reference/glossary.md!` scans as `reference/glossary.md` and passes. Core unit tests `scan_keeps_inner_suffix_and_fails_it` and `scan_trims_trailing_bang`." },
+  { id = "EX-8", text = "RV-408 F-4 (control): the resolution walk fed a manifest admitted from the on-disk bytes with the cited address removed reports the citation, independent of the compiled embed. Test `shipped_walk_uses_given_manifest_not_embed`." },
+  { id = "EX-9", text = "RV-408 F-5 (control): a client `.doctrine/` markdown file that cannot be read (mode 000), beside a readable sibling holding an unresolved `lib:` citation, yields a finding naming the unreadable file AND the sibling's finding; a manifest that does not admit yields one could-not-run finding; a glob that cannot be built yields one finding naming the pattern. Tests `lib_citation_unreadable_file_disclosed_sibling_reported` and `lib_citation_manifest_not_admitted_disclosed`." },
+  { id = "EX-10", text = "`every_shipped_lib_citation_resolves` green on the current tree (zero `lib:` citations yet — vacuous but live); `doctrine check commit` clean, clippy zero warnings." },
+]
+verification = [
+  { id = "VT-1", expects = "core grammar and resolution cases of design 4.4, incl. RV-408 F-3", test_file = "src/lib_citation.rs", keywords = ["fn scan", "fn unresolved", "fn bare_mentions", "fn bare_targets", "BARE_EXEMPT", "scan_keeps_inner_suffix_and_fails_it", "scan_trims_trailing_bang", "my-glossary.md", "xlib:"], waived = false },
+  { id = "VT-2", expects = "shipped-roots tests; every file; disk manifest; RV-408 F-2 and F-4 seeded walks", test_file = "src/lib_citation.rs", keywords = ["SHIPPED_TEXT_ROOTS", "every_shipped_lib_citation_resolves", "no_bare_library_mention_in_shipped_text", "#[ignore", "publication_manifest_bytes_from_disk", "shipped_walk_fails_on_seeded_toml_fixture", "shipped_walk_uses_given_manifest_not_embed"], waived = false },
+  { id = "VT-3", expects = "LIB_PREFIX constant and declares_address", test_file = "src/publication.rs", keywords = ["LIB_PREFIX", "fn declares_address"], waived = false },
+  { id = "VT-4", expects = "library show lib:<address> round-trips to the unprefixed bytes", test_file = "src/commands/library.rs", keywords = ["LIB_PREFIX", "lib_prefixed_address_shows_same_bytes"], waived = false },
+  { id = "VT-5", expects = "doctor leg: unresolved client citation reported; RV-408 F-5 unreadable-file and manifest disclosure", test_file = "src/doctor_checks.rs", keywords = ["fn lib_citation_findings", "Category::LibCitation", "lib_citation_unreadable_file_disclosed_sibling_reported", "lib_citation_manifest_not_admitted_disclosed"], waived = false },
+  { id = "VT-6", expects = "new finding category at warning severity", test_file = "src/finding.rs", keywords = ["LibCitation"], waived = false },
+  { id = "VA-1", text = "Agent confirms the doctor leg is wired (`src/commands/doctor.rs` calls `lib_citation_findings`) and reads no bare report in client prose." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Teaching and consolidation"
+objective = """
+Make each library rule have one owner and teach the `lib:` form (design \
+sections 3.3, 5): the ADR-005 / ADR-024 / SPEC-011 Revision; rename \
+`routing-process.md` → `essentials.md` (heading \"Essentials\"); retire \
+`boot-footer.md`; the owner-map cuts; `using-doctrine.md` § publication; \
+`shipped-corpus-authoring.md` on `lib:`; repair of every live reference the \
+rename and retirement leave dead (RV-408 F-6). Claude.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: `every_shipped_lib_citation_resolves` enforcing, so every `lib:` citation authored here is checked." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "One Revision (ADR-013) carries the governing-text changes of design 5.4 — ADR-005 (one-workflow-doc invariant names `essentials.md` as the boot onboarding summary; push-tier and affected-surface lines; rename recorded as done), ADR-024 (pointer to `install/routing-process.md`), SPEC-011 (embedded-digest reference). The user approves it (VH-1) and it is applied before the rename commit lands." },
+  { id = "EX-2", text = "`install/routing-process.md` renamed to `install/essentials.md`, published as `reference/essentials.md`: `publication/manifest.toml` entry, `SourceKind::Static` and heading \"Essentials\" in `src/boot.rs` and its tests; `doctrine boot` regenerated after `cargo build`." },
+  { id = "EX-3", text = "`install/boot-footer.md` and its manifest entry removed." },
+  { id = "EX-4", text = "`essentials.md`'s first line states its role; it carries the resolution rule (a `lib:<address>` citation is read with `doctrine library show`, nothing is on disk) and the mandatory-retrieval line (DEC-345); every block it does not own ends with a `lib:` cue to its owner (I3); it is no longer than 88 lines (I4)." },
+  { id = "EX-5", text = "Owner-map cuts of design 5.2 applied: `glossary.md` gains first-use qualification (C5); `using-doctrine.md` gains § publication (published vs projected, what the library holds, same-named client files, the `lib:` form) and its reference-forms and pointers duplicates are cut to `lib:` citations; the four templates' header-comment restatements of reference forms are cut to a `lib:` citation. No owner points back to a summary." },
+  { id = "EX-6", text = "`shipped-corpus-authoring.md` teaches `lib:` for shipped citations and cites `lib:reference/using-doctrine.md` § publication rather than restating the model. Examples use `lib:<address>` or a resolving address, never a plausible fake." },
+  { id = "EX-7", text = "Rename repair (RV-408 F-6, design 5.4): the shipped memory `mem_019ec92b0ffc79d294a49559db9aa12a` corrected (then `cargo build` → `doctrine memory sync`, committed at once); the four local memories' scope paths/globs updated via `doctrine memory edit`; instructing prose in local memories corrected." },
+  { id = "EX-8", text = "Old-name sweep for `routing-process` and `boot-footer` over `.doctrine/` (excluding slice history and review ledgers), `memory/`, `install/`, `plugins/`, `src/`: every hit repaired or recorded as history in `notes.md`, with a positive control showing the grep finds a known hit before the repair." },
+  { id = "EX-9", text = "`doctrine check commit` clean; `doctrine boot --check` clean." },
+]
+verification = [
+  { id = "VT-1", expects = "boot carries the Essentials section from essentials.md with the lib: rule and mandatory-retrieval line", test_file = "src/boot.rs", keywords = ["\"Essentials\"", "essentials.md", "boot_essentials_carries_lib_rule"], waived = false },
+  { id = "VT-2", expects = "every lib: citation authored in this phase resolves against the on-disk manifest", test_file = "src/lib_citation.rs", keywords = ["every_shipped_lib_citation_resolves"], waived = false },
+  { id = "VA-1", text = "Owner map (design 5.2) checked against the landed docs: one owner per concept; summaries end with a cue; no owner points back (I3). Result recorded in notes.md." },
+  { id = "VA-2", text = "`wc -l install/essentials.md` ≤ 88 (I4)." },
+  { id = "VA-3", text = "Old-name sweep output (EX-8) recorded in notes.md, every hit dispositioned." },
+  { id = "VA-4", text = "`doctrine show` on ADR-005, ADR-024, SPEC-011 names `essentials.md`; the Revision is applied." },
+  { id = "VH-1", text = "The user approves the Revision's change set before it is applied." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Sweep inventory"
+objective = """
+Enumerate and adjudicate (design 6.1, 6.2): a DeepSeek pi worker \
+(`./scripts/pi-research`, read-only) records every `*.md` token, library path \
+form and restate offender over the inventory roots with a recommendation; the \
+orchestrator writes `.doctrine/slice/273/inventory.toml`, sets a verdict on \
+every row, logs ownerless-concept rows to IMP-500, and commits.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete and committed: the rename and retirement have landed, so targets are stable (R2)." },
+  { id = "EN-2", text = "The worker brief (roots, occurrence definition, row schema, class and recommend vocabularies of design 6.1) is written in notes.md." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`.doctrine/slice/273/inventory.toml` holds one `[[row]]` per occurrence with the design 6.1 fields; ids C-nnn / R-nnn, append-only. Roots: `plugins/doctrine/skills/**`, `install/**`, prose-bearing string literals in `src/**`." },
+  { id = "EX-2", text = "Completeness control: every mention printed by `cargo test -- --ignored no_bare_library_mention_in_shipped_text` maps to an inventory row by file and excerpt; unmapped mentions are added as rows before adjudication." },
+  { id = "EX-3", text = "Every row carries a verdict (accept | amend | reject), applying the design 6.2 rules; `resolved` is set on every amend; convert targets use post-rename addresses (`reference/essentials.md`). No empty verdict." },
+  { id = "EX-4", text = "Every `log` row's file and line is appended to IMP-500's body." },
+  { id = "EX-5", text = "The adjudicated inventory is committed on edge and edge is promoted to main (`git fetch . edge:main`) before PHASE-04 dispatch." },
+]
+verification = [
+  { id = "VA-1", text = "Script over inventory.toml: zero rows with empty verdict; zero amend rows with empty `resolved`. Output in notes.md." },
+  { id = "VA-2", text = "Completeness cross-check (EX-2) output in notes.md: zero unmapped mentions." },
+  { id = "VA-3", text = "`doctrine show IMP-500` lists every `log` row's location." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Apply and enforce"
+objective = """
+Apply the adjudicated inventory and make the bare report enforcing (design \
+6.3): a DeepSeek pi worker, dispatched confined, applies exactly the accept and \
+amend rows; the orchestrator un-ignores `no_bare_library_mention_in_shipped_text` \
+and verifies the diff per occurrence against the inventory before accepting \
+the import. Hosts RV-408 F-1.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete; the adjudicated inventory is on main." },
+  { id = "EN-2", text = "RV-408 F-1 (control), before dispatch: the per-occurrence verification script (design 6.3 steps 2-4, over inventory.toml and `git diff`) exists and, run on a seeded diff that converts a slice-artefact `design.md` mention adjudicated `leave` to `lib:templates/design.md` in the same hunk as an authorised glossary conversion, reports that occurrence as unauthorised. Script and control output recorded in notes.md." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The worker's hand-back changes only occurrences of accept / amend rows, located by file and excerpt. If the diff is too large to verify in one pass, the phase splits into two dispatches along the C-/R- boundary (design 6.3)." },
+  { id = "EX-2", text = "RV-408 F-1: before the import is accepted, the verification script runs on the real hand-back: every accept/amend excerpt reads as adjudicated; every leave/reject excerpt is unchanged; every changed occurrence maps to exactly one applied row — sharing a hunk with an authorised row authorises nothing; every `log` row is in IMP-500. Zero violations; output in notes.md." },
+  { id = "EX-3", text = "`#[ignore]` removed from `no_bare_library_mention_in_shipped_text`; it and `every_shipped_lib_citation_resolves` pass (I1, I2)." },
+  { id = "EX-4", text = "`doctrine check gate` green." },
+]
+verification = [
+  { id = "VT-1", expects = "both shipped-roots tests run by default and pass", test_file = "src/lib_citation.rs", keywords = ["no_bare_library_mention_in_shipped_text", "every_shipped_lib_citation_resolves"], waived = false },
+  { id = "VA-1", text = "RV-408 F-1 control run (EN-2) and real-diff run (EX-2) outputs present in notes.md; both show the expected result." },
+  { id = "VA-2", text = "`grep -B2 'fn no_bare_library_mention_in_shipped_text' src/lib_citation.rs` shows no `#[ignore]`." },
+]
+specs        = []
+requirements = []
