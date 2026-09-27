@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e4c5-4710-7512-aee9-400140d3cd50"
+recorded_at = "2026-09-27T21:28:49.168410228Z"
+kind = "friction"
+summary = "skill:/retrieve-memory triage of ISS-465 — doctrine memory search has no default limit, so every query returns the whole corpus and the query-invariant row count reads as a ranking bug"
+detail = "Triaging ISS-465 ('memory search ranking too poor to compete with raw grep'). Ran 'doctrine memory search --query <q>' for three unrelated queries, including the literal garbage 'zzzqqq nonsense'. All three printed the SAME row count (565) and read as 'the query is ignored' — the exact report in observation 01a0ba1d ('the SAME 69 hits in the SAME severity-ordered sequence'). The count is invariant because --limit has NO default (help shows a default for --offset but none for --limit), so search emits every filter survivor: 565 today (the whole active corpus), 69 when 01a0ba1d was written. The ordering DOES vary per query — BM25 sits at sort key 2 of 9 in src/retrieve.rs — and top rows were relevant for distinctive queries. Two costs: (1) a triage call dumps the entire corpus into context, burying the ranking signal under 565 rows; (2) the query-invariant row count is a false fingerprint of 'ranking ignored the query', which is how five observation records plus ISS-465 came to describe a ranking defect that is partly not one. Note also: the no-lexical-evidence fallback is severity-then-trust ordered by design (sort keys 4-6), so a genuinely zero-match query DOES return the same high-severity rows every time — that part of the SL-268 reports is designed behaviour, not a defect. Fix candidates: a default page size, and a count line reflecting the query's lexical evidence."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
