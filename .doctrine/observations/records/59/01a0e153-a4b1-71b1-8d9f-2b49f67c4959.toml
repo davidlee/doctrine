@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e153-a4b1-71b1-8d9f-2b49f67c4959"
+recorded_at = "2026-09-27T05:25:50.385953954Z"
+kind = "friction"
+summary = "retrieve-memory: Codex skill refresh failed on read-only installer paths"
+detail = "During IMP-496 live-skill verification, doctrine install --agent codex --skill audit --skill reconcile -y reported success overall but its Codex hook refresh failed writing .codex/.hooks.json.*.tmp (EROFS) and npx skills failed writing ~/.npm/_cacache/tmp (EROFS). The installed .agents skills remained stale. Remote edge contains IMP-496 while remote main does not, and the delegated npx source is the GitHub default branch."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
