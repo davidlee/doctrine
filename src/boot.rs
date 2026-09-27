@@ -2961,7 +2961,7 @@ pub(crate) fn run_install(
             return Ok(());
         }
     }
-    wire(&root, &exec, &harnesses, dry_run)
+    wire(&root, &exec, &harnesses, dry_run, &install::CaptureRunner)
 }
 
 /// Report ONE spec's hook-merge outcome. Lifted out of [`wire`] unchanged when
@@ -3000,20 +3000,90 @@ fn write_hook_outcome(
 /// the operator reasonably trusts the whole set in one `/hooks` pass (SL-263
 /// §5.6; the installer cannot read codex's trust state, so disclosure is what it
 /// can guarantee).
+/// The codex hooks-feature state, as the probe found it (SL-271). `None` at the
+/// call site means the probe did not run (dry run).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum HooksState {
+    Enabled,
+    Disabled,
+    Unknown(String),
+}
+
+/// PURE. The row whose first token is `hooks` contributes its final token:
+/// `true` -> `Some(true)`, `false` -> `Some(false)`; no row, or any other shape,
+/// is `None` (design sec-5.2). `stdout` is read regardless of exit status — a
+/// failed command that still printed a parseable row is a usable answer.
+fn parse_codex_features(stdout: &str) -> Option<bool> {
+    for line in stdout.lines() {
+        let mut tokens = line.split_whitespace();
+        if tokens.next() != Some("hooks") {
+            continue;
+        }
+        return match tokens.last() {
+            Some("true") => Some(true),
+            Some("false") => Some(false),
+            _ => None,
+        };
+    }
+    None
+}
+
+/// Run `codex features list` with `cwd` bound to the install root and classify the
+/// hooks state. Nothing is gated on the probe: any failure degrades to a named
+/// `Unknown` (design sec-5.2/5.4).
+fn codex_hooks_state(run: &dyn install::CommandRunner, cwd: &Path) -> HooksState {
+    match run.run_capture("codex", &["features", "list"], cwd) {
+        Ok(capture) => match parse_codex_features(&capture.stdout) {
+            Some(true) => HooksState::Enabled,
+            Some(false) => HooksState::Disabled,
+            None => {
+                let reason = capture.stderr.trim();
+                HooksState::Unknown(if !reason.is_empty() {
+                    reason.to_string()
+                } else if !capture.success {
+                    "codex features list exited non-zero".to_string()
+                } else {
+                    "codex features list printed no recognised hooks row".to_string()
+                })
+            }
+        },
+        Err(e) => HooksState::Unknown(format!("{e:#}")),
+    }
+}
+
+/// One activation notice per codex arm. `state` is the probe answer: `None` when
+/// the probe did not run (dry run) and step 1 prints unconditionally; `Enabled`
+/// omits step 1 (nothing said about hooks, DEC-329); `Disabled`/`Unknown` print it
+/// naming the key or the reason. Under `dry_run` the notice states what WOULD be
+/// written, never "wrote".
 fn write_codex_activation(
     stdout: &mut impl io::Write,
     h: &Harness,
     tag: &str,
+    dry_run: bool,
+    state: Option<HooksState>,
 ) -> anyhow::Result<()> {
+    let verb = if dry_run { "would write" } else { "wrote" };
     writeln!(
         stdout,
-        "  {tag}{}: wrote {CODE_HOOKS_REL}. To activate:",
+        "  {tag}{}: {verb} {CODE_HOOKS_REL}. To activate:",
         harness_label(h)
     )?;
-    writeln!(
-        stdout,
-        "    1. Ensure [features] hooks = true in .codex/config.toml."
-    )?;
+    match state {
+        Some(HooksState::Enabled) => {}
+        Some(HooksState::Disabled) => writeln!(
+            stdout,
+            "    1. Enable [features] hooks = true in .codex/config.toml (currently off)."
+        )?,
+        Some(HooksState::Unknown(reason)) => writeln!(
+            stdout,
+            "    1. Ensure [features] hooks = true in .codex/config.toml ({reason})."
+        )?,
+        None => writeln!(
+            stdout,
+            "    1. Ensure [features] hooks = true in .codex/config.toml."
+        )?,
+    }
     writeln!(
         stdout,
         "    2. Start codex in this project and accept the project trust prompt."
@@ -3073,6 +3143,7 @@ pub(crate) fn wire(
     exec: &Path,
     harnesses: &[Harness],
     dry_run: bool,
+    runner: &dyn install::CommandRunner,
 ) -> anyhow::Result<()> {
     let reference = format!("@{BOOT_REL}");
     let targets: Vec<PathBuf> = harnesses
@@ -3116,7 +3187,14 @@ pub(crate) fn wire(
                 // three codex hooks, so a per-spec repeat would say the same thing
                 // twice and still describe only one hook (SL-263 §5.6/§5.8).
                 if codex_hook_written && matches!(h, Harness::Codex) {
-                    write_codex_activation(&mut stdout, h, tag)?;
+                    // The probe fires only off a real hook write, never under dry
+                    // run, and never for Claude (DEC-329; design sec-5.4).
+                    let state = if dry_run {
+                        None
+                    } else {
+                        Some(codex_hooks_state(runner, root))
+                    };
+                    write_codex_activation(&mut stdout, h, tag, dry_run, state)?;
                 }
                 if report.spike_warning {
                     writeln!(
@@ -3164,6 +3242,10 @@ pub(crate) fn wire(
                     | BaseRefOutcome::PrintedFallback
                     | BaseRefOutcome::NotApplicable => {}
                 }
+                let mcp_written = matches!(
+                    &report.mcp,
+                    RefreshOutcome::Wired(_) | RefreshOutcome::Refreshed(_)
+                );
                 // MCP registration leg (CHR-013; SL-271): report a fresh wire or a
                 // stale refresh for the harness's own file (`.mcp.json` for Claude,
                 // `.codex/config.toml` for Codex); a foreign / uninterpretable entry
@@ -3220,6 +3302,17 @@ pub(crate) fn wire(
                         writeln!(stdout, "{snippet}")?;
                     }
                     RefreshOutcome::None => {}
+                }
+                // The trust caveat prints once per arm — only when the activation
+                // notice (which already carries the trust step) did not print it
+                // (design sec-5.4). A Wired report is a statement about the file,
+                // never about activation.
+                if matches!(h, Harness::Codex) && mcp_written && !dry_run && !codex_hook_written {
+                    writeln!(
+                        stdout,
+                        "  {}: note — codex loads project-scoped config only for projects you have trusted; an untrusted project's layer is skipped silently, so this registration is not active until you trust the project.",
+                        harness_label(h)
+                    )?;
                 }
                 // Append-system symlink leg (PHASE-02): pi creates a symlink so
                 // the boot snapshot is ingested as append-only context. Claude
@@ -7239,13 +7332,33 @@ env_vars = ["DOCTRINE_BIN"]
 
     const FAKE_EXEC: &str = "/fake/doctrine";
 
+    /// A capture runner reporting the hooks feature ENABLED — the default for
+    /// wire-level tests that do not exercise the probe.
+    #[derive(Debug)]
+    struct FakeCaptureRunner;
+
+    impl install::CommandRunner for FakeCaptureRunner {
+        fn run_capture(
+            &self,
+            _program: &str,
+            _args: &[&str],
+            _cwd: &Path,
+        ) -> anyhow::Result<install::Capture> {
+            Ok(install::Capture {
+                success: true,
+                stdout: "hooks  stable  true\n".to_string(),
+                stderr: String::new(),
+            })
+        }
+    }
+
     #[test]
     fn wire_adds_import_and_hook_then_is_idempotent() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let exec = Path::new(FAKE_EXEC);
 
-        wire(root, exec, &[Harness::Claude], false).unwrap();
+        wire(root, exec, &[Harness::Claude], false, &FakeCaptureRunner).unwrap();
 
         let claude_md = fs::read_to_string(root.join("CLAUDE.md")).unwrap();
         assert_eq!(claude_md.matches(REF).count(), 1, "import ref wired once");
@@ -7261,7 +7374,7 @@ env_vars = ["DOCTRINE_BIN"]
         assert_eq!(parsed["worktree"]["baseRef"], Value::String("head".into()));
 
         // re-run: import Present, still no hook, baseRef idempotent.
-        wire(root, exec, &[Harness::Claude], false).unwrap();
+        wire(root, exec, &[Harness::Claude], false, &FakeCaptureRunner).unwrap();
         let claude_md = fs::read_to_string(root.join("CLAUDE.md")).unwrap();
         assert_eq!(
             claude_md.matches(REF).count(),
@@ -7281,7 +7394,14 @@ env_vars = ["DOCTRINE_BIN"]
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
 
-        wire(root, Path::new(FAKE_EXEC), &[Harness::Claude], true).unwrap();
+        wire(
+            root,
+            Path::new(FAKE_EXEC),
+            &[Harness::Claude],
+            true,
+            &FakeCaptureRunner,
+        )
+        .unwrap();
         assert!(!root.join("CLAUDE.md").exists(), "dry-run wrote no import");
         assert!(
             !root.join(SETTINGS_PROJECT_REL).exists(),
@@ -7305,6 +7425,7 @@ env_vars = ["DOCTRINE_BIN"]
             Path::new(FAKE_EXEC),
             &[Harness::Claude, Harness::Codex],
             false,
+            &FakeCaptureRunner,
         )
         .unwrap();
 
@@ -8453,7 +8574,7 @@ weight = 0
     #[test]
     fn codex_activation_notice_names_all_three_hooks() {
         let mut buf = Vec::new();
-        write_codex_activation(&mut buf, &Harness::Codex, "").unwrap();
+        write_codex_activation(&mut buf, &Harness::Codex, "", false, None).unwrap();
         let text = String::from_utf8(buf).unwrap();
         assert!(text.contains("SessionStart"), "{text}");
         assert!(text.contains("Bash"), "{text}");
@@ -8462,6 +8583,117 @@ weight = 0
             !text.contains("trust the doctrine hook."),
             "the singular form is gone: {text}"
         );
+    }
+
+    #[test]
+    fn codex_activation_notice_is_dry_run_and_probe_aware() {
+        // Dry run: no probe (None), step 1 prints, and the verb is "would write".
+        let mut buf = Vec::new();
+        write_codex_activation(&mut buf, &Harness::Codex, "[dry-run] ", true, None).unwrap();
+        let text = String::from_utf8(buf).unwrap();
+        assert!(text.contains("would write"), "{text}");
+        assert!(!text.contains("wrote "), "no 'wrote' under dry run: {text}");
+        assert!(
+            text.contains("Ensure [features] hooks = true"),
+            "step 1 prints with no probe: {text}"
+        );
+
+        // Enabled probe: step 1 is omitted, the rest still prints.
+        let mut buf = Vec::new();
+        let state = Some(HooksState::Enabled);
+        write_codex_activation(&mut buf, &Harness::Codex, "", false, state).unwrap();
+        let text = String::from_utf8(buf).unwrap();
+        assert!(
+            !text.contains("Ensure [features] hooks = true"),
+            "step 1 omitted when Enabled: {text}"
+        );
+        assert!(text.contains("Start codex"), "step 2 still prints: {text}");
+    }
+
+    #[test]
+    fn parse_codex_features_reads_the_hooks_row() {
+        assert_eq!(parse_codex_features("hooks  stable  true\n"), Some(true));
+        assert_eq!(parse_codex_features("hooks  stable  false\n"), Some(false));
+        assert_eq!(
+            parse_codex_features("name  state  value\nhooks  x  true\n"),
+            Some(true)
+        );
+        assert_eq!(parse_codex_features("hooks  stable  maybe\n"), None);
+        assert_eq!(parse_codex_features("other  x  true\n"), None);
+        assert_eq!(parse_codex_features(""), None);
+    }
+
+    /// A runner returning one fixed capture (or a spawn error).
+    #[derive(Debug)]
+    struct FixedCapture(Result<install::Capture, &'static str>);
+
+    impl install::CommandRunner for FixedCapture {
+        fn run_capture(
+            &self,
+            _program: &str,
+            _args: &[&str],
+            _cwd: &Path,
+        ) -> anyhow::Result<install::Capture> {
+            match &self.0 {
+                Ok(c) => Ok(c.clone()),
+                Err(e) => anyhow::bail!("{e}"),
+            }
+        }
+    }
+
+    fn capture(success: bool, stdout: &str, stderr: &str) -> install::Capture {
+        install::Capture {
+            success,
+            stdout: stdout.to_string(),
+            stderr: stderr.to_string(),
+        }
+    }
+
+    #[test]
+    fn codex_hooks_state_degrades_to_named_unknown() {
+        let root = Path::new("/proj");
+        let enabled = FixedCapture(Ok(capture(true, "hooks  stable  true\n", "")));
+        assert_eq!(codex_hooks_state(&enabled, root), HooksState::Enabled);
+        let disabled = FixedCapture(Ok(capture(true, "hooks  stable  false\n", "")));
+        assert_eq!(codex_hooks_state(&disabled, root), HooksState::Disabled);
+        // success with no parseable row -> Unknown, non-empty reason.
+        let empty = FixedCapture(Ok(capture(true, "", "")));
+        assert!(matches!(codex_hooks_state(&empty, root), HooksState::Unknown(r) if !r.is_empty()));
+        // non-zero exit that still printed a parseable row -> the parsed answer.
+        let nonzero = FixedCapture(Ok(capture(false, "hooks  stable  true\n", "warn")));
+        assert_eq!(codex_hooks_state(&nonzero, root), HooksState::Enabled);
+        // a failure carrying a useful reason -> Unknown naming it.
+        let failed = FixedCapture(Ok(capture(false, "", "boom: no config\n")));
+        assert_eq!(
+            codex_hooks_state(&failed, root),
+            HooksState::Unknown("boom: no config".to_string())
+        );
+        // a spawn error -> Unknown, non-empty.
+        let spawn_err = FixedCapture(Err("no such file or directory"));
+        assert!(
+            matches!(codex_hooks_state(&spawn_err, root), HooksState::Unknown(r) if r.contains("no such file"))
+        );
+    }
+
+    #[test]
+    fn codex_hooks_state_probes_the_install_root() {
+        #[derive(Debug)]
+        struct CwdRunner(std::sync::Mutex<Option<PathBuf>>);
+        impl install::CommandRunner for CwdRunner {
+            fn run_capture(
+                &self,
+                _program: &str,
+                _args: &[&str],
+                cwd: &Path,
+            ) -> anyhow::Result<install::Capture> {
+                *self.0.lock().unwrap() = Some(cwd.to_path_buf());
+                Ok(capture(true, "hooks  stable  true\n", ""))
+            }
+        }
+        let runner = CwdRunner(std::sync::Mutex::new(None));
+        let root = Path::new("/the/install/root");
+        assert_eq!(codex_hooks_state(&runner, root), HooksState::Enabled);
+        assert_eq!(runner.0.lock().unwrap().as_deref(), Some(root));
     }
 
     // =======================================================================
