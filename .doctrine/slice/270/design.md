@@ -104,10 +104,10 @@ a finding is listed iff
 
 - it is **severe**: severity is not known `minor` or `nit` (an unknown severity
   counts, as `gates_as_blocker` does for blockers);
-- it is **disposed**: status is known `answered`, `contested` or `verified`.
-  An unknown status is excluded: `vocabulary_defects` already discloses it and
-  no review verb can act on it. A finding already listed as an undisposed
-  blocker is excluded, so no finding is reported twice (RV-400 F-7); and
+- it is **disposed**: status is not known `open` or `withdrawn`, so an
+  out-of-vocabulary status counts, failing closed (RV-400 F-11). A finding
+  already listed as an undisposed blocker is excluded, so no finding is
+  reported twice (RV-400 F-7); and
 - it is **unrouted**, for one of three reasons, each named in the entry:
   - `no route` — the `route` field is absent;
   - `legacy route: prefix` — absent, and the disposition starts `route:`;
@@ -123,7 +123,8 @@ F-7 (unknown route owner-fix)* and is capped like the other list causes
 (`carries_a_list`, `cut`). Its remedy names the repair per status:
 answered, `review amend <RV> --finding F-n --route <route> --note …`;
 contested, dispose again with `--route`; verified, the raiser reopens and the
-responder disposes again with `--route`.
+responder disposes again with `--route`; an out-of-vocabulary status, repair
+the status by hand, as the blocker check already requires.
 
 **Not covered, on purpose.** Findings on superseded passes and findings
 disposed after lock (the lock reads the current pass, once); open findings (open blockers already refuse; open
@@ -139,7 +140,7 @@ Amended on RV-400 F-1, F-3, F-4, F-5 and F-9. In short:
 
 | item | rule |
 |---|---|
-| eligibility | the first 3 code-changing slices whose design run mints a review pass after the window opens, in minting order; waived reviews recorded and skipped; parked or abandoned slices stay in, with status |
+| eligibility | the window opens at the first passing build-floor check after SL-270 closes; then the first 3 code-changing slices whose design run mints a review pass after it, in minting order; waived reviews recorded and skipped; parked or abandoned slices stay in, with status |
 | build floor | at window open and each eligible design start: CLI help and the MCP `review_dispose` schema list six routes (they carry the embedded `reviewing.md`); `doctrine install` run at window open and projections recorded current. A failure holds the slice |
 | per finding | route; instrument evidence produced (instrument routes); L - the repair or obligation drew a related finding or contest in the ledger, a later design pass, or the audit ledger, up to slice close |
 | per ledger | rounds, contests (journal), artefact-prose findings, findings against repair text, design growth, later audit findings, completion |
@@ -155,8 +156,8 @@ pass on the day the window opens.
 | id | mode | asserts |
 |---|---|---|
 | VT-1 | test | `Route::parse` accepts exactly the six; `owner-fix` is refused on write with the known list; lockstep with `ROUTES` holds |
-| VT-2 | test | `unrouted_severe` lists an answered major with no route (`no route`), an answered blocker whose disposition starts `route:` (`legacy`), a verified major with route `owner-fix` (`unknown route`), and a contested major with no route; omits a routed one, an open one, a withdrawn one, a minor, and an open route-less blocker (already an undisposed blocker) |
-| VT-3 | test | an unknown severity counts as severe; an unknown status is excluded |
+| VT-2 | test | `unrouted_severe` lists an answered major with no route (`no route`), an answered blocker whose disposition starts `route:` (`legacy`), a verified major with route `owner-fix` (`unknown route`), and a contested major with no route; omits a routed one, an open one, a withdrawn one, a minor, and a contested route-less blocker (already an undisposed blocker, so listed once, there) |
+| VT-3 | test | an unknown severity counts as severe; a route-less major with an unknown status is listed (fail closed) |
 | VT-4 | test | the lock refuses on a concluded, blocker-free pass with one unrouted major, naming it; the same run locks once the finding is amended with a route |
 | VT-5 | test | `Cause::SevereFindingsUnrouted` is a capped list cause (joins `carries_a_list`) |
 | VT-6 | test | the MCP `review_dispose` schema's route enum equals the six |

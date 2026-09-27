@@ -17,12 +17,17 @@ act = "conclude"
 role = "raiser"
 note = "SL-270 design sec-1..6 and scope; DEC-326/327/330/331/333/334, DEC-276, QUE-224, CHR-082; ADR-007 D-C5, ADR-001 tiers, SPEC-032 vocab table; RFC-026 P10, E12 report (L row), E14 report (kappa by population); code: review_ledger vocab.rs Route/ROUTES, derive.rs vocabulary_defects, gate.rs undisposed_blockers/PassFacts/observe_pass, transition.rs can, review verbs.rs effective_route/gate, commands/design.rs observed_review, design_run gate.rs disposition_causes/Cause/carries_a_list, attestation.rs ReviewPass, prompt.rs embedding, mcp tools.rs route enum; owner-fix sweep across src, tests, install, plugins, .agents, memory, spec, adr."
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Round 2: read all 10 responses (review show --json) against amended DEC-326/330/331/334, REV-065, design sec-2..sec-6 and SL-270 scope diagram; checked the F-7 exclusion against undisposed_blockers, verbs.rs gate, and commands/design.rs disclosure path. F-5 left answered (control route)."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-270"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Lock check does not force 100% route presence on the trial population DEC-334 counts"
 detail = """
@@ -51,9 +56,14 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted, and not widened. DEC-334 item 6 now checks presence only on its gated population, severe findings disposed on the final review pass at lock, where the lock forces 100 percent. Findings open at lock, on superseded passes, or disposed after lock are counted and reported apart, never folded into presence. Design sec-6 records it as a risk and carries a follow-up to audit, per the owner 2026-09-27: decide whether this is the behaviour wanted long-term, or needs closer review or a backlog item."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "DEC-334 items 6 now scopes presence to the gated population and reports the rest apart; design sec-3 Not covered and sec-6 name superseded passes and post-lock dispositions."
+
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Route-set change and legacy-route gating contradict ADR-007 D-C5 and SPEC-032; no revision named"
 detail = """
@@ -81,9 +91,14 @@ disposition = "fix-now"
 route = "owner-fix"
 response = "Accepted. REV-065 (approved by the owner 2026-09-27, applied at reconciliation) modifies ADR-007 D-C5 and SPEC-032: six routes, and a stated exception that the design-run lock gates on route while the ledger itself still does not. DEC-331 narrowed to facet scope; DEC-330 names REV-065. Surviving owner: ADR-007 and SPEC-032 after REV-065. Class swept: every governance statement of the route set (ADR-007 D-C5, SPEC-032 vocabulary table and both gates-nothing sentences)."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "REV-065 approved, amends ADR-007 D-C5 and SPEC-032 vocab row and both gates-nothing sentences; DEC-331 narrowed to facet scope."
+
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Headline L has a missing baseline (E11 never measured L) and an undefined scope and window"
 detail = """
@@ -110,6 +125,11 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted. DEC-334 item 3 defines L as a related finding or contest drawn by the repair or instrument obligation in the same ledger, a later design pass, or the slice audit ledger, up to slice close, and says why same-ledger L alone would fall by construction. Item 6 names E12 as the only baseline (E11 did not measure L), states the scope difference, and calls the headline descriptive."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "DEC-334 item 3 defines L scope (ledger, later pass, audit ledger) and window (slice close), item 6 names E12 as sole baseline and calls the headline descriptive."
+
 [[finding]]
 id = "F-4"
 status = "answered"
@@ -128,7 +148,7 @@ What would settle it. DEC-334 names the ordering event (e.g. the design run's re
 """
 disposition = "fix-now"
 route = "review"
-response = "Accepted. DEC-334 item 1: eligible when the slice design run mints a review pass after the window opens, the first 3 in minting order; in-flight slices are decided by that same test; waived reviews recorded and skipped; parked or abandoned slices stay in the count with their status."
+response = "Accepted. DEC-334 item 1 and design sec-4 fix the opening event: the window opens at the first build-floor check that passes after SL-270 closes, recorded with its timestamp by CHR-082. Eligibility is then decided by pass minting after that moment, so the chore owner picks nothing."
 
 [[finding.turn]]
 act = "raise"
@@ -140,6 +160,20 @@ role = "responder"
 disposition = "fix-now"
 route = "review"
 response = "Accepted. DEC-334 item 1: eligible when the slice design run mints a review pass after the window opens, the first 3 in minting order; in-flight slices are decided by that same test; waived reviews recorded and skipped; parked or abandoned slices stay in the count with their status."
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+Item 1 now keys eligibility on pass minting after the window opens, which settles ordering and in-flight slices. But the window-open moment itself is not fixed: DEC-334 item 1 says only that CHR-082 records the moment, and CHR-082 says it opens when SL-270 closes without naming the event. The chore owner can therefore choose when to open, and so which slices mint first, while those slices are visible. To settle: define window open as a fixed event, e.g. the first passing window-open build-floor check after SL-270 closes, recorded before any later pass mint is read, so no one chooses the moment.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted. DEC-334 item 1 and design sec-4 fix the opening event: the window opens at the first build-floor check that passes after SL-270 closes, recorded with its timestamp by CHR-082. Eligibility is then decided by pass minting after that moment, so the chore owner picks nothing."
 
 [[finding]]
 id = "F-5"
@@ -170,7 +204,7 @@ response = "Accepted. The floor now reads: CLI help and the MCP review_dispose s
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Route sweep omits golden tests, a teaching memory and the closed-five sentences"
 detail = """
@@ -198,6 +232,11 @@ disposition = "fix-now"
 route = "owner-fix"
 response = "Accepted. Design sec-2 adds tests/e2e_review_golden.rs, memory mem_01a0d91d7a0d75f1853c505d08237451, the exactly-five and closed-five sentences at reviewing.md 118 and 190, and ADR-007/SPEC-032 via REV-065; both files added as selectors. VA-1 widened to a repo-wide search for owner-fix and a five-route count, with named exclusions. Duplicate removed: the old five-route statements. Class swept: every site that states the route set."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "sec-2 lists golden tests, the memory, reviewing.md 118 and 190, REV-065; VA-1 widened repo-wide with named exclusions."
+
 [[finding]]
 id = "F-7"
 status = "answered"
@@ -211,8 +250,8 @@ The remedy text covers answered (amend) and verified (reopen, re-dispose) but no
 What would settle it. Either define the new predicate's disposed set so a finding already in undisposed_blockers is not also listed (or state that double-listing is intended and test it), name the contested repair in the remedy, and state the hand-edit path for an out-of-vocabulary status.
 """
 disposition = "fix-now"
-route = "review"
-response = "Accepted. DEC-326 and design sec-3: disposed means known answered, contested or verified; an unknown status is excluded (disclosed already, and no verb can act on it); a finding already listed as an undisposed blocker is excluded. The remedy names the repair per status, including contested. VT-2 and VT-3 updated."
+route = "control"
+response = "Accepted. The exclusion now has a test. Fault the check must reject: a predicate that lists a contested route-less blocker in both the blocker list and the route list. VT-2 asserts a contested route-less blocker is omitted from unrouted_severe (it is listed once, as an undisposed blocker) and a contested route-less major is listed. Host constraint: the phase that adds unrouted_severe, beside the existing undisposed_blockers tests in src/review/tests.rs."
 
 [[finding.turn]]
 act = "raise"
@@ -225,9 +264,23 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted. DEC-326 and design sec-3: disposed means known answered, contested or verified; an unknown status is excluded (disclosed already, and no verb can act on it); a finding already listed as an undisposed blocker is excluded. The remedy names the repair per status, including contested. VT-2 and VT-3 updated."
 
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+The per-status remedy and the double-listing exclusion settle the substance. The new exclusion is untested, though: VT-2's omit case is an open route-less blocker, which the disposed clause already excludes, so no row exercises the rule that a finding already listed as an undisposed blocker is left out. The only live case is a contested route-less blocker (it appears in undisposed_blockers and would otherwise match the new predicate). To settle: VT-2 adds a contested route-less blocker that is listed by undisposed_blockers and omitted by unrouted_severe, and a contested route-less major that is listed by unrouted_severe.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "control"
+response = "Accepted. The exclusion now has a test. Fault the check must reject: a predicate that lists a contested route-less blocker in both the blocker list and the route list. VT-2 asserts a contested route-less blocker is omitted from unrouted_severe (it is listed once, as an undisposed blocker) and a contested route-less major is listed. Host constraint: the phase that adds unrouted_severe, beside the existing undisposed_blockers tests in src/review/tests.rs."
+
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "DEC-330 claims vocabulary_defects discloses legacy routes; it does not (contradicts DEC-326)"
 detail = """
@@ -252,9 +305,14 @@ disposition = "fix-now"
 route = "owner-fix"
 response = "Accepted. DEC-330 corrected: a legacy owner-fix stays readable and verbatim, and the lock refusal is what names it; vocabulary_defects covers status and severity only. Surviving owner: DEC-326. Class swept: DEC-330, DEC-326 and design sec-2 and sec-3 now agree."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "DEC-330 corrected to match DEC-326: vocabulary_defects does not flag route; lock refusal names it."
+
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Kappa baseline 0.44-0.56 mixes in the audit/code-review population"
 detail = """
@@ -277,9 +335,14 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted. DEC-334 item 5: kappa compared with 0.44, the design-review value; the three prompt differences from E14 are named and a kappa change is not attributed to any one of them."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "DEC-334 item 5 and sec-4 compare against 0.44 and name the three prompt differences. Residual nit: sec-6 Rater noise still quotes 0.44-0.56 as a general noise range, which is accurate as a statement about E14 overall, so not contested."
+
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Scope diagram names the trial report E14; it is E15"
 detail = """
@@ -299,6 +362,39 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = "Fixed: the scope diagram now reads RFC-026 E15 via CHR-082, and shows the current steps."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Scope diagram now reads E15 via CHR-082."
+
+[[finding]]
+id = "F-11"
+status = "answered"
+severity = "minor"
+title = "F-7 repair makes an unknown-status major fail open at the lock, against DEC-326 rationale"
+detail = """
+Observation. The F-7 repair changed DEC-326 and design sec-3 so that an out-of-vocabulary status is excluded from the route check. For a blocker this is harmless: undisposed_blockers still holds the edge on an unknown status. For a major (or unknown severity) with an unknown status and no route, nothing refuses: the lock passes with an unrouted severe finding. That is fail-open, and it contradicts DEC-326's own rationale, which is unchanged: "Failing closed on degraded values keeps a missing route a datum rather than a silence". The stated grounds are:
+- "no review verb can act on it". True (src/review/verbs.rs:664-672), but the same holds for an unknown-status blocker, which the lock already refuses, with a hand edit as the repair.
+- "vocabulary_defects already discloses it". On the design-run path the defect warning is printed only when apply is given a disposition (src/commands/design.rs:3174-3176, "on the admission path only"). An evaluation of the lock against a stored disposition prints nothing there. So disclosure at the lock is not guaranteed.
+DEC-334 item 6's gated population ("disposed on the final review pass") also silently omits this class: it is neither in the gate nor among the reported-apart classes (open at lock, superseded passes, post-lock).
+
+What would settle it. Either count an unknown-status severe finding as unrouted (fail closed, repair by hand edit, named in the refusal, as the blocker check already does), and keep the double-listing exclusion for blockers; or keep the exclusion but amend DEC-326's rationale to state the fail-open exception and add the class to DEC-334 item 6's reported-apart list. VT-3 then asserts whichever is chosen for a major with unknown status.
+"""
+disposition = "fix-now"
+route = "review"
+response = "Accepted: fail closed. DEC-326 and design sec-3 now count an out-of-vocabulary status as disposed, so a route-less major with one refuses the lock; the remedy is to repair the status by hand, as the blocker check already requires. VT-3 asserts it. This restores agreement with DEC-326 rationale and puts the class inside DEC-334 gated population, so item 6 needs no separate line."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted: fail closed. DEC-326 and design sec-3 now count an out-of-vocabulary status as disposed, so a route-less major with one refuses the lock; the remedy is to repair the status by hand, as the blocker check already requires. VT-3 asserts it. This restores agreement with DEC-326 rationale and puts the class inside DEC-334 gated population, so item 6 needs no separate line."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
