@@ -162,7 +162,7 @@ fn vt1_initialize_handshake() {
     kill(child);
 }
 
-// ── VT-2: tools/list returns 22 tools ────────────────────────────────────
+// ── VT-2: tools/list returns 31 tools ────────────────────────────────────
 
 #[test]
 fn vt2_tools_list() {
@@ -184,7 +184,8 @@ fn vt2_tools_list() {
     );
     let tools = resp["result"]["tools"].as_array().expect("tools array");
     // 30 → 29 at SL-254 PHASE-06: `worker_commit` retired with the claude dispatch arm.
-    assert_eq!(tools.len(), 29, "expected 29 tools, got {tools:?}");
+    // 29 → 31 at SL-268 PHASE-05: `review_amend`, `review_reopen` added.
+    assert_eq!(tools.len(), 31, "expected 31 tools, got {tools:?}");
 
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for expected in &[
@@ -193,8 +194,10 @@ fn vt2_tools_list() {
         "review_show",
         "review_raise",
         "review_dispose",
+        "review_amend",
         "review_verify",
         "review_contest",
+        "review_reopen",
         "review_withdraw",
         "review_status",
         "review_prime",
@@ -366,7 +369,7 @@ fn vt4_full_cycle() {
         serde_json::json!({
             "reference": review_id.to_string(),
             "finding": finding_id,
-            "disposition": "fixed",
+            "disposition": "fix-now",
             "response": "Fixed the issue.",
             "as": "responder"
         }),
@@ -399,12 +402,167 @@ fn vt4_full_cycle() {
         "finding should be verified in TOML:\n{toml_content}"
     );
     assert!(
-        toml_content.contains("disposition = \"fixed\""),
+        toml_content.contains("disposition = \"fix-now\""),
         "disposition should be in TOML:\n{toml_content}"
     );
     assert!(
         toml_content.contains("response = \"Fixed the issue.\""),
         "response should be in TOML:\n{toml_content}"
+    );
+
+    kill(child);
+}
+
+// ── SL-268 T11 (PHASE-03 VT-6): MCP review_list carries warnings ─────────
+
+/// The MCP `review_list` tool carries the ledger's closed-vocabulary defects
+/// as a structured `warnings` field (SL-268 D15, DEC-319, RV-396 `F-2`) —
+/// wired in tranche A (`ReviewOutput::Listed.warnings`, `list_rows`), and
+/// proved here over the built binary rather than only the in-process unit
+/// suite. As a control, the SAME call before the hand-edit has no `warnings`
+/// key at all (`skip_serializing_if` on an empty vec).
+#[test]
+fn review_list_carries_warnings() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Test Slice", "test-slice");
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let _ = call(
+        &mut stdin,
+        &mut reader,
+        "initialize",
+        Some(&serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "test", "version": "1.0" }
+        })),
+    );
+
+    // review_new + review_raise (mirrors vt4_full_cycle's opening steps).
+    let params = tools_call_params(
+        "review_new",
+        serde_json::json!({ "facet": "design", "target": "SL-001" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    let review_id = out["Created"]["id"].as_u64().expect("review id") as u32;
+
+    let params = tools_call_params(
+        "review_raise",
+        serde_json::json!({
+            "reference": review_id.to_string(),
+            "severity": "major",
+            "title": "Test Finding",
+            "detail": "This is a test finding detail.",
+            "as": "raiser"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "review_raise: {resp:?}");
+
+    // Control: before the hand-edit, `review_list` carries no `warnings` key.
+    let params = tools_call_params("review_list", serde_json::json!({}));
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    assert!(
+        out["Listed"].get("warnings").is_none(),
+        "a clean ledger carries no warnings key: {out}"
+    );
+
+    // Hand-edit the ledger's severity to an out-of-vocabulary value.
+    let ledger_path = root.join(".doctrine/review/001/review-001.toml");
+    let toml_content = fs::read_to_string(&ledger_path).unwrap();
+    let edited = toml_content.replacen("severity = \"major\"", "severity = \"crit\"", 1);
+    assert_ne!(
+        toml_content, edited,
+        "the hand-edit must actually change the ledger"
+    );
+    fs::write(&ledger_path, edited).unwrap();
+
+    let params = tools_call_params("review_list", serde_json::json!({}));
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    let warnings = out["Listed"]["warnings"]
+        .as_array()
+        .expect("warnings is an array once the ledger is defective");
+    assert_eq!(
+        warnings,
+        &vec![serde_json::json!({
+            "rv": "RV-001",
+            "finding": "F-1",
+            "field": "severity",
+            "raw": "crit",
+            "effect": "gating as blocker",
+        })],
+        "review_list names the defect: {out}"
+    );
+
+    kill(child);
+}
+
+/// VT-3 (SL-268 PHASE-08, sec-8 VT 13 prime arm): D11's degrade path over the
+/// MCP arm. `seed_slice` writes NO `[[selector]]` rows, so `SL-001` is a
+/// ready-made zero-selector target — `review_prime` must DEGRADE rather than
+/// return a tool error, carrying a named `degraded` reason and no `cleared`
+/// key (there is no earlier cache to remove).
+#[test]
+fn review_prime_carries_degraded() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Test Slice", "test-slice");
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let _ = call(
+        &mut stdin,
+        &mut reader,
+        "initialize",
+        Some(&serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "test", "version": "1.0" }
+        })),
+    );
+
+    let params = tools_call_params(
+        "review_new",
+        serde_json::json!({ "facet": "design", "target": "SL-001" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    let review_id = out["Created"]["id"].as_u64().expect("review id") as u32;
+
+    let params = tools_call_params(
+        "review_prime",
+        serde_json::json!({ "reference": review_id.to_string() }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "review_prime: {resp:?}");
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+
+    let degraded = out["Primed"]["degraded"]
+        .as_str()
+        .expect("degraded reason string");
+    assert!(
+        degraded.contains("declares no selectors"),
+        "degraded reason: {degraded}"
+    );
+    assert_eq!(out["Primed"]["tracked_count"].as_u64(), Some(0));
+    assert!(
+        out["Primed"].get("cleared").is_none(),
+        "no earlier cache to clear: {out}"
     );
 
     kill(child);
@@ -627,7 +785,7 @@ fn vt9_state_mismatch() {
         serde_json::json!({
             "reference": "1",
             "finding": "F-1",
-            "disposition": "fixed",
+            "disposition": "fix-now",
             "response": "done",
             "as": "responder"
         }),
@@ -1691,6 +1849,525 @@ fn observation_record_escapes_hostile_input_in_refusals() {
     assert!(
         !detail.contains('\n'),
         "the refusal is a single logical line — no forged line: {detail:?}"
+    );
+
+    kill(child);
+}
+
+// ── SL-268 PHASE-04 (VT-5): contest/withdraw notes land in the turn journal ──
+
+/// Spawn a handshaken server over a fresh RV-001 whose F-1 is `answered`
+/// (raised, then disposed) — the start state for the note round-trips.
+fn answered_f1_session(
+    root: &Path,
+) -> (
+    Child,
+    std::process::ChildStdin,
+    BufReader<std::process::ChildStdout>,
+) {
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Test Slice", "test-slice");
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let mut reader = BufReader::new(child.stdout.take().expect("stdout"));
+    let init = serde_json::json!({
+        "protocolVersion": "2024-11-05",
+        "capabilities": {},
+        "clientInfo": { "name": "test", "version": "1.0" }
+    });
+    let _ = call(&mut stdin, &mut reader, "initialize", Some(&init));
+    for (tool, args) in [
+        (
+            "review_new",
+            serde_json::json!({ "facet": "design", "target": "SL-001" }),
+        ),
+        (
+            "review_raise",
+            serde_json::json!({ "reference": "1", "severity": "minor", "title": "T", "detail": "D" }),
+        ),
+        (
+            "review_dispose",
+            serde_json::json!({
+                "reference": "1", "finding": "F-1", "disposition": "fix-now", "response": "done"
+            }),
+        ),
+    ] {
+        let resp = call(
+            &mut stdin,
+            &mut reader,
+            "tools/call",
+            Some(&tools_call_params(tool, args)),
+        );
+        assert!(resp.get("error").is_none(), "{tool}: {resp:?}");
+    }
+    (child, stdin, reader)
+}
+
+fn ledger_text(root: &Path) -> String {
+    fs::read_to_string(root.join(".doctrine/review/001/review-001.toml")).unwrap()
+}
+
+/// F-1's turn rows, read back from the authored ledger.
+fn f1_turns(root: &Path) -> Vec<Value> {
+    let doc: toml::Value = toml::from_str(&ledger_text(root)).unwrap();
+    let turns = doc["finding"][0]["turn"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    turns
+        .into_iter()
+        .map(|t| serde_json::to_value(t).unwrap())
+        .collect()
+}
+
+#[test]
+fn review_contest_note_round_trips() {
+    let dir = tmp();
+    let root = dir.path();
+    let (child, mut stdin, mut reader) = answered_f1_session(root);
+
+    // A missing note and a blank note are both NOTE_REQUIRED, and write nothing.
+    let before = ledger_text(root);
+    for args in [
+        serde_json::json!({ "reference": "1", "finding": "F-1" }),
+        serde_json::json!({ "reference": "1", "finding": "F-1", "note": "" }),
+    ] {
+        let params = tools_call_params("review_contest", args);
+        let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+        let err = resp.get("error").expect("should have error");
+        assert_eq!(err["code"], -32602, "{resp:?}");
+        assert_eq!(err["data"]["code"], "NOTE_REQUIRED", "{resp:?}");
+        assert_eq!(err["data"]["act"], "contest", "{resp:?}");
+    }
+    assert_eq!(
+        ledger_text(root),
+        before,
+        "a refused contest writes nothing"
+    );
+
+    let params = tools_call_params(
+        "review_contest",
+        serde_json::json!({ "reference": "1", "finding": "F-1", "note": "the repair is partial" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+    let contest = f1_turns(root)
+        .into_iter()
+        .find(|t| t["act"] == "contest")
+        .expect("a contest turn");
+    assert_eq!(contest["role"], "raiser");
+    assert_eq!(contest["note"], "the repair is partial");
+
+    kill(child);
+}
+
+/// SL-268 PHASE-06 VT-5 (EX-5): `review_conclude` requires a non-empty `basis`
+/// (the schema lists it; a missing or blank one is NOTE_REQUIRED with
+/// `act = "conclude"`), and a present one lands as the conclude turn's note.
+#[test]
+fn review_conclude_requires_basis() {
+    let dir = tmp();
+    let root = dir.path();
+    let (child, mut stdin, mut reader) = answered_f1_session(root);
+
+    let before = ledger_text(root);
+    for args in [
+        serde_json::json!({ "reference": "1" }),
+        serde_json::json!({ "reference": "1", "basis": "" }),
+    ] {
+        let params = tools_call_params("review_conclude", args);
+        let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+        let err = resp.get("error").expect("should have error");
+        assert_eq!(err["code"], -32602, "{resp:?}");
+        assert_eq!(err["data"]["code"], "NOTE_REQUIRED", "{resp:?}");
+        assert_eq!(err["data"]["act"], "conclude", "{resp:?}");
+    }
+    assert_eq!(
+        ledger_text(root),
+        before,
+        "a refused conclude writes nothing"
+    );
+
+    let params = tools_call_params(
+        "review_conclude",
+        serde_json::json!({ "reference": "1", "basis": "examined X" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+    let doc: toml::Value = toml::from_str(&ledger_text(root)).unwrap();
+    assert_eq!(doc["review"]["concluded"].as_bool(), Some(true));
+    let turns = doc["review"]["turn"].as_array().expect("review turns");
+    let last = serde_json::to_value(turns.last().unwrap()).unwrap();
+    assert_eq!(last["act"], "conclude");
+    assert_eq!(last["role"], "raiser");
+    assert_eq!(last["note"], "examined X");
+
+    kill(child);
+}
+
+#[test]
+fn review_withdraw_note_round_trips() {
+    let dir = tmp();
+    let root = dir.path();
+    let (child, mut stdin, mut reader) = answered_f1_session(root);
+
+    let params = tools_call_params(
+        "review_withdraw",
+        serde_json::json!({ "reference": "1", "finding": "F-1", "note": "superseded by F-9" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+    let last = f1_turns(root).pop().expect("a withdraw turn");
+    assert_eq!(last["act"], "withdraw");
+    assert_eq!(last["note"], "superseded by F-9");
+
+    kill(child);
+}
+
+// ── SL-268 PHASE-05 (VT-5): amend, reopen, and dispose's `--route` ───────────
+
+/// F-1's current status, read back from the authored ledger.
+fn f1_status(root: &Path) -> String {
+    let doc: toml::Value = toml::from_str(&ledger_text(root)).unwrap();
+    doc["finding"][0]["status"].as_str().unwrap().to_owned()
+}
+
+#[test]
+fn review_amend_round_trips() {
+    let dir = tmp();
+    let root = dir.path();
+    let (child, mut stdin, mut reader) = answered_f1_session(root);
+
+    // A missing note and a blank note are both NOTE_REQUIRED, and write nothing.
+    let before = ledger_text(root);
+    for args in [
+        serde_json::json!({ "reference": "1", "finding": "F-1", "response": "R2" }),
+        serde_json::json!({ "reference": "1", "finding": "F-1", "response": "R2", "note": "" }),
+    ] {
+        let params = tools_call_params("review_amend", args);
+        let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+        let err = resp.get("error").expect("should have error");
+        assert_eq!(err["code"], -32602, "{resp:?}");
+        assert_eq!(err["data"]["code"], "NOTE_REQUIRED", "{resp:?}");
+        assert_eq!(err["data"]["act"], "amend", "{resp:?}");
+    }
+    assert_eq!(ledger_text(root), before, "a refused amend writes nothing");
+
+    // A valid amend journals note, disposition, route and response, and the
+    // finding carries the new answer.
+    let params = tools_call_params(
+        "review_amend",
+        serde_json::json!({
+            "reference": "1", "finding": "F-1", "response": "R2", "note": "n1",
+            "disposition": "tolerated", "route": "probe"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    assert_eq!(out["Amended"]["finding_id"].as_str().unwrap(), "F-1");
+    let amend = f1_turns(root)
+        .into_iter()
+        .find(|t| t["act"] == "amend")
+        .expect("an amend turn");
+    assert_eq!(amend["role"], "responder");
+    assert_eq!(amend["note"], "n1");
+    assert_eq!(amend["disposition"], "tolerated");
+    assert_eq!(amend["route"], "probe");
+    assert_eq!(amend["response"], "R2");
+    assert_eq!(f1_status(root), "answered");
+
+    kill(child);
+}
+
+#[test]
+fn review_reopen_round_trips() {
+    let dir = tmp();
+    let root = dir.path();
+    let (child, mut stdin, mut reader) = answered_f1_session(root);
+
+    // Verify F-1 so it is eligible for `reopen`.
+    let params = tools_call_params(
+        "review_verify",
+        serde_json::json!({ "reference": "1", "finding": "F-1" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+    assert_eq!(f1_status(root), "verified");
+
+    // A missing note and a blank note are both NOTE_REQUIRED, and write nothing.
+    let before = ledger_text(root);
+    for args in [
+        serde_json::json!({ "reference": "1", "finding": "F-1" }),
+        serde_json::json!({ "reference": "1", "finding": "F-1", "note": "" }),
+    ] {
+        let params = tools_call_params("review_reopen", args);
+        let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+        let err = resp.get("error").expect("should have error");
+        assert_eq!(err["code"], -32602, "{resp:?}");
+        assert_eq!(err["data"]["code"], "NOTE_REQUIRED", "{resp:?}");
+        assert_eq!(err["data"]["act"], "reopen", "{resp:?}");
+    }
+    assert_eq!(ledger_text(root), before, "a refused reopen writes nothing");
+
+    // A valid reopen moves verified → contested and journals the note.
+    let params = tools_call_params(
+        "review_reopen",
+        serde_json::json!({ "reference": "1", "finding": "F-1", "note": "reopening" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    assert_eq!(out["Reopened"]["finding_id"].as_str().unwrap(), "F-1");
+    assert_eq!(f1_status(root), "contested");
+    let reopen = f1_turns(root).pop().expect("a reopen turn");
+    assert_eq!(reopen["act"], "reopen");
+    assert_eq!(reopen["role"], "raiser");
+    assert_eq!(reopen["note"], "reopening");
+
+    kill(child);
+}
+
+#[test]
+fn review_dispose_route_round_trips() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Test Slice", "test-slice");
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let _ = call(
+        &mut stdin,
+        &mut reader,
+        "initialize",
+        Some(&serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "test", "version": "1.0" }
+        })),
+    );
+
+    let params = tools_call_params(
+        "review_new",
+        serde_json::json!({ "facet": "design", "target": "SL-001" }),
+    );
+    let _ = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+
+    let params = tools_call_params(
+        "review_raise",
+        serde_json::json!({
+            "reference": "1", "severity": "minor", "title": "t", "detail": "d"
+        }),
+    );
+    let _ = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+
+    // RV-397 F-5: `review_show` projects a finding's `route`, absent (not null)
+    // while unset, so an unrouted ledger's output is unchanged on the wire.
+    let show_finding = |stdin: &mut std::process::ChildStdin,
+                        reader: &mut BufReader<std::process::ChildStdout>,
+                        view: &str| {
+        let params = tools_call_params(
+            "review_show",
+            serde_json::json!({ "reference": "1", "format": "json", "view": view }),
+        );
+        let resp = call(stdin, reader, "tools/call", Some(&params));
+        assert!(resp.get("error").is_none(), "review_show: {resp:?}");
+        let out: Value = serde_json::from_str(tool_result_text(&resp)).expect("Showed JSON");
+        out["Showed"]["findings"][0].clone()
+    };
+    let before = show_finding(&mut stdin, &mut reader, "full");
+    assert!(
+        before.get("route").is_none(),
+        "unset route is absent: {before}"
+    );
+
+    // `route` lands on the finding and on the dispose turn.
+    let params = tools_call_params(
+        "review_dispose",
+        serde_json::json!({
+            "reference": "1", "finding": "F-1", "disposition": "fix-now",
+            "route": "demonstrate", "response": "done"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+    let toml_content = ledger_text(root);
+    assert!(
+        toml_content.contains("route = \"demonstrate\""),
+        "route on the finding and turn:\n{toml_content}"
+    );
+    // ...and reads back over MCP, in both views (RV-397 F-5).
+    for view in ["full", "summary"] {
+        let after = show_finding(&mut stdin, &mut reader, view);
+        assert_eq!(after["route"], "demonstrate", "{view}: {after}");
+    }
+
+    // An unknown disposition is -32602 with a `parse_error` naming the set.
+    let params = tools_call_params(
+        "review_dispose",
+        serde_json::json!({
+            "reference": "1", "finding": "F-1", "disposition": "bogus", "response": "done"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let err = resp.get("error").expect("should have error");
+    assert_eq!(err["code"], -32602, "{resp:?}");
+    let parse_error = err["data"]["parse_error"].as_str().expect("parse_error");
+    assert!(parse_error.contains("unknown disposition"), "{parse_error}");
+    for token in [
+        "aligned",
+        "fix-now",
+        "design-wrong",
+        "follow-up",
+        "tolerated",
+    ] {
+        assert!(parse_error.contains(token), "{parse_error} names {token}");
+    }
+
+    kill(child);
+}
+
+// ── SL-268 PHASE-07 T1 (D-T1-5, VT-4 literal half) ───────────────────────────
+
+/// MCP passes JSON prose straight to `run_*` — `src/mcp_server/tools.rs`'s
+/// `review_raise` arm never calls `input::resolve_prose` — so a literal
+/// `-`/`@path` value is stored verbatim, unlike the CLI's resolved surface.
+/// This is a characterisation test: green on arrival by construction. Its
+/// teeth come from the mutation beat (phase sheet T1.4): temporarily route
+/// this arm through `input::resolve_prose`, confirm this test goes red, then
+/// revert.
+#[test]
+fn review_literal_dash_stays_literal() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Test Slice", "test-slice");
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let mut reader = BufReader::new(child.stdout.take().expect("stdout"));
+    let _ = call(
+        &mut stdin,
+        &mut reader,
+        "initialize",
+        Some(&serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "test", "version": "1.0" }
+        })),
+    );
+
+    let params = tools_call_params(
+        "review_new",
+        serde_json::json!({ "facet": "design", "target": "SL-001" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+
+    let params = tools_call_params(
+        "review_raise",
+        serde_json::json!({
+            "reference": "1", "severity": "minor", "title": "-", "detail": "@nope"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+
+    let doc: toml::Value = toml::from_str(&ledger_text(root)).unwrap();
+    assert_eq!(doc["finding"][0]["title"].as_str(), Some("-"));
+    assert_eq!(doc["finding"][0]["detail"].as_str(), Some("@nope"));
+
+    kill(child);
+}
+
+/// SL-268 PHASE-07 T2 (D8, VT-4 alias half): `review_raise`'s `as` accepts the
+/// ledger's declared raiser label, and the journal records the CANONICAL role.
+/// A `review_new` whose labels collide is refused before anything is minted.
+#[test]
+fn review_role_alias_accepted() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Test Slice", "test-slice");
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let mut reader = BufReader::new(child.stdout.take().expect("stdout"));
+    let _ = call(
+        &mut stdin,
+        &mut reader,
+        "initialize",
+        Some(&serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "test", "version": "1.0" }
+        })),
+    );
+
+    // Refused: one label for both roles — nothing minted.
+    let params = tools_call_params(
+        "review_new",
+        serde_json::json!({
+            "facet": "design", "target": "SL-001", "raiser": "codex", "responder": "codex"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_some(), "{resp:?}");
+    assert!(
+        !root.join(".doctrine/review/001").exists(),
+        "a refused review_new mints nothing"
+    );
+
+    let params = tools_call_params(
+        "review_new",
+        serde_json::json!({
+            "facet": "design", "target": "SL-001", "raiser": "codex", "responder": "claude"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+
+    // The responder's label resolves to the responder, so it cannot raise — the
+    // alias is read, not ignored in favour of the verb's default.
+    let params = tools_call_params(
+        "review_raise",
+        serde_json::json!({
+            "reference": "1", "severity": "minor", "title": "T", "detail": "D", "as": "claude"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert_eq!(
+        resp["error"]["data"]["code"].as_str(),
+        Some("ROLE_MISMATCH"),
+        "{resp:?}"
+    );
+    assert_eq!(
+        resp["error"]["data"]["actual"].as_str(),
+        Some("responder"),
+        "{resp:?}"
+    );
+
+    let params = tools_call_params(
+        "review_raise",
+        serde_json::json!({
+            "reference": "1", "severity": "minor", "title": "T", "detail": "D", "as": "codex"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "{resp:?}");
+
+    let doc: toml::Value = toml::from_str(&ledger_text(root)).unwrap();
+    assert_eq!(
+        doc["finding"][0]["turn"][0]["role"].as_str(),
+        Some("raiser")
     );
 
     kill(child);

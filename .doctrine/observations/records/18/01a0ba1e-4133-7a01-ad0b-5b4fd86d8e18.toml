@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba1e-4133-7a01-ad0b-5b4fd86d8e18"
+recorded_at = "2026-09-19T14:42:20.08375753Z"
+kind = "friction"
+summary = "/plan: SL-246 design-mandated C7 (facet-only read at the Facets level) is carried by no phase criterion"
+detail = "design.md:737 states 'Facets reads only record-NNN.toml. This is C7 discharged' and the code-impact table at :1240 requires the same. grep C7 over .doctrine/slice/246/plan.toml returns NOTHING, in any of the six phases - the design mandates a behaviour and the plan carries no exit criterion or verification row for it. Surfaced by the PHASE-03 phase planner, not by doctrine check plan, which validates VT rows against test files and cannot see a design mandate that no criterion cites. Consequence if unaddressed: PHASE-03 reads the full record (body included) at the Facets level via read_record, so Facets pays for prose it discards and C7 is NOT discharged by this slice. Behaviourally invisible (a record with a missing .md is pruned pre-selection - X7), so no test will catch the omission either. Kept to one call site by the planner so a later facet-only path is one function's change. Escalated to the human as a scope question: add a criterion or take it to a backlog item."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

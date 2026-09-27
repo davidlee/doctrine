@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0de02-064f-75a2-8bae-7cecca462b48"
+recorded_at = "2026-09-26T13:57:49.775651433Z"
+kind = "friction"
+summary = "capsule-phase-planner SL-268 PHASE-04: no verb renders plan.toml"
+detail = "Planner had to read .doctrine/slice/268/plan.toml raw, against the read-via-show rule; memory search returned mostly irrelevant hits for review/toml_edit/clap queries; slice research reported drift from slice/plan files only."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

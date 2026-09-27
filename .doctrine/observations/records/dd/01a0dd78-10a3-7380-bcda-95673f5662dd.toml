@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dd78-10a3-7380-bcda-95673f5662dd"
+recorded_at = "2026-09-26T11:27:08.451388932Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: planner used grep -cw usage counts that also count comments"
+detail = "PHASE-02 sheet's usage-count method counted comment mentions, producing one wrong test-only re-export (doc_unresolved_blockers) and one wrong comment-repoint target (envelope.rs:2389). Compiler caught the first."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

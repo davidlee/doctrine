@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba54-7e91-7102-a734-f14f5be8c2a9"
+recorded_at = "2026-09-19T15:41:34.737075033Z"
+kind = "friction"
+summary = "/phase-plan: broken memory search drove a planner to read .doctrine/memory raw files, defeating the read-via-verb guardrail"
+detail = "SECOND independent occurrence, now from the SL-246 PHASE-04 capsule-phase-planner after the PHASE-03 planner hit it (recorded separately). Recurrence is the point: two different agents on the same slice both lost the verb. New and worse datum this time - 'doctrine memory search' returned an apparently relevance-blind list, the SAME eleven rows (bwrap, capsule, sandbox) for the query 'black-box CLI golden byte-exact stdout test' AND for 'inspect knowledge facet', with no matching row surfaced in either. The planner recovered by grepping memory_key/title pairs straight out of .doctrine/memory/items/*/memory.toml, which found ten directly relevant memories in ONE call. So a broken ranking verb actively pushed an agent into the raw-file read that the boot guardrail ('read entities via doctrine <kind> show, not raw files') exists to prevent - and the raw read was roughly ten times cheaper and strictly more effective. A guardrail that is more expensive and less effective than violating it will be violated. Also re-confirmed: 'doctrine memory retrieve' takes no positional query and errors 'unexpected argument'; the real flag is --query. Cost four wasted invocations for this planner on top of the PHASE-03 planner's three."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

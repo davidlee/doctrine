@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b9da-9f6d-7973-8fe9-803de7e03c6f"
+recorded_at = "2026-09-19T13:28:27.757684049Z"
+kind = "friction"
+summary = "phase-plan: memory retrieval precision is low for code-level topics — second independent instance"
+detail = """Second capsule-phase-planner in the same session to report this (first was SL-246 PHASE-01). Planning PHASE-02, queries '--query "STD-001 named constants magic strings enum as_str"' and '--query "relation_graph inbound derived reciprocity inspect view selection"' both returned mem.signpost.project.orientation plus unrelated bubblewrap facts in the top 5. The dead-code-altitude cluster -- the single most expensive gotcha in the phase, worth ~69 compile errors if missed -- surfaced ONLY because the orchestrator's brief named two memory ids outright. A planner without those ids in hand would have missed it. Two independent planners hitting the same wall on different subject matter suggests the retrieval index is tuned for orientation/signpost content and does not reach engineering-hazard memories by topical query. Practical consequence for this capsule pattern: the orchestrator must hand down memory ids explicitly rather than trusting a planner to retrieve them, which pushes knowledge that should be in the corpus into the spawn prompt."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

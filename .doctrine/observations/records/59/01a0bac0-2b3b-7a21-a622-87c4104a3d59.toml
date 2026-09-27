@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bac0-2b3b-7a21-a622-87c4104a3d59"
+recorded_at = "2026-09-19T17:39:11.291505493Z"
+kind = "friction"
+summary = "capsule-worker: SL-246's plan.toml has two EX-5s and two EX-1s, and a sed range expression for PHASE-05 silently returns PHASE-06's block"
+detail = "Beyond the EX-5 collision already flagged (PHASE-05's own EX-5 is the staleness disclosure; design.md 5.6's 'the EX-5 help assertion' means SL-233 PHASE-04's EX-5, which is PHASE-05's EX-8 subject — two different EX-5s one paragraph apart), the worker found that 'sed -n /PHASE-05/,/PHASE-06/p plan.toml' reads past the intended block: PHASE-05's entry is at line 140 and PHASE-06's at 173, so the range captured the wrong phase. It was caught only because the criteria text was obviously about deleting SliceCommand::Design. A less suspicious reader implements the wrong phase. Structured access (a doctrine verb that prints one phase's criteria) would beat line-range greps over plan.toml, which is the only access shape currently documented."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

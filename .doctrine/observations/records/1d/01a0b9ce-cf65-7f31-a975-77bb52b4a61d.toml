@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b9ce-cf65-7f31-a975-77bb52b4a61d"
+recorded_at = "2026-09-19T13:15:33.605761003Z"
+kind = "friction"
+summary = "capsule-worker: python3 absent in the jail, so line-precise source surgery falls back to sed heredocs with no verification step documented"
+detail = "Reported by the SL-246 PHASE-01 worker (no observation broker of its own). It reached for python3 for line-precise edits to a 6000-line src/knowledge.rs and got 'command not found', costing a turn and a rewrite onto 'sed -i Nr file' heredocs. Worse, its first region splice ('sed -i START,ENDd') overshot the intended range by a four-line section banner plus blank line, silently deleting a comment block. It caught this by running 'git diff | grep ^-' immediately afterwards and restored it. The technique is workable but the verification beat -- diff the deleted lines after every region splice -- is the load-bearing part and is in neither the phase sheet nor, as far as the worker could tell, memory. In a shared main worktree that check is the difference between a caught slip and a silently deleted comment block. Candidate memory: in this jail, structured multi-line source edits go through sed -r with heredoc-staged fragments, always followed by a deleted-line audit."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

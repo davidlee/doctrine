@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba1d-ede0-7353-8463-7d4da168ae69"
+recorded_at = "2026-09-19T14:41:58.752820831Z"
+kind = "friction"
+summary = "/phase-plan: memory retrieve and search are inconsistent siblings and the lexical leg looks broken"
+detail = "Reported by the SL-246 PHASE-03 capsule-phase-planner (it holds no broker; recorded by the orchestrator). Four separate costs in one verb family. (1) 'doctrine memory retrieve' takes NO positional query and errors 'unexpected argument'; its sibling 'memory search' does take a positional. Same noun two verbs two grammars - cost three failed invocations before the planner read --help. (2) 'memory search --query' appears to ignore the query entirely: --query 'facet render marker empty' --query 'serde_json golden byte-exact render' and --query 'zzzqqq nonsense' all returned the SAME 69 hits in the SAME severity-ordered sequence. BM25 ranking is either not applied or not reaching this path. Tag-scoped search worked and is how the planner actually found the load-bearing memories - so the corpus is fine and the lexical leg is the suspect. (3) 'memory search --columns uid,title' is rejected with unknown column 'uid,title'; the flag must be repeated and the error names the available columns but not the repeat-the-flag shape. (4) --tag knowledge and --tag golden both return zero rows while the corpus plainly holds knowledge-subsystem and golden-test material - the tag vocabulary is thinner than a searcher assumes so tag-scoping is a lucky-guess interface."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

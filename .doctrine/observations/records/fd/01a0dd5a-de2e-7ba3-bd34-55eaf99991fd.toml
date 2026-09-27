@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dd5a-de2e-7ba3-bd34-55eaf99991fd"
+recorded_at = "2026-09-26T10:55:14.990492388Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: no verb appends to slice notes.md; VA-1 'record in phase notes' has no orchestrator-owned channel"
+detail = "PHASE-01 VA-1 asks the test count be recorded in the phase notes. 'doctrine slice notes' only scaffolds; the orchestrator holds no Edit. Used 'slice phase --note' (runtime, gitignored) instead, so the record is not durable. Worker also could not write the phase sheet Findings."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

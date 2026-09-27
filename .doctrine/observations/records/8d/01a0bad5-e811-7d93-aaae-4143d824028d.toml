@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bad5-e811-7d93-aaae-4143d824028d"
+recorded_at = "2026-09-19T18:02:55.889071587Z"
+kind = "friction"
+summary = "capsule-orchestrator: SL-246's intentional-red whitelist enumerated three LOCATIONS but its meaning covers a fourth — src/main.rs's argv-driven guard coverage, which no phase artefact ever grepped"
+detail = """PHASE-06's worker correctly halted at S2 on write_class_tests::slice_split (src/main.rs), which asserts cls([doctrine,slice,design,0]) == Some(slice design). That pins exactly the guard.rs row EX-2 mandates deleting, so it is semantically whitelist row 1 (the retiring leaf's tests) — but it sits outside row 1's enumerated location and every inventory missed it. Root cause: the guard's classification is covered TWICE by two different mechanisms — once by matching SliceCommand::Design directly (guard.rs, found by every grep for the symbol) and once via argv -> clap -> write_class (src/main.rs, invisible to a symbol grep because the variant appears only as the string literal "design" inside an argv array). design.md 5.6's greps were scoped to src/slice.rs, src/commands/*.rs and tests/. Lesson for a deletion phase: a whitelist of intentional reds should be expressed as a PREDICATE (tests that assert the retiring surface's behaviour) not as a list of files, because a list cannot anticipate coverage expressed as string literals. Cost: one worker halt and a respawn, which is the correct outcome but not a free one."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

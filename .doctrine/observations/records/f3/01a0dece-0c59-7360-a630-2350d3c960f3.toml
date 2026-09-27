@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dece-0c59-7360-a630-2350d3c960f3"
+recorded_at = "2026-09-26T17:40:40.666003906Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: phase sheet contract re-exported pub(super) consts as pub(crate) (E0364)"
+detail = "PHASE-08 worker: sheet told it to re-export prime's pub(super) prefix consts via pub(crate) use in mod.rs; that is a compile error; referenced via prime::CONST instead."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba9a-f17e-7080-bfa8-bc86ec80dd27"
+recorded_at = "2026-09-19T16:58:31.678459943Z"
+kind = "friction"
+summary = "capsule-phase-planner: doctrine memory retrieve takes --query, not a positional argument, contradicting the operating instructions agents are given"
+detail = """The planner's brief (and the project's own retrieve-memory guidance) implies 'doctrine memory retrieve "<topic>"'. That errors — the verb requires --query. Cost two wasted round trips. Will bite every planner/worker given the same brief, so it is a recurring tax rather than a one-off."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

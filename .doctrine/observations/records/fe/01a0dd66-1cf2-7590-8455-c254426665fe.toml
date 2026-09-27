@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dd66-1cf2-7590-8455-c254426665fe"
+recorded_at = "2026-09-26T11:07:31.954982932Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: planner contract memory-retrieve positional form failed again (PHASE-02, six failed calls)"
+detail = "Same as PHASE-01: 'doctrine memory retrieve <topic>' takes no positional; needs --query/--path-scope. Recurring cost per planner spawn."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

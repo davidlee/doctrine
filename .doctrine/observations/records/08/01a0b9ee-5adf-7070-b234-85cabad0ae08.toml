@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b9ee-5adf-7070-b234-85cabad0ae08"
+recorded_at = "2026-09-19T13:50:00.927746273Z"
+kind = "friction"
+summary = "capsule-worker: expect(dead_code) on an enum does not cover its impl methods — a second cfg_attr is needed"
+detail = "Reported by the SL-246 PHASE-02 worker. It placed #[cfg_attr(not(test), expect(dead_code, ...))] on the KnowledgeLevel enum per the in-file TierFilter precedent, and still got a hard error for the unreachable KnowledgeLevel::as_str method: an associated impl method is its own dead-code unit and the enum's attribute does not cover it. Needed a second, method-level cfg_attr on as_str itself. The existing memory on dead-code altitude (attribute goes on the OUTERMOST dead item, never a field or variant) covers the field/variant case but reads as if the enum attribute would cover everything defined on the enum; the enum-vs-impl-method split is a distinct case. Cost one clippy cycle. Worth folding into the dead-code altitude memory: type and impl-method are separate dead-code units even when the impl is on the dead type."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

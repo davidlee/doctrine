@@ -4,9 +4,9 @@ schema_version = 1
 memory_type = "pattern"
 status = "active"
 title = "RV review verbs refuse on a worktree fork — drive the audit from the parent tree or merge-first"
-summary = "RV review turn-verbs refuse on a worktree fork (IMP-024); drive audit from the parent tree or merge-first"
+summary = "RV turn-verbs, status, prime and unlock refuse on a worktree fork (IMP-024); review new/show/list do not, so new strands a ledger there. Drive from the parent or coordination tree, or merge-first"
 created = "2026-06-11"
-updated = "2026-08-16"
+updated = "2026-09-26"
 
 [scope]
 paths = []

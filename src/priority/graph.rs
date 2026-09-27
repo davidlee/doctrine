@@ -1214,14 +1214,14 @@ mod tests {
     }
 
     /// Seed a review (status-LESS authored; status derived from findings).
-    fn seed_review(root: &Path, id: u32, target: &str, findings: &str) {
+    fn seed_review(root: &Path, id: u32, target: &str, findings: &str, review_extra: &str) {
         write(
             root,
             &format!(".doctrine/review/{id:03}/review-{id:03}.toml"),
             &format!(
                 "id = {id}\nslug = \"r\"\ntitle = \"R\"\n\
                  [review]\nfacet = \"reconciliation\"\nraiser = \"a\"\nresponder = \"b\"\n\
-                 [target]\nref = \"{target}\"\n{findings}"
+                 {review_extra}[target]\nref = \"{target}\"\n{findings}"
             ),
         );
     }
@@ -1244,7 +1244,7 @@ mod tests {
         seed_requirement(root, 5);
         seed_issue(root, 1, "open", "", "slices = [\"SL-001\"]\n");
         seed_rec(root, 1, "SL-001");
-        seed_review(root, 1, "SL-001", "");
+        seed_review(root, 1, "SL-001", "", "");
 
         let pg = build(root).unwrap();
         // Node set equals the scanned entity set (one NodeAttr per scanned entity).
@@ -1293,14 +1293,16 @@ mod tests {
             "SL-001",
             "[[finding]]\nid = \"F-1\"\nstatus = \"open\"\nseverity = \"minor\"\n\
              title = \"t\"\ndetail = \"d\"\n",
+            "",
         );
-        // A review with all VERIFIED ⇒ derived status "done".
+        // A review with all VERIFIED, concluded ⇒ derived status "done" (SL-268 D2).
         seed_review(
             root,
             2,
             "SL-001",
             "[[finding]]\nid = \"F-1\"\nstatus = \"verified\"\nseverity = \"minor\"\n\
              title = \"t\"\ndetail = \"d\"\n",
+            "concluded = true\n",
         );
 
         let pg = build(root).unwrap();
@@ -2185,7 +2187,7 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         seed_issue_with_facets(root, 1, "", "", "value = 5.0", "");
-        seed_review(root, 1, "ISS-001", "");
+        seed_review(root, 1, "ISS-001", "", "");
         seed_rec(root, 1, "ISS-001");
         let pg = build(root).unwrap();
         // ISS-001 optionality should be 0 — reviews and owning_slice don't count.

@@ -298,7 +298,8 @@ mod tests {
     use super::*;
     use crate::test_support::SCHEMA_KNOWLEDGE;
     use crate::{
-        adr, backlog, knowledge, policy, requirement, review, revision, slice, spec, standard,
+        adr, backlog, knowledge, policy, requirement, review_ledger, revision, slice, spec,
+        standard,
     };
     use std::collections::BTreeSet;
 
@@ -375,7 +376,7 @@ mod tests {
 
     #[test]
     fn review_partition_covers_the_real_vocabulary() {
-        assert_eq!(vocab("RV"), set(review::REVIEW_STATUSES));
+        assert_eq!(vocab("RV"), set(review_ledger::REVIEW_STATUSES));
     }
 
     // -- SL-066 VT-2: the REV partition's G1 canary (its own vocab, not backlog's) --
@@ -755,11 +756,11 @@ mod tests {
     fn rv_derived_status_resolves_through_the_table() {
         // RV carries a DERIVED active/done — classified like any kind (Charge I).
         assert_eq!(
-            status_class(&review::REVIEW_KIND, Some("active")),
+            status_class(&kinds::REVIEW_KIND, Some("active")),
             StatusClass::Workable
         );
         assert_eq!(
-            status_class(&review::REVIEW_KIND, Some("done")),
+            status_class(&kinds::REVIEW_KIND, Some("done")),
             StatusClass::Terminal
         );
     }

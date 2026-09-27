@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b9e8-4e03-7931-8883-50a38ab95d9e"
+recorded_at = "2026-09-19T13:43:24.419813391Z"
+kind = "friction"
+summary = "capsule-driver: orchestrator cannot safely run the suite while its worker is still live in the same worktree"
+detail = "Verifying SL-246 PHASE-02 I ran 'cargo test --bin doctrine relation_graph' while the capsule-worker was still running, and saw 'test result: FAILED, selection_excludes_non_record_sources'. Almost certainly a sample taken mid mutation-battery: the sheet's T11 deliberately mutates source to prove each test discriminates, restoring between mutations. So the red was the worker's own scaffolding, not a defect -- but the orchestrator has no way to tell those apart from outside, and the standing instruction is that any unexpected red is a halt-and-escalate alarm. Unlike /dispatch, a capsule worker shares the orchestrator's worktree, so there is no isolation to make concurrent verification safe. Consequence: an orchestrator must not run tests until the worker has handed back and the tree is at rest, which serialises verification behind the whole phase and removes any chance of catching a problem early. Either the worker should signal 'tree at rest' or the mutation battery should run somewhere the orchestrator does not read. Nearly caused a false C1 escalation."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

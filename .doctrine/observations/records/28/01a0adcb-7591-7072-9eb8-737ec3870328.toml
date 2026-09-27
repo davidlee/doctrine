@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0adcb-7591-7072-9eb8-737ec3870328"
+recorded_at = "2026-09-17T05:16:27.409897939Z"
+kind = "friction"
+summary = "environment: python3 absent from the jail, so file-surgery one-liners must be redone in awk/sed"
+detail = "A capsule-worker on SL-245 PHASE-03 reached for python3 to do a structured multi-point file edit and found it absent from the bubblewrap jail; awk and sed are present. Had to redo the insertion with sed -e r plus an awk filter. Minor individually, but every worker that assumes a Python one-liner is available for file surgery eats the same round-trip. Worth either documenting the jail's available tooling or adding python3 to flake.nix."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

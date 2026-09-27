@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dddc-8591-7042-8d9d-b9d2efed3bcb"
+recorded_at = "2026-09-26T13:16:51.985567487Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: PHASE-03 sheet named one call site for a signature widening that had five"
+detail = "Tranche B worker found status_and_title_for widened across 5 call sites while the sheet listed one, and observed_review's Option->Result ripple was unflagged. Sheets should say 'every call site' for signature changes."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

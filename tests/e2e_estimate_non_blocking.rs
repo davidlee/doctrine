@@ -82,7 +82,11 @@ const ALLOWLIST: &[&str] = &[
     "governance.rs",
     "memory.rs",
     "rec.rs",
-    "review.rs",
+    // SL-268 PHASE-02: review.rs split along the tier line (D4) — the facet
+    // symbols on ReviewDoc land in review_ledger/schema.rs, and run_show's
+    // resolve_unit/resolve_confidence calls land in review/read.rs.
+    "review/read.rs",
+    "review_ledger/schema.rs",
     "revision.rs",
     "spec.rs",
     // IMP-183: config loading for estimate/value display units in show/render

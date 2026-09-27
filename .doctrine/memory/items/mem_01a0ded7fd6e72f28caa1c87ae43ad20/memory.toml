@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0ded7fd6e72f28caa1c87ae43ad20"
+memory_key = "mem.pattern.review.done-requires-concluded"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A review reads done only once concluded — and raise or reopen un-concludes it"
+summary = "A review reads done only when every finding is terminal AND the raiser has concluded the pass (conclude --basis). A later raise or reopen clears concluded; conclude again before a design run's conducted disposition."
+created = "2026-09-26"
+updated = "2026-09-26"
+
+[scope]
+paths = ["src/review_ledger/derive.rs", "src/review_ledger/gate.rs", "src/design_run"]
+globs = []
+commands = ["doctrine review conclude", "doctrine review status", "doctrine design apply"]
+tags = ["review", "design-run", "footgun", "lifecycle"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "cb2cd54beb6cbbaf746363d23296d6a896ad0deb"
+ref_name = "refs/heads/work"
+checkout_state_id = "d8fa09de4bcab38dc7634a29323d9823c39006e5b0810e17aa21e9bd1b1d31c2"
+base_commit = "aadf9347f3c0830410d4dcf449116e6cce67daa1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0defa-7ba4-7500-8f14-13e8f45800e0"
+recorded_at = "2026-09-26T18:29:12.740183379Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: no backlog status verb; closing is backlog edit --status --resolution"
+detail = "PHASE-10 planner found the close shape only by trial."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

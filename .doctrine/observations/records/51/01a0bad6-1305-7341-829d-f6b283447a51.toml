@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bad6-1305-7341-829d-f6b283447a51"
+recorded_at = "2026-09-19T18:03:06.885127844Z"
+kind = "friction"
+summary = "capsule-worker: src/main.rs::help_snapshot_slice_subcommand now passes COINCIDENTALLY — it asserts slice --help contains 'design' but the design row is gone; the substring survives in unrelated descriptions"
+detail = """Found by the PHASE-06 worker while verifying that no test asserts the slice --help design row. help_snapshot_slice_subcommand (src/main.rs, SL-208 PHASE-02) asserts help.contains("design") over render_subcommand_help([slice]). After PHASE-06 deletes the Design variant that row is gone, but the assertion still passes because 'design' appears inside show's own description ('not design/plan/notes') and record-delta's ('design SL-189'). So the assertion no longer tests what it names: it is a latent FALSE GREEN that would not catch the row's removal. NOT red, NOT SL-246's criterion (it carries SL-208 PHASE-02's), so deliberately left untouched — but audit/reconcile should know, because a contains-a-bare-word assertion over a help snapshot is load-bearing for nothing and misleading for a future reader. Candidate backlog item: assert the row shape, not the bare substring."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

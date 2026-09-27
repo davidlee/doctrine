@@ -41,13 +41,12 @@ Inputs:
    Additionally:
    * Every per-slice direct-edit item is applied to `design.md` /
      `slice-NNN.md` and recorded in the `## Reconciliation Outcome`.
-   * The RV ledger is resolved (`done · await=none`). **A zero-finding review
-    is terminal for close purposes whatever its derived status string says —
-    the absence of unresolved blockers is what gates the transition, never the
-    status string (a display summary, never a gate).
-    The string itself is unsettled for the empty ledger — the intended value
-    is `active`, the engine currently answers `done`, and the gap is tracked
-    upstream. Do not raise a token finding to force it terminal.**
+   * The RV ledger is resolved (`done · await=none`): every finding terminal
+     **and** the pass concluded (`review conclude RV-NNN --basis …`). A ledger
+     whose findings are all terminal — a zero-finding ledger included — reads
+     `active · await=raiser` until the raiser concludes it; conclude it, do not
+     raise a token finding. The absence of unresolved blockers is what gates the
+     transition, never the status string (a display summary, never a gate).
    * The reconcile outcome is recorded (REV rationale and/or RV
      `## Reconciliation Outcome`).
    No free-floating "rejected" disposition is permitted — every finding

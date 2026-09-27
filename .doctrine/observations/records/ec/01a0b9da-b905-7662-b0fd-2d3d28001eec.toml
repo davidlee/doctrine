@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b9da-b905-7662-b0fd-2d3d28001eec"
+recorded_at = "2026-09-19T13:28:34.309936286Z"
+kind = "friction"
+summary = "phase-plan: step 4 mandates doctrine slice research for phases too small to warrant it"
+detail = "The SL-246 PHASE-02 planner deliberately skipped /phase-plan step 4's 'doctrine slice research 246' as disproportionate for a three-item pure-code phase (an enum, a struct, and one pure function), citing the project's disciplined-laziness rule, and flagged the skip rather than omitting it silently. That is the right call, but it means the skill's step list is calibrated for large phases and every planner on a small phase must either overspend or deviate. A proportionality clause in the skill -- naming when the research step is and is not warranted -- would let a planner comply instead of justifying non-compliance."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

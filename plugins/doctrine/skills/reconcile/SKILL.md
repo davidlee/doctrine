@@ -69,10 +69,12 @@ closure story).
 
 ### 1. Read inputs
 
-Read `review-NNN.md` for the `## Reconciliation Brief` section. Read
-`review-NNN.toml` for finding status — confirm **every finding is terminal**
-(`verified` / `withdrawn` / `tolerated`). A finding still in `open` / `disputed` /
-`follow-up` is an incomplete audit — stop and hand back to `/audit`.
+Read `review-NNN.md` for the `## Reconciliation Brief` section. Read finding
+status with `doctrine review show RV-NNN` — confirm **every finding is terminal**
+(`verified` / `withdrawn`) and the pass concluded (`doctrine review status
+RV-NNN` reads `done · await=none`). A finding still `open` / `answered` /
+`contested`, or an unconcluded pass, is an incomplete audit — stop and hand back
+to `/audit`.
 
 Findings stay `verified` — remediation is recorded separately by you, never by
 mutating the finding disposition. Record the RV id and the brief items you will act

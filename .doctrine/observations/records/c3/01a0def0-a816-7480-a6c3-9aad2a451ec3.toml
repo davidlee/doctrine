@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0def0-a816-7480-a6c3-9aad2a451ec3"
+recorded_at = "2026-09-26T18:18:28.75897674Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: shell regex editing of shipped markdown fragile"
+detail = "PHASE-09 T3: multi-line perl substitution failed on quoting in audit SKILL.md; fell back to Edit tool."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

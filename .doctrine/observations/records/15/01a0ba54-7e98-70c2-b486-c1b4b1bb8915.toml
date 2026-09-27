@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba54-7e98-70c2-b486-c1b4b1bb8915"
+recorded_at = "2026-09-19T15:41:34.744611147Z"
+kind = "friction"
+summary = "/plan: PHASE-02's authored EX-2 amendment landed without the design prose following, so design.md now contradicts the tree on SelectedRecord's siting"
+detail = "design.md:1236 (section 5.6 Code Impact) and section 5.2 both state that SelectedRecord and the level live in src/knowledge.rs, 'defined here so the dependency runs relation_graph -> knowledge and never back'. src/selection.rs:1-16 says the opposite and cites DEC-274. The tree is right: PHASE-02's amended EX-2 in plan.toml moved the type to the leaf module because the mandated edge closed a cycle and grew the command tangle 76->77. The design text was never updated - reasonably, since the design run is locked at revision 66 and amending a locked design is a heavier act than amending a criterion. Consequence: the stale prose cost the PHASE-04 planner a re-check and will cost anyone who greps the design for siting. Not resolved by the orchestrator: design-vs-tree divergence is reconciliation's business, and this is an input to SL-246's reconcile brief rather than a defect to patch mid-execution."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

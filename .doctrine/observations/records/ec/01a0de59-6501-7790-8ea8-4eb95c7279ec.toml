@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0de59-6501-7790-8ea8-4eb95c7279ec"
+recorded_at = "2026-09-26T15:33:15.649267799Z"
+kind = "friction"
+summary = "capsule-worker SL-268 PHASE-06: perl # delimiter collides with Rust attributes"
+detail = "Orchestrator/sheet advice to use perl s#..#..# (after PHASE-04's | trap) fails on Rust #[arg(...)] in the replacement; a chained perl command still ran and edited another file. Advise the Edit tool only for multi-line Rust edits; no python3 in env."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

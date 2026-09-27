@@ -1096,7 +1096,7 @@ fn review_pass_plan(slice: u32) -> MintPlan {
     MintPlan {
         subject: IntentSubject::ReviewPass,
         effect: MintEffect::Create(MintKind::Review(crate::review::NewArgs {
-            facet: crate::review::Facet::Design,
+            facet: crate::review_ledger::Facet::Design,
             target: slice_ref(slice),
             phase: None,
             title: None,
@@ -2591,12 +2591,24 @@ fn project(
 /// means *nothing outstanding*. So where the run names a pass Doctrine cannot
 /// read, this errors naming the reference rather than borrowing the spelling of
 /// good news. This is the one path that diverges from the gate's, which reads the
-/// same failure as refusal through `review::observe_pass`.
+/// same failure as refusal through `review_ledger::observe_pass`.
 fn outstanding_by_severity(root: &Path, run: &DesignSnapshot) -> Result<OutstandingBySeverity> {
     let Some(pass) = run.review.pass.as_ref() else {
         return Ok(OutstandingBySeverity::default());
     };
-    let counts = crate::review::read_pass_facts(root, pass.review.as_str())?.outstanding;
+    let facts = crate::review_ledger::read_pass_facts(root, pass.review.as_str())?;
+    // Disclosure (SL-268 D15, DEC-319, RV-396 `F-9`): additive only — the
+    // defects feed no predicate here (EX-4/VT-5), they are printed on the
+    // caller's error channel so a defective pass is visible on every read that
+    // reaches this projection (`design show`/`resume`).
+    for defect in &facts.defects {
+        writeln!(
+            std::io::stderr(),
+            "{}",
+            defect.warning_line(pass.review.as_str())
+        )?;
+    }
+    let counts = facts.outstanding;
     Ok(OutstandingBySeverity {
         blocker: counts.blocker,
         major: counts.major,
@@ -3132,10 +3144,11 @@ fn gate_facts(
     authored_fingerprint: Option<Fingerprint>,
     declared: Option<&ReviewDisposition>,
 ) -> Result<design_run::run::GateFacts> {
+    let observed_review = observed_review(run, declared, root)?;
     Ok(design_run::run::GateFacts {
         authored_fingerprint,
         runbook: runbook_facts(run.run.stage)?,
-        observed_review: observed_review(run, declared, root),
+        observed_review,
         observed_facts: observed_facts(root, slice),
     })
 }
@@ -3157,11 +3170,19 @@ fn gate_facts(
 /// **Absence is refusal, not satisfaction.** An unreadable `RV` yields `None`
 /// too, and the pure layer treats that as refusing rather than as nothing to
 /// check — which is why the two are not distinguished here.
+///
+/// **Disclosure (SL-268 D15, DEC-319, RV-396 `F-9`), on the admission path
+/// only.** Printed when `declared.is_some()` — `apply` observing the pass it is
+/// about to judge a disposition against — and NOT when a mere read (`declared
+/// == None`) observes the same pass for the forward-edge envelope, so a `design
+/// show`/`resume` does not print the defect twice in one invocation (R1: that
+/// path already prints it once, in [`outstanding_by_severity`]). Additive only:
+/// the defects feed no admission predicate.
 fn observed_review(
     prior: &DesignSnapshot,
     declared: Option<&ReviewDisposition>,
     root: &Path,
-) -> Option<ObservedReview> {
+) -> Result<Option<ObservedReview>> {
     let stored = prior
         .acts
         .acts
@@ -3169,16 +3190,30 @@ fn observed_review(
         .find(|act| act.act == ActKind::ReviewDisposed)
         .and_then(|act| act.disposition.as_ref())
         .map(|disposed| &disposed.disposition);
-    let reference = match declared.or(stored)? {
-        ReviewDisposition::Conducted { review } => review,
-        ReviewDisposition::Waived { .. } => return None,
+    let Some(disposition) = declared.or(stored) else {
+        return Ok(None);
     };
-    let facts = crate::review::observe_pass(root, reference.as_str())?;
-    Some(ObservedReview {
+    let reference = match disposition {
+        ReviewDisposition::Conducted { review } => review,
+        ReviewDisposition::Waived { .. } => return Ok(None),
+    };
+    let Some(facts) = crate::review_ledger::observe_pass(root, reference.as_str()) else {
+        return Ok(None);
+    };
+    if declared.is_some() {
+        for defect in &facts.defects {
+            writeln!(
+                std::io::stderr(),
+                "{}",
+                defect.warning_line(reference.as_str())
+            )?;
+        }
+    }
+    Ok(Some(ObservedReview {
         reference: reference.clone(),
         concluded: facts.concluded,
         undisposed_blockers: facts.undisposed_blockers,
-    })
+    }))
 }
 
 /// Everything canonical the run does not own, observed **this invocation**

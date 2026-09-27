@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bacb-0cb7-7a73-b238-2f1f6a0bacb3"
+recorded_at = "2026-09-19T17:51:04.375265016Z"
+kind = "friction"
+summary = "capsule-phase-planner: SL-246 PHASE-06's plan.toml line citations were invalidated by PHASE-05 within the same slice, and design 5.6 understates EX-4's unit of work"
+detail = "PHASE-06's EX-1/EX-2 cite slice.rs:781 (live: 823, +42), design.rs:2053 (live: 2092, +39), cli.rs:1531 (live: 1536-1543, +12) — all drifted because PHASE-05 added design_document/design_doc_path/DESIGN_DOC to the same files. A plan authored before its predecessors execute will ALWAYS carry stale lines for later phases; citing symbols would be drift-proof. Separately, EX-4 and design.md 5.6 describe the test retirement as 'five invocations', but the true unit is two whole test functions (deprecated_shim_without_run_scaffolds_warns_and_points, deprecated_shim_live_run_matches_materialise_bytes_and_refusals) plus three orphaned helpers — the five lines cannot be removed independently because surrounding assertions consume their results. A worker following the criterion literally would produce a non-compiling file. Cost: a full structural read of the file to establish it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

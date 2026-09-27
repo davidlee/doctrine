@@ -124,11 +124,15 @@ valid relics and need no migration.
    `harvest.md`. A clean trial harvests nothing — a valid outcome, not a
    dereliction.
 
-The Inquisition is **done** when every charge is terminal — verified or withdrawn;
-an unresolved `blocker` will be refused at the target's close seam
-(`review-ledger.md` §6). **Drive the ledger from the parent tree** — the `doctrine
-review` verbs refuse a worktree/fork-resolved root (merge first, or try the heresy
-from the main tree).
+The Inquisition is **done** when every charge is terminal — verified or withdrawn
+— **and** the trial is concluded: the raiser's last act is
+`doctrine review conclude RV-NNN --basis …`, stating what the trial examined. A
+charge raised or reopened afterwards clears the conclusion; conclude again. An
+unresolved `blocker` will be refused at the target's close seam
+(`review-ledger.md` §6). **Open and drive the ledger from the primary tree** (or a coordination
+worktree). The turn verbs refuse a root inside a worktree fork, but
+`doctrine review new` does not: run in a fork, it strands the ledger there. Land
+the fork first, or try the heresy from the primary tree.
 
 ## The mandate of voice
 

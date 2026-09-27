@@ -156,7 +156,7 @@ pub(crate) enum Command {
         command: crate::memory::MemoryCommand,
     },
 
-    /// Create, show, and list adversarial-review ledgers (the RV kind, ADR-007).
+    /// Create, show, and list adversarial-review ledgers (the RV kind).
     Review {
         #[command(subcommand)]
         command: crate::review::ReviewCommand,

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0de5f-afd2-74c2-a9ce-ce7f4d0467ee"
+recorded_at = "2026-09-26T15:40:08.018822025Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: slice research drift advisory fires on post-planning edits to own plan files"
+detail = "PHASE-07 planner: doctrine slice research SL-268 reports drift from plan.toml/plan.md/slice-268.md, expected after planning; noise advisory."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

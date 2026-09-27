@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0df1f-36ee-7712-99a0-7692c0313b13"
+recorded_at = "2026-09-26T19:09:19.982478842Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: doctrine show/inspect omit a revision's originates_from edge"
+detail = "PHASE-10 worker: VA-2 asks show REV-NNN to confirm originates_from RFC-032 but neither inspect nor revision show --json displays it (REV-035 same); had to read TOML."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba8c-be27-7ba2-a1d8-8af869831598"
+recorded_at = "2026-09-19T16:43:01.031369052Z"
+kind = "friction"
+summary = "capsule-orchestrator: SL-246 VA-2's named acceptance target (design show SL-244) cannot be read by the pre-PHASE-05 surface — SL-244's design run snapshot is absent, so all three envelope renderings exit 1"
+detail = "PHASE-06 VA-2 mandates evidence from 'doctrine design show SL-244 --knowledge facets'. Snapshotting the EX-1 byte-identity baselines revealed SL-244 has design.md (202243 bytes, authored, committed) but no .doctrine/state/slice/244/design.toml — the runtime snapshot is gone (SL-244 is 'done'; runtime state is gitignored and disposable by design). design show SL-244 --format prompt|json|status therefore all exit 1 with 'no design run for slice 244'. This was not noticed when the design named SL-244 as the acceptance target, so the VA-2 evidence path was latently broken at authoring time. It is NOT a blocker and needs no criterion change: EX-2 (read design.md VERBATIM, do not parse) plus EX-4 (a slice with NO design.md gets a clean error) together determine that the document rendering depends on design.md alone and not on the run. But the natural implementation loads the run first and would inherit its failure, making the flagship acceptance case fail. Consequence worth keeping: after PHASE-05, 'design show SL-244' renders 202KB of document while 'design show SL-244 --format prompt' still correctly errors for want of a run. Reconcile input: the design's acceptance example implicitly assumed a run it does not have."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

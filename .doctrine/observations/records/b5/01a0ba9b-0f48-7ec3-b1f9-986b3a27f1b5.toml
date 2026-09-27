@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba9b-0f48-7ec3-b1f9-986b3a27f1b5"
+recorded_at = "2026-09-19T16:58:39.304880816Z"
+kind = "friction"
+summary = "capsule-orchestrator: my own PHASE-05 planner brief mis-stated two inputs (design.md length, and EX-6 as needing a new guard row it already has)"
+detail = "I told the planner design.md was ~3,400 lines (it is 1,817 — I inherited the figure from my charter without checking) and framed EX-6 as 'where the worker adds a Read classification' when src/commands/guard.rs:435-437 already reads DesignCommand::Show(_) | Resume(_) | Contract(_) => Read. The planner caught both cheaply, but a worker handed the second claim unmediated would have added a duplicate match arm — an orchestrator-introduced defect. Lesson: an orchestrator relaying a charter's factual claims should mark which it verified and which it is passing through unverified."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

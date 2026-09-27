@@ -9,13 +9,69 @@ How to drive a review on the **RV kind** (`RV-NNN`) — the structured,
 append-only audit substrate the hand-made `audit.md` lacked. This doc owns the
 *invariant* protocol shared by every review skill (`/audit`, `/code-review`,
 `/inquisition`): pick the subject, open + prime, raise, dispose + resolve,
-synthesize + harvest, close. Each skill restates the trigger in its own voice and
-keeps its own lens and harvest tail — but the mechanics live here, once.
+conclude, synthesize + harvest, close. Each skill restates the trigger in its own
+voice and keeps its own lens and harvest tail — but the mechanics live here, once.
 
 For **exact command shapes and flags**, ask `doctrine review <command> --help` —
 this doc names verbs, never their flag tables. For the work/knowledge/decision
 boundary, see `using-doctrine.md`; for ids and the verification taxonomy, see
 `glossary.md`.
+
+## Acts and roles
+
+A finding moves only through the ledger's **acts**. Each act belongs to one
+role, and the ledger refuses an act from the wrong role or the wrong state:
+
+| act | role | finding moves | required prose |
+|---|---|---|---|
+| `raise` | raiser | (new) → `open` | `--title`, `--detail` |
+| `dispose` | responder | `open` / `contested` → `answered` | `--response` |
+| `amend` | responder | `answered` → `answered` | `--response`, `--note` |
+| `verify` | raiser | `answered` → `verified` | — (`--note` optional) |
+| `contest` | raiser | `answered` → `contested` | `--note` |
+| `reopen` | raiser | `verified` → `contested` | `--note` |
+| `withdraw` | raiser | `open` / `answered` → `withdrawn` | — (`--note` optional) |
+| `conclude` | raiser | the pass, not a finding | `--basis` |
+
+`verified` and `withdrawn` are the **terminal** statuses — they count toward
+done (§6). `withdrawn` has no exit; `verified` does: `review reopen` hands a
+verified finding back to the responder.
+
+Every `--note`, `--response` and `--basis` is **durable** — the ledger records
+it as a turn on the finding (or the pass), and a later act never erases it.
+
+**One rule: roles belong to acts, not agents.** `--as` names the role an act is
+performed in: `raiser` or `responder`, or the labels the ledger declared at
+`review new --raiser <L> --responder <L>` (accepted as aliases). A responder that
+spots a new defect raises it `--as raiser`; one agent may drive both roles.
+`--as` is **cooperative role assertion, not a security boundary**. `review new`
+refuses two identical labels, and a label that names the other role.
+
+The remaining verbs read or maintain the ledger: `new`, `list`, `show`,
+`status`, `prime`, `unlock` (removes a stale per-review lock left by a hard
+kill), and `paths` (prints a review's file paths).
+
+### Passing prose
+
+Prefer the **MCP tools** (`review_raise`, `review_dispose`, …) when your harness
+has them: the prose travels as structured fields and never touches a shell. On
+the CLI, `--title`, `--detail`, `--response`, `--note` and `--basis` each accept
+`-` (read stdin) or `@path` (read a file). Pass prose through a quoted heredoc,
+so `$`, backticks and quotes reach the ledger unexpanded:
+
+```
+doctrine review raise RV-NNN --severity major --title @/tmp/title.txt \
+  --detail - <<'EOF'
+Expected: …
+Observed: …
+EOF
+```
+
+At most one flag per invocation may read `-`. A literal value that starts with
+`@`, or is exactly `-`, must itself go through stdin or a file. A `--title` read
+through `-` or `@path` drops its trailing newline, since a title is one line;
+every other prose flag is stored exactly as read. The `@` in a
+`--target SL-NNN@PHASE-NN` is a phase scope, not a file read.
 
 ## §1 — Pick the subject
 
@@ -94,9 +150,11 @@ Warm the reviewer context so the staleness signal has a path-set to hash:
 
 1. `doctrine review prime RV-NNN` — populates the warm-cache from the **target
    slice's selectors** (`scope-relevant` + `design-target`; the path-set the
-   staleness signal hashes). One call, no curation step. (The hand-authored
-   `domain_map` of areas/invariants/risks was a dead authoring tax — retired;
-   selectors, seeded at `/slice` and `/design`, are the path-set now.)
+   staleness signal hashes). One call, no curation step; selectors, seeded at
+   `/slice` and `/design`, are the path-set. When the target is not a slice, or
+   the slice declares no selectors, prime **degrades** instead of failing: it
+   prints `primed nothing: <reason>` and writes no cache (removing any earlier
+   one).
 2. Seed the ledger's `## Brief` (in `review-NNN.md`) with the **lines of attack**:
    what this review is probing and the invariants it pins the subject to — this is
    where the reviewer's intent lives, not in a persisted map.
@@ -109,12 +167,15 @@ refusal.
 
 ```
 doctrine review raise RV-NNN --severity <S> --title <expected vs observed> \
-  --detail <evidence>
+  --detail - <<'EOF'
+<evidence>
+EOF
 ```
 
 The **raiser owns `severity` / `title` / `detail`**, fixed at raise — the ledger is
 append-only, so frame each finding as *expected vs observed* with its evidence the
-first time.
+first time. A raise clears the pass's `concluded` marker: conclude again after it
+(§4, "Conclude the pass").
 
 **Severity vocab** — `blocker | major | minor | nit`:
 
@@ -130,7 +191,9 @@ Every finding gets an explicit disposition, then a terminal close:
 
 ```
 doctrine review dispose RV-NNN --finding F-n --disposition <vocab> \
-  --response <rationale> --as responder
+  [--route <route>] --as responder --response - <<'EOF'
+<rationale>
+EOF
 ```
 
 **Disposition vocab** (use consistently):
@@ -143,43 +206,58 @@ doctrine review dispose RV-NNN --finding F-n --disposition <vocab> \
 - **tolerated** — explicit unresolved drift, with rationale, only when the tradeoff
   is consciously accepted.
 
+To change an answer the raiser has not yet acted on, the responder uses
+`doctrine review amend RV-NNN --finding F-n --response … --note …` (answered →
+answered; `--note` says why, and `--disposition` / `--route` may be replaced).
+
 Then close each finding **terminal**:
 
 - `doctrine review verify RV-NNN --finding F-n --as raiser` — accept (terminal).
-- `doctrine review contest RV-NNN --finding F-n --as raiser` — disagree; hand back
-  (answered → contested) for re-disposition.
+- `doctrine review contest RV-NNN --finding F-n --as raiser --note …` — disagree;
+  hand back (answered → contested) for re-disposition. The note is the argument.
 - `doctrine review withdraw RV-NNN --finding F-n --as raiser` — a finding **raised
   in error** is retracted (terminal), *not* disposed.
 
+A verified finding can still be reopened when later evidence undoes it:
+`doctrine review reopen RV-NNN --finding F-n --as raiser --note …` (verified →
+contested). The responder then re-disposes, and the raiser verifies again.
+Reopen clears the pass's `concluded` marker, just as raise does.
+
 **Caveats:**
 
-- `--note` on `verify` / `contest` is **ephemeral baton chatter** for the log, NOT
-  durable rationale — durable justification belongs in the finding's `response` or a
-  new finding.
 - **Self-review** drives both roles via `--as` (raiser raises / verifies /
-  withdraws; responder disposes). The per-review lock and the per-finding `can()`
-  gate keep a one- or two-party review correct; `--as` is **cooperative role
-  assertion, not a security boundary**.
+  contests / reopens / withdraws / concludes; responder disposes / amends). The
+  per-review lock and the per-finding act table keep a one- or two-party review
+  correct.
 - Loose conversation notes are **insufficient** for closure-grade work — findings
   live in the ledger, not the conversation.
 
 **Route axis** (provisional — applies to design-review ledgers, not to
 `/audit` or `/code-review` passes):
 
-Severe findings on a design-review ledger additionally carry a route as the
-first token of the disposition — `route:<route> <vocab>`. The vocab above
-records what the responder did; the route records what instrument can settle the
-finding.
+Severe findings on a design-review ledger additionally carry a **route** —
+`--route <route>` on `dispose` or `amend`, one of `review | demonstrate | probe |
+control | owner-fix`. The disposition vocab above records what the responder
+did; the route records what instrument can settle the finding. The CLI refuses a
+`route:` prefix inside `--disposition`, and omitting `--route` keeps the
+finding's current route.
+
+The table view of `review show` renders the disposition, not the route: read it
+from `doctrine review show RV-NNN --json` (`.review.finding[].route`), or from
+the MCP `review_show` output (`Showed.findings[].route`, absent while unset). An older
+ledger carries the route as a `route:` prefix inside its disposition string,
+which still reads verbatim.
 
 An instrument-routed finding's terminal close is **deferred**: it is verified
 after `slice phases`, against the criterion its obligation became — not in the
 pass that raised it. The immediate terminal close above is the rule for every
 other finding, routed or not.
 
-The operative rule — the closed route set, what each route owes, and the form
-`--response` must take — is delivered on every reviewing turn by
-`design-prompts/reviewing.md`, which owns it. This entry exists so the axis is
-discoverable beside the vocab, not to restate it. Nothing validates it.
+The operative rule — what each route owes, and the form `--response` must take
+— is delivered on every reviewing turn by `design-prompts/reviewing.md`, which
+owns it. This entry exists so the axis is discoverable beside the vocab, not to
+restate it. The route value is validated on write; whether the obligation it
+names is met is not checked.
 
 ### Anti-escape guardrails
 
@@ -188,6 +266,22 @@ discoverable beside the vocab, not to restate it. Nothing validates it.
 - Do **not** downgrade a true **blocker** to dodge the close-gate.
 - Unresolved ambiguity after reading the design and governance → stop and
   `/consult`. Do not improvise a disposition.
+
+### Conclude the pass
+
+The raiser's **closing move of every pass** is:
+
+```
+doctrine review conclude RV-NNN --as raiser --basis - <<'EOF'
+<what this pass examined, and against what>
+EOF
+```
+
+`--basis` is required: it records what the pass covered. Conclude **after the
+last raise or reopen**. Either act clears the `concluded` marker, so conclude
+again after it. Open findings do not block conclude — disposing them is the
+responder's work — but the ledger is not done until they are terminal (§6). A
+design run's `conducted` disposition is refused over an unconcluded ledger.
 
 ## §5 — Synthesis + harvest
 
@@ -206,22 +300,22 @@ the owning skill** (e.g. an audit's phase-sheet harvest).
 
 ## §6 — Done + close-gate
 
-A review is **done** when **every finding is terminal** — verified or withdrawn.
-`doctrine review status RV-NNN` then reports `done · await=none`. Done is
+A review is **done** when **every finding is terminal** (verified or withdrawn)
+**and the pass is concluded**. `doctrine review status RV-NNN` then reports
+`done · await=none`. Until the raiser concludes, a ledger whose findings are all
+terminal — including one with no findings at all — reads `active ·
+await=raiser`, so "no findings yet" is never mistaken for completion. Done is
 about the *ledger*; closing the *subject* is the next, separate move.
-
-**The empty ledger is the carve-out, not an instance of the rule.** The
-all-terminal rule is vacuously true of a review with no findings; the
-empty-ledger carve-out overrides it and fixes an
-empty ledger at `active · await=raiser`, "so an implementation can never mistake
-'no findings yet' for completion". Read the all-terminal rule as applying to a
-*non-empty* ledger. (Reading §6 alone, without the carve-out, is how a review
-talks itself into vacuous-done.)
 
 The **close-gate**: an unresolved `blocker` on an active RV refuses the
 target's closure transitions — resolve it (`verify` or `withdraw`) before the
 subject can advance. `major` / `minor` / `nit` never gate.
 
-**Parent-tree caveat.** Drive reviews from the **parent tree** — the `doctrine
-review` verbs refuse a worktree/fork-resolved root. Run a review from the main tree
-(or merge the fork first), never from inside an isolated worktree.
+**Parent-tree caveat.** The turn verbs (`raise`, `dispose`, `amend`, `verify`,
+`contest`, `reopen`, `withdraw`, `conclude`) and `status`, `prime` and `unlock`
+refuse a root inside a worktree **fork**: any linked worktree that is not a
+dispatch coordination worktree. `review new`, `show` and `list` do **not**
+refuse. A `review new` run in a fork succeeds and leaves a stray ledger there,
+which the next turn verb then refuses, so a successful `new` is no proof you are
+outside a fork. Open and drive reviews from the primary tree or a coordination
+worktree (or land the fork first), never from inside an isolated worker fork.

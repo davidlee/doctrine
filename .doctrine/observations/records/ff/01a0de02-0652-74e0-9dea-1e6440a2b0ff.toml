@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0de02-0652-74e0-9dea-1e6440a2b0ff"
+recorded_at = "2026-09-26T13:57:49.778170365Z"
+kind = "friction"
+summary = "capsule-worker SL-268 PHASE-04: perl s||| delimiter trap, no python3"
+detail = '''Worker used perl s|..|..| for multi-line edits; \| in the pattern became alternation, matched empty at line 1, mangled run_raise once and made a mutation look like a survivor. No python3 in env pushes multi-line edits to perl/sed. Also: the sheet's VT-4 grep 'enum Verb' over src/ can never be empty (src/conformance.rs has an unrelated enum Verb) — scope criteria greps to src/review*. And the sheet assumed a worker marker that skips golden writes, but the main-worktree capsule shell carries none.'''
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

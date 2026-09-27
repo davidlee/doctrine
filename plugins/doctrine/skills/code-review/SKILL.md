@@ -184,6 +184,12 @@ because the fix feels large, do not normalise **tolerated** without a real
 rationale. Ambiguous after reading the design and governance → stop and `/consult`,
 do not improvise a disposition.
 
+End the pass as raiser with `doctrine review conclude RV-NNN --basis …` (or
+`review_conclude`), stating what the review examined — after the last raise or
+reopen, since either clears the conclusion. The ledger reads `done` only once
+every finding is terminal **and** the pass is concluded (`review-ledger.md` §4,
+"Conclude the pass").
+
 ## The prose → the synthesis
 
 The narrative does not live in chat. When the findings are resolved, the prose

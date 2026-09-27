@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bad6-1303-7660-8cc8-060bb7c25bbf"
+recorded_at = "2026-09-19T18:03:06.883035884Z"
+kind = "friction"
+summary = "capsule-orchestrator: I relayed a wrong test count to the PHASE-06 worker (21 test fns / 19 surviving) taken from a planner's grep of '^fn ' rather than '#[test]'"
+detail = "I told the worker tests/e2e_design_materialise.rs had 21 test functions with 19 surviving. The real figures are 8 #[test] fns before deletion and 6 after (26 fns total including helpers). The 21 came from a planner counting all fn declarations, and I passed it through as 'test fns' without checking. The worker caught and reported it rather than being misled, so no harm landed — but this is the second time this session an orchestrator-relayed factual claim was wrong (the first: design.md's length and EX-6's guard state). Concrete practice that would have prevented both: when relaying a subagent's numeric or file:line claim, either verify it or mark it explicitly as unverified pass-through so the recipient knows to check. I did mark the PHASE-06 sheet's line numbers as unverified and that worked; I failed to apply the same treatment to the test count in the same prompt."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

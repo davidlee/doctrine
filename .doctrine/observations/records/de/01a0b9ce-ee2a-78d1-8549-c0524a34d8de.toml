@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b9ce-ee2a-78d1-8549-c0524a34d8de"
+recorded_at = "2026-09-19T13:15:41.482690982Z"
+kind = "friction"
+summary = "capsule-worker: doctrine check quick exits 0 while printing 45 findings and 1085 raw-label warnings, so it is unusable as an inner-loop signal"
+detail = "Reported by the SL-246 PHASE-01 worker. 'doctrine check quick' is the documented per-edit cadence, but its validate leg prints ~45 pre-existing corpus findings (unresolved citations, raw memory labels) plus ~1085 raw-label warnings on every invocation, all of them present at the branch point and none attributable to the delta. Answering the only question the inner loop asks -- 'did MY edit break validate?' -- requires grepping past the noise every time. A --since/delta mode, or even a one-line 'N findings, 0 new' summary, would make quick a usable signal instead of something to squint past. Related to but distinct from the tail-truncation trap: here the output is complete and still uninformative."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

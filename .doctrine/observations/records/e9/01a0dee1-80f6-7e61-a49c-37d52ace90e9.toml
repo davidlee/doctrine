@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dee1-80f6-7e61-a49c-37d52ace90e9"
+recorded_at = "2026-09-26T18:01:55.702192938Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: review-NNN.md heading ignores --title"
+detail = "T2 reviewer: the brief heading comes from the template (facet of target) while toml holds the given title; cosmetic, cost a check."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ad8d-6762-7af1-8c22-9204747d383e"
+recorded_at = "2026-09-17T04:08:40.546694254Z"
+kind = "friction"
+summary = "capsule-driver: newly-installed agent definitions are invisible until session restart, so the first spawn always fails in an uninstalled tree"
+detail = "After copying capsule-orchestrator/worker/phase-planner into .claude/agents/, the Agent tool still refused subagent_type 'capsule-orchestrator' — the harness enumerates agent types at session start and does not hot-reload. So discovering the missing definitions mid-run cannot be repaired mid-run: it costs a full session restart plus re-derivation of whatever the seat had built. Compounds the earlier friction record about the missing precondition: the cost of not checking agent-type availability up front is not one copy command, it is a restart. A driver-side preflight (list .claude/agents/ against the types the skill names, BEFORE building any charter) would turn a restart into a no-op. Same root cause as the settings-pin refusal: capsule-driver assumes an installed, already-configured harness and has no check for it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

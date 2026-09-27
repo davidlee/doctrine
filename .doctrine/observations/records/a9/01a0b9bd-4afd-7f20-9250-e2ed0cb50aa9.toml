@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b9bd-4afd-7f20-9250-e2ed0cb50aa9"
+recorded_at = "2026-09-19T12:56:25.597236526Z"
+kind = "friction"
+summary = "phase-plan: doctrine memory retrieve takes --query, not a positional, unlike memory search"
+detail = "A capsule-phase-planner lost three invocations to 'error: unexpected argument' before reading --help. 'doctrine memory search <q>' takes a positional; 'doctrine memory retrieve' requires --query. The inconsistency between two sibling verbs in the same group is the trap. Compounding it: /phase-plan step 3 instructs 'run /retrieve-memory', which a subagent cannot invoke, so every planner subagent falls back to the raw CLI and meets this edge. Reported via hand-back; recorded by the orchestrator."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -2386,10 +2386,11 @@ mod tests {
     /// `VT-2` — the severity summary renders, and costs nothing when there is
     /// nothing to say.
     ///
-    /// The *wider than the gate* clause is not here: it lives in `src/review.rs`
-    /// as `severity_summary_is_wider_than_the_gate` (`VT-4`, the owner's
-    /// 2026-08-05 ruling on `Q2`), because this tier is leaf-tier and cannot
-    /// import `review` to ask the gate's predicate the same question.
+    /// The *wider than the gate* clause is not here: it lives in
+    /// `src/review/tests.rs` as `severity_summary_is_wider_than_the_gate`
+    /// (`VT-4`, the owner's 2026-08-05 ruling on `Q2`), because this tier is
+    /// leaf-tier and cannot import `review` to ask the gate's predicate the
+    /// same question.
     ///
     /// **The no-passive-cost property is asserted by differencing, not by a golden
     /// file.** An all-zero projection and a populated one differ by *exactly one

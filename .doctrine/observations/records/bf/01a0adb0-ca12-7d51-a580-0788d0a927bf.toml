@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0adb0-ca12-7d51-a580-0788d0a927bf"
+recorded_at = "2026-09-17T04:47:19.570984283Z"
+kind = "friction"
+summary = "execute: shipped memory wrongly claims dead-code deny is cargo-test-only, costing a worker a full build cycle"
+detail = "mem_01a0089ad3337e13b6308ace9742306b states that dead-code deny 'fires only under cargo test, not cargo build/cargo clippy'. A capsule-worker on SL-245 PHASE-02 measured the opposite: plain 'cargo build --bin doctrine' failed identically to cargo test on all four new items in a brand-new leaf module (RasterOutcome, rasterise_png, run, classify) until a module-level allow(dead_code) was added. The documented asymmetry does not hold for a new module whose only consumer is its own #[cfg(test)] mod tests block, because that block is cfg-stripped in a non-test build leaving genuinely zero non-test callers. The memory should be corrected or qualified; as written it sends workers into a confusing red."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

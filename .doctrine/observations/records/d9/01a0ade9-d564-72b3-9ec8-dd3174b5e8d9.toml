@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ade9-d564-72b3-9ec8-dd3174b5e8d9"
+recorded_at = "2026-09-17T05:49:38.020108726Z"
+kind = "friction"
+summary = "'doctrine slice verify-vt' has no --phase selector, so a per-phase check reports the whole slice"
+detail = "Verifying one phase's VT conformance at capsule-orchestrator commit time, 'doctrine slice verify-vt SL-245 --phase PHASE-05' errored with 'unexpected argument'. The verb takes only the slice id and prints every phase. Harmless here (17 rows), but on a long slice an orchestrator that only wants its own phase's verdict pays for all of them and has to eyeball the right block."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

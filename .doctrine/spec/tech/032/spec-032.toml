@@ -1,0 +1,40 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 32
+slug = "review-ledger"
+title = "Review ledger"
+status = "draft"
+kind = "tech"
+category = "review"
+c4_level = "container"
+parent = "SPEC-003"
+tags = ["review", "ledger", "turn-journal", "derived-status", "baton", "cas", "prime", "fail-safe-read", "pure-layer"]
+responsibilities = [
+  "Own the authored review ledger schema — the `[review]` metadata with its role labels, concluded marker and counter seeds, the single-ref `[target]`, each `[[finding]]`'s current state, and the append-only `[[finding.turn]]` and `[[review.turn]]` journals — where every key added after the first ledger defaults on read, absence has exactly one meaning, and no ledger is ever migrated.",
+  "Own the closed vocabularies — facet, finding status, severity, role, review status, await, disposition and route — each single-sourced as an enum with a lockstep known-set constant, closed on write and read without a fallback.",
+  "Own the act table: eight acts, each with one owning role, one from-set and one note rule, held in a single pure `can` predicate from which every refusal's admissible from-set is computed, and applied by one edit-preserving write that moves a finding's state and journals its turn together.",
+  "Own the turn protocol: a per-review runtime lock that serialises invocations, compare-and-swap windows at entry and before the write that refuse to clobber an out-of-band edit, authored-first-then-baton ordering, and turn counters derived from the journal over a once-written seed.",
+  "Derive a review's status and await on every read and never latch it: a review is done only when every finding is terminal and the raiser has concluded the current pass, and `raise` and `reopen` clear the conclusion in the write that journals them.",
+  "Read corrupted authored vocabulary fail-safe — an unknown status holds its review open and admits no act, an unknown severity gates as a blocker — and disclose every such defect on the reading surface's own channel rather than substituting a known value.",
+  "Supply the gate predicates other kinds consume: the unresolved-blocker scan that refuses a target's closure, and the pass facts a design run reads before admitting a review disposition.",
+  "Front the ledger through one command family and matching MCP tools that share one write function per act, resolve prose arguments only in the CLI shell, and prime a reviewer-context cache keyed on content hashes of the target slice's selector path-set, degrading with a disclosed reason when there is none.",
+]
+
+[[source]]
+language = "rust"
+identifier = "src/review_ledger/mod.rs"
+module = "doctrine::review_ledger"
+
+[[source]]
+language = "rust"
+identifier = "src/review/mod.rs"
+module = "doctrine::review"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-007"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-001"

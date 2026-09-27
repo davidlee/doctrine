@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0adcb-2e30-7bb2-9da3-5dcfb8527f94"
+recorded_at = "2026-09-17T05:16:09.136492715Z"
+kind = "friction"
+summary = "execute: no doctrine check rung compiles the test unit, so TDD red cannot be shown cheaply"
+detail = "A capsule-worker on SL-245 PHASE-03 found that 'doctrine check quick' (fmt + lint + validate) runs cargo clippy WITHOUT --all-targets, so it compiles only the bin target and #[cfg(test)] mod tests is cfg-stripped. Its first TDD red probe came back GREEN, buried in unrelated corpus-validation warnings. The cheapest correct red probe is 'doctrine check commit', which also runs the full corpus doctor/prompt check - minutes of work irrelevant to whether a test compiles. TDD needs a fast 'does the test unit compile and fail' rung on every cycle and the ladder has none, which pushed the worker into raw cargo commands (cargo test --no-run, cargo test --bin doctrine kitty::) to get an inner loop at all. Suggest a rung between quick and commit that compiles test targets only."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

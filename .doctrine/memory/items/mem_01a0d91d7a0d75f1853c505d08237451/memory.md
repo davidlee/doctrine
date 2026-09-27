@@ -1,7 +1,20 @@
-Under the RFC-026 P10 trial, a `blocker` or `major` finding on a design-review ledger carries a route written as the first token of its disposition, of the form `route:<route> <vocab>` - e.g. `route:owner-fix fix-now`. The route and the vocab are different axes: the route says what instrument can settle the finding (review | demonstrate | probe | control | owner-fix); the vocab says what was done.
+Under the RFC-026 P10 trial, a `blocker` or `major` finding on a design-review ledger also carries a **route**: which instrument can settle it (`review | demonstrate | probe | control | owner-fix`). The route and the disposition are different axes. The disposition (`aligned | fix-now | design-wrong | follow-up | tolerated`) says what the responder did.
 
-The footgun: `doctrine review dispose` accepts a disposition that names only the route (`route:owner-fix`), so the vocab token is silently droppable and nothing rejects it. Seen on RV-391 pass 2 (SL-267): four re-dispositions recorded the route but not `fix-now`; the raiser noted it in the synthesis rather than contesting, and logged the tool's non-rejection as friction.
+Each has its own flag, and both sets are closed and validated on write:
 
-Always include the vocab token. Minor/nit findings take the disposition alone (no route required).
+```
+doctrine review dispose RV-NNN --finding F-n --as responder \
+  --disposition fix-now --route owner-fix --response - <<'X'
+...
+X
+```
 
-Related: `reference/review-ledger.md` (the protocol), the design-review rules in `install/design-prompts/reviewing.md`.
+`--route` is optional on `dispose` and `amend`; omitting it keeps the finding's current route. The MCP `review_dispose`/`review_amend` tools take the same two fields.
+
+**Refused now:** a `route:` prefix inside `--disposition` (`route:owner-fix fix-now`), and a route-only disposition (`route:owner-fix`). The refusal names `--route`. This replaces the earlier prose form, where the route rode as the first token of the disposition string and a dropped vocab token went unnoticed (seen on RV-391 pass 2, SL-267). The closed vocab closed that footgun.
+
+**Reading it back:** the table view of `review show` does not render the route. Use `doctrine review show RV-NNN --json` (`.review.finding[].route`) or the MCP `review_show` output (`findings[].route`, absent while unset). An older ledger still shows the legacy `route:` prefix inside its disposition string, which reads verbatim.
+
+Minor/nit findings take the disposition alone.
+
+Related: `reference/review-ledger.md` ("Route axis"), the design-review rules in `install/design-prompts/reviewing.md`.

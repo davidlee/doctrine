@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba1d-ede3-7753-a478-9d5020183e18"
+recorded_at = "2026-09-19T14:41:58.755871357Z"
+kind = "friction"
+summary = "/phase-plan: review status needs a reference with no way to list reviews for a slice"
+detail = "Reported by the SL-246 PHASE-03 capsule-phase-planner. 'doctrine review status' requires a positional REFERENCE and there is no listing verb scoped to a slice. The planner needed the review that raised finding F-23 (which PHASE-03 EX-3 exists to fix) and had to fall back to grepping .doctrine/review/*/ for the literal string F-23 to discover it was RV-370. A finding id cited in an authored plan is not resolvable to its owning review through the CLI."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

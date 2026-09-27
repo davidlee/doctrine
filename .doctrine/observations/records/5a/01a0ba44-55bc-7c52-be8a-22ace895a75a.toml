@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba44-55bc-7c52-be8a-22ace895a75a"
+recorded_at = "2026-09-19T15:23:55.70864647Z"
+kind = "friction"
+summary = "/execute: slice verify-vt reports 'keyword present' for keywords that are absent, so UNATTRIBUTABLE masks a real FAIL"
+detail = "Running 'doctrine slice verify-vt SL-246' after SL-246 PHASE-03 landed. Every PHASE-04 row printed: UNATTRIBUTABLE VT-N — keyword present but tests/e2e_inspect_golden.rs not modified by this slice. The keywords are NOT present: grep -c for skip_is_byte_identical_to_the_prior_surface / facets_carries_deciding_fields_only / a_non_skip_level_with_transitive_is_refused_naming_imp_398_s5 over tests/e2e_inspect_golden.rs returns 0. PHASE-04 has not been implemented yet so that is the correct state of the tree - but the verdict message asserts the opposite. The attribution check (is the file in this slice's delta) evidently short-circuits ahead of the keyword check, and the message is then emitted with a 'keyword present' clause that was never evaluated. Consequence: UNATTRIBUTABLE silently absorbs what should be FAIL, so an orchestrator reading the summary for an unimplemented phase is told the tests exist. Contrast PHASE-05, whose rows correctly FAIL because the mandated test_file does not exist at all - so the tool distinguishes missing-file but not missing-keyword. Note also that verify-vt exits 1 mid-slice purely on PHASE-05's not-yet-built file, which makes the exit code unusable as a per-phase signal; the per-row verdict has to be read."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

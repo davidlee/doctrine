@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0bac0-64b6-7963-bc99-51d699782044"
+recorded_at = "2026-09-19T17:39:26.006461271Z"
+kind = "friction"
+summary = "capsule-orchestrator: the mandated friction instrumentation destabilises its own gate — recording observations during a session raises the ISS-463 EPIPE flake rate in tests/e2e_observation.rs"
+detail = "The PHASE-05 worker's two full gates were green (7807 passed). My first verification gate on the SAME tree exited 101 on exactly one failure: record_input_cannot_be_combined_with_the_per_field_flags, BrokenPipe (os error 32) writing stdin, tests/e2e_observation.rs:102 — the known ISS-463 flake. It passed in isolation (exit 0) and a re-run of the full gate was clean (119 suites, 7807 passed, 0 failed). The difference between the worker's runs and mine is that I had recorded five observation records in between, per the RFC-011 instrumentation mandate. Plausible mechanism: a larger observation corpus slows the refusal path enough that the CLI exits before the test finishes writing stdin. If that holds, the instrumentation we are benchmarking with degrades the reliability of the suite that tests it, and a gate red can be manufactured by complying with the mandate. Also a practical trap: a gate that aborts at e2e_observation never runs the suites ordered after it, so a single flake silently narrows the evidence a verifier thinks they have."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

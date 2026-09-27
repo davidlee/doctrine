@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0baca-df76-7653-9314-1bf7951ccbe3"
+recorded_at = "2026-09-19T17:50:52.790754064Z"
+kind = "friction"
+summary = "capsule-phase-planner: there is no structured verb to READ one phase's criteria, so every planner does line arithmetic over plan.toml — and it has already caused one wrong-phase read this slice"
+detail = "Reported independently by the PHASE-05 worker and both PHASE-06 planning passes. 'doctrine slice phase' only WRITES status; there is no 'doctrine slice phase show <ID> <PHASE>'. 'doctrine slice show SL-246' prints phase names and status but not criteria, and prints the ~200KB design body with no flag to suppress it. So the only access to a phase's own criteria is sed/grep line ranges over an authored TOML. Concrete harm already realised: 'sed -n /PHASE-05/,/PHASE-06/p plan.toml' silently returns PHASE-06's block (PHASE-05 at line 140, PHASE-06 at 173), and for the LAST phase the symmetric range returns nothing. One agent nearly implemented the wrong phase. A read verb for a single phase's criteria would remove a recurring, correctness-relevant tax."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b9da-b903-7ef2-9580-cb4911f8216d"
+recorded_at = "2026-09-19T13:28:34.307610687Z"
+kind = "friction"
+summary = "phase-plan: doctrine memory retrieve --format table silently ignores the format and prints full framed bodies"
+detail = "Reported by the SL-246 PHASE-02 planner. 'doctrine memory retrieve --format table' prints full framed memory bodies rather than a table, so a cheap 'what is out there' scan costs the same tokens as reading every hit in full. The planner had to grep memory_key off the output to get a listing. --columns is documented as ignored by retrieve, which makes --format table read as though it WOULD work. Either honour it or refuse it; silently ignoring a format flag on a token-expensive read surface is the worst of the three options, because the caller only discovers it after paying."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

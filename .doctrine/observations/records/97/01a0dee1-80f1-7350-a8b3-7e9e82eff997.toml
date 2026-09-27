@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dee1-80f1-7350-a8b3-7e9e82eff997"
+recorded_at = "2026-09-26T18:01:55.69774883Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: PHASE-09 sheet ground truth wrong: new/show/list bypass the fork guard"
+detail = "T2 reviewer (RV-397 F-3/F-4): sheet claimed resolve_review_root refuses every review verb; new/show/list don't call it. T1 then flagged a true memory as stale on that basis; a tranche trusting the sheet rewrites true guidance false."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

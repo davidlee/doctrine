@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ade9-c1e4-7bf1-ac04-626c531847c5"
+recorded_at = "2026-09-17T05:49:33.028761692Z"
+kind = "friction"
+summary = 'Jail lacks python3; perl -0pi with \Q..\E around a newline silently half-applies a mutation'
+detail = 'A capsule-worker doing TDD mutation probes on SL-245 PHASE-05 lost a tool call discovering python3 is absent from the bwrap jail (perl is present), then hit a subtler one: perl -0pi -e with \Q...\E quoting around a pattern containing \n matches a literal backslash-n, not a newline, so the substitution half-applied and had to be noticed and finished by hand. Both are environment facts a worker rediscovers every time; worth a line in the worker-facing mechanics doc.'
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

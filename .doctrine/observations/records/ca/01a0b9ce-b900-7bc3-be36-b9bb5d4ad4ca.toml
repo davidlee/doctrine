@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b9ce-b900-7bc3-be36-b9bb5d4ad4ca"
+recorded_at = "2026-09-19T13:15:27.872891096Z"
+kind = "friction"
+summary = "capsule-driver: piping a gate run through tail silently truncates the log the C1-alarm grep then reads"
+detail = "Verifying SL-246 PHASE-01 I ran 'doctrine check gate 2>&1 | tail -25' as a background task, then grepped the captured output file for 'test result: FAILED' and '^failures:' to discharge the no-red-suite constraint. The file only contained 25 lines, so the grep was structurally incapable of finding a failure anywhere earlier in the run and returned a reassuring 0. The exit code was still trustworthy (captured via PIPESTATUS), which is what makes this dangerous: one real signal next to one fake one that looks like corroboration. Caught only because a suite-count tally came back implausibly low (3 suites, 7 tests). Lesson for any orchestrator verifying a phase: redirect the gate to a full log file and grep THAT; never grep a tail-piped capture. An orchestrator whose whole job is to distrust a worker's green claim must not build its own check on a truncated log."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

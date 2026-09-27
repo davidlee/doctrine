@@ -4,10 +4,10 @@ schema_version = 1
 lifespan = "semantic"
 memory_type = "pattern"
 status = "active"
-title = "A design-review disposition on a severe finding needs both the route and the vocab token"
-summary = """RFC-026 P10: a blocker/major finding's disposition must be "route:<route> <vocab>"; the tool accepts the route alone, so the vocab is easy to drop."""
+title = "A design-review finding's route goes in --route, beside a closed-vocab --disposition"
+summary = "Route and disposition are separate closed flags on review dispose/amend; a route: prefix inside --disposition is refused"
 created = "2026-09-25"
-updated = "2026-09-25"
+updated = "2026-09-26"
 
 [scope]
 paths = []

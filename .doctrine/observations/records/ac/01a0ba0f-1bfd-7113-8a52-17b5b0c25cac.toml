@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba0f-1bfd-7113-8a52-17b5b0c25cac"
+recorded_at = "2026-09-19T14:25:47.517516913Z"
+kind = "friction"
+summary = "/capsule-driver: PHASE-03 EX-2 blank predicate authored too narrow for bare Vec<String> facet rows"
+detail = "SL-246 PHASE-03's authored EX-2 defines the unfilled-facet marker's predicate as 'every tier-surviving field is Absent'. Facet list rows are bare Vec<String>, not Option<Vec<String>>, so an empty list projects as FacetValue::List([]) and can never be Absent (src/knowledge.rs:1237 and the FacetValue doc comment at :1231, which states the text arm conceals both Absent and List(vec![])). Verified against the authored tables: CONSTRAINT_FACET_FIELDS.applies_to is List AND Tier::Deciding (src/knowledge.rs:1128), so an unfilled CON renders nothing on the text arm at BOTH levels; DECISION_FACET_FIELDS.alternatives/consequences are List at Tier::Argument (:1062), so an unfilled DEC renders nothing at full. Two of seven record kinds silently render an empty explanation in their default scaffolded state - exactly what DEC-149 exists to prevent. Cost: the defect was only catchable by cross-reading the criterion against the field-shape tables; the criterion as authored reads correct in isolation. Human ruled the predicate widened to Absent | List(empty) composed in PHASE-03 and EX-2 amended in place."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

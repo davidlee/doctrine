@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0dead-bb32-7630-b72d-4e24ae125bde"
+recorded_at = "2026-09-26T17:05:22.738924977Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: plan test_file for PHASE-08 VT points at prime.rs, diverging from the src/review/tests.rs convention"
+detail = "PHASE-08 planner caught by hand that plan.toml VT test_file=src/review/prime.rs while earlier phases use src/review/tests.rs; nothing flags it until verify-vt. Worker told to follow the plan (test module in prime.rs)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

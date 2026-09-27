@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba42-3b57-77d3-b4c7-bc794007978c"
+recorded_at = "2026-09-19T15:21:37.879982231Z"
+kind = "friction"
+summary = "/capsule-driver: piping a gate run through tail in a background task destroys both the transcript and the exit status"
+detail = "Orchestrator self-inflicted, and a trap the capsule-driver pattern invites. To keep a full-suite gate out of context I ran 'doctrine check gate 2>&1 | tail -30' as a background task. Two failures at once. (1) The task's output FILE then contains only the last 30 lines, so there is no transcript to diagnose a failure from - the run has to be repeated. (2) Worse, a shell pipeline's exit status is the LAST command's, and tail always succeeds, so the reported 'exit code 0' carried NO signal about whether the gate passed. I nearly accepted a phase on it, and caught it only because the surviving tail showed 4 suites where the baseline showed 118. The correct shape is to redirect to a file and echo the real status: 'doctrine check gate > /tmp/gate.log 2>&1; echo EXIT=0', then grep the file. Applies to every orchestrator that keeps suite output out of its context by piping - which is the recommended practice, so the trap is structural rather than incidental."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ded3-f479-7e02-a9a5-c376176d4fab"
+recorded_at = "2026-09-26T17:47:07.769531878Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: memory edit refuses shipped memories; no documented edit path"
+detail = "PHASE-09 planner: 'doctrine memory edit' refuses memory/ records (shipped read-only) and the refusal only suggests recording a local copy; SL-267 hand-edited memory.md. No documented path to correct a shipped memory."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

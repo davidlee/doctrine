@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0de5f-afce-7101-a366-ea950a508557"
+recorded_at = "2026-09-26T15:40:08.014189348Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: planner contract says 'memory retrieve <topic>' but retrieve takes no positional"
+detail = "PHASE-07 planner: six memory retrieve calls failed before it read --help; retrieve needs --query/--path-scope. The capsule-phase-planner prompt teaches the wrong shape."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ad9d-e73c-7c81-95f1-9ff9e0988ff1"
+recorded_at = "2026-09-17T04:26:41.852057096Z"
+kind = "friction"
+summary = "phase-plan: stale runtime phase sheet survived a plan scope cut and could have misled a worker"
+detail = "SL-245 PHASE-02's runtime sheet at .doctrine/state/slice/245/phases/phase-02.md already existed carrying content that predated the 2026-09-15 scope cut - it still referenced RENDER_TIMEOUT and subprocess::run_bounded, both of which IMP-452 removed from the phase. Nothing flagged it as stale; the planner only caught it by diffing against the authored plan.toml. A worker handed that sheet without re-reading plan.toml would have implemented the superseded objective. Suggest doctrine slice phases detect a sheet older than the plan.toml mtime, or that /phase-plan always materialise fresh rather than expanding in place."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

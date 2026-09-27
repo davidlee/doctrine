@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0de59-64fe-77c2-9d32-f4d80e02a1a0"
+recorded_at = "2026-09-26T15:33:15.646971805Z"
+kind = "friction"
+summary = "capsule-phase-planner SL-268 PHASE-06: design/plan test-change list stale and line-cited"
+detail = "Plan and design sec-8 cite test locations as line numbers in src/review.rs at an old commit (pre-split), forcing git show mapping; the expected-test-change list missed eight changes the code required (priority graph seed_review, e2e_design_forward growing_run, R6, vt1_withdrawn, lifecycle_raise_dispose_verify, etc.). Cite tests by name."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,14 +1,15 @@
 # RV review verbs refuse on a worktree fork — drive the audit from the parent tree or merge-first
 
-RV review **turn-verbs** (`raise`/`dispose`/`verify`/`contest`/`withdraw`/`status`)
-refuse on a git worktree fork — the turn baton lives in the **parent tree's
+RV review **turn-verbs** (`raise`/`dispose`/`amend`/`verify`/`contest`/`reopen`/
+`withdraw`/`conclude`), plus `status`, `prime` and `unlock`, refuse on a git worktree fork — the turn baton lives in the **parent tree's
 gitignored runtime state**, which a fork cannot co-write (IMP-024). `review new`
-*succeeds* on a fork (it only writes the authored ledger files), which is the
-trap; the next turn verb fails with:
+*succeeds* on a fork (it only writes the authored ledger files; `show` and `list`
+are unguarded too), which is the trap: a successful `new` is no proof you are
+outside a fork; the next turn verb fails with:
 
 > review verbs are not supported on a worktree fork (IMP-024): the turn baton
 > lives in the parent tree's gitignored state, which a fork cannot co-write. Run
-> `review` from the parent tree.
+> `review` from the parent or coordination tree.
 
 **Why it bites `/audit` + `/close`:** when a slice's implementation lives on a
 worktree branch (e.g. dispatch funnel work), you cannot drive the audit RV ledger
@@ -34,7 +35,8 @@ Discovered during SL-042 `/audit`: work on the `sl-042-coord` worktree; merged t
 
 The refusal message says "worktree fork", and the guard's own doc comment says
 "the test is the ROLE, not mere linkage". Both undersell the reach. Read the
-code (`review.rs:2358` → `worktree/shared.rs:77`):
+code (`src/review/turn.rs` `resolve_review_root` → `worktree` `classify_worktree_role`;
+re-verified 2026-09-26, SL-268):
 
 ```rust
 if classify_worktree_role(branch, linked) == "fork" { bail!(…) }

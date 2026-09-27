@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ad8c-9c40-70f0-95b3-9c12a0db3c39"
+recorded_at = "2026-09-17T04:07:48.544307122Z"
+kind = "friction"
+summary = "capsule-driver: capsule agent types absent from .claude/agents until doctrine install runs; skill gives no precondition for it"
+detail = "capsule-driver's tiering names three subagent types (capsule-orchestrator, capsule-phase-planner, capsule-worker). They ship as authored sources in install/agents/claude/ and only reach .claude/agents/ (untracked install output) when doctrine install runs. In this tree only dispatch-probe and dispatch-worker were installed, so every subagent_type the skill names was unresolvable. The skill's four preconditions cover permission posture, spawn depth, competing writers and plan readiness, but not 'the agent definitions this skill dispatches to are actually installed' — the one precondition whose failure is a hard stop at the first spawn. Fixed by copying the three files into .claude/agents/. Suggest the skill add a precondition, or the driver check for the agent types before chartering."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0adeb-1674-75e1-8ffb-ce513d157bb8"
+recorded_at = "2026-09-17T05:51:00.212541138Z"
+kind = "friction"
+summary = "capsule-driver: seat cannot verify a subagent's gate claim without re-running the full gate itself"
+detail = "Both orchestrators reported 'doctrine check gate exit 0', and orchestrator #2 volunteered that its own capture only tailed the last binary so it re-ran the new tests explicitly to be sure. The seat has no cheaper way to confirm a hand-back's green claim than running the whole gate again (~5 min), which it must do at the charter boundary because the claim is the only evidence it has. A machine-readable gate receipt — exit status plus per-suite counts written to runtime state by the check itself, addressable by commit sha — would let the seat and each orchestrator verify a claim in one read instead of a full re-run. Related to the already-recorded friction that no check rung compiles the test unit: both are cases where the verification surface does not report enough for a caller to trust it without redoing the work."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

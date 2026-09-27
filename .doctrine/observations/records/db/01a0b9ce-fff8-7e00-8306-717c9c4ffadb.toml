@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b9ce-fff8-7e00-8306-717c9c4ffadb"
+recorded_at = "2026-09-19T13:15:46.040066114Z"
+kind = "friction"
+summary = "phase-plan: sheet predicted a VA-1 grep count that its own mandated test made wrong"
+detail = """SL-246 PHASE-01's sheet predicted 'three hits after' for the VA-1 grep on "why_matters", but the same sheet's T1 mandated a name-based DEC-150 mapping oracle test, which necessarily adds a fourth hit by restating the ruling's field names. The worker had to decide for itself whether its own required test had broken the criterion it was verifying. Not a defect in the phase -- the show/render-path count still went 3 to 1, which is what VA-1 actually claims -- but a planner that mandates a test which will appear in a criterion's own grep should pre-classify that hit in the grep table. Generalises: when a VA criterion is discharged by a count, every artefact the phase adds must be pre-classified in or out, or the worker is left adjudicating its own verification."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

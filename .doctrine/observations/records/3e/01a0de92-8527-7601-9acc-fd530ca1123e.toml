@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0de92-8527-7601-9acc-fd530ca1123e"
+recorded_at = "2026-09-26T16:35:39.431779805Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-268: grep-filtered mutation beat hid a compile error, looking like a silent non-red"
+detail = "PHASE-07 T2 worker: mutated MCP arm left an unused var (hard error); filtering output to 'test result' hid the compile failure. Mutation-confirmation memory should say check for compile errors too."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

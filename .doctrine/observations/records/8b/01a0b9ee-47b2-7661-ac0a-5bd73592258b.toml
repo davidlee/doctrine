@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0b9ee-47b2-7661-ac0a-5bd73592258b"
+recorded_at = "2026-09-19T13:49:56.018761756Z"
+kind = "friction"
+summary = "phase-plan: ADR-001 framing cited the tier doctrine but never checked the live layering.toml tangle ratchet, so a mandated edge failed the gate only at end of phase"
+detail = "SL-246 PHASE-02's exit criterion EX-2 mandates SelectedRecord live in src/knowledge.rs 'so the dependency runs relation_graph -> knowledge and never back (ADR-001)'. The phase sheet repeated that framing confidently. But .doctrine/adr/001/layering.toml classifies BOTH relation_graph and knowledge as tier 'command', so the edge is a same-tier peer edge, not the tier-crossing concern the rationale describes -- and a pre-existing reverse path already ran knowledge -> install -> boot -> memory -> priority -> relation_graph (all five hops verified). The mandated edge therefore CLOSES a cycle and grows the frozen command tangle baseline 76 -> 77, tripping the TangleGrew ratchet in tests/architecture_layering.rs. Three suites red. This is a stricter, independently-enforced gate that the ADR-001 prose framing does not mention, and neither the design, the plan, nor the sheet checked it. Discovered only by running the real gate AFTER the implementation was complete. Pattern for phase planning: when a phase adds a cross-module edge, check the authored tier assignment and tangle risk in layering.toml (or 'cargo test --test architecture_layering dump_real_graph -- --nocapture --ignored') BEFORE mandating a component placement, not after. A placement mandate justified by a layering argument should be checked against the layering gate that enforces it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba41-b1aa-7273-88bc-a0f4d39b25b3"
+recorded_at = "2026-09-19T15:21:02.634257965Z"
+kind = "friction"
+summary = "/execute: deny(unused) turns predicate deletion into a compile error instead of a discriminating test failure"
+detail = "Reported by the SL-246 PHASE-03 capsule-worker. Mutation (iii) - decide by-design AFTER the tier filter rather than off the unfiltered table - initially failed to COMPILE rather than failing a test, because removing the facet_fields(kind) call made the kind parameter unused and this crate denies unused. A compile failure is technically a red but not a discriminating one: it proves nothing about whether the test distinguishes the two states. The worker recovered the real signal by re-running with 'let _ = kind;'. Generalisable across this codebase: under deny(unused), deleting a predicate usually yields a compile error rather than a test failure, which HIDES whether the test discriminates. A mutation that removes a read must keep the binding alive."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

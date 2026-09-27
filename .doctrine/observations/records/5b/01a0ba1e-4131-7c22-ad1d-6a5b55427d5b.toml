@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba1e-4131-7c22-ad1d-6a5b55427d5b"
+recorded_at = "2026-09-19T14:42:20.081112392Z"
+kind = "friction"
+summary = "/phase-plan: PHASE-03 EX-4 mandates a render_block signature that cannot satisfy its own required output"
+detail = "SL-246 PHASE-03 EX-4 as authored mandates render_block(root, selected, level) -> String and requires that an empty selection return X1's explicit line. D3/X1 (design.md:1199 and :1404) specify that line as '(no knowledge records point at SL-999)' - it NAMES THE SUBJECT, which the three-argument signature cannot see. The criterion is internally unsatisfiable as written. Found by the phase planner cross-reading the criterion against the design's own specimen line; nothing in the criterion text hints at the gap. Resolved by the orchestrator as an arity-only amendment (add subject) rather than escalated, because intent is determinable - the design specifies the output and there is exactly one way to produce it. Cost: one planner escalation round plus an authored plan amendment."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

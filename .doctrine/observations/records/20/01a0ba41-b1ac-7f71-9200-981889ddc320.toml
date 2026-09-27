@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba41-b1ac-7f71-9200-981889ddc320"
+recorded_at = "2026-09-19T15:21:02.636439625Z"
+kind = "friction"
+summary = "/execute: the staged-ahead-module pattern carries a fixed per-item cfg_attr tax that STD-001 cannot reduce"
+detail = """Reported by the SL-246 PHASE-03 capsule-worker. PHASE-03 builds producers that PHASE-04 wires, so every staged item needs #[cfg_attr(not(test), expect(dead_code, reason = "PHASE-04 wires the composed read onto InspectArgs"))]. That attribute is repeated VERBATIM 18 times in the phase delta. Attribute reason arguments must be string literals, so the reason cannot be hoisted to a named constant and STD-001's single-source rule is unhonourable at this seam - the language forces the duplication. Not actionable as a code change; worth knowing that the phase-staged-ahead-of-its-wiring pattern carries a tax that grows linearly with the number of items staged, and that a reviewer should not read the repetition as an STD-001 violation."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

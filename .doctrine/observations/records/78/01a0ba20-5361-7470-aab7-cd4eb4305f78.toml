@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ba20-5361-7470-aab7-cd4eb4305f78"
+recorded_at = "2026-09-19T14:44:35.809820374Z"
+kind = "friction"
+summary = "/phase-plan: SL-246 design section 7.1 understates what moved from DEC-149, and the two artefacts spell the markers differently"
+detail = "DEC-149's body sketch spells the three empty-state markers with middot separators and gives the BY-DESIGN marker a prose-size hint too: '(concepts carry no facet · 1.2 KB prose · doctrine knowledge show CPT-001)'; its consequences field states the hint 'is permanent for CPT, whose prose is always the payload'. design.md section 5.2 (line 866) spells them differently AND withdraws the by-design hint, arguing 'Only the middle message is a bare constant; the other two name the record': '(no facet recorded — 6.7 KB of prose: doctrine knowledge show QUE-206)' / '(no facet by design — a concept rides its prose body)' / '(unreadable: record not found at …/record-140.toml)'. But the divergence table at design.md:1367 records only that DEC-149's SITING clause moved and asserts 'the ruling ... is intact' - it does not disclose that the spelling and the CPT hint moved too. A worker or planner trusting section 7.1's summary over section 5.2's table would emit the wrong strings, and PHASE-04 goldens them. Adjudicated in favour of design section 5.2 (later, reviewed, and it argues the change; the plan's EX-2 agrees by attaching the hint to unfilled only). Cost: one escalation round. Also worth recording: the 6.7 KB figure is DECIMAL KB - QUE-206's record-206.md is 6744 bytes, /1000 = 6.7, /1024 = 6.6 - which a worker would have got right on a coin flip."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
