@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 342
+slug = "lib-form-boot-resolves-library-explains"
+title = "lib: form: boot resolves, library explains"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-27"
+updated = "2026-09-27"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Research found eight rules owned only by skills (G1-G8). SL-273 introduces lib: citations, so G7 (the publication model and the lib: form) cannot stay ownerless; but a library doc cannot be the only teacher of how to read the library (bootstrap)."
+choice = "Two layers. Boot (the reference-docs paragraph in install/routing-process.md, PUSH) carries the resolution rule: a lib:<address> citation is read with doctrine library show, not on disk. using-doctrine.md carries the model: published vs projected, ADR-019, library contents, same-named client files; shipped-corpus-authoring.md cites it for the author side. doctrine library show accepts the lib: prefix verbatim. G1-G6 and G8 are deferred to IMP-500."
+alternatives = ["standalone publication.md library doc", "also author G1 boot tiering here", "rule only in using-doctrine.md (fails bootstrap)"]
+rationale = "The rule needed before anything else is reachable must be pushed; everything else is reachable through it. using-doctrine.md already owns reading via show. Accepting the prefix makes a copied citation self-resolving and shortens the boot rule; the parser is shared with the DEC-339 resolver."
+consequences = ["small CLI change in library show plus a test", "restate audit cannot cut G1-G6/G8 concept tables yet (inq-7)", "IMP-500 carries the deferred gaps"]
+decided_by = "user"
+decided_on = "2026-09-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-273"
