@@ -106,3 +106,28 @@ ledger is history, not plan input.
 - **No new runtime state.** The only state is the config file; the planner is a
   pure function of its bytes. Nothing here writes runtime state, so no VA
   criterion reads gitignored state.
+
+## PHASE-04 — appended at the design back-edge (RV-403 F-1)
+
+The audit's blocker falsified one design premise: a pre-trust
+`codex features list` answers for the *user* codex layer, not the project
+`.codex/config.toml` the activation notice names, because codex applies a
+project's config only for a trusted project — and install runs before trust. The
+probe could therefore suppress step 1 for a project that disables hooks, the
+silent-hooks failure the disclosure exists to prevent. The user ratified
+**option A**: read `[features] hooks` from the project file doctrine already
+reads and writes, and retire the probe.
+
+PHASE-04 carries that remedy. It is a *retirement* phase, not a feature phase:
+`install.rs`'s `Capture`/`CommandRunner`/`CaptureRunner` and `boot.rs`'s
+`HooksState`/`parse_codex_features`/`codex_hooks_state` go, `wire()` loses its
+runner parameter, and `write_codex_activation` takes `hooks_enabled: Option<bool>`.
+The testing seam inverts with it: the injected runner and the `PATH`-emptied e2e
+case retire, replaced by a filesystem fixture that pins `[features] hooks = false`
+→ step 1 prints and `= true` → step 1 omitted.
+
+`RV-402` `F-5` (README's undeclared `codex` execution) is obsoleted by the
+retirement — no codex subprocess remains on the install path — so the README's
+Host-dependencies section keeps only its `sh` statement. `DEC-329` is amended to
+match, and no `SPEC-011` Revision changes: `REV-066`'s two members describe the
+registration leg, not the hooks disclosure.

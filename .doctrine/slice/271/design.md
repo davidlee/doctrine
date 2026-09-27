@@ -145,7 +145,7 @@ refresh and receives the resulting report.
 
 ```mermaid
 flowchart TD
-  install["boot install"] --> wire["wire(runner)"]
+  install["boot install"] --> wire["wire()"]
   wire --> refresh["install_refresh(Codex)"]
   refresh --> hooks["codex hook merge<br/>.codex/hooks.json"]
   refresh --> mcp["install_codex_mcp<br/>.codex/config.toml"]
@@ -157,14 +157,15 @@ flowchart TD
   refresh --> report["RefreshReport.mcp"]
   report --> wire
   hooks --> wire
-  wire --> probe["codex features list, cwd=root (probe, fail-soft)"]
+  wire --> hooksread["read [features] hooks<br/>from .codex/config.toml (fail-soft)"]
   wire --> out["stdout: wrote-line, trust caveat, hooks warning"]
 ```
 
 The decision table is the one shared element between the arms: `mcp_action` maps
 an entry's class to what to do, and knows nothing about JSON or TOML. Each arm
-derives its class from its own parse and renders its own payload. The probe hangs
-off the hook write, not the MCP write — it answers a question about hooks.
+derives its class from its own parse and renders its own payload. The
+`[features] hooks` read hangs off the hook write, not the MCP write — it answers
+a question about hooks.
 
 ### 5.2 Interfaces & Contracts
 
@@ -269,39 +270,36 @@ emitted one, including a wrong type or an extra element), a different program, a
 extra key, an extra argument. A plain-literal `command` and a baked abspath are
 foreign for the same reason.
 
-The probe, split pure/imperative, over a capture-capable seam that the existing
-installer runner cannot provide (it uses `.status()` and inherits stdio):
+The hooks disclosure reads the project file directly — the very file the MCP leg
+already reads and writes — with no subprocess and no capture seam. This is the
+`RV-403` `F-1` remedy (option A), ratified after the audit falsified the probe's
+premise: a pre-trust `codex features list` answers for the *user* layer, not the
+project file the notice names, so it could suppress step 1 for a project that
+disables hooks. The project file is the signal the notice is actually about:
 
 ```rust
-struct Capture { success: bool, stdout: String, stderr: String }
+/// Pure. `[features] hooks` from a project `.codex/config.toml`: a present
+/// boolean yields Some(bool); an absent key, an absent `[features]` table, a
+/// non-boolean value, or an unparseable document yields None ("not confirmed
+/// enabled"). Reuses the `DocumentMut` access the MCP planner already performs.
+fn parse_codex_hooks_feature(existing_toml: &str) -> Option<bool>;
 
-/// The seam `wire()` takes as a parameter. `install::CaptureRunner` is the
-/// default implementation (Command::output()); tests inject a fake. `cwd` is
-/// the install root, so the probe answers for the project being installed —
-/// `--path`, or install run from a subdirectory, must not probe another tree.
-trait CommandRunner {
-    fn run_capture(&self, program: &str, args: &[&str], cwd: &Path) -> anyhow::Result<Capture>;
-}
-
-enum HooksState { Enabled, Disabled, Unknown(String) }
-
-/// Pure. The row whose first token is `hooks` contributes its final token:
-/// "true" -> Some(true), "false" -> Some(false); no row or any other shape -> None.
-/// `stdout` is read regardless of `success`: a failed command that still printed
-/// a parseable row is a usable answer, and `stderr` is available for the reason.
-fn parse_codex_features(stdout: &str) -> Option<bool>;
-fn codex_hooks_state(run: &dyn CommandRunner, cwd: &Path) -> HooksState;
+/// The shell read, fail-soft: None for NotFound and for any other read error
+/// alike, because the notice's fallback is the instruction and a degraded read
+/// must never be read as "enabled".
+fn codex_project_hooks(root: &Path) -> Option<bool>;
 ```
 
 `install_refresh`'s Codex arm replaces `mcp: RefreshOutcome::None` with
 `mcp: install_codex_mcp(root, dry_run).with_context(…)?` — the context names the
 leg and what preceded it, mirroring the Claude hook loop's boundary context
 (`boot.rs:1732`), so an aborted leg does not silently lose the report of hooks
-already written. `wire()` gains the runner parameter and selects the reported
-file from the harness it holds (`Harness::Codex => CODEX_CONFIG_REL`, otherwise
-`MCP_REL`), carrying the full rendered invocation so neither arm re-appends
-arguments. The codex messages state what was **written**, not that the harness
-has activated it. The fallback line is ONE wording for both arms and both causes
+already written. `wire()` selects the reported file from the harness it holds
+(`Harness::Codex => CODEX_CONFIG_REL`, otherwise `MCP_REL`), carrying the full
+rendered invocation so neither arm re-appends arguments, and reads
+`codex_project_hooks(root)` when it is about to print the codex activation
+notice. The codex messages state what was **written**, not that the harness has
+activated it. The fallback line is ONE wording for both arms and both causes
 (a foreign entry and an uninterpretable file): the shared table cannot tell them
 apart, and the operator's next step is the same either way.
 
@@ -356,11 +354,10 @@ env_vars = ["DOCTRINE_BIN"]
 
 ```mermaid
 sequenceDiagram
-  participant W as wire(runner)
+  participant W as wire()
   participant I as install_refresh (Codex arm)
   participant P as plan_codex_mcp (pure)
   participant F as .codex/config.toml
-  participant C as CommandRunner (install::CaptureRunner)
   W->>I: refresh(harness, root, exec, dry_run)
   I->>F: read (NotFound -> None; any other error -> malformed)
   I->>P: plan_codex_mcp(existing)
@@ -374,9 +371,9 @@ sequenceDiagram
   end
   I-->>W: RefreshReport { mcp }
   alt h is Codex AND a hook was written AND not dry_run
-    W->>C: codex features list, cwd=root (fail-soft)
-    C-->>W: Capture { success, stdout, stderr }
-    W->>W: activation notice; hooks step only unless Enabled
+    W->>F: read [features] hooks (fail-soft)
+    F-->>W: Option<bool>
+    W->>W: activation notice; hooks step only unless Some(true)
   end
   alt h is Codex AND the MCP entry was written AND the notice did not print
     W->>W: trust caveat
@@ -409,19 +406,24 @@ Ordering and disclosure rules:
     Codex deliberately does not distinguish a fresh wire from a stale-entry
     refresh — the operator's next step is identical and sec-5.2 specifies one
     form (settles `RV-402` F-4);
-  - the **hooks probe** fires iff `h == Codex && codex_hook_written && !dry_run` —
-    the same signal that gates the activation notice (`boot.rs:2788`). `[features]
+  - the **hooks disclosure** fires iff `h == Codex && codex_hook_written &&
+    !dry_run` — the same signal that gates the activation notice
+    (`boot.rs:2788`). It reads `[features] hooks` from the project file (the file
+    doctrine already writes), never a subprocess: `Some(true)` omits step 1,
+    every other outcome — `Some(false)`, an absent key or file, an unparseable
+    document — prints it, because the notice's fallback is the instruction and a
+    degraded read must never be read as "enabled" (`RV-403` `F-1`). `[features]
     hooks` gates codex HOOKS, not MCP servers, and the warning's own text is about
     "the hooks this install just wired", so keying it to the MCP outcome would
     both miss a dead hook write and warn about hooks nobody just wired;
   - the **trust caveat** prints iff `h == Codex && the MCP entry was written &&
     !dry_run && !codex_hook_written` — i.e. only when the activation notice (which
     already carries the trust step) did not print it. Once per arm, never twice.
-- The probe's result folds into the activation notice, which takes
-  `state: Option<HooksState>`: `None` means the probe did not run (dry run) and
-  step 1 prints as it does today, unconditionally; `Some(Enabled)` omits step 1
-  (nothing said about hooks, per DEC-329); `Some(Disabled)` prints it naming the
-  key; `Some(Unknown(reason))` prints it naming the reason.
+- The project-file answer folds into the activation notice, which takes
+  `hooks_enabled: Option<bool>`: `None` means the notice has no answer (dry run,
+  an absent file, or a degraded read) and step 1 prints unconditionally, exactly
+  as it does today; `Some(true)` omits step 1 (nothing said about hooks, per
+  DEC-329); `Some(false)` prints it naming the key.
 - The trust caveat states that codex loads project-scoped config only for trusted
   projects and that an untrusted project's layer is skipped silently, so a
   `Wired` report is a statement about the file, never about activation.
@@ -478,7 +480,7 @@ Ordering and disclosure rules:
 | `doctrine` an inline table in the emitted shape | `None` — content, not spelling, decides |
 | TOML does not parse, or the file is unreadable / not UTF-8 | `PrintedFallback`, bytes untouched |
 | file carries `[features] hooks = true` and comments | both preserved |
-| `codex` absent, `features list` fails, or the row is unrecognised | `Unknown(reason)` warning; install still succeeds |
+| `.codex/config.toml` absent, unreadable, unparseable, or without `[features] hooks` | step 1 still prints; install still succeeds |
 | `DOCTRINE_BIN` unset at run time | emitted string unchanged; runtime fallback is codex's behaviour |
 
 <!-- doctrine:section sec-6 -->
@@ -507,9 +509,11 @@ remains is placement, observation, and recorded follow-ups:
   and replaced. The codex leg's `NotFound`-vs-error split is the pattern;
   applying it to the Claude leg is ISS-495 (open, linked to this slice), not
   silently done here.
-- **`codex features list` scope.** Resolved by construction: the probe runs with
-  `root` as its working directory, so it answers for the project being installed
-  rather than for whatever tree the shell happens to be in.
+- **The hooks disclosure's authority.** Closed by `RV-403` `F-1`: the effective
+  hooks state is not readable from doctrine's side before trust (the CLI answers
+  for the user layer), so the design discloses the *project file's* value, which
+  is the file the notice names and the operator can edit. A user-layer override
+  remains theirs and out of doctrine's sight.
 - **A third harness.** Cursor (IMP-245) inherits the same question; the shared
   decision table is the seam that makes its planner cheap.
 
@@ -525,7 +529,7 @@ the alternatives considered, not the chronology.
 | Ownership & emitted-form set | Own the wrapper shape only (`command = "sh"` + a line in the emitted-forms set); `env_vars` absent or exactly the emitted whitelist; a stale wrapper refreshes to canonical. A plain `doctrine` literal, `/bin/sh`, baked abspaths and any user `env_vars` value are FOREIGN and left untouched. Comparator tests the emitted constants. | DEC-332 (supersedes the second half of DEC-324) |
 | Sharing boundary | Separate pure planner and shell per arm; one shared `McpEntryClass` enum plus `mcp_action` (class → what to do), each arm deriving its class from its own parse. | DEC-328 |
 | Report seam | One `mcp` field; `wire()` names the file from the harness; `PrintedFallback` keeps carrying its own file. | DEC-325 |
-| Disclosure & file ownership | Register MCP only — never `[features] hooks = true`; probe the harness (`codex features list`) and warn on `false` or unknown; disclose the trust-gated skip. The probe's *trigger* is a design choice keyed to the hook write, not the MCP write — DEC-329 itself rejects coupling the hook leg's activation to the MCP leg. | DEC-329 |
+| Disclosure & file ownership | Register MCP only — never `[features] hooks = true`; read the project file's `[features] hooks` key (never a subprocess — `RV-403` F-1) and print step 1 unless it is `true`; disclose the trust-gated skip. The disclosure's *trigger* is keyed to the hook write, not the MCP write — DEC-329 rejects coupling the hook leg's activation to the MCP leg. | DEC-329 (amended) |
 
 The ownership set was narrowed during the adversarial pass (RV-399 F-7): the plain literal is foreign-by-design, not a migration input. The third pass (RV-399 F-32/F-33) named the emitted-forms set as the mechanism behind "an earlier wording refreshes", and tightened `env_vars` to absent-or-exact so a refresh can never clobber a user's own list; DEC-332 was amended to match.
 
@@ -534,10 +538,17 @@ Rejected alternative (F-37): refusing to write into an inline `mcp_servers` or a
 Rejected alternatives, kept because they will be proposed again: baking an
 absolute path (POL-002, and untracked-vs-tracked is unresolvable without a
 resolver that does not exist); the literal `doctrine` command alone (loses the
-override that the jail and dispatch depend on, IMP-249); reading
-`[features] hooks` out of the project file (wrong by construction — the effective
-value may come from the user layer); and threading the MCP leg through the
-owner-locked hook merge core rather than sitting beside it.
+override that the jail and dispatch depend on, IMP-249); and threading the MCP
+leg through the owner-locked hook merge core rather than sitting beside it.
+
+**Overturned by `RV-403` `F-1`:** reading `[features] hooks` out of the project
+file was rejected as "wrong by construction — the effective value may come from
+the user layer". The audit showed the alternative is worse: a pre-trust
+`codex features list` answers for the user layer and can suppress step 1 for a
+project that disables hooks, which is the silent-hooks failure the disclosure
+exists to prevent. The project file's value is the honest scope — it is the file
+the notice names and the operator can edit — so the rejected alternative became
+the chosen remedy (option A, ratified 2026-09-27), and the probe is retired.
 
 
 <!-- doctrine:section sec-8 -->
@@ -548,12 +559,12 @@ owner-locked hook merge core rather than sitting beside it.
 | Comparator/migration thrash | A no-op branch testing a form the renderer does not emit rewrites the file on every install — the SL-195 `F-1` failure. | The comparator reads the emitted constants; ownership is one strict shape; the emitted-form matrix and the constants-agreement test make drift fail loudly. |
 | Stranding our own older wording | An ownership test that is exact string equality retires every installed entry the moment the wrapper wording changes: each becomes "foreign" and nags on every install — the false negative the first pass's probe list warned of. | Ownership is membership in `CODEX_MCP_WRAPPER_FORMS`; a wording change APPENDS its predecessor, so a previously-emitted wrapper refreshes instead of stranding. The matrix test enumerates the set. |
 | Clobbering a user's `env_vars` | An ownership rule that admits any `env_vars` reaches owned-but-stale from a *user's* own list and rewrites it, dropping the variables they forwarded — while an extra element is tolerated as current. | `owned` requires `env_vars` absent or exactly the emitted array; any other value is `Foreign`. Strict for elements as well as keys. |
-| A trust claim keyed to the wrong write | A probe hung off the MCP outcome leaves a dead hook write unwarned, and warns about hooks nobody just wired; the unchanged activation notice also tells every operator to set `hooks = true` even when the probe reports them on. | The probe hangs off `codex_hook_written`, its result folds into the activation notice (step 1 printed only when not `Enabled`), and the trust caveat prints exactly once per arm. |
+| A trust claim keyed to the wrong write | A disclosure hung off the MCP outcome leaves a dead hook write unwarned, and warns about hooks nobody just wired; the unchanged activation notice also tells every operator to set `hooks = true` even when the project already enables them. | The disclosure hangs off `codex_hook_written`, its project-file answer folds into the activation notice (step 1 printed unless `Some(true)`), and the trust caveat prints exactly once per arm. |
 | Parallel planner divergence | Two hand-maintained copies of "what is stale vs foreign" drift silently. | One shared `mcp_action` table both arms call (plus the class enum), with the existing `plan_mcp_*` suite as the unchanged behaviour-preservation proof. |
 | Panic instead of fail-soft | Indexing `args` on a hand-written short entry aborts `install_refresh` — the opposite of the never-clobber posture. | Every index is length-guarded; short arities are `Foreign`; unit cases pin `args = []` and `["-c"]`. |
 | Clobbering a user-owned file | `.codex/config.toml` holds `[features]`, comments and user keys. | Narrow-path `toml_edit` mutation; only a shape doctrine has emitted is owned; an e2e preservation assertion. |
 | False or stale claim in output | A written table that codex ignores, a dry-run that says "wrote", or a repeat "register manually" line all misdescribe the state. | The report states what was written; `dry_run` renders "would write"; a foreign entry's repeat output is stable; the trust caveat names the untrusted-project skip. |
-| Resting on an incidental seam | `.codex/config.toml`'s shape and `features list`'s output are both version-varying. | Unrecognised probe output degrades to a named `Unknown`; nothing is gated on the probe; the write seam is a recorded version delta with a post-write verification follow-up. |
+| Resting on an incidental seam | `.codex/config.toml`'s `[features]` shape is version-varying. | A missing or non-boolean `hooks` key reads as "not confirmed enabled" and prints the instruction; nothing is gated on the read; the write seam is a recorded version delta with a post-write verification follow-up. |
 | Dead override | Without `env_vars` the wrapper silently falls back to the stale PATH binary (IMP-249). | A wrapper with `env_vars` absent is `OwnedStale`, so it refreshes; `current` requires the emitted array exactly. |
 | Undeclared host dependency | The `sh` wrapper acquires a POSIX shell on the default path. | Declared per POL-002 facet 3 (§6). |
 | Requirements gap treated as closed | The Revision is raised at reconcile; a reconcile that skips it would close the slice with the surface permanently undelivered. | Close requires the two-member Revision landed or a recorded waiver; phases are allowed to proceed first (SL-250 / RV-350 precedent). |
@@ -601,15 +612,12 @@ is built from `CODEX_MCP_SERVE_ARGS`; `CODEX_MCP_ENV` occurs inside
 never match anything); and `CODEX_MCP_SERVER_KEY == MCP_SERVER_KEY`, pinned with
 the reason (one server, two harnesses) rather than shared by construction.
 
-**Unit — probe.** `parse_codex_features` against the verified shape
-(`hooks  stable  true` / `false`), an absent row, unexpected columns and garbage.
-`codex_hooks_state` through an injected runner over **five** cases: success
-carrying `hooks ... true` → `Enabled`; success carrying `hooks ... false` →
-`Disabled`; success with empty stdout → `Unknown`; **non-zero exit carrying a
-parseable row** → the parsed answer; runner error with useful `stderr` →
-`Unknown` naming that reason. One case asserts the runner received `root` as its
-working directory — a `--path` install must not probe another tree. No test
-requires a real codex on `PATH`.
+**Unit — hooks disclosure.** `parse_codex_hooks_feature` over a `.codex/config.toml`
+carrying `[features] hooks = true` / `= false` → `Some(true)` / `Some(false)`; an
+absent `hooks` key, an absent `[features]` table, a non-boolean value, and an
+unparseable document → `None`. `codex_project_hooks` over an absent file → `None`
+and over a real temp file → the parsed value. No test requires a real codex on
+`PATH`, and no test injects a runner — the seam is gone.
 
 **Integration — codex install.** Four cases. (i) A project whose
 `.codex/config.toml` carries `[features] hooks = true` and a comment: assert the
@@ -617,12 +625,13 @@ emitted entry equals §5.3 by PARSED value, the pre-existing keys and comment
 survive, and a second run reports nothing to do; (ii) a project with no
 `.codex/config.toml`: assert the file and parent directory are created; (iii) a
 project whose `.codex/config.toml` holds a non-UTF-8 byte: assert the bytes are
-unchanged and the fallback line prints (no clobber); (iv) `PATH` emptied: this
-case uses the **real** `CaptureRunner` (no injection), so the empty `PATH` is what
-makes the probe fail, and it asserts the warning carries a non-empty reason.
-Cases (i)–(iii) inject the runner. Additional assertions: the probe fires on a
-hook write even when the MCP entry was already current, and does not fire when
-only the MCP entry was refreshed; a foreign entry's second-run output is stable
+unchanged and the fallback line prints (no clobber); (iv) a project whose
+`.codex/config.toml` carries `[features] hooks = false` (or no `hooks` key):
+assert step 1 still prints; and one carrying `= true`: assert step 1 is omitted.
+No case injects a runner or empties `PATH` — the seam is gone. Additional
+assertions: the notice fires on a hook write even when the MCP entry was already
+current, and does not fire when only the MCP entry was refreshed; a foreign
+entry's second-run output is stable
 (not a fresh instruction); and no `dry_run` output contains the word "wrote" —
 for the MCP line **and** the hook activation notice; and that under `dry_run`
 the notice's step 1 still prints unconditionally (no probe ran). Ownership
@@ -646,10 +655,10 @@ control in the same test.
 
 | path | change |
 |---|---|
-| `src/boot.rs` | the codex constants (incl. `CODEX_MCP_WRAPPER_FORMS`); `McpEntryClass` + `mcp_action`; the `plan_mcp` refactor onto them (behaviour-preservation: existing `plan_mcp_*` suite unchanged); `plan_codex_mcp` / `install_codex_mcp` / `codex_mcp_entry` / `codex_mcp_fallback_snippet`; the read's `NotFound`-vs-error split; the table-like write; `parse_codex_features` / `codex_hooks_state`; the Codex arm's `mcp` outcome and its error boundary; `wire()`'s runner parameter, per-harness file name, wrote/would-write wording, one fallback wording, the three disclosure conditions and dry-run gating; `write_codex_activation`'s `Option<HooksState>` parameter and conditional step 1; `run_install:2645`; three stale doc comments (`RefreshOutcome:940`, `RefreshReport.mcp:1787`, the `wire` MCP block `:2851`) |
-| `src/install.rs` | `CaptureRunner` (`Command::output()` with `current_dir(cwd)`) and the default-injection point; `wire`'s production call site `install::run:414` |
-| `src/boot.rs` (tests) | the codex planner matrix, the decision-table test, the constants-agreement test, the five probe cases (one asserting the probe's `cwd`), the wire-level Claude-only assertion, the three disclosure-condition assertions, the dry-run wording assertion, the four existing `wire` call sites (`:6647`, `:6663`, `:6683`, `:6702`) and the `:5170` flip |
-| `tests/e2e_codex_install.rs` (new) | preservation + idempotence, create-from-absent, non-UTF-8 no-clobber, empty-`PATH` `Unknown(reason)` with the real runner |
+| `src/boot.rs` | the codex constants (incl. `CODEX_MCP_WRAPPER_FORMS`); `McpEntryClass` + `mcp_action`; the `plan_mcp` refactor onto them (behaviour-preservation: existing `plan_mcp_*` suite unchanged); `plan_codex_mcp` / `install_codex_mcp` / `codex_mcp_entry` / `codex_mcp_fallback_snippet`; the read's `NotFound`-vs-error split; the table-like write; `parse_codex_hooks_feature` / `codex_project_hooks` (replacing `parse_codex_features` / `codex_hooks_state`); the Codex arm's `mcp` outcome and its error boundary; `wire()`'s per-harness file name, wrote/would-write wording, one fallback wording, the three disclosure conditions and dry-run gating; `write_codex_activation`'s `hooks_enabled: Option<bool>` parameter and conditional step 1; `run_install:2645`; three stale doc comments (`RefreshOutcome:940`, `RefreshReport.mcp:1787`, the `wire` MCP block `:2851`) |
+| `src/install.rs` | RETIRED: `Capture`, `CommandRunner`, `CaptureRunner`; `wire`'s production call site `install::run:414` loses the runner argument |
+| `src/boot.rs` (tests) | the codex planner matrix, the decision-table test, the constants-agreement test, the hooks-disclosure cases (filesystem fixtures, no runner), the wire-level Claude-only assertion, the disclosure conditions and dry-run wording assertions, the `wire` call sites (`:7351`, `:7367`, `:7392`, `:7418`) lose the runner argument, and the `:5170` flip |
+| `tests/e2e_codex_install.rs` | preservation + idempotence, create-from-absent, non-UTF-8 no-clobber, `[features] hooks = false` → step 1 prints, `= true` → step 1 omitted |
 | `README.md`, `install/` docs | the POL-002 facet 3 declaration of the `sh` dependency |
 | `.doctrine/spec/tech/011/**` | touched only at reconcile, by the two-member Revision — never by a phase |
 

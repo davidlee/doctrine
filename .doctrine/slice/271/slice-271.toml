@@ -1,7 +1,7 @@
 id = 271
 slug = "codex-mcp-registration-during-install"
 title = "Codex MCP registration during install"
-status = "reconcile"
+status = "started"
 created = "2026-09-27"
 updated = "2026-09-27"
 tags = ["area:boot", "area:install", "cluster:harness-install", "harness:codex"]

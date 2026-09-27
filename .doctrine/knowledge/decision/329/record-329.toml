@@ -3,7 +3,7 @@ version = 1
 
 id = 329
 slug = "register-mcp-only-warn-on-hooks-using-codexs-own-cli"
-title = "Register MCP only; warn on hooks using codex's own CLI"
+title = "Register MCP only; disclose hooks from the project file"
 record_kind = "decision"
 status = "accepted"
 created = "2026-09-27"
@@ -11,11 +11,11 @@ updated = "2026-09-27"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-context = "inq-5, SL-271: install becomes the first doctrine writer of `.codex/config.toml`, a user-owned file whose `[features] hooks = true` key `write_codex_activation` today only instructs the human to set."
-choice = "Write the MCP registration only; probe `codex features list` for the effective hooks state and warn on false or unknown, naming the reason; disclose the trust-gated skip."
-alternatives = ["Set `[features] hooks = true` ourselves — removes a manual step but enables a client feature flag and couples the hook leg's activation to the MCP leg's write (including a fail-soft ordering hazard).", "Read the project file for the key instead of asking the CLI — wrong by construction: the effective value may come from the user layer or defaults, and it would miss the case the operator's own testing hit.", "Say nothing about hooks — loses a warning the operator explicitly asked for."]
-rationale = "The harness itself is the authority on its own effective configuration, so the CLI answers a question the file cannot. Declining to write the flag keeps doctrine out of enabling client features, and the disclosure keeps the honest-read obligation."
-consequences = ["A new host-tool invocation on the codex arm — the harness's own binary — with an absent binary handled as a named unknown rather than an error.", "The probe must be injectable so unit tests never require codex on PATH.", "An unrecognised `features list` shape degrades to a named warning, never a guess and never a failure.", "The install output gains: the registration line, the trust caveat, and (conditionally) the hooks warning."]
+context = "inq-5, SL-271: install becomes the first doctrine writer of `.codex/config.toml`, a user-owned file whose `[features] hooks = true` key `write_codex_activation` today only instructs the human to set. Amended at reconcile (RV-403 F-1, option A): the pre-trust probe premise was falsified."
+choice = "Write the MCP registration only; read `[features] hooks` from the project `.codex/config.toml` and print step 1 unless it is `true`; disclose the trust-gated skip."
+alternatives = ["Set `[features] hooks = true` ourselves — removes a manual step but enables a client feature flag and couples the hook leg's activation to the MCP leg's write (including a fail-soft ordering hazard).", "Probe `codex features list` for the effective state — the original choice, reversed by RV-403 F-1: a pre-trust probe answers for the user layer, so it can suppress step 1 for a project that disables hooks.", "Say nothing about hooks — loses a warning the operator explicitly asked for."]
+rationale = "Declining to write the flag keeps doctrine out of enabling client features, and the disclosure keeps the honest-read obligation. The effective state is not readable from doctrine side before trust, so the disclosure scopes to the project file the notice names and the operator can edit — the alternative (a pre-trust probe) is the silent-hooks failure the disclosure exists to prevent."
+consequences = ["The install output gains: the registration line, the trust caveat, and (conditionally) the hooks warning.", "The hooks read is a filesystem fixture in tests, never a runner; no codex subprocess runs on the install path, so POL-002 facet 3's host-dependency duty is only the `sh` statement.", "The project file's value is disclosed, not the effective value; a user-layer override remains the operator's and out of doctrine's sight."]
 decided_by = "user"
 decided_on = "2026-09-27"
 
