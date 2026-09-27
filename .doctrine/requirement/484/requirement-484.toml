@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 484
+slug = "boot-install-registers-the-doctrine-mcp-server-by-a-narrow-path-edit-preserving-write-of-mcp"
+title = "`boot install` registers the doctrine MCP server by a narrow-path, edit-preserving write of `[mcp_servers.doctrine]` into the project `.codex/config.toml` — a portable `sh -c` entry carrying no host absolute path — owning only a shape doctrine has emitted (the wrapper line in the emitted-forms set, `env_vars` absent or exactly the emitted whitelist), refreshing a stale owned entry, preserving foreign keys and tables, and printing the TOML snippet rather than clobbering a file or entry it cannot own; the report states what was written, never that the harness has activated it."
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

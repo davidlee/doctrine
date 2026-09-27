@@ -81,7 +81,7 @@ install e2e and `tests/e2e_claude_install.rs` makes no MCP assertion at all.
 | POL-003 facets 1–2 | Codex vocabulary (`mcp_servers`, `env_vars`, `command`, `args`) stays at the codex edge. The table's *shape* is a versioned seam: the design records the write as a documented version delta with a follow-up (facet 2's sanctioned outcome) rather than treating it as a stable contract. |
 | POL-003 facet 3 | The supplement is opt-in and **disclosed**: report what was written, name any step that remains, and never claim an entry is active while codex still requires project trust or while the write's shape may have moved. |
 | STD-001 | Every recurring literal gets one named constant, and where `const` cannot compose, a test pins the copies together. |
-| SPEC-011 REQ-186 | The merge posture to match: an ownership predicate over the entry, refreshing a stale owned copy, preserving every foreign hook and key. (Its text is the Claude settings file; it governs here by the posture, with the Claude `.mcp.json` leg as in-repo precedent.) |
+| SPEC-011 REQ-483 / REQ-484 | The MCP registration contract for each arm: an ownership predicate over the entry, refreshing a stale owned copy, preserving every foreign key and server, and a print-and-skip fallback. The posture is inherited from the Claude hook-set merge (`REQ-186`) and the codex hook registry (`REQ-479`). |
 | SPEC-011 responsibilities (prose) | The pure-plan/imperative-apply split `boot install` rides — a responsibility, not a requirement member. |
 | SPEC-011 REQ-479 | **Precedent, not authority**: the codex hook-registry leg shows a codex-specific surface getting its own member. Citing it as the *rule* would misread it. |
 | SPEC-011 REQ-480 | The per-leg reporting pattern: each generated file is reported as its own outcome rather than folded into another leg's line. |
@@ -397,12 +397,18 @@ Ordering and disclosure rules:
   the Claude arm accepts the same cost and names the boundary instead.
 - A malformed file yields `PrintedFallback` with a TOML snippet and no write.
   Install continues and the run ends green: the leg's failure mode is disclosure,
-  not error (SPEC-011 REQ-186). A foreign entry yields the same line, and a
+  not error (SPEC-011 REQ-484). A foreign entry yields the same line, and a
   repeat install produces the same stable line rather than a fresh instruction.
 - **Exact disclosure predicate.** Three separate conditions, because they answer
   three different questions:
-  - the MCP **wrote-line** prints iff `h == Codex && matches!(report.mcp, Wired |
-    Refreshed) && !dry_run`;
+  - the MCP **wrote-line** prints iff `matches!(report.mcp, Wired | Refreshed) &&
+    !dry_run`, harness-scoped: the Claude arm prints `registered MCP server in
+    .mcp.json: <invocation>` (or `refreshed MCP server in …` for a stale-entry
+    refresh), the Codex arm its single `wrote MCP server registration in
+    .codex/config.toml: <wrapper line>` form (`would write …` under `dry_run`).
+    Codex deliberately does not distinguish a fresh wire from a stale-entry
+    refresh — the operator's next step is identical and sec-5.2 specifies one
+    form (settles `RV-402` F-4);
   - the **hooks probe** fires iff `h == Codex && codex_hook_written && !dry_run` —
     the same signal that gates the activation notice (`boot.rs:2788`). `[features]
     hooks` gates codex HOOKS, not MCP servers, and the warning's own text is about

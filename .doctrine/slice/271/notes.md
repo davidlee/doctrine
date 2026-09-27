@@ -251,6 +251,40 @@ for both a foreign Claude entry and a foreign codex entry). Suites: `--bin doctr
 mcp` 131, `--bin doctrine codex` 22, `e2e_codex_install` 12,
 `architecture_layering` 25; `doctrine check gate` exit 0; `cargo fmt --check` clean.
 
+## Reconcile (RV-403, 2026-09-27) — F-2/F-3/F-4 landed; F-1 escalated
+
+Entered `reconcile`, then rewrote the primary tree's phase sheets from composite
+truth (`doctrine slice reconcile-phases 271`) — 3/3 `completed`, the
+`boundaries.toml` source-delta registry untouched (the `phase ... completed`
+clobber trap, `mem.pattern.doctrine.phase-complete-clobbers-boundary`). The fork
+`slice/SL-271-...` is retained until the rollup is confirmed.
+
+- **F-4** — `doctrine slice selector rm 271 'install/**'`. README is the `sh`
+declaration's home (`EX-9`/`VA-1`), so the declared-but-undelivered selector is
+dropped, not owed.
+- **F-3** — `design.md` sec-5.4 "exact disclosure predicate": the MCP wrote-line
+restated harness-scoped (Claude `registered`/`refreshed`, Codex a single
+`wrote`/`would write`), recording the decision that Codex does not distinguish a
+stale-entry refresh from a fresh wire (settles `RV-402` F-4).
+- **F-2** — one `SPEC-011` Revision, `REV-066` (`done`): `introduce FR-012`
+(Claude `.mcp.json` registration → `REQ-483`) and `FR-013` (codex
+`[mcp_servers.doctrine]` → `REQ-484`), plus a `modify SPEC-011` landing the
+Overview scope enumeration, the `responsibilities` list + prose, the `boot
+install` mechanism paragraph, and the Concerns/D6 fail-soft language. Also
+re-pointed `design.md` sec-5.4's `REQ-186` citation to `REQ-484`, and the sec-3
+governance row to `REQ-483`/`REQ-484` (the `REQ-186` merge posture demoted to
+in-repo precedent).
+- **F-1** — escalated to the design back-edge (`doctrine slice status 271
+design`) per the ratified option A remedy: read `[features] hooks` from the
+project `.codex/config.toml` and retire the probe (`HooksState`,
+`parse_codex_features`, `codex_hooks_state`, `write_codex_activation`'s
+`Option<HooksState>`, `wire()`'s runner parameter, `install.rs`'s
+`Capture`/`CommandRunner`/`CaptureRunner`). Owes code, so its lawful resolution
+is the back-edge + a new phase, never a reconcile edit.
+
+`design.md` is now diverged from the locked run `dr-01a0e17c` rev 44 — expected
+at reconcile, not damage (`mem.pattern.reconcile.edit-design-out-of-band`).
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-09-27 · audit (RV-403 concluded; fork landed) · ad5754620

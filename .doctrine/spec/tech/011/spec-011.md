@@ -15,8 +15,8 @@ governance kinds (ADR, policy, standard, memory) and the install/listing
 substrate for their row data; this spec restates none of that and owns only what
 is specific to *the projection and its wiring*: the pure assembly seam, the
 content-diff cache key, the section source-kind taxonomy and its marker
-fallback, the `@`-import, harness hook registries and generated pi extension
-installer, and the `--check` disk sentry.
+fallback, the `@`-import, harness hook registries, MCP server registration and
+the generated pi extension installer, and the `--check` disk sentry.
 
 ## Responsibilities
 
@@ -27,6 +27,8 @@ fixed marker on any miss; write only on content change; wire the `@`-import and
 the Claude hook set through `boot install`, into the scope-selected settings file
 and sweeping the abandoned sibling; merge the codex hook registry into
 `.codex/hooks.json` with the memory-surface limit and timeout on each handler;
+register the doctrine MCP server edit-preservingly per harness (Claude
+`.mcp.json`, codex `.codex/config.toml`), owning only a shape doctrine emitted;
 plan and install the generated pi extensions, one report leg per file; and run
 `boot --check` as a disk-scoped sentry.
 
@@ -82,7 +84,7 @@ the agent's cached session-start prefix, so an unchanged regenerate reports
 `Unchanged` and touches nothing. `doctrine boot` resolves the root and
 `current_exe()`, regenerates, and reports `Wrote` or `Unchanged`.
 
-### `boot install` — import wiring and hook merge
+### `boot install` — import wiring, hook merge and MCP registration
 
 `boot install` resolves target harnesses (explicit `--agent` wins, else
 auto-detect by `.claude/` / `.codex/` markers), then does two things behind a
@@ -129,6 +131,20 @@ the spec does not set is left alone. Codex runs a new or changed hook only after
 the operator trusts it in `/hooks`; writing the file does not activate it, so
 every wired or refreshed outcome prints that manual step naming all three hooks.
 
+Both arms also **register the doctrine MCP server**, each in its own harness's
+file and behind the same pure-plan / imperative-apply posture: Claude merges
+`mcpServers.doctrine` into the project `.mcp.json`, and codex writes
+`[mcp_servers.doctrine]` into the project `.codex/config.toml` by a narrow-path,
+edit-preserving `toml_edit` mutation that keeps unrelated keys, tables and
+comments. Each arm owns only a shape doctrine has emitted — for codex the
+portable `sh -c` wrapper line in the emitted-forms set, with `env_vars` absent
+or exactly the emitted whitelist — refreshes a stale owned entry, preserves
+every foreign key and server, and prints a manual-paste snippet rather than
+clobbering a file or entry it cannot interpret. The codex entry names no host
+absolute path (POL-002). Neither leg's report claims the harness has activated
+the server: a `wrote` line is a statement about the file, never about a live
+entry (POL-003 facet 3).
+
 The codex arm also plans and installs the generated **pi extensions** —
 `index.ts`, the `mcp.ts` bridge and the `surface.ts` memory-surface adapter —
 through one ownership-aware descriptor core: generate when absent, regenerate
@@ -163,8 +179,12 @@ edit lags until `/clear` or restart. Closing that lag is the freshen-now ritual
 - **Settings-merge safety.** The hook merges write into hand-editable JSON
   files they do not own (Claude settings, `.codex/hooks.json`); a malformed or
   oddly-typed `hooks`/`<event>` structure must fail soft (print-and-skip), never
-  clobber foreign content. A generated pi extension without doctrine's ownership
-  marker is foreign and skipped, never overwritten.
+  clobber foreign content. The MCP registration writes into shared harness
+  config too (`.mcp.json`, `.codex/config.toml`); a file or entry it cannot own
+  is left untouched and a manual snippet printed instead, and an entry is owned
+  only in a shape doctrine emitted, so a user's own `env_vars` value, extra key
+  or third argument is never modified. A generated pi extension without
+  doctrine's ownership marker is foreign and skipped, never overwritten.
 - **Written is not active.** A codex hook the operator has not trusted is skipped
   by codex at runtime. The installer can disclose the manual trust step; it
   cannot verify it, and never reports a written hook as active.
@@ -209,6 +229,7 @@ edit lags until `/clear` or restart. Closing that lag is the freshen-now ritual
 - **D6 — the installer preserves foreign content and fails soft.** The
   `@`-import is an idempotent dedup'd prepend; the hook merges (Claude settings,
   `.codex/hooks.json`) mutate JSON at the narrow path, preserving every foreign
-  hook, and print a manual snippet rather than clobbering a malformed file; a
-  generated pi extension lacking doctrine's ownership marker is skipped and
-  reported.
+  hook, and print a manual snippet rather than clobbering a malformed file; the
+  MCP registration owns only a shape doctrine emitted and leaves a foreign or
+  uninterpretable entry alone with a snippet; a generated pi extension lacking
+  doctrine's ownership marker is skipped and reported.

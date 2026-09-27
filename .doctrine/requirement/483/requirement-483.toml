@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 483
+slug = "boot-install-registers-the-doctrine-mcp-server-under-mcpserversdoctrine-in-the-project-mcpjson-the"
+title = "`boot install` registers the doctrine MCP server under `mcpServers.doctrine` in the project `.mcp.json` — the portable `${DOCTRINE_BIN:-doctrine}` invocation, or a legacy absolute-path form it owns — refreshing a stale owned entry and preserving every foreign key and server, and printing a manual-paste snippet rather than clobbering a file or entry it cannot interpret."
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
