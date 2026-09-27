@@ -33,3 +33,8 @@ target = "RFC-033"
 target = "ADR-005"
 action = "modify"
 primary = true
+
+[[change]]
+target = "ADR-024"
+action = "modify"
+primary = false

@@ -45,12 +45,30 @@ Deliberately **left unchanged**:
   so residency is compatible with single ownership.
 - The restate line (R-OQ-4). The new memory invariant is its sibling, not an
   edit to it.
-- ADR-019 and ADR-024. Ownership is orthogonal to ADR-019's asset policies, and
-  RFC-033 dropped the public target that would have reopened ADR-024's scope.
+- ADR-019. Ownership is orthogonal to its asset policies.
+- ADR-024's scope fence. RFC-033 dropped the public target that would have
+  reopened it; Change 2 touches only the citation form.
 - SPEC-011 and SPEC-026. The frame needs no new mechanism: boot already derives
   its sections, and the publication register already carries the library.
 
-No REQ rows: ADR-005 is the only governed truth that changes. `modify` rows are
+### The `lib:` citation form
+
+Once the library carries most of doctrine's instruction, a citation of it must
+be recognisable on sight, the way `[[mem.<key>]]` and `SL-NNN` are. Today boot
+teaches the bare form `<name>.md`, while ADR-024 names the logical address
+`reference/<name>.md`. The two have drifted, and neither is unambiguous: in a
+client, `governance.md` names both a library doc and the project's own
+`.doctrine/governance.md`, a tier-2 file (see QUE-228).
+
+Change 2 marks ADR-024's published logical address with a `lib:` prefix —
+`lib:reference/glossary.md`. Stripping the prefix yields exactly the argument
+`doctrine library show` takes, it covers every published entry (not only
+`reference/`), and it is matchable by a pattern, which makes the
+citation-resolution criterion mechanical. Boot introduces it once. Migrating
+existing bare citations (boot, skills, templates, memories) is slice work
+descending from RFC-033, not part of this apply.
+
+No REQ rows: ADR-005 and ADR-024 are the only governed truth that changes. `modify` rows are
 hand-landed at apply, so each **After** block below is the exact replacement
 text.
 
@@ -74,8 +92,9 @@ text.
    This tier is the **normative owner** of doctrine's rules and concepts (see
    *Ownership by material type* below). A pull-reference is only *visible* to a
    client if a skill, a memory or the boot digest **points at it**: reference docs
-   are published, not projected (ADR-019), read with `doctrine library show
-   reference/<name>.md`, and a doc nothing cites is read by no one. The set:
+   are published, not projected (ADR-019), cited by their `lib:` address
+   (ADR-024) and read with `doctrine library show <address>`; a doc nothing cites
+   is read by no one. The set:
 ````
 
 ### Add tier 4 and the ownership table — insert after tier 3
@@ -98,7 +117,7 @@ text.
 4. **PULL-orientation — the shipped memory corpus.** Dense, retrieved on demand,
    agent-voiced. A memory carries orientation (where to look next), sharp edges,
    and facts the reference library does not own; for anything the library owns
-   it **points** (cites `<name>.md`) rather than restating.
+   it **points** (cites its `lib:` address) rather than restating.
 
 **Ownership by material type (RFC-033).** Every rule or concept has exactly one
 normative home. Every other surface either **derives** from it mechanically or
@@ -107,7 +126,7 @@ normative home. Every other surface either **derives** from it mechanically or
 | material | home | other surfaces |
 |---|---|---|
 | structured / generated (vocabularies, command shapes, boot sections) | code, `--help`, or the publication register | derived; checked by regeneration |
-| rules and concepts | the reference library (tier 2) | cite by `<name>.md` |
+| rules and concepts | the reference library (tier 2) | cite by `lib:` address |
 | orientation, sharp edges, facts the library does not own | memories (tier 4) | point at the library for anything it owns |
 | routing | skills (tier 3) | — |
 | human orientation (tour, quickstart, mental model) | its own documentation mode | may paraphrase for a human reader; must cite the owner |
@@ -132,8 +151,9 @@ normative home. Every other surface either **derives** from it mechanically or
 - **The memory line:** a memory **MAY** cite a library-owned rule or concept by
   name; it **MUST NOT** restate it. The same applies to any memory the boot
   snapshot inlines.
-- A citation must **resolve**: every `<name>.md` a shipped surface cites is in the
-  publication register.
+- A library citation carries the **`lib:` marker** (ADR-024) and must
+  **resolve**: every `lib:` address a shipped surface cites is in the
+  publication register. A bare `<name>.md` is not a library citation.
 ````
 
 ### Consequences / Positive — qualify the single-source claim
@@ -165,9 +185,62 @@ normative home. Every other surface either **derives** from it mechanically or
 ````markdown
 - **VA** — no shipped doc reproduces `doctrine --help` content; each pull-reference
   is pointed-at by a skill, a memory or boot (reachability check).
-- **VT** — every `<name>.md` citation in a shipped skill, memory or boot source
+- **VT** — every `lib:` citation in a shipped skill, memory or boot source
   resolves to a publication-register entry (citation-resolution check).
 - **VA** — no shipped memory restates a rule or concept the reference library
   owns (the memory line). Restatement is not mechanically detectable; this
   criterion is held by review.
+````
+
+## Change 2 — ADR-024 (modify)
+
+### Form 2 — mark the published logical address
+
+**Before:**
+
+````markdown
+2. **A published logical address** — `reference/<name>.md`, resolvable in every
+   client through `doctrine library show` (`ADR-019`). A published doc has no
+   file on disk in a client, so this is a logical address, not a path.
+````
+
+**After:**
+
+````markdown
+2. **A published logical address** — cited as `lib:<address>`, e.g.
+   `lib:reference/glossary.md`, where `<address>` is exactly the argument
+   `doctrine library show` takes (`ADR-019`) and may name any published entry.
+   A published doc has no file on disk in a client, so this is a logical
+   address, not a path; the `lib:` marker says so on sight and tells it apart
+   from a client file of the same name.
+````
+
+### The no-new-syntax sentence
+
+**Before:**
+
+````markdown
+admissible, at any tier.** These six are not a new citation syntax; they are the
+resolution seams a client already has.
+````
+
+**After:**
+
+````markdown
+admissible, at any tier.** Apart from form 2's `lib:` marker, these six are not
+a new citation syntax; they are the resolution seams a client already has.
+````
+
+### Disposition table — the repoint row
+
+**Before:**
+
+````markdown
+| a durable, corpus-internal referent | **repoint** to a published `reference/<name>.md` |
+````
+
+**After:**
+
+````markdown
+| a durable, corpus-internal referent | **repoint** to a published `lib:` address |
 ````
