@@ -10,7 +10,7 @@ raiser    = "raiser"
 responder = "responder"
 rounds_base = 0
 contests_base = 0
-concluded = true
+concluded = false
 
 [[review.turn]]
 act = "conclude"
@@ -31,7 +31,7 @@ ref   = "SL-273"
 
 [[finding]]
 id = "F-1"
-status = "verified"
+status = "answered"
 severity = "blocker"
 title = "Sweep verification permits edits to leave rows"
 detail = """
@@ -40,8 +40,9 @@ Observed: design.md:376-383 requires checking that applied rows changed and that
 """
 disposition = "fix-now"
 response = """
-Accepted. Design sec-5 (section 6.3): verification is per occurrence against each row's own verdict — accept/amend rows read as adjudicated, leave/reject rows unchanged — and every changed occurrence must map to exactly one applied row; hunk co-residence no longer authorises. Mechanical over inventory.toml + git diff, output in notes.md. Section 6.4: the audit re-pass also flags any lib: occurrence at a first-inventory leave/reject location. I5 restated per occurrence (sec-6).
+Design repaired in sections 6.3 and 6.4 (per-occurrence check, leave rows unchanged, audit flags unauthorised conversions). Control: the concrete incorrect candidate is a phase 4 diff that converts a slice-artefact design.md mention adjudicated leave to a lib templates citation, in the same hunk as an authorised glossary conversion; the per-occurrence check must reject it. Criterion: the verification script reports that occurrence as unauthorised. Host phase constraint: the phase that applies the adjudicated inventory, run before its import is accepted.
 """
+route = "control"
 
 [[finding.turn]]
 act = "raise"
@@ -60,9 +61,23 @@ act = "verify"
 role = "raiser"
 note = "Sections 6.3-6.4 require per-occurrence checks against adjudicated outcomes, unchanged leave/reject occurrences, exact mapping of changed occurrences, and audit detection of unauthorized conversions."
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Reopened by the responder agent solely to attach the route the design-review gate requires; the raiser's verification of the design repair is unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "control"
+response = """
+Design repaired in sections 6.3 and 6.4 (per-occurrence check, leave rows unchanged, audit flags unauthorised conversions). Control: the concrete incorrect candidate is a phase 4 diff that converts a slice-artefact design.md mention adjudicated leave to a lib templates citation, in the same hunk as an authorised glossary conversion; the per-occurrence check must reject it. Criterion: the verification script reports that occurrence as unauthorised. Host phase constraint: the phase that applies the adjudicated inventory, run before its import is accepted.
+"""
+
 [[finding]]
 id = "F-2"
-status = "verified"
+status = "answered"
 severity = "major"
 title = "Shipped TOML citations escape the enforcing sweep test"
 detail = """
@@ -71,8 +86,9 @@ Observed: design.md:170-179 walks only `*.md` under `install` and `plugins/doctr
 """
 disposition = "fix-now"
 response = """
-Accepted; verified install/templates/plan.toml:25 and install/doctrine.toml:25. Design sec-3 (4.2): SHIPPED_TEXT_ROOTS walks every file under the roots, not only *.md; a non-UTF-8 file fails by name. Test renamed no_bare_library_mention_in_shipped_text; I2 and verification restated for shipped text.
+Design repaired in section 4.2 (every file under the shipped roots). Control: the concrete incorrect candidate is a bare glossary.md mention placed in a comment of a shipped TOML template; the no-bare-mention test must fail on it, and an undeclared lib citation in the same file must fail the resolution test. Criterion: both tests fail on the seeded TOML fixture. Host phase constraint: the phase that builds the resolution check.
 """
+route = "control"
 
 [[finding.turn]]
 act = "raise"
@@ -91,9 +107,23 @@ act = "verify"
 role = "raiser"
 note = "Section 4.2 walks every file under the shipped roots, including TOML, fails named non-UTF-8 files, and consistently renames the enforcing test and I2."
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Reopened by the responder agent solely to attach the route the design-review gate requires; the raiser's verification of the design repair is unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "control"
+response = """
+Design repaired in section 4.2 (every file under the shipped roots). Control: the concrete incorrect candidate is a bare glossary.md mention placed in a comment of a shipped TOML template; the no-bare-mention test must fail on it, and an undeclared lib citation in the same file must fail the resolution test. Criterion: both tests fail on the seeded TOML fixture. Host phase constraint: the phase that builds the resolution check.
+"""
+
 [[finding]]
 id = "F-3"
-status = "verified"
+status = "answered"
 severity = "major"
 title = "Scanner silently validates a truncated citation"
 detail = """
@@ -102,8 +132,9 @@ Observed: the maximal `[A-Za-z0-9_./-]` run at design.md:72-76 stops before `#` 
 """
 disposition = "fix-now"
 response = """
-Accepted; verified LogicalAddress::parse accepts '#'. Design sec-2 (3.1): recognition takes a whole run up to whitespace, backtick, quote, angle brackets, parens or square brackets, then trims trailing .,;: — a suffix such as #section stays in the address and fails resolution, so the check validates exactly what library show receives. Core test added (4.4); edge case in 7.2.
+Design repaired in section 3.1 (whole token kept, trailing punctuation trimmed). Control: the concrete incorrect candidate is the citation lib:reference/glossary.md#section; scan plus unresolved must report it undeclared, while lib:reference/glossary.md followed by an exclamation mark must pass. Criterion: core unit tests for both. Host phase constraint: the phase that builds the resolution check.
 """
+route = "control"
 
 [[finding.turn]]
 act = "raise"
@@ -122,9 +153,23 @@ act = "verify"
 role = "raiser"
 note = "Section 3.1 consumes #section and ?x as part of the address, so unresolved rejects those suffixes; section 4.4 adds the corresponding core case."
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Reopened by the responder agent solely to attach the route the design-review gate requires; the raiser's verification of the design repair is unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "control"
+response = """
+Design repaired in section 3.1 (whole token kept, trailing punctuation trimmed). Control: the concrete incorrect candidate is the citation lib:reference/glossary.md#section; scan plus unresolved must report it undeclared, while lib:reference/glossary.md followed by an exclamation mark must pass. Criterion: core unit tests for both. Host phase constraint: the phase that builds the resolution check.
+"""
+
 [[finding]]
 id = "F-4"
-status = "verified"
+status = "answered"
 severity = "major"
 title = "Shipped citation test trusts the potentially stale embed"
 detail = """
@@ -133,8 +178,9 @@ Observed: design.md:170-179 loads PublicationManifest::load(), which reads the c
 """
 disposition = "fix-now"
 response = """
-Accepted; verified src/asset_source.rs:69-74. Design sec-3 (4.2): the build-repo test admits the manifest from disk via asset_source::publication_manifest_bytes_from_disk; the doctor leg keeps the embed; backing availability stays with every_shipped_entry_resolves_and_is_mit. R5 mitigation updated.
+Design repaired in section 4.2 (build-repo test admits the manifest from disk). Control: the concrete incorrect candidate is a shipped citation to an address that the on-disk manifest no longer declares but a stale compiled embed still does; the build-repo test must fail. Criterion: a test feeding the disk-manifest path with the address removed observes the failure independent of the embed. Host phase constraint: the phase that builds the resolution check.
 """
+route = "control"
 
 [[finding.turn]]
 act = "raise"
@@ -153,9 +199,23 @@ act = "verify"
 role = "raiser"
 note = "Section 4.2 admits the current manifest from disk for the build-repo citation test, preserving the embedded resolver test for backing availability."
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Reopened by the responder agent solely to attach the route the design-review gate requires; the raiser's verification of the design repair is unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "control"
+response = """
+Design repaired in section 4.2 (build-repo test admits the manifest from disk). Control: the concrete incorrect candidate is a shipped citation to an address that the on-disk manifest no longer declares but a stale compiled embed still does; the build-repo test must fail. Criterion: a test feeding the disk-manifest path with the address removed observes the failure independent of the embed. Host phase constraint: the phase that builds the resolution check.
+"""
+
 [[finding]]
 id = "F-5"
-status = "verified"
+status = "answered"
 severity = "major"
 title = "Doctor can report clean after an unreadable authored Markdown file"
 detail = """
@@ -164,8 +224,9 @@ Observed: the design names only manifest admission failure; it gives no per-file
 """
 disposition = "fix-now"
 response = """
-Accepted; verified src/doctor_checks.rs:284-321 silently skips. Design sec-3 (4.3): the leg discloses manifest admission failure, glob construction failure, and each unreadable matched file (name + reason) while continuing over readable siblings; it does not copy prose_cite's walk. Tests added (4.4) and verification row updated.
+Design repaired in section 4.3 (doctor discloses manifest, glob and per-file read failures). Control: the concrete incorrect candidate is a client .doctrine markdown file that cannot be read, beside a readable sibling holding an unresolved lib citation; doctor must emit a finding naming the unreadable file and still report the sibling. Criterion: doctor_checks test with an unreadable fixture. Host phase constraint: the phase that builds the doctor leg.
 """
+route = "control"
 
 [[finding.turn]]
 act = "raise"
@@ -183,6 +244,20 @@ Accepted; verified src/doctor_checks.rs:284-321 silently skips. Design sec-3 (4.
 act = "verify"
 role = "raiser"
 note = "Section 4.3 requires findings for manifest, glob, and per-file read failures, plus continued checking of readable siblings; sections 4.4 and 8.1 require doctor tests."
+
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Reopened by the responder agent solely to attach the route the design-review gate requires; the raiser's verification of the design repair is unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "control"
+response = """
+Design repaired in section 4.3 (doctor discloses manifest, glob and per-file read failures). Control: the concrete incorrect candidate is a client .doctrine markdown file that cannot be read, beside a readable sibling holding an unresolved lib citation; doctor must emit a finding naming the unreadable file and still report the sibling. Criterion: doctor_checks test with an unreadable fixture. Host phase constraint: the phase that builds the doctor leg.
+"""
 
 [[finding]]
 id = "F-6"

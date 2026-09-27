@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e2dd-81fd-78e2-9def-659eecca7aa2"
+recorded_at = "2026-09-27T12:36:02.685235407Z"
+kind = "friction"
+summary = "design skill: design-review route requirement surfaces only at lock"
+detail = "SL-273 RV-408: responder disposed severe findings fix-now without --route (the dispose help and the feedback skill do not mention it; the rule lives in design-prompts/reviewing.md). The raiser verified all. review-disposed then refused at lock: severe findings carry no route. Remedy per the CLI is raiser reopen then responder re-dispose with --route — a full extra ledger round for bookkeeping."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
