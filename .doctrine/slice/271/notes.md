@@ -177,6 +177,50 @@ contested, 2 new (F-43 minor, F-44 nit).
   normalise fixed-point assertion added; ISS-495 cited by id; the fallback
   wording is "could not be interpreted".
 
+## Plan (2026-09-27) — three phases, design rev 44
+
+Authored `plan.toml` + `plan.md`; materialised PHASE-01..03. Deliverables map:
+
+- **PHASE-01** — `McpEntryClass` + `mcp_action` + the `plan_mcp` refactor; the
+  `Wired`/`Refreshed` payload becomes the full invocation. Behaviour-preservation
+  proof is the untouched `plan_mcp_*` suite (`DEC-328`).
+- **PHASE-02** — the codex leg: constants, `codex_mcp_entry` /
+  `codex_mcp_fallback_snippet`, `plan_codex_mcp`, `install_codex_mcp` (read split
+  + `toml_edit` narrow-path write), arm wiring with boundary context, the report
+  seam (per-harness file, wrote/would-write, one fallback wording), the `:5170`
+  flip, the new `tests/e2e_codex_install.rs`, and the `sh` declaration
+  (`DEC-323`, `DEC-325`, `DEC-332`).
+- **PHASE-03** — the capture seam (`CaptureRunner`), `parse_codex_features`,
+  `codex_hooks_state`, `write_codex_activation(Option<HooksState>)`, the trust
+  caveat (`DEC-329`).
+
+Boundary rationale is in `plan.md`; the load-bearing one is that the codex leg
+lands whole, because a planner-only phase leaves `install_codex_mcp` uncalled in
+a non-test build (a `dead_code` warning at the zero-warning gate).
+
+### Assessment performed before declaring readiness
+
+- **Design premises re-grepped.** Every concrete reference in design sec-2/sec-5
+  resolves at the current tree (`McpPlan:1976`, `plan_mcp:2034`,
+  `install_mcp:2087`, the `wire()` MCP block `:2851-2878`, `codex_hook_written`
+  `:2788/:2799`, `install_mcp` empty `.ok()` `:2089`, the gitignore-justified
+  `CommandForm::Baked` `:2331-2338`, the `plan_mcp_*` suite `:5293-5416`, and the
+  four `wire` test call sites). `src/boot.rs` and `src/install.rs` are byte-identical
+  to the design commit `e569620cd`. Confirmed `src/install.rs:1713` `trait Runner`
+  returns `bool` and cannot capture stdout, and that `boot.rs` has no `toml_edit`
+  use today (`toml_edit = 0.22`, `Cargo.toml:174`).
+- **Research advisory.** Drift is `design.md` only — research predates design by
+  construction; no code premise moved. Not restamped (recorded in `plan.md`).
+- **Routed findings.** `RV-399` has 44 findings, all `fix-now` + verified, none
+  routed `demonstrate`/`probe`/`control` — nothing to transcribe.
+- **Selectors.** Drafted from the Thread 2 hotspot map + design impact table;
+  removed the redundant `install/manifest.toml` selector.
+- **Version-delta assumptions.** Not re-probed; the post-write `codex mcp get
+  doctrine` check and seam re-verification are `IMP-497` (created, `references`
+  SL-271). `ISS-495` stays out of scope.
+- **Spec Revision.** Two-member `SPEC-011` Revision at reconcile; no phase cites
+  its `REQ` ids.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>

@@ -19,10 +19,6 @@ selector = "src/install.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "install/manifest.toml"
-intent = "scope-relevant"
-
-[[selector]]
 selector = "tests/**"
 intent = "scope-relevant"
 
