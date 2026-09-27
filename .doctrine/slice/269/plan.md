@@ -62,6 +62,14 @@ flowchart LR
   less. So when `update-ref` fails and the ref is still absent, the lock was
   held persistently: an error, not a race. PHASE-02 VT-1 (two trees racing)
   exercises the race side.
+- PHASE-05 VT-3 needs a seam. `run_new` reaches `admit_review` through
+  `resolve_review_root`, which reads `DOCTRINE_WORKER`; setting that in the test
+  process races parallel tests, and a CLI e2e would hit `worker_guard` first
+  rather than the review-level check. Shape: `resolve_review_root` delegates to
+  a `resolve_review_root_as(path, worker: bool)` the test calls, and the test
+  asserts no `review/NNN` dir and no reservation ref exist after the refusal.
+  `/phase-plan` for PHASE-05 confirms or replaces this; it must not weaken the
+  assertion to `admit_review` alone.
 - Unwritable-ref-store test (PHASE-01 VT-1): a `chmod` read-only `refs/` dir is
   bypassed when tests run as root; use a persistently held `<ref>.lock` file
   instead, which git refuses regardless of uid once its lock timeout expires.
