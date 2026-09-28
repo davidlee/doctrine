@@ -269,3 +269,232 @@ Backlog items record intent as it stood when they were filed, so they count as h
 | review ledger, harvest, dispatch mechanics | their docs | deferred to the section 6 restate audit (PHASE-03 onward). Not in this phase. |
 
 I3: no owner points back to an essentials summary.
+
+## PHASE-03 worker brief
+
+Verbatim copy of the sheet sections "Inventory roots and token classes",
+"`inventory.toml` row schema", "Recommendation criteria" and "Worker brief"
+(`.doctrine/state/slice/273/phases/phase-03.md`), appended by W-C to satisfy EN-2
+before enumerating C- rows (T1).
+
+## Inventory roots and token classes
+
+**Roots.**
+
+| root | C- rows | R- rows | enumeration |
+|---|---|---|---|
+| `plugins/doctrine/skills/**` (every file) | yes | yes | regex + full read (R) |
+| `install/**` (every file: md, toml, just, hooks, hymns, design-prompts, agents, templates) | yes | only `install/templates/plan.toml` comment | regex |
+| `src/**` prose-bearing text (A3) | yes | no | literal grep + `--help` walk |
+
+Use `rg --no-ignore --hidden`: the check walks every file under the roots, so
+gitignore must not hide any.
+
+**Token classes to enumerate (C-).**
+
+1. **`*.md` tokens**, verbatim, as matched by
+   `MD='[A-Za-z0-9_.<>{}*/~-]*[A-Za-z0-9_>}*-]\.md\b'`. This is one regex for
+   bare basenames (`glossary.md`), paths (`install/glossary.md`,
+   `.doctrine/governance.md`, `reference/harvest.md`), globs (`**/handover.md`)
+   and placeholders (`<name>.md`, `slice-NNN.md`). The `token` field is the
+   regex match exactly: `lib:reference/glossary.md` yields token
+   `reference/glossary.md` (`:` is outside the class).
+2. **Library path forms that don't end in `.md`**:
+   `(reference|templates)/[A-Za-z0-9_.<>{}-]+` not preceded by
+   `[:A-Za-z0-9_/-]`, e.g. `reference/doctrine.toml.example`,
+   `templates/plan.toml`. Baseline: **0** in plugins+install. Still run it.
+3. **`doctrine library show` forms**, including the **wrapped** form, where
+   `library show` ends one line and the address opens the next. Five library
+   maintainer headers use it (`install/{review-ledger,dispatch-mechanics,
+   using-doctrine,claude-activation,harvest}.md:2-3`). The token is the
+   address (class 1 catches it). The excerpt must span both lines so PHASE-04
+   can rewrite the whole form. Probe:
+   `rg -n 'library show`?\s*$|library\s*$' plugins/doctrine/skills install`.
+4. **Src prose** (A3), in two sub-steps:
+   - `--help` walk: for each command and verb, `doctrine <c> [<v>] --help`,
+     grep `\.md\b|reference/|library show`, then map each hit to its doc
+     comment's `file:line`.
+   - Non-test literals: per file, stop at the first `#[cfg(test)]`, skip
+     `tests.rs`, and grep string literals (including continuation lines,
+     `concat!` and raw strings) for `MD`. Keep only those that reach output.
+
+**Restate offenders (R-)**, one row per offending **block** (a table, a list,
+or a paragraph), with non-overlapping spans:
+
+- `flag-shape`: a flag table, an option list, an enum/value table for flags,
+  or prose explaining what flags do or which values they take. Owner:
+  `doctrine <cmd> --help`. Recommend `cut-to-help`.
+- `owned-concept`: prose or a table restating a concept a library doc owns.
+  Owners per design 5.2 and research overlaps:
+  - `lib:reference/review-ledger.md`: RV acts, severity/disposition vocabulary
+  - `lib:reference/harvest.md`
+  - `lib:reference/dispatch-mechanics.md`: the funnel, oracle, unbound fork,
+    worktree verb classes
+  - `lib:reference/glossary.md`: reference forms, criteria modes
+  - `lib:reference/using-doctrine.md`: storage tiers, read via `show`,
+    publication, which-home
+  - `lib:reference/authority.md`
+
+  Recommend `cut-to-lib`.
+- `ownerless-concept`: a concept table with no library owner. Map it to an
+  IMP-500 gap:
+  - G1 push/pull tiering and boot anatomy
+  - G2 memory mechanics
+  - G3 backlog mechanics
+  - G4 knowledge gating
+  - G5 spec authoring
+  - G6 worktree isolation
+  - G8 `doctrine.toml` schema
+
+  Recommend `log`.
+- **Not an offender** (not recorded): a single inline invocation at the step
+  where the agent runs it, e.g. "flip the phase with
+  `doctrine slice phase <id> PHASE-NN --status in_progress`", naming a verb and
+  the flags that step needs without explaining them. This is ADR-005's MAY
+  (name a verb). **This boundary needs human confirmation: see OQ-1.**
+
+## `inventory.toml` row schema
+
+The file holds a header comment, then `[[row]]` tables. It is generated with
+`nu` (`{row: $rows} | to toml`). **Never hand-escape excerpts**: nu round-trips
+backticks, quotes and newlines (probed). Validate with `nu -c 'open <file>'`.
+
+```toml
+# SL-273 sweep inventory — design 6.1. Rows are append-only; ids never renumber.
+[[row]]
+id        = "C-014"   # C-nnn citation / R-nnn restate; 3-digit; sorted by (file, line) at mint; append-only
+file      = "plugins/doctrine/skills/audit/SKILL.md"   # repo-relative
+line      = 42        # 1-based line of the excerpt's first line; informational (lines drift)
+token     = "review-ledger.md"        # (+) C: the MD / path regex match, verbatim; R: ""
+excerpt   = "see `review-ledger.md` for the turn protocol"   # verbatim text; occurs EXACTLY ONCE in file; may span lines
+span      = "`review-ledger.md`"      # (+) exact substring of excerpt that target/resolved replaces; occurs EXACTLY ONCE in excerpt; C: contains token
+class     = "library-doc"
+recommend = "convert"
+target    = "`lib:reference/review-ledger.md`"   # replacement for span; "" when recommend is leave | log
+owner     = ""        # (+) R: "--help:<cmd>" | "lib:reference/<doc>.md" | "IMP-500:G<n>"; C: ""
+within    = ""        # (+) C: id of the R- row whose span contains this occurrence, else ""
+reason    = "names the published review-ledger protocol"
+verdict   = ""        # orchestrator: accept | amend | reject — empty until adjudicated
+resolved  = ""        # orchestrator, on amend only: replacement for span (non-empty)
+```
+
+(+) marks a field added to design 6.1's sketch. All are additive and consistent
+with its semantics (Decisions D3).
+
+**Vocabularies** (design 6.1, unchanged):
+
+| prefix | `class` | `recommend` |
+|---|---|---|
+| C- | `library-doc` · `library-path` · `template` · `slice-artefact` · `client-file` · `repo-file` · `other` | `convert` · `leave` |
+| R- | `flag-shape` · `owned-concept` · `ownerless-concept` | `cut-to-help` · `cut-to-lib` · `log` |
+
+Class meanings (C-):
+
+- `library-doc`: a bare basename (or an existing `lib:` site) of a published
+  reference doc, meant as that doc.
+- `library-path`: a path form addressing a library asset:
+  `reference/<x>`, `doctrine library show <x>`, `install/<x>`,
+  `.doctrine/<libdoc>.md`.
+- `template`: a published template (`templates/<x>`, or a template basename
+  used to mean the template).
+- `slice-artefact`: a client entity or runtime file: `design.md`, `plan.md`,
+  `notes.md`, `phase-NN.md`, `handover.md`, `research.md`, `audit.md`,
+  `inquisition.md`, `slice-NNN.md`, `review-NNN.md`, `revision-NNN.md`,
+  `memory.md`, and so on.
+- `client-file`: a client repo file: `CLAUDE.md`, `AGENTS.md`,
+  `.doctrine/governance.md`, `README.md`, the projected
+  `project-orientation.md`.
+- `repo-file`: a shipped-tree or doctrine-repo file that is not a library
+  address: `SKILL.md`, a skill sibling such as `rigour/reference.md` or
+  `worktree/NOTICE.md`, and src path constants.
+- `other`: placeholders, globs, examples.
+
+**Outcome rule** (used by PHASE-04 and by the checks here):
+
+- The text **changes** iff `verdict = "amend"`, or `verdict = "accept"` and
+  `recommend` ∈ {`convert`, `cut-to-help`, `cut-to-lib`}.
+- The new text of `span` is `resolved` on amend, and `target` otherwise.
+- Every other row leaves its excerpt byte-identical. That covers `leave`,
+  `log` and `reject` rows.
+- A C- row with `within` set is **subsumed** when its R- row changes: PHASE-04
+  checks the R- row only.
+- To delete text, widen `span` so the replacement is non-empty (no sentinel).
+  Example: `span = "…library. A doc still cited bare…\`reference/<name>.md\`."`
+  with `resolved = "…library."`.
+
+## Recommendation criteria (the worker applies these; they are design 6.2)
+
+C- rows:
+
+1. `convert` only where the text means the **published library asset**, that
+   is, where `doctrine library show` would return what the sentence refers
+   to. The target is a code-span `lib:` address using post-rename names
+   (`lib:reference/essentials.md`, never `routing-process.md` or
+   `boot-footer.md`). Section names stay as prose after the citation
+   (`` `lib:reference/glossary.md` § reference forms ``). No `#anchor`.
+2. `template` and `slice-artefact` rows are `leave`, unless the sentence is
+   plainly about the published template (then `lib:templates/<x>`).
+3. `governance.md` and `AGENTS.md` are `leave`, unless plainly the library
+   copy.
+4. An existing `lib:` site is `leave` (A4).
+5. A library maintainer header ("read it with `doctrine library show
+   reference/<self>.md`") is `convert`. The span is the whole code span,
+   including the wrap, and the target names the doc's own address in `lib:`
+   form. The worker proposes the wording, e.g. "read it as
+   `lib:reference/<self>.md`"
+   (`mem_01a0d933…`; shipped-corpus-authoring :94-103).
+6. `library-path` forms with a library meaning (`install/<doc>.md`,
+   `.doctrine/<doc>.md`, `library show reference/…`) are `convert`, and the
+   span covers the whole path form.
+7. A `.toml` `paths`/`globs` value, or any data field (not a comment), is
+   `leave` and goes on the attention list.
+8. Every src row is `leave` (A3). If one really does cite a library doc as
+   guidance, put it on the attention list.
+9. A bare library-doc basename under the test roots that must stay a filename
+   is `leave` plus **I2-conflict** (S1).
+10. The essentials transition clause (`install/essentials.md:80-81`, "A doc
+    still cited bare as `<name>.md` is at `reference/<name>.md`.") is
+    `other`/`leave`, on the attention list as **delete-at-PHASE-04**. Its
+    tokens `<name>.md` and `reference/<name>.md` are placeholders.
+
+R- rows: the class decides the recommendation (table above). The
+`install/templates/plan.toml` reference-forms comment (:21-28, the part about
+criterion ids) is `owned-concept` → `cut-to-lib`. Its target should mirror
+the four md templates' Part A cut, one line reading
+`# Reference forms: \`lib:reference/glossary.md\` § reference forms.`. Keep any
+ordering or immutability sentence that is plan-specific. The `glossary.md`
+token inside it is its own C- row with `within` = that R- id.
+
+## Worker brief (self-contained; pass verbatim to W-C and W-R)
+
+> You are a capsule-worker for SL-273 PHASE-03 (sweep inventory). You
+> **enumerate and recommend**. You do **not** edit any skill, install asset
+> or src file. You write only `.doctrine/slice/273/inventory.toml` and, where
+> this brief says so, `.doctrine/slice/273/notes.md`. Read the design
+> sections 6.1, 6.2 and 7.2 with `doctrine show SL-273`, or
+> `.doctrine/slice/273/design.md:364-482`.
+>
+> Your context carries this sheet's sections "Inventory roots and token
+> classes", "`inventory.toml` row schema" and "Recommendation criteria". They
+> are binding for your task.
+>
+> Method:
+>
+> 1. Enumerate with the regexes given, using
+>    `rg --no-ignore --hidden -n -o`, and read each hit in context (±2 lines).
+> 2. Build the rows as a nu table. Emit them with `{row: $rows} | to toml`.
+> 3. Leave `verdict` and `resolved` empty.
+> 4. Run checks V1–V4 (and V5/V6 for W-C) from this sheet, and paste their
+>    raw output into your hand-back.
+>
+> Hand back:
+>
+> - the row count by class and recommend;
+> - an **attention list** of row ids where the 6.2 rules don't clearly decide,
+>   tagged `I2-conflict` / `data-field` / `delete-at-PHASE-04` / `judgement`;
+> - any STOP (S1–S4) you hit;
+> - any friction you met. You cannot record observations, so report them.
+>
+> The enumeration is exhaustive: record every occurrence of the C- token
+> classes, whatever its class. Classifying is not filtering.
+
