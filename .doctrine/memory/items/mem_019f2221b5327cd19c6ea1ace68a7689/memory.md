@@ -16,7 +16,7 @@ So when SL-187's design says a "`universal`-band hymns section" on the disk
 `boot.md`, that is **loose wording, not a hymns-corpus band**. The delivered
 vehicle is one **authored `SourceKind::Static` embed section** in
 `boot_sequence()` (`src/boot.rs:104`) — the same pattern as
-`SourceKind::Static("routing-process.md")` (body via `install::asset_text`, read
+`SourceKind::Static("essentials.md")` (body via `install::asset_text`, read
 from the compiled embed, never from disk `.doctrine/`).
 
 **Cache-ordering invariant** (`src/boot.rs:100-103`): the `ExecPath` ("Invoking

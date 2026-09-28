@@ -2,7 +2,7 @@
 
 This repo's `CLAUDE.md` serves people **building** doctrine. Clients who
 **install** doctrine into their own repos get the shipped surfaces — the boot
-snapshot (`install/routing-process.md` + `governance.md` + memory/ADR sections),
+snapshot (`install/essentials.md` + `governance.md` + memory/ADR sections),
 the skills (`plugins/doctrine/skills/`), `install/rules/AGENTS.md`, templates —
 but **never this repo's `CLAUDE.md`**. So any guidance about *using* doctrine
 that lives only in `CLAUDE.md` is invisible to every client.
@@ -14,7 +14,7 @@ that lives only in `CLAUDE.md` is invisible to every client.
   forms, lifecycle, the change loop) → must ship on a client-facing surface.
 
 **Push vs pull when you ship it:**
-- *Push* (always in context): `install/routing-process.md` rides the boot
+- *Push* (always in context): `install/essentials.md` rides the boot
   snapshot into every session's cached prefix. Use for rules that must fire
   without being invoked.
 - *Pull* (read on demand): a skill (`/canon`, etc.). A pull-only home does NOT

@@ -6,7 +6,7 @@ status = "active"
 title = "Auditing the shipped corpus: the citation grep's illustration classes"
 summary = "The shipped corpus contains ~80 id-shaped strings that are format illustrations or client-structure refs, not citations — do not sweep them."
 created = "2026-09-25"
-updated = "2026-09-25"
+updated = "2026-09-28"
 
 [scope]
 paths = []

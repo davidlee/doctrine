@@ -2,7 +2,7 @@ Auditing the shipped corpus (`install/`, the published reference docs, and the s
 
 **Do NOT sweep — illustrations and client-structure references (the majority):**
 
-- **Reference-form illustrations.** The `glossary.md` kind↔abbr table, `routing-process.md`'s `SL-023`/`ADR-005`/`REQ-059` list, the reference-forms headers in `install/templates/*.md`, and the commented payload examples in `templates/{spec-product,spec-tech,members,interactions}.toml`. These docs *define* what an id looks like; the correct referent is the client's own `PRD-001`.
+- **Reference-form illustrations.** The `glossary.md` kind↔abbr table, `essentials.md`'s `SL-023`/`ADR-005`/`REQ-059` list, the reference-forms headers in `install/templates/*.md`, and the commented payload examples in `templates/{spec-product,spec-tech,members,interactions}.toml`. These docs *define* what an id looks like; the correct referent is the client's own `PRD-001`.
 - **Client-structure references.** `.doctrine/spec/` and `.doctrine/adr/` cited as directory conventions, and client filenames cited inside templates (`adr-nnn.md`, `phase-01.md`, `handover.md`, `research.md`).
 - **Fill-in-the-blank scaffolding.** e.g. `install/harvest.md`'s `IMP-241 — <one clause>`.
 

@@ -6,7 +6,7 @@ status = "active"
 title = "Boot universal section is a Static embed, not a hymns band"
 summary = "boot's disk 'universal' section is an authored Static embed, NOT a hymns band — SL-186's band registry is closed with no universal band"
 created = "2026-07-02"
-updated = "2026-07-02"
+updated = "2026-09-28"
 
 [scope]
 paths = ["src/boot.rs", "src/hymns.rs"]
