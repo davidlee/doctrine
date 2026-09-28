@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e868-6c3d-71c2-950c-02a202da5bed"
+recorded_at = "2026-09-28T14:25:52.70109313Z"
+kind = "friction"
+summary = "[capsule-worker; SL-273 PHASE-03] copying sheet schema into notes.md raised new LibCitation doctor warnings"
+detail = '''The EN-2 worker brief, a verbatim copy of the sheet's schema and criteria sections into notes.md, carries placeholder examples (lib:reference/<doc>.md, lib:templates/, lib:reference/glossary.md\) that doctor's LibCitation leg reports as malformed at notes.md:374,436,444,464. Quoted examples in slice notes keep tripping the leg (compare PHASE-01 VA-1 at notes.md:81-90).'''
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

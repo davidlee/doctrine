@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e868-6c35-7e01-b7c8-893e3194082a"
+recorded_at = "2026-09-28T14:25:52.693319101Z"
+kind = "friction"
+summary = "[capsule-phase-planner; SL-273 PHASE-03] plan chose pi/DeepSeek worker that cannot run outside the jail"
+detail = "SL-273's plan named ./scripts/pi-research (DeepSeek) for the PHASE-03 enumeration, and PHASE-04 and the audit pass name it too. In /work/doctrine (no /workspace) ~/.pi/agent/auth.json is empty and the smoke test failed with 'No API key found for deepseek'. Nothing checked mechanism feasibility at plan time; the orchestrator adapted to Claude capsule-workers."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

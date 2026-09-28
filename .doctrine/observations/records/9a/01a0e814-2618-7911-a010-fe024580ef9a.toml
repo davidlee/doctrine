@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e814-2618-7911-a010-fe024580ef9a"
+recorded_at = "2026-09-28T12:53:49.720895267Z"
+kind = "friction"
+summary = "[capsule-worker; SL-273 PHASE-02] memory retrieve silently empty with no git remote"
+detail = "doctrine memory retrieve returned nothing for repo-scoped memories because the checkout has no remote, so repo identity fell back to a local git-root id and 1178 memories scoped to github.com/davidlee/doctrine were filtered out without any disclosure (possible STD-003 no-silent-skip breach). The worker had to build a scratch repo with the origin to run the RV-408 F-6 retrieve control."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

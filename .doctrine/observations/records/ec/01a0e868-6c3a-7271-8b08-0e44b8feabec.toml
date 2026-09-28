@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e868-6c3a-7271-8b08-0e44b8feabec"
+recorded_at = "2026-09-28T14:25:52.69875115Z"
+kind = "friction"
+summary = "[capsule-worker; SL-273 PHASE-03] nu 0.115 parse gotchas cost repeated iterations across four workers"
+detail = """Multi-line if/else-if and boolean or/and chains inside closures fail ('Command else/or not found'). r#'..'# truncates when the content starts with '#'. A '(' inside a $".." string starts a subexpression. open on .md auto-parses and needs --raw. 0..(n-2) errors when n==1. The phase sheet's own V2/V3 snippets were not copy-pasteable."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
