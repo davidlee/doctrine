@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ea38-843d-7c61-a786-2cdb988e3ffc"
+recorded_at = "2026-09-28T22:52:47.549048851Z"
+kind = "friction"
+summary = "capsule-orchestrator (SL-273 PHASE-04): sheet common rules contradicted orchestrator amend instructions"
+detail = "Phase sheet common rules said units never edit inventory.toml, but the orchestrator's decision (after planner hand-back) had applying units write contextual amends into it; the runtime sheet was not updated, so later workers flagged the conflict. Orchestrator cannot edit the sheet (no Write); a planner respawn to patch it would have cost more than the prompt override."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

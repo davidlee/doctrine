@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ea38-8435-7750-a55a-828d5e036096"
+recorded_at = "2026-09-28T22:52:47.541598341Z"
+kind = "friction"
+summary = "capsule-worker (SL-273 PHASE-04 U3c): no python and nu reformats TOML on write"
+detail = "Amending inventory.toml rows in place had no clean tool: nu rewrites/reformats the whole TOML on save and python is absent, so the worker wrote a throwaway perl splicer. Each unit reinvented an amend helper."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
