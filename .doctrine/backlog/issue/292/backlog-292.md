@@ -101,3 +101,10 @@ then use reseat's output only as a cross-check. That is what was done for
   a `status` reviews never store, ADR-007 D-C8). Same command, different fault.
 - `SL-233` `notes.md` `## Harvest` → `### Open` — the six-id ruling and the
   five moves still outstanding on `edge`.
+
+## Status after SL-269
+
+SL-269 fixed faults 1, 3 and 4 (its design sec-3, "Dangler report"): the scan
+now reads `.toml` as well as `.md`, does not follow symlinks, and lists
+unreadable files instead of skipping them. Fault 2, fault 5 and
+automatic rewriting of structured edges remain open here.

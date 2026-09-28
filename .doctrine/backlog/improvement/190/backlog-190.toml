@@ -5,10 +5,10 @@ id = 190
 slug = "audit-skill-signpost-worktree-fork-review-refusal-parent-tree-promotion"
 title = "/audit skill: signpost worktree-fork review refusal + parent-tree promotion"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-27"
-updated = "2026-07-20"
+updated = "2026-09-28"
 tags = ["area:audit", "area:skills", "cluster:review-system"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

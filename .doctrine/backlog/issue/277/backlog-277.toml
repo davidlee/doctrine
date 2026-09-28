@@ -5,10 +5,10 @@ id = 277
 slug = "reseat-cannot-renumber-a-review-strict-meta-read-requires-derived-status"
 title = "reseat cannot renumber a review — strict Meta read requires derived status"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-29"
-updated = "2026-07-29"
+updated = "2026-09-28"
 tags = ["area:cli", "area:entity", "area:review", "cluster:review-system"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
