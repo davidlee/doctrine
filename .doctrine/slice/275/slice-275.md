@@ -45,16 +45,19 @@ records the diagnostic.
 
 ## Scope & Objectives
 
-1. **Page by default.** `memory search` honours `RETRIEVE_LIMIT_DEFAULT` the way
-   `memory retrieve` already does (`src/memory.rs:648-658`:
-   `unwrap_or(DEFAULT).min(MAX)`), so an unset `--limit` is a page, not the corpus.
-2. **One notion of page size.** `--offset`/`--page` arithmetic, the row slice, and
-   the footer's continuation hint derive from the same resolved limit. `--page N`
-   without `--limit` must be correct.
-3. **A retrieval floor.** Zero-score hits are excluded (or demoted behind a marked
-   boundary), matching `doctrine search`'s behaviour.
-4. **A zero-evidence signal.** A query with no lexical evidence says so, rather than
-   falling through to severity order as though it had ranked something.
+1. **Page by default.** `memory search` (CLI and MCP `memory_search`) resolves an
+   unset `--limit` to one named constant, `SEARCH_LIMIT_DEFAULT = 20`, so an unset
+   `--limit` is a page, not the corpus (`DEC-347`; supersedes the "5" framing).
+2. **One notion of page size.** `--offset`/`--page` arithmetic, the row slice, the
+   footer's continuation hint, and MCP's `limit`/`next_offset` derive from the same
+   value, resolved once in the command layer. `--page N` without `--limit` must be
+   correct.
+3. **A retrieval floor.** Under a free-text query, rows with no evidence (no lexical
+   score, no exact-key hit) are excluded; selector-only requests are unfloored
+   (`DEC-348`). The floor lives in the shared `query()` pipeline, so it reaches
+   `memory retrieve` too (`DEC-350` — scope widened 2026-09-28).
+4. **A zero-evidence signal.** A free-text query with no evidence says so in table
+   mode; `--json`/MCP signal it by empty rows, no wire change (`DEC-349`).
 
 ## Non-Goals
 
@@ -66,9 +69,10 @@ records the diagnostic.
 - **The entity search surface** (`doctrine search`, SL-141). It is the *precedent*
   for objective 3, not a target; if its floor needs changing, that is its own item.
 - **`IMP-154`** (index non-entity docs) — corpus widening, not retrieval shape.
-- **`memory retrieve`'s** five-row default and cap (`RETRIEVE_LIMIT_DEFAULT`/`_MAX`):
-  it already behaves; it may only move if objective 2 requires the constants to be
-  re-homed.
+- **`memory retrieve`'s** five-row default and cap (`RETRIEVE_LIMIT_DEFAULT`/`_MAX`)
+  stay unchanged. Retrieve *does* gain the retrieval floor (`DEC-350`).
+- **The surface hook** (`retrieve_rows`) — it carries no free text, so the floor never
+  applies to it; it remains the scope-only, severity-gated mode.
 
 ## Affected surface
 

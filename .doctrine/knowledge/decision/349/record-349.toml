@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 349
+slug = "zero-evidence-signal-on-memory-reads"
+title = "Zero-evidence signal on memory reads"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-28"
+updated = "2026-09-28"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Under DEC-348 a free-text query with no lexical evidence yields zero rows; the result must not be mistaken for an empty corpus or a silent failure."
+choice = """Table mode prints a stdout notice beside the truncation notice, e.g. 'no lexical match for "<q>"; drop the query to browse by scope'. --json and MCP carry no new field: empty rows with total 0 under a free-text query is the signal. The MCP memory_search tool description states the free-text vs selector-only contract."""
+alternatives = ["A distinct no_evidence status field in CLI JSON and MCP", "Signal on stderr"]
+rationale = "An empty row set is already unambiguous once the floor exists; a new wire field costs golden churn and tells an agent nothing more."
+consequences = ["No wire or golden change for --json/MCP", "MCP tool description text changes"]
+decided_by = "user"
+decided_on = "2026-09-28"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-275"

@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 350
+slug = "retrieval-floor-lives-in-the-shared-query-pipeline"
+title = "Retrieval floor lives in the shared query pipeline"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-28"
+updated = "2026-09-28"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "query() in src/retrieve.rs is shared by memory search, MCP memory_search, memory retrieve and the surface hook (retrieve_rows, free_query=None)."
+choice = "The DEC-348 floor is applied once in query(), so search, MCP search and retrieve all exclude no-evidence rows under a free-text query. The surface hook is unaffected because it never carries free text. SL-275 scope widens to include the floor on memory retrieve; retrieve's default/cap stay unchanged."
+alternatives = ["Floor in run_search only, retrieve case to backlog"]
+rationale = "One pipeline, no parallel implementation; also fixes retrieve --query <nonsense> injecting severity-top bodies into agent context."
+consequences = ["memory retrieve behaviour changes under a zero-evidence free-text query (zero blocks)", "Scope card non-goal on retrieve narrows to its default/cap only"]
+decided_by = "user"
+decided_on = "2026-09-28"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-275"
