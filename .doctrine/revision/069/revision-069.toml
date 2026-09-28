@@ -1,7 +1,7 @@
 id      = 69
 slug    = "adr-005-names-essentialsmd-as-the-boot-onboarding-summary"
 title   = "ADR-005 names essentials.md as the boot onboarding summary"
-status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
+status = "done"
 approval = "approved"
 updated = "2026-09-28"
 tags    = []
