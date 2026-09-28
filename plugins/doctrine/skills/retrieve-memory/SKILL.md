@@ -64,14 +64,16 @@ fall back to the `doctrine memory` CLI commands described below.
 live / what is the right way here?" question whose answer may be an ADR, spec,
 slice, RFC, or backlog item, use `doctrine search <query>` instead — one ranked
 query over the entity corpus. It is entities-only, and its default kind set omits
-policies and standards; `reference/using-doctrine.md` gives the scope and how to
+policies and standards; `lib:reference/using-doctrine.md` gives the scope and
+how to
 widen it.
 
 ## Procedure (fast → thorough)
 
 1. **Scoped query first.** Run `doctrine memory retrieve` scoped to the concrete
    files you expect to read or edit, plus the command context you are about to
-   run (ask `--help` for flags; `using-doctrine.md` for the verb model).
+   run (ask `--help` for flags; `lib:reference/using-doctrine.md` for the verb
+   model).
    Glob-scoped memories still match path scopes — no separate flag needed. Scope
    probes are OR'd; type/status are AND hard filters, so do not over-filter
    unless certain.

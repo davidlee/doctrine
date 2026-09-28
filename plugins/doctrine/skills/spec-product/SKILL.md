@@ -242,7 +242,8 @@ the canonical shape:
 
 Real CLI surface: `doctrine spec --help` (scaffold a product spec, `req add` a
 requirement member, `show` the reassembled whole, `validate` corpus FK integrity,
-`list` the specs). See `using-doctrine.md` for the verb model — do not guess flags.
+`list` the specs). See `lib:reference/using-doctrine.md` for the verb model —
+do not guess flags.
 
 `spec req add` reserves a `REQ-NNN` member with bare fields. **To make it render
 richly under `spec show`, hand-enrich the requirement entity TOML**

@@ -24,7 +24,8 @@ Inputs:
      every governance/spec finding is dispositioned, and the RV carries a
      `## Reconciliation Outcome` section. If the reconciliation brief was empty
      (no-op), the outcome confirms that explicitly.
-   - Durable findings from the slice are harvested per `harvest.md` before
+   - Durable findings from the slice are harvested per
+     `lib:reference/harvest.md` before
      closure — or **consciously rejected**. A clean slice may harvest nothing;
      the conscious-rejection gate is what closure checks.
    - `doctrine check gate` is green.

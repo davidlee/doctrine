@@ -11,7 +11,7 @@ Records *shape* work; they are never work items themselves.
 
 Four homes, one line: work intent → backlog; epistemic state → knowledge
 record; architectural decision → ADR; agent guidance → memory. See
-`using-doctrine.md` § Which home for which record.
+`lib:reference/using-doctrine.md` § Which home for which record.
 
 The CLI is the source of truth for exact flags and each kind's status
 vocabulary: `doctrine knowledge --help`.

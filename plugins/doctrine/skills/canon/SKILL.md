@@ -24,7 +24,7 @@ see [[mem.fact.doctrine.cli-source-of-truth]].
   - or jump straight to the ones bearing on your task: `doctrine search
     "<keywords>" -k governance`. Policies and standards sit *outside* the
     default kind scope, so a bare search misses exactly the rules you came for —
-    `reference/using-doctrine.md` has the scope and the widening flags.
+    `lib:reference/using-doctrine.md` has the scope and the widening flags.
 - the governing slice's `design.md` — canon for *this* change's design intent.
 
 For implementation truth (gotchas, patterns, invariants tied to files or
@@ -32,7 +32,8 @@ commands), `/retrieve-memory` rather than rediscovering it.
 
 **Read entities tier-aware — via `show`, never a single raw file.** The storage
 rule + read-via-`show` discipline are resident in the boot digest and detailed in
-`using-doctrine.md`. The storage model and storage rule are documented in
+`lib:reference/using-doctrine.md`. The storage model and storage rule are
+documented in
 [[mem.concept.doctrine.storage-model]]; storage tiers: authored, runtime,
 derived — see [[mem.fact.doctrine.storage-tiers]]. Reading one tier and
 concluding "empty" is false witness.

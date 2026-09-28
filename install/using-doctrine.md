@@ -1,13 +1,14 @@
 <!-- Shipped reference. Published, not projected: there is no copy on disk in an
-     installed project — read it with `doctrine library show
-     reference/using-doctrine.md`. Names verbs and states discipline — it never reproduces
+     installed project — read it as `lib:reference/using-doctrine.md`. Names
+     verbs and states discipline — it never reproduces
      `doctrine --help`; ask the CLI for exact flags. -->
 
 # Using doctrine
 
 How to *operate* doctrine: which verb for which intent, how to read and edit the
 artifacts, and the rules that keep authored state coherent. For **vocabulary and
-ids** see `glossary.md`; for the **workflow** (route → slice → design → plan →
+ids** see `lib:reference/glossary.md`; for the **workflow** (route → slice →
+design → plan →
 execute → close) see `lib:reference/essentials.md`. For **exact command shapes
 and flags**, ask `doctrine <command> --help` — this doc names verbs, never their
 flag tables.
@@ -35,7 +36,8 @@ reach-for-it map):
 | regenerate the boot snapshot | `doctrine boot` |
 | check a slice's phase rollup | `doctrine slice list` |
 
-`<kind>` is `slice`, `spec`, `adr`, `memory`, `backlog`, … (see `glossary.md`).
+`<kind>` is `slice`, `spec`, `adr`, `memory`, `backlog`, … (see
+`lib:reference/glossary.md`).
 Ask `doctrine <kind> --help` for the subcommands and flags each verb takes.
 
 ### Finding things by text — three corpora, three verbs
@@ -189,7 +191,7 @@ Three tiers; know which one you are writing:
 `design.md`, `plan.toml`, `plan.md`, and `notes.md` are **authored** (committed,
 diffable). `handover.md` and the `phases/` symlink are **runtime** (gitignored) —
 they carry disposable context and phase tracking, never committed progress. See
-`glossary.md` for the full directory layout.
+`lib:reference/glossary.md` for the full directory layout.
 
 **Hand-edit vs verb.** Reach for a verb to create or transition an entity; hand-
 edit the TOML for fields no verb yet owns (cite the CLI gap if so). Prose is always

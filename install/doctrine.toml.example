@@ -75,7 +75,7 @@
 # repo = "davidlee/doctrine"
 # # Which Claude settings file doctrine writes its hooks into: "project"
 # # (.claude/settings.json, committed, default) or "local"
-# # (.claude/settings.local.json, gitignored). See `claude-activation.md`.
+# # (.claude/settings.local.json, gitignored). See `lib:reference/claude-activation.md`.
 # claude-settings-scope = "project"
 #
 # [dispatch]

@@ -18,7 +18,7 @@
 # codicil that is a fact about EVIDENCE, not about classification — a verifier
 # strengthens a discharge from `attested` to `verified`; its absence does not
 # make the obligation framing. Each earns the block on its own warrant, stated
-# in the design-run obligations reference (`reference/design-run-obligations.md`).
+# in the design-run obligations reference (`lib:reference/design-run-obligations.md`).
 
 mode = "sequence"
 

@@ -27,7 +27,8 @@ Inputs:
    - first phase starting → move the slice: `doctrine slice status <id> started`
      (bare number), if not already there.
    - flip the phase to `in_progress` with `doctrine slice phase` (see
-     `using-doctrine.md`). **This auto-records the conformance boundary** — the
+     `lib:reference/using-doctrine.md`). **This auto-records the conformance
+     boundary** — the
      handler stamps `code_start_oid = HEAD` into the phase sheet. No extra call;
      the binding rides the transition you already issue. (It self-skips
      in a dispatch coordination context, where the funnel beat is the recorder

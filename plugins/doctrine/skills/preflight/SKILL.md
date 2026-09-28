@@ -83,7 +83,8 @@ Search order:
 - `doctrine search "<query>"` — the cheapest way to locate a thing whose owning
   artifact you cannot name: one ranked query over the entity corpus. It reaches
   neither memories nor the reference docs, and its default kind set excludes
-  policies and standards — `reference/using-doctrine.md` gives the scope and how
+  policies and standards — `lib:reference/using-doctrine.md` gives the scope
+  and how
   to widen it.
 - related governance (ADRs, standards, policies) — see `/canon`
 - related tech specs under `.doctrine/spec/tech/`

@@ -97,7 +97,7 @@ Inputs:
       the file alone.
     - `specs` / `requirements` stay empty in v1 (no registry yet). When a slice
       does carry relations, they are written with `doctrine link` (not typed keys
-      here) — see `using-doctrine.md` § Relating entities.
+      here) — see `lib:reference/using-doctrine.md` § Relating entities.
 5.  Author `plan.md` — the rationale and sequencing prose: why these phases, in
     this order, with these boundaries. Honour the storage rule: **no queried or
     derived data in `plan.md`**; the structured criteria live in `plan.toml`, and

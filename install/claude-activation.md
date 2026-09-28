@@ -1,6 +1,6 @@
 <!-- Shipped reference. Published, not projected: there is no copy on disk in an
-     installed project — read it with `doctrine library show
-     reference/claude-activation.md`. Explains how Claude Code activation works
+     installed project — read it as `lib:reference/claude-activation.md`.
+     Explains how Claude Code activation works
      since the plugin/marketplace install path retired — it never
      reproduces `doctrine --help`; ask the CLI for exact flags. -->
 

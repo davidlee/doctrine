@@ -1,6 +1,6 @@
 <!-- Shipped reference. Published, not projected: there is no copy on disk in an
-     installed project — read it with
-     `doctrine library show reference/shipped-corpus-authoring.md`. It states
+     installed project — read it as
+     `lib:reference/shipped-corpus-authoring.md`. It states
      the grounding rule once and the procedure for applying it; the governance
      record that owns the rule is not itself shipped, so this document is the
      rule's delivery copy. -->

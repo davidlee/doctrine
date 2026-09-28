@@ -22,7 +22,7 @@
 # --- Install ----------------------------------------------------------------
 # Git repo slug for the universal npx-skills delegation, and which Claude
 # settings file doctrine writes its hooks into ("project" | "local"; default
-# "project"). See the shipped reference `claude-activation.md`.
+# "project"). See the shipped reference `lib:reference/claude-activation.md`.
 # [install]
 # repo = "davidlee/doctrine"
 # claude-settings-scope = "project"

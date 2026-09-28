@@ -43,7 +43,8 @@ Inputs:
    policy ambiguity, stop — `/consult`, or return to `/design` if the design
    itself is the gap. Do not invent your way past it.
 8. When the sheet tells a coherent story, flip the phase to `in_progress` with
-   `doctrine slice phase` (see `using-doctrine.md`), then `/execute`.
+   `doctrine slice phase` (see `lib:reference/using-doctrine.md`), then
+   `/execute`.
 
 ## Outcomes
 

@@ -15,7 +15,7 @@ engine (TOML+MD tiers, relations, `show` command) is documented in
 > (subtype/title/slug only), hand-edit the spine and flat fields into
 > `spec-NNN.toml`, then `spec req add` its requirements. Use `show` to read the
 > reassembled whole, `validate` for FK integrity, `list` for the corpus (flags in
-> `--help`; verb model in `using-doctrine.md`). Identity, the relational spine, and
+> `--help`; verb model in `lib:reference/using-doctrine.md`). Identity, the relational spine, and
 > flat fields (incl. `c4_level`, `[[source]]` anchors) live in `spec-NNN.toml`, the
 > narrative in `spec-NNN.md`; requirements are **peer entities** (`REQ-NNN`) membered
 > via `members.toml`; tech-only spec→spec edges are written with `doctrine spec

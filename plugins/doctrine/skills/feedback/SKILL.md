@@ -93,7 +93,8 @@ not hold on unverified recollection.
    the drop.
 7. **Harvest.** Artifact corrections die with the task; corrections to your
    *process or the source's preferences* are the durable leg — harvest them per
-   `harvest.md`, always with the *why*, or the same correction recurs next
+   `lib:reference/harvest.md`, always with the *why*, or the same correction
+   recurs next
    session.
 
 ## With structured review ledgers

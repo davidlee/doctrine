@@ -41,10 +41,12 @@ Mid-flight, any stage: unanticipated obstacle / tradeoff / emergent complexity �
 `/feedback` (adjudicate on evidence; close the loop). Durable gotcha / pattern →
 `/record-memory`.
 Not sure which artifact owns a thing? `doctrine search <query>` before assuming
-— one ranked query over the entity corpus; `using-doctrine.md` gives its scope.
+— one ranked query over the entity corpus; `lib:reference/using-doctrine.md`
+gives its scope.
 Latent **work** intent (issue / improvement / chore / risk / idea) → `backlog
 new` instead of losing it; check `backlog list` at the start of substantive work
-(already captured?). Work vs knowledge vs decision boundary: `using-doctrine.md`.
+(already captured?). Work vs knowledge vs decision boundary:
+`lib:reference/using-doctrine.md`.
 Finished a coherent unit → `/harvest`. Handing off to fresh context → `/handover`.
 Agent confusion / stale memory corpus → `/reviewing-memory`.
 

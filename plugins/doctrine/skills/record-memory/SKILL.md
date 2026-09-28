@@ -29,7 +29,8 @@ ranking.
 ## 2. Record it
 
 Record with `doctrine memory record` (ask `--help` for the flags; see
-`using-doctrine.md` for the verb model). It scaffolds a TOML + body under
+`lib:reference/using-doctrine.md` for the verb model). It scaffolds a TOML +
+body under
 `.doctrine/memory/items/`; the **born git anchor is captured automatically** —
 do not hand-author it.
 

@@ -21,7 +21,8 @@ Before emitting anything, confirm the capture pass is current:
   matches the current lifecycle position (phase / stage + head commit). If
   stale, run `/harvest` first — do not re-survey what the harvest already swept.
 - **Another governing artifact (RFC, spec, review …):** the capture pass still
-  runs — route produced / learned / open to their sinks per `harvest.md` §5;
+  runs — route produced / learned / open to their sinks per
+  `lib:reference/harvest.md` §5;
   orientation falls back to entity queries.
 
 Phase status accurate and work committed (or its uncommitted state noted)

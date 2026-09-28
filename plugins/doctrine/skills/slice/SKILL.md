@@ -47,7 +47,8 @@ evergreen spec material (`.doctrine/spec/`).
    the storage rule — structured data in TOML, prose in MD, never queried/derived
    data in prose. **Relations are written with `doctrine link`, not hand-authored
    rows** — it validates the pair against `RELATION_RULES` (the legal vocabulary;
-   `using-doctrine.md` § Relating entities). e.g. `governed_by` an ADR, `specs` a
+   `lib:reference/using-doctrine.md` § Relating entities). e.g. `governed_by`
+   an ADR, `specs` a
    spec, `supersedes` a prior slice.
 
 5. **Check the altitude.** If the work is really a project-global decision →

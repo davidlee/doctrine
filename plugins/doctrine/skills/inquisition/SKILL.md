@@ -21,7 +21,8 @@ The Inquisition is a **review** — and reviews are tried on the ledger, the RV
 kind (`RV-NNN`), not in the wind. The shared mechanics of that
 tribunal — open + prime, raise, dispose + resolve, the severity and disposition
 vocab, synthesis, the close-gate, where reviews run — are inscribed in
-`review-ledger.md`; **read it, for this skill does not re-litigate the verbs.**
+`lib:reference/review-ledger.md`; **read it, for this skill does not re-litigate
+the verbs.**
 What follows is the Inquisitor's *lens*:
 the persona, the procedure, and how the charges and the verdict are entered into
 the record. The voice and zeal below are mandatory throughout.
@@ -35,7 +36,8 @@ governing slice is given a typed home: create or use a backlog target
 (`doctrine backlog new <kind>`, then target it). Only an explicitly throwaway,
 one-shot heresy-hunt — no durable subject, no lifecycle gate, no finding worth
 surviving the clearing of the context — may be tried in prose alone. The
-presumption favours the ledger; when in doubt, open it (`review-ledger.md` §1).
+presumption favours the ledger; when in doubt, open it
+(`lib:reference/review-ledger.md` §1).
 
 **Facet by the aspect under trial.** Choose the facet that names the *lifecycle
 aspect* you interrogate — reviewing design intent arraigns the design aspect, a
@@ -43,7 +45,7 @@ plan its planning aspect, an implementation its conformance. The inquisitorial
 **posture** is not a facet: it rides **`--raiser inquisitor`**. Posture is not
 aspect; minting a new facet for the Inquisitor's zeal is a category error and a
 heresy in its own right — the facet enum is a closed, sanctified set
-(`review-ledger.md` §2).
+(`lib:reference/review-ledger.md` §2).
 
 **One trial, one aspect.** One RV = one facet = one aspect. A heresy that taints
 both design *and* implementation is two inquisitions (two RVs), or you arraign
@@ -71,7 +73,8 @@ single tribunal.
    the hand-curated `domain_map` was retired) — and inscribe the
    **lines of interrogation** into the ledger's `## Brief`: the
    questions this Inquisition presses and the doctrine it holds the accused to.
-   (Verbs and flags: `review-ledger.md` §1–§2.) A design under a managed design
+   (Verbs and flags: `lib:reference/review-ledger.md` §1–§2.) A design under
+   a managed design
    run already holds its ledger — try it there, never on a second RV (§2, *Open*).
 
 3. Perform the **interrogation** (adversarial review).
@@ -79,7 +82,8 @@ single tribunal.
    - Prefer concrete evidence: exact file paths, symbol names, line numbers.
    - Read each entity via its CLI `show`, never a single raw file. See
      [[mem.concept.doctrine.reading-entities]] — the tier discipline is
-     resident in the boot digest and `using-doctrine.md`. The Inquisitor who
+     resident in the boot digest and `lib:reference/using-doctrine.md`. The
+     Inquisitor who
      reads one tier and cries "empty" bears false witness.
    - Escalate "unknown unknowns": suspicious assumptions, missing invariants,
      unclear ownership boundaries, vague acceptance criteria, silent error
@@ -121,7 +125,8 @@ valid relics and need no migration.
    thunders.
 
 4. **Harvest — judgment-gated.** When durable findings exist, harvest them per
-   `harvest.md`. A clean trial harvests nothing — a valid outcome, not a
+   `lib:reference/harvest.md`. A clean trial harvests nothing — a valid
+   outcome, not a
    dereliction.
 
 The Inquisition is **done** when every charge is terminal — verified or withdrawn
@@ -129,7 +134,8 @@ The Inquisition is **done** when every charge is terminal — verified or withdr
 `doctrine review conclude RV-NNN --basis …`, stating what the trial examined. A
 charge raised or reopened afterwards clears the conclusion; conclude again. An
 unresolved `blocker` will be refused at the target's close seam
-(`review-ledger.md` §6). **The ledger may be opened and driven from any
+(`lib:reference/review-ledger.md` §6). **The ledger may be opened and driven
+from any
 tree** — the primary, a coordination tree, a linked worktree, an adopted
 capsule — save one: a dispatch worker process, which every review write
 refuses outright. One tribunal, one writer per RV at a time.
