@@ -12,11 +12,39 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/retrieve.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/memory.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/listing.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/mcp_server/tools.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_memory_sync.rs"
+intent = "design-target"
+
+[[selector]]
+selector = ".agents/skills/retrieve-memory/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = ".agents/skills/record-memory/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = ".agents/skills/dreaming/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/using-doctrine.md"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"

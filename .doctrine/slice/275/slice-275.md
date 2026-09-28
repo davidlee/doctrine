@@ -128,42 +128,28 @@ records the diagnostic.
 
 ## Open questions
 
-- **OQ-1** — *Resolved.* Something does consume an unbounded search — five things,
-  named under `A1`. Their update is in scope.
-- **OQ-2** — Floor semantics: hard exclusion of score-0 hits, or a *marked* boundary
-  ("no lexical match — showing by severity")? Research **favours the marked
-  boundary**, and the grounds are not consumer convenience: `SL-008` `D17`/`D18` and
-  `REQ-152` construct the severity fallback deliberately to keep risk visible on the
-  holdback-exempt surface, and `SL-141` `D8`'s stated rationale ("entity search has
-  no scope-filter pre-pass") does not transfer to memory, which has one. Hard
-  exclusion fixes a *signalling* defect by deleting a capability.
-- **OQ-3** — Should `search` also adopt `RETRIEVE_LIMIT_MAX`, or is an explicit
-  `--limit` unbounded by design for search (the `SL-086`/`SL-131` position)?
-- **OQ-4** — Where does the zero-evidence signal surface — a footer line, an empty
-  result, or a distinct status in JSON (a small wire change with golden cost)?
-- **OQ-5** — Are the constants correctly homed, or should the *default* be resolved
-  at the command layer while the engine keeps only the cap? Precedent runs both ways
-  (`R4`); `STD-001` argues against a second constant for the same value.
-- **OQ-7 — The floor's conditionality.** Unconditional, the floor empties the
-  selector-only browse path and objective 1 becomes moot for browse. Conditional on a
-  free-text query being present, "find this" and "show me what's here" become
-  different requests — defensible, and research's recommendation, but it must be
-  *stated as the contract*, because the MCP wire makes the two cases look alike.
+All resolved in design (2026-09-28): `OQ-2`/`OQ-7` → `DEC-348` (exclude
+no-evidence rows under free text; selector-only browse unfloored; research's
+marked-boundary lean overturned — `REQ-152` stays satisfied through browse and
+`show`); `OQ-3`/`OQ-5` → `DEC-347` (`SEARCH_LIMIT_DEFAULT = 20`, resolved once in
+the command layer, explicit search `--limit` uncapped); `OQ-4` → `DEC-349` (table
+notice, no wire change); floor placement → `DEC-350` (shared `query()`, reaches
+retrieve).
 
 ## Verification / closure intent
 
-- `memory search "<query>"` with no `--limit` returns exactly
-  `RETRIEVE_LIMIT_DEFAULT` rows and a self-consistent continuation hint.
+- `memory search "<query>"` with no `--limit` returns at most
+  `SEARCH_LIMIT_DEFAULT` (20) rows and a self-consistent continuation hint; MCP
+  `memory_search` likewise, with or without selectors.
 - `memory search "<query>" --page 2` (no `--limit`) returns the second page, not
-  page 2-onward; the footer names the correct next page. All three page-size notions
-  (`src/memory.rs:619-621`, `src/retrieve.rs:891`, `src/retrieve.rs:918`) collapse to
-  one resolved value.
-- A query whose tokens match no document reports zero evidence, and does not present
-  the severity-ordered corpus as though it had ranked (shape per `OQ-2`/`OQ-4`).
+  page 2-onward; the footer names the correct next page. All page-size notions
+  (`src/memory.rs:619-621`, `src/retrieve.rs:891`, `src/retrieve.rs:918`, MCP
+  `limit` at `tools.rs:912`) collapse to one resolved value.
+- A free-text query with no evidence returns zero rows on search, MCP search and
+  retrieve, with a table-mode notice; a selector-only query is unchanged.
 - The two affected verification artefacts are updated **deliberately and in the
-  open**: `tests/e2e_memory_sync.rs:425` re-expresses "this memory is findable"
-  rather than "this uid is present in an unpaged dump", and the MCP VT-1 browse
-  expectation is restated under whatever `OQ-7` decides.
+  open**: `tests/e2e_memory_sync.rs:425` asserts reachability with an explicit
+  `--limit`; MCP VT-1 (browse) stays green unchanged.
 - Behaviour preservation: a query with genuine lexical hits returns the same ordered
   top-N as today for the same `--limit`; the existing ranking suites stay green
   unchanged (the behaviour-preservation proof for the shared machinery).
