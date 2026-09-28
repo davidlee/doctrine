@@ -209,7 +209,7 @@ pub(crate) fn mint_review(
     let draft = ReviewDraft::from_args(args, target)?;
     let trunk_ids = crate::git::trunk_entity_ids(root, REVIEW_DIR)?;
     let (backend, mut reserved) =
-        crate::reserve::backend(root, REVIEW_KIND.prefix, crate::install::prompt_confirm)?;
+        crate::reserve::backend(root, &REVIEW_KIND, crate::install::prompt_confirm)?;
     let out: Materialised = entity::materialise_fresh_prebuilt_hooked(
         &*backend,
         root,

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e2be-c4b2-7db0-b9a5-958f804a5a56"
+recorded_at = "2026-09-27T12:02:28.146438962Z"
+kind = "friction"
+summary = "capsule-orchestrator/phase-planner: stale phase sheet claimed nonexistent RED test"
+detail = "SL-269 PHASE-01 runtime sheet from an earlier discarded pass had Findings claiming a RED test in src/git.rs; no src change existed since code_start_oid. Phase was already in_progress. Risk a worker trusts vanished work; planner rewrote sheet."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

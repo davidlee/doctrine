@@ -3,10 +3,10 @@ memory_key = "mem.pattern.worktree.primary-tree-resolver-and-contextual-review-f
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "Primary-tree resolver reuse and the contextual review fork-ban"
+title = "Primary-tree resolver reuse (review fork-ban retired)"
 summary = "Reuse worktree::subagent::primary_worktree for cross-worktree state; review.rs:1953 fork ban is contextual, not a universal law"
 created = "2026-06-23"
-updated = "2026-06-23"
+updated = "2026-09-27"
 
 [scope]
 paths = ["src/worktree/subagent.rs", "src/review.rs"]

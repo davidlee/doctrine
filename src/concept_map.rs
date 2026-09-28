@@ -311,11 +311,8 @@ pub(crate) fn run_new(
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let trunk_ids = crate::git::trunk_entity_ids(&root, CONCEPT_MAP_KIND.dir)?;
-    let (backend, mut reserved) = crate::reserve::backend(
-        &root,
-        CONCEPT_MAP_KIND.prefix,
-        crate::install::prompt_confirm,
-    )?;
+    let (backend, mut reserved) =
+        crate::reserve::backend(&root, &CONCEPT_MAP_KIND, crate::install::prompt_confirm)?;
     let title = crate::input::resolve_title(title)?;
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();

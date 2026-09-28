@@ -25,6 +25,7 @@ use std::path::Path;
 
 use anyhow::Context;
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 
 use crate::dtoml;
 use crate::entity;
@@ -41,20 +42,32 @@ pub(crate) struct Meta {
     pub(crate) tags: Vec<String>,
 }
 
-/// Parse the `Meta` of a single entity by id, reading `<stem>-<id>.toml` under
-/// its numeric dir in `tree_root`.
-pub(crate) fn read_meta(
+/// Locate, read and parse a single entity's `<stem>-<id>.toml` under its numeric
+/// dir in `tree_root` into the caller-chosen projection `T` — the one place the
+/// path and the `not found at` / `Failed to parse` wording live (SL-269 EX-1).
+fn read_entity_toml<T: DeserializeOwned>(
     tree_root: &Path,
     stem: &str,
     id: u32,
     prefix: &str,
-) -> anyhow::Result<Meta> {
+) -> anyhow::Result<T> {
     let name = format!("{id:03}");
     let path = tree_root.join(&name).join(format!("{stem}-{name}.toml"));
     let text = fs::read_to_string(&path)
         .with_context(|| format!("{stem} {name} not found at {}", path.display()))?;
     dtoml::parse_entity_toml(&text, prefix, id)
         .with_context(|| format!("Failed to parse {}", path.display()))
+}
+
+/// Parse the `Meta` of a single entity by id, reading `<stem>-<id>.toml` under
+/// its numeric dir in `tree_root`. Status-strict: [`Meta`] requires `status`.
+pub(crate) fn read_meta(
+    tree_root: &Path,
+    stem: &str,
+    id: u32,
+    prefix: &str,
+) -> anyhow::Result<Meta> {
+    read_entity_toml(tree_root, stem, id, prefix)
 }
 
 /// The id, and only the id, of a `<stem>-<id>.toml` — the scan-path reader
@@ -73,13 +86,26 @@ pub(crate) struct IdOnly {
 /// scan-path reader. Used by `integrity::scan_kind`, the one place a status-less
 /// kind (review) must be read without tripping the strict [`Meta`] (D2).
 pub(crate) fn read_id(tree_root: &Path, stem: &str, id: u32, prefix: &str) -> anyhow::Result<u32> {
-    let name = format!("{id:03}");
-    let path = tree_root.join(&name).join(format!("{stem}-{name}.toml"));
-    let text = fs::read_to_string(&path)
-        .with_context(|| format!("{stem} {name} not found at {}", path.display()))?;
-    let parsed: IdOnly = dtoml::parse_entity_toml(&text, prefix, id)
-        .with_context(|| format!("Failed to parse {}", path.display()))?;
-    Ok(parsed.id)
+    read_entity_toml::<IdOnly>(tree_root, stem, id, prefix).map(|p| p.id)
+}
+
+/// The slug, and only the slug, of a `<stem>-<id>.toml` — the lenient projection
+/// `reseat` needs to name its alias (ISS-277): a status-less kind (review) must
+/// not trip the strict [`Meta`].
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub(crate) struct SlugOnly {
+    pub(crate) slug: String,
+}
+
+/// Read just the `slug` of a single entity's `<stem>-<id>.toml` — the
+/// [`SlugOnly`] reader. Unlike [`read_meta`] it does not require `status`.
+pub(crate) fn read_slug(
+    tree_root: &Path,
+    stem: &str,
+    id: u32,
+    prefix: &str,
+) -> anyhow::Result<String> {
+    read_entity_toml::<SlugOnly>(tree_root, stem, id, prefix).map(|p| p.slug)
 }
 
 /// Read and parse every `<stem>-<id>.toml` under `tree_root`. `scan_ids` yields
@@ -164,6 +190,17 @@ mod tests {
         let root = dir.path();
         write_statusless_toml(root, "review", 7);
         assert_eq!(read_id(root, "review", 7, "TK").unwrap(), 7);
+    }
+
+    /// SL-269 VT-1 (ISS-277): the lenient slug reader reads a status-less toml,
+    /// while the strict `read_meta` still hard-fails on the very same file.
+    #[test]
+    fn read_slug_reads_a_statusless_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_statusless_toml(root, "review", 7);
+        assert_eq!(read_slug(root, "review", 7, "TK").unwrap(), "sl");
+        assert!(read_meta(root, "review", 7, "TK").is_err());
     }
 
     /// SL-040 D2 (VT-1, the preserved-invariant half): the strict `Meta` reader

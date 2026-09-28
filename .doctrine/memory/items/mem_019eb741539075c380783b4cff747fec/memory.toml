@@ -2,7 +2,7 @@ memory_uid = "mem_019eb741539075c380783b4cff747fec"
 memory_key = "mem.pattern.review.rv-verbs-refuse-on-worktree-fork"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
+status = "superseded"
 title = "RV review verbs refuse on a worktree fork — drive the audit from the parent tree or merge-first"
 summary = "RV turn-verbs, status, prime and unlock refuse on a worktree fork (IMP-024); review new/show/list do not, so new strands a ledger there. Drive from the parent or coordination tree, or merge-first"
 created = "2026-06-11"
@@ -47,3 +47,7 @@ target = "mem.pattern.dispatch.fork-rung3-base-not-session-head"
 [[relation]]
 label = "related"
 target = "mem.pattern.build.clean-head-worktree-binary-vs-stash"
+
+[[relation]]
+label = "superseded_by"
+target = "mem_01a0e51ab021770080931110b50e3a40"

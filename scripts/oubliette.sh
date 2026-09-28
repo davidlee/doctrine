@@ -398,11 +398,8 @@ $ID generation $GEN is home.
 Phase status, handover and research came back with it. The divergence and
 conflict report above is against this repo's HEAD.
 
-Gather audit evidence here: check gate, slice verify-vt, and
-slice conformance --against <base>..$branch. The review verbs refuse this
-worktree (ISS-494, IMP-240), so the RV ledger can only open on edge, after
-the merge. Phase status stays here too: before auditing on edge, copy
-$wt/.doctrine/state/slice/$N/ over .doctrine/state/slice/$N/, or edge reads 0/N.
+Audit here: check gate, slice verify-vt, slice conformance --against
+<base>..$branch, and the RV ledger. Close here, then land.
 EOF
 }
 

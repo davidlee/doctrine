@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e4fd-88a6-7072-98a9-48d474d24570"
+recorded_at = "2026-09-27T22:30:15.974931278Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-269 PHASE-04: slice research drift noise after plan files added"
+detail = "doctrine slice research 269 reports drift solely because plan.md/plan.toml were added after research; no code-map thread affected. Noise until someone runs --restamp."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

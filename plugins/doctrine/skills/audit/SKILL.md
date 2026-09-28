@@ -10,7 +10,7 @@ governance, and is every gap consciously dispositioned before reconciliation?
 
 The audit stage runs on a **review ledger** — the RV kind (`RV-NNN`). The
 shared ledger mechanics (open + prime, raise, dispose + resolve, the severity and
-disposition vocab, synthesis, the close-gate, the parent-tree caveat) live in
+disposition vocab, synthesis, the close-gate, where reviews run) live in
 `review-ledger.md` — **read it; this skill does not repeat the verbs.** 
 What follows is the audit *lens*: the facet, the modes, the scope, the evidence 
 the reconciliation loop demands, and the audit-specific harvest and closure tail.
@@ -96,8 +96,11 @@ and is recorded separately — do not mutate a finding to `fixed`/`remediated`.
    2), computed from recorded source-deltas, complements prime rather than
    replacing it.
 2. **Gather evidence** (the audit's divergent work):
-   - prepare subject: do NOT change the main repository branch; use a worktree
-     instead, if necessary.
+   - prepare subject: do NOT switch the primary checkout's branch. An audit
+     runs where the code is — the primary tree, a dispatch coordination tree, a
+     linked worktree, or an adopted capsule tree; audit and close there, then
+     land. Only a dispatch worker process is refused review writes; one writer
+     per RV at a time (`review-ledger.md` §6, "Where reviews run").
    - **Run `doctrine slice conformance <id>` and read the algebra** — the
      mechanical path-conformance delta between what `design.md` declared
      (`design-target` selectors) and what git actually touched (recorded

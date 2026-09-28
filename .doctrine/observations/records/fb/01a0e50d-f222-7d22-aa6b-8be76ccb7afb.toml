@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e50d-f222-7d22-aa6b-8be76ccb7afb"
+recorded_at = "2026-09-27T22:48:11.554817981Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-269 PHASE-05: flaky e2e_observation BrokenPipe cost a full gate rerun"
+detail = "tests/e2e_observation.rs record_input_cannot_be_combined_with_the_per_field_flags: run_with_stdin (~l.97-102) expects the stdin write to succeed, but the child refuses before reading stdin, so the write races to BrokenPipe. The gate stops at the first failing binary, so the rest went unchecked until the rerun."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -272,7 +272,7 @@ fn evidence_ref_table(e: &EvidenceRef) -> String {
 pub(crate) fn materialise_populated(root: &Path, doc: &RecDoc) -> anyhow::Result<u32> {
     let trunk_ids = crate::git::trunk_entity_ids(root, REC_DIR)?;
     let (backend, mut reserved) =
-        crate::reserve::backend(root, REC_KIND.prefix, crate::install::prompt_confirm)?;
+        crate::reserve::backend(root, &REC_KIND, crate::install::prompt_confirm)?;
     let out: Materialised = entity::materialise_fresh_prebuilt(
         &*backend,
         root,
@@ -351,7 +351,7 @@ pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<(
 
     let trunk_ids = crate::git::trunk_entity_ids(&root, REC_DIR)?;
     let (backend, mut reserved) =
-        crate::reserve::backend(&root, REC_KIND.prefix, crate::install::prompt_confirm)?;
+        crate::reserve::backend(&root, &REC_KIND, crate::install::prompt_confirm)?;
     let out: Materialised = entity::materialise_fresh_prebuilt(
         &*backend,
         &root,

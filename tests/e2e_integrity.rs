@@ -246,3 +246,104 @@ fn reseat_refuses_live_runtime_phase_state() {
         "no dst created"
     );
 }
+
+// --- SL-269 PHASE-03: reseat claims its destination -----------------------
+
+/// ISS-281: reseat now builds a real reservation backend, so a test over a
+/// plain tempdir asserts it sits outside every git worktree — otherwise the
+/// backend would write refs into whatever repo encloses `TMPDIR`.
+fn assert_outside_git(root: &Path) {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .output()
+        .expect("spawn git");
+    assert!(
+        !out.status.success(),
+        "precondition: {} must be outside any git worktree (ISS-281)",
+        root.display()
+    );
+}
+
+/// SL-269 VT-2 (ISS-277): a review's authored toml is status-less; reseat reads
+/// its slug leniently and renumbers the quad.
+#[test]
+fn reseat_renumbers_a_review() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
+    let t = tmp();
+    assert_outside_git(t.path());
+    let reviews = t.path().join(common::REVIEW_DIR);
+    let src = reviews.join("007");
+    fs::create_dir_all(&src).unwrap();
+    fs::write(
+        src.join("review-007.toml"),
+        "id = 7\nslug = \"probe\"\ntitle = \"fixture\"\n",
+    )
+    .unwrap();
+    fs::write(src.join("review-007.md"), "# fixture\n\nbody.\n").unwrap();
+    symlink("007", reviews.join("007-probe")).unwrap();
+
+    let out = run(t.path(), &["reseat", "RV-007", "--to", "012"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert!(
+        stdout(&out).contains("reseated RV-007 → RV-012"),
+        "{}",
+        stdout(&out)
+    );
+    let toml = fs::read_to_string(reviews.join("012/review-012.toml")).unwrap();
+    assert!(toml.contains("id = 12"), "{toml}");
+    assert!(reviews.join("012/review-012.md").is_file());
+    assert_eq!(
+        fs::read_link(reviews.join("012-probe")).unwrap(),
+        Path::new("012")
+    );
+    assert!(!reviews.join("007").exists());
+    assert!(fs::symlink_metadata(reviews.join("007-probe")).is_err());
+}
+
+/// SL-269 VT-4: a refusal that does not depend on the destination runs before
+/// any claim, so neither the default nor an explicit `--to` leaves a claim.
+#[test]
+fn reseat_refusal_leaves_no_claim() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
+    let lt = common::LinkedTrees::new("");
+    let root = lt.root(&lt.a);
+    seed_slice(&root, 31, 31, "src");
+    fs::create_dir_all(root.join(".doctrine/state/slice/031/phases")).unwrap();
+
+    for args in [
+        &["reseat", "SL-031"][..],
+        &["reseat", "SL-031", "--to", "045"][..],
+    ] {
+        let out = run(&root, args);
+        assert!(!out.status.success());
+        assert!(
+            stderr(&out).contains("runtime phase state"),
+            "{}",
+            stderr(&out)
+        );
+    }
+
+    let slices: Vec<String> = fs::read_dir(root.join(common::SLICE_DIR))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(slices, ["031"], "no new numbered dir");
+    let refs = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&lt.main)
+        .args(["for-each-ref", "refs/doctrine/reservation-local/"])
+        .output()
+        .expect("spawn git");
+    assert!(refs.status.success());
+    assert!(
+        refs.stdout.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&refs.stdout)
+    );
+}

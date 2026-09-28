@@ -53,14 +53,26 @@ pub(crate) trait Claim {
     /// `AlreadyHeld` if another agent won the race. Only this op arbitrates.
     fn claim(&self, ctx: &ClaimCtx<'_>) -> anyhow::Result<Acquired>;
 
-    /// Whether this backend arbitrates at a remote (the `GitRef` cross-clone
-    /// backend) vs the local filesystem (`LocalFs`). Test-only discriminator for
-    /// the reach-selection suites (SL-148 VT-2/VT-3/VT-6) — production never branches
-    /// on the backend kind (the seam exists precisely so it doesn't).
+    /// What this backend's claim arbitrates over. Test-only discriminator for the
+    /// reach-selection suites (SL-148 VT-2/VT-3/VT-6, SL-269 VT-4) — production never
+    /// branches on the backend kind (the seam exists precisely so it doesn't).
     #[cfg(test)]
-    fn is_remote(&self) -> bool {
-        false
+    fn arbiter(&self) -> Arbiter {
+        Arbiter::Dir
     }
+}
+
+/// What a [`Claim`] backend arbitrates over — the test-only reach-selection
+/// discriminator ([`Claim::arbiter`]).
+#[cfg(test)]
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Arbiter {
+    /// The local filesystem: the `mkdir` is the claim (`LocalFs`).
+    Dir,
+    /// This clone's own ref store (`CloneRef`, SL-269).
+    CloneRef,
+    /// A remote ref, cross-clone (`GitRef`).
+    RemoteRef,
 }
 
 /// The local-filesystem backend: the `mkdir` is the claim (D1 — the dir *is*
@@ -540,37 +552,51 @@ fn claim_fresh_id(
     tree_root: &Path,
     prefix: &str,
     trunk_ids: &[u32],
-    mut scan: impl FnMut() -> anyhow::Result<Vec<u32>>,
+    scan: impl FnMut() -> anyhow::Result<Vec<u32>>,
     mut on_reserved: impl FnMut(u32, &str) -> anyhow::Result<()>,
     mut build: impl FnMut(u32, &str) -> anyhow::Result<Fileset>,
 ) -> anyhow::Result<Materialised> {
+    let (id, dir) = claim_next_id(claim, tree_root, prefix, trunk_ids, scan)?;
+    let canonical = format!("{prefix}-{id:03}");
+    // The midpoint: the identity is claimed, no byte is written yet.
+    let written = on_reserved(id, &canonical)
+        .and_then(|()| build(id, &canonical))
+        .and_then(|fs| write_fileset(tree_root, &fs));
+    match written {
+        Ok(()) => Ok(Materialised {
+            eid: OwnedEntityId::Numbered { id, canonical },
+            dir,
+        }),
+        Err(e) => {
+            // Won ⟹ we created `dir` ⟹ a partial scaffold is our mess
+            // to clean (H2). Best-effort; the build error is surfaced.
+            drop(fs::remove_dir_all(&dir));
+            Err(e)
+        }
+    }
+}
+
+/// The pick-claim-retry loop shared by fresh-numbered placement and `reseat`
+/// (SL-269 EX-2). Each attempt re-reads `scan` (recovering a lost claim race),
+/// unions it with the constant `trunk_ids`, picks [`next_id`] and claims
+/// `tree_root/<NNN>` once; `AlreadyHeld` recomputes and retries. Returns the
+/// won `(id, dir)` — a `Won` claim means this caller created `dir`, which the
+/// caller now owns. `prefix` only keys the retry-exhaustion hint.
+pub(crate) fn claim_next_id(
+    claim: &dyn Claim,
+    tree_root: &Path,
+    prefix: &str,
+    trunk_ids: &[u32],
+    mut scan: impl FnMut() -> anyhow::Result<Vec<u32>>,
+) -> anyhow::Result<(u32, PathBuf)> {
     let mut last_id = 0u32;
     for _ in 0..MAX_CLAIM_RETRIES {
         let id = next_id(&scan()?, trunk_ids);
         last_id = id;
-        let name = format!("{id:03}");
-        let dir = tree_root.join(&name);
+        let dir = tree_root.join(format!("{id:03}"));
         let ctx = ClaimCtx { dir: &dir, id };
         match claim.claim(&ctx)? {
-            Acquired::Won => {
-                let canonical = format!("{prefix}-{name}");
-                // The midpoint: the identity is claimed, no byte is written yet.
-                let written = on_reserved(id, &canonical)
-                    .and_then(|()| build(id, &canonical))
-                    .and_then(|fs| write_fileset(tree_root, &fs));
-                return match written {
-                    Ok(()) => Ok(Materialised {
-                        eid: OwnedEntityId::Numbered { id, canonical },
-                        dir,
-                    }),
-                    Err(e) => {
-                        // Won ⟹ we created `dir` ⟹ a partial scaffold is our mess
-                        // to clean (H2). Best-effort; the build error is surfaced.
-                        drop(fs::remove_dir_all(&dir));
-                        Err(e)
-                    }
-                };
-            }
+            Acquired::Won => return Ok((id, dir)),
             Acquired::AlreadyHeld => {} // lost the race; recompute and retry
         }
     }
@@ -1060,6 +1086,36 @@ mod tests {
             msg.contains("doctrine reseat TK-001"),
             "exhaustion error must carry the reseat hint: {msg}"
         );
+    }
+
+    /// SL-269 VT-6: the extracted loop skips an `AlreadyHeld` id, re-scans, and
+    /// returns the won `(id, dir)` — the dir this caller now owns.
+    #[test]
+    fn claim_next_id_skips_held_ids_and_returns_the_won_dir() {
+        struct HoldsOne;
+        impl Claim for HoldsOne {
+            fn claim(&self, ctx: &ClaimCtx<'_>) -> anyhow::Result<Acquired> {
+                if ctx.id == 1 {
+                    return Ok(Acquired::AlreadyHeld);
+                }
+                fs::create_dir(ctx.dir)?;
+                Ok(Acquired::Won)
+            }
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let tree = dir.path().join("tree");
+        fs::create_dir_all(&tree).unwrap();
+
+        // The scan learns of id 1 only after it was found held (a sibling's).
+        let scans = Cell::new(0u32);
+        let (id, won) = claim_next_id(&HoldsOne, &tree, "TK", &[], || {
+            scans.set(scans.get() + 1);
+            Ok(if scans.get() == 1 { vec![] } else { vec![1] })
+        })
+        .unwrap();
+        assert_eq!((id, won.clone()), (2, tree.join("002")));
+        assert!(won.is_dir());
+        assert_eq!(scans.get(), 2);
     }
 
     // --- H2: a write failure cleans up the won directory ---

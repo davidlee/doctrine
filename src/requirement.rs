@@ -243,11 +243,8 @@ pub(crate) fn reserve(
     date: &str,
 ) -> anyhow::Result<entity::Materialised> {
     let trunk_ids = crate::git::trunk_entity_ids(root, REQUIREMENT_KIND.dir)?;
-    let (backend, mut reserved) = crate::reserve::backend(
-        root,
-        REQUIREMENT_KIND.prefix,
-        crate::install::prompt_confirm,
-    )?;
+    let (backend, mut reserved) =
+        crate::reserve::backend(root, &REQUIREMENT_KIND, crate::install::prompt_confirm)?;
     entity::materialise(
         &REQUIREMENT_KIND,
         requirement_scaffold,

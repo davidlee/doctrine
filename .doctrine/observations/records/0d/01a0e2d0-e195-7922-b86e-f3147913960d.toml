@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e2d0-e195-7922-b86e-f3147913960d"
+recorded_at = "2026-09-27T12:22:15.189984969Z"
+kind = "friction"
+summary = "capsule-orchestrator/worker: python3 absent"
+detail = "SL-269 PHASE-01 worker attempted a scripted edit with python3, which is not in the environment; one wasted round-trip before falling back to Edit/perl."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

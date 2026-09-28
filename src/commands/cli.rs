@@ -1804,7 +1804,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             reference,
             to,
             path,
-        } => crate::integrity::run_reseat(path, &reference, to),
+        } => crate::integrity::run_reseat(path, &reference, to, crate::install::prompt_confirm),
         Command::Relation { command } => match command {
             crate::commands::relation::RelationCommand::List {
                 include_memory,

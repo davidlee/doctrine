@@ -5,10 +5,10 @@ id = 483
 slug = "reserve-vt-3-test-is-not-env-isolated-the-jails-doctrine-reservation-fallback1-turns-check-gate-red"
 title = "reserve VT-3 test is not env-isolated: the jail's DOCTRINE_RESERVATION_FALLBACK=1 turns check gate red"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-09-25"
-updated = "2026-09-25"
+updated = "2026-09-28"
 tags = ["area:dispatch", "area:jail", "area:testing"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e4d6-7978-7e01-80b1-18d6ee2d9550"
+recorded_at = "2026-09-27T21:47:36.18457949Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-269 PHASE-03: reserve local-ref prefix private, tests retype it"
+detail = "RESERVATION_LOCAL_REF_PREFIX is private in src/reserve.rs, so integrity tests retype the ref literal as LOCAL_REF_NS (drift risk). And assert_outside_git is now triplicated across reserve.rs tests, integrity.rs tests and tests/e2e_integrity.rs; it belongs in src/test_support.rs."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

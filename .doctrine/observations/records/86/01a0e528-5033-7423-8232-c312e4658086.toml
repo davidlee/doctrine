@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e528-5033-7423-8232-c312e4658086"
+recorded_at = "2026-09-27T23:16:59.571130863Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-269 PHASE-06: cargo build no-ops after editing embedded memory/ and plugins/"
+detail = "After hand-editing memory/ and plugins/, cargo build finished in 0.06s without re-embedding (RustEmbed folder contents not fingerprinted). Worker had to touch src/asset_source.rs, src/corpus.rs, src/install.rs to force a rebuild before memory sync/install saw the edits."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

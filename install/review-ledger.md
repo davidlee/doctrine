@@ -311,11 +311,21 @@ The **close-gate**: an unresolved `blocker` on an active RV refuses the
 target's closure transitions — resolve it (`verify` or `withdraw`) before the
 subject can advance. `major` / `minor` / `nit` never gate.
 
-**Parent-tree caveat.** The turn verbs (`raise`, `dispose`, `amend`, `verify`,
-`contest`, `reopen`, `withdraw`, `conclude`) and `status`, `prime` and `unlock`
-refuse a root inside a worktree **fork**: any linked worktree that is not a
-dispatch coordination worktree. `review new`, `show` and `list` do **not**
-refuse. A `review new` run in a fork succeeds and leaves a stray ledger there,
-which the next turn verb then refuses, so a successful `new` is no proof you are
-outside a fork. Open and drive reviews from the primary tree or a coordination
-worktree (or land the fork first), never from inside an isolated worker fork.
+**Where reviews run.** Reviews can be opened and driven in any working tree:
+the primary checkout, a dispatch coordination tree, a linked worktree you made
+yourself, or an adopted capsule tree. An audit therefore runs where the code
+is: audit and close there, then land the branch. The one refusal is narrower
+than tree shape: every review write (`new`, the turn verbs — `raise`,
+`dispose`, `amend`, `verify`, `contest`, `reopen`, `withdraw`, `conclude` —
+`status`, `prime` and `unlock`) is refused in a dispatch worker process, one
+with `DOCTRINE_WORKER` set, and `new` refuses before allocating an id. Workers
+read with `review show` / `review list`; the orchestrator writes the ledger.
+Branch name plays no part. The turn baton is a cache in the resolved tree's
+own gitignored state, rebuilt from the ledger wherever the review is next
+used.
+
+**One writer per RV at a time.** Whichever tree you write from, the per-review
+lock and hash checks protect writers inside one tree only. Two trees writing
+the same RV can each pass their own checks; git merge of the ledger is a
+best-effort backstop that may conflict, or may merge cleanly into an
+incoherent ledger. Keep one writer per RV at a time.

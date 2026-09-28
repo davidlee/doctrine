@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e2be-c4ad-7120-9097-9df7b40eb444"
+recorded_at = "2026-09-27T12:02:28.141410466Z"
+kind = "friction"
+summary = "capsule-orchestrator/phase-planner: memory retrieve shape mismatch"
+detail = """SL-269 PHASE-01 planner: its brief showed 'doctrine memory retrieve "<topic>"' but the verb takes only flags (--query, --path-scope). Positional form fails; wasted calls."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

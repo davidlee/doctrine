@@ -46,7 +46,7 @@
 #
 # [reservation]
 # # How fresh entity ids are allocated.
-# #   local  — single-tree: local mkdir is the claim; remote is never touched
+# #   local  — this clone: a ref in the clone's git dir is the claim; remote is never touched
 # #   shared — cross-clone: remote ref CAS is the claim; unreachable remote hard-errors
 # #   auto   — shared when a remote is reachable, degrade to local otherwise (default)
 # reach = "auto"

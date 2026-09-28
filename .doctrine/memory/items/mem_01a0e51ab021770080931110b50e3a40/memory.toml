@@ -1,0 +1,42 @@
+memory_uid = "mem_01a0e51ab021770080931110b50e3a40"
+memory_key = "mem.pattern.review.writes-refused-only-in-worker"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Review writes are refused only in a dispatch worker process"
+summary = "Any non-worker tree (primary, coord, solo worktree, adopted capsule) may open and drive an RV; one writer per RV at a time"
+created = "2026-09-27"
+updated = "2026-09-27"
+
+[scope]
+paths = ["src/review/turn.rs"]
+globs = []
+commands = ["review", "audit", "close"]
+tags = ["review", "worktree", "dispatch"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "933066f505b7dbe4983dee7f1fd9722a144464b9"
+ref_name = "refs/heads/work"
+checkout_state_id = "a908bf9ff58d0570daaba2aeb592a2df9f8d1f3fe3c6d025261243fde0b5c1a6"
+base_commit = "e85c3a75fadd11b4368a560f631317dce3cbdd8e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+

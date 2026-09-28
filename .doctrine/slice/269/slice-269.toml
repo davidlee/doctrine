@@ -1,9 +1,9 @@
 id = 269
 slug = "review-capable-worktree-locus"
 title = "Review-capable worktree locus"
-status = "started"
+status = "done"
 created = "2026-09-27"
-updated = "2026-09-27"
+updated = "2026-09-28"
 tags = []
 
 [relationships]
@@ -20,7 +20,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "plugins/doctrine/skills/audit/SKILL.md"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "install/review-ledger.md"
@@ -115,14 +115,6 @@ selector = "install/doctrine.toml.example"
 intent = "design-target"
 
 [[selector]]
-selector = ".agents/skills/audit/SKILL.md"
-intent = "design-target"
-
-[[selector]]
-selector = ".agents/skills/inquisition/SKILL.md"
-intent = "design-target"
-
-[[selector]]
 selector = "tests/e2e_integrity.rs"
 intent = "design-target"
 
@@ -134,6 +126,26 @@ intent = "design-target"
 selector = "src/git.rs"
 intent = "design-target"
 note = "RV-406 F-4: update_ref_cas error split"
+
+[[selector]]
+selector = "plugins/doctrine/skills/code-review/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/inquisition/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "src/kinds/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/test_support.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/common/mod.rs"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"
@@ -163,6 +175,10 @@ target = "ISS-496"
 label = "fulfils"
 degree = "partial"
 target = "ISS-292"
+
+[[relation]]
+label = "fulfils"
+target = "ISS-494"
 
 [[relation]]
 label = "governed_by"

@@ -1,0 +1,116 @@
+id    = 409
+slug  = "sl-269-audit"
+title = "SL-269 audit"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Audited branch capsule/SL-269/c26 (5cd5eec8e..9dbe1b8ae): gate green, verify-vt 25/25, conformance algebra read, admission and reservation code read against design sec-2..sec-7, guidance text against sec-5, governance text against DEC-337/DEC-338. Four documentary findings, all design-wrong, carried in the Reconciliation Brief."
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-269"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Design names nonexistent .agents/skills sources"
+detail = "Design sec-5/sec-6 and the selector registry name .agents/skills/{audit,inquisition}/SKILL.md, which do not exist (conformance: undelivered). The edits landed in plugins/doctrine/skills/{audit,code-review,inquisition}/SKILL.md (conformance: undeclared), which sec-5 wrongly calls generated copies refreshed by doctrine install. code-review/SKILL.md is not named at all."
+disposition = "design-wrong"
+response = "Design/selector drift, not code. Reconciliation Brief, Per-slice, F-1: selector rm/add plus design sec-5/sec-6 mirror."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Design/selector drift, not code. Reconciliation Brief, Per-slice, F-1: selector rm/add plus design sec-5/sec-6 mirror."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Delivered paths missing from sec-6 and selectors"
+detail = "src/kinds/mod.rs (review KindRef state_dir -> None, required by design sec-3 'Review runtime state') and the LinkedTrees fixture in src/test_support.rs + tests/common/mod.rs (the two-linked-worktree fixture sec-7 describes) are delivered but absent from sec-6 Code impact and the design-target selectors, so conformance reports them undeclared."
+disposition = "design-wrong"
+response = "Delivered per design sec-3/sec-7 but undeclared. Reconciliation Brief, Per-slice, F-2: selector add plus sec-6 mirror."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Delivered per design sec-3/sec-7 but undeclared. Reconciliation Brief, Per-slice, F-2: selector add plus sec-6 mirror."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Fulfilled backlog items not linked"
+detail = "Design sec-5 Backlog says SL-269 fulfils ISS-279, ISS-277, ISS-483, ISS-494, IMP-240 (defect 2), IMP-190, ISS-496, and partly ISS-292 (faults 1, 3, 4). SL-269 records only governed_by POL-002, ADR-007; no fulfils edges exist."
+disposition = "design-wrong"
+response = "Reconciliation Brief, Per-slice, F-3: record fulfils edges per design sec-5 Backlog."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Reconciliation Brief, Per-slice, F-3: record fulfils edges per design sec-5 Backlog."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Governance still states fork ban and per-tree local reach"
+detail = "ADR-007 D-C1, D-C7 and D-C10 still say review verbs refuse a worktree fork and that a ledger lives in one working tree; PRD-005 and SPEC-008 still define local reach as a per-tree mkdir and omit reseat's claimed destination. The code now contradicts them. Design sec-5 plans one REV at /reconcile."
+disposition = "design-wrong"
+response = "Planned REV at /reconcile (design sec-5). Reconciliation Brief, Governance/spec, F-4 lists each clause and line."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Planned REV at /reconcile (design sec-5). Reconciliation Brief, Governance/spec, F-4 lists each clause and line."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

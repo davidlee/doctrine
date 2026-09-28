@@ -24,7 +24,7 @@ ref   = "SL-269"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "A moved Doctrine root makes the sibling scan miss a live id"
 detail = """
@@ -52,9 +52,13 @@ response = """
 The observation holds, but only for ids minted before this slice. The fix is partial. A sibling with no doctrine root at <rel>, or with an unreadable kind dir, is no longer skipped silently: a stderr warning names it (STD-003; sec-2). The remaining case, a pre-slice uncommitted id in a live sibling whose root moved, is added to DEC-337's accepted residual (sec-2 "Existing claims", sec-8, slice R2), with git merge as the backstop and reseat as the repair. Sibling-root discovery was not adopted: it is ambiguous when one repo holds several doctrine projects, and it would make layout guessing a correctness condition. The user accepted this residual widening with the design.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "A one-time sibling snapshot cannot cover concurrent legacy writers"
 detail = """
@@ -82,9 +86,13 @@ response = """
 Accepted as a stated boundary, not closed. A ref-less mkdir by a pre-slice binary or by hand cannot be made atomic with the ref CAS, and re-reading sibling dirs would narrow the window without closing it. The design no longer claims unconditional same-clone freedom. Its rollout rule is to upgrade every tree of a clone together and not hand-make numbered dirs (sec-2 "Existing claims", sec-8), and the residual is added to DEC-337's. The F-3 repair means CloneRef treats a same-tree occupant as AlreadyHeld. The user accepted this with the design.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The split-state reseat hint cannot repair a missing directory"
 detail = """
@@ -112,9 +120,13 @@ response = """
 Observation verified (src/reserve.rs:160-171 discards the mkdir error; reseat needs a source dir, src/integrity.rs:286-295). Integrated in sec-2 "After the CAS": one post-CAS mkdir helper for both git backends with an outcome table. It keeps the I/O cause; it suggests reseat only when the dir exists (GitRef occupant); CloneRef treats an existing dir as AlreadyHeld and retries; any other error says the id is burnt and a re-run takes the next one. No repair/release verb was added: an orphan ref is a numbering gap (sec-8), so there is nothing to repair. Tests in sec-7.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "A failed local ref update is misreported as contention"
 detail = """
@@ -142,9 +154,13 @@ response = """
 Verified at src/git.rs:1104-1116. Integrated: update_ref_cas returns Moved only when the ref has left expected_old; a failure leaving it at expected_old is an error with git stderr and the ref name (sec-2 "A failed CAS is not always a rival"; src/git.rs added to sec-6; test in sec-7). Fixing the primitive, not adding a strict variant, corrects every caller.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Reseat cleanup must stop at the commit point and preserve a populated claim"
 detail = """
@@ -172,9 +188,13 @@ response = """
 Accepted. sec-3 now splits failure at the commit rename. Before it: the claimed dir is removed with remove_dir (empty only), a populated dir is kept and named, and the remove_dir_all precedent is not copied. After it: a committed move, never rolled back, and the error names the partial state. Flowchart updated; tests for a populated claim and a post-rename alias failure added. A pre-rename emptiness assert was not added: rename(2) already fails ENOTEMPTY on a populated destination. A claimed dir removed and re-made empty by another writer before the rename is covered by the ref under CloneRef/GitRef; that leaves only the non-git LocalFs case, which is negligible.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "The expanded dangler report still silently skips unreadable authored files"
 detail = """
@@ -202,9 +222,13 @@ response = """
 Verified: src/integrity.rs:426 continues on read failure. Integrated in sec-3's dangler table as a fourth fault: each walk or read failure is listed with its path and cause under its own heading, and reseat exits non-zero (STD-003). Test: one readable citation plus one unreadable authored file.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Canonical paths can hide an externally symlinked runtime state tree"
 detail = """
@@ -232,9 +256,13 @@ response = """
 Observation accepted; prescription replaced. canonicalise-and-dedup is dropped. scan_danglers now walks .doctrine/ with walkdir, follow_links(false), and skips symlink entries. A symlinked .doctrine/state is then never entered, and is_disposable_prose keeps running on the lexical path, so the external-state case cannot arise. Every symlink under .doctrine/ is an alias for a real sibling or the phases link (inventoried with find -type l), so nothing authored is lost.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Canonicalising matched files does not bound symlink traversal"
 detail = """
@@ -261,6 +289,10 @@ route = "review"
 response = """
 Verified that glob follows directory symlinks. Integrated through the same change as F-7: a walkdir walk that does not follow links stays inside .doctrine/ and cannot loop, and it also removes the alias double-count without dedup. The report header states that symlinks are not followed. sec-7 tests an external dir symlink and a loop.
 """
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.

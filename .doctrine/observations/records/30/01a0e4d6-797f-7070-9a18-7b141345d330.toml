@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e4d6-797f-7070-9a18-7b141345d330"
+recorded_at = "2026-09-27T21:47:36.19176857Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-269: record-delta usage line lists --commit, --start and --end all as required"
+detail = "The usage line reads '--commit <COMMIT> --end <END> --start <START>' as if all were required, while the prose says they are mutually exclusive modes. Misleading at a glance."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -51,3 +51,22 @@ unreachable `origin`). Fix the **config** (set `reach = "local"`, or
 `allow-local-fallback = true`) rather than reintroducing the env export — and
 note that setting the variable reddens `reserve::tests::vt3_auto_degradation…`,
 which asserts the fail-closed default (`ISS-483`).
+
+
+## Correction (2026-09-27) — `local` reach now means this clone, not a per-tree mkdir
+
+Since SL-269, `reach = "local"` no longer means a bare `LocalFs` `mkdir` claim
+scoped to whichever working tree runs the command. In a git root it now means
+*this clone*: the claim is a zero-oid ref CAS under
+`refs/doctrine/reservation-local/` in the clone's common git dir (the
+`CloneRef` backend), shared by every linked worktree of that clone — still no
+remote contact. A non-git root (no `.git` at all) still falls back to a plain
+`mkdir` (`LocalFs`).
+
+`DOCTRINE_RESERVATION_FALLBACK` / `allow-local-fallback` still matter only for
+`auto` (or `shared`) reach when the remote is unreachable — they select this
+same `local` behaviour as a degrade path, not a different one.
+
+The env opt-in is now read once at the shell edge and passed in as a value,
+so setting it no longer reddens `reserve::tests` — the "reddens vt3" line
+in the correction above is obsolete (`ISS-483` fixed).

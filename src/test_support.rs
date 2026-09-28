@@ -87,6 +87,79 @@ fn worker_env_says_worker(value: Option<&std::ffi::OsStr>) -> bool {
     value.is_some()
 }
 
+/// One clone with a primary worktree and two linked worktrees, no remote (SL-269
+/// EX-5): the substrate for clone-wide reservation and for `reseat` across trees.
+/// Each tree carries a committed `<rel>/.doctrine/` (git tracks no empty dir, so a
+/// `.keep` holds it), making `<tree>/<rel>` a doctrine project root in all three.
+///
+/// std + `tempfile` + `git` only — no `crate::` paths — because this file is also
+/// `#[path]`-included into the integration-test crate.
+pub(crate) struct LinkedTrees {
+    _tmp: tempfile::TempDir,
+    /// The doctrine project root relative to each worktree top level (`""` or `"proj/"`).
+    rel: String,
+    /// The primary worktree (holds the common git dir).
+    pub(crate) main: PathBuf,
+    /// Linked worktree on branch `a`.
+    pub(crate) a: PathBuf,
+    /// Linked worktree on branch `b`.
+    pub(crate) b: PathBuf,
+}
+
+impl LinkedTrees {
+    /// Build the clone; `rel` places the doctrine root below each worktree top level.
+    pub(crate) fn new(rel: &str) -> Self {
+        let tmp = tempfile::tempdir().expect("linked-trees temp dir");
+        let main = tmp.path().join("main");
+        std::fs::create_dir_all(main.join(rel).join(".doctrine")).expect("mkdir doctrine root");
+        std::fs::write(main.join(rel).join(".doctrine/.keep"), "").expect("write .keep");
+        std::fs::write(main.join("seed.txt"), "seed").expect("write seed");
+        let git = |args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&main)
+                .args(args)
+                .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00 +0000")
+                .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00 +0000")
+                .output()
+                .expect("spawn git");
+            assert!(
+                out.status.success(),
+                "git {args:?}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+        git(&["init", "-b", "main"]);
+        git(&["config", "user.name", "Linked Trees"]);
+        git(&["config", "user.email", "linked@doctrine.test"]);
+        git(&["add", "."]);
+        git(&["commit", "-m", "seed"]);
+        let a = tmp.path().join("a");
+        let b = tmp.path().join("b");
+        for (branch, path) in [("a", &a), ("b", &b)] {
+            git(&[
+                "worktree",
+                "add",
+                "-b",
+                branch,
+                path.to_str().expect("utf-8 path"),
+            ]);
+        }
+        Self {
+            _tmp: tmp,
+            rel: rel.to_owned(),
+            main,
+            a,
+            b,
+        }
+    }
+
+    /// The doctrine project root inside `tree` (`<tree>/<rel>`).
+    pub(crate) fn root(&self, tree: &std::path::Path) -> PathBuf {
+        tree.join(&self.rel)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e528-5030-7712-ae9f-308edd8dabe4"
+recorded_at = "2026-09-27T23:16:59.56854816Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-269 PHASE-06: design names gitignored .agents/skills as the skill source"
+detail = "Design sec-5 guidance table (and plan EX-1, and the orchestrator brief) name .agents/skills/** as the edit target and plugins/ as generated. It is the reverse: .agents/.pi are gitignored install output, plugins/doctrine/skills is tracked + embedded. Planner caught it; an edit in .agents would have produced no delta."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -53,7 +53,7 @@ exit_criteria = [
   { id = "EX-3", text = "A sibling with no doctrine root at <rel>, or an unreadable kind dir, is not scanned and is named in a stderr warning; the allocation proceeds (STD-003; RV-406 F-1). A sibling with a root but no kind dir contributes nothing silently." },
   { id = "EX-4", text = "reserve::backend(root, &Kind, prompt); all 11 fresh-id call sites pass the Kind. .doctrine/adr/001/layering.toml declares reserve → kinds; the architecture layering test is green." },
   { id = "EX-5", text = "A test fixture composes one clone with two linked worktrees and no remote, reusable by PHASE-03." },
-  { id = "EX-6", text = "Existing entity and reserve suites green unchanged; doctrine check gate green." },
+  { id = "EX-6", text = "The reserve tests that asserted plain-directory claiming in a git clone (vt2_reach_selection, vt3_auto_degradation_is_fail_closed_with_explicit_optin, vt6_local_backend_is_back_compatible, reach_selection_ignores_ambient_fallback_env) are rewritten for the clone-wide backend per design sec-7: only their expected arbiter flips from Dir to CloneRef. Every other entity and reserve test stays green unchanged; doctrine check gate green." },
 ]
 verification = [
   { id = "VT-1", expects = "two linked trees allocating one kind get distinct ids", test_file = "src/reserve.rs", keywords = ["CloneRef", "two_linked_trees_allocating_one_kind_get_distinct_ids"], waived = false },
@@ -75,7 +75,7 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "meta::read_slug(tree_root, stem, id, prefix) beside read_id, both through one private generic reader (IdOnly, SlugOnly); read_meta still requires status." },
-  { id = "EX-2", text = "entity::claim_fresh_id splits into claim_next_id(claim, tree_root, trunk_ids, scan) -> (id, dir) plus the existing midpoint/build/cleanup; the 11 fresh-id sites see no change." },
+  { id = "EX-2", text = "entity::claim_fresh_id splits into claim_next_id(claim, tree_root, trunk_ids, scan) -> (id, dir) plus the existing midpoint/build/cleanup; the 11 fresh-id sites see no change. (Adapted: claim_next_id also takes the kind prefix, to keep the retry-exhaustion message unchanged.)" },
   { id = "EX-3", text = "run_reseat takes prompt: PromptFn (supplied from src/commands/cli.rs); refusals not depending on the destination (source resolution, live phase state) run before any claim; default destination via claim_next_id through reserve::backend; --to refused when it equals src or appears in scan ∪ trunk, otherwise claimed once (AlreadyHeld → refuse). layering.toml declares integrity → reserve." },
   { id = "EX-4", text = "Commit: the staged dir is renamed over the claimed empty dir. Before the rename, failure removes the claim with remove_dir only (a populated dir is kept and named). After the rename, failure is a committed move: nothing rolled back, the destination never removed, the error names the partial state." },
   { id = "EX-5", text = "Existing reseat e2e tests and read_meta_still_hard_fails_on_a_missing_status green unchanged; doctrine check gate green." },

@@ -15,9 +15,12 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
+use walkdir::WalkDir;
 
+use crate::corpus_guard::DOCTRINE_PATHSPEC;
+use crate::entity::{Acquired, Claim, ClaimCtx, Kind};
 use crate::kinds::{KINDS, KindRef, parse_canonical_ref};
-use crate::{entity, fsutil, git, listing, meta, root};
+use crate::{entity, fsutil, git, listing, meta, reserve, root};
 
 // ---------------------------------------------------------------------------
 // Pure check layer — facts in, findings out. No disk (design pure/impure split).
@@ -260,24 +263,35 @@ fn extract_entity_id(msg: &str, kind: &KindRef) -> Option<String> {
 
 /// `doctrine reseat <CANONICAL_REF> [--to <NNN>]` — renumber an entity's
 /// canonical-id quad (dir name, the `<stem>-NNN.{toml,md}` filenames, the toml
-/// `id` field, the `NNN-slug` alias) to the next free trunk-aware id, or to an
-/// explicit `--to`. Guards (checked BEFORE any mutation): an occupied target is
-/// refused (no clobber, §5.3); an id with live gitignored runtime phase state is
-/// refused (F3 — reseat does not own the disposable tier). Inbound prose
+/// `id` field, the `NNN-slug` alias) to the next free id, or to an explicit
+/// `--to`. The slug is read leniently ([`meta::read_slug`]), so a status-less
+/// kind (review) reseats (ISS-277). Refusals that do not depend on the
+/// destination run BEFORE any claim, so a refused reseat leaves no claim behind:
+/// an id with live gitignored runtime state is refused (F3 — reseat does not own
+/// the disposable tier), and so is a `--to` equal to the source. Inbound prose
 /// citations are reported as danglers and force a non-zero exit; prose is never
 /// rewritten (ADR-004 outbound-only, D4/R-3).
 ///
 /// CONTRACT (SL-032 review F-4): the dangler exit is **non-zero even on
 /// a fully-completed reseat** — the mutation succeeded, the citations are the
 /// human's to fix; `reseat && commit` is therefore wrong, drive it by hand.
-/// The mutation is now staged in a sibling temp dir with a single atomic
-/// rename as the commit point (IMP-010): a mid-sequence failure before the
-/// rename leaves only an orphan `.MMM.tmp` the retry path cleans — never a
-/// half-reseated entity at the canonical id.
+///
+/// The destination is **claimed** through the reservation backend
+/// ([`reserve::backend`], SL-269), not merely picked: the default rides
+/// [`entity::claim_next_id`]; an explicit `--to` is refused when the candidate set
+/// (this tree, sibling trees, reservation refs, trunk) holds it, else claimed once
+/// (no clobber, §5.3). The mutation is staged in a sibling `.MMM.tmp` and
+/// committed by one `rename(2)` over the claimed **empty** dir (IMP-010), which
+/// is the cleanup boundary (RV-406 F-5): before it, failure removes the claim
+/// with `remove_dir` only — a populated claim is kept and named — and removes our
+/// own staging dir; any reservation ref stays (its id is skipped from then on).
+/// After it, the move is committed: nothing is rolled back, the destination is
+/// never removed, and the error names what is seated and what remains.
 pub(crate) fn run_reseat(
     path: Option<PathBuf>,
     reference: &str,
     to: Option<u32>,
+    prompt: reserve::PromptFn,
 ) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
     let (kind, src_id) = parse_canonical_ref(reference)?;
@@ -291,34 +305,12 @@ pub(crate) fn run_reseat(
         listing::canonical_id(kind.kind.prefix, src_id),
         src_dir.display()
     );
-    // Slug from the authored metadata — the alias name component.
-    let slug = meta::read_meta(&tree_root, kind.kind.stem, src_id, kind.kind.prefix)?.slug;
+    // Slug from the authored metadata — the alias name component. Lenient: a
+    // status-less kind (review) must not trip the strict `Meta` (ISS-277).
+    let slug = meta::read_slug(&tree_root, kind.kind.stem, src_id, kind.kind.prefix)?;
 
-    // The free-id pick: explicit `--to`, else the trunk-aware default (PHASE-02).
-    let dst_id = match to {
-        Some(t) => t,
-        None => entity::next_id(
-            &entity::scan_ids(&tree_root)?,
-            &git::trunk_entity_ids(&root, kind.kind.dir)?,
-        ),
-    };
-    anyhow::ensure!(
-        dst_id != src_id,
-        "{} is already seated at {src_name}",
-        listing::canonical_id(kind.kind.prefix, src_id)
-    );
-
-    let dst_name = format!("{dst_id:03}");
-    let dst_dir = tree_root.join(&dst_name);
-
-    // Guard 1 — occupied target (no clobber). `exists` resolves the numeric dir.
-    anyhow::ensure!(
-        !dst_dir.exists(),
-        "id {dst_name} is occupied — refusing to clobber {}",
-        dst_dir.display()
-    );
-    // Guard 2 — live runtime phase state (F3). Only kinds with a `state_dir`
-    // (slice) key disposable state by id; reseat does not migrate that tier.
+    // Guard — live runtime phase state (F3). Only kinds with a `state_dir` key
+    // disposable state by id; reseat does not migrate that tier.
     if let Some(state_dir) = kind.state_dir {
         let state = root.join(state_dir).join(&src_name);
         anyhow::ensure!(
@@ -328,29 +320,179 @@ pub(crate) fn run_reseat(
             state.display()
         );
     }
+    anyhow::ensure!(
+        to != Some(src_id),
+        "{} is already seated at {src_name}",
+        listing::canonical_id(kind.kind.prefix, src_id)
+    );
 
+    // Every destination-independent refusal has run: only now build the backend
+    // (which may print the local-fallback signal or prompt) and claim.
+    let trunk_ids = git::trunk_entity_ids(&root, kind.kind.dir)?;
+    let (claim, mut scan) = reserve::backend(&root, kind.kind, prompt)?;
+    let dst_id = reseat_onto(
+        &tree_root, kind.kind, src_id, &slug, to, &*claim, &mut *scan, &trunk_ids,
+    )?;
+
+    let old_ref = listing::canonical_id(kind.kind.prefix, src_id);
+    let new_ref = listing::canonical_id(kind.kind.prefix, dst_id);
+    writeln!(io::stdout(), "reseated {old_ref} → {new_ref}")?;
+
+    // Inbound citations — report, never rewrite (D4/R-3). The report states its
+    // bound (design sec-3 "Dangler report") so it is not read as exhaustive.
+    let danglers = scan_danglers(&root, &old_ref);
+    if danglers.hits.is_empty() && danglers.unreadable.is_empty() {
+        return Ok(());
+    }
+    if !danglers.hits.is_empty() {
+        writeln!(
+            io::stdout(),
+            "inbound citations to {old_ref} in .doctrine/ (*.md, *.toml; symlinks not followed) — rewrite by hand; source outside .doctrine/ is not scanned:"
+        )?;
+        for hit in &danglers.hits {
+            writeln!(io::stdout(), "  {hit}")?;
+        }
+    }
+    if !danglers.unreadable.is_empty() {
+        writeln!(
+            io::stdout(),
+            "unreadable under .doctrine/ (not scanned — the list above may be incomplete):"
+        )?;
+        for entry in &danglers.unreadable {
+            writeln!(io::stdout(), "  {entry}")?;
+        }
+    }
+    let mut remains = Vec::new();
+    if !danglers.hits.is_empty() {
+        remains.push(format!(
+            "{} inbound citation(s) to {old_ref} remain",
+            danglers.hits.len()
+        ));
+    }
+    if !danglers.unreadable.is_empty() {
+        remains.push(format!(
+            "{} unreadable file(s) under .doctrine/",
+            danglers.unreadable.len()
+        ));
+    }
+    bail!("reseat: {}", remains.join("; "))
+}
+
+/// The reseat core below the shell's refusals: claim the destination, stage the
+/// renumbered copy, commit it over the claimed empty dir, then swap the alias and
+/// drop the source. Returns the seated id. `scan` maps this tree's numeric ids to
+/// the full candidate set (a [`reserve::ScanSource`]); `trunk_ids` is constant.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the shell/core seam: every input is resolved by the shell so the core runs git-free under test"
+)]
+fn reseat_onto(
+    tree_root: &Path,
+    kind: &Kind,
+    src_id: u32,
+    slug: &str,
+    to: Option<u32>,
+    claim: &dyn Claim,
+    scan: &mut dyn FnMut(&[u32]) -> anyhow::Result<Vec<u32>>,
+    trunk_ids: &[u32],
+) -> anyhow::Result<u32> {
+    let (dst_id, dst_dir) = match to {
+        None => entity::claim_next_id(claim, tree_root, kind.prefix, trunk_ids, || {
+            scan(&entity::scan_ids(tree_root)?)
+        })?,
+        Some(t) => claim_explicit(claim, tree_root, t, scan, trunk_ids)?,
+    };
+    let src_name = format!("{src_id:03}");
+    let dst_name = format!("{dst_id:03}");
+    let src_dir = tree_root.join(&src_name);
+    let old_ref = listing::canonical_id(kind.prefix, src_id);
+    let new_ref = listing::canonical_id(kind.prefix, dst_id);
+
+    // --- Pre-commit: everything up to and including the commit rename. ---
     // Staging dir — sibling `.MMM.tmp` on the same mount, invisible until commit.
     let tmp_dir = tree_root.join(format!(".{dst_name}.tmp"));
-    if tmp_dir.exists() {
-        std::fs::remove_dir_all(&tmp_dir)
-            .with_context(|| format!("clean stale staging dir {}", tmp_dir.display()))?;
+    if let Err(e) = stage_and_commit(kind, src_id, dst_id, &src_dir, &tmp_dir, &dst_dir) {
+        let fate = abandon_uncommitted(&dst_dir, &tmp_dir);
+        return Err(e.context(format!(
+            "reseat {old_ref} → {new_ref} not committed; {fate}; any reservation for \
+             {new_ref} is kept (that id is skipped from now on)"
+        )));
     }
 
-    // --- Mutation (IMP-010: staged in tmp, atomic rename = commit point) ---
+    // --- Post-commit: the move is committed; never roll back, never touch dst. ---
+    let old_alias = tree_root.join(format!("{src_name}-{slug}"));
+    let new_alias = tree_root.join(format!("{dst_name}-{slug}"));
+    if let Err(e) = finish_committed(&old_alias, &new_alias, &dst_name, &src_dir) {
+        let remaining = remaining_after_commit(&old_alias, &new_alias, &dst_name, &src_dir);
+        return Err(e.context(format!(
+            "reseat committed {old_ref} → {new_ref} at {}, but a post-commit step \
+             failed; remaining by hand: {remaining}",
+            dst_dir.display()
+        )));
+    }
+    Ok(dst_id)
+}
+
+/// Claim an explicit `--to` destination: refuse before any claim when the
+/// candidate set holds it (a sibling tree's pre-slice dir is invisible to the ref
+/// CAS), else claim once — `AlreadyHeld` refuses with the same wording.
+fn claim_explicit(
+    claim: &dyn Claim,
+    tree_root: &Path,
+    to: u32,
+    scan: &mut dyn FnMut(&[u32]) -> anyhow::Result<Vec<u32>>,
+    trunk_ids: &[u32],
+) -> anyhow::Result<(u32, PathBuf)> {
+    let dir = tree_root.join(format!("{to:03}"));
+    let occupied = || {
+        anyhow::anyhow!(
+            "id {to:03} is occupied or reserved (this tree, a sibling tree, a reservation \
+             ref, or trunk) — refusing to clobber {}",
+            dir.display()
+        )
+    };
+    let held = scan(&entity::scan_ids(tree_root)?)?;
+    if held.contains(&to) || trunk_ids.contains(&to) {
+        return Err(occupied());
+    }
+    match claim.claim(&ClaimCtx { dir: &dir, id: to })? {
+        Acquired::Won => Ok((to, dir)),
+        Acquired::AlreadyHeld => Err(occupied()),
+    }
+}
+
+/// Stage the renumbered copy in `tmp_dir` and commit it by renaming over the
+/// claimed empty `dst_dir` — the single commit point (IMP-010). `rename(2)`
+/// replaces an empty dir atomically and fails on a populated one, so a claim
+/// someone has filled is never overwritten.
+fn stage_and_commit(
+    kind: &Kind,
+    src_id: u32,
+    dst_id: u32,
+    src_dir: &Path,
+    tmp_dir: &Path,
+    dst_dir: &Path,
+) -> anyhow::Result<()> {
+    let src_name = format!("{src_id:03}");
+    let dst_name = format!("{dst_id:03}");
+    if tmp_dir.exists() {
+        std::fs::remove_dir_all(tmp_dir)
+            .with_context(|| format!("clean stale staging dir {}", tmp_dir.display()))?;
+    }
     // Step 1: copy src contents into staging dir (invisible).
-    fsutil::copy_dir_all(&src_dir, &tmp_dir)
+    fsutil::copy_dir_all(src_dir, tmp_dir)
         .with_context(|| format!("copy {} → {}", src_dir.display(), tmp_dir.display()))?;
 
     // Step 2–3: transform staging dir in place.
     for ext in ["toml", "md"] {
-        let from = tmp_dir.join(format!("{}-{src_name}.{ext}", kind.kind.stem));
-        let onto = tmp_dir.join(format!("{}-{dst_name}.{ext}", kind.kind.stem));
+        let from = tmp_dir.join(format!("{}-{src_name}.{ext}", kind.stem));
+        let onto = tmp_dir.join(format!("{}-{dst_name}.{ext}", kind.stem));
         if from.exists() {
             std::fs::rename(&from, &onto)
                 .with_context(|| format!("rename {} → {}", from.display(), onto.display()))?;
         }
     }
-    let toml_path = tmp_dir.join(format!("{}-{dst_name}.toml", kind.kind.stem));
+    let toml_path = tmp_dir.join(format!("{}-{dst_name}.toml", kind.stem));
     let text = std::fs::read_to_string(&toml_path)
         .with_context(|| format!("read {}", toml_path.display()))?;
     let mut doc = text
@@ -361,71 +503,151 @@ pub(crate) fn run_reseat(
     fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())
         .with_context(|| format!("write {}", toml_path.display()))?;
 
-    // Step 4: atomic commit — rename(tmp → dst_dir).
-    std::fs::rename(&tmp_dir, &dst_dir).with_context(|| {
+    // Step 4: atomic commit — rename(tmp → the claimed empty dst_dir).
+    std::fs::rename(tmp_dir, dst_dir).with_context(|| {
         format!(
             "commit rename {} → {}",
             tmp_dir.display(),
             dst_dir.display()
         )
-    })?;
-
-    // Step 5: swap aliases.
-    let old_alias = tree_root.join(format!("{src_name}-{slug}"));
-    if matches!(std::fs::symlink_metadata(&old_alias), Ok(m) if m.file_type().is_symlink()) {
-        std::fs::remove_file(&old_alias)
-            .with_context(|| format!("remove stale alias {}", old_alias.display()))?;
-    }
-    fsutil::set_symlink(
-        &tree_root.join(format!("{dst_name}-{slug}")),
-        Path::new(&dst_name),
-    )?;
-
-    // Step 6: cleanup src_dir.
-    std::fs::remove_dir_all(&src_dir)
-        .with_context(|| format!("remove old src dir {}", src_dir.display()))?;
-
-    let old_ref = listing::canonical_id(kind.kind.prefix, src_id);
-    let new_ref = listing::canonical_id(kind.kind.prefix, dst_id);
-    writeln!(io::stdout(), "reseated {old_ref} → {new_ref}")?;
-
-    // Inbound prose citations — report, never rewrite (D4/R-3).
-    let danglers = scan_danglers(&root, &old_ref)?;
-    if danglers.is_empty() {
-        return Ok(());
-    }
-    writeln!(
-        io::stdout(),
-        "inbound citations to {old_ref} (rewrite by hand — prose relations are outbound-only):"
-    )?;
-    for d in &danglers {
-        writeln!(io::stdout(), "  {d}")?;
-    }
-    bail!(
-        "reseat: {} inbound citation(s) to {old_ref} remain",
-        danglers.len()
-    )
+    })
 }
 
-/// Scan authored `.doctrine/**/*.md` prose for inbound citations of `needle`
-/// (a canonical ref), returning `file:line` locations. A whole-token match
-/// (`SL-031` does not match inside `SL-0310`) keeps the report honest, and
-/// disposable prose ([`is_disposable_prose`]) is skipped — a `rm -rf`-able
-/// `handover.md` or runtime phase note is not a citation a human must rewrite.
-fn scan_danglers(root: &Path, needle: &str) -> anyhow::Result<Vec<String>> {
-    let pattern = root.join(".doctrine/**/*.md");
-    let pattern = pattern
-        .to_str()
-        .with_context(|| format!("non-utf8 scan path {}", pattern.display()))?;
+/// Pre-commit cleanup (RV-406 F-5): remove the claimed dir with `remove_dir`
+/// ONLY — never `remove_dir_all`, a populated claim is someone's and is kept —
+/// and best-effort remove our own staging dir. Returns the fate of each, naming
+/// anything left behind (STD-003).
+fn abandon_uncommitted(dst_dir: &Path, tmp_dir: &Path) -> String {
+    let claim = match std::fs::remove_dir(dst_dir) {
+        Ok(()) => format!("claimed dir {} removed", dst_dir.display()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            format!("claimed dir {} already gone", dst_dir.display())
+        }
+        Err(e) => format!("claimed dir {} kept ({e})", dst_dir.display()),
+    };
+    let staging = match std::fs::symlink_metadata(tmp_dir) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => format!("; staging dir {} not inspected ({e})", tmp_dir.display()),
+        Ok(_) => match std::fs::remove_dir_all(tmp_dir) {
+            Ok(()) => format!("; staging dir {} removed", tmp_dir.display()),
+            Err(e) => format!("; staging dir {} left behind ({e})", tmp_dir.display()),
+        },
+    };
+    format!("{claim}{staging}")
+}
 
+/// The post-commit steps: swap the alias, then drop the source dir.
+fn finish_committed(
+    old_alias: &Path,
+    new_alias: &Path,
+    dst_name: &str,
+    src_dir: &Path,
+) -> anyhow::Result<()> {
+    if is_symlink(old_alias) {
+        std::fs::remove_file(old_alias)
+            .with_context(|| format!("remove stale alias {}", old_alias.display()))?;
+    }
+    fsutil::set_symlink(new_alias, Path::new(dst_name))?;
+    std::fs::remove_dir_all(src_dir)
+        .with_context(|| format!("remove old src dir {}", src_dir.display()))
+}
+
+/// What a failed post-commit sequence left for the human, read back from disk.
+fn remaining_after_commit(
+    old_alias: &Path,
+    new_alias: &Path,
+    dst_name: &str,
+    src_dir: &Path,
+) -> String {
+    let mut left = Vec::new();
+    if is_symlink(old_alias) {
+        left.push(format!("remove stale alias {}", old_alias.display()));
+    }
+    if std::fs::read_link(new_alias).ok().as_deref() != Some(Path::new(dst_name)) {
+        left.push(format!("point alias {} at {dst_name}", new_alias.display()));
+    }
+    if std::fs::symlink_metadata(src_dir).is_ok() {
+        left.push(format!("remove source dir {}", src_dir.display()));
+    }
+    if left.is_empty() {
+        "nothing".to_owned()
+    } else {
+        left.join("; ")
+    }
+}
+
+fn is_symlink(path: &Path) -> bool {
+    matches!(std::fs::symlink_metadata(path), Ok(m) if m.file_type().is_symlink())
+}
+
+/// Extensions `scan_danglers` reads for inbound citations: prose (`.md`) and
+/// structured data (`.toml`) — a memory `[[source]]` ref or a plan criterion
+/// cites just as authoritatively as a sentence does. Named so the walk's
+/// exclusion is visible, not an inline literal (STD-001).
+const DANGLER_SCAN_EXTS: &[&str] = &["md", "toml"];
+
+/// One `scan_danglers` run's two channels: `hits` are inbound citations of the
+/// scanned ref (`file:line`), `unreadable` are paths the walk could not read —
+/// each `"<path>: <cause>"` — so a failed read is tolerated (the walk
+/// continues) *and* disclosed (STD-003), never silently skipped.
+pub(crate) struct DanglerScan {
+    pub(crate) hits: Vec<String>,
+    pub(crate) unreadable: Vec<String>,
+}
+
+/// Scan authored `.doctrine/*.md` and `*.toml` for inbound citations of
+/// `needle` (a canonical ref), returning `file:line` hit locations plus any
+/// path the walk could not read. The walk does not follow symlinks
+/// (`follow_links(false)`): every symlink under `.doctrine/` is an alias
+/// (`NNN-slug`) or the `phases` link into runtime state, so nothing authored
+/// is lost, and a link loop is never entered. The disposable tier
+/// ([`is_disposable_prose`]) is pruned by its walked (lexical) path, so a
+/// runtime `phases` link or `handover.md` never reads as authored, and a
+/// permission-denied disposable subtree never reports as unreadable (out of
+/// scope). The whole-token matcher ([`line_cites`]) is unchanged. Every failure
+/// mode (a denied dir, a link loop, a bad read) is tolerated into `unreadable`
+/// rather than propagated, so this cannot itself fail.
+fn scan_danglers(root: &Path, needle: &str) -> DanglerScan {
     let mut hits = Vec::new();
-    for entry in glob::glob(pattern).context("bad glob pattern")? {
-        let path = entry.context("glob walk")?;
-        if is_disposable_prose(&path) {
+    let mut unreadable = Vec::new();
+    let walk_root = root.join(DOCTRINE_PATHSPEC);
+
+    let walk = WalkDir::new(&walk_root)
+        .follow_links(false)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_entry(|e| !is_disposable_prose(e.path()));
+
+    for entry in walk {
+        // Walk error (denied dir, loop, …): tolerate + disclose (STD-003).
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => {
+                let path = e.path().unwrap_or(walk_root.as_path());
+                unreadable.push(format!("{}: {e}", path.display()));
+                continue;
+            }
+        };
+        // `follow_links(false)` makes a symlink report its own file type, so
+        // this one check skips directories AND symlink entries (aliases, the
+        // `phases` link into runtime state) in one place.
+        if !entry.file_type().is_file() {
             continue;
         }
-        let Ok(text) = std::fs::read_to_string(&path) else {
-            continue; // non-utf8 / unreadable — not authored prose we cite
+        let path = entry.path();
+        let is_scanned = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|ext| DANGLER_SCAN_EXTS.contains(&ext));
+        if !is_scanned {
+            continue;
+        }
+        let text = match std::fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(e) => {
+                unreadable.push(format!("{}: {e}", path.display()));
+                continue;
+            }
         };
         for (i, line) in text.lines().enumerate() {
             if line_cites(line, needle) {
@@ -433,7 +655,7 @@ fn scan_danglers(root: &Path, needle: &str) -> anyhow::Result<Vec<String>> {
             }
         }
     }
-    Ok(hits)
+    DanglerScan { hits, unreadable }
 }
 
 /// True for prose in the disposable tiers a reseat must not nag about: any file
@@ -607,9 +829,121 @@ mod tests {
         plant(".doctrine/slice/001/handover.md"); // disposable → skipped
         plant(".doctrine/state/slice/001/phases/phase-01.md"); // runtime → skipped
 
-        let hits = scan_danglers(root, "SL-031").unwrap();
+        let hits = scan_danglers(root, "SL-031").hits;
         assert_eq!(hits.len(), 1, "only authored prose reported: {hits:?}");
         assert!(hits[0].ends_with("notes/x.md:1"), "{}", hits[0]);
+    }
+
+    // --- SL-269 PHASE-04: dangler report as a worklist ---
+
+    /// VT-1: the structured tier (`.toml`) is in scope — a memory `[[source]]`
+    /// ref is a citation the old glob (`*.md` only) could never see.
+    #[test]
+    fn dangler_scan_reports_a_toml_citation() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let p = root.join(".doctrine/memory/items/ab/x.toml");
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, "[[source]]\nref = \"SL-031\"\n").unwrap();
+
+        let hits = scan_danglers(root, "SL-031").hits;
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert!(hits[0].ends_with("x.toml:2"), "{}", hits[0]);
+    }
+
+    /// VT-2: an `NNN-slug` alias symlink must not double-count the citation its
+    /// target directory already reports.
+    #[test]
+    fn dangler_scan_reports_alias_file_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let real = root.join(".doctrine/slice/031");
+        std::fs::create_dir_all(&real).unwrap();
+        std::fs::write(real.join("slice-031.md"), "cites SL-099 here\n").unwrap();
+        fsutil::set_symlink(&root.join(".doctrine/slice/031-foo"), Path::new("031")).unwrap();
+
+        let hits = scan_danglers(root, "SL-099").hits;
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert!(hits[0].contains("slice/031/"), "{}", hits[0]);
+        assert!(!hits[0].contains("031-foo"), "{}", hits[0]);
+    }
+
+    /// VT-2: the `phases` symlink into runtime state must not defeat
+    /// disposability by presenting runtime prose at an authored lexical path.
+    /// Positive control: `notes/x.md` proves the walk was actually looking.
+    #[test]
+    fn dangler_scan_ignores_phases_symlink() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let state_phases = root.join(".doctrine/state/slice/031/phases");
+        std::fs::create_dir_all(&state_phases).unwrap();
+        std::fs::write(state_phases.join("phase-01.md"), "cites SL-099 here\n").unwrap();
+        let slice_dir = root.join(".doctrine/slice/031");
+        std::fs::create_dir_all(&slice_dir).unwrap();
+        fsutil::set_symlink(
+            &slice_dir.join("phases"),
+            Path::new("../../state/slice/031/phases"),
+        )
+        .unwrap();
+
+        let note = root.join(".doctrine/notes/x.md");
+        std::fs::create_dir_all(note.parent().unwrap()).unwrap();
+        std::fs::write(&note, "cites SL-099 here\n").unwrap();
+
+        let hits = scan_danglers(root, "SL-099").hits;
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert!(hits[0].ends_with("notes/x.md:1"), "{}", hits[0]);
+    }
+
+    /// VT-4: the walk does not follow a symlinked directory out of `.doctrine/`
+    /// (an external tree), nor into a link loop back on itself. Positive
+    /// control: `notes/x.md` proves the walk was actually looking.
+    #[test]
+    fn dangler_scan_does_not_enter_symlinked_dirs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let ext_tmp = tempfile::tempdir().unwrap();
+        let ext_root = ext_tmp.path();
+        std::fs::write(ext_root.join("ext.md"), "cites SL-099 here\n").unwrap();
+
+        std::fs::create_dir_all(root.join(".doctrine")).unwrap();
+        fsutil::set_symlink(&root.join(".doctrine/ext"), ext_root).unwrap();
+        fsutil::set_symlink(&root.join(".doctrine/loop"), Path::new(".")).unwrap();
+
+        let note = root.join(".doctrine/notes/x.md");
+        std::fs::create_dir_all(note.parent().unwrap()).unwrap();
+        std::fs::write(&note, "cites SL-099 here\n").unwrap();
+
+        let hits = scan_danglers(root, "SL-099").hits;
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert!(hits[0].ends_with("notes/x.md:1"), "{}", hits[0]);
+    }
+
+    /// VT-3: an unreadable file (non-UTF-8) is tolerated (the walk continues)
+    /// and disclosed (STD-003), never silently skipped.
+    #[test]
+    fn dangler_scan_lists_unreadable_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let dir = root.join(".doctrine/notes");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("bad.md"), [0xff, 0xfe, 0xfd]).unwrap();
+        std::fs::write(dir.join("ok.md"), "cites SL-099 here\n").unwrap();
+
+        let scan = scan_danglers(root, "SL-099");
+        assert_eq!(scan.hits.len(), 1, "{:?}", scan.hits);
+        assert!(scan.hits[0].ends_with("ok.md:1"), "{}", scan.hits[0]);
+        assert_eq!(scan.unreadable.len(), 1, "{:?}", scan.unreadable);
+        assert!(
+            scan.unreadable[0].contains("notes/bad.md"),
+            "{}",
+            scan.unreadable[0]
+        );
+        assert!(
+            !scan.unreadable[0].ends_with("notes/bad.md"),
+            "cause must follow the path: {}",
+            scan.unreadable[0]
+        );
     }
 
     #[test]
@@ -623,15 +957,17 @@ mod tests {
                 "RV", "REC", "ASM", "DEC", "QUE", "CON", "EVD", "HYP", "CPT", "CM", "REV", "RFC"
             ]
         );
-        // Slice and review (SL-040) own a runtime state tree (F3 guard surface).
-        // REC (SL-042) is status-less but stateless — no runtime tree. The six
-        // knowledge kinds (SL-059) are status-ful but stateless — no runtime tree.
+        // Slice alone owns a runtime state tree (F3 guard surface). Review's
+        // baton is a pure cache the review layer derives itself (SL-269 design
+        // sec-3 "Review runtime state") — no phase-state tree for reseat to
+        // guard. REC (SL-042) is status-less but stateless — no runtime tree.
+        // The six knowledge kinds (SL-059) are status-ful but stateless too.
         let stateful: Vec<_> = KINDS
             .iter()
             .filter(|k| k.state_dir.is_some())
             .map(|k| k.kind.prefix)
             .collect();
-        assert_eq!(stateful, ["SL", "RV"]);
+        assert_eq!(stateful, ["SL"]);
     }
 
     #[test]
@@ -751,6 +1087,274 @@ mod tests {
         assert!(
             diagnostics.is_empty(),
             "section inside a string value must not be reported: {diagnostics:?}"
+        );
+    }
+
+    // --- SL-269 PHASE-03: reseat claims its destination ---
+
+    use crate::kinds::SLICE_KIND;
+    use crate::test_support::LinkedTrees;
+
+    /// The clone-local reservation namespace (`reserve`'s private constant; the
+    /// ref shape is the contract under test here).
+    const LOCAL_REF_NS: &str = "refs/doctrine/reservation-local";
+
+    /// The injected fallback prompt: never opt in (no `set_var`, ISS-483).
+    fn never(_: &str) -> anyhow::Result<bool> {
+        Ok(false)
+    }
+
+    /// Seed a status-bearing slice `id` (slug `moved`) under `root`'s slice tree.
+    fn seed_slice(root: &Path, id: u32) {
+        let name = format!("{id:03}");
+        let dir = root.join(SLICE_KIND.dir).join(&name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(format!("slice-{name}.toml")),
+            format!("id = {id}\nslug = \"moved\"\ntitle = \"T\"\nstatus = \"proposed\"\n"),
+        )
+        .unwrap();
+        std::fs::write(dir.join(format!("slice-{name}.md")), "# body\n").unwrap();
+    }
+
+    fn git_in(dir: &Path, args: &[&str]) -> std::process::Output {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .expect("spawn git");
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        out
+    }
+
+    /// ISS-281: a core-driven test needs a NON-git root; assert it rather than
+    /// trusting `TMPDIR`.
+    fn assert_outside_git(root: &Path) {
+        assert!(
+            git::toplevel_and_prefix(root).unwrap().is_none(),
+            "precondition: {} must be outside any git worktree (ISS-281)",
+            root.display()
+        );
+    }
+
+    /// SL-269 PHASE-04 EX-2: an unreadable file under `.doctrine/` makes reseat
+    /// exit non-zero and name it — but the move itself already committed (the
+    /// dangler report runs after the claim, D4/R-3).
+    #[test]
+    fn reseat_exits_non_zero_on_unreadable_files() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_outside_git(dir.path());
+        seed_slice(dir.path(), 31);
+        std::fs::create_dir_all(dir.path().join(".doctrine/notes")).unwrap();
+        std::fs::write(
+            dir.path().join(".doctrine/notes/bad.md"),
+            [0xff, 0xfe, 0xfd],
+        )
+        .unwrap();
+
+        let err =
+            run_reseat(Some(dir.path().to_path_buf()), "SL-031", Some(45), never).unwrap_err();
+        assert!(err.to_string().contains("unreadable"), "{err:#}");
+        assert!(
+            dir.path()
+                .join(SLICE_KIND.dir)
+                .join("045/slice-045.toml")
+                .is_file(),
+            "move committed before the report"
+        );
+    }
+
+    /// SL-269 VT-3: `--to` onto a sibling tree's dir, or onto an id a local
+    /// reservation ref holds, is refused before any claim; the source is intact.
+    #[test]
+    fn reseat_to_a_sibling_held_id_refuses() {
+        let lt = LinkedTrees::new("");
+        let root_a = lt.root(&lt.a);
+        seed_slice(&root_a, 31);
+        let slices_a = root_a.join(SLICE_KIND.dir);
+
+        // Case 1: tree b holds an uncommitted `045` dir.
+        std::fs::create_dir_all(lt.root(&lt.b).join(SLICE_KIND.dir).join("045")).unwrap();
+        let err = run_reseat(Some(root_a.clone()), "SL-031", Some(45), never).unwrap_err();
+        assert!(err.to_string().contains("occupied"), "{err:#}");
+
+        // Case 2: a clone-local reservation ref holds `046`.
+        let head = String::from_utf8(git_in(&lt.main, &["rev-parse", "HEAD"]).stdout).unwrap();
+        git_in(
+            &lt.main,
+            &["update-ref", &format!("{LOCAL_REF_NS}/SL/046"), head.trim()],
+        );
+        let err = run_reseat(Some(root_a.clone()), "SL-031", Some(46), never).unwrap_err();
+        assert!(err.to_string().contains("occupied"), "{err:#}");
+
+        assert!(slices_a.join("031/slice-031.toml").is_file());
+        assert!(!slices_a.join("045").exists());
+        assert!(!slices_a.join("046").exists());
+    }
+
+    /// SL-269 VT-3: the default destination skips a sibling tree's ids, and is
+    /// claimed (a clone-local reservation ref now holds it).
+    #[test]
+    fn reseat_default_skips_sibling_ids() {
+        let lt = LinkedTrees::new("");
+        let root_a = lt.root(&lt.a);
+        seed_slice(&root_a, 31);
+        std::fs::create_dir_all(lt.root(&lt.b).join(SLICE_KIND.dir).join("050")).unwrap();
+
+        run_reseat(Some(root_a.clone()), "SL-031", None, never).unwrap();
+
+        let slices_a = root_a.join(SLICE_KIND.dir);
+        assert!(slices_a.join("051/slice-051.toml").is_file());
+        assert!(!slices_a.join("031").exists());
+        git_in(
+            &lt.main,
+            &["rev-parse", "--verify", &format!("{LOCAL_REF_NS}/SL/051")],
+        );
+    }
+
+    /// A claim double that wins by creating the dir AND populating it — someone
+    /// else's bytes landed in the claim before the commit rename.
+    struct PopulatingClaim;
+    impl Claim for PopulatingClaim {
+        fn claim(&self, ctx: &ClaimCtx<'_>) -> anyhow::Result<Acquired> {
+            std::fs::create_dir(ctx.dir)?;
+            std::fs::write(ctx.dir.join("foreign.txt"), "not ours")?;
+            Ok(Acquired::Won)
+        }
+    }
+
+    /// The identity scan: a non-git tree's candidate set is its own ids.
+    fn identity(local: &[u32]) -> anyhow::Result<Vec<u32>> {
+        Ok(local.to_vec())
+    }
+
+    /// SL-269 VT-5 (RV-406 F-5): the commit rename fails onto a populated claim;
+    /// pre-commit cleanup uses `remove_dir` only, so the foreign bytes survive and
+    /// the error names the kept dir. Our staging dir is removed; the source is intact.
+    #[test]
+    fn reseat_keeps_a_populated_claim_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_outside_git(dir.path());
+        seed_slice(dir.path(), 31);
+        let tree = dir.path().join(SLICE_KIND.dir);
+
+        let err = reseat_onto(
+            &tree,
+            &SLICE_KIND,
+            31,
+            "moved",
+            Some(45),
+            &PopulatingClaim,
+            &mut identity,
+            &[],
+        )
+        .unwrap_err();
+        let dst = tree.join("045");
+        let msg = err.to_string();
+        assert!(msg.contains("not committed"), "{err:#}");
+        assert!(msg.contains(&dst.display().to_string()), "{err:#}");
+        assert!(msg.contains("kept"), "{err:#}");
+        assert!(dst.join("foreign.txt").is_file());
+        assert!(!tree.join(".045.tmp").exists());
+        assert!(tree.join("031/slice-031.toml").is_file());
+    }
+
+    /// SL-269 VT-5: a failure after the commit rename (a regular file squats the
+    /// new alias) is a committed move — the destination stays seated, nothing is
+    /// rolled back, and the error names what remains.
+    #[test]
+    fn reseat_post_commit_failure_leaves_destination() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_outside_git(dir.path());
+        seed_slice(dir.path(), 31);
+        let tree = dir.path().join(SLICE_KIND.dir);
+        std::fs::write(tree.join("045-moved"), "squatter").unwrap();
+
+        let err = reseat_onto(
+            &tree,
+            &SLICE_KIND,
+            31,
+            "moved",
+            Some(45),
+            &entity::LocalFs,
+            &mut identity,
+            &[],
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("reseat committed SL-031 → SL-045"), "{err:#}");
+        assert!(msg.contains("remove source dir"), "{err:#}");
+        let toml = std::fs::read_to_string(tree.join("045/slice-045.toml")).unwrap();
+        assert!(toml.contains("id = 45"), "{toml}");
+        assert!(
+            tree.join("031").is_dir(),
+            "source removal follows the alias step"
+        );
+    }
+
+    /// A staging failure with the claim still empty removes the claim: no
+    /// destination dir, no staging dir, source intact.
+    #[test]
+    fn reseat_staging_failure_removes_an_empty_claim() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_outside_git(dir.path());
+        seed_slice(dir.path(), 31);
+        let tree = dir.path().join(SLICE_KIND.dir);
+        // Corrupt the source toml so the staged rewrite fails to parse.
+        std::fs::write(tree.join("031/slice-031.toml"), "id = [").unwrap();
+
+        let err = reseat_onto(
+            &tree,
+            &SLICE_KIND,
+            31,
+            "moved",
+            Some(45),
+            &entity::LocalFs,
+            &mut identity,
+            &[],
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("removed"), "{err:#}");
+        assert!(!tree.join("045").exists());
+        assert!(!tree.join(".045.tmp").exists());
+        assert!(tree.join("031/slice-031.toml").is_file());
+    }
+
+    /// SL-269 PHASE-04 Task B (design sec-3 "Review runtime state"): a review's
+    /// runtime baton is a pure cache reseat does not own — it is left in place,
+    /// unmoved, and does not refuse the reseat.
+    #[test]
+    fn reseat_leaves_a_review_baton_in_place() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_outside_git(dir.path());
+        let reviews = dir.path().join(REVIEW_KIND.dir);
+        let src = reviews.join("007");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(
+            src.join("review-007.toml"),
+            "id = 7\nslug = \"probe\"\ntitle = \"fixture\"\n",
+        )
+        .unwrap();
+        std::fs::write(src.join("review-007.md"), "# fixture\n\nbody.\n").unwrap();
+        fsutil::set_symlink(&reviews.join("007-probe"), Path::new("007")).unwrap();
+
+        let baton = dir.path().join(".doctrine/state/review/007/baton.toml");
+        std::fs::create_dir_all(baton.parent().unwrap()).unwrap();
+        std::fs::write(&baton, b"known-bytes").unwrap();
+
+        run_reseat(Some(dir.path().to_path_buf()), "RV-007", Some(12), never).unwrap();
+
+        assert!(reviews.join("012/review-012.toml").is_file());
+        assert!(baton.is_file(), "baton at 007 left in place");
+        assert_eq!(std::fs::read(&baton).unwrap(), b"known-bytes");
+        assert!(
+            !dir.path().join(".doctrine/state/review/012").exists(),
+            "reseat does not create a baton at the new id"
         );
     }
 }

@@ -70,7 +70,7 @@ vtgate = "leaf"             # out=0: SL-170 S3 pure VT existence/shape gate — 
 # Import engines + leaves; do NOT import command modules. Core domain model,
 # entity-kind handler scaffold, shared infrastructure.
 entity = "engine"           # → fsutil only; the hub — kind-agnostic directory-entity scaffold
-reserve = "engine"          # SL-148: claim-backend selection seam; → entity/git/dtoml (out=3)
+reserve = "engine"          # SL-148: claim-backend selection seam; → entity/git/dtoml/kinds/corpus_guard (out=5; SL-269: kinds for Kind, corpus_guard for the .doctrine root name)
 meta = "engine"             # → entity only; shared metadata-list substrate
 relation = "engine"         # → entity, kinds; relation vocabulary leaf (design: engine-tier relation rules)
 state = "engine"            # → fsutil, install, plan; runtime state; install→ upward baselined
@@ -86,7 +86,7 @@ supersede = "engine"        # → entity, knowledge; supersession policy gate; k
 backlog_order = "engine"    # → backlog, projection; ordering engine; backlog→ upward baselined
 paths = "engine"            # PHASE-01/SL-139: shared entity-file-path projection; engine-tier, no clap/command imports
 publication = "engine"      # SL-223 PHASE-02: → asset_source (leaf); publication declaration + fail-closed admission (D1/D6/D9). Downward: publication(engine)→asset_source(leaf); commands(command)→publication(engine)
-integrity = "engine"        # SL-204: → entity, meta (engine) + kinds, listing, fsutil, git, root (leaf); cross-kind integrity validator. PHASE-01→03 evicted the 13 kind-module up-reaches (Kind identity + KINDS table + ref resolvers relocated to leaf kinds/), breaking the 4 command back-cycles (backlog/rec/review/revision) → integrity drops to engine.
+integrity = "engine"        # SL-204: → entity, meta, reserve (engine) + corpus_guard, kinds, listing, fsutil, git, root (leaf); cross-kind integrity validator. PHASE-01→03 evicted the 13 kind-module up-reaches (Kind identity + KINDS table + ref resolvers relocated to leaf kinds/), breaking the 4 command back-cycles (backlog/rec/review/revision) → integrity drops to engine. SL-269: → reserve (engine) — reseat claims its destination through the reservation backend; → corpus_guard (leaf) for DOCTRINE_PATHSPEC in the dangler-report walk.
 authored_status = "engine"  # SL-238: → kinds, meta, entity; the sole per-kind authored-status reader (status + title from one read). Exactly `integrity`'s import set, so no new module edge in kind; sited here rather than in `meta` because it branches on RV/REC and `meta`'s charter is zero per-kind knowledge.
 review_ledger = "engine"    # SL-268 D4: → kinds, listing, estimate, value (leaf) + entity, relation (engine); RV ledger schema, derivation, transition table, blocker predicates
 relation_query = "command"  # SL-137: pure relation projection+filter engine over &Catalog; imports catalog (cmd) + integrity (now engine, SL-204) — uniformly command via catalog

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e352-c91f-7d11-986f-4fa935a85ab7"
+recorded_at = "2026-09-27T14:44:08.607187601Z"
+kind = "friction"
+summary = "capsule-orchestrator/capsule-phase-planner SL-269 PHASE-03: reseat e2e tests self-skip under DOCTRINE_WORKER"
+detail = "VT-2/VT-4 e2e reseat tests early-return when DOCTRINE_WORKER is set, so a worker's green is vacuous for them; orchestrator must rerun cargo test --test e2e_integrity outside worker env."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

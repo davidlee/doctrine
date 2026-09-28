@@ -12,7 +12,7 @@
 #[path = "../../src/test_support.rs"]
 mod test_support;
 
-pub(crate) use test_support::{doctrine_bin, repo_root, under_worker_marker};
+pub(crate) use test_support::{LinkedTrees, doctrine_bin, repo_root, under_worker_marker};
 
 /// Entity-tree roots, from the same bytes the binary compiles — `src/kinds/dirs.rs`
 /// imports nothing precisely so a fixture can plant `.doctrine/…` without typing

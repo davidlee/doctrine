@@ -64,6 +64,10 @@ Options worth weighing, none chosen here:
 
 ## What worked — `DOCTRINE_TRUNK_REF` (verified 2026-07-30, RV-324)
 
+> **Retired by SL-269 (DEC-337).** `local` reach now claims a ref in the clone's
+> common git dir and scans every live worktree, so trees of one clone no longer
+> collide and this workaround is unnecessary. Kept as history.
+
 **The engine already has the lever.** The "no `--id` override, so the only lever
 is allocating from a tree whose counter is already ahead" claim above is too
 pessimistic — there is a second lever, and it costs nothing.

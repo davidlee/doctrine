@@ -1432,55 +1432,74 @@ fn vt9_status_rebuilds_the_baton() {
     );
 }
 
-/// VT-10: a review verb on a fork-resolved root bails (IMP-024 guard), and the
-/// baton/lock sit in the gitignored parent state tree. Builds a real linked
-/// worktree to exercise `is_linked_worktree`.
+/// Sets the `cfg(test)` worker flag for its lifetime and resets it on drop, so a
+/// test that simulates a dispatch worker cannot leak the flag into another test
+/// on a reused thread. The only sanctioned way to set `WORKER_PROCESS`.
+struct WorkerProcess;
+impl WorkerProcess {
+    fn on() -> Self {
+        WORKER_PROCESS.with(|w| w.set(true));
+        Self
+    }
+}
+impl Drop for WorkerProcess {
+    fn drop(&mut self) {
+        WORKER_PROCESS.with(|w| w.set(false));
+    }
+}
+
+/// DEC-338 (VT-1): the pure admission predicate refuses a worker process and
+/// admits everything else, and the refusal names the worker cause and the read
+/// verbs a worker should use instead.
 #[test]
-fn vt10_fork_root_refused_and_baton_in_parent_state() {
+fn admit_review_refuses_only_a_worker() {
+    assert!(admit_review(false).is_ok());
+    let err = admit_review(true).unwrap_err().to_string();
+    assert!(
+        err.contains(crate::worktree::WORKER_ENV_CAUSE),
+        "names the worker cause: {err}"
+    );
+    assert!(
+        err.contains("review show"),
+        "points at the read verbs: {err}"
+    );
+}
+
+/// DEC-338 / ISS-494 / IMP-240 (VT-2): a SOLO linked tree (a non-`dispatch/`
+/// branch — formerly classified a "fork" and refused) is admitted,
+/// and its baton lands in the tree's OWN gitignored state, never the parent's —
+/// `state_dir` is root-derived. Builds a real linked worktree.
+#[test]
+fn vt10_solo_linked_tree_admitted() {
     let (_tmp, main, fork) = repo_with_linked_tree(None);
 
-    // A verb resolved at the fork root bails (IMP-024).
-    let err = run_raise(
+    run_raise(
         Some(fork.clone()),
         &raise_args("RV-001", Severity::Major, "t"),
         Role::Raiser,
     )
-    .unwrap_err();
-    assert!(
-        err.to_string().contains("worktree fork"),
-        "fork guard: {err}"
-    );
-
-    // A verb on the parent tree works, and the baton lands under the parent's
-    // gitignored .doctrine/state/review/ (never the fork).
-    run_raise(
-        Some(main.clone()),
-        &raise_args("RV-001", Severity::Major, "t"),
-        Role::Raiser,
-    )
     .unwrap();
+
     assert!(
-        main.join(".doctrine/state/review/001/baton.toml").is_file(),
-        "baton in parent state"
+        fork.join(".doctrine/state/review/001/baton.toml").is_file(),
+        "baton in the solo tree's own state"
     );
     assert!(
-        !fork.join(".doctrine/state/review/001/baton.toml").exists(),
-        "no baton in the fork"
+        !main.join(".doctrine/state/review/001/baton.toml").exists(),
+        "no baton in the parent tree"
     );
 }
 
-/// ISS-275: the IMP-024 guard bails on *forks*, not on every linked worktree.
-/// A dispatch COORDINATION tree (`dispatch/<NNN>`, numeric suffix) is the sole
-/// writer of its branch, so it may drive a review, and its baton lands in its
-/// OWN gitignored state tree — `state_dir` is root-derived, so admitting the
-/// tree is the whole fix; nothing about the baton's locus needs to move.
-/// Without this, the three SL-233 design gates cannot be driven where their
-/// sketches live.
+/// ISS-275, now the general rule (DEC-338): a dispatch COORDINATION tree
+/// (`dispatch/<NNN>`) is admitted like any non-worker tree, and its baton lands
+/// in its OWN gitignored state tree — `state_dir` is root-derived, so nothing
+/// about the baton's locus needs to move. This is where the SL-233 design gates
+/// are driven.
 #[test]
 fn vt10b_coord_worktree_admitted_and_baton_in_its_own_state() {
     let (_tmp, main, coord) = repo_with_linked_tree(Some("dispatch/001"));
 
-    // The verb is ADMITTED at the coord root (contrast VT-10's fork).
+    // The verb is ADMITTED at the coord root.
     run_raise(
         Some(coord.clone()),
         &raise_args("RV-001", Severity::Major, "t"),
@@ -1542,20 +1561,64 @@ fn repo_with_linked_tree(branch: Option<&str>) -> (tempfile::TempDir, PathBuf, P
     (tmp, main, tree)
 }
 
-/// ISS-484: `review new` obeys the same locus guard as the rest of the verb
-/// family, and refuses BEFORE allocating — no id claimed, no entity written, so
-/// a fork cannot mint an RV every later verb then refuses.
+/// ISS-484 + DEC-338 (VT-3): `review new` obeys the same admission as the rest
+/// of the verb family, and a worker process is refused BEFORE allocating — no
+/// id claimed, no entity written. The root is a plain NON-linked tree, formerly
+/// admitted: the tightening row — a worker is refused whatever its tree shape.
 #[test]
-fn review_new_on_a_fork_refuses_before_allocating() {
+fn review_new_in_a_worker_refuses_before_allocating() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    plant_slice_target(root, 1);
+    {
+        let _w = WorkerProcess::on();
+        let err =
+            run_new(Some(root.to_path_buf()), &new_args(Facet::Design, "SL-001")).unwrap_err();
+        assert!(
+            err.to_string().contains(crate::worktree::WORKER_ENV_CAUSE),
+            "worker refusal: {err}"
+        );
+        assert!(
+            !root.join(REVIEW_DIR).join("001").exists(),
+            "no RV-001 allocated in a worker"
+        );
+    }
+    // Control: with the guard dropped the same call succeeds, so the refusal
+    // came from the worker flag and nothing else.
+    run_new(Some(root.to_path_buf()), &new_args(Facet::Design, "SL-001")).unwrap();
+    assert!(root.join(REVIEW_DIR).join("001").is_dir());
+}
+
+/// DEC-338 (VT-4): a solo linked tree runs a whole review pass end to end —
+/// open, raise, dispose, verify, conclude (last: a later raise or reopen would
+/// un-conclude it) — and the ledger derives Done with its baton in the tree's
+/// own state.
+#[test]
+fn solo_linked_tree_review_lifecycle() {
     let (_tmp, _main, fork) = repo_with_linked_tree(None);
-    let err = run_new(Some(fork.clone()), &new_args(Facet::Design, "SL-001")).unwrap_err();
+    let out = run_new(Some(fork.clone()), &new_args(Facet::Design, "SL-001")).unwrap();
+    let ReviewOutput::Created { id, canonical, .. } = out else {
+        panic!("review new returns Created");
+    };
+    let at = || Some(fork.clone());
+
+    run_raise(
+        at(),
+        &raise_args(&canonical, Severity::Major, "t"),
+        Role::Raiser,
+    )
+    .unwrap();
+    run_dispose(at(), &dispose_args(&canonical, "F-1"), Role::Responder).unwrap();
+    run_verify(at(), &canonical, "F-1", None, Role::Raiser).unwrap();
+    run_conclude(at(), &canonical, "basis", Role::Raiser).unwrap();
+
+    let doc = read_doc(&fork, id);
+    assert_eq!(doc.finding[0].status, "verified");
+    assert_eq!(doc.derived(), (ReviewStatus::Done, Await::None));
     assert!(
-        err.to_string().contains("worktree fork"),
-        "fork guard: {err}"
-    );
-    assert!(
-        !fork.join(REVIEW_DIR).join("002").exists(),
-        "no RV-002 allocated in the fork"
+        fork.join(format!(".doctrine/state/review/{id:03}/baton.toml"))
+            .is_file(),
+        "baton in the solo tree's own state"
     );
 }
 

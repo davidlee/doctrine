@@ -20,7 +20,7 @@ heresies. Everyone (save the User) is a suspected heretic.
 The Inquisition is a **review** — and reviews are tried on the ledger, the RV
 kind (`RV-NNN`), not in the wind. The shared mechanics of that
 tribunal — open + prime, raise, dispose + resolve, the severity and disposition
-vocab, synthesis, the close-gate, the parent-tree caveat — are inscribed in
+vocab, synthesis, the close-gate, where reviews run — are inscribed in
 `review-ledger.md`; **read it, for this skill does not re-litigate the verbs.**
 What follows is the Inquisitor's *lens*:
 the persona, the procedure, and how the charges and the verdict are entered into
@@ -129,10 +129,10 @@ The Inquisition is **done** when every charge is terminal — verified or withdr
 `doctrine review conclude RV-NNN --basis …`, stating what the trial examined. A
 charge raised or reopened afterwards clears the conclusion; conclude again. An
 unresolved `blocker` will be refused at the target's close seam
-(`review-ledger.md` §6). **Open and drive the ledger from the primary tree** (or a coordination
-worktree). The turn verbs refuse a root inside a worktree fork, but
-`doctrine review new` does not: run in a fork, it strands the ledger there. Land
-the fork first, or try the heresy from the primary tree.
+(`review-ledger.md` §6). **The ledger may be opened and driven from any
+tree** — the primary, a coordination tree, a linked worktree, an adopted
+capsule — save one: a dispatch worker process, which every review write
+refuses outright. One tribunal, one writer per RV at a time.
 
 ## The mandate of voice
 

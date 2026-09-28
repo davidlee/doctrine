@@ -416,15 +416,16 @@ baton is rebuilt from the ledger wherever it is next read.
 ### Guidance text
 
 Every surface that states the fork ban or the per-tree reservation is rewritten
-to the new rules in the same change. Generated copies (`.pi/skills/**`,
-`plugins/doctrine/skills/**`) are refreshed by `doctrine install`, never
-hand-edited.
+to the new rules in the same change. Skill sources live in
+`plugins/doctrine/skills/**`; installed copies (`.claude/skills/**`,
+`.pi/skills/**`) are refreshed by `doctrine install`, never hand-edited.
 
 | surface | now says | becomes |
 |---|---|---|
 | `install/review-ledger.md` "Parent-tree caveat" (§6) | turn verbs, `status`, `prime`, `unlock` refuse a fork; `new` strands a ledger there | **"Where reviews run"**: any tree except a dispatch worker; one writer per RV at a time, git merge a best-effort backstop |
-| `.agents/skills/audit/SKILL.md` (intro, step 2) | cites the parent-tree caveat; "use a worktree instead, if necessary" | an audit runs where the code is — primary, coordination, solo fork or adopted capsule; audit and close there, then land (IMP-190) |
-| `.agents/skills/inquisition/SKILL.md` (ledger step) | "open and drive the ledger from the primary tree" | any non-worker tree; same one-writer rule |
+| `plugins/doctrine/skills/audit/SKILL.md` (intro, step 2) | cites the parent-tree caveat; "use a worktree instead, if necessary" | an audit runs where the code is — primary, coordination, solo fork or adopted capsule; audit and close there, then land (IMP-190) |
+| `plugins/doctrine/skills/inquisition/SKILL.md` (ledger step) | "open and drive the ledger from the primary tree" | any non-worker tree; same one-writer rule |
+| `plugins/doctrine/skills/code-review/SKILL.md` (intro) | cites the parent-tree caveat | cites "where reviews run" |
 | `src/mcp_server/tools.rs:78` (`review_new` description) | "refuses a worktree fork … open it from the primary or coordination tree" | "refuses in a dispatch worker" |
 | `src/review/prime.rs:148` comment | "already refuse fork roots" | worker-only refusal |
 | `scripts/oubliette.sh` `back` advice | "the review verbs refuse this worktree … the RV ledger can only open on edge" | audit here, close here, then land (project-local consumer; validates the change) |
@@ -482,8 +483,10 @@ restates the fork refusal and would otherwise be left false.
 | `src/commands/cli.rs` | pass `install::prompt_confirm` to `run_reseat` |
 | `src/review/turn.rs` | `admit_review(worker)`; `resolve_review_root` drops the branch-shape test |
 | `src/review/prime.rs`, `src/mcp_server/tools.rs` | comment / tool description text |
+| `src/kinds/mod.rs` | review `KindRef.state_dir` → `None`: the baton is a pure cache, not phase state for `reseat` to guard (sec-3 "Review runtime state") |
+| `src/test_support.rs`, `tests/common/mod.rs` | `LinkedTrees` fixture — one clone, two linked worktrees, no remote (sec-7) |
 | `.doctrine/adr/001/layering.toml` | `reserve → kinds`, `integrity → reserve` declared |
-| `install/review-ledger.md`, `install/doctrine.toml.example`, `.agents/skills/audit/SKILL.md`, `.agents/skills/inquisition/SKILL.md`, `scripts/oubliette.sh` | guidance text (sec-5) |
+| `install/review-ledger.md`, `install/doctrine.toml.example`, `plugins/doctrine/skills/{audit,code-review,inquisition}/SKILL.md`, `scripts/oubliette.sh` | guidance text (sec-5) |
 
 No change: `src/commands/design.rs` (ASM-012), `src/worktree/shared.rs`
 (`classify_worktree_role` keeps its other callers).
