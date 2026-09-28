@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e9f9-a225-79e0-b650-de82b2d08d6d"
+recorded_at = "2026-09-28T21:44:06.437154443Z"
+kind = "friction"
+summary = "capsule-orchestrator (SL-273 PHASE-04): memory verify refuses a dirty tree"
+detail = "memory verify refuses on a dirty worktree, so a capsule worker (which hands back an uncommitted delta) cannot re-attest a memory; the orchestrator must do it after committing."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

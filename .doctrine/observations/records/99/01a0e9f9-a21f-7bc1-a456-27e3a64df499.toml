@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e9f9-a21f-7bc1-a456-27e3a64df499"
+recorded_at = "2026-09-28T21:44:06.431852223Z"
+kind = "friction"
+summary = "capsule-phase-planner (SL-273 PHASE-04): doctor scans notes.md lib: tokens inside fenced blocks"
+detail = "Pasting verification-script output into notes.md can turn doctor/gate red because doctor scans lib: tokens even in fenced code. Non-obvious; the sheet had to warn workers explicitly."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

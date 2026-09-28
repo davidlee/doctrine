@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e9f9-a21d-7941-ad1e-416b1bab5e26"
+recorded_at = "2026-09-28T21:44:06.429480263Z"
+kind = "friction"
+summary = "capsule-orchestrator (SL-273 PHASE-04): no CLI verb edits a backlog body"
+detail = "Charter assumed a CLI verb to append a note to IMP-500's body; backlog edit only changes status. Planner had to route to a hand-edit of the body md, which using-doctrine permits for prose. Extra planning cycle to discover."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
