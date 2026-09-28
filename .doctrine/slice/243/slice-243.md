@@ -78,15 +78,17 @@ contract share it rather than splitting.
 the skill stops instructing a manual grep.
 
 **O6 — the shared machinery the above needs** (added by design; DEC-114,
-DEC-116). Two deliverables outside O1–O5 that the decisions oblige and the
+DEC-351). Two deliverables outside O1–O5 that the decisions oblige and the
 original scope did not name:
 
 - Extract the capture-with-timeout argv runner out of `coverage_verify` into a
   leaf taking a `Duration`, with `coverage_verify` folding its result. This
   modifies a module SPEC-002 governs; its existing suites are the proof and must
   stay green **unchanged**.
-- Add `lint-all: cargo clippy --workspace` to `gate`, mirroring the existing
-  `test`/`test-all` pairing, so the adapter crate is linted rather than exempted.
+- Name the gate's packages once in the justfile, expanded by both `test-all` and
+  a new `lint-all` that `gate` runs, and add the adapter crate to that list, so
+  it is linted and tested rather than exempted. `crates/doctrine-control` stays
+  off the list (RV-353 `F-4`).
 
 ### Design commitments carried in from the pre-slice discussion
 
@@ -168,11 +170,11 @@ Invert the spec→code anchor edge into a governed-unit map: a language-agnostic
 join and report in the engine, fed by a project-declared inventory adapter, with
 Rust as the first adapter and doctrine's own corpus as the proving ground.
 
-Closure intent: `doctrine spec anchors` reproduces the spike's headline figures
-from the shipped path (48 specs / 81 anchors / 27% dark), renders markdown that
-drops into `/spec-coverage-assessment`'s artifact tables without translation, and
-the skill cites the verb instead of a manual grep. Baseline to beat is recorded
-in Context.
+Closure intent: `doctrine spec anchors` agrees with the published JSON contract
+over the live corpus (on 2026-09-28 a spike measured 88 anchors / 0
+non-resolving / 23% dark), renders markdown that drops into
+`/spec-coverage-assessment`'s artifact tables without translation, and the skill
+cites the verb instead of a manual grep.
 
 ## Follow-Ups
 
