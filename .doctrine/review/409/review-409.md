@@ -98,7 +98,7 @@ Standing risks:
   and a `LinkedTrees` fixture row. Conformance now reports 0 undelivered and no
   undeclared source, test or plugin path.
 - F-3: premise mostly false. Seven of eight `fulfils` edges already existed;
-  `doctrine show SL-269` does not render outbound `fulfils` edges (ISS-498).
+  `doctrine show SL-269` does not render outbound `fulfils` edges (ISS-499).
   Added the one missing edge, SL-269 fulfils ISS-494. IMP-240 stays `full`, not
   `partial` as the brief said: its defect 1 was fixed by ISS-484 and defect 2 by
   this slice.

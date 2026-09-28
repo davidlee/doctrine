@@ -1,4 +1,4 @@
-# ISS-498: slice show omits outbound fulfils edges under its relationships header
+# ISS-499: slice show omits outbound fulfils edges under its relationships header
 
 <!-- Backlog item body — context, detail, links. The structured, queried fields
      live in the sister `backlog-NNN.toml`; this prose is free-form and is never

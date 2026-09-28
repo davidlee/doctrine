@@ -25,7 +25,7 @@ fresh-as-of: 2026-09-28 · close · edbbc26c8
 - inq-12 (user) folds ISS-292 faults 1/3/4 into sec-3, superseding inq-5's out-of-scope ruling; SL-269 fulfils ISS-496, partly ISS-292
 - review pass ledger RV-406 opened by the run, no findings yet; status reports it STALE (sections changed after it opened)
 - PHASE-01..06 implemented (39b174ece..9dbe1b8ae); gate green at close
-- RV-409 audit + REV-068 (ADR-007, PRD-005, SPEC-008) done; ISS-498 captured
+- RV-409 audit + REV-068 (ADR-007, PRD-005, SPEC-008) done; ISS-499 captured
 
 ### Learned
 - mem.pattern.review.mcp-bypasses-worker-guard — review admission must live in `resolve_review_root`

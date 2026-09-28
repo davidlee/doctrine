@@ -1,7 +1,6 @@
 schema = "doctrine.backlog"
 version = 1
-
-id = 498
+id = 499
 slug = "slice-show-omits-outbound-fulfils-edges-under-its-relationships-header"
 title = "slice show omits outbound fulfils edges under its relationships header"
 kind = "issue"
