@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 348
+slug = "memory-search-retrieval-floor"
+title = "Memory search retrieval floor"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-28"
+updated = "2026-09-28"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "memory search returns every filter survivor; a free-text query with no lexical match falls through to severity order and looks like a ranked success. The PreToolUse surface hook calls retrieve_rows with free_query=None (src/retrieve.rs:1069)."
+choice = "Evidence is lexical > 0 or an exact-key hit; scope match is not evidence. The floor applies only when a free-text query is present ('find this'); selector-only queries ('show me what is here') are unfloored and keep severity order, which is the hook's and browse's mode. No-evidence rows are excluded, not shown behind a marked boundary; total counts evidence rows only."
+alternatives = ["Unconditional floor (empties browse and the hook)", "Marked boundary: no-evidence rows demoted below a marker", "No floor (status quo)"]
+rationale = "REQ-152 requires find/show keep held-back memory inspectable; browse and show still do, so exclusion under a free-text query deletes no capability. A marker inside a paged list complicates pagination. Exact-key is computed independently of BM25, so a lexical-only test would drop it."
+consequences = ["Supersedes the SL-008 D17/D18 reading that search always falls back to severity under a query", "Selector-only and free-text requests are distinct contracts and must be documented as such, especially on the MCP wire", "A zero-evidence free-text query yields zero rows and needs an explicit signal (inq-5)"]
+decided_by = "user"
+decided_on = "2026-09-28"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-275"

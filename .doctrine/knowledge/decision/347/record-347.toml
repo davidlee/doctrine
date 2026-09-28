@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 347
+slug = "memory-search-page-size"
+title = "Memory search page size"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-28"
+updated = "2026-09-28"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "memory search carried four page-size notions (offset sugar, row slice, footer, MCP limit) and no default page; SL-086 D14 made unset --limit unbounded."
+choice = "One named constant SEARCH_LIMIT_DEFAULT = 20 serves CLI memory search and MCP memory_search. The command layer resolves the page size once and passes a concrete usize to the engine; offset/page, row slice, footer and MCP limit/next_offset all derive from it. MCP applies the same default with or without selectors. An explicit --limit is honoured uncapped on search. retrieve keeps RETRIEVE_LIMIT_DEFAULT 5 / RETRIEVE_LIMIT_MAX 20."
+alternatives = ["Reuse RETRIEVE_LIMIT_DEFAULT (5) for search", "Keep unset limit unbounded (SL-086 D14)", "Cap explicit search --limit at RETRIEVE_LIMIT_MAX"]
+rationale = "Search rows are metadata, not framed bodies; retrieve's 5 is an agent-context budget, a distinct concept under STD-001. 20 matches doctrine search and the existing MCP no-selector cap. Resolving once removes the divergence by construction."
+consequences = ["Supersedes SL-086 D14, SL-131 s2 and SL-184 s2 unbounded-default positions", "tests/e2e_memory_sync.rs:425 and MCP VT-1 must be restated", "The tools.rs literal 20 is replaced by the constant"]
+decided_by = "user"
+decided_on = "2026-09-28"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-275"
