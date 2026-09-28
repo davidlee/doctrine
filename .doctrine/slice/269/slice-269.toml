@@ -1,9 +1,9 @@
 id = 269
 slug = "review-capable-worktree-locus"
 title = "Review-capable worktree locus"
-status = "started"
+status = "reconcile"
 created = "2026-09-27"
-updated = "2026-09-27"
+updated = "2026-09-28"
 tags = []
 
 [relationships]

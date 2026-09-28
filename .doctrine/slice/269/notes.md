@@ -35,3 +35,11 @@ fresh-as-of: 2026-09-27 · design:reviewing · 0cf1eaf21
 - DEC-338 — review admission refused only in a worker process
 - ASM-012 — design-run mint relies on the CLI worker guard (no MCP design tools)
 - ISS-292 — faults 2, 5 and structured-edge rewrite stay out of scope
+
+### Audit (RV-409, 2026-09-28)
+- RV-409 opened and driven in the adopted capsule worktree with the slice binary (live demo of DEC-338 + DEC-337); 4 findings, all `design-wrong`, handed to /reconcile via its Reconciliation Brief
+- gate green; `slice verify-vt` 25/25 PASS
+- RSK-233 — clone-ref reservation writes into an ambient git repo above `TMPDIR` (PHASE-02/03 risk, unfixed)
+- ISS-463 — the EPIPE-flaky e2e_observation test seen in PHASE-05 (already captured)
+- residual: `worker_process()`'s production arm (`env_worker_set()`) has no unit test by construction; it is the only barrier for MCP review writes in a worker
+- transition window: a pre-slice binary on edge ignores `reservation-local` refs; RV/RSK ids minted here (RV-409, RSK-233) could collide with edge mints before the merge
