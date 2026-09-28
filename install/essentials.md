@@ -1,7 +1,9 @@
+The compact summary every session carries. It owns routing, core process,
+guardrails and the library register; each other block cues its owner.
+
 **Route before you act.** At the start of ANY substantive work, choose the
 governing skill *before* inspecting files, running commands, or writing code.
 When unsure, route to the stricter skill. No code without an approved plan.
-
 
 | When | Skill |
 |---|---|
@@ -48,11 +50,10 @@ Agent confusion / stale memory corpus → `/reviewing-memory`.
 
 **Core process:** `doctrine slice new` (scope) → `doctrine design start` opens
 the managed design run; read the design with `doctrine design show` (the turn
-envelope under `--format prompt`), mutate it
-with `doctrine design apply`, write the authored prose with
-`doctrine design materialise`, and re-enter a cold context with
-`doctrine design resume` — the run locks when its gate clears →
-`doctrine slice plan` → `doctrine slice phases` → per phase: `/phase-plan` the
+envelope under `--format prompt`), mutate it with `doctrine design apply`,
+write the authored prose with `doctrine design materialise`, and re-enter a
+cold context with `doctrine design resume` — the run locks when its gate clears
+→ `doctrine slice plan` → `doctrine slice phases` → per phase: `/phase-plan` the
 runtime sheet, flip `in_progress`, implement TDD red/green/**refactor**, end
 green, flip `completed` → `/audit` → reconcile → `/close`.
 
@@ -60,31 +61,28 @@ green, flip `completed` → `/audit` → reconcile → `/close`.
 ids / command shapes / paths — and **read entities via `doctrine show <REF>`**
 (the canonical ref names its kind), not raw files: structured/queried data
 lives in `*.toml`, prose in `*.md`, and `show` synthesizes both tiers (a `.md`
-body may be empty by design — never judge an entity from one tier). The plan is
-not higher authority than the design or `/canon`. Phase ids (`PHASE-NN`) and
-criteria ids (`EN-/EX-/VT-`) are immutable — edits append, never renumber.
+body may be empty by design — never judge an entity from one tier; storage
+tiers: `lib:reference/using-doctrine.md`). The plan is not higher authority
+than the design or `/canon`. Phase ids (`PHASE-NN`) and criteria ids
+(`EN-/EX-/VT-`) are immutable — edits append, never renumber.
 
-**Reference forms.** Entity ids — prefixed, 3-digit zero-padded (`SL-023`,
-`ADR-005`, `REQ-059`); cite the durable id, never a mobile membership label
-(`FR-`/`NF-`). Doc-local enumerations — bare (`OQ-1`, `D1`, `R1`, `Q1`, `C1`).
-A doc-local id means nothing outside the artefact holding it, and your reader
-has not memorised it, so **introduce it qualified by that artefact's durable
-id** on first use in a message — a slice's `OQ-1` written as `SL-NNN`'s
-`OQ-1`, or a review's `F-4` as `RV-NNN`'s `F-4`, say — with a
-one-line synopsis where context does not supply one. This binds your own prose,
-not only what you quote. When the reader is a human, that first qualified
-mention also names the verb that opens the artefact — `doctrine show RV-NNN`,
-say — for every kind, not only reviews. Criteria modes — `VT` by test / `VA` by agent / `VH` by
-human.
+**Reference forms.** Cite an entity by its durable id — prefixed, 3-digit
+zero-padded (`SL-023`, `ADR-005`, `REQ-059`) — never a mobile membership label
+(`FR-`/`NF-`). Doc-local ids are bare (`OQ-1`, `D1`, `F-4`); on first use in a
+message you write, qualify one by its artefact's durable id (`SL-NNN`'s
+`OQ-1`) with a one-line synopsis, and for a human reader name the verb that
+opens it (`doctrine show RV-NNN`). Criteria modes: `VT` by test / `VA` by
+agent / `VH` by human. Owner: `lib:reference/glossary.md` § reference forms.
 
 **Reference docs (read on demand).** A library citation is written
-`lib:<address>`. Read it with `doctrine library show <citation>`, which accepts
-the prefix verbatim; nothing is on disk to read or glob for, and `doctrine
-library tree` lists the library. A doc still cited bare as `<name>.md` is at
+`lib:<address>`; read it with `doctrine library show <citation>`, which accepts
+the prefix verbatim. Nothing is on disk to read or glob for; `doctrine library
+tree` lists the library. A doc still cited bare as `<name>.md` is at
 `reference/<name>.md`. A retrieval a skill or reference doc specifies is
-mandatory, not optional reading. `lib:reference/glossary.md` — kinds, ids, full
-reference forms, verification taxonomy. `lib:reference/using-doctrine.md` —
-which verb for which intent, reading via `show`, storage tiers, publication and
-the `lib:` form, edit-preserving rules. `lib:reference/shipped-corpus-authoring.md`
-— how to write text that doctrine ships into a client repo, and the per-site
-procedure for citing without a repo-private id.
+mandatory, not optional reading. The publication model:
+`lib:reference/using-doctrine.md` § publication. The register:
+`lib:reference/glossary.md` — kinds, ids, full reference forms, verification
+taxonomy. `lib:reference/using-doctrine.md` — which verb for which intent,
+reading via `show`, storage tiers, publication, edit-preserving rules.
+`lib:reference/shipped-corpus-authoring.md` — writing text doctrine ships into
+a client repo, and citing without a repo-private id.

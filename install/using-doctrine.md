@@ -8,8 +8,9 @@
 How to *operate* doctrine: which verb for which intent, how to read and edit the
 artifacts, and the rules that keep authored state coherent. For **vocabulary and
 ids** see `glossary.md`; for the **workflow** (route → slice → design → plan →
-execute → close) see the routing digest. For **exact command shapes and flags**,
-ask `doctrine <command> --help` — this doc names verbs, never their flag tables.
+execute → close) see `lib:reference/essentials.md`. For **exact command shapes
+and flags**, ask `doctrine <command> --help` — this doc names verbs, never their
+flag tables.
 
 ## Which verb for which intent
 
@@ -330,5 +331,6 @@ decision that needed it.
 
 ## Pointers
 
-- `glossary.md` — kinds, ids, reference forms, verification taxonomy.
+- `lib:reference/essentials.md` — the register of reference docs, in its
+  "Reference docs" block.
 - `doctrine <command> --help` — the authoritative, self-documenting command shapes.
