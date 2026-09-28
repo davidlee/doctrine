@@ -5,7 +5,7 @@ Doctrine ships skills under `.doctrine/skills/` (glob
 *before* you act. Route-before-you-act is the gate, not a suggestion.
 
 The routing table is authoritative in boot.md — see
-[[mem.concept.doctrine.boot-snapshot]] for the `## Routing & Process` section
+[[mem.concept.doctrine.boot-snapshot]] for the `## Essentials` section
 that carries the When → Skill mapping.
 
 The lifecycle ordering these stages follow:
