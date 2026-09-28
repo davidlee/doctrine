@@ -43,17 +43,16 @@ Inputs:
     **Routed findings from the design review (provisional).**
     Before authoring phases, open the slice's design-review RV and read every
     finding whose `route` is `demonstrate`, `probe` or `control`. The table view
-    of `review show` does not render the route: read it from
-    `doctrine review show RV-NNN --json` (`.review.finding[].route`) or from the
-    MCP `review_show` output (`findings[].route`). An older
-    ledger carries it instead as a `route:` prefix on the disposition string
-    (`route:probe fix-now`, say). Each is an obligation deliberately not
-    repaired in prose. Its response carries a criterion sketch and a placement
-    constraint: transcribe the sketch into an entry or exit criterion citing
-    `RV-NNN F-n` inline in the criterion text, on the earliest phase that
-    satisfies the constraint. An
-    untranscribed routed blocker cannot honestly be verified, and an unverified
-    blocker refuses the slice close. Nothing validates the transcription.
+    of `review show` does not render the route — see
+    `lib:reference/review-ledger.md` § Route axis for how to read it: JSON
+    `.review.finding[].route`, MCP `findings[].route`, or an older ledger's
+    `route:` disposition prefix (`route:probe fix-now`, say). Each is an
+    obligation deliberately not repaired in prose. Its response carries a
+    criterion sketch and a placement constraint: transcribe the sketch into an
+    entry or exit criterion citing `RV-NNN F-n` inline in the criterion text, on
+    the earliest phase that satisfies the constraint. An untranscribed routed
+    blocker cannot honestly be verified, and an unverified blocker refuses the
+    slice close. Nothing validates the transcription.
 
 4.  Author `plan.toml` — one `[[phase]]` per ordered phase:
     - `id` is `PHASE-NN` (zero-padded), **immutable** and never reused — edits
@@ -99,9 +98,9 @@ Inputs:
       does carry relations, they are written with `doctrine link` (not typed keys
       here) — see `lib:reference/using-doctrine.md` § Relating entities.
 5.  Author `plan.md` — the rationale and sequencing prose: why these phases, in
-    this order, with these boundaries. Honour the storage rule: **no queried or
-    derived data in `plan.md`**; the structured criteria live in `plan.toml`, and
-    runtime progress lives under `.doctrine/state/`, never here.
+    this order, with these boundaries. Honour the storage rule
+    (`lib:reference/using-doctrine.md` § Storage tiers): no queried or derived
+    data in `plan.md`.
 6.  Commit.
 7.  Consider plan critically: what's under-specified, assumed, ambiguous,
     oversized, optimistic, requires verification, or presents implementation risk?

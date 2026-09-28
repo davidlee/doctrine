@@ -9,12 +9,8 @@ One spawn shape, for every harness. The drive cadence lives in the
 [`/dispatch` router](../dispatch/SKILL.md); this skill is the spawn call plus the
 landing mechanics.
 
-**The worker is confined by the OS, not by cooperation.** Inside the namespace
-only its own worktree and the harness's config dir are writable; everything else
-— the coordination tree, sibling forks, `.doctrine/`, and the real git dir — is
-read-only. So the worker **cannot commit at all**, and its hand-back is an
-*uncommitted working tree* that the orchestrator imports. Never instruct a worker
-to commit.
+See `lib:reference/dispatch-mechanics.md` § The worker returns a working tree,
+not a commit.
 
 ## Spawn
 
@@ -45,12 +41,9 @@ itself — you do not fork separately:
    asymmetry is the only harness difference beyond the config dir and the exec
    line.
 
-**The prompt is pre-distilled and self-contained** — the worker inherits no
-conversation. It must state that the fork is a **clean** checkout with no WIP,
-forbid every work-discarding git verb (`reset`, `checkout --`, `stash`, `clean`
-— a worker that hallucinates "pre-existing WIP" can silently destroy its own
-delta), and instruct the worker to leave its work **uncommitted** in the tree.
-For a TDD red proof, tell it to *edit* the scratch out, never to git-discard it.
+See `lib:reference/dispatch-mechanics.md` § Workers can silently discard their
+own work for the prompt-fencing rules (clean checkout, forbidden verbs,
+edit-not-discard for a red proof).
 
 Never trust the worker's self-reported success. The tree is the ground truth.
 
@@ -61,11 +54,9 @@ exits — nothing auto-reaps it.
 
 1. **Import.** `doctrine worktree import --base <B> --from-worktree <DIR>
    --slice <N>` — gathers the tracked + untracked delta, runs the
-   `classify_import` scope belt as a HARD pre-apply gate (`.doctrine/` /
-   `.claude/` reject, undeclared-scope reject), applies onto `B`
-   **NON-committing**, then runs the reject-and-halt prove gate in-process. An
-   unformatted or lint-red delta HALTS staged and is **never** auto-fixed: that
-   is a worker-delta defect, distinct from a dirty-base defect. Any refusal is
+   `classify_import` scope belt and the reject-and-halt prove gate per
+   `lib:reference/dispatch-mechanics.md` — a red delta halts staged, never
+   auto-fixed (land-or-reject, never rewrite). Any refusal is
    report-and-halt — never import around it.
 2. **Commit ONE** on the coordination branch — the orchestrator's own act, and
    the reason import is non-committing.
@@ -86,16 +77,9 @@ exits — nothing auto-reaps it.
 
 ## The funnel: a bound fork's machinery, not this path's
 
-`doctrine dispatch next` prescribes from a **committed funnel row**, and a row
-only exists for a fork bound at creation (`fork --worker --slice N --phase
-PHASE-NN` under `<coord>/.worktrees/<name>`). This path forks **unbound**, so no
-`Spawn` row ever lands and `next` sits at `spawn` indefinitely.
-
-That is not a defect and not something to heal: this is the **main-thread
-orchestrator** — it applies the delta, commits, records the boundary and flips
-the phase as separate acts, and never consults the funnel record. The funnel
-machinery is retained and unchanged; it simply does not describe this drive.
-Read `next` as advisory here, not as the driver.
+See `lib:reference/dispatch-mechanics.md` § The funnel record, and when it is
+the driver — this path forks unbound, so no row lands and `next` sits at
+`spawn`.
 
 ## Red Flags
 

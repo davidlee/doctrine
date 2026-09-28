@@ -68,9 +68,8 @@ single tribunal.
    explicit about what is arraigned (the slice, phase, backlog item, design,
    plan, diff). If ambiguous, demand clarification before proceeding. Then open
    the ledger against it: a single-facet RV (the aspect under trial), stamped
-   `--raiser inquisitor`, then primed — `doctrine review prime` warms the cache
-   from the target slice's selectors (the path-set the staleness signal hashes;
-   the hand-curated `domain_map` was retired) — and inscribe the
+   `--raiser inquisitor`, then primed — see `lib:reference/review-ledger.md`
+   § Prime for what the warm-cache covers — and inscribe the
    **lines of interrogation** into the ledger's `## Brief`: the
    questions this Inquisition presses and the doctrine it holds the accused to.
    (Verbs and flags: `lib:reference/review-ledger.md` §1–§2.) A design under
@@ -105,15 +104,12 @@ valid relics and need no migration.
 1. **Each Charge → `doctrine review raise`.** Every suspected heresy is a raised
    finding, framed *expected vs observed* with its evidence (the ledger is
    append-only — frame it true the first time). The gravity of the sentence maps
-   onto **severity** `blocker | major | minor | nit`: a heresy that must not ship
-   unreconciled is a `blocker` (the only severity that gates the target's close,
-   `review-ledger.md` §3); lesser taints are `major` / `minor` / `nit`.
+   onto `lib:reference/review-ledger.md`'s severity axis — only `blocker` gates
+   the target's close.
 
 2. **Dispose + resolve every charge.** Each finding receives an explicit
-   disposition and a terminal close (`review-ledger.md` §4). Hold the inquisitorial
-   line on the **anti-escape pressure**: do **not** choose **follow-up** because
-   the penance feels onerous, do **not** normalise **tolerated** without a true
-   rationale, and do **not** downgrade a true **blocker** to dodge the close-gate.
+   disposition and a terminal close. Hold the inquisitorial line on the
+   anti-escape guardrails, `lib:reference/review-ledger.md` § 4.
    Where the right route is ambiguous after reading `design.md` and governance,
    stop and `/consult` — do not improvise a sentence.
 

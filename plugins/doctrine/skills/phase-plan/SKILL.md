@@ -36,9 +36,9 @@ Inputs:
    - assumptions and constraints carried into execution
    - the verification steps that will satisfy each `VT-`/`VA-`/`VH-` expectation
    - the files / components each task is expected to touch
-6. This is **runtime state**. Never write task detail or progress back into the
-   authored `plan.toml` / `plan.md` (the storage rule) — those stay the durable
-   record; the sheet is `rm -rf`-able working context.
+6. This is runtime state (`lib:reference/using-doctrine.md` § Storage tiers) —
+   never write task detail or progress back into the authored `plan.toml` /
+   `plan.md`.
 7. If detailing the phase surfaces new design problems, unresolved tradeoffs, or
    policy ambiguity, stop — `/consult`, or return to `/design` if the design
    itself is the gap. Do not invent your way past it.

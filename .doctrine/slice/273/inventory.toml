@@ -5139,9 +5139,11 @@ recommend = "cut-to-lib"
 target = "then primed — see `lib:reference/review-ledger.md` § Prime for what the warm-cache covers — and inscribe the"
 owner = "lib:reference/review-ledger.md"
 within = ""
-reason = "restates review-ledger.md §2 Prime's own wording almost verbatim ('populates the warm-cache from the target slice's selectors ... the path-set the staleness signal hashes ... no curation step') beyond naming the verb"
-verdict = "accept"
-resolved = ""
+reason = "restates review-ledger.md §2 Prime's own wording almost verbatim ('populates the warm-cache from the target slice's selectors ... the path-set the staleness signal hashes ... no curation step') beyond naming the verb — PHASE-04 contextual repair: span opens with the `--raiser inquisitor` stamp instruction, which the literal target (starting \"then primed\") dropped and review-ledger.md does not own for this skill; restored it at the head of the replacement"
+verdict = "amend"
+resolved = """
+`--raiser inquisitor`, then primed — see `lib:reference/review-ledger.md`
+§ Prime for what the warm-cache covers — and inscribe the"""
 
 [[row]]
 id = "R-501"
@@ -5165,9 +5167,12 @@ recommend = "cut-to-lib"
 target = "the gravity of the sentence maps onto `lib:reference/review-ledger.md`'s severity axis — only `blocker` gates the target's close."
 owner = "lib:reference/review-ledger.md"
 within = ""
-reason = "reproduces review-ledger.md §3's severity vocabulary (blocker/major/minor/nit) and the blocker-gates-close rule as prose, beyond citing it"
-verdict = "accept"
-resolved = ""
+reason = "reproduces review-ledger.md §3's severity vocabulary (blocker/major/minor/nit) and the blocker-gates-close rule as prose, beyond citing it — PHASE-04 contextual repair: preceding text ends \"(the ledger is\"; the literal target lost the span-opening \"append-only — frame it true the first time)\" and its closing paren; restored that clause verbatim and capitalised \"The\" to open the next sentence"
+verdict = "amend"
+resolved = """
+append-only — frame it true the first time). The gravity of the sentence maps
+onto `lib:reference/review-ledger.md`'s severity axis — only `blocker` gates
+the target's close."""
 
 [[row]]
 id = "R-502"
@@ -5229,9 +5234,14 @@ recommend = "cut-to-lib"
 target = "The table view of `review show` does not render the route — see `lib:reference/review-ledger.md` § Route axis for how to read it (JSON `.review.finding[].route`, MCP `findings[].route`, or an older ledger's `route:` disposition prefix)."
 owner = "lib:reference/review-ledger.md"
 within = ""
-reason = "restates review-ledger.md's Route axis section (the JSON/MCP read path and the older route: disposition-prefix form) almost verbatim"
-verdict = "accept"
-resolved = ""
+reason = "restates review-ledger.md's Route axis section (the JSON/MCP read path and the older route: disposition-prefix form) almost verbatim — PHASE-04 contextual repair: preceding text ends \"read every\" and the literal target dropped the span-opening \"finding whose `route` is ...\" object clause (plan-owned instruction); restored it verbatim. The span ends before \"(`route:probe fix-now`, say).\", so the target's parenthesis became a colon list ending in \"prefix\" to let that trailing example attach without a doubled paren"
+verdict = "amend"
+resolved = """
+finding whose `route` is `demonstrate`, `probe` or `control`. The table view
+of `review show` does not render the route — see
+`lib:reference/review-ledger.md` § Route axis for how to read it: JSON
+`.review.finding[].route`, MCP `findings[].route`, or an older ledger's
+`route:` disposition prefix"""
 
 [[row]]
 id = "R-504"
@@ -5252,9 +5262,12 @@ recommend = "cut-to-lib"
 target = "Honour the storage rule (`lib:reference/using-doctrine.md` § Storage tiers): no queried or derived data in `plan.md`."
 owner = "lib:reference/using-doctrine.md"
 within = ""
-reason = "restates using-doctrine.md's storage-tier mechanics as prose (which data lives in plan.toml vs plan.md vs .doctrine/state/) instead of citing the owner"
-verdict = "accept"
-resolved = ""
+reason = "restates using-doctrine.md's storage-tier mechanics as prose (which data lives in plan.toml vs plan.md vs .doctrine/state/) instead of citing the owner — PHASE-04 contextual repair: preceding text ends \"why these phases, in\"; restored the span-opening \"this order, with these boundaries.\" so the sentence completes instead of reading \"in Honour\""
+verdict = "amend"
+resolved = """
+this order, with these boundaries. Honour the storage rule
+(`lib:reference/using-doctrine.md` § Storage tiers): no queried or derived
+data in `plan.md`."""
 
 [[row]]
 id = "R-505"
@@ -5337,9 +5350,12 @@ recommend = "cut-to-lib"
 target = "runs the `classify_import` scope belt and the reject-and-halt prove gate per `lib:reference/dispatch-mechanics.md` — a red delta halts staged, never auto-fixed (land-or-reject, never rewrite)."
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
-reason = "restates dispatch-mechanics.md's classify_import scope-belt and prove-gate land-or-reject-never-rewrite rule almost verbatim"
-verdict = "accept"
-resolved = ""
+reason = "restates dispatch-mechanics.md's classify_import scope-belt and prove-gate land-or-reject-never-rewrite rule almost verbatim — PHASE-04 contextual repair: preceding text ends \"runs the\", so the target's own \"runs the\" was dropped to avoid duplication; the span ends \"Any refusal is\" before \"report-and-halt — never import around it.\", so that clause head is kept to complete the next sentence"
+verdict = "amend"
+resolved = """
+`classify_import` scope belt and the reject-and-halt prove gate per
+`lib:reference/dispatch-mechanics.md` — a red delta halts staged, never
+auto-fixed (land-or-reject, never rewrite). Any refusal is"""
 
 [[row]]
 id = "R-508"
@@ -5399,9 +5415,11 @@ recommend = "cut-to-help"
 target = "see `doctrine memory record --help` for the `--type` values: concept|fact|pattern|signpost|system|thread."
 owner = "--help:memory record"
 within = ""
-reason = "reproduces the `--type` flag's full enum (concept/fact/pattern/system/signpost/thread) with per-value meanings, matching `doctrine memory record --help`'s own `--type` line"
-verdict = "accept"
-resolved = ""
+reason = "reproduces the `--type` flag's full enum (concept/fact/pattern/system/signpost/thread) with per-value meanings, matching `doctrine memory record --help`'s own `--type` line — PHASE-04 contextual repair: literal target opens with lowercase \"see\" but starts a fresh paragraph under the section heading; capitalised to \"See\""
+verdict = "amend"
+resolved = """
+See `doctrine memory record --help` for the `--type` values:
+concept|fact|pattern|signpost|system|thread."""
 
 [[row]]
 id = "R-510"
@@ -5579,9 +5597,11 @@ recommend = "cut-to-help"
 target = "see `doctrine memory retrieve --help`: retrieve applies the non-bypassable trust holdback (low-trust + high-severity suppressed)."
 owner = "--help:memory retrieve"
 within = ""
-reason = "restates `doctrine memory retrieve --help`'s own description line ('Applies the trust holdback (non-bypassable): low-trust high-severity memories are suppressed') almost verbatim"
-verdict = "accept"
-resolved = ""
+reason = "restates `doctrine memory retrieve --help`'s own description line ('Applies the trust holdback (non-bypassable): low-trust high-severity memories are suppressed') almost verbatim — PHASE-04 contextual repair: literal target opens with lowercase \"see\" but starts a fresh paragraph; capitalised to \"See\" (trust calibration and attesting stay covered by the skill's own sections 4-5)"
+verdict = "amend"
+resolved = """
+See `doctrine memory retrieve --help`: retrieve applies the non-bypassable trust
+holdback (low-trust + high-severity suppressed)."""
 
 [[row]]
 id = "R-515"
@@ -5603,9 +5623,11 @@ recommend = "cut-to-help"
 target = "`doctrine memory retrieve` — see `doctrine memory retrieve --help` for the data-not-instruction framing and the non-bypassable trust holdback."
 owner = "--help:memory retrieve"
 within = ""
-reason = "restates `doctrine memory retrieve --help`'s own description line (bounded security-framed data-not-instruction; non-bypassable holdback) almost verbatim"
-verdict = "accept"
-resolved = ""
+reason = "restates `doctrine memory retrieve --help`'s own description line (bounded security-framed data-not-instruction; non-bypassable holdback) almost verbatim — PHASE-04 contextual repair: span includes the \"- \" list marker of the Two surfaces list; restored it so the item stays a list item alongside its siblings"
+verdict = "amend"
+resolved = """
+- `doctrine memory retrieve` — see `doctrine memory retrieve --help` for the
+data-not-instruction framing and the non-bypassable trust holdback."""
 
 [[row]]
 id = "R-516"
@@ -5649,9 +5671,11 @@ recommend = "cut-to-help"
 target = "see `doctrine memory retrieve --help` for `--limit` and `--min-trust` (raises, never lowers, the default trust floor)."
 owner = "--help:memory retrieve"
 within = ""
-reason = "reproduces `--limit`'s default/max and `--min-trust`'s raise-only semantics, matching `doctrine memory retrieve --help`'s own `--min-trust` line almost verbatim"
-verdict = "accept"
-resolved = ""
+reason = "reproduces `--limit`'s default/max and `--min-trust`'s raise-only semantics, matching `doctrine memory retrieve --help`'s own `--min-trust` line almost verbatim — PHASE-04 contextual repair: span includes the \"2. **Tune the surface.**\" step marker and bold lead of the numbered procedure; restored them (steps 1/3/4 remain) and capitalised \"See\""
+verdict = "amend"
+resolved = """
+2. **Tune the surface.** See `doctrine memory retrieve --help` for `--limit`
+and `--min-trust` (raises, never lowers, the default trust floor)."""
 
 [[row]]
 id = "R-518"
@@ -5671,9 +5695,11 @@ recommend = "cut-to-help"
 target = "see `doctrine compare elicit --help` for `--json`/`--depth`/`--kind`."
 owner = "--help:compare elicit"
 within = ""
-reason = "full flag surface of `compare elicit` reproduced as a code block, beyond naming the verb — flag-shape per design 6.2"
-verdict = "accept"
-resolved = ""
+reason = "full flag surface of `compare elicit` reproduced as a code block, beyond naming the verb — flag-shape per design 6.2 — PHASE-04 contextual repair: span is the whole Fetch fence; the literal target (\"see ... --help for `--json`/...\") dropped the skill-owned instruction to fetch the queue as JSON, which the following spine/yield_basis prose depends on and --help does not prescribe; kept it as \"Run ... --json\" and point at --help for the remaining flags"
+verdict = "amend"
+resolved = """
+Run `doctrine compare elicit --json`; see `doctrine compare elicit --help` for
+`--depth`/`--kind`."""
 
 [[row]]
 id = "R-519"
@@ -5703,9 +5729,17 @@ recommend = "cut-to-help"
 target = "see `doctrine compare elicit --help` for the `--kind` values (comparison|anchor-review) and what each yields, and for `--limit`."
 owner = "--help:compare elicit"
 within = ""
-reason = "enumerates the `--kind` flag's two values and their yield-basis semantics plus `--limit`'s display-only scope — an enum/value table for flags per design 6.2"
-verdict = "accept"
-resolved = ""
+reason = "enumerates the `--kind` flag's two values and their yield-basis semantics plus `--limit`'s display-only scope — an enum/value table for flags per design 6.2 — PHASE-04 contextual repair: `doctrine compare elicit --help` lists the --kind values and --limit but carries none of the per-kind yield semantics (order-bearing min, incomparable yields zero, read yield_note), and the preceding line introduces them (\"Two kinds, different `yield_basis` semantics:\"); kept those skill-owned bullets verbatim and cut only the flag restatement (--limit) to the --help pointer"
+verdict = "amend"
+resolved = """
+- `comparison` — yield is the min over **order-bearing** answers
+  (prefer-a/prefer-b/equal). `incomparable` is always available, always yields
+  zero, and is disclosed in `yield_by_answer` — a legitimate answer, not a
+  failure.
+- `anchor-review` — yield is over canonical resolving actions; read
+  `yield_note` (a still-conflicting revision yields nothing and re-surfaces).
+
+See `doctrine compare elicit --help` for the `--kind` values and `--limit`."""
 
 [[row]]
 id = "R-520"
@@ -5725,9 +5759,13 @@ recommend = "cut-to-help"
 target = "see `doctrine compare record --help` for the full flag surface."
 owner = "--help:compare record"
 within = ""
-reason = "full flag surface of `compare record` reproduced as a code block (--prefer/--equal/--incomparable/--rater/--by/--frame/--audience/--note), beyond naming the verb"
-verdict = "accept"
-resolved = ""
+reason = "full flag surface of `compare record` reproduced as a code block (--prefer/--equal/--incomparable/--rater/--by/--frame/--audience/--note), beyond naming the verb — PHASE-04 contextual repair: span starts inside a code fence whose opener lies outside it, so the literal target left an unclosed fence; kept the command's first line (the answer leg the preceding colon introduces, minus its continuation backslash), closed the fence, and moved the --help pointer after it"
+verdict = "amend"
+resolved = """
+doctrine compare record <A> <B> --prefer a|b | --equal | --incomparable
+```
+
+See `doctrine compare record --help` for the full flag surface."""
 
 [[row]]
 id = "R-521"
@@ -5825,9 +5863,12 @@ recommend = "cut-to-lib"
 target = "This is runtime state (`lib:reference/using-doctrine.md` § Storage tiers) — never write task detail or progress back into the authored `plan.toml` / `plan.md`."
 owner = "lib:reference/using-doctrine.md"
 within = ""
-reason = "restates using-doctrine.md's storage-tier mechanics as prose (authored vs runtime, rm-rf-able working context) instead of citing the owner"
-verdict = "accept"
-resolved = ""
+reason = "restates using-doctrine.md's storage-tier mechanics as prose (authored vs runtime, rm-rf-able working context) instead of citing the owner — PHASE-04 contextual repair: span includes the \"6.\" step marker of the numbered procedure; restored it"
+verdict = "amend"
+resolved = """
+6. This is runtime state (`lib:reference/using-doctrine.md` § Storage tiers) —
+never write task detail or progress back into the authored `plan.toml` /
+`plan.md`."""
 
 [[row]]
 id = "R-523"
@@ -5854,9 +5895,12 @@ recommend = "cut-to-lib"
 target = "# Reference forms: `lib:reference/glossary.md` § reference forms."
 owner = "lib:reference/glossary.md"
 within = ""
-reason = "sheet-mandated (Recommendation criteria, R- rows): the criterion-ids/mode vocabulary restates glossary.md's EN/EX/VT/VA/VH reference-forms table; the phase-id ordering/immutability sentence (:21-23) and the phase-qualification sentence (:29) are kept as plan-specific"
-verdict = "accept"
-resolved = ""
+reason = "sheet-mandated (Recommendation criteria, R- rows): the criterion-ids/mode vocabulary restates glossary.md's EN/EX/VT/VA/VH reference-forms table; the phase-id ordering/immutability sentence (:21-23) and the phase-qualification sentence (:29) are kept as plan-specific — PHASE-04 contextual repair: preceding comment ends \"so the id\" and the next line opens \"the only mode marker\", so the literal target left both clauses dangling and dropped plan-specific immutability wording; kept the span's ordering/immutability sentences verbatim, converted the glossary.md cite (subsumed C-072) and cut only the EN/EX/VT/VA/VH enumeration the glossary owns"
+verdict = "amend"
+resolved = """
+# sequence goes non-monotonic after a split and that is expected. Criterion ids
+# are local to their phase, bare, and equally immutable
+# (`lib:reference/glossary.md` § reference forms). The prefix is"""
 
 [[row]]
 id = "R-700"

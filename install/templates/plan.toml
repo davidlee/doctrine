@@ -22,9 +22,8 @@ dependencies = []
 # IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
 # never reused once authored — edits append, they never renumber, so the id
 # sequence goes non-monotonic after a split and that is expected. Criterion ids
-# are local to their phase, bare, and equally immutable (glossary.md §
-# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
-# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance. The prefix is
+# are local to their phase, bare, and equally immutable
+# (`lib:reference/glossary.md` § reference forms). The prefix is
 # the only mode marker; there is no mode field. Reference a criterion from
 # another phase phase-qualified (PHASE-03/EX-8) — bare EX-8 is ambiguous.
 [[phase]]

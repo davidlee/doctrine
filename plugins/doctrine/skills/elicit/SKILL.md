@@ -16,9 +16,8 @@ CLI is the source of truth for flags: `doctrine compare --help`.
 
 ## Fetch
 
-```
-doctrine compare elicit --json [--depth K] [--kind comparison|anchor-review]
-```
+Run `doctrine compare elicit --json`; see `doctrine compare elicit --help` for
+`--depth`/`--kind`.
 
 Entries share a spine — `rank / kind / guaranteed_yield / guaranteed_impact /
 score / reasons / ask`. Two kinds, different `yield_basis` semantics:
@@ -30,7 +29,7 @@ score / reasons / ask`. Two kinds, different `yield_basis` semantics:
 - `anchor-review` — yield is over canonical resolving actions; read
   `yield_note` (a still-conflicting revision yields nothing and re-surfaces).
 
-`--limit` caps display only; the full pool is still ranked beneath it.
+See `doctrine compare elicit --help` for the `--kind` values and `--limit`.
 
 ## Curate the batch
 
@@ -66,9 +65,10 @@ score / reasons / ask`. Two kinds, different `yield_basis` semantics:
 Copy the entry's `ask`; the answer leg is always the open capture surface:
 
 ```
-doctrine compare record <A> <B> --prefer a|b | --equal | --incomparable \
-  --rater human --by <name> [--frame F] [--audience T] [--note ...]
+doctrine compare record <A> <B> --prefer a|b | --equal | --incomparable
 ```
+
+See `doctrine compare record --help` for the full flag surface.
 
 Provenance stays honest: a human's answer is `--rater human`, always. Your own
 judgements (when the human delegates) stay `--rater agent`.
