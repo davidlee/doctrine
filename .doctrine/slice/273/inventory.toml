@@ -1,7 +1,6 @@
 # SL-273 sweep inventory — design 6.1. Rows are append-only; ids never renumber.
 # PHASE-03 T1 (W-C): C-001..C-281, citation rows over plugins/doctrine/skills/**, install/** and src/**.
 # PHASE-03 T3 (W-R): R- restate rows over plugins/doctrine/skills/** and install/templates/plan.toml (R-a R-001.., R-b1 R-500.., R-b2 R-700..).
-
 [[row]]
 id = "C-001"
 file = "install/agents/claude/capsule-phase-planner.md"
@@ -15,7 +14,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -31,7 +30,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -47,7 +46,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -63,7 +62,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -79,7 +78,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -95,7 +94,7 @@ target = "`lib:reference/authority-model.md`"
 owner = ""
 within = ""
 reason = "worked pointer to a sibling library doc; converts the whole invocation to a lib: citation"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -115,7 +114,7 @@ target = "read it as `lib:reference/claude-activation.md`"
 owner = ""
 within = ""
 reason = "maintainer header naming its own published address; converts the invocation to a lib: self-citation (rule 5)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -131,7 +130,7 @@ target = ""
 owner = ""
 within = ""
 reason = "shipped-tree/doctrine-repo file, not a reachable library address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -147,7 +146,7 @@ target = ""
 owner = ""
 within = ""
 reason = "shipped-tree/doctrine-repo file, not a reachable library address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -163,7 +162,7 @@ target = "`lib:reference/design-run-obligations.md`"
 owner = ""
 within = ""
 reason = "path form addressing a published library asset; converts to lib: form"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -179,7 +178,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -195,7 +194,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -211,7 +210,7 @@ target = ""
 owner = ""
 within = ""
 reason = "shipped-tree/doctrine-repo file, not a reachable library address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -231,7 +230,7 @@ target = "read it as `lib:reference/design-run-obligations.md`"
 owner = ""
 within = ""
 reason = "maintainer header naming its own published address; converts the invocation to a lib: self-citation (rule 5)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -251,7 +250,7 @@ target = "read it as `lib:reference/dispatch-mechanics.md`"
 owner = ""
 within = ""
 reason = "maintainer header naming its own published address; converts the invocation to a lib: self-citation (rule 5)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -267,7 +266,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -283,7 +282,7 @@ target = "`lib:reference/claude-activation.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -299,7 +298,7 @@ target = "`lib:reference/claude-activation.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -315,7 +314,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -331,7 +330,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -347,7 +346,7 @@ target = ""
 owner = ""
 within = ""
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -363,7 +362,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -379,7 +378,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -387,16 +386,20 @@ id = "C-024"
 file = "install/essentials.md"
 line = 80
 token = "<name>.md"
-excerpt = "tree` lists the library. A doc still cited bare as `<name>.md` is at"
-span = "`<name>.md`"
+excerpt = """
+tree` lists the library. A doc still cited bare as `<name>.md` is at
+`reference/<name>.md`. A retrieval"""
+span = """
+tree` lists the library. A doc still cited bare as `<name>.md` is at
+`reference/<name>.md`. A retrieval"""
 class = "other"
 recommend = "leave"
 target = ""
 owner = ""
 within = ""
-reason = "essentials transition clause placeholder; attention delete-at-PHASE-04"
-verdict = ""
-resolved = ""
+reason = "essentials transition clause placeholder; attention delete-at-PHASE-04 adjudicated: Deletes the essentials transition clause (delete-at-PHASE-04)."
+verdict = "amend"
+resolved = "tree` lists the library. A retrieval"
 
 [[row]]
 id = "C-025"
@@ -410,8 +413,8 @@ recommend = "leave"
 target = ""
 owner = ""
 within = ""
-reason = "essentials transition clause placeholder; attention delete-at-PHASE-04"
-verdict = ""
+reason = "essentials transition clause placeholder; attention delete-at-PHASE-04 — subsumed by C-024's amend: the whole transition clause is deleted at PHASE-04; PHASE-04 must not flag this excerpt's disappearance"
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -427,7 +430,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -443,7 +446,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -459,7 +462,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -475,7 +478,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -491,7 +494,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -507,7 +510,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -523,7 +526,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -539,7 +542,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -555,7 +558,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -571,7 +574,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -587,7 +590,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -603,7 +606,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -619,7 +622,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -635,7 +638,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -655,7 +658,7 @@ target = "read it as `lib:reference/harvest.md`"
 owner = ""
 within = ""
 reason = "maintainer header naming its own published address; converts the invocation to a lib: self-citation (rule 5)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -671,7 +674,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -687,7 +690,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -703,7 +706,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -719,7 +722,7 @@ target = ""
 owner = ""
 within = ""
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -735,7 +738,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -751,7 +754,7 @@ target = ""
 owner = ""
 within = ""
 reason = "TOML data field (backings array), not a comment; attention data-field (criteria #7)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -767,7 +770,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -783,7 +786,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -799,7 +802,7 @@ target = ""
 owner = ""
 within = ""
 reason = "TOML glob data value, not a comment; attention data-field (criteria #7)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -815,7 +818,7 @@ target = ""
 owner = ""
 within = ""
 reason = "TOML glob data value, not a comment; attention data-field (criteria #7)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -831,7 +834,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -847,7 +850,7 @@ target = ""
 owner = ""
 within = ""
 reason = "shell glob in an operative justfile recipe, not prose; attention judgement"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -863,7 +866,7 @@ target = ""
 owner = ""
 within = ""
 reason = "fuzzy-match argument in an operative justfile recipe, not prose; attention judgement"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -879,7 +882,7 @@ target = ""
 owner = ""
 within = ""
 reason = "templated path in an operative justfile recipe, not prose; attention judgement"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -895,7 +898,7 @@ target = ""
 owner = ""
 within = ""
 reason = "fuzzy-match argument in an operative justfile recipe, not prose; attention judgement"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -911,7 +914,7 @@ target = ""
 owner = ""
 within = ""
 reason = "templated path in an operative justfile recipe, not prose; attention judgement"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -931,7 +934,7 @@ target = "read it as `lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "maintainer header naming its own published address; converts the invocation to a lib: self-citation (rule 5)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -947,7 +950,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -963,7 +966,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -979,7 +982,7 @@ target = "`lib:reference/glossary.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -995,7 +998,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1011,7 +1014,7 @@ target = ""
 owner = ""
 within = ""
 reason = "internal design-prompts fragment path, not a published reference/ or templates/ address; attention judgement"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1027,7 +1030,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1043,7 +1046,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1059,7 +1062,7 @@ target = "`lib:reference/harvest.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1079,7 +1082,7 @@ target = "read it as `lib:reference/shipped-corpus-authoring.md`"
 owner = ""
 within = ""
 reason = "maintainer header naming its own published address; converts the invocation to a lib: self-citation (rule 5)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1095,7 +1098,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1111,7 +1114,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1127,7 +1130,7 @@ target = ""
 owner = ""
 within = ""
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1143,7 +1146,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1159,7 +1162,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1175,7 +1178,7 @@ target = "`lib:reference/glossary.md`"
 owner = ""
 within = "R-523"
 reason = "bare mention inside the R- owned-concept comment block (:21-28); own C- row, subsumed once W-R sets within"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1193,7 +1196,7 @@ target = ""
 owner = ""
 within = ""
 reason = "external tool's own template (spec-driver/supekku), not doctrine's templates/ asset; attention judgement"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1209,7 +1212,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1225,7 +1228,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1241,7 +1244,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1259,7 +1262,7 @@ target = ""
 owner = ""
 within = ""
 reason = "external tool's own template (spec-driver/supekku), not doctrine's templates/ asset; attention judgement"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1279,7 +1282,7 @@ target = "read it as `lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "maintainer header naming its own published address; converts the invocation to a lib: self-citation (rule 5)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1295,7 +1298,7 @@ target = "`lib:reference/glossary.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1311,7 +1314,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1327,7 +1330,7 @@ target = "`lib:reference/glossary.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1343,7 +1346,7 @@ target = ""
 owner = ""
 within = ""
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1359,7 +1362,7 @@ target = ""
 owner = ""
 within = ""
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1375,7 +1378,7 @@ target = ""
 owner = ""
 within = ""
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1391,7 +1394,7 @@ target = ""
 owner = ""
 within = ""
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1407,7 +1410,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1423,7 +1426,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1439,7 +1442,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1455,7 +1458,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1471,7 +1474,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1487,7 +1490,7 @@ target = "`lib:reference/glossary.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1502,8 +1505,8 @@ recommend = "convert"
 target = "`lib:reference/governance.md`"
 owner = ""
 within = ""
-reason = "plainly the library copy (governance.md is a library reference doc); governance.md is exempt from bare-mention enforcement (A2) regardless"
-verdict = ""
+reason = 'plainly the library copy (governance.md is a library reference doc); governance.md is exempt from bare-mention enforcement (A2) regardless adjudicated: "Same-named files" illustration: the bare name IS the point; not in the bare-test output (governance.md exempt)'
+verdict = "reject"
 resolved = ""
 
 [[row]]
@@ -1519,7 +1522,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1534,8 +1537,8 @@ recommend = "convert"
 target = "`lib:templates/design.md`"
 owner = ""
 within = ""
-reason = "plainly the published template (design.md is a library template)"
-verdict = ""
+reason = "plainly the published template (design.md is a library template) adjudicated: same illustration; design.md is a template name, not a reference target"
+verdict = "reject"
 resolved = ""
 
 [[row]]
@@ -1551,7 +1554,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1567,7 +1570,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1583,7 +1586,7 @@ target = ""
 owner = ""
 within = ""
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1599,7 +1602,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1615,7 +1618,7 @@ target = ""
 owner = ""
 within = ""
 reason = "already in target form (PHASE-02, A4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1631,7 +1634,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1647,7 +1650,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1663,7 +1666,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1679,7 +1682,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1695,7 +1698,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1711,7 +1714,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = "R-005"
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1727,7 +1730,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1743,7 +1746,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1759,7 +1762,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1775,7 +1778,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1791,7 +1794,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1807,7 +1810,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1823,7 +1826,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1839,7 +1842,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1855,7 +1858,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1871,7 +1874,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1887,7 +1890,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1903,7 +1906,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1919,7 +1922,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1935,7 +1938,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1951,7 +1954,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1967,7 +1970,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1983,7 +1986,7 @@ target = "`lib:reference/harvest.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -1999,7 +2002,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2015,7 +2018,7 @@ target = ""
 owner = ""
 within = "R-709"
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2031,7 +2034,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2047,7 +2050,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2063,7 +2066,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "path form addressing a published library asset; converts to lib: form"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2079,7 +2082,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2095,7 +2098,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2111,7 +2114,7 @@ target = "`lib:reference/harvest.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2127,7 +2130,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2143,7 +2146,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2159,7 +2162,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2175,7 +2178,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2191,7 +2194,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2207,7 +2210,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2223,7 +2226,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2239,7 +2242,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = "R-014"
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2255,7 +2258,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = "R-014"
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2271,7 +2274,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = "R-014"
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2287,7 +2290,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = "R-014"
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2303,7 +2306,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2319,7 +2322,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = "R-013"
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2335,7 +2338,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = "R-013"
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2351,7 +2354,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2367,7 +2370,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2383,7 +2386,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2399,7 +2402,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2415,7 +2418,7 @@ target = "`lib:reference/harvest.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2431,7 +2434,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2447,7 +2450,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2463,7 +2466,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2479,7 +2482,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "worked pointer to a library doc; converts the whole invocation to a lib: citation"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2495,7 +2498,7 @@ target = ""
 owner = ""
 within = ""
 reason = "shipped-tree/doctrine-repo file, not a reachable library address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2511,7 +2514,7 @@ target = ""
 owner = ""
 within = ""
 reason = "shipped-tree/doctrine-repo file, not a reachable library address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2527,7 +2530,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2543,7 +2546,7 @@ target = ""
 owner = ""
 within = ""
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2559,7 +2562,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2575,7 +2578,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2591,7 +2594,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2607,7 +2610,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2623,7 +2626,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2639,7 +2642,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2655,7 +2658,7 @@ target = "`lib:reference/harvest.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2671,7 +2674,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = "R-700"
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2687,7 +2690,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2703,7 +2706,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2719,7 +2722,7 @@ target = "`lib:reference/harvest.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2735,7 +2738,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2751,7 +2754,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2767,7 +2770,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2783,7 +2786,7 @@ target = ""
 owner = ""
 within = ""
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2799,7 +2802,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2815,7 +2818,7 @@ target = ""
 owner = ""
 within = ""
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2831,7 +2834,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2847,7 +2850,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2866,7 +2869,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client's own context-packet output; widened to disambiguate from the identical line at :126 (V4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2882,7 +2885,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2901,7 +2904,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client's own context-packet output; widened to disambiguate from the identical line at :120 (V4)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2917,7 +2920,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2933,7 +2936,7 @@ target = "`lib:reference/harvest.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2949,7 +2952,7 @@ target = ""
 owner = ""
 within = ""
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2965,7 +2968,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2981,7 +2984,7 @@ target = "`lib:reference/harvest.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -2997,7 +3000,7 @@ target = "`lib:reference/harvest.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3013,7 +3016,7 @@ target = "`lib:reference/harvest.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3029,7 +3032,7 @@ target = "`lib:reference/harvest.md`"
 owner = ""
 within = "R-715"
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3045,7 +3048,7 @@ target = ""
 owner = ""
 within = "R-715"
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3061,7 +3064,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3077,7 +3080,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3093,7 +3096,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3109,7 +3112,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3125,7 +3128,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3141,7 +3144,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3157,7 +3160,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3173,7 +3176,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3189,7 +3192,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3205,7 +3208,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3221,7 +3224,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3237,7 +3240,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3253,7 +3256,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3269,7 +3272,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = "R-501"
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3285,7 +3288,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = "R-502"
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3301,7 +3304,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3317,7 +3320,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3333,7 +3336,7 @@ target = "`lib:reference/harvest.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3349,7 +3352,7 @@ target = "`lib:reference/review-ledger.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3365,7 +3368,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3381,7 +3384,7 @@ target = ""
 owner = ""
 within = "R-714"
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3397,7 +3400,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3413,7 +3416,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3429,7 +3432,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3445,7 +3448,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3461,7 +3464,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3477,7 +3480,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3493,7 +3496,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3509,7 +3512,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3525,7 +3528,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3541,7 +3544,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3557,7 +3560,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3573,7 +3576,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3589,7 +3592,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3605,7 +3608,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3621,7 +3624,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3637,7 +3640,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3653,7 +3656,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3669,7 +3672,7 @@ target = ""
 owner = ""
 within = "R-504"
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3685,7 +3688,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3701,7 +3704,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3717,7 +3720,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "path form addressing a published library asset; converts to lib: form"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3733,7 +3736,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3749,7 +3752,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3765,7 +3768,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3781,7 +3784,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3797,7 +3800,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3813,7 +3816,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3829,7 +3832,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3845,7 +3848,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3861,7 +3864,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3877,7 +3880,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3893,7 +3896,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3909,7 +3912,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3925,7 +3928,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3941,7 +3944,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3957,7 +3960,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3973,7 +3976,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -3989,7 +3992,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4005,7 +4008,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4021,7 +4024,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4037,7 +4040,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4053,7 +4056,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4069,7 +4072,7 @@ target = ""
 owner = ""
 within = ""
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4085,7 +4088,7 @@ target = ""
 owner = ""
 within = ""
 reason = "placeholder, glob, or illustrative example — not a specific occurrence"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4101,7 +4104,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4117,7 +4120,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "path form addressing a published library asset; converts to lib: form"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4133,7 +4136,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4149,7 +4152,7 @@ target = ""
 owner = ""
 within = ""
 reason = "shipped-tree/doctrine-repo file, not a reachable library address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4165,7 +4168,7 @@ target = ""
 owner = ""
 within = ""
 reason = "project's own generated runtime boot snapshot; attention judgement (no class bucket fits cleanly)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4181,7 +4184,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "path form addressing a published library asset; converts to lib: form"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4197,7 +4200,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4213,7 +4216,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4229,7 +4232,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4245,7 +4248,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4261,7 +4264,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4277,7 +4280,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4293,7 +4296,7 @@ target = "`lib:reference/using-doctrine.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4309,7 +4312,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4325,7 +4328,7 @@ target = "`lib:reference/harvest.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4341,7 +4344,7 @@ target = "`lib:reference/harvest.md`"
 owner = ""
 within = ""
 reason = "names the published library reference doc; converts to its lib: address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4357,7 +4360,7 @@ target = ""
 owner = ""
 within = ""
 reason = "shipped-tree/doctrine-repo file, not a reachable library address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4373,7 +4376,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4389,7 +4392,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4405,7 +4408,7 @@ target = ""
 owner = ""
 within = ""
 reason = "shipped-tree/doctrine-repo file, not a reachable library address"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4421,7 +4424,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4437,7 +4440,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client-owned file, not the library copy"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4453,7 +4456,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4469,7 +4472,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4485,7 +4488,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4501,7 +4504,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4517,7 +4520,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4533,7 +4536,7 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4557,7 +4560,7 @@ target = "see `lib:reference/dispatch-mechanics.md` § The fork base is explicit
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
 reason = "restates dispatch-mechanics.md's 'fork base is explicit, never session HEAD' rationale (near-verbatim: session HEAD may sit on main, divergent base corrupts B..S) beyond naming the base parameter"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4585,7 +4588,7 @@ target = "`lib:reference/dispatch-mechanics.md` § Worker identity is a property
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
 reason = "restates dispatch-mechanics.md's 'Worker identity is a property of the process, set by the spawn' section almost verbatim"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4631,7 +4634,7 @@ target = '`lib:reference/dispatch-mechanics.md` §§ "The worker returns a worki
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
 reason = "restates dispatch-mechanics.md's worker-returns-a-working-tree and workers-can-discard-their-own-work sections as a 3-step list"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4666,9 +4669,12 @@ recommend = "cut-to-lib"
 target = "See `lib:reference/review-ledger.md` for the MCP-vs-CLI tool preference and the full verb list."
 owner = "lib:reference/review-ledger.md"
 within = ""
-reason = 'review-ledger.md already states the MCP-tool preference ("Prefer the MCP tools ... when your harness ..."); this section fully enumerates the tool list and rationale beyond naming the rule'
-verdict = ""
-resolved = ""
+reason = 'review-ledger.md already states the MCP-tool preference ("Prefer the MCP tools ... when your harness ..."); this section fully enumerates the tool list and rationale beyond naming the rule adjudicated: keeps the unowned CLI-only exception the plain cut would lose'
+verdict = "amend"
+resolved = """
+Prefer the MCP review tools over the CLI when your harness has them
+(`lib:reference/review-ledger.md` § Passing prose); `review unlock` and
+`review paths` stay CLI-only."""
 
 [[row]]
 id = "R-005"
@@ -4705,7 +4711,7 @@ target = "the closed disposition vocab, `lib:reference/review-ledger.md` §4."
 owner = "lib:reference/review-ledger.md"
 within = ""
 reason = "restates review-ledger.md's disposition vocabulary (meanings of aligned/fix-now/tolerated/design-wrong, verified-is-a-status-not-a-disposition) beyond audit's own scope-specific never-follow-up rule"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4748,8 +4754,8 @@ recommend = "log"
 target = ""
 owner = "IMP-500:G9"
 within = ""
-reason = "OQ-3: restates the human-engagement default (owner governance.md, unreachable in clients); no owning lib doc and not one of IMP-500's existing G1-G8 gaps — logged against a proposed new G9 pending the orchestrator's OQ-3 ruling (sheet recommends reject citing QUE-228)"
-verdict = ""
+reason = "OQ-3: restates the human-engagement default (owner governance.md, unreachable in clients); no owning lib doc and not one of IMP-500's existing G1-G8 gaps — logged against a proposed new G9 pending the orchestrator's OQ-3 ruling (sheet recommends reject citing QUE-228) adjudicated: OQ-3 provisional default: human-engagement text stays in place (owner unreachable, QUE-228 open); pending the user"
+verdict = "reject"
 resolved = ""
 
 [[row]]
@@ -4783,7 +4789,7 @@ target = "See `lib:reference/dispatch-mechanics.md` § The funnel record, and wh
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
 reason = "restates dispatch-mechanics.md's funnel-record / unbound-fork explanation almost verbatim"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4815,7 +4821,7 @@ target = 'See `lib:reference/dispatch-mechanics.md` §§ "Two altitudes" and "A 
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
 reason = "near-verbatim restatement of dispatch-mechanics.md's own 'Two altitudes' and 'A refusal is the recovery procedure' sections"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4839,7 +4845,7 @@ target = "delta halts the import per `lib:reference/dispatch-mechanics.md` (land
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
 reason = "restates dispatch-mechanics.md's 'The import is non-committing' land-or-reject-never-rewrite rule almost verbatim"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4874,8 +4880,8 @@ recommend = "log"
 target = ""
 owner = "IMP-500:G9"
 within = ""
-reason = "OQ-3: restates the human-engagement default (owner governance.md, unreachable in clients); no owning lib doc and not one of IMP-500's existing G1-G8 gaps — logged against a proposed new G9 pending the orchestrator's OQ-3 ruling (sheet recommends reject citing QUE-228)"
-verdict = ""
+reason = "OQ-3: restates the human-engagement default (owner governance.md, unreachable in clients); no owning lib doc and not one of IMP-500's existing G1-G8 gaps — logged against a proposed new G9 pending the orchestrator's OQ-3 ruling (sheet recommends reject citing QUE-228) adjudicated: OQ-3, same"
+verdict = "reject"
 resolved = ""
 
 [[row]]
@@ -4911,7 +4917,7 @@ target = "see `doctrine revision change add --help` for the `--action` values an
 owner = "--help:revision change add"
 within = ""
 reason = "an enum/value table for the `--action` flag of `revision change add`, mapping each value's meaning and extra flags — flag-shape per design 6.2"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4931,7 +4937,7 @@ target = "see `doctrine revision apply --help` for which `--action` values auto-
 owner = "--help:revision apply"
 within = ""
 reason = "prose explaining which `--action` values `revision apply` auto-lands vs. surfaces manually — flag-shape, duplicates step 5's own explanation"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -4974,7 +4980,7 @@ target = "the emoji severities map onto `lib:reference/review-ledger.md`'s sever
 owner = "lib:reference/review-ledger.md"
 within = ""
 reason = "reproduces review-ledger.md's severity vocab (blocker/major/minor/nit) as an enum table plus its blocker-gates-close rule, mapped to this skill's emoji"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5029,7 +5035,7 @@ target = "see `lib:reference/review-ledger.md` § the subject/target ladder."
 owner = "lib:reference/review-ledger.md"
 within = ""
 reason = "restates review-ledger.md's target-ladder concept (named as review-ledger.md-owned in this skill's own text) in full, beyond citing it — least-sure: sheet's owner-map bullet for review-ledger.md names only 'RV acts, severity/disposition vocabulary', not the target ladder explicitly, so confirm against design 5.2's full text"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5059,7 +5065,7 @@ target = "see `lib:reference/dispatch-mechanics.md` § Split lineage — record 
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
 reason = "near-verbatim restatement of dispatch-mechanics.md's 'Split lineage' section (same wording: operator direct-land / manual --no-ff merge / external integration; ancestor-not-descendant; non-ff refused)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5088,7 +5094,7 @@ target = "per `lib:reference/dispatch-mechanics.md` § Split lineage, `--record-
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
 reason = "continues the R-015 restatement of dispatch-mechanics.md's 'Split lineage' section (resolves earned payload / asserts already-ancestor / commits Verified row), separated from R-015 by a permitted single invocation code block"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5118,7 +5124,7 @@ target = "then primed — see `lib:reference/review-ledger.md` § Prime for what
 owner = "lib:reference/review-ledger.md"
 within = ""
 reason = "restates review-ledger.md §2 Prime's own wording almost verbatim ('populates the warm-cache from the target slice's selectors ... the path-set the staleness signal hashes ... no curation step') beyond naming the verb"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5144,7 +5150,7 @@ target = "the gravity of the sentence maps onto `lib:reference/review-ledger.md`
 owner = "lib:reference/review-ledger.md"
 within = ""
 reason = "reproduces review-ledger.md §3's severity vocabulary (blocker/major/minor/nit) and the blocker-gates-close rule as prose, beyond citing it"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5170,9 +5176,11 @@ recommend = "cut-to-lib"
 target = "disposition and a terminal close, holding review-ledger.md's §4 anti-escape pressure (never dodge follow-up, tolerated or a true blocker to escape the close-gate)."
 owner = "lib:reference/review-ledger.md"
 within = ""
-reason = "restates review-ledger.md §4's anti-escape pressure rule (never choose follow-up to dodge, never normalise tolerated, never downgrade a true blocker) almost verbatim"
-verdict = ""
-resolved = ""
+reason = "restates review-ledger.md §4's anti-escape pressure rule (never choose follow-up to dodge, never normalise tolerated, never downgrade a true blocker) almost verbatim adjudicated: the plain target left a bare review-ledger.md (an I2 failure) and dropped the list indent"
+verdict = "amend"
+resolved = """
+   disposition and a terminal close. Hold the inquisitorial line on the
+   anti-escape guardrails, `lib:reference/review-ledger.md` § 4."""
 
 [[row]]
 id = "R-503"
@@ -5206,7 +5214,7 @@ target = "The table view of `review show` does not render the route — see `lib
 owner = "lib:reference/review-ledger.md"
 within = ""
 reason = "restates review-ledger.md's Route axis section (the JSON/MCP read path and the older route: disposition-prefix form) almost verbatim"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5229,7 +5237,7 @@ target = "Honour the storage rule (`lib:reference/using-doctrine.md` § Storage 
 owner = "lib:reference/using-doctrine.md"
 within = ""
 reason = "restates using-doctrine.md's storage-tier mechanics as prose (which data lives in plan.toml vs plan.md vs .doctrine/state/) instead of citing the owner"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5257,7 +5265,7 @@ target = "See `lib:reference/dispatch-mechanics.md` § The worker returns a work
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
 reason = "restates dispatch-mechanics.md's 'The worker returns a working tree, not a commit' section (confinement rw/ro binds, cannot commit at all, orchestrator imports) almost verbatim"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5285,7 +5293,7 @@ target = "See `lib:reference/dispatch-mechanics.md` § Workers can silently disc
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
 reason = "restates dispatch-mechanics.md's 'Workers can silently discard their own work' fencing rules (clean checkout, forbid reset/checkout--/stash/clean, edit not git-discard for TDD red) almost verbatim"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5314,7 +5322,7 @@ target = "runs the `classify_import` scope belt and the reject-and-halt prove ga
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
 reason = "restates dispatch-mechanics.md's classify_import scope-belt and prove-gate land-or-reject-never-rewrite rule almost verbatim"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5352,7 +5360,7 @@ target = "See `lib:reference/dispatch-mechanics.md` § The funnel record, and wh
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
 reason = "restates dispatch-mechanics.md's funnel-record / bound-fork / unbound-spawn explanation almost verbatim — the same ground dispatch/SKILL.md's R-007 already covers, duplicated here"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5376,7 +5384,7 @@ target = "see `doctrine memory record --help` for the `--type` values: concept|f
 owner = "--help:memory record"
 within = ""
 reason = "reproduces the `--type` flag's full enum (concept/fact/pattern/system/signpost/thread) with per-value meanings, matching `doctrine memory record --help`'s own `--type` line"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5402,7 +5410,7 @@ target = ""
 owner = "IMP-500:G2"
 within = ""
 reason = "thread-visibility ranking behaviour (hidden from find/retrieve until verified) is not documented anywhere in `doctrine memory --help`; no library doc owns memory mechanics (research thread-3-ia.md Gaps G2)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5443,8 +5451,8 @@ recommend = "cut-to-help"
 target = "pick the narrowest `--lifespan` that fits — see `doctrine memory record --help` for the flag; identity|semantic|procedural|episodic|working, most to least durable."
 owner = "--help:memory record"
 within = ""
-reason = "reproduces the `--lifespan` flag's enum and decay-ratio semantics as a table; `--help` currently only says 'Lifespan classification' with no enum shown, but the flag is the mechanical owner per design 6.2's flag-shape rule"
-verdict = ""
+reason = "reproduces the `--lifespan` flag's enum and decay-ratio semantics as a table; `--help` currently only says 'Lifespan classification' with no enum shown, but the flag is the mechanical owner per design 6.2's flag-shape rule adjudicated: `doctrine memory record --help` does not carry the --lifespan enum; cutting loses information"
+verdict = "reject"
 resolved = ""
 
 [[row]]
@@ -5505,8 +5513,8 @@ recommend = "cut-to-help"
 target = "see `doctrine memory record --help` for `--trust` (low|medium|high) and `--severity` (critical|high|medium|low|none) and their defaults."
 owner = "--help:memory record"
 within = ""
-reason = "reproduces the `--trust`/`--severity` flags' full value enums and meanings plus the record-time defaults, beyond naming the flags"
-verdict = ""
+reason = "reproduces the `--trust`/`--severity` flags' full value enums and meanings plus the record-time defaults, beyond naming the flags adjudicated: `memory record --help` does not carry the --trust/--severity enums"
+verdict = "reject"
 resolved = ""
 
 [[row]]
@@ -5534,7 +5542,7 @@ target = ""
 owner = "IMP-500:G2"
 within = ""
 reason = "the thread_expiry 14-day verified+reviewed window is not documented in any `--help` or library doc; ownerless memory mechanics (G2)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5556,7 +5564,7 @@ target = "see `doctrine memory retrieve --help`: retrieve applies the non-bypass
 owner = "--help:memory retrieve"
 within = ""
 reason = "restates `doctrine memory retrieve --help`'s own description line ('Applies the trust holdback (non-bypassable): low-trust high-severity memories are suppressed') almost verbatim"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5580,7 +5588,7 @@ target = "`doctrine memory retrieve` — see `doctrine memory retrieve --help` f
 owner = "--help:memory retrieve"
 within = ""
 reason = "restates `doctrine memory retrieve --help`'s own description line (bounded security-framed data-not-instruction; non-bypassable holdback) almost verbatim"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5603,8 +5611,8 @@ recommend = "cut-to-help"
 target = "see `doctrine memory retrieve --help` for the `--lifespan` filter's ordering (identity broadest, working narrowest)."
 owner = "--help:memory retrieve"
 within = ""
-reason = "reproduces the `--lifespan` flag's filter-ordering semantics (identity/semantic/procedural exclusions) as prose, beyond naming the flag"
-verdict = ""
+reason = "reproduces the `--lifespan` flag's filter-ordering semantics (identity/semantic/procedural exclusions) as prose, beyond naming the flag adjudicated: `memory retrieve --help` does not carry the --lifespan filter ordering"
+verdict = "reject"
 resolved = ""
 
 [[row]]
@@ -5626,7 +5634,7 @@ target = "see `doctrine memory retrieve --help` for `--limit` and `--min-trust` 
 owner = "--help:memory retrieve"
 within = ""
 reason = "reproduces `--limit`'s default/max and `--min-trust`'s raise-only semantics, matching `doctrine memory retrieve --help`'s own `--min-trust` line almost verbatim"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5648,7 +5656,7 @@ target = "see `doctrine compare elicit --help` for `--json`/`--depth`/`--kind`."
 owner = "--help:compare elicit"
 within = ""
 reason = "full flag surface of `compare elicit` reproduced as a code block, beyond naming the verb — flag-shape per design 6.2"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5680,7 +5688,7 @@ target = "see `doctrine compare elicit --help` for the `--kind` values (comparis
 owner = "--help:compare elicit"
 within = ""
 reason = "enumerates the `--kind` flag's two values and their yield-basis semantics plus `--limit`'s display-only scope — an enum/value table for flags per design 6.2"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5702,7 +5710,7 @@ target = "see `doctrine compare record --help` for the full flag surface."
 owner = "--help:compare record"
 within = ""
 reason = "full flag surface of `compare record` reproduced as a code block (--prefer/--equal/--incomparable/--rater/--by/--frame/--audience/--note), beyond naming the verb"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5780,7 +5788,7 @@ target = ""
 owner = "IMP-500:G5"
 within = ""
 reason = "canonical spec structure (relational spine, C4 altitude, dual posture, the three locked context/container/component shapes) has no owning library doc; duplicated near-identically in spec-product/SKILL.md (research thread-3-ia.md Gaps G5) — should not be maintained in two skills"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5802,7 +5810,7 @@ target = "This is runtime state (`lib:reference/using-doctrine.md` § Storage ti
 owner = "lib:reference/using-doctrine.md"
 within = ""
 reason = "restates using-doctrine.md's storage-tier mechanics as prose (authored vs runtime, rm-rf-able working context) instead of citing the owner"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5831,7 +5839,7 @@ target = "# Reference forms: `lib:reference/glossary.md` § reference forms."
 owner = "lib:reference/glossary.md"
 within = ""
 reason = "sheet-mandated (Recommendation criteria, R- rows): the criterion-ids/mode vocabulary restates glossary.md's EN/EX/VT/VA/VH reference-forms table; the phase-id ordering/immutability sentence (:21-23) and the phase-qualification sentence (:29) are kept as plan-specific"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5859,7 +5867,7 @@ target = "See `lib:reference/review-ledger.md` §4 for the responder's dispositi
 owner = "lib:reference/review-ledger.md"
 within = ""
 reason = "restates review-ledger.md's disposition vocabulary and verb mapping (aligned, --response, contest is raiser's verb, review amend) despite the surrounding section's own disclaimer against duplicating the ledger's mechanics"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5881,7 +5889,7 @@ target = "See `lib:reference/dispatch-mechanics.md` § the patch-id landed oracl
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
 reason = "restates dispatch-mechanics.md's two-leg patch-id landed-oracle mechanism and the multi-commit-squash blind spot (owner map: dispatch-mechanics.md owns 'the funnel, oracle, unbound fork, worktree verb classes')"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5919,7 +5927,7 @@ target = "See `doctrine backlog --help` for the full verb list and flags."
 owner = "--help:backlog"
 within = ""
 reason = "a verb/flag table for every backlog subcommand (new/list/show/edit/tag/needs/after) and their exact flags, fully covered by `doctrine backlog --help`"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5959,7 +5967,7 @@ target = "See `lib:reference/using-doctrine.md` § Which home for which record f
 owner = "lib:reference/using-doctrine.md"
 within = ""
 reason = "near-verbatim restatement of using-doctrine.md's 'Backlog = latent work' bullet: the same five kinds and the same work-intake membership test citing the same mem.concept id"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -5993,7 +6001,7 @@ target = "See `doctrine backlog edit --help` for the status/resolution values an
 owner = "--help:backlog edit"
 within = ""
 reason = "an enum/value table (status lifecycle, resolution values) and prose explaining the terminal/non-terminal coupling, fully covered by `doctrine backlog edit --help`"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -6015,7 +6023,7 @@ target = "See `doctrine backlog tag --help` for the tag syntax and the `--remove
 owner = "--help:backlog tag"
 within = ""
 reason = "restates the tag validation regex and the add/--remove flag shape, fully covered by `doctrine backlog tag --help`"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -6039,7 +6047,7 @@ target = "See `doctrine backlog needs --help` and `doctrine backlog after --help
 owner = "--help:backlog needs"
 within = ""
 reason = "restates the needs/after verbs' validation and cycle-handling semantics, fully covered by their own --help text"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -6059,7 +6067,7 @@ target = "See `doctrine backlog --help` — the id prefix auto-selects the kind.
 owner = "--help:backlog"
 within = ""
 reason = "restates the id-prefix-auto-selects-kind behaviour that each subcommand's own --help already states ('kind auto-detected from the prefix')"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -6075,7 +6083,7 @@ target = "See `lib:reference/using-doctrine.md` § Which home for which record �
 owner = "lib:reference/using-doctrine.md"
 within = ""
 reason = "near-verbatim restatement of using-doctrine.md's risk-admission clause ('never as a general epistemic note')"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -6091,7 +6099,7 @@ target = "Don't hand-edit backlog TOML (`lib:reference/using-doctrine.md` § sto
 owner = "lib:reference/using-doctrine.md"
 within = ""
 reason = "restates using-doctrine.md's storage-tier hand-edit-vs-verb rule"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -6111,7 +6119,7 @@ target = "See `doctrine backlog list --help` — terminal items are hidden by de
 owner = "--help:backlog list"
 within = ""
 reason = "restates the list command's default-hide/--all/--status behaviour, fully covered by `doctrine backlog list --help`"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -6145,7 +6153,7 @@ target = "See `doctrine knowledge --help` (and `doctrine link --help` / `doctrin
 owner = "--help:knowledge"
 within = ""
 reason = "a verb/flag table for the knowledge subcommands plus the cross-cutting `link`/`supersede` commands, fully covered by their own --help text"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -6169,7 +6177,7 @@ target = "See `lib:reference/using-doctrine.md` § Which home for which record f
 owner = "lib:reference/using-doctrine.md"
 within = ""
 reason = "near-verbatim restatement of using-doctrine.md's knowledge_record gating clause (dependent work item authors `needs`, settling unblocks it, records never author dep/seq themselves)"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -6189,7 +6197,7 @@ target = "See `doctrine knowledge --help` — the id prefix resolves the kind on
 owner = "--help:knowledge"
 within = ""
 reason = "restates the id-prefix-resolves-kind behaviour already implicit in each subcommand's own usage/--help shape"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -6209,7 +6217,7 @@ target = "Don't hand-edit record TOML (`lib:reference/using-doctrine.md` § stor
 owner = "lib:reference/using-doctrine.md"
 within = ""
 reason = "restates using-doctrine.md's storage-tier hand-edit-vs-verb rule"
-verdict = ""
+verdict = "accept"
 resolved = ""
 
 [[row]]
@@ -6235,5 +6243,5 @@ target = "Update the `## Harvest` section per `lib:reference/harvest.md` § Cano
 owner = "lib:reference/harvest.md"
 within = ""
 reason = "restates harvest.md §3's output rules near-verbatim (fresh-as-of shape, pointer-only entries, drop-settled-entries/git-holds-history) despite citing 'harvest.md §3' by name in the same sentence"
-verdict = ""
+verdict = "accept"
 resolved = ""

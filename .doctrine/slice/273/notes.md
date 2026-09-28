@@ -498,3 +498,144 @@ token inside it is its own C- row with `within` = that R- id.
 > The enumeration is exhaustive: record every occurrence of the C- token
 > classes, whatever its class. Classifying is not filtering.
 
+## PHASE-03 adjudication
+
+O's adjudication list, applied verbatim by W-A (task T6):
+
+```text
+default: accept
+C-092 reject    # "Same-named files" illustration: the bare name IS the point; not in the bare-test output (governance.md exempt)
+C-094 reject    # same illustration; design.md is a template name, not a reference target
+C-024 amend excerpt="tree` lists the library. A doc still cited bare as `<name>.md` is at\n`reference/<name>.md`. A retrieval" span=<same as excerpt> resolved="tree` lists the library. A retrieval"
+                # \n = one real newline. Deletes the essentials transition clause (delete-at-PHASE-04). Check that the new excerpt occurs exactly once in install/essentials.md and still contains C-024's token.
+C-025 accept    # verdict accept (recommend stays leave), but APPEND to its reason: " — subsumed by C-024's amend: the whole transition clause is deleted at PHASE-04; PHASE-04 must not flag this excerpt's disappearance"
+R-004 amend resolved="Prefer the MCP review tools over the CLI when your harness has them\n(`lib:reference/review-ledger.md` § Passing prose); `review unlock` and\n`review paths` stay CLI-only."
+                # keeps the unowned CLI-only exception the plain cut would lose
+R-502 amend resolved="   disposition and a terminal close. Hold the inquisitorial line on the\n   anti-escape guardrails, `lib:reference/review-ledger.md` § 4."
+                # the plain target left a bare review-ledger.md (an I2 failure) and dropped the list indent
+R-511 reject    # `doctrine memory record --help` does not carry the --lifespan enum; cutting loses information
+R-512 reject    # `memory record --help` does not carry the --trust/--severity enums
+R-516 reject    # `memory retrieve --help` does not carry the --lifespan filter ordering
+R-006 reject    # OQ-3 provisional default: human-engagement text stays in place (owner unreachable, QUE-228 open); pending the user
+R-010 reject    # OQ-3, same
+```
+
+**Counts by verdict** (337 rows total): `accept` 327, `amend` 3 (C-024, R-004,
+R-502), `reject` 7 (C-092, C-094, R-511, R-512, R-516, R-006, R-010).
+
+**Plan adaptation, recorded for PHASE-04.** R- `target`/`resolved` texts are
+semantic replacements, not layout-ready. 45 cut rows are single-line and
+zero-indent against spans that are multi-line and in places indented, with
+widths up to 239 columns. PHASE-04 lands each replacement preserving the
+span's leading indent and list context and reflowing to the file's wrap width
+(≤ 80 columns). Its outcome check therefore compares whitespace-normalised
+text (collapse runs of whitespace), not bytes. C-025 is subsumed by C-024's
+deletion. Rows with `within` set are subsumed when their R- row changes
+(R-004 and R-502 change via amend; R-511/512/516/006/010 are rejected, so any
+C- row within them stands on its own verdict).
+
+## PHASE-03 inventory checks
+
+Run from `/work/doctrine` at the post-adjudication `inventory.toml` (337
+rows, `verdict` set on every row: 327 `accept`, 3 `amend`, 7 `reject`).
+
+**V1: TOML parses.**
+
+```
+nu -c "open $INV | get row | length"
+337
+```
+
+**V2: ids and enums.**
+
+```
+bad rows: 0
+uniq ids: 337 vs row count: 337
+```
+
+**V3: fields.**
+
+```
+rows with != 13 keys: 337
+target-nonempty-iff-recommend mismatches: 0
+R- rows with empty owner: 0
+rows with within not naming an existing R- id: 0
+```
+
+Note: the sheet's V3 says "every row has all 13 keys", but the schema block
+(and every row) actually carries 14 keys (id, file, line, token, excerpt,
+span, class, recommend, target, owner, within, reason, verdict, resolved).
+All 337 rows are uniform at 14 keys — 0 missing, 0 extra — so the substantive
+check (every row has the full, consistent field set) passes; the "13" in the
+sheet's prose looks like a miscount against the schema block, not a data
+defect. Flagging rather than silently reconciling.
+
+**V4: locatable** (run over all 337 rows, not just the changed ones).
+
+```
+checked: 337
+excerpt failures: []
+span failures: []
+token failures: []
+```
+
+**V8: verdict completeness (VA-1).**
+
+```
+rows with verdict=='': 0
+amend rows with resolved=='': 0
+```
+
+**V9: I1 pre-check.**
+
+```
+changing rows: 131
+distinct lib addresses: 9
+[reference/authority-model.md, reference/claude-activation.md,
+ reference/design-run-obligations.md, reference/dispatch-mechanics.md,
+ reference/glossary.md, reference/harvest.md, reference/review-ledger.md,
+ reference/shipped-corpus-authoring.md, reference/using-doctrine.md]
+contains routing-process: false
+contains boot-footer: false
+
+./target/debug/doctrine library show reference/authority-model.md: exit=0
+./target/debug/doctrine library show reference/claude-activation.md: exit=0
+./target/debug/doctrine library show reference/design-run-obligations.md: exit=0
+./target/debug/doctrine library show reference/dispatch-mechanics.md: exit=0
+./target/debug/doctrine library show reference/glossary.md: exit=0
+./target/debug/doctrine library show reference/harvest.md: exit=0
+./target/debug/doctrine library show reference/review-ledger.md: exit=0
+./target/debug/doctrine library show reference/shipped-corpus-authoring.md: exit=0
+./target/debug/doctrine library show reference/using-doctrine.md: exit=0
+
+control (known good): reference/glossary.md: exit=0
+control (known bad): reference/routing-process.md: exit=1
+```
+
+**V10: I2 pre-check.**
+
+```
+candidate rows (basename is a manifest target, excerpt not already lib:): 82
+exceptions: 0
+```
+
+The 82 matches the EX-2 bare-test control count (V6, 82 lines at `133bd5cb7`),
+consistent with A2/A4: those are exactly the bare mentions this phase tracks.
+
+**V11: IMP-500 (VA-3).**
+
+Non-rejected `log` rows: R-510, R-513, R-521 (R-006 and R-010 are rejected
+under OQ-3 and are correctly absent from IMP-500's body).
+
+```
+FOUND: plugins/doctrine/skills/record-memory/SKILL.md:23   (R-510)
+FOUND: plugins/doctrine/skills/record-memory/SKILL.md:104  (R-513)
+FOUND: plugins/doctrine/skills/spec-tech/SKILL.md:33        (R-521)
+```
+
+`doctrine show IMP-500` carries a new `## Ownerless restatements left in
+place (SL-273 restate audit)` section (grouped by gap: G2 ×2, G5 ×1) plus a
+`### Noted, not rowed` subsection for the plan/SKILL.md VT-mandate schema and
+the elicit/SKILL.md "Refresh and stop" footer vocabulary, per the sheet's T6
+instructions.
+
