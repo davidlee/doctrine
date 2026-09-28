@@ -774,3 +774,107 @@ replacement → `MISAPPLIED`; an unknown or non-changing `--applied` id, both
 or neither scope flag, and a bad `--base` → exit 2. Against `--base
 5b3b39cbc` (pre-adjudication inventory, same shipped text) the drift check
 reports all 337 rows as `INVENTORY` info lines.
+
+## PHASE-04 EX-2 real-diff run
+
+U4 delta uncommitted, parent HEAD `638a4984c` (U1-U3c landed). C-024 applied
+(delete-at-PHASE-04 clause) and R-701's `resolved` corrected (see below).
+
+```
+$ nu .doctrine/slice/273/verify-sweep.nu --base cff015419eecc2dc122af069615ea1af1fe5f0f7 --through U4
+rows 337 · applied 120 (OK 120) · subsumed 17 · unchanged-ok 200 · diff-only 0 · row-failures 0 · violations 1 (UNAUTHORISED 1) · inventory-drift 31 · width 4
+```
+
+`inventory-drift 31` = the 30 prior R-0xx/R-5xx/R-7xx seam amends plus this
+phase's R-701 heading repair, as expected. LOG-MISSING is 0 (not listed —
+the script only prints a line per finding). The one violation is expected and
+is not a citation-sweep defect:
+
+```
+UNAUTHORISED src/lib_citation.rs []: free text
+```
+
+`src` is one of the verifier's `ROOTS`, so it diffs the whole `src/` tree
+against base and flags any changed file that holds no inventory row. U4 step 2
+removes the `#[ignore = "enforcing from SL-273 PHASE-04; …"]` line ahead of
+`no_bare_library_mention_in_shipped_text` — a real code edit the task
+directs, carrying no inventory row (it is not a citation swap). No row exists
+to authorise it and none should be manufactured for it. `row-failures 0` and
+`inventory-drift 31` are otherwise exactly as predicted; all 337 rows located
+and only the C-024/R-701 pair changed since the last committed run. The 4
+WIDTH lines are pre-existing (`install/design-prompts/inquiring.toml:21`,
+`install/doctrine.toml.example:78`, `install/manifest.toml:56`,
+`plugins/doctrine/skills/spec-tech/SKILL.md:18`), unrelated to this unit and
+untouched by it.
+
+### U4b: give the verifier EX-3's authority for the `#[ignore]` removal
+
+The one violation above is a real gap, not a false positive: the `#[ignore]`
+removal is authorised by plan PHASE-04 EX-3, not by an inventory row, and the
+verifier had no way to know that. Rather than accept a permanent 1-violation
+baseline, the verifier now recognises exactly this one plan-authorised,
+non-inventory edit.
+
+Added to `verify-sweep.nu`:
+
+- `EX3_FILE` / `EX3_FN` constants naming the file and function the exemption
+  is scoped to.
+- `ignore-removal-only [base_t, post_t]` — true iff base -> post differs by
+  exactly one removed line, that line matches `#[ignore`, and in base it sits
+  directly between a `#[test]` line and the `EX3_FN` definition. Any other
+  difference in the file (a changed word elsewhere, more than one line
+  touched, the removal not immediately bracketed by `#[test]`/the fn) fails
+  the check and falls through to the ordinary word-diff path unchanged.
+- `u4_in_scope` — derived once from the already-computed unit/scope
+  partition (`units.U4` intersects `scope`), so it reads correctly for both
+  `--through` (only `--through U4` includes it, since U4 is last and
+  `--through` is cumulative) and `--applied` (naming `C-024`, U4's sole owned
+  row).
+- a per-file special case in the main loop, gated on `$u4_in_scope and $f ==
+  $EX3_FILE and (ignore-removal-only ...)`, that appends an info line
+  (`PLAN-AUTHORISED src/lib_citation.rs: EX-3 #[ignore] removal`) and a new
+  `plan_auth` counter instead of falling into the generic diff, then
+  `continue`s past it. The generic path — and its violations — are otherwise
+  untouched.
+- the summary line gained a `plan-authorised (N)` field between `violations`
+  and `inventory-drift`.
+
+Three controls, run against `--tree` overlays under `/tmp` (never touching
+shipped files) plus the real tree:
+
+```
+$ nu .doctrine/slice/273/verify-sweep.nu --base cff015419eecc2dc122af069615ea1af1fe5f0f7 --through U4
+rows 337 · applied 120 (OK 120) · subsumed 17 · unchanged-ok 200 · diff-only 0 · row-failures 0 · violations 0 · plan-authorised 1 · inventory-drift 31 · width 4
+```
+
+(a) real tree, `--through U4`: 0 violations, 1 plan-authorised, drift 31 — the
+`#[ignore]` removal is now recognised and the one prior violation is gone with
+nothing else moving.
+
+```
+$ nu .doctrine/slice/273/verify-sweep.nu --base cff015419eecc2dc122af069615ea1af1fe5f0f7 --through U4 --tree /tmp/sweep-overlay-b
+rows 337 · applied 120 (OK 120) · subsumed 17 · unchanged-ok 200 · diff-only 0 · row-failures 0 · violations 2 (UNAUTHORISED 2) · plan-authorised 0 · inventory-drift 31 · width 4
+```
+
+(b) overlay `src/lib_citation.rs` with the `#[ignore]` line removed *and* one
+extra word changed elsewhere in the same file (a doc-comment word,
+uppercased): `ignore-removal-only` correctly rejects the exact-match test
+(the remaining lines no longer compare equal), so the whole file falls
+through to the generic word-diff path and both changes surface as
+`UNAUTHORISED` — 0 plan-authorised, as required.
+
+```
+$ nu .doctrine/slice/273/verify-sweep.nu --base cff015419eecc2dc122af069615ea1af1fe5f0f7 --through U3c
+... UNAUTHORISED src/lib_citation.rs []: free text ...
+rows 337 · applied 119 (OK 119) · subsumed 16 · unchanged-ok 200 · diff-only 0 · row-failures 2 · violations 2 (UNAUTHORISED 2) · plan-authorised 0 · inventory-drift 31 · width 4
+```
+
+(c) real tree, `--through U3c` (U4 not in the cumulative scope, since U4 is
+last in `UNITS`): `u4_in_scope` is false, the special case never fires, and
+the `#[ignore]` removal is still flagged `UNAUTHORISED` exactly as before —
+the exemption is scoped to U4, not global.
+
+**Summary: EX-3's `#[ignore]` removal is now a recognised plan-authorised
+edit under U4 scope (0 violations, 1 plan-authorised, drift 31 unchanged),
+still a violation under any earlier scope or alongside any other change in
+`src/lib_citation.rs`, and every other row/violation class is untouched.**

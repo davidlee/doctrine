@@ -449,7 +449,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "enforcing from SL-273 PHASE-04; run with --ignored for the sweep's working list"]
     fn no_bare_library_mention_in_shipped_text() {
         let walk = walk_shipped(&crate::test_support::repo_root(), &disk_manifest());
         assert!(

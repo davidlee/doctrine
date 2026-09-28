@@ -38,6 +38,13 @@ each stays until its gap has an owner, then is cut to a `lib:` citation.
 - G2 memory mechanics — `plugins/doctrine/skills/record-memory/SKILL.md:23-27` (SL-273 inventory R-510)
 - G2 memory mechanics — `plugins/doctrine/skills/record-memory/SKILL.md:104-108` (SL-273 inventory R-513)
 - G5 spec authoring — `plugins/doctrine/skills/spec-tech/SKILL.md:33-63` (SL-273 inventory R-521)
+- Human-engagement default restated in
+  `plugins/doctrine/skills/audit/SKILL.md:173` (R-006) and
+  `plugins/doctrine/skills/reconcile/SKILL.md:68` (R-010), rejected under
+  SL-273 OQ-3: the text stays. Its owner is project-local
+  `governance.md`, which a client cannot reach through
+  `doctrine library show`, so no library owner exists (QUE-228). Proposed
+  gap G9.
 
 ### Noted, not rowed
 

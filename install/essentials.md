@@ -79,8 +79,7 @@ agent / `VH` by human. Owner: `lib:reference/glossary.md` § reference forms.
 **Reference docs (read on demand).** A library citation is written
 `lib:<address>`; read it with `doctrine library show <citation>`, which accepts
 the prefix verbatim. Nothing is on disk to read or glob for; `doctrine library
-tree` lists the library. A doc still cited bare as `<name>.md` is at
-`reference/<name>.md`. A retrieval a skill or reference doc specifies is
+tree` lists the library. A retrieval a skill or reference doc specifies is
 mandatory, not optional reading. The publication model:
 `lib:reference/using-doctrine.md` § publication. The register:
 `lib:reference/glossary.md` — kinds, ids, full reference forms, verification

@@ -22,6 +22,11 @@ const CHANGING_RECOMMEND = [convert cut-to-help cut-to-lib]
 const LOG_ENTITY = "IMP-500"
 const CTX = 8
 const WIDTH = 80
+# PHASE-04 EX-3: the single non-inventory edit the plan itself authorises —
+# dropping the `#[ignore]` this sweep's own control test carried, immediately
+# above its `#[test]`. Recognised only when U4 is in scope; never elsewhere.
+const EX3_FILE = "src/lib_citation.rs"
+const EX3_FN = "no_bare_library_mention_in_shipped_text"
 
 def die [msg: string] {
   print -e $"HARD ERROR: ($msg)"
@@ -39,6 +44,25 @@ def new-text [r: record] {
 
 def norm [s: string] {
   $s | str replace -ar '\s+' ' ' | str trim
+}
+
+# EX-3: true iff base -> post differs by exactly one removed line, that line
+# matches `#[ignore`, and in base it sits directly between a `#[test]` line
+# and the EX3_FN definition. Any other difference (elsewhere in the file, or
+# a change instead of a clean removal) fails this and falls through to the
+# ordinary word-diff check, which still treats it as unauthorised.
+def ignore-removal-only [base_t: string, post_t: string] {
+  let bl = ($base_t | lines)
+  let pl = ($post_t | lines)
+  if ($bl | length) != (($pl | length) + 1) { return false }
+  mut i = 0
+  let n = ($pl | length)
+  while $i < $n and ($bl | get $i) == ($pl | get $i) { $i = $i + 1 }
+  if $i >= ($bl | length) or $i == 0 { return false }
+  if not ($bl | get $i | str trim | str starts-with "#[ignore") { return false }
+  if ($bl | skip ($i + 1)) != ($pl | skip $i) { return false }
+  if ($bl | get ($i - 1) | str trim) != "#[test]" { return false }
+  ($bl | get ($i + 1) | str trim | str starts-with $"fn ($EX3_FN)")
 }
 
 # Base location: the excerpt occurs exactly once in the file, the span exactly
@@ -228,6 +252,9 @@ def main [
     $want | uniq
   })
   if ($scope | is-empty) { die "scope selects zero rows" }
+  # U4 in scope: --through U4 (cumulative, U4 last), or --applied naming C-024
+  # (U4's sole owned row) explicitly.
+  let u4_in_scope = (($units | get U4) | any {|i| $i in $scope })
   let a0 = ($located | where {|x| $x.id in $scope })
   # an applied row nested in another applied row is subsumed by it
   let nested = ($a0 | where {|x| $a0 | any {|y| contains $y $x } })
@@ -306,6 +333,7 @@ def main [
   mut rowstat = {}
   mut width = []
   mut quick = 0
+  mut plan_auth = 0
   for f in $files {
     let base_t = (if $f in $rowfiles { $bt | get $f } else { read-base $base $f })
     let post_t = (read-post $root $tree $f)
@@ -325,6 +353,11 @@ def main [
         if not ($x.id in $subids) { $rowstat = ($rowstat | insert $x.id unchanged-ok) }
       }
       $quick = $quick + 1
+      continue
+    }
+    if $u4_in_scope and $f == $EX3_FILE and (ignore-removal-only $base_t $post_t) {
+      $info = ($info | append $"PLAN-AUTHORISED ($f): EX-3 #[ignore] removal")
+      $plan_auth = $plan_auth + 1
       continue
     }
     let tsp = ($frows | where {|x| $x.ok and not ($x.id in $aids) and not ($x.id in $subids) })
@@ -440,6 +473,6 @@ def main [
   let okn = ($st | where {|s| $s == "OK" } | length)
   let kinds = ($viol | group-by kind | transpose k v | each {|g| $"($g.k) ($g.v | length)" } | str join ", ")
   let nv = ($viol | length)
-  print $"rows ($rows | length) · applied ($aids | length) \(OK ($okn)\) · subsumed ($subids | length) · unchanged-ok ($unch) · diff-only ($donly) · row-failures ($bad | length) · violations ($nv)(if $nv > 0 { " (" + $kinds + ")" } else { "" }) · inventory-drift ($drift) · width ($width | length)"
+  print $"rows ($rows | length) · applied ($aids | length) \(OK ($okn)\) · subsumed ($subids | length) · unchanged-ok ($unch) · diff-only ($donly) · row-failures ($bad | length) · violations ($nv)(if $nv > 0 { " (" + $kinds + ")" } else { "" }) · plan-authorised ($plan_auth) · inventory-drift ($drift) · width ($width | length)"
   if $nv > 0 or ($bad | is-not-empty) { exit 1 }
 }

@@ -102,7 +102,8 @@ doctrine worktree land --fork slice/SL-NNN-slug   # merge --no-ff, ancestry pres
 doctrine worktree gc   --fork slice/SL-NNN-slug   # reap the spent fork once the oracle proves it landed
 ```
 
-See `lib:reference/dispatch-mechanics.md` § the patch-id landed oracle, for why
+See `lib:reference/dispatch-mechanics.md` §§ "The import severs ancestry — so
+"did it land?" needs a patch-id oracle" and "The squash blind spot", for why
 `land`/`gc` behave as they do.
 
 ## Outcomes

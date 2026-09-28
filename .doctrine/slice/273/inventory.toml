@@ -5948,9 +5948,12 @@ recommend = "cut-to-lib"
 target = "See `lib:reference/dispatch-mechanics.md` § the patch-id landed oracle, for why `land`/`gc` behave as they do."
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
-reason = "restates dispatch-mechanics.md's two-leg patch-id landed-oracle mechanism and the multi-commit-squash blind spot (owner map: dispatch-mechanics.md owns 'the funnel, oracle, unbound fork, worktree verb classes')"
-verdict = "accept"
-resolved = ""
+reason = "restates dispatch-mechanics.md's two-leg patch-id landed-oracle mechanism and the multi-commit-squash blind spot (owner map: dispatch-mechanics.md owns 'the funnel, oracle, unbound fork, worktree verb classes') — PHASE-04 contextual repair: cited § heading did not exist"
+verdict = "amend"
+resolved = """
+See `lib:reference/dispatch-mechanics.md` §§ "The import severs ancestry — so
+"did it land?" needs a patch-id oracle" and "The squash blind spot", for why
+`land`/`gc` behave as they do."""
 
 [[row]]
 id = "R-702"
