@@ -77,12 +77,14 @@ mention also names the verb that opens the artefact — `doctrine show RV-NNN`,
 say — for every kind, not only reviews. Criteria modes — `VT` by test / `VA` by agent / `VH` by
 human.
 
-**Reference docs (read on demand).** Cited bare as `<name>.md` throughout the
-skills and templates; they are **published, not projected** — there is no copy
-on disk to read or glob for. Read one with `doctrine library show
-reference/<name>.md`; `doctrine library tree` lists them. `glossary.md` — kinds,
-ids, full reference forms, verification taxonomy. `using-doctrine.md` — which
-verb for which intent, reading via `show`, storage tiers, and hand-editing /
-edit-preserving rules. `shipped-corpus-authoring.md` — how to write text that
-doctrine ships into a client repo, and the per-site procedure for citing without
-a repo-private id.
+**Reference docs (read on demand).** A library citation is written
+`lib:<address>`. Read it with `doctrine library show <citation>`, which accepts
+the prefix verbatim; nothing is on disk to read or glob for, and `doctrine
+library tree` lists the library. A doc still cited bare as `<name>.md` is at
+`reference/<name>.md`. A retrieval a skill or reference doc specifies is
+mandatory, not optional reading. `lib:reference/glossary.md` — kinds, ids, full
+reference forms, verification taxonomy. `lib:reference/using-doctrine.md` —
+which verb for which intent, reading via `show`, storage tiers, publication and
+the `lib:` form, edit-preserving rules. `lib:reference/shipped-corpus-authoring.md`
+— how to write text that doctrine ships into a client repo, and the per-site
+procedure for citing without a repo-private id.

@@ -108,15 +108,6 @@ provenance    = "declared"
 customization = "customizable"
 
 [[entry]]
-address       = "reference/boot-footer.md"
-backing       = "boot-footer.md"
-kind          = "reference"
-title         = "Boot snapshot footer"
-licence       = "MIT"
-provenance    = "declared"
-customization = "customizable"
-
-[[entry]]
 address       = "design-prompts/conditions/blocking-inquiries-dispositioned.md"
 backing       = "design-prompts/conditions/blocking-inquiries-dispositioned.md"
 kind          = "guidance"

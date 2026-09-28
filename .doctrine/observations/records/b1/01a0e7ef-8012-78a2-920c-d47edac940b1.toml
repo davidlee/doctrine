@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e7ef-8012-78a2-920c-d47edac940b1"
+recorded_at = "2026-09-28T12:13:47.922614552Z"
+kind = "friction"
+summary = "capsule-phase-planner SL-273 PHASE-02: memory retrieve takes --query/--path-scope/--glob, not a positional topic; six failed calls"
+detail = """Planner brief (and likely skill text) used 'doctrine memory retrieve "<topic>"'. Also memory search returned the same unrelated high-trust bwrap memories on every query (noise), and 'review show RV-408' omits finding bodies — planner grepped the review TOML (no python in env)."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

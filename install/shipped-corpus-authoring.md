@@ -19,9 +19,11 @@ reader, either unreachable or — worse — silently true of something else.
 
 1. **Prose that stands without a reference.** Inline the fact. Often the whole
    fix: a one-clause rationale rarely needs an id to carry it.
-2. **A published logical address** — `reference/<name>.md`, resolvable in every
-   client through `doctrine library show reference/<name>.md`. A published doc
-   has no file on disk in a client, so this is an address, not a path.
+2. **A library citation** — `lib:<address>`, a published logical address with
+   the `lib:` marker, resolvable in every client through `doctrine library show`.
+   A published doc has no file on disk in a client, so this is an address, not a
+   path. How the library works and how the form is written:
+   `lib:reference/using-doctrine.md` § publication.
 3. **A shipped memory key** — `[[mem.<key>]]`, where the key is present in the
    shipped corpus.
 4. **A skill name** — the shipped skills are invoked by name.
@@ -46,8 +48,8 @@ Most id-shaped text in shipped prose is correct, and sweeping it corrupts the
 very documents that define the vocabulary. Three classes are **left alone**:
 
 - **Reference-form illustrations.** Tables and headers that *define* what an id
-  looks like — the glossary's kind/abbreviation table, the reference-form headers
-  in the entity templates, the commented payload examples. The correct referent
+  looks like — the glossary's kind/abbreviation table and its reference-form
+  tables, the commented payload examples. The correct referent
   is the client's own record, which is exactly the point.
 - **Client-structure references.** A published doc that tells a client where
   *the client's* specs, ADRs, slices, plans or handovers live is citing the
@@ -66,7 +68,7 @@ For each candidate site, in order:
    considered it and why.
 2. **Does the fact stand alone cheaply?** If yes — inline it and drop the id.
 3. **Is the referent durable and about the corpus itself?** If yes — repoint to a
-   published `reference/<name>.md` address, existing or newly published.
+   published `lib:` address, existing or newly published.
 4. **Could the reasoning live in a published doc?** If yes — publish it, then
    repoint. The rationale moves; the citation follows it.
 5. **Otherwise** — drop the clause.
@@ -75,7 +77,7 @@ For each candidate site, in order:
 |---|---|
 | illustration, client-structure reference, fill-in-the-blank | **leave** |
 | one-clause rationale | **inline**; drop the id |
-| durable, corpus-internal referent | **repoint** to a published address |
+| durable, corpus-internal referent | **repoint** to a published `lib:` address |
 | reasoning with no shipped home | **publish**, then repoint |
 | none of the above | **drop** |
 

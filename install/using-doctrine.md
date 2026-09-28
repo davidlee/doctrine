@@ -194,6 +194,40 @@ they carry disposable context and phase tracking, never committed progress. See
 edit the TOML for fields no verb yet owns (cite the CLI gap if so). Prose is always
 hand-edited. Keep each datum on its correct side of the tier split.
 
+## Publication
+
+Doctrine's shipped material reaches a project in one of two ways, and they are
+separate decisions. One never implies the other.
+
+- **Projected** material is written into the project at a stable path because
+  something needs it there: configuration, managed files, harness adapters. It
+  is on disk, and you can open it.
+- **Published** material is embedded in the `doctrine` binary and read on demand
+  from the **library**: reference docs, templates, prompt fragments and
+  integration guides. It has no copy on disk to read, grep or glob for, and it
+  always matches the installed binary.
+
+`doctrine library tree` lists the library by logical address (`reference/`,
+`templates/`, and so on). `doctrine library show <address>` prints one entry.
+
+**Same-named files.** A logical address is not a path in your project, and some
+names exist in both places. `governance.md` is a library reference doc, and it
+is also your project's own `.doctrine/governance.md`, the governance layer you
+edit and boot loads. `design.md` is a library template, and it is also a slice's
+authored design. A bare filename cannot tell these apart.
+
+**The `lib:` citation form.** A citation of a library entry is the marker `lib:`
+followed by the entry's logical address, written in inline code:
+`lib:reference/glossary.md`. The general shape is `lib:<address>`.
+
+- Read it with `doctrine library show`, passing the citation verbatim. The
+  command accepts it with or without the marker.
+- An address has no anchors. To point at a section, name the section in prose
+  after the citation: `lib:reference/glossary.md` § reference forms.
+- A citation resolves only if `doctrine library tree` lists its address.
+  `doctrine doctor` reports a citation under `.doctrine/` that does not resolve.
+- A bare `<name>.md` is not a library citation.
+
 ## Relating entities
 
 Connect entities with the **`link` verb**, not a hand-written row. `doctrine link
@@ -222,7 +256,8 @@ drift malformed and skip the legality check (`doctrine link` is the validated se
   (`EN-1`/`EX-1`/`VT-1`/`VA-1`/`VH-1`) are never renumbered or reused — **edits
   append**. The slug is never authoritative; cite the prefixed id.
 - **Cite the durable id**, never a mobile membership label (`FR-`/`NF-` move per
-  spec — cite the `REQ-NNN` they label). Reference forms: `glossary.md`.
+  spec — cite the `REQ-NNN` they label). Reference forms:
+  `lib:reference/glossary.md` § reference forms.
 - Preserve surrounding structure when hand-editing — match the file's existing
   shape rather than reformatting it.
 
