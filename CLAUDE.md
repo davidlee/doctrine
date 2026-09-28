@@ -47,9 +47,13 @@ Use doctrine memory (the mcp tool). DON'T use claude built-in memory.
 - Opus sub-agent is also useful for variety on subsequent passes.
 
 ## Research
-- DON'T use subagents 
-- do use `./scripts/pi-scout` (quicker, cheaper) or `./scripts/pi-research`
-  (smarter) usage: takes a prompt via stdin or arg; returns results on stdout.
+
+Claude's mechanism for the `/research` round — see `.doctrine/governance.md`
+§Research agents for the contract it must satisfy.
+
+- Don't use Claude subagents for research in this repo; do use
+  `./scripts/pi-scout` (quicker, cheaper) or `./scripts/pi-research` (smarter).
+  Usage: takes a prompt via stdin or arg; returns results on stdout.
 - note: outside the jail (i.e pwd is not in `/workspace/doctrine`) these agents
   have no API keys in the environment; pass prompts to the user to run for you.
 

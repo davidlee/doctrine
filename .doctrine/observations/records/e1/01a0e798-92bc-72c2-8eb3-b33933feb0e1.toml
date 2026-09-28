@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e798-92bc-72c2-8eb3-b33933feb0e1"
+recorded_at = "2026-09-28T10:38:51.068558087Z"
+kind = "friction"
+summary = "[harness-guidance placement] no pi-only project-local context file: .pi/ is config, not context"
+detail = "Answered 'where does pi-specific boot guidance go?'. pi's context-file candidates (AGENTS.override.md/AGENTS.md/AGENTS.MD/CLAUDE.md/CLAUDE.MD) are discoverable only as a string constant in the pi binary — docs/configuration.md documents the project .pi/ table and the context-file section separately, and neither says the two do not intersect. Both the user and I proposed .pi/AGENTS.md; it is silently dead. Confirming this needed binary-string extraction plus an empirical sentinel run."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

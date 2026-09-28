@@ -6,6 +6,7 @@
 /.agents
 /.pi/*
 !/.pi/agents
+!/.pi/APPEND_SYSTEM.md
 /.codex
 /.dirge
 /.mcp.json

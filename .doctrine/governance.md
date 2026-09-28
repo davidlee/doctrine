@@ -69,15 +69,15 @@ Work in a way that is:
 
 ## Research agents
 
-The `/research` pre-design round spawns these — one read-only agent per thread.
+The `/research` pre-design round spawns one read-only agent per thread and pipes
+its output to `.doctrine/slice/NNN/research/raw/<thread>.md`. Delegate liberally:
+a child context is what keeps the interactive session's context intact.
 
-- `./scripts/pi-scout` — quicker, cheaper; the default for a code-map thread.
-- `./scripts/pi-research` — smarter; use for governance applicability or when a
-  thread needs judgement.
-- Both take a prompt via stdin or arg and return results on stdout — pipe each
-  thread's stdout to `.doctrine/slice/NNN/research/raw/<thread>.md`.
-- Do NOT use harness subagents for research in this repo, use the above liberally
-  to preserve interactive session context.
+Pick the tier the thread needs — recon for a code-map thread, judgement for one
+about governance applicability.
+
+The *mechanism* is harness-specific, so it lives in each harness's own file, not
+here: `## Research` in `CLAUDE.md` for Claude, `.pi/APPEND_SYSTEM.md` for pi.
 
 ## useful commands
 
