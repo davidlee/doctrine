@@ -102,9 +102,8 @@ doctrine worktree land --fork slice/SL-NNN-slug   # merge --no-ff, ancestry pres
 doctrine worktree gc   --fork slice/SL-NNN-slug   # reap the spent fork once the oracle proves it landed
 ```
 
-`land` preserves the multi-commit TDD history via `git merge --no-ff` (it cannot
-express a squash); `gc` deletes only after the two-leg landed oracle certifies the
-fork — both fail closed with a distinct token, never auto-merge.
+See `lib:reference/dispatch-mechanics.md` § the patch-id landed oracle, for why
+`land`/`gc` behave as they do.
 
 ## Outcomes
 

@@ -52,8 +52,5 @@ don't restate it.
 
 ## `## Harvest` maintenance
 
-At each pass, update the single-copy `## Harvest` section in the slice's
-`notes.md` per `harvest.md` §3: restamp the `fresh-as-of` line (date · lifecycle
-position · head commit), keep entries pointer-only (ids + one clause, never a
-status), and drop settled or superseded entries — git holds the history, so the
-section stays current rather than cumulative.
+Update the `## Harvest` section per `lib:reference/harvest.md` § Canonical
+output.

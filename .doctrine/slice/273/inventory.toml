@@ -6026,9 +6026,13 @@ recommend = "cut-to-lib"
 target = "See `lib:reference/using-doctrine.md` § Which home for which record for the backlog kinds and the work-intake membership test."
 owner = "lib:reference/using-doctrine.md"
 within = ""
-reason = "near-verbatim restatement of using-doctrine.md's 'Backlog = latent work' bullet: the same five kinds and the same work-intake membership test citing the same mem.concept id"
-verdict = "accept"
-resolved = ""
+reason = "near-verbatim restatement of using-doctrine.md's 'Backlog = latent work' bullet: the same five kinds and the same work-intake membership test citing the same mem.concept id — PHASE-04 contextual repair: the span opens with the section heading, which the literal target (section body only) dropped; kept the heading per the phase sheet's keep-section-headings rule"
+verdict = "amend"
+resolved = """
+## Kind membership
+
+See `lib:reference/using-doctrine.md` § Which home for which record for the
+backlog kinds and the work-intake membership test."""
 
 [[row]]
 id = "R-704"
@@ -6060,9 +6064,13 @@ recommend = "cut-to-help"
 target = "See `doctrine backlog edit --help` for the status/resolution values and their coupling."
 owner = "--help:backlog edit"
 within = ""
-reason = "an enum/value table (status lifecycle, resolution values) and prose explaining the terminal/non-terminal coupling, fully covered by `doctrine backlog edit --help`"
-verdict = "accept"
-resolved = ""
+reason = "an enum/value table (status lifecycle, resolution values) and prose explaining the terminal/non-terminal coupling, fully covered by `doctrine backlog edit --help` — PHASE-04 contextual repair: the span opens with the section heading, which the literal target (section body only) dropped; kept the heading per the phase sheet's keep-section-headings rule"
+verdict = "amend"
+resolved = """
+## Status lifecycle
+
+See `doctrine backlog edit --help` for the status/resolution values and their
+coupling."""
 
 [[row]]
 id = "R-705"
@@ -6126,9 +6134,10 @@ recommend = "cut-to-help"
 target = "See `doctrine backlog --help` — the id prefix auto-selects the kind."
 owner = "--help:backlog"
 within = ""
-reason = "restates the id-prefix-auto-selects-kind behaviour that each subcommand's own --help already states ('kind auto-detected from the prefix')"
-verdict = "accept"
-resolved = ""
+reason = "restates the id-prefix-auto-selects-kind behaviour that each subcommand's own --help already states ('kind auto-detected from the prefix') — PHASE-04 contextual repair: the span opens with the \"- \" list marker of a ## Rules bullet, which the literal target dropped; restored the marker and continuation indent"
+verdict = "amend"
+resolved = """
+- See `doctrine backlog --help` — the id prefix auto-selects the kind."""
 
 [[row]]
 id = "R-708"
@@ -6142,9 +6151,11 @@ recommend = "cut-to-lib"
 target = "See `lib:reference/using-doctrine.md` § Which home for which record — a risk is admitted only as unresolved work-risk."
 owner = "lib:reference/using-doctrine.md"
 within = ""
-reason = "near-verbatim restatement of using-doctrine.md's risk-admission clause ('never as a general epistemic note')"
-verdict = "accept"
-resolved = ""
+reason = "near-verbatim restatement of using-doctrine.md's risk-admission clause ('never as a general epistemic note') — PHASE-04 contextual repair: the span opens with the \"- \" list marker of a ## Rules bullet, which the literal target dropped; restored the marker and continuation indent"
+verdict = "amend"
+resolved = """
+- See `lib:reference/using-doctrine.md` § Which home for which record — a risk
+  is admitted only as unresolved work-risk."""
 
 [[row]]
 id = "R-709"
@@ -6158,9 +6169,11 @@ recommend = "cut-to-lib"
 target = "Don't hand-edit backlog TOML (`lib:reference/using-doctrine.md` § storage tiers) — use the verb; prose (`*.md`) is hand-edited."
 owner = "lib:reference/using-doctrine.md"
 within = ""
-reason = "restates using-doctrine.md's storage-tier hand-edit-vs-verb rule"
-verdict = "accept"
-resolved = ""
+reason = "restates using-doctrine.md's storage-tier hand-edit-vs-verb rule — PHASE-04 contextual repair: the span opens with the \"- \" list marker of a ## Rules bullet, which the literal target dropped; restored the marker and continuation indent"
+verdict = "amend"
+resolved = """
+- Don't hand-edit backlog TOML (`lib:reference/using-doctrine.md` § storage
+  tiers) — use the verb; prose (`*.md`) is hand-edited."""
 
 [[row]]
 id = "R-710"
@@ -6178,9 +6191,11 @@ recommend = "cut-to-help"
 target = "See `doctrine backlog list --help` — terminal items are hidden by default; `--all` or an explicit `--status` reveals them."
 owner = "--help:backlog list"
 within = ""
-reason = "restates the list command's default-hide/--all/--status behaviour, fully covered by `doctrine backlog list --help`"
-verdict = "accept"
-resolved = ""
+reason = "restates the list command's default-hide/--all/--status behaviour, fully covered by `doctrine backlog list --help` — PHASE-04 contextual repair: the span opens with the \"- \" list marker of a ## Rules bullet, which the literal target dropped; restored the marker and continuation indent"
+verdict = "amend"
+resolved = """
+- See `doctrine backlog list --help` — terminal items are hidden by default;
+  `--all` or an explicit `--status` reveals them."""
 
 [[row]]
 id = "R-711"
@@ -6212,9 +6227,13 @@ recommend = "cut-to-help"
 target = "See `doctrine knowledge --help` (and `doctrine link --help` / `doctrine supersede --help`) for the verb list and flags."
 owner = "--help:knowledge"
 within = ""
-reason = "a verb/flag table for the knowledge subcommands plus the cross-cutting `link`/`supersede` commands, fully covered by their own --help text"
-verdict = "accept"
-resolved = ""
+reason = "a verb/flag table for the knowledge subcommands plus the cross-cutting `link`/`supersede` commands, fully covered by their own --help text — PHASE-04 contextual repair: the literal target points at `doctrine link --help` for the knowledge relation labels, but that help lists no labels (it names governed_by/consumes/related only); restored the skill-owned label guidance (`shapes`, `spawns`, `supports`/`disputes`) as one sentence after the pointer"
+verdict = "amend"
+resolved = """
+See `doctrine knowledge --help` (and `doctrine link --help` / `doctrine
+supersede --help`) for the verb list and flags. Link a record to the work it
+shapes with `shapes` (`spawns` for work it caused); an evidentiary edge is
+`supports` or `disputes`."""
 
 [[row]]
 id = "R-712"
@@ -6256,9 +6275,11 @@ recommend = "cut-to-help"
 target = "See `doctrine knowledge --help` — the id prefix resolves the kind on read and transition."
 owner = "--help:knowledge"
 within = ""
-reason = "restates the id-prefix-resolves-kind behaviour already implicit in each subcommand's own usage/--help shape"
-verdict = "accept"
-resolved = ""
+reason = "restates the id-prefix-resolves-kind behaviour already implicit in each subcommand's own usage/--help shape — PHASE-04 contextual repair: the span opens with the \"- \" list marker of a ## Rules bullet, which the literal target dropped; restored the marker and continuation indent; also repointed `doctrine knowledge --help` (which does not mention prefix resolution) to `doctrine knowledge show --help`, whose `<ID>` help states \"the prefix selects the kind\""
+verdict = "amend"
+resolved = """
+- See `doctrine knowledge show --help` — the id prefix resolves the kind on read
+  and transition."""
 
 [[row]]
 id = "R-714"
@@ -6276,9 +6297,11 @@ recommend = "cut-to-lib"
 target = "Don't hand-edit record TOML (`lib:reference/using-doctrine.md` § storage tiers) — use the verbs; the prose body (`*.md`) is hand-edited."
 owner = "lib:reference/using-doctrine.md"
 within = ""
-reason = "restates using-doctrine.md's storage-tier hand-edit-vs-verb rule"
-verdict = "accept"
-resolved = ""
+reason = "restates using-doctrine.md's storage-tier hand-edit-vs-verb rule — PHASE-04 contextual repair: the span opens with the \"- \" list marker of a ## Rules bullet, which the literal target dropped; restored the marker and continuation indent, and lowercased \"The\" after the joining semicolon"
+verdict = "amend"
+resolved = """
+- Don't hand-edit record TOML (`lib:reference/using-doctrine.md` § storage
+  tiers) — use the verbs; the prose body (`*.md`) is hand-edited."""
 
 [[row]]
 id = "R-715"
