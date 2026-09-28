@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 351
+slug = "gate-lints-and-tests-one-named-package-list-the-adapter-crate-joins-it"
+title = "Gate lints and tests one named package list; the adapter crate joins it"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-28"
+updated = "2026-09-28"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-116's `cargo clippy --workspace` now selects crates/doctrine-control, which RV-353 F-4 removed from every default selection; DEC-116 also left the adapter crate's tests out of the gate."
+choice = "One justfile variable names the gate's packages; test-all and a new lint-all both expand it; gate runs lint-all; the adapter crate joins the list; doctrine-control stays with capsule-check."
+alternatives = ["Name packages separately in lint-all and test-all (two lists that can drift)", "cargo clippy --workspace --exclude doctrine-control (auto-gates new members, reversing RV-353's opt-in selection)"]
+rationale = "Keeps RV-353's explicit opt-in selection while making lint and test coverage of the gate one list that cannot half-change."
+consequences = ["Adding a gated crate is one edit", "New workspace members are still not auto-gated", "The adapter crate is tested at the gate, not only linted"]
+decided_by = "user"
+decided_on = "2026-09-28"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = ["DEC-116"]   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-243"

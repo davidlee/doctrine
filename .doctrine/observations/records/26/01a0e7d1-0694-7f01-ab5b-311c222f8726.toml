@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e7d1-0694-7f01-ab5b-311c222f8726"
+recorded_at = "2026-09-28T11:40:30.740518026Z"
+kind = "friction"
+summary = "design; SL-243: slice research reports 'current' across ~2k commits of code drift"
+detail = "doctrine slice research 243 said the baseline is current after 2 months idle; it hashes intent docs only. DEC-116 had been invalidated by RV-353 F-4 (doctrine-control out of default selection) — found only by manual code inspection. The staleness advisory gives false comfort for code-dependent decisions."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
