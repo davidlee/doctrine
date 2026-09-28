@@ -29,6 +29,7 @@ const CATEGORY_NAME_PROSE_CITE: &str = "Prose Citation";
 const CATEGORY_NAME_AGENT_CONFORMANCE: &str = "Agent Conformance";
 const CATEGORY_NAME_COORD_HOOK: &str = "Coord Hook";
 const CATEGORY_NAME_INERT_FACET_KEY: &str = "Inert Facet Key";
+const CATEGORY_NAME_LIB_CITATION: &str = "Lib Citation";
 
 const SEVERITY_ERROR: &str = "error";
 const SEVERITY_WARNING: &str = "warning";
@@ -80,13 +81,14 @@ pub(crate) enum Category {
     AgentConformance,
     CoordHook,
     InertFacetKey,
+    LibCitation,
 }
 
 impl Category {
     /// Single severity source (F5) — IdIntegrity/RelationIntegrity/SpecFk/MemoryHealth
     /// and `AgentConformance` (SL-198 RSK-225: worker tool-surface is a jail wall)
     /// are errors; Lifecycle/RawLabel/TomlParse/`ProseCite`/`CoordHook`/
-    /// `InertFacetKey` are warnings.
+    /// `InertFacetKey`/`LibCitation` are warnings.
     #[must_use]
     pub(crate) const fn severity(self) -> Severity {
         match self {
@@ -100,7 +102,8 @@ impl Category {
             | Self::TomlParse
             | Self::ProseCite
             | Self::CoordHook
-            | Self::InertFacetKey => Severity::Warning,
+            | Self::InertFacetKey
+            | Self::LibCitation => Severity::Warning,
         }
     }
 
@@ -118,6 +121,7 @@ impl Category {
             Self::AgentConformance => 8,
             Self::CoordHook => 9,
             Self::InertFacetKey => 10,
+            Self::LibCitation => 11,
         }
     }
 
@@ -135,6 +139,7 @@ impl Category {
             Self::AgentConformance => CATEGORY_NAME_AGENT_CONFORMANCE,
             Self::CoordHook => CATEGORY_NAME_COORD_HOOK,
             Self::InertFacetKey => CATEGORY_NAME_INERT_FACET_KEY,
+            Self::LibCitation => CATEGORY_NAME_LIB_CITATION,
         }
     }
 }
@@ -155,7 +160,7 @@ impl Serialize for Category {
 }
 
 /// All categories in ordinal order.
-const CATEGORIES_BY_ORDINAL: [Category; 11] = [
+const CATEGORIES_BY_ORDINAL: [Category; 12] = [
     Category::IdIntegrity,
     Category::RelationIntegrity,
     Category::SpecFk,
@@ -167,6 +172,7 @@ const CATEGORIES_BY_ORDINAL: [Category; 11] = [
     Category::AgentConformance,
     Category::CoordHook,
     Category::InertFacetKey,
+    Category::LibCitation,
 ];
 
 #[derive(Debug, Clone)]
@@ -294,6 +300,7 @@ mod tests {
         assert_eq!(Category::AgentConformance.severity(), Severity::Error);
         assert_eq!(Category::CoordHook.severity(), Severity::Warning);
         assert_eq!(Category::InertFacetKey.severity(), Severity::Warning);
+        assert_eq!(Category::LibCitation.severity(), Severity::Warning);
     }
 
     #[test]

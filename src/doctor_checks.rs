@@ -18,6 +18,7 @@ use crate::mcp_server::dispatch::{
     TOOL_DISPATCH_AUTHORED_DIVERGENCE, TOOL_DISPATCH_CONCLUDE_PHASE, TOOL_DISPATCH_IMPORT,
     TOOL_DISPATCH_NEXT_READY, TOOL_DISPATCH_PHASE_RECEIPT, TOOL_DISPATCH_REAP,
 };
+use crate::publication::{AdmissionError, LIB_PREFIX, PublicationManifest};
 // Named only by the role-allowlist tests since SL-254 PHASE-06: the worker role's
 // grant of it retired with the confined-worker MCP surface (DEC-216), and the tests
 // pin its ABSENCE from every role's set.
@@ -800,6 +801,147 @@ fn coord_hook_present(coord: &std::path::Path) -> bool {
         coord.join(dir)
     };
     resolved.join("pre-commit").exists()
+}
+
+// ---------------------------------------------------------------------------
+// LibCitation — #13 unresolved `lib:` citations in client prose (SL-273)
+// ---------------------------------------------------------------------------
+
+/// The client prose the leg scans, relative to the project root (design 4.3).
+const LIB_CITATION_GLOB: &str = ".doctrine/**/*.md";
+/// Runtime state under the scanned tree — disposable, never reported.
+const LIB_CITATION_SKIP_DIR: &str = ".doctrine/state";
+/// The remedy every unresolved-citation finding names.
+const LIB_CITATION_FIX: &str = "`doctrine library tree` lists what exists";
+/// Prefix of a finding that says the whole check could not run.
+const LIB_CITATION_NOT_RUN: &str = "lib: citation check could not run";
+
+fn lib_citation_finding(entity: Option<String>, message: String) -> Finding {
+    Finding {
+        category: Category::LibCitation,
+        entity,
+        message,
+    }
+}
+
+/// Scan `.doctrine/**/*.md` (skipping `.doctrine/state/`) for `lib:` citations
+/// that do not resolve against the EMBEDDED publication manifest — one Warning
+/// per unresolved citation. No bare-mention report: a client's prose may say
+/// `glossary.md`; only a claimed library citation is held to resolving.
+///
+/// Degraded reads are disclosed, never skipped (STD-003, RV-408 F-5): a manifest
+/// that does not admit, or a glob that cannot be built, yields one could-not-run
+/// finding; a matched file that cannot be read yields one finding naming it and
+/// the walk continues. Deliberately NOT `prose_cite_findings`' walk, which drops
+/// all three silently.
+pub(crate) fn lib_citation_findings(root: &Path) -> Vec<Finding> {
+    lib_citation_findings_with(root, PublicationManifest::load())
+}
+
+/// [`lib_citation_findings`] over an explicit admission result (the test seam
+/// for the could-not-run disclosure).
+fn lib_citation_findings_with(
+    root: &Path,
+    manifest: Result<PublicationManifest, AdmissionError>,
+) -> Vec<Finding> {
+    let manifest = match manifest {
+        Ok(m) => m,
+        Err(e) => {
+            return vec![lib_citation_finding(
+                None,
+                format!("{LIB_CITATION_NOT_RUN}: publication manifest not admitted: {e}"),
+            )];
+        }
+    };
+    // Escape the root so a `[`/`*` in a directory name is matched literally
+    // rather than silently re-scoping the scan.
+    let Some(root_str) = root.to_str() else {
+        return vec![lib_citation_finding(
+            None,
+            format!(
+                "{LIB_CITATION_NOT_RUN}: root '{}' is not UTF-8, so no glob pattern can be built",
+                root.display()
+            ),
+        )];
+    };
+    let pattern = format!("{}/{LIB_CITATION_GLOB}", glob::Pattern::escape(root_str));
+    lib_citation_walk(root, &pattern, &manifest)
+}
+
+/// Walk `pattern`'s matches under `root`, reporting unresolved citations and
+/// disclosing every path the walk could not read.
+fn lib_citation_walk(root: &Path, pattern: &str, manifest: &PublicationManifest) -> Vec<Finding> {
+    let entries = match glob::glob(pattern) {
+        Ok(entries) => entries,
+        Err(e) => {
+            return vec![lib_citation_finding(
+                None,
+                format!("{LIB_CITATION_NOT_RUN}: glob pattern '{pattern}' cannot be built: {e}"),
+            )];
+        }
+    };
+    let skip = root.join(LIB_CITATION_SKIP_DIR);
+    // The skip also applies through links: `.doctrine/slice/NNN/phases` points
+    // into runtime state. Absent state dir → nothing resolves under it.
+    let skip_real = std::fs::canonicalize(&skip).ok();
+    let rel = |p: &Path| p.strip_prefix(root).unwrap_or(p).display().to_string();
+    let unreadable = |file: &str, e: &std::io::Error| {
+        lib_citation_finding(
+            Some(file.to_string()),
+            format!("{file}: cannot read, lib: citations unchecked: {e}"),
+        )
+    };
+    let mut seen: BTreeSet<std::path::PathBuf> = BTreeSet::new();
+    let mut findings = Vec::new();
+    for entry in entries {
+        let path = match entry {
+            Ok(path) => path,
+            // The glob itself could not read a directory on the way.
+            Err(e) => {
+                if !e.path().starts_with(&skip) {
+                    findings.push(unreadable(&rel(e.path()), e.error()));
+                }
+                continue;
+            }
+        };
+        if path.starts_with(&skip) {
+            continue;
+        }
+        let file = rel(&path);
+        // Resolve links once: a slug alias of a walked slice dir is not
+        // re-reported, and a dangling link is disclosed, not skipped.
+        let real = match std::fs::canonicalize(&path) {
+            Ok(real) => real,
+            Err(e) => {
+                findings.push(unreadable(&file, &e));
+                continue;
+            }
+        };
+        if skip_real.as_ref().is_some_and(|s| real.starts_with(s))
+            || real.is_dir()
+            || !seen.insert(real)
+        {
+            continue;
+        }
+        match std::fs::read_to_string(&path) {
+            Err(e) => findings.push(unreadable(&file, &e)),
+            Ok(text) => {
+                let cites = crate::lib_citation::scan(&text);
+                for (c, why) in crate::lib_citation::unresolved(&cites, manifest) {
+                    findings.push(lib_citation_finding(
+                        Some(file.clone()),
+                        format!(
+                            "{file}:{}: {LIB_PREFIX}{} — {}; {LIB_CITATION_FIX}",
+                            c.line,
+                            c.address,
+                            why.reason()
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+    findings
 }
 
 // ---------------------------------------------------------------------------
@@ -2177,5 +2319,186 @@ mod tests {
             crate::knowledge::run_list(Some(root.to_path_buf()), ListArgs::default()).is_ok(),
             "knowledge list must stay green on a corpus carrying an inert key"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // LibCitation — #13 doctor leg tests (SL-273 design 4.3/4.4, RV-408 F-5)
+    // ------------------------------------------------------------------
+
+    /// A manifest declaring only `reference/glossary.md`.
+    fn lib_manifest() -> PublicationManifest {
+        PublicationManifest::admit(
+            b"[[entry]]\n\
+              address = \"reference/glossary.md\"\n\
+              backing = \"reference/glossary.md\"\n\
+              kind = \"reference\"\n\
+              title = \"Glossary\"\n\
+              licence = \"MIT\"\n\
+              provenance = \"declared\"\n\
+              customization = \"customizable\"\n",
+        )
+        .unwrap()
+    }
+
+    /// Write `bytes` at `rel` under `root`, creating parents.
+    fn write_doc(root: &Path, rel: &str, bytes: &[u8]) {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, bytes).unwrap();
+    }
+
+    fn messages(findings: &[Finding]) -> Vec<&str> {
+        findings.iter().map(|f| f.message.as_str()).collect()
+    }
+
+    #[test]
+    fn lib_citation_reports_unresolved_client_citation() {
+        let dir = tmp();
+        let root = dir.path();
+        write_doc(
+            root,
+            ".doctrine/slice/001/design.md",
+            b"see glossary.md\n`lib:reference/glossary.md` and lib:reference/x.md.\n",
+        );
+        // Runtime state is skipped.
+        write_doc(root, ".doctrine/state/scratch.md", b"lib:reference/y.md\n");
+        let findings = lib_citation_findings_with(root, Ok(lib_manifest()));
+        assert_eq!(findings.len(), 1, "{:?}", messages(&findings));
+        let f = &findings[0];
+        assert_eq!(f.category, Category::LibCitation);
+        assert_eq!(f.category.severity(), crate::finding::Severity::Warning);
+        for part in [
+            ".doctrine/slice/001/design.md:2",
+            "lib:reference/x.md",
+            "not declared",
+            "doctrine library tree",
+        ] {
+            assert!(f.message.contains(part), "{part:?} missing: {}", f.message);
+        }
+    }
+
+    // The public entry admits the EMBEDDED manifest: a shipped address passes,
+    // an unknown one is reported.
+    #[test]
+    fn lib_citation_findings_resolve_against_embedded_manifest() {
+        let dir = tmp();
+        write_doc(
+            dir.path(),
+            ".doctrine/notes/a.md",
+            b"lib:reference/glossary.md lib:reference/no-such-doc.md\n",
+        );
+        let findings = lib_citation_findings(dir.path());
+        assert_eq!(findings.len(), 1, "{:?}", messages(&findings));
+        assert!(findings[0].message.contains("lib:reference/no-such-doc.md"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn lib_citation_unreadable_file_disclosed_sibling_reported() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tmp();
+        let root = dir.path();
+        // Mode 000 AND not UTF-8: unreadable whether or not the test runs as root.
+        write_doc(root, ".doctrine/notes/a.md", &[0xff, 0xfe]);
+        let locked = root.join(".doctrine/notes/a.md");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+        write_doc(root, ".doctrine/notes/b.md", b"lib:reference/x.md\n");
+
+        let findings = lib_citation_findings_with(root, Ok(lib_manifest()));
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let msgs = messages(&findings);
+        assert_eq!(findings.len(), 2, "{msgs:?}");
+        assert!(
+            msgs.iter()
+                .any(|m| m.contains(".doctrine/notes/a.md") && m.contains("cannot read")),
+            "unreadable file not disclosed: {msgs:?}"
+        );
+        assert!(
+            msgs.iter()
+                .any(|m| m.contains(".doctrine/notes/b.md:1") && m.contains("lib:reference/x.md")),
+            "sibling's citation not reported: {msgs:?}"
+        );
+    }
+
+    // The corpus's own symlinks: a slug alias of a slice dir must not duplicate
+    // its findings, and the `phases` link into `.doctrine/state/` must not
+    // smuggle runtime state past the skip.
+    #[cfg(unix)]
+    #[test]
+    fn lib_citation_symlinks_neither_duplicate_nor_reach_state() {
+        use std::os::unix::fs::symlink;
+        let dir = tmp();
+        let root = dir.path();
+        write_doc(
+            root,
+            ".doctrine/slice/001/design.md",
+            b"lib:reference/x.md\n",
+        );
+        write_doc(
+            root,
+            ".doctrine/state/slice/001/phases/phase-01.md",
+            b"lib:reference/y.md\n",
+        );
+        symlink("001", root.join(".doctrine/slice/001-slug")).unwrap();
+        symlink(
+            "../../state/slice/001/phases",
+            root.join(".doctrine/slice/001/phases"),
+        )
+        .unwrap();
+        let findings = lib_citation_findings_with(root, Ok(lib_manifest()));
+        let msgs = messages(&findings);
+        assert_eq!(msgs.len(), 1, "{msgs:?}");
+        assert!(
+            msgs[0].starts_with(".doctrine/slice/001/design.md:1"),
+            "{msgs:?}"
+        );
+    }
+
+    #[test]
+    fn lib_citation_manifest_not_admitted_disclosed() {
+        let dir = tmp();
+        write_doc(dir.path(), ".doctrine/notes/a.md", b"lib:reference/x.md\n");
+        let findings =
+            lib_citation_findings_with(dir.path(), Err(AdmissionError::ManifestAssetMissing));
+        assert_eq!(findings.len(), 1, "{:?}", messages(&findings));
+        assert_eq!(findings[0].category, Category::LibCitation);
+        assert!(findings[0].message.contains("could not run"));
+    }
+
+    #[test]
+    fn lib_citation_glob_build_failure_disclosed() {
+        let dir = tmp();
+        let bad = "notes/***/x.md";
+        let findings = lib_citation_walk(dir.path(), bad, &lib_manifest());
+        assert_eq!(findings.len(), 1, "{:?}", messages(&findings));
+        assert_eq!(findings[0].category, Category::LibCitation);
+        assert!(findings[0].message.contains(bad), "{}", findings[0].message);
+    }
+
+    // A root whose path cannot be put in a glob pattern (non-UTF-8) is disclosed,
+    // not silently scanned as empty.
+    #[cfg(unix)]
+    #[test]
+    fn lib_citation_non_utf8_root_disclosed() {
+        use std::os::unix::ffi::OsStrExt;
+        let dir = tmp();
+        let root = dir.path().join(std::ffi::OsStr::from_bytes(b"r\xff"));
+        std::fs::create_dir_all(&root).unwrap();
+        let findings = lib_citation_findings_with(&root, Ok(lib_manifest()));
+        assert_eq!(findings.len(), 1, "{:?}", messages(&findings));
+        assert!(findings[0].message.contains("could not run"));
+    }
+
+    #[test]
+    fn lib_citation_finding_renders() {
+        let dir = tmp();
+        write_doc(dir.path(), ".doctrine/notes/a.md", b"lib:reference/x.md\n");
+        let findings = lib_citation_findings_with(dir.path(), Ok(lib_manifest()));
+        assert_eq!(findings.len(), 1);
+        let out = crate::finding::render_findings(&findings, false);
+        assert!(out.contains("[Lib Citation]"), "{out}");
+        assert!(out.contains("lib:reference/x.md"), "{out}");
+        assert!(out.contains("1 finding(s)"), "{out}");
     }
 }

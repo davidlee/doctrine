@@ -17,7 +17,7 @@
 
 use crate::listing::Format;
 use crate::publication::{
-    AdmissionError, EmbeddedAdapter, EmitError, LogicalAddress, PublicationEntry,
+    AdmissionError, EmbeddedAdapter, EmitError, LIB_PREFIX, LogicalAddress, PublicationEntry,
     PublicationManifest, ResolveError, Resolver,
 };
 use clap::Subcommand;
@@ -310,8 +310,12 @@ fn show_with<A: crate::publication::SourceAdapter>(
     addr: &str,
     out: &mut dyn Write,
 ) -> anyhow::Result<()> {
+    // A `lib:` citation copied from prose resolves verbatim (SL-273 design 3.2):
+    // the marker is stripped before any of the four classes is checked; the
+    // diagnostics below still quote the address as the user gave it.
+    let bare = addr.strip_prefix(LIB_PREFIX).unwrap_or(addr);
     // Class 1 — invalid / traversal address (AdmissionError::TraversalRejected).
-    let address = LogicalAddress::parse(addr).map_err(|_rejected: AdmissionError| {
+    let address = LogicalAddress::parse(bare).map_err(|_rejected: AdmissionError| {
         anyhow::anyhow!("invalid library address '{addr}': not a safe relative logical path")
     })?;
     resolver.emit(&address, out).map_err(|e| match e {
@@ -364,6 +368,20 @@ mod tests {
              provenance = \"declared\"\n\
              customization = \"customizable\"\n"
         )
+    }
+
+    // SL-273 VT-4: a `lib:` citation copied from prose resolves verbatim — the
+    // prefixed and bare forms emit identical bytes.
+    #[test]
+    fn lib_prefixed_address_shows_same_bytes() {
+        let resolver = shipped();
+        let prefixed = format!("{LIB_PREFIX}templates/slice.toml");
+        let mut with_prefix: Vec<u8> = Vec::new();
+        let mut bare: Vec<u8> = Vec::new();
+        show_with(&resolver, &prefixed, &mut with_prefix).expect("prefixed shows");
+        show_with(&resolver, "templates/slice.toml", &mut bare).expect("bare shows");
+        assert!(!bare.is_empty());
+        assert_eq!(with_prefix, bare);
     }
 
     // VT-1: run_show (via its testable core) round-trips a published asset

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e7e3-cfd0-7c31-95c9-151fd9e5f8a6"
+recorded_at = "2026-09-28T12:01:01.904893097Z"
+kind = "friction"
+summary = "capsule-worker SL-273 PHASE-01: new module needs ADR-001 layering.toml classification, an authored .doctrine/ touch site absent from sheet and touch-site memory"
+detail = "Worker (fenced out of authored .doctrine/) left the gate red on Unclassified(lib_citation). Fix-up worker then hit StaleEntry: tests/architecture_layering.rs skip_cfg_test_file treats a whole file as test-only when its first non-comment line is #[cfg(test)] — lib_citation.rs led with a #[cfg(test)] use. Two extra spawns. Also: doctrine check commit stops at first failing test binary, hiding later failures."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

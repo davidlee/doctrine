@@ -21,6 +21,11 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::io::Write;
 
+/// The library-citation marker (SL-273 design 3.1, STD-001): `lib:` followed by
+/// a [`LogicalAddress`]. Stripping it yields exactly what `LogicalAddress::parse`
+/// accepts; `library show` accepts it verbatim and `lib_citation` scans for it.
+pub(crate) const LIB_PREFIX: &str = "lib:";
+
 /// Closed licence set (D6, STD-001). A value outside the set fails admission —
 /// there is no runtime default and no guessed licence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -364,6 +369,12 @@ impl PublicationManifest {
     )]
     pub(crate) fn declares_backing(&self, backing: &str) -> bool {
         self.entries.iter().any(|e| e.backing == backing)
+    }
+
+    /// Whether any admitted entry declares `addr` as its logical address (SL-273)
+    /// — the membership predicate a `lib:` citation must satisfy to resolve.
+    pub(crate) fn declares_address(&self, addr: &LogicalAddress) -> bool {
+        self.entries.iter().any(|e| e.address() == addr)
     }
 }
 
@@ -981,6 +992,22 @@ mod tests {
         let manifest = one_entry("templates/slice.toml", "backing/present.bin");
         assert!(manifest.declares_backing("backing/present.bin"));
         assert!(!manifest.declares_backing("backing/not-declared.bin"));
+    }
+
+    // SL-273 VT-3: declares_address(): membership over declared logical addresses.
+    #[test]
+    fn declares_address_membership() {
+        let manifest = one_entry("templates/slice.toml", "backing/present.bin");
+        let declared = LogicalAddress::parse("templates/slice.toml").expect("valid");
+        let undeclared = LogicalAddress::parse("templates/absent.toml").expect("valid");
+        assert!(manifest.declares_address(&declared));
+        assert!(!manifest.declares_address(&undeclared));
+    }
+
+    // SL-273 VT-3: the citation marker is one constant (STD-001, I6).
+    #[test]
+    fn lib_prefix_is_the_citation_marker() {
+        assert_eq!(LIB_PREFIX, "lib:");
     }
 
     // VT-4 (SL-227): every shipped entry resolves — the grown manifest declares

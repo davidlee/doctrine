@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e7e3-cfd3-7431-8e91-1c88f54ab0a7"
+recorded_at = "2026-09-28T12:01:01.907454067Z"
+kind = "friction"
+summary = "capsule-worker SL-273 PHASE-01: prose_cite_findings doctor leg double-counts findings through slug symlinks and reads .doctrine/state via the phases symlink"
+detail = "New lib_citation doctor leg hit the same bug during VA-1 and fixed it by resolved-path dedupe and applying the state skip post-resolution; sibling prose_cite_findings still duplicates (RFC-035 listed twice). Backlog candidate."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

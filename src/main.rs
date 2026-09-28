@@ -68,6 +68,7 @@ mod knowledge;
 mod lazyspec;
 mod ledger;
 mod lexical;
+mod lib_citation;
 mod lifecycle;
 pub(crate) mod links;
 mod listing;
