@@ -4710,9 +4710,13 @@ recommend = "cut-to-lib"
 target = "the closed disposition vocab, `lib:reference/review-ledger.md` §4."
 owner = "lib:reference/review-ledger.md"
 within = ""
-reason = "restates review-ledger.md's disposition vocabulary (meanings of aligned/fix-now/tolerated/design-wrong, verified-is-a-status-not-a-disposition) beyond audit's own scope-specific never-follow-up rule"
-verdict = "accept"
-resolved = ""
+reason = "restates review-ledger.md's disposition vocabulary (meanings of aligned/fix-now/tolerated/design-wrong, verified-is-a-status-not-a-disposition) beyond audit's own scope-specific never-follow-up rule — PHASE-04 contextual repair: literal target left a verbless fragment after the bold lead and silently dropped the audit-owned never-follow-up rule (not covered by review-ledger.md); resolved adds a verb and restores that sentence verbatim from the span"
+verdict = "amend"
+resolved = """
+See the closed disposition vocab,
+`lib:reference/review-ledger.md` §4. Audit must **never** use `follow-up` for
+spec/governance items — those belong to the reconcile write surface, not the
+backlog."""
 
 [[row]]
 id = "R-006"
@@ -4916,9 +4920,11 @@ recommend = "cut-to-help"
 target = "see `doctrine revision change add --help` for the `--action` values and their flags."
 owner = "--help:revision change add"
 within = ""
-reason = "an enum/value table for the `--action` flag of `revision change add`, mapping each value's meaning and extra flags — flag-shape per design 6.2"
-verdict = "accept"
-resolved = ""
+reason = "an enum/value table for the `--action` flag of `revision change add`, mapping each value's meaning and extra flags — flag-shape per design 6.2 — PHASE-04 contextual repair: literal target opens with lowercase \"see\" but now starts a fresh paragraph after a code fence; capitalised to \"See\""
+verdict = "amend"
+resolved = """
+See `doctrine revision change add --help` for the `--action` values and their
+flags."""
 
 [[row]]
 id = "R-012"
@@ -4936,9 +4942,11 @@ recommend = "cut-to-help"
 target = "see `doctrine revision apply --help` for which `--action` values auto-land vs. surface for manual landing."
 owner = "--help:revision apply"
 within = ""
-reason = "prose explaining which `--action` values `revision apply` auto-lands vs. surfaces manually — flag-shape, duplicates step 5's own explanation"
-verdict = "accept"
-resolved = ""
+reason = "prose explaining which `--action` values `revision apply` auto-lands vs. surfaces manually — flag-shape, duplicates step 5's own explanation — PHASE-04 contextual repair: literal target opens with lowercase \"see\" but now starts a fresh paragraph right after R-011's replacement; capitalised to \"See\""
+verdict = "amend"
+resolved = """
+See `doctrine revision apply --help` for which `--action` values auto-land vs.
+surface for manual landing."""
 
 [[row]]
 id = "R-013"
@@ -4979,9 +4987,12 @@ recommend = "cut-to-lib"
 target = "the emoji severities map onto `lib:reference/review-ledger.md`'s severity vocab (🔴 blocker, 🟠 major, 🟡 minor, 🔵 nit); only `blocker` gates close."
 owner = "lib:reference/review-ledger.md"
 within = ""
-reason = "reproduces review-ledger.md's severity vocab (blocker/major/minor/nit) as an enum table plus its blocker-gates-close rule, mapped to this skill's emoji"
-verdict = "accept"
-resolved = ""
+reason = "reproduces review-ledger.md's severity vocab (blocker/major/minor/nit) as an enum table plus its blocker-gates-close rule, mapped to this skill's emoji — PHASE-04 contextual repair: preceding text ends a sentence (\"append-only). \") so the literal lowercase-\"the\" target needs Title-case to open the next sentence"
+verdict = "amend"
+resolved = """
+The emoji severities map onto `lib:reference/review-ledger.md`'s
+severity vocab (🔴 blocker, 🟠 major, 🟡 minor, 🔵 nit); only `blocker`
+gates close."""
 
 [[row]]
 id = "R-014"
@@ -5034,9 +5045,9 @@ recommend = "cut-to-lib"
 target = "see `lib:reference/review-ledger.md` § the subject/target ladder."
 owner = "lib:reference/review-ledger.md"
 within = ""
-reason = "restates review-ledger.md's target-ladder concept (named as review-ledger.md-owned in this skill's own text) in full, beyond citing it — least-sure: sheet's owner-map bullet for review-ledger.md names only 'RV acts, severity/disposition vocabulary', not the target ladder explicitly, so confirm against design 5.2's full text"
-verdict = "accept"
-resolved = ""
+reason = "restates review-ledger.md's target-ladder concept (named as review-ledger.md-owned in this skill's own text) in full, beyond citing it — least-sure: sheet's owner-map bullet for review-ledger.md names only 'RV acts, severity/disposition vocabulary', not the target ladder explicitly, so confirm against design 5.2's full text — PHASE-04 contextual repair: literal target opens with lowercase \"see\" but now opens a paragraph right after a heading; capitalised to \"See\""
+verdict = "amend"
+resolved = "See `lib:reference/review-ledger.md` § the subject/target ladder."
 
 [[row]]
 id = "R-015"
@@ -5064,9 +5075,11 @@ recommend = "cut-to-lib"
 target = "see `lib:reference/dispatch-mechanics.md` § Split lineage — record an already-landed payload, don't advance trunk."
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
-reason = "near-verbatim restatement of dispatch-mechanics.md's 'Split lineage' section (same wording: operator direct-land / manual --no-ff merge / external integration; ancestor-not-descendant; non-ff refused)"
-verdict = "accept"
-resolved = ""
+reason = "near-verbatim restatement of dispatch-mechanics.md's 'Split lineage' section (same wording: operator direct-land / manual --no-ff merge / external integration; ancestor-not-descendant; non-ff refused) — PHASE-04 contextual repair: literal target opens with lowercase \"see\" mid-sentence right after a bold lead ending in a period; capitalised to \"See\""
+verdict = "amend"
+resolved = """
+See `lib:reference/dispatch-mechanics.md` §
+   Split lineage — record an already-landed payload, don't advance trunk."""
 
 [[row]]
 id = "R-016"
@@ -5093,9 +5106,12 @@ recommend = "cut-to-lib"
 target = "per `lib:reference/dispatch-mechanics.md` § Split lineage, `--record-integration` asserts the payload is already an ancestor of trunk and commits a single Verified trunk row."
 owner = "lib:reference/dispatch-mechanics.md"
 within = ""
-reason = "continues the R-015 restatement of dispatch-mechanics.md's 'Split lineage' section (resolves earned payload / asserts already-ancestor / commits Verified row), separated from R-015 by a permitted single invocation code block"
-verdict = "accept"
-resolved = ""
+reason = "continues the R-015 restatement of dispatch-mechanics.md's 'Split lineage' section (resolves earned payload / asserts already-ancestor / commits Verified row), separated from R-015 by a permitted single invocation code block — PHASE-04 contextual repair: literal target opens with lowercase \"per\" but now opens a paragraph right after a code fence; capitalised to \"Per\""
+verdict = "amend"
+resolved = """
+Per `lib:reference/dispatch-mechanics.md` § Split lineage,
+   `--record-integration` asserts the payload is already an ancestor of trunk
+   and commits a single Verified trunk row."""
 
 [[row]]
 id = "R-500"

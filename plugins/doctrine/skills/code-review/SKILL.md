@@ -106,22 +106,8 @@ facet (`lib:reference/review-ledger.md` §2).
 
 ### Where the findings land — subject before you start
 
-Pick the subject up the target ladder (`review-ledger.md` §1) before you raise a
-single thing; the closer the subject sits to a real entity, the more your
-findings can be queried, gated, and handed off:
+See `lib:reference/review-ledger.md` § the subject/target ladder.
 
-- An existing **slice / phase / design / plan** under review → open the RV against
-  it — except a design under a managed design run, which already holds its pass
-  RV (`doctrine design show <slice> --format prompt` names it as `review_pass`):
-  raise there, never on a second RV (`review-ledger.md` §2, *Open*). A **backlog
-  item** (`issue` / `improvement` / `chore` / `risk` / `idea`) is the typed home
-  for a durable diff with no slice yet — and if no proximate subject exists but
-  the review is durable, **mint one** (`backlog new <kind>`) and target that. Do
-  not skip to prose to dodge the mint.
-- **Prose is the last resort** — reserved for an explicitly throwaway one-shot with
-  no durable subject, no lifecycle gate, no handoff, and no finding worth keeping.
-  If you are reviewing code that matters, it has a home on the ledger; the cost
-  asymmetry favours opening it (`review-ledger.md` §1, the ledger-vs-prose trigger).
 - The **code/diff is the evidence, not the subject.** When the locus is a backlog
   item (or any non-code entity), the item is the RV's *locus* and the concrete code
   evidence — file, line, the offending construct — lives in each finding's
@@ -165,19 +151,9 @@ not raises on this RV — capture them (`backlog new`) and move on.
 
 Every pathology you uncover is a `doctrine review raise` — framed *expected vs
 observed* with its evidence in `--detail`, fixed at raise (the ledger is
-append-only). The emoji severities map straight onto the shared severity axis
-(`review-ledger.md` §3); raise with the mapped `--severity`:
-
-| label | meaning | `--severity` |
-|---|---|---|
-| 🔴 | blocking | `blocker` |
-| 🟠 | important | `major` |
-| 🟡 | minor | `minor` |
-| 🔵 | optional suggestion | `nit` |
-
-Only **`blocker`** gates the target's close (`review-ledger.md` §3, §6) — reserve
-it for what must not ship unreconciled, and do not downgrade a true blocker to
-dodge the close-gate. **👍 good is not a finding** — praise (such as it is) goes
+append-only). The emoji severities map onto `lib:reference/review-ledger.md`'s
+severity vocab (🔴 blocker, 🟠 major, 🟡 minor, 🔵 nit); only `blocker`
+gates close. **👍 good is not a finding** — praise (such as it is) goes
 into the synthesis, not the ledger.
 
 Then dispose and resolve every finding to a terminal state per

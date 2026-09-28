@@ -166,19 +166,11 @@ For each governance/spec item, append a typed row:
 doctrine revision change add REV-N --action <action> [--target <T>] [--to-status <S>] [--new-label <L> --member-of <SPEC>] [--primary]
 ```
 
-Actions map to intent:
+See `doctrine revision change add --help` for the `--action` values and their
+flags.
 
-| Brief says | `--action` | Extra flags |
-|---|---|---|
-| ADR/Spec prose wrong → amend | `modify` | `--target <ADR-N>` |
-| Requirement changed status | `status` | `--target <REQ-N> --to-status <S>` |
-| New requirement needed | `introduce` | `--new-label <FR-\|NF-NNN> --member-of <SPEC-N>` |
-| Requirement obsolete | `retire` | `--target <REQ-N>` |
-| New spec needed | `create` | `--new-label <label> [--member-of <SPEC>]` |
-| Requirement moves spec | `move` | `--target <REQ-N> --member-of <SPEC-N>` |
-
-`modify` / `retire` / `create` / `move` / `prose` rows are **surfaced for manual
-landing** at apply time — `revision apply` auto-lands only `status` rows.
+See `doctrine revision apply --help` for which `--action` values auto-land vs.
+surface for manual landing.
 
 #### 4d. Record the reconcile narrative
 

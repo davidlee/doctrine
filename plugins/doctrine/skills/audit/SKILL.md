@@ -37,15 +37,9 @@ Inputs:
 
 ## Tool preference
 
-If your harness supports MCP tools and doctrine's MCP server is connected
-(you see `review_new`, `review_raise`, `review_dispose`, `review_amend`,
-`review_verify`, `review_contest`, `review_reopen`, `review_withdraw`,
-`review_conclude`, `review_prime`, `review_list`, `review_show`,
-`review_status` in your tool list), **prefer these MCP tools over the CLI** —
-they return machine-parseable JSON text in the MCP content block, carry prose as
-structured fields with no shell quoting, and eliminate shell overhead. Every
-review verb has an MCP equivalent except `review unlock` and `review paths`,
-which stay CLI-only.
+Prefer the MCP review tools over the CLI when your harness has them
+(`lib:reference/review-ledger.md` § Passing prose); `review unlock` and
+`review paths` stay CLI-only.
 
 ## Audit lens
 
@@ -70,16 +64,10 @@ withdraws and concludes; the responder disposes and amends. Roles belong to
 acts, not agents; `--as` is cooperative role assertion, not a security boundary
 (`lib:reference/review-ledger.md`, "Acts and roles").
 
-**Disposition convention (audit-specific).** `--disposition` takes only the
-closed vocab (`review-ledger.md` §4). Audit uses `aligned` (observation correct,
-no change needed), `fix-now` (code fix within audit scope — never a spec or
-governance edit), `tolerated` (explicit accepted drift with rationale), and
-`design-wrong` for a spec/governance change delegated to `/reconcile`, with the
-reconciliation-brief link in `--response`. Audit must **never** use `follow-up`
-for spec/governance items — those belong to the reconcile write surface, not the
-backlog. Keep disposition and status apart: `verified` is a finding **status**,
-reached when the raiser runs `review verify`, never a `--disposition` value (the
-CLI refuses it). Every finding ends `verified` (the observation is confirmed; a
+**Disposition convention (audit-specific).** See the closed disposition vocab,
+`lib:reference/review-ledger.md` §4. Audit must **never** use `follow-up` for
+spec/governance items — those belong to the reconcile write surface, not the
+backlog. Every finding ends `verified` (the observation is confirmed; a
 delegated one once its brief entry exists); the *remediation* is reconcile's job
 and is recorded separately — do not mutate a finding to `fixed`/`remediated`.
 

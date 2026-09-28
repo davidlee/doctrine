@@ -30,9 +30,8 @@ semantics (the split seam).
 - requested branch / path
 - `base` — the ref the fork is created from. **`solo` defaults to `HEAD`;
   `worker` REQUIRES an explicit base** (the orchestrator's coordination HEAD `B`),
-  because the session HEAD is **not** `B` — the orchestrator drives from the
-  coordination branch while the session repo may sit on `main`. Forking from the
-  implicit session HEAD imports a divergent base and corrupts the `B..S` delta.
+  see `lib:reference/dispatch-mechanics.md` § The fork base is explicit, never
+  the session HEAD.
 
 **Behaviour:**
 - `solo` — MAY degrade to the work-in-place rung on sandbox denial (no fork; the
@@ -202,28 +201,11 @@ is what happens *after* a green baseline, in place of solo handoff. The worker i
 a constrained writer: one importable delta, then return, never touching the
 coordination/runtime tier (the fork already withholds it).
 
-**Armed by the jail, not by cooperation.** `DOCTRINE_WORKER=1` is set inside the
-confinement namespace by the spawn script, so the doctrine guard is armed before
-the worker's first command: any doctrine-mediated authored write (`slice`,
-`memory record`, `backlog`, minting) **refuses**. Worker-ness is a property of
-the process, not of the directory. Outside a dispatch spawn — a hand-driven
-worker turn — export it yourself first.
+`lib:reference/dispatch-mechanics.md` § Worker identity is a property of the
+process, set by the spawn.
 
-**The constrained loop:**
-
-1. **Mutate source only.** Edit source files in the fork. Do **not** write
-   `.doctrine/` authored trees, runtime state, or memory — an import touching them
-   is rejected (report+halt).
-2. **Verify.** Run the **orchestrator-supplied** verify command (passed in the
-   worker prompt — not assumed `doctrine check gate`). A red verify is reported
-   back; the worker does not hand back a red delta as if it were green.
-3. **Leave the delta uncommitted.** A confined worker **cannot** commit — the
-   linked worktree's real git dir is read-only inside the jail, so there is no
-   self-commit path and none is wanted. The importable unit is the working tree
-   itself, which the orchestrator gathers with `worktree import --from-worktree`.
-   Never `reset`, `checkout --`, `stash` or `clean` your own work away — that
-   destroys the only copy. Stay within your declared file set; straying breaks
-   the file-disjoint batch.
+`lib:reference/dispatch-mechanics.md` §§ "The worker returns a working tree,
+not a commit" and "Workers can silently discard their own work".
 
 **MUST NOT degrade to work-in-place.** A worker with no real fork is a **hard
 abort**, never a silent in-tree edit (contrast `solo` rung 4). If creation failed,
