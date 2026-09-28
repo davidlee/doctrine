@@ -639,3 +639,138 @@ place (SL-273 restate audit)` section (grouped by gap: G2 ×2, G5 ×1) plus a
 the elicit/SKILL.md "Refresh and stop" footer vocabulary, per the sheet's T6
 instructions.
 
+
+## PHASE-04 execution deviation
+
+- **Mechanism.** PHASE-04 runs as Claude capsule-workers in the main
+  worktree `/work/doctrine` on branch `work`, one worker per unit, strictly
+  sequential (U1 → U2 → U3a → U3b → U3c → U4), with the orchestrator
+  committing between units. The plan's DeepSeek pi confined dispatch was not
+  used: there are no API keys outside the jail. The user decided this on
+  2026-09-28.
+- **No edge/main promotion.** EN-1 ("adjudicated inventory on main") and
+  PHASE-03 EX-5 are met by the adjudicated inventory committed on `work` at
+  `cdf79c1f8`.
+- **SL-273 OQ-1** (does a worked `doctrine …` command restate a verb's
+  `--help`?), settled by the user: a single worked `doctrine …` command at the
+  step that runs it does not violate ADR-005's restate line. No rows are
+  added, and ADR-005 is not amended.
+- **SL-273 OQ-3** (human-engagement restatements with no reachable owner),
+  settled by the user: R-006 and R-010 stay rejected; the gap is logged in
+  IMP-500 (U4).
+- **Seam repairs are recorded in `inventory.toml` directly** (orchestrator
+  decision, 2026-09-28, replacing the phase sheet's runtime
+  `<unit>-proposed-amends.toml`). Where an R- row's literal new text is not
+  applicable in context (known: R-005, R-500, R-501, R-504, R-507, R-523, plus
+  capitalisation-only seams), the U3 worker makes the minimal contextual
+  repair and writes the amended text into `inventory.toml` itself
+  (`verdict = "amend"`, `resolved` = the exact replacement for the row's
+  original `span`), with a note in `reason` recording it as a PHASE-04
+  contextual repair. `inventory.toml` is therefore the single source of truth
+  when the verifier runs; a unit's run is expected at 0 violations. The
+  verifier discloses every inventory row that differs from `--base` as an
+  `INVENTORY` info line (`inventory-drift N` in the summary), so the
+  orchestrator adjudicates the amends from that list and from
+  `git diff -- .doctrine/slice/273/inventory.toml` before committing.
+- **IMP-500 body note** (U4): hand-edit of the backlog body `.md` accepted
+  (`backlog edit` is status-only).
+- **Memory re-verify:** only `mem.signpost.project.orientation`; the
+  orchestrator runs `memory verify` after the U4 commit.
+- **BASE** = `cff015419eecc2dc122af069615ea1af1fe5f0f7` (HEAD at U1 start).
+  `git diff --quiet cdf79c1f8 cff015419 -- plugins install src` exits 0, so
+  its shipped text is the adjudicated-inventory commit's.
+
+## PHASE-04 verifier (RV-408 F-1)
+
+Script: `.doctrine/slice/273/verify-sweep.nu` (nu 0.115; one entry point;
+`^diff` for the word diff).
+
+```
+nu .doctrine/slice/273/verify-sweep.nu --base <BASE> (--through <U2|U3a|U3b|U3c|U4> | --applied <id,id,...>) [--tree <overlay-dir>]
+```
+
+Exit 0 = no violations, 1 = violations or row failures, 2 = hard error.
+
+1. Locate every row in `git show BASE:<file>` (excerpt exactly once, span
+   exactly once in it; else `LOCATE`). Scope A = the unit's changing rows
+   (Outcome rule), derived from `inventory.toml` at run time; a row whose span
+   lies inside an applied span is subsumed (containment, not `within`).
+2. Expected text = base with each A span replaced by its new text; its words
+   carry origin tags (the A row, a non-applied row's span, or free).
+3. Word-diff expected against the post text (`--tree` overlay, else the
+   working tree), whitespace-normalised. Every differing region is a
+   violation: only A-row words → `MISAPPLIED`; any free word or non-applied
+   row → `UNAUTHORISED` naming each row.
+4. Per row, cross-check its normalised expected excerpt against the
+   normalised post text; a clean diff with a missing excerpt is `CROSSCHECK`.
+   New, deleted or whitespace-only-changed files with no applied row, rows
+   removed from the inventory since BASE, and non-rejected `log` rows absent
+   from `doctrine show IMP-500` are violations.
+5. Info only: `within` vs containment disagreements (C-141, C-214), inventory
+   drift since BASE, over-80-column changed lines (`WIDTH`).
+
+Region labels are diagnostic; the count is the control. An insertion next to
+an applied row's word is labelled `MISAPPLIED`, and on an untouched tree
+`--through U4` labels 4 multi-row R- regions `UNAUTHORISED` (free words the
+LCS aligns into them). Either way each region is a violation.
+
+## PHASE-04 EN-2 control run
+
+Overlays under `/tmp/sl273-control/` (no shipped file touched). `red`:
+`install/using-doctrine.md` with C-091 (:192, authorised) and C-087 (:189,
+`accept`/`leave`) both converted; `git diff --no-index` puts them in one
+hunk. `green`: C-091 only.
+
+```
+$ nu .doctrine/slice/273/verify-sweep.nu --base cff015419eecc2dc122af069615ea1af1fe5f0f7 --applied C-091 --tree /tmp/sl273-control/red
+base cff015419eecc2dc122af069615ea1af1fe5f0f7 · --applied C-091 · tree /tmp/sl273-control/red
+partition: changing 131 = unit-applied 120 + subsumed-by-changing 11 · U2 71 · U3a 14 · U3b 18 · U3c 16 · U4 1
+files: 68 checked, 67 byte-identical to base with no applied row
+INFO within: C-141 has within=R-014 but its span lies outside R-014's span
+INFO within: C-214 lies inside R-522 but within=''
+UNAUTHORISED install/using-doctrine.md [C-087]: C-087 (verdict accept, recommend leave)
+    expected: … **Example — inside a slice directory:** `slice-NNN.toml`, `slice-NNN.md`, [`design.md`,] `plan.toml`, `plan.md`, and `notes.md` are **authored** (committed, diffable). …
+    post:     … **Example — inside a slice directory:** `slice-NNN.toml`, `slice-NNN.md`, [`lib:templates/design.md`,] `plan.toml`, `plan.md`, and `notes.md` are **authored** (committed, diffable). …
+ROW C-087 install/using-doctrine.md: CHANGED
+ROW C-088 install/using-doctrine.md: EXCERPT-TOUCHED
+ROW C-089 install/using-doctrine.md: EXCERPT-TOUCHED
+WIDTH install/using-doctrine.md:189 (94 cols)
+rows 337 · applied 1 (OK 1) · subsumed 0 · unchanged-ok 333 · diff-only 0 · row-failures 3 · violations 1 (UNAUTHORISED 1) · inventory-drift 0 · width 1
+(exit 1)
+```
+
+The single violation is C-087, and C-091 is OK. C-088 and C-089
+(`plan.toml`, `plan.md` on the same line) share C-087's excerpt, so they
+report `EXCERPT-TOUCHED`: a row-level consequence of the same region, not a
+second violation.
+
+```
+$ nu .doctrine/slice/273/verify-sweep.nu --base cff015419eecc2dc122af069615ea1af1fe5f0f7 --applied C-091 --tree /tmp/sl273-control/green
+base cff015419eecc2dc122af069615ea1af1fe5f0f7 · --applied C-091 · tree /tmp/sl273-control/green
+partition: changing 131 = unit-applied 120 + subsumed-by-changing 11 · U2 71 · U3a 14 · U3b 18 · U3c 16 · U4 1
+files: 68 checked, 67 byte-identical to base with no applied row
+INFO within: C-141 has within=R-014 but its span lies outside R-014's span
+INFO within: C-214 lies inside R-522 but within=''
+rows 337 · applied 1 (OK 1) · subsumed 0 · unchanged-ok 336 · diff-only 0 · row-failures 0 · violations 0 · inventory-drift 0 · width 0
+(exit 0)
+```
+
+Baseline, untouched tree (summary line only):
+
+```
+$ nu .doctrine/slice/273/verify-sweep.nu --base cff015419eecc2dc122af069615ea1af1fe5f0f7 --through U2
+rows 337 · applied 71 (OK 0) · subsumed 0 · unchanged-ok 264 · diff-only 0 · row-failures 73 · violations 71 (MISAPPLIED 71) · inventory-drift 0 · width 0
+(exit 1)
+```
+
+71 MISAPPLIED (each U2 row applied in scope but not yet in the text) and 0
+UNAUTHORISED, with all 337 rows located. The 73 row failures are the 71 plus
+R-014 and R-500, whose excerpts hold an unapplied U2 span (C-141, C-198) and
+so report `EXCERPT-TOUCHED`. Extra probes, overlay only: a free
+word inserted → `UNAUTHORISED` free text; the applied line rewrapped and
+re-indented → 0 violations; a whitespace-only change in a file with no
+applied row → `UNAUTHORISED-FILE`; a new file → `NEW-FILE`; a wrong
+replacement → `MISAPPLIED`; an unknown or non-changing `--applied` id, both
+or neither scope flag, and a bad `--base` → exit 2. Against `--base
+5b3b39cbc` (pre-adjudication inventory, same shipped text) the drift check
+reports all 337 rows as `INVENTORY` info lines.
