@@ -1,6 +1,3 @@
-# SL-273 sweep inventory — design 6.1. Rows are append-only; ids never renumber.
-# PHASE-03 T1 (W-C, capsule-worker): C-001..C-281, citation rows over plugins/doctrine/skills/**,
-# install/** and src/** prose-bearing text. R- rows are appended by T3 (W-R).
 [[row]]
 id = "C-001"
 file = "install/agents/claude/capsule-phase-planner.md"
@@ -1708,7 +1705,7 @@ class = "library-doc"
 recommend = "convert"
 target = "`lib:reference/review-ledger.md`"
 owner = ""
-within = ""
+within = "R-005"
 reason = "names the published library reference doc; converts to its lib: address"
 verdict = ""
 resolved = ""
@@ -2236,7 +2233,7 @@ class = "library-doc"
 recommend = "convert"
 target = "`lib:reference/review-ledger.md`"
 owner = ""
-within = ""
+within = "R-014"
 reason = "names the published library reference doc; converts to its lib: address"
 verdict = ""
 resolved = ""
@@ -2252,7 +2249,7 @@ class = "library-doc"
 recommend = "convert"
 target = "`lib:reference/review-ledger.md`"
 owner = ""
-within = ""
+within = "R-014"
 reason = "names the published library reference doc; converts to its lib: address"
 verdict = ""
 resolved = ""
@@ -2268,7 +2265,7 @@ class = "library-doc"
 recommend = "convert"
 target = "`lib:reference/review-ledger.md`"
 owner = ""
-within = ""
+within = "R-014"
 reason = "names the published library reference doc; converts to its lib: address"
 verdict = ""
 resolved = ""
@@ -2284,7 +2281,7 @@ class = "library-doc"
 recommend = "convert"
 target = "`lib:reference/review-ledger.md`"
 owner = ""
-within = ""
+within = "R-014"
 reason = "names the published library reference doc; converts to its lib: address"
 verdict = ""
 resolved = ""
@@ -2316,7 +2313,7 @@ class = "library-doc"
 recommend = "convert"
 target = "`lib:reference/review-ledger.md`"
 owner = ""
-within = ""
+within = "R-013"
 reason = "names the published library reference doc; converts to its lib: address"
 verdict = ""
 resolved = ""
@@ -2332,7 +2329,7 @@ class = "library-doc"
 recommend = "convert"
 target = "`lib:reference/review-ledger.md`"
 owner = ""
-within = ""
+within = "R-013"
 reason = "names the published library reference doc; converts to its lib: address"
 verdict = ""
 resolved = ""
@@ -4532,5 +4529,560 @@ target = ""
 owner = ""
 within = ""
 reason = "client entity or runtime file, not the library asset"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-001"
+file = "plugins/doctrine/skills/worktree/SKILL.md"
+line = 31
+token = ""
+excerpt = """
+- `base` — the ref the fork is created from. **`solo` defaults to `HEAD`;
+  `worker` REQUIRES an explicit base** (the orchestrator's coordination HEAD `B`),
+  because the session HEAD is **not** `B` — the orchestrator drives from the
+  coordination branch while the session repo may sit on `main`. Forking from the
+  implicit session HEAD imports a divergent base and corrupts the `B..S` delta."""
+span = """
+because the session HEAD is **not** `B` — the orchestrator drives from the
+  coordination branch while the session repo may sit on `main`. Forking from the
+  implicit session HEAD imports a divergent base and corrupts the `B..S` delta."""
+class = "owned-concept"
+recommend = "cut-to-lib"
+target = "see `lib:reference/dispatch-mechanics.md` § The fork base is explicit, never the session HEAD."
+owner = "lib:reference/dispatch-mechanics.md"
+within = ""
+reason = "restates dispatch-mechanics.md's 'fork base is explicit, never session HEAD' rationale (near-verbatim: session HEAD may sit on main, divergent base corrupts B..S) beyond naming the base parameter"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-002"
+file = "plugins/doctrine/skills/worktree/SKILL.md"
+line = 205
+token = ""
+excerpt = """
+**Armed by the jail, not by cooperation.** `DOCTRINE_WORKER=1` is set inside the
+confinement namespace by the spawn script, so the doctrine guard is armed before
+the worker's first command: any doctrine-mediated authored write (`slice`,
+`memory record`, `backlog`, minting) **refuses**. Worker-ness is a property of
+the process, not of the directory. Outside a dispatch spawn — a hand-driven
+worker turn — export it yourself first."""
+span = """
+**Armed by the jail, not by cooperation.** `DOCTRINE_WORKER=1` is set inside the
+confinement namespace by the spawn script, so the doctrine guard is armed before
+the worker's first command: any doctrine-mediated authored write (`slice`,
+`memory record`, `backlog`, minting) **refuses**. Worker-ness is a property of
+the process, not of the directory. Outside a dispatch spawn — a hand-driven
+worker turn — export it yourself first."""
+class = "owned-concept"
+recommend = "cut-to-lib"
+target = "`lib:reference/dispatch-mechanics.md` § Worker identity is a property of the process, set by the spawn."
+owner = "lib:reference/dispatch-mechanics.md"
+within = ""
+reason = "restates dispatch-mechanics.md's 'Worker identity is a property of the process, set by the spawn' section almost verbatim"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-003"
+file = "plugins/doctrine/skills/worktree/SKILL.md"
+line = 212
+token = ""
+excerpt = """
+**The constrained loop:**
+
+1. **Mutate source only.** Edit source files in the fork. Do **not** write
+   `.doctrine/` authored trees, runtime state, or memory — an import touching them
+   is rejected (report+halt).
+2. **Verify.** Run the **orchestrator-supplied** verify command (passed in the
+   worker prompt — not assumed `doctrine check gate`). A red verify is reported
+   back; the worker does not hand back a red delta as if it were green.
+3. **Leave the delta uncommitted.** A confined worker **cannot** commit — the
+   linked worktree's real git dir is read-only inside the jail, so there is no
+   self-commit path and none is wanted. The importable unit is the working tree
+   itself, which the orchestrator gathers with `worktree import --from-worktree`.
+   Never `reset`, `checkout --`, `stash` or `clean` your own work away — that
+   destroys the only copy. Stay within your declared file set; straying breaks
+   the file-disjoint batch."""
+span = """
+**The constrained loop:**
+
+1. **Mutate source only.** Edit source files in the fork. Do **not** write
+   `.doctrine/` authored trees, runtime state, or memory — an import touching them
+   is rejected (report+halt).
+2. **Verify.** Run the **orchestrator-supplied** verify command (passed in the
+   worker prompt — not assumed `doctrine check gate`). A red verify is reported
+   back; the worker does not hand back a red delta as if it were green.
+3. **Leave the delta uncommitted.** A confined worker **cannot** commit — the
+   linked worktree's real git dir is read-only inside the jail, so there is no
+   self-commit path and none is wanted. The importable unit is the working tree
+   itself, which the orchestrator gathers with `worktree import --from-worktree`.
+   Never `reset`, `checkout --`, `stash` or `clean` your own work away — that
+   destroys the only copy. Stay within your declared file set; straying breaks
+   the file-disjoint batch."""
+class = "owned-concept"
+recommend = "cut-to-lib"
+target = '`lib:reference/dispatch-mechanics.md` §§ "The worker returns a working tree, not a commit" and "Workers can silently discard their own work".'
+owner = "lib:reference/dispatch-mechanics.md"
+within = ""
+reason = "restates dispatch-mechanics.md's worker-returns-a-working-tree and workers-can-discard-their-own-work sections as a 3-step list"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-004"
+file = "plugins/doctrine/skills/audit/SKILL.md"
+line = 37
+token = ""
+excerpt = """
+## Tool preference
+
+If your harness supports MCP tools and doctrine's MCP server is connected
+(you see `review_new`, `review_raise`, `review_dispose`, `review_amend`,
+`review_verify`, `review_contest`, `review_reopen`, `review_withdraw`,
+`review_conclude`, `review_prime`, `review_list`, `review_show`,
+`review_status` in your tool list), **prefer these MCP tools over the CLI** —
+they return machine-parseable JSON text in the MCP content block, carry prose as
+structured fields with no shell quoting, and eliminate shell overhead. Every
+review verb has an MCP equivalent except `review unlock` and `review paths`,
+which stay CLI-only."""
+span = """
+If your harness supports MCP tools and doctrine's MCP server is connected
+(you see `review_new`, `review_raise`, `review_dispose`, `review_amend`,
+`review_verify`, `review_contest`, `review_reopen`, `review_withdraw`,
+`review_conclude`, `review_prime`, `review_list`, `review_show`,
+`review_status` in your tool list), **prefer these MCP tools over the CLI** —
+they return machine-parseable JSON text in the MCP content block, carry prose as
+structured fields with no shell quoting, and eliminate shell overhead. Every
+review verb has an MCP equivalent except `review unlock` and `review paths`,
+which stay CLI-only."""
+class = "owned-concept"
+recommend = "cut-to-lib"
+target = "See `lib:reference/review-ledger.md` for the MCP-vs-CLI tool preference and the full verb list."
+owner = "lib:reference/review-ledger.md"
+within = ""
+reason = 'review-ledger.md already states the MCP-tool preference ("Prefer the MCP tools ... when your harness ..."); this section fully enumerates the tool list and rationale beyond naming the rule'
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-005"
+file = "plugins/doctrine/skills/audit/SKILL.md"
+line = 71
+token = ""
+excerpt = """
+**Disposition convention (audit-specific).** `--disposition` takes only the
+closed vocab (`review-ledger.md` §4). Audit uses `aligned` (observation correct,
+no change needed), `fix-now` (code fix within audit scope — never a spec or
+governance edit), `tolerated` (explicit accepted drift with rationale), and
+`design-wrong` for a spec/governance change delegated to `/reconcile`, with the
+reconciliation-brief link in `--response`. Audit must **never** use `follow-up`
+for spec/governance items — those belong to the reconcile write surface, not the
+backlog. Keep disposition and status apart: `verified` is a finding **status**,
+reached when the raiser runs `review verify`, never a `--disposition` value (the
+CLI refuses it). Every finding ends `verified` (the observation is confirmed; a
+delegated one once its brief entry exists); the *remediation* is reconcile's job
+and is recorded separately — do not mutate a finding to `fixed`/`remediated`."""
+span = """
+`--disposition` takes only the
+closed vocab (`review-ledger.md` §4). Audit uses `aligned` (observation correct,
+no change needed), `fix-now` (code fix within audit scope — never a spec or
+governance edit), `tolerated` (explicit accepted drift with rationale), and
+`design-wrong` for a spec/governance change delegated to `/reconcile`, with the
+reconciliation-brief link in `--response`. Audit must **never** use `follow-up`
+for spec/governance items — those belong to the reconcile write surface, not the
+backlog. Keep disposition and status apart: `verified` is a finding **status**,
+reached when the raiser runs `review verify`, never a `--disposition` value (the
+CLI refuses it)."""
+class = "owned-concept"
+recommend = "cut-to-lib"
+target = "the closed disposition vocab, `lib:reference/review-ledger.md` §4."
+owner = "lib:reference/review-ledger.md"
+within = ""
+reason = "restates review-ledger.md's disposition vocabulary (meanings of aligned/fix-now/tolerated/design-wrong, verified-is-a-status-not-a-disposition) beyond audit's own scope-specific never-follow-up rule"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-006"
+file = "plugins/doctrine/skills/audit/SKILL.md"
+line = 173
+token = ""
+excerpt = """
+   **Human-facing synthesis.** When the audit has consequential material, give
+   the human a short route through the participating systems, one important
+   behaviour and its implementation, the tests that bear on it, and a remaining
+   risk. For consequential Doctrine sources cited in a decision, name why each
+   matters and give its exact `doctrine <kind> show <ID>` command. If deeper
+   inspection would help, offer `/walkthrough` or `/pair` without requiring it.
+   A focused question about which risk concerns the human may improve the
+   synthesis; use the answer if asked, and do not turn it into a comprehension
+   check. When a real finding supports it, an optional short mock peer challenge
+   can help rehearse a decision or test its rationale. Keep the source and
+   whether the objection is historical or simulated clear. A new substantive
+   defect belongs on the RV ledger; the human's ability to answer is neither a
+   finding nor an acceptance condition. Respect the project's engagement
+   default and the human's verbal changes."""
+span = """
+   **Human-facing synthesis.** When the audit has consequential material, give
+   the human a short route through the participating systems, one important
+   behaviour and its implementation, the tests that bear on it, and a remaining
+   risk. For consequential Doctrine sources cited in a decision, name why each
+   matters and give its exact `doctrine <kind> show <ID>` command. If deeper
+   inspection would help, offer `/walkthrough` or `/pair` without requiring it.
+   A focused question about which risk concerns the human may improve the
+   synthesis; use the answer if asked, and do not turn it into a comprehension
+   check. When a real finding supports it, an optional short mock peer challenge
+   can help rehearse a decision or test its rationale. Keep the source and
+   whether the objection is historical or simulated clear. A new substantive
+   defect belongs on the RV ledger; the human's ability to answer is neither a
+   finding nor an acceptance condition. Respect the project's engagement
+   default and the human's verbal changes."""
+class = "ownerless-concept"
+recommend = "log"
+target = ""
+owner = "IMP-500:G9"
+within = ""
+reason = "OQ-3: restates the human-engagement default (owner governance.md, unreachable in clients); no owning lib doc and not one of IMP-500's existing G1-G8 gaps — logged against a proposed new G9 pending the orchestrator's OQ-3 ruling (sheet recommends reject citing QUE-228)"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-007"
+file = "plugins/doctrine/skills/dispatch/SKILL.md"
+line = 69
+token = ""
+excerpt = """
+### The funnel oracle — for a bound fork only
+
+`doctrine dispatch next --slice <N>` reads the **committed funnel record** and
+prescribes exactly one action at a time. It is read-only, never heals, and always
+exits 0. But a funnel row exists only for a fork **bound at creation**
+(`fork --worker --slice N --phase PHASE-NN` under `<coord>/.worktrees/<name>`),
+and the shipped spawn path forks unbound — so on an ordinary drive `next` sits at
+`spawn` and prescribes nothing further. That is expected: you are the main-thread
+orchestrator, and the main-thread orchestrator never consults the funnel record.
+Read `next` as advisory, and drive the order above. Do not "heal" a missing row."""
+span = """
+`doctrine dispatch next --slice <N>` reads the **committed funnel record** and
+prescribes exactly one action at a time. It is read-only, never heals, and always
+exits 0. But a funnel row exists only for a fork **bound at creation**
+(`fork --worker --slice N --phase PHASE-NN` under `<coord>/.worktrees/<name>`),
+and the shipped spawn path forks unbound — so on an ordinary drive `next` sits at
+`spawn` and prescribes nothing further. That is expected: you are the main-thread
+orchestrator, and the main-thread orchestrator never consults the funnel record.
+Read `next` as advisory, and drive the order above. Do not "heal" a missing row."""
+class = "owned-concept"
+recommend = "cut-to-lib"
+target = "See `lib:reference/dispatch-mechanics.md` § The funnel record, and when it is the driver."
+owner = "lib:reference/dispatch-mechanics.md"
+within = ""
+reason = "restates dispatch-mechanics.md's funnel-record / unbound-fork explanation almost verbatim"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-008"
+file = "plugins/doctrine/skills/dispatch/SKILL.md"
+line = 100
+token = ""
+excerpt = """
+**Two altitudes.** `next` answers the *phase funnel* only. Everything past it —
+prepare-review, base freshness, candidates, admission, close — is `dispatch
+status`, which is where `all-reaped` sends you.
+
+**A refusal is the recovery procedure.** Every funnel verb that refuses prints
+``<verb> refused at position `<pos>` — <reason>; expected: <next>``. Read it and
+act on it. Do not improvise a repair, do not go digging for the state by hand,
+and do not re-drive around it — a refusal is a defect or a halt, never a detour."""
+span = """
+**Two altitudes.** `next` answers the *phase funnel* only. Everything past it —
+prepare-review, base freshness, candidates, admission, close — is `dispatch
+status`, which is where `all-reaped` sends you.
+
+**A refusal is the recovery procedure.** Every funnel verb that refuses prints
+``<verb> refused at position `<pos>` — <reason>; expected: <next>``. Read it and
+act on it. Do not improvise a repair, do not go digging for the state by hand,
+and do not re-drive around it — a refusal is a defect or a halt, never a detour."""
+class = "owned-concept"
+recommend = "cut-to-lib"
+target = 'See `lib:reference/dispatch-mechanics.md` §§ "Two altitudes" and "A refusal is the recovery procedure".'
+owner = "lib:reference/dispatch-mechanics.md"
+within = ""
+reason = "near-verbatim restatement of dispatch-mechanics.md's own 'Two altitudes' and 'A refusal is the recovery procedure' sections"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-009"
+file = "plugins/doctrine/skills/dispatch/SKILL.md"
+line = 121
+token = ""
+excerpt = """
+- **The import's prove gate.** `worktree import --from-worktree` is
+  non-committing and runs the **reject-and-halt prove gate** in-process
+  (`doctrine check prove` on the post-import tree): an unformatted OR lint-red
+  delta HALTS the import (staged, NOT committed) and is reported — never
+  auto-fixed (sole-writer posture: land-or-reject, never rewrite). A red here is
+  a WORKER-delta defect, distinct from the pre-spawn BASE defect above."""
+span = """
+delta HALTS the import (staged, NOT committed) and is reported — never
+  auto-fixed (sole-writer posture: land-or-reject, never rewrite)."""
+class = "owned-concept"
+recommend = "cut-to-lib"
+target = "delta halts the import per `lib:reference/dispatch-mechanics.md` (land-or-reject, never rewrite)."
+owner = "lib:reference/dispatch-mechanics.md"
+within = ""
+reason = "restates dispatch-mechanics.md's 'The import is non-committing' land-or-reject-never-rewrite rule almost verbatim"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-010"
+file = "plugins/doctrine/skills/reconcile/SKILL.md"
+line = 68
+token = ""
+excerpt = """
+## Human-facing reconciliation
+
+For a consequential proposed change, make the current passage, proposed
+passage, and effect on future work legible before asking for the existing
+confirmation or REV approval. Give enough context to judge the change and the
+exact `doctrine <kind> show <ID>` command for consequential Doctrine sources.
+Offer `/walkthrough` of the passages and their implications when it would help;
+an answer about remaining risk or intent may improve the proposal, so carry it
+into the write. This composes with the confirmation below: do not add a second
+acceptance act or require the human to prove understanding. Respect the
+project's engagement default and the human's verbal changes."""
+span = """
+For a consequential proposed change, make the current passage, proposed
+passage, and effect on future work legible before asking for the existing
+confirmation or REV approval. Give enough context to judge the change and the
+exact `doctrine <kind> show <ID>` command for consequential Doctrine sources.
+Offer `/walkthrough` of the passages and their implications when it would help;
+an answer about remaining risk or intent may improve the proposal, so carry it
+into the write. This composes with the confirmation below: do not add a second
+acceptance act or require the human to prove understanding. Respect the
+project's engagement default and the human's verbal changes."""
+class = "ownerless-concept"
+recommend = "log"
+target = ""
+owner = "IMP-500:G9"
+within = ""
+reason = "OQ-3: restates the human-engagement default (owner governance.md, unreachable in clients); no owning lib doc and not one of IMP-500's existing G1-G8 gaps — logged against a proposed new G9 pending the orchestrator's OQ-3 ruling (sheet recommends reject citing QUE-228)"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-011"
+file = "plugins/doctrine/skills/reconcile/SKILL.md"
+line = 169
+token = ""
+excerpt = '''
+Actions map to intent:
+
+| Brief says | `--action` | Extra flags |
+|---|---|---|
+| ADR/Spec prose wrong → amend | `modify` | `--target <ADR-N>` |
+| Requirement changed status | `status` | `--target <REQ-N> --to-status <S>` |
+| New requirement needed | `introduce` | `--new-label <FR-\|NF-NNN> --member-of <SPEC-N>` |
+| Requirement obsolete | `retire` | `--target <REQ-N>` |
+| New spec needed | `create` | `--new-label <label> [--member-of <SPEC>]` |
+| Requirement moves spec | `move` | `--target <REQ-N> --member-of <SPEC-N>` |'''
+span = '''
+Actions map to intent:
+
+| Brief says | `--action` | Extra flags |
+|---|---|---|
+| ADR/Spec prose wrong → amend | `modify` | `--target <ADR-N>` |
+| Requirement changed status | `status` | `--target <REQ-N> --to-status <S>` |
+| New requirement needed | `introduce` | `--new-label <FR-\|NF-NNN> --member-of <SPEC-N>` |
+| Requirement obsolete | `retire` | `--target <REQ-N>` |
+| New spec needed | `create` | `--new-label <label> [--member-of <SPEC>]` |
+| Requirement moves spec | `move` | `--target <REQ-N> --member-of <SPEC-N>` |'''
+class = "flag-shape"
+recommend = "cut-to-help"
+target = "see `doctrine revision change add --help` for the `--action` values and their flags."
+owner = "--help:revision change add"
+within = ""
+reason = "an enum/value table for the `--action` flag of `revision change add`, mapping each value's meaning and extra flags — flag-shape per design 6.2"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-012"
+file = "plugins/doctrine/skills/reconcile/SKILL.md"
+line = 180
+token = ""
+excerpt = """
+`modify` / `retire` / `create` / `move` / `prose` rows are **surfaced for manual
+landing** at apply time — `revision apply` auto-lands only `status` rows."""
+span = """
+`modify` / `retire` / `create` / `move` / `prose` rows are **surfaced for manual
+landing** at apply time — `revision apply` auto-lands only `status` rows."""
+class = "flag-shape"
+recommend = "cut-to-help"
+target = "see `doctrine revision apply --help` for which `--action` values auto-land vs. surface for manual landing."
+owner = "--help:revision apply"
+within = ""
+reason = "prose explaining which `--action` values `revision apply` auto-lands vs. surfaces manually — flag-shape, duplicates step 5's own explanation"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-013"
+file = "plugins/doctrine/skills/code-review/SKILL.md"
+line = 166
+token = ""
+excerpt = """
+append-only). The emoji severities map straight onto the shared severity axis
+(`review-ledger.md` §3); raise with the mapped `--severity`:
+
+| label | meaning | `--severity` |
+|---|---|---|
+| 🔴 | blocking | `blocker` |
+| 🟠 | important | `major` |
+| 🟡 | minor | `minor` |
+| 🔵 | optional suggestion | `nit` |
+
+Only **`blocker`** gates the target's close (`review-ledger.md` §3, §6) — reserve
+it for what must not ship unreconciled, and do not downgrade a true blocker to
+dodge the close-gate. **👍 good is not a finding** — praise (such as it is) goes
+into the synthesis, not the ledger."""
+span = """
+The emoji severities map straight onto the shared severity axis
+(`review-ledger.md` §3); raise with the mapped `--severity`:
+
+| label | meaning | `--severity` |
+|---|---|---|
+| 🔴 | blocking | `blocker` |
+| 🟠 | important | `major` |
+| 🟡 | minor | `minor` |
+| 🔵 | optional suggestion | `nit` |
+
+Only **`blocker`** gates the target's close (`review-ledger.md` §3, §6) — reserve
+it for what must not ship unreconciled, and do not downgrade a true blocker to
+dodge the close-gate."""
+class = "owned-concept"
+recommend = "cut-to-lib"
+target = "the emoji severities map onto `lib:reference/review-ledger.md`'s severity vocab (🔴 blocker, 🟠 major, 🟡 minor, 🔵 nit); only `blocker` gates close."
+owner = "lib:reference/review-ledger.md"
+within = ""
+reason = "reproduces review-ledger.md's severity vocab (blocker/major/minor/nit) as an enum table plus its blocker-gates-close rule, mapped to this skill's emoji"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-014"
+file = "plugins/doctrine/skills/code-review/SKILL.md"
+line = 105
+token = ""
+excerpt = """
+### Where the findings land — subject before you start
+
+Pick the subject up the target ladder (`review-ledger.md` §1) before you raise a
+single thing; the closer the subject sits to a real entity, the more your
+findings can be queried, gated, and handed off:
+
+- An existing **slice / phase / design / plan** under review → open the RV against
+  it — except a design under a managed design run, which already holds its pass
+  RV (`doctrine design show <slice> --format prompt` names it as `review_pass`):
+  raise there, never on a second RV (`review-ledger.md` §2, *Open*). A **backlog
+  item** (`issue` / `improvement` / `chore` / `risk` / `idea`) is the typed home
+  for a durable diff with no slice yet — and if no proximate subject exists but
+  the review is durable, **mint one** (`backlog new <kind>`) and target that. Do
+  not skip to prose to dodge the mint.
+- **Prose is the last resort** — reserved for an explicitly throwaway one-shot with
+  no durable subject, no lifecycle gate, no handoff, and no finding worth keeping.
+  If you are reviewing code that matters, it has a home on the ledger; the cost
+  asymmetry favours opening it (`review-ledger.md` §1, the ledger-vs-prose trigger).
+- The **code/diff is the evidence, not the subject.** When the locus is a backlog
+  item (or any non-code entity), the item is the RV's *locus* and the concrete code
+  evidence — file, line, the offending construct — lives in each finding's
+  `--detail` (`review-ledger.md` §1). Never include any secrets,
+  credentials or API keys directly in the ledger."""
+span = """
+Pick the subject up the target ladder (`review-ledger.md` §1) before you raise a
+single thing; the closer the subject sits to a real entity, the more your
+findings can be queried, gated, and handed off:
+
+- An existing **slice / phase / design / plan** under review → open the RV against
+  it — except a design under a managed design run, which already holds its pass
+  RV (`doctrine design show <slice> --format prompt` names it as `review_pass`):
+  raise there, never on a second RV (`review-ledger.md` §2, *Open*). A **backlog
+  item** (`issue` / `improvement` / `chore` / `risk` / `idea`) is the typed home
+  for a durable diff with no slice yet — and if no proximate subject exists but
+  the review is durable, **mint one** (`backlog new <kind>`) and target that. Do
+  not skip to prose to dodge the mint.
+- **Prose is the last resort** — reserved for an explicitly throwaway one-shot with
+  no durable subject, no lifecycle gate, no handoff, and no finding worth keeping.
+  If you are reviewing code that matters, it has a home on the ledger; the cost
+  asymmetry favours opening it (`review-ledger.md` §1, the ledger-vs-prose trigger)."""
+class = "owned-concept"
+recommend = "cut-to-lib"
+target = "see `lib:reference/review-ledger.md` § the subject/target ladder."
+owner = "lib:reference/review-ledger.md"
+within = ""
+reason = "restates review-ledger.md's target-ladder concept (named as review-ledger.md-owned in this skill's own text) in full, beyond citing it — least-sure: sheet's owner-map bullet for review-ledger.md names only 'RV acts, severity/disposition vocabulary', not the target ladder explicitly, so confirm against design 5.2's full text"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-015"
+file = "plugins/doctrine/skills/close/SKILL.md"
+line = 116
+token = ""
+excerpt = """
+3b. **Split lineage — the payload reached trunk out-of-band
+   (`--record-integration`).** If the reviewed code already sits on trunk by a
+   sanctioned route the dispatch journal never recorded — an operator direct-land,
+   a manual `--no-ff` merge of the payload, an external integration — then
+   `--integrate` (step 3a) **cannot** run: it advances trunk fast-forward-only, but
+   a landed payload is an *ancestor*, not a descendant, of the trunk merge tip
+   (non-ff → refused). The close gate still refuses `done` ("dispatched but no
+   trunk row"). Record the earned row instead of hand-editing `journal.toml`:"""
+span = """
+If the reviewed code already sits on trunk by a
+   sanctioned route the dispatch journal never recorded — an operator direct-land,
+   a manual `--no-ff` merge of the payload, an external integration — then
+   `--integrate` (step 3a) **cannot** run: it advances trunk fast-forward-only, but
+   a landed payload is an *ancestor*, not a descendant, of the trunk merge tip
+   (non-ff → refused)."""
+class = "owned-concept"
+recommend = "cut-to-lib"
+target = "see `lib:reference/dispatch-mechanics.md` § Split lineage — record an already-landed payload, don't advance trunk."
+owner = "lib:reference/dispatch-mechanics.md"
+within = ""
+reason = "near-verbatim restatement of dispatch-mechanics.md's 'Split lineage' section (same wording: operator direct-land / manual --no-ff merge / external integration; ancestor-not-descendant; non-ff refused)"
+verdict = ""
+resolved = ""
+
+[[row]]
+id = "R-016"
+file = "plugins/doctrine/skills/close/SKILL.md"
+line = 130
+token = ""
+excerpt = """
+   It resolves the earned trunk payload (phase-chain tip, or the admitted
+   `close_target` when a candidate workflow is active — **never** `review/<N>`, a
+   review surface that is forbidden as a trunk payload), asserts it is **already an
+   ancestor** of trunk, and commits a single **Verified** trunk row — mutating no
+   ref. Then `slice status <N> done` reads that row and passes. This is the
+   sanctioned replacement for a hand-written journal row; land the payload
+   out-of-band as `git merge --no-ff phase/<N>-NN` (or
+   the admitted candidate), not `review/<N>`."""
+span = """
+It resolves the earned trunk payload (phase-chain tip, or the admitted
+   `close_target` when a candidate workflow is active — **never** `review/<N>`, a
+   review surface that is forbidden as a trunk payload), asserts it is **already an
+   ancestor** of trunk, and commits a single **Verified** trunk row — mutating no
+   ref."""
+class = "owned-concept"
+recommend = "cut-to-lib"
+target = "per `lib:reference/dispatch-mechanics.md` § Split lineage, `--record-integration` asserts the payload is already an ancestor of trunk and commits a single Verified trunk row."
+owner = "lib:reference/dispatch-mechanics.md"
+within = ""
+reason = "continues the R-015 restatement of dispatch-mechanics.md's 'Split lineage' section (resolves earned payload / asserts already-ancestor / commits Verified row), separated from R-015 by a permitted single invocation code block"
 verdict = ""
 resolved = ""
