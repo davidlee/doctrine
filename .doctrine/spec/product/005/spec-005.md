@@ -29,8 +29,9 @@ In scope:
   permanent claim that decouples holding a number from authoring its contents.
 - Arbitrating contended allocation so exactly one agent wins a given identity and
   the rest retake the next free one, without a lock, daemon, or central authority.
-- The reach of a claim as a backend choice — a single working tree, or every
-  clone of a shared remote — selected by configuration, transparent to callers.
+- The reach of a claim as a backend choice — every working tree of one clone,
+  or every clone of a shared remote — selected by configuration, transparent to
+  callers.
 - Surveying the held claims: who holds what, and since when, across the active
   coordination store.
 
@@ -45,7 +46,7 @@ Out of scope:
 - Guarding direct human edits to working-tree files — reservation guards identity
   allocation, not content mutation.
 - Cross-VCS parity beyond the project's chosen version control; where a shared
-  remote is unavailable, the contract narrows to single-tree reach.
+  remote is unavailable, the contract narrows to clone-local reach.
 
 Boundary: this capability governs *claims on names*, never *content*. It answers
 "who holds this identity, with what reach" and nothing about what the identified
@@ -105,7 +106,7 @@ Invariants:
   reservation leaves a harmless gap, never a fault that must be repaired.
 - When a shared-reach backend is configured, identities are unique across every
   clone of the remote; when it is unavailable, allocation falls back to
-  single-tree reach with the reduced reach made visible, not silently assumed.
+  clone-local reach with the reduced reach made visible, not silently assumed.
 - An operator can survey the held claims and see who holds what and since when.
 - Adding a new numbered entity kind reuses the same reservation guarantee with no
   new collision-avoidance mechanism invented for it.
@@ -122,12 +123,12 @@ wins the atomic claim; the loser observes the collision, recomputes the next fre
 candidate, and retries, until it lands a free identity. No caller ever proceeds on
 a contested number.
 
-Reach selection: the reach of a claim is chosen from configuration — a single
-working tree, or every clone of a shared remote. When reach is set to resolve
-automatically, the broader-reach backend is used when its remote is reachable, and
-otherwise allocation falls back to single-tree reach with a one-time signal that
+Reach selection: the reach of a claim is chosen from configuration — every
+working tree of one clone, or every clone of a shared remote. When reach is set
+to resolve automatically, the broader-reach backend is used when its remote is
+reachable, and otherwise allocation falls back to clone-local reach with a one-time signal that
 cross-team reach is off. This automatic fall-back governs the structurally
-single-tree case — no remote configured. A *configured* remote that fails is
+clone-local case — no remote configured. A *configured* remote that fails is
 treated as a hard error rather than silently downgraded; the operator opts into
 reduced-reach local allocation explicitly. A transient failure can thus never
 silently mint a local id that collides with another clone's accepted remote
@@ -137,7 +138,7 @@ Survey flow: an operator asks for the held claims under a namespace and receives
 each held identity with its holder and the time it was acquired.
 
 Edge cases and boundaries: an empty namespace yields the first identity; gaps left
-by abandoned reservations are skipped, never reused; under single-tree reach,
+by abandoned reservations are skipped, never reused; under clone-local reach,
 agents in separate clones can still collide — an accepted limitation made visible,
 not silently hidden. A claim never touches the identified entity's content, so a
 reservation can exist with no entity authored behind it.
@@ -156,7 +157,7 @@ correctly; and no two holders ever come away with the same number. Durability an
 permanence are proven by confirming a reserved identity persists and is never
 reissued, even when no entity is authored behind it. Reach behaviour is proven by
 confirming that automatic selection resolves to broader reach when the remote is
-reachable and falls back to single-tree reach — with the reduced reach surfaced —
+reachable and falls back to clone-local reach — with the reduced reach surfaced —
 otherwise, and that an explicit reach choice overrides selection. The
 coordination-only boundary is proven by confirming a claim references an entity by
 name without holding its content and never appears in the entity's record. The
@@ -169,9 +170,9 @@ quality requirements is tracked against those entities, not duplicated here.
 
 ## 8. Open Questions
 
-- Single-tree reach cannot see other clones, so teams in separate clones can still
+- Clone-local reach cannot see other clones, so teams in separate clones can still
   collide before a shared-reach backend is configured. What is the acceptable
-  interim posture for multi-team work while only single-tree reach is available?
+  interim posture for multi-team work while only clone-local reach is available?
   This blocks any guarantee of cross-team uniqueness in the default configuration.
 - Resolving reach automatically currently costs a coordination round-trip on each
   reservation. Whether that probe should be cached or amortised is unresolved; it

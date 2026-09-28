@@ -85,3 +85,31 @@ Standing risks:
   - SPEC-008 (lines 73, 143, 155): local = clone-common ref CAS plus per-tree
     `mkdir`; scan union; `reseat` does a lenient slug read, claims its
     destination, and refuses `--to` onto a held id.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- F-1: selectors — removed `.agents/skills/{audit,inquisition}/SKILL.md`; added
+  `plugins/doctrine/skills/{audit,code-review,inquisition}/SKILL.md` as
+  design-target. design.md sec-5 (skill-source sentence, guidance table incl. a
+  `code-review` row) and sec-6 (guidance row) mirror it.
+- F-2: selectors — added `src/kinds/mod.rs`, `src/test_support.rs`,
+  `tests/common/mod.rs` as design-target; design.md sec-6 gains a `kinds` row
+  and a `LinkedTrees` fixture row. Conformance now reports 0 undelivered and no
+  undeclared source, test or plugin path.
+- F-3: premise mostly false. Seven of eight `fulfils` edges already existed;
+  `doctrine show SL-269` does not render outbound `fulfils` edges (ISS-498).
+  Added the one missing edge, SL-269 fulfils ISS-494. IMP-240 stays `full`, not
+  `partial` as the brief said: its defect 1 was fixed by ISS-484 and defect 2 by
+  this slice.
+
+### REVs completed
+- REV-068 (`reconcile-sl-269`): done — ADR-007 D-C1/D-C7/D-C10 plus the D-C7
+  verification line; PRD-005 "single-tree" → "clone-local" reach; SPEC-008
+  local-reach mechanism, D1, trunk-union rationale, `reseat` section and
+  concerns (covers F-4). Rationale in revision-068.md.
+
+### Withdrawn / tolerated
+- None.
+
+Reconcile pass complete — handoff to /close.

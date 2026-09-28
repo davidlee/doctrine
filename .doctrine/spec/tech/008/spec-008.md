@@ -69,8 +69,21 @@ claim backend reserves an id by creating `refs/doctrine/reservation/<prefix>/<NN
 zero-oid create-CAS (`push --force-with-lease=<ref>:0`), linearizing the claim
 across every clone. Three new remote ops in `git.rs` back it (`fetch_refspec`,
 `push_ref_cas`, `for_each_ref`). Reach is config-selected (`[reservation] reach =
-local | shared | auto`); the trunk-union local scan above remains the degraded
-single-tree reach. Leasing (IDE-021) and git-ref content storage stay out of scope.
+local | shared | auto`). Leasing (IDE-021) and git-ref content storage stay out of
+scope.
+
+**Shipped (SL-269, DEC-337): `local` reach is clone-wide.** In a git root, a
+`local` claim is a zero-oid `update-ref` CAS on
+`refs/doctrine/reservation-local/<PREFIX>/<NNN>` in the clone's common git dir,
+followed by the per-tree `mkdir`, so every worktree of one clone arbitrates on
+the same ref store; the remote is never touched. Whatever reach is configured,
+the candidate scan is the union of both ref namespaces (`reservation-local/` and
+`reservation/`, scoped to the kind's prefix), every live worktree's entity dirs
+(covering ids minted before the ref existed), and the trunk listing — trunk is
+one scan input, not the whole fix. A non-git root keeps plain `mkdir`. Accepted
+residual (DEC-337): a pre-SL-269 id committed only on a branch with no live
+worktree, or claimed without a ref, is invisible to the scan; `validate` and
+`reseat` remain the backstop.
 
 ### The corpus-wide `KINDS` table
 
@@ -104,16 +117,23 @@ corruption. A clean corpus exits zero; any finding exits non-zero with the count
 ### `reseat` — the repair half
 
 `reseat` renumbers an entity's canonical-id quad — the directory name, the
-`<stem>-NNN.{toml,md}` filenames, the toml `id` field (written edit-preservingly so
-comments and unknown keys survive), and the `NNN-slug` alias — to the next-free
-trunk-aware id, or to an explicit `--to`. It keys on the canonical ref (`SL-031`),
-never a bare number, because the kind disambiguates the per-namespace id. Two guards
-fire *before* any mutation: an occupied target is refused (no clobber), and an id
-with live gitignored runtime phase state is refused (reseat does not own the
-disposable tier — clear it first). Inbound prose citations of the old ref are
-reported as danglers and force a non-zero exit *even on a fully-completed reseat* —
-the rename succeeded, but the citations are the human's to rewrite by hand, because
-prose relations are outbound-only (ADR-004); reseat never rewrites prose.
+`<stem>-NNN.{toml,md}` filenames, the toml `id` field (written edit-preservingly
+so comments and unknown keys survive), and the `NNN-slug` alias — to the next-free
+trunk-aware id, or to an explicit `--to`. The source's slug is read leniently, so
+status-less kinds (review, REC) reseat too. The destination is claimed through the
+reservation backend before the rename, so the pick sees sibling trees and local
+refs, and `--to` onto an id held as a sibling tree's dir or a local ref is refused
+(SL-269). It keys on the canonical ref (`SL-031`), never a bare number, because
+the kind disambiguates the per-namespace id. Two guards fire *before* any
+mutation: an occupied target is refused (no clobber), and an id with live
+gitignored runtime phase state is refused (reseat does not own the disposable tier
+— clear it first). Inbound citations of the old ref in `.doctrine/` `*.md` and
+`*.toml` files are reported as danglers (the walk does not follow symlinks, so
+aliases and the `phases` link are neither double-counted nor entered; an
+unreadable file is listed with its cause, never skipped — STD-003) and force a
+non-zero exit *even on a fully-completed reseat* — the rename succeeded, but the
+citations are the human's to rewrite by hand, because prose relations are
+outbound-only (ADR-004); reseat never rewrites prose.
 
 ## Concerns
 
@@ -123,14 +143,16 @@ prose relations are outbound-only (ADR-004); reseat never rewrites prose.
   the detect/repair backstop when a collision lands anyway (e.g. a pre-merge
   reservation race the local backend could not see).
 - **Local-only degradation is silent reach loss, not incorrectness.** Without a
-  reachable trunk, allocation is correct and lock-free on one tree but cannot see
-  other forks; the cross-fork guarantee requires a trunk to union against.
+  shared remote, allocation is correct across the trees of one clone but cannot
+  see other clones; the cross-clone guarantee requires shared reach.
 - **`KINDS` is a drift surface.** A numbered kind not registered there escapes every
   integrity check — an accepted cost of one flat table over a threaded registry.
 - **`reseat` is non-transactional.** Its post-guard filesystem ops are a sequence,
   not a transaction; a mid-sequence failure leaves a half-reseated entity that
-  `validate` will flag. It targets freshly-minted pre-execution collisions where
-  that blast radius is acceptable.
+  `validate` will flag. Cleanup before the commit rename removes only the empty
+  claimed dir; a failure after it is reported as a partial move, not undone. It
+  targets freshly-minted pre-execution collisions where that blast radius is
+  acceptable.
 
 ## Hypotheses
 
@@ -140,9 +162,9 @@ prose relations are outbound-only (ADR-004); reseat never rewrites prose.
   unification to dodge a ref-count cliff no Doctrine kind approaches.
 - **Trunk union closes the fork gap without a shared store.** Folding trunk ids into
   the local scan is preferred over requiring a network reservation backend for the
-  common case, so single-tree and forked work are both collision-free offline; the
-  shared-backend (`git-ref`) reach is deferred until a caller needs cross-team
-  claims.
+  common case, so merged work is never reused offline. It is one scan input: trees
+  of one clone are covered by the clone-wide local ref and the live-worktree scan
+  (SL-269). The shared-backend (`git-ref`) reach serves cross-clone claims.
 - **Detect and repair are deliberately separate verbs.** `validate` only reports and
   `reseat` only repairs one entity at a time, preferred over an auto-fixing scan, so
   renumbering is always a deliberate human-driven act and never silently rewrites the
@@ -152,7 +174,8 @@ prose relations are outbound-only (ADR-004); reseat never rewrites prose.
 
 - **D1 — reservation is an interpretation of the engine's claim seam, not a second
   primitive.** The `max + 1` arbitration and retry loop are owned here; the atomic
-  `Claim` primitive (`mkdir` is the local backend) is owned by the parent engine
+  `Claim` primitive (`mkdir` is the engine's base claim; in a git root, `local`
+  reach claims a clone-common ref first — SL-269) is owned by the parent engine
   (SPEC-004) and not restated. A `claim` is the generic "this dir is mine"; a
   *reservation* is what the numbered callers build on it.
 - **D2 — trunk ids are a constant input read once at the shell edge.** Fork safety
