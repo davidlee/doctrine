@@ -590,8 +590,10 @@ pub(crate) fn git_facts(root: &Path, m: &Memory, snap: &Snapshot) -> GitFacts {
 /// returns the ranked survivors. Each memory runs the filter cascade
 /// `base_filter → match_scope → thread_expiry`, then crosses into the ordering
 /// core as a `Candidate` carrying its derived signals. A scope-bearing query
-/// requires a `match_scope` hit; a bare `--query` keeps every survivor with no
-/// scope match (specificity 0, D20).
+/// requires a `match_scope` hit; a bare `--query` keeps survivors with no scope
+/// match (specificity 0, D20). A *find* (free text that tokenizes) then keeps
+/// only rows with evidence ([`Candidate::has_evidence`]); a browse is unfloored
+/// (SL-275 DEC-348).
 pub(crate) fn query<'a>(
     mems: &'a [Memory],
     q: &QueryContext,
@@ -1231,6 +1233,9 @@ pub(crate) fn search_for_mcp(
     offset: usize,
     limit: usize,
 ) -> Result<SearchForMcp> {
+    if limit == 0 {
+        anyhow::bail!("--limit must be >= 1");
+    }
     let loaded = load_query(
         path, paths, globs, commands, tags, lifespan, free_query, type_f, status_f,
     )?;
@@ -1244,9 +1249,6 @@ pub(crate) fn search_for_mcp(
         &ranker,
     );
     let total = ranked.len();
-    if limit == 0 {
-        anyhow::bail!("--limit must be >= 1");
-    }
     let visible: Vec<&Candidate<'_>> = ranked.iter().skip(offset).take(limit).collect();
     let floor = holdback_floor(None);
     let rows: Vec<serde_json::Value> = visible

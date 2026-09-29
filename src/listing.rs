@@ -921,9 +921,8 @@ fn grid_min_width(cols: usize) -> usize {
 /// the self-guard makes the shared surface robust regardless of caller discipline;
 /// D-review BLOCKER F7).
 ///
-/// The 4th argument is `page_size` (the resolved limit), NOT a generic `limit`
-/// that could be `None`. Call sites must pass the resolved page size (e.g.
-/// `limit.unwrap_or(DEFAULT)`).
+/// The 4th argument is `page_size`: the page size the caller actually renders
+/// (search's resolved limit, retrieve's capped limit), never a raw request.
 pub(crate) fn format_truncation_notice(
     shown: usize,
     total: usize,
@@ -1003,6 +1002,14 @@ mod tests {
     use super::*;
 
     // -- truncation notice (SL-275 PHASE-01) --------------------------------
+
+    #[test]
+    fn no_match_notice_golden() {
+        assert_eq!(
+            format_no_match_notice("zebra"),
+            "no match for \"zebra\"; drop the query to browse by scope\n"
+        );
+    }
 
     /// Aligned, non-final pages: byte-identical to the pre-SL-275 wording.
     #[test]

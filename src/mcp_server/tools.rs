@@ -2789,10 +2789,13 @@ mod tests {
         let text = result["content"][0]["text"].as_str().unwrap();
         let parsed: Value = serde_json::from_str(text).unwrap();
         assert_eq!(parsed["kind"], "memory_search");
-        // With 2 seeds and no selectors → capped at 20
+        // With 2 seeds → one default page
         let rows = parsed["rows"].as_array().unwrap();
         assert!(!rows.is_empty(), "should return rows");
-        assert!(rows.len() <= 20, "no-selector default cap should be 20");
+        assert!(
+            rows.len() <= crate::retrieve::SEARCH_LIMIT_DEFAULT,
+            "one default page"
+        );
         // Pagination metadata
         assert!(parsed["total"].as_u64().is_some());
         assert!(parsed["offset"].as_u64().is_some());
@@ -2873,6 +2876,19 @@ mod tests {
         assert_eq!(last["total"], 26, "25 seeded facts + corpus fact");
         assert_eq!(last["rows"].as_array().unwrap().len(), 6);
         assert!(last["next_offset"].is_null(), "final page has no next");
+    }
+
+    /// SL-275 PHASE-02 EX-4: MCP `memory_retrieve` renders the table format, so
+    /// a zero-evidence find carries the no-match notice.
+    #[test]
+    fn memory_retrieve_no_match_carries_notice() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        seed_memory_corpus(root);
+        let result = memory_dispatch(root, "memory_retrieve", json!({ "query": "zebra" }));
+        let text = result["content"][0]["text"].as_str().unwrap();
+        assert_eq!(text, crate::listing::format_no_match_notice("zebra"));
     }
 
     /// SL-275 VT-4 (RV-410 F-3): `limit: 0` is refused at the handler edge.
