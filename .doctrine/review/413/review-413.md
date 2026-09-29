@@ -64,3 +64,18 @@ names the remedy. Out of scope and tracked: `CHR-171` (spec text still says
 ### Governance/spec (REV)
 - None. Spec-text drift (`SPEC-007`/`REQ-378` naming `memory find`) is already
   owned by `CHR-171`, deferred by design sec-2.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- design.md sec-6 "Code impact", guidance row: `.agents/skills/…` →
+  `plugins/doctrine/skills/{retrieve-memory,record-memory,dreaming}/SKILL.md`
+  (finding F-1). User assent 2026-09-29 ("agreed").
+
+### REVs completed
+- None — the brief carried no governance/spec items.
+
+### Withdrawn / tolerated
+- F-2: aligned — the slice's own bookkeeping files; no write needed.
+
+Reconcile pass complete — handoff to /close.

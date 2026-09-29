@@ -181,7 +181,7 @@ could record `DEC-347`/`DEC-348`.
 | `src/listing.rs` | `format_no_match_notice` (pure) |
 | `src/mcp_server/tools.rs` | `memory_search` resolves via `SEARCH_LIMIT_DEFAULT`; `has_selectors` branch deleted; `limit`/`next_offset` from the resolved value; tool description |
 | `tests/e2e_memory_sync.rs` | explicit `--limit` on the reachability assertion |
-| `.agents/skills/retrieve-memory/SKILL.md`, `.agents/skills/record-memory/SKILL.md`, `.agents/skills/dreaming/SKILL.md`, `install/using-doctrine.md` | guidance per §Supersession and guidance |
+| `plugins/doctrine/skills/retrieve-memory/SKILL.md`, `plugins/doctrine/skills/record-memory/SKILL.md`, `plugins/doctrine/skills/dreaming/SKILL.md`, `install/using-doctrine.md` | guidance per §Supersession and guidance |
 
 Layering (ADR-001): the constant and predicates live in the engine module; the
 command layer only resolves and forwards. No new edges.
