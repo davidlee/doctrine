@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 360
+slug = "jev-trial-comparison-controls"
+title = "Jev trial comparison controls"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-29"
+updated = "2026-09-29"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "RV-415 showed the arm deltas could reflect pool truncation, id matching, unequal text, unchecked batching or option order rather than the ranker."
+choice = "Fixed N = 50; opaque option keys and id-free prefixes; a B-point-matched control arm; a τ ≥ 0.8 and |Δ recall@10| ≤ 0.05 batching gate; forward+reversed list calls averaged."
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-277"

@@ -21,30 +21,33 @@ Build a replayable relevance evaluator, as a Rust workspace crate outside
 `default-members`, with one code path and two drivers:
 
 - **rank** — for one slice, produce a ranked research packet with per-item
-  provenance (source entity, section, snapshot commit, score, arm).
-- **eval** — replay many completed slices and report recall at a fixed token
-  budget, per arm.
+  provenance (source entity, snapshot commit, arm, score; the scoring section
+  for point rankers).
+- **eval** — replay many completed slices and report entity recall, per arm.
 
-Three arms, each over the corpus as of the slice's pre-research commit: the
-parent of the commit that first added its scope file (leakage guard, DEC-354):
-
-An arm is a candidate pool paired with a ranker (DEC-358):
+Every arm reads the corpus as of the slice's pre-research commit: the parent of
+the commit that first added its scope file (leakage guard, DEC-354). An arm is a
+candidate pool paired with a ranker (DEC-358, DEC-360):
 
 | Arm | Candidates | Ranking |
 |---|---|---|
-| A | `doctrine search` BM25 top-N | BM25 (baseline) |
+| A | `doctrine search` BM25 top 50 | BM25 (baseline) |
 | B-point | same pool | Jev pointwise: one Noul per section |
+| B-point-matched | same pool | Jev pointwise over B-list's option text (control) |
 | B-list | same pool | Jev listwise: one Choice over the pool's entities |
-| C-point | whole snapshot (entity bodies; memories excluded, DEC-357) | Jev pointwise (recall ceiling) |
+| C-point | whole snapshot (entity bodies; memories excluded, DEC-357) | Jev pointwise |
 | C-point→list | whole snapshot | pointwise, then listwise over its top 100 |
 
 The query (the slice's scope body as first committed) is the state throughout.
 Pointwise packs one Noul per candidate section, with explicit true/false
 criteria, into each request (DEC-352, DEC-355). Listwise asks one Choice whose
-options are entities, with no "none of these" option, each option capped to fit
-the 32k budget (DEC-359). The point-versus-list comparison is a primary result,
-prompted by Hindsight's listwise result on the same model
-(`research/raw/hindsight-jev-reranker.md`).
+options are entities under opaque keys, with no "none of these" option, each
+option capped to fit the 32k budget (DEC-359), and asks it in forward and
+reversed order (DEC-360). No option key or section prefix carries an id. The
+point-versus-list comparison is a primary result, prompted by Hindsight's
+listwise result on the same model (`research/raw/hindsight-jev-reranker.md`);
+the matched-text control arm separates the ranker from the text it sees
+(DEC-360).
 
 Components, kept small and reusable, since later trials such as repair
 propagation should inherit them:
@@ -64,21 +67,26 @@ propagation should inherit them:
   questions, rubric, preprocessing version). Raw output is stored apart from
   threshold decisions, and a failure is never cached as a negative.
 - **Budget**: dry-run by default (planned requests, token and dollar estimate).
-  A live run takes an explicit spend cap and aborts before exceeding it, counting
-  retries. It backs off on rate-limit responses, since the user is on the free
+  A live run takes an explicit spend cap and never exceeds it: each attempt,
+  retries included, reserves the documented per-request worst case before it is
+  sent. It backs off on rate-limit responses, since the user is on the free
   tier.
 - **Egress**: an explicit corpus path allow-list (default `.doctrine/` entity
-  bodies), plus a local log of what each run sent. The credential is read from
+  bodies), plus a local log of every attempt, written before it is sent. The credential is read from
   `JEV_API_KEY` and never written to records, cache, or debug output.
-- **Report**: per-arm entity recall@10 and @25 (headline), recall at a token
-  budget (secondary), with sample counts and intervals (DEC-359). Jev-surfaced entities that no one cited are listed for human
-  judgment rather than scored wrong.
+- **Report**: per-arm entity recall@10 and @25 (headline, also over labels the
+  query does not already name), BM25 pool coverage, recall at a token budget
+  (secondary), per-kind breakdown, sample counts and intervals (DEC-359,
+  DEC-360). Only complete arm-slices enter paired comparisons. Jev-surfaced
+  entities that no one cited are listed for human judgment rather than scored
+  wrong.
 
 Run sequence: a live probe of about 10 calls; the call-shape agreement check on
-one slice's BM25 pool (DEC-352); one slice across all three arms; then the eval
-set. The pool is the 39 slices with a `research.md`; about 10 are held out for
-the user's label spot-check (about 5) and rubric tuning, and the rest (about 29)
-are the eval set (DEC-353). The verdict is recorded as an EVD record.
+one slice's BM25 pool, with a fixed threshold and DEC-352's fallback if it fails
+(DEC-360); one slice across all six arms; then the eval set. The pool is the 39
+slices with a `research.md`; about 10 are held out for rubric tuning, and the
+rest (about 29) are the eval set (DEC-353). The user spot-checks the labels of
+5 tuning and 5 random eval slices. The verdict is recorded as an EVD record.
 
 ## Non-Goals
 
@@ -106,7 +114,11 @@ Risks and assumptions:
 
 - **Silver labels measure what research found and used, not what was
   relevant.** That biases arm C's precision downwards, which is why uncited hits
-  are listed for review.
+  are listed for review. Ids cited in examples or review history also enter the
+  labels; the per-kind breakdown and the eval label audit expose that.
+- **Old snapshots under a current binary.** Entities the current `catalog scan`
+  cannot read are disclosed as unreadable, not treated as absent, and leave the
+  recall denominator (STD-003).
 - **Stale snapshots.** A long scope-to-research gap ages the snapshot; the
   labels it drops are disclosed per slice (DEC-354).
 - **Free-tier rate limits are unknown.** Batched, arm C is about 400 requests
@@ -120,8 +132,9 @@ Risks and assumptions:
   pedantic and doc lint groups (see memory "New workspace member trips the cargo
   lint group").
 
-Design questions settled in the design run: DEC-352 to DEC-359 (call shape,
-labels, snapshot, rubric, crate, memories, pool × ranker arms, listwise sizing). Cache and run logs live under
+Design questions settled in the design run: DEC-352 to DEC-360 (call shape,
+labels, snapshot, rubric, crate, memories, pool × ranker arms, listwise sizing,
+comparison controls). Cache and run logs live under
 `.doctrine/state/jev/`; POL-002 does not reach a non-shipped crate.
 
 Verification and closure: offline tests cover the request/result contract,
@@ -135,7 +148,7 @@ sample counts.
 ## Follow-Ups
 
 - An adoption slice, whose shape depends on the verdict (B wins: reranker; C
-  wins: retriever).
+  wins where the BM25 pool misses labels: retriever).
 - Trial 2 (repair propagation), reusing the client, sectioner, and provenance.
 - Conditional: an older design-only eval set (DEC-353); a memory arm
   (DEC-357); a separate applicability/contribution split (DEC-355).

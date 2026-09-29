@@ -16,224 +16,386 @@ ref   = "SL-277"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Estimated tokens cannot enforce the spend cap"
 detail = """
 Section sec-5 promises that a live run aborts before exceeding --cap-usd, but it reserves only bytes/3 estimated tokens before each attempt and replaces that estimate with reported usage after the response. An attempt whose actual usage exceeds the estimate can pass the pre-send check and overspend the cap; retries with no usage also have no verified billable-token bound. Evidence: .doctrine/slice/277/design.md:129-131,192-197,330-331; .doctrine/slice/277/research/raw/jev-models.md:13-20. Define the cap as explicitly estimated exposure or reserve a defensible worst-case bound and test actual-usage overshoot across retries.
 """
+disposition = "fix-now"
+route = "review"
+response = "Accepted. Each attempt, retries included, now reserves the documented per-request worst case (64k input tokens, about 0.0027 USD) before sending; an attempt whose worst case exceeds the remaining cap is not sent; reported usage replaces the reservation, an attempt with no usage stays charged at the worst case. Spend cannot exceed the cap. design.md Budget, Budget VT; slice scope Budget."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted. Each attempt, retries included, now reserves the documented per-request worst case (64k input tokens, about 0.0027 USD) before sending; an attempt whose worst case exceeds the remaining cap is not sent; reported usage replaces the reservation, an attempt with no usage stays charged at the worst case. Spend cannot exceed the cap. design.md Budget, Budget VT; slice scope Budget."
+
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Estimator cannot prove Jev context limits"
 detail = """
 Section sec-3 calls bytes/3 deliberately conservative and sec-8 tests only that estimates fit 64k and 32k. Jev applies those limits to actual model tokens, and no documented tokenizer or upper-bound proof supports bytes/3 for every input and JSON overhead. A 100-option Choice or a packed Noul request can therefore produce a 422 even though the VT passes. Evidence: .doctrine/slice/277/design.md:110-130,318-320,357-358; .doctrine/slice/277/research/raw/jev-models.md:15-20; .doctrine/slice/277/research/raw/jev-api.md:329-334. Specify an actual-token safety policy, handling for a context-limit 422, and a boundary test using pathological input.
 """
+disposition = "fix-now"
+route = "review"
+response = "Accepted. Requests pack to 80 percent of each limit (PACK_HEADROOM), list option caps likewise; a 422 naming the context limit is a distinct TooLong outcome that splits a point request or halves list caps, counted; the probe records the 422 body and calibrates bytes/3 against reported usage including dense ASCII (hashes, base64). The claim that bytes/3 is conservative is withdrawn. design.md Client, Rankers, client and packer VTs, Risks."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted. Requests pack to 80 percent of each limit (PACK_HEADROOM), list option caps likewise; a 422 naming the context limit is a distinct TooLong outcome that splits a point request or halves list caps, counted; the probe records the 422 body and calibrates bytes/3 against reported usage including dense ASCII (hashes, base64). The claim that bytes/3 is conservative is withdrawn. design.md Client, Rankers, client and packer VTs, Risks."
+
 [[finding]]
 id = "F-3"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Fix and bound the BM25 pool size"
 detail = """
 Sections sec-1/sec-2 leave top-N as an unbound parameter, while the headline includes recall@25 and DEC-359 assumes roughly 20 B-list options. At N=20, A and both B arms can return at most 20 entities, making their recall@25 mechanically capped while C can return 25. At N>255, B-list violates Jev's Choice maximum. Evidence: .doctrine/slice/277/design.md:21-27,69-71,119-127,242-250; .doctrine/knowledge/decision/359/record-359.md:1; .doctrine/slice/277/research/raw/jev-api.md:124-125; src/search.rs:220-224. Choose a fixed N of at least 25 and at most 255, record it with every run, and test both bounds.
 """
+disposition = "fix-now"
+route = "review"
+response = "Accepted as DEC-360: BM25 pool fixed at N = 50 (POOL_SIZE), recorded per run; 25 <= N <= 255 by construction. Packer VT covers 1, 50 and 100 options. design.md What changes, Pipeline step 5, Rankers."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted as DEC-360: BM25 pool fixed at N = 50 (POOL_SIZE), recorded per run; 25 <= N <= 255 by construction. Packer VT covers 1, 50 and 100 options. design.md What changes, Pipeline step 5, Rankers."
+
 [[finding]]
 id = "F-4"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Entity IDs give Jev an unequal exact-match cue"
 detail = """
 Section sec-4 prefixes every pointwise section with its canonical ID, and sec-3 uses canonical IDs as Choice option keys. The first-committed scope can already cite those same IDs (for example SL-239's first scope commit cites SL-127 and SPEC-022); BM25 indexes title, body and descriptors but not the entity key. Jev can therefore recover already-named labels by exact ID matching unavailable to A, inflating the apparent reranker gain. Evidence: .doctrine/slice/277/design.md:29-31,119-125,144-146,157-176; .doctrine/slice/239/slice-239.md:12,98-100 (also present in first-add commit 8bb8b2e); src/search.rs:126-147. Report a subset excluding IDs already cited in the query, or equalize ID visibility across arms.
 """
+disposition = "fix-now"
+route = "review"
+response = "Accepted as DEC-360: Choice option keys are opaque (o1, o2, ...) mapped back locally; section prefixes are title plus heading path with no id; the headline is also reported over labels the query does not already name. VT list asserts no option key or prefix carries an id."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted as DEC-360: Choice option keys are opaque (o1, o2, ...) mapped back locally; section prefixes are title plus heading path with no id; the headline is also reported over labels the query does not already name. VT list asserts no option key or prefix carries an id."
+
 [[finding]]
 id = "F-5"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Cited IDs are noisy relevance labels"
 detail = """
 Section sec-4 extracts every ID-like token from research.md and design.md, then uses snapshot intersection as the only semantic filter. That retains IDs in examples, warnings, rejected options and review history, including real RV IDs. The research itself measured 1,226 RV matches in design prose and called them likely noise. Five tuning-set spot-checks cannot validate the unseen eval labels. Evidence: .doctrine/slice/277/design.md:152-180,242-254,323-326; .doctrine/slice/277/research/research.md:151-158; .doctrine/slice/277/research/raw/codemap.md:58-60. Define a citation-context eligibility rule or audit a representative eval-label sample, and report label-quality sensitivity before interpreting recall as relevant-source coverage.
 """
+disposition = "fix-now"
+route = "review"
+response = "Accepted, modified. Recall is broken down per label kind, and the VH label spot-check adds 5 random eval slices (labels only, rubric not shown) beside 5 tune slices. No citation-context eligibility rule: it would add a heuristic the audit and breakdown can test instead. design.md Labels, Report, Risks; scope Risks."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted, modified. Recall is broken down per label kind, and the VH label spot-check adds 5 random eval slices (labels only, rubric not shown) beside 5 tune slices. No citation-context eligibility rule: it would add a heuristic the audit and breakdown can test instead. design.md Labels, Report, Risks; scope Risks."
+
 [[finding]]
 id = "F-6"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Point versus list changes the evidence shown"
 detail = """
 The primary B-list minus B-point comparison is presented as a ranker comparison, but B-point sees all heading sections up to 4k tokens and takes their maximum, whereas B-list sees one body truncated to an equal per-option cap. C-point to C-point-list similarly replaces a full-section score with about 270 tokens per option at 100 options. A difference can be caused by missing text or the max-over-sections rule rather than Choice versus Noul; counting truncations does not separate these causes. Evidence: .doctrine/slice/277/design.md:110-127,144-150,247-253; .doctrine/knowledge/decision/359/record-359.md:1. Add a matched-text comparison or a truncation-stratified analysis before naming a point-versus-list winner.
 """
+disposition = "fix-now"
+route = "review"
+response = "Accepted as DEC-360: new arm B-point-matched scores each pool entity with one Noul over exactly its B-list option text. B-list minus B-point-matched isolates the ranker primitive; B-point minus B-point-matched isolates text and best-section effects. C-point-to-list minus C-point is reported as a pipeline comparison only."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted as DEC-360: new arm B-point-matched scores each pool entity with one Noul over exactly its B-list option text. B-list minus B-point-matched isolates the ranker primitive; B-point minus B-point-matched isolates text and best-section effects. C-point-to-list minus C-point is reported as a pipeline comparison only."
+
 [[finding]]
 id = "F-7"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Whole-snapshot point arm is not a recall ceiling"
 detail = """
 Sections sec-1/sec-6 call C-point a recall ceiling and treat a C win as evidence for a retriever. C-point is still a fallible best-section Noul ranking at k=10/25, so it can place an available label below k; a loss to B does not prove the BM25 pool was sufficient. The actual pool ceiling is the fraction of snapshot labels present in each candidate pool, independent of ranking. Evidence: .doctrine/slice/277/design.md:23-27,110-118,242-250,268-274; .doctrine/slice/277/research/raw/jev-cookbooks-rerank_typesafe.md:378-382. Report pool coverage/oracle recall separately and qualify the adoption inference.
 """
+disposition = "fix-now"
+route = "review"
+response = "Accepted. Recall-ceiling wording dropped for C-point. The report adds BM25 pool coverage (labels present in the top 50) as the ceiling for A and B arms, and the verdict reads a C win as a retriever signal only where pool coverage shows the pool missing labels C ranks in."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted. Recall-ceiling wording dropped for C-point. The report adds BM25 pool coverage (labels present in the top 50) as the ceiling for A and B arms, and the verdict reads a C win as a retriever signal only where pool coverage shows the pool missing labels C ranks in."
+
 [[finding]]
 id = "F-8"
-status = "open"
+status = "answered"
 severity = "major"
 title = "DEC-352 disagreement fallback is absent"
 detail = """
 Section sec-6 performs the one-slice packing agreement check but gives no material-disagreement criterion or branch in the run sequence; it proceeds to the five-arm eval. Accepted DEC-352 requires fallback to section-as-state and a 3-5-slice C subsample if rankings materially disagree. Without that branch, a failed call-shape validation still feeds the main verdict. Evidence: .doctrine/slice/277/design.md:258-266; .doctrine/knowledge/decision/352/record-352.md:1. Define the comparison statistic, threshold, fallback run, and report treatment before full evaluation.
 """
+disposition = "fix-now"
+route = "review"
+response = "Accepted as DEC-360: batching is kept iff Kendall tau between batched and section-as-state point scores on one tuning slice's pool is at least 0.8 and recall@10 differs by at most 0.05; otherwise DEC-352's fallback (section-as-state, C on a 3 to 5 slice subsample). Run sequence step 3."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted as DEC-360: batching is kept iff Kendall tau between batched and section-as-state point scores on one tuning slice's pool is at least 0.8 and recall@10 differs by at most 0.05; otherwise DEC-352's fallback (section-as-state, C on a 3 to 5 slice subsample). Run sequence step 3."
+
 [[finding]]
 id = "F-9"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Partial Jev answers can be scored as a complete arm"
 detail = """
 Section sec-3 sorts unanswered candidates last and sec-6 computes recall, but no rule prevents an arm/slice with missing or malformed answers from entering the paired headline and EVD verdict. A 200 with missing questions would silently depress Jev recall even though the report counts unscored items; in a small B pool they may still enter top-k. Evidence: .doctrine/slice/277/design.md:89-102,208-211,242-254,312-315,332-333; .doctrine/slice/277/research/raw/jev-api.md:180-195. Define retry or invalidation for incomplete arm results, an explicit completeness denominator, and a VT showing partial success cannot masquerade as a valid paired observation.
 """
+disposition = "fix-now"
+route = "review"
+response = "Accepted. In eval the missing questions are retried once; an arm-slice is complete only if every candidate is then answered; incomplete arm-slices are excluded from paired deltas and counted. New VT completeness covers retry-success and retry-failure."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted. In eval the missing questions are retried once; an arm-slice is complete only if every candidate is then answered; incomplete arm-slices are excluded from paired deltas and counted. New VT completeness covers retry-success and retry-failure."
+
 [[finding]]
 id = "F-10"
-status = "open"
+status = "answered"
 severity = "major"
 title = "One reversed list call cannot settle position bias"
 detail = """
 Sections sec-6/sec-9 measure B-list position bias by reversing options once on one tuning slice, but no statistic, tolerance, or corrective rule says when B-list is fit for the headline eval. A single query provides no estimate across the varied option counts and texts, especially for the 100-option C list. Evidence: .doctrine/slice/277/design.md:119-127,261-266,347-351; .doctrine/knowledge/decision/359/record-359.md:1. Define a multi-slice order-sensitivity check, its acceptance rule, and the action if it fails.
 """
+disposition = "fix-now"
+route = "review"
+response = "Accepted as DEC-360: every list question is sent forward and reversed, option probabilities averaged, order from the mean; per-call forward-vs-reversed Kendall tau reported as a diagnostic. Replaces the single reversed call on one slice."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted as DEC-360: every list question is sent forward and reversed, option probabilities averaged, order from the mean; per-call forward-vs-reversed Kendall tau reported as a diagnostic. Replaces the single reversed call on one slice."
+
 [[finding]]
 id = "F-11"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Memory-drop count has no extractor"
 detail = """
 Section sec-4 says the fixture records dropped memory-key citations, but its only extraction pattern matches uppercase prefixed numeric IDs. Memory keys have the mem. or mem_ form, so the specified pass cannot produce the per-slice counts required by DEC-357 and STD-003. Evidence: .doctrine/slice/277/design.md:154-176,323-326; .doctrine/knowledge/decision/357/record-357.md:1; .doctrine/slice/277/research/raw/codemap.md:58-60. Specify the separate memory-key recognizer and a positive count fixture.
 """
+disposition = "fix-now"
+response = "Accepted. A separate matcher counts dotted mem. keys and mem_ uids; the labels VT includes both forms with a positive count."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Accepted. A separate matcher counts dotted mem. keys and mem_ uids; the labels VT includes both forms with a positive count."
+
 [[finding]]
 id = "F-12"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Choice distribution validation is underspecified"
 detail = """
 Section sec-3 ranks every option by returned Choice probabilities, but the outcome table and sec-8 VT do not require exactly the requested option keys, a valid chosen key, finite probabilities in [0,1], or an approximately unit sum. The raw API promises a full distribution over every option and a chosen highest-probability option. A partial or malformed 200 could silently omit candidates or alter their order while still being cached. Evidence: .doctrine/slice/277/design.md:89-102,119-127,204-211,312-315; .doctrine/slice/277/research/raw/jev-api.md:246-265. State and test the full Choice answer invariant before ranking or caching.
 """
+disposition = "fix-now"
+route = "review"
+response = "Accepted. A Choice answer is well formed only with exactly the requested key set, each probability finite in [0, 1], sum 1 +/- 0.01, choice among the keys; otherwise the whole question is Unanswered and not cached. Client VT cases added."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted. A Choice answer is well formed only with exactly the requested key set, each probability finite in [0, 1], sum 1 +/- 0.01, choice among the keys; otherwise the whole question is Unanswered and not cached. Client VT cases added."
+
 [[finding]]
 id = "F-13"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Recall-at-budget prefix rule is undefined"
 detail = """
 Section sec-6 gives each entity a min(body, 1k tokens) cost, but does not define whether a non-fitting next entity stops the ranked prefix or is skipped, whether zero-body entities cost zero, or which token estimate is used. Those choices change recall at 4k/8k/16k/32k; sec-8's hand-worked-table VT cannot be unambiguous without them. Evidence: .doctrine/slice/277/design.md:242-248,332-333; .doctrine/knowledge/decision/359/record-359.md:1. Define the accumulation rule and edge cases while retaining DEC-359's common per-entity cap.
 """
+disposition = "fix-now"
+response = "Accepted. Entity cost is min(estimated body tokens, 1k); empty-body entities are left out; the budget prefix walks rank order and ends at the first entity that does not fit. Metrics VT includes both edge cases."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Accepted. Entity cost is min(estimated body tokens, 1k); empty-body entities are left out; the budget prefix walks rank order and ends at the first entity that does not fit. Metrics VT includes both edge cases."
+
 [[finding]]
 id = "F-14"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Rank provenance promises a section for entity rankers"
 detail = """
 Section sec-1 promises each rank packet item has section provenance and score, but A orders whole entities by BM25 and B-list uses truncated entity bodies, neither of which selects a section. The pipeline and report do not define a truthful section field or a score for list beyond within-call probability. Evidence: .doctrine/slice/277/design.md:9-13,21-27,110-127,279-296; .doctrine/slice/277/research/raw/jev-api.md:246-255. Define per-arm provenance and score semantics, allowing an explicit absent section rather than inventing one.
 """
+disposition = "fix-now"
+response = "Accepted. Rank packet provenance is entity, snapshot commit, arm and ranker score; point rankers also name the scoring section, bm25 and list name none."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Accepted. Rank packet provenance is entity, snapshot commit, arm and ranker score; point rankers also name the scoring section, bm25 and list name none."
+
 [[finding]]
 id = "F-15"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Pure-layer placement contradicts fixture I/O"
 detail = """
 Section sec-7 says labels is pure and that disk I/O lives in corpus, cache, runlog, transport or main, yet its labels.rs row owns fixture read and write. The split is implementable, but the module responsibility and verification target are contradictory. Evidence: .doctrine/slice/277/design.md:152-164,291-304. Put fixture I/O in the shell or explicitly distinguish the pure extraction functions from the impure labels module.
 """
+disposition = "fix-now"
+response = "Accepted. labels.rs is pure (extraction, memory-key count, classification, intersection); fixture read and write move to the main.rs shell."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Accepted. labels.rs is pure (extraction, memory-key count, classification, intersection); fixture read and write move to the main.rs shell."
+
 [[finding]]
 id = "F-16"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Unreadable snapshot entities are mistaken for absent labels"
 detail = """
 Section sec-4 intersects citation IDs with hydrated catalog-scan keys and labels every miss as a citation not in the snapshot. Section sec-9 acknowledges that current catalog scan on old snapshots emits diagnostics and drops unhydratable entities. An entity can therefore exist at the snapshot commit yet be excluded by a current-binary parse failure; calling it post-snapshot and removing it from the recall denominator hides a corpus failure and inflates scores. Evidence: .doctrine/slice/277/design.md:65-71,154-176,252-254,352-354; src/catalog/scan.rs:179-203. Distinguish absent-at-commit IDs from present-but-unreadable IDs, disclose both, and do not score a degraded slice as an ordinary complete observation.
 """
+disposition = "fix-now"
+route = "review"
+response = "Accepted. A cited id outside the scan is unreadable if the export holds its directory (prefix-to-directory mapping learned from the scan's own hydrated entries), absent otherwise. Unreadable labels leave the denominator and are disclosed per slice; the headline is also shown over slices with no unreadable labels. Labels VT covers both classes."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
 
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Accepted. A cited id outside the scan is unreadable if the export holds its directory (prefix-to-directory mapping learned from the scan's own hydrated entries), absent otherwise. Unreadable labels leave the denominator and are disclosed per slice; the headline is also shown over slices with no unreadable labels. Labels VT covers both classes."
+
 [[finding]]
 id = "F-17"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Egress allow-list has no negative verification"
 detail = """
 Section sec-5 makes the corpus path allow-list the boundary on external egress, but sec-8 has no VT for a disallowed source, a symlink/path escape, or a send log that accounts for every attempted request. Its credential VT checks only fake-run disk output and Debug formatting. Evidence: .doctrine/slice/277/design.md:213-220,312-339. Add negative allow-list and send-log tests at the transport boundary, including a request rejected before network send; this is the only stated guard on what corpus text leaves the checkout.
 """
+disposition = "fix-now"
+route = "control"
+response = "Accepted. Design change: the send log records one line per attempt, written before the attempt is sent (design.md Egress). Criterion (stays on this ledger for planning): with a fake transport, a question sourced from a path outside the snapshot's .doctrine, one reached through a symlink escaping it, and one from a memory entity are each refused before the transport is called, with zero transport calls; and every attempt the fake receives has a matching send-log line written before it. The incorrect candidate the check must reject is an egress guard that validates only the declared source path string, so a symlinked or memory-kind source passes. Host phase constraint: the phase that builds the transport boundary and send log, not a later one."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "control"
+response = "Accepted. Design change: the send log records one line per attempt, written before the attempt is sent (design.md Egress). Criterion (stays on this ledger for planning): with a fake transport, a question sourced from a path outside the snapshot's .doctrine, one reached through a symlink escaping it, and one from a memory entity are each refused before the transport is called, with zero transport calls; and every attempt the fake receives has a matching send-log line written before it. The incorrect candidate the check must reject is an egress guard that validates only the declared source path string, so a symlinked or memory-kind source passes. Host phase constraint: the phase that builds the transport boundary and send log, not a later one."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ec2a-4a22-7820-98dc-3f4b15096c44"
+recorded_at = "2026-09-29T07:56:29.602195488Z"
+kind = "friction"
+summary = "design skill: top-level acceptance on a checkpoint-dispose submission recorded design-accepted"
+detail = "SL-277 run rev 33: a design apply payload with declare=[cp-13 dispose create] plus a top-level acceptance{basis} (meant as the basis for creating DEC-360) also emitted act_recorded cpa-design-accepted, although the user had not accepted the design. There is no retract verb; the act only goes stale when the payload changes. The contract does not say that a bare top-level acceptance means design-accepted in stage reviewing."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
