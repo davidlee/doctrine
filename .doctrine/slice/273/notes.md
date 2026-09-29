@@ -46,7 +46,7 @@ a stale-binary session regenerates old boot.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-29 · audit→reconcile · RV-414 concluded
+fresh-as-of: 2026-09-29 · reconcile→close · RV-414 outcome recorded
 
 ### Produced
 - Upstream (RFC-033 descent): frame settled 2e02a6cd2; overview memory un-inlined d947dd363; REV-067 applied to ADR-005 + ADR-024 0cf1eaf21 (lib: form); SL-144 abandoned, DEC-010 accepted
@@ -54,6 +54,7 @@ fresh-as-of: 2026-09-29 · audit→reconcile · RV-414 concluded
 - minted: ISS-497 — stale-binary `memory sync` rolls back the shipped corpus
 - implementation: PHASE-01..04 landed on capsule/SL-273/c32; REV-069 applied; IMP-502 captured
 - audit: RV-414 (done), RV-408 controls verified; `inventory-audit.toml`; minted IMP-505, ISS-505, ISS-506
+- reconcile: selector `src/lib.rs` → `src/main.rs`, design §8.2 mirrored (RV-414 F-3) 17495333e
 
 ### Learned
 - mem.pattern.research.pi-agents-need-tracked-background — detached pi agents die at tool-call end
@@ -64,7 +65,7 @@ fresh-as-of: 2026-09-29 · audit→reconcile · RV-414 concluded
 - A1 (notes triage) — library addresses stable except deliberate retirements
 - design questions inq-1..inq-8 live in the design run, not here
 - IMP-505 — restate bar and the 71 re-pass leads; ISS-505 — three skill/owner contradictions; ISS-506 — prose_cite silent skips
-- RV-414 brief: selector registry fix for /reconcile
+- conformance: 8 exact `src/*` selectors read undelivered, shadowed by `src/**` (tool behaviour; observation recorded at audit)
 
 ## Design review (reviewing, 2026-09-27)
 
