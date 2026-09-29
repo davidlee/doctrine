@@ -6,13 +6,18 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-29 · PHASE-01 · (this commit)
+fresh-as-of: 2026-09-29 · PHASE-02 · (this commit)
 
 ### Produced
 - PHASE-01: `SEARCH_LIMIT_DEFAULT`; `memory::resolve_limit` + `memory::page_offset`
   (shared by Search/Retrieve arms); `run_search`/`search_for_mcp` take `usize`;
   `format_truncation_notice` next-row continuation; MCP edge `limit 0` refusal,
   `checked_add` `next_offset`; `temp_project_with_memories(n)` fixture.
+- PHASE-02: `QueryContext::has_free_text`, `Candidate::has_evidence`, floor in
+  `query()`; `listing::format_no_match_notice` + retrieve-private
+  `no_match_notice` (scrubs; keyed pre-holdback); MCP `memory_search`
+  find/browse description; `record_fact` / `search_out` / `retrieve_out` test
+  helpers. Live: `memory search bwrap` 565 → 10 rows.
 
 ### Learned
 - `plan.toml` PHASE-01 header had been swallowed by a template comment; the plan
@@ -20,9 +25,19 @@ fresh-as-of: 2026-09-29 · PHASE-01 · (this commit)
 - `resolve_limit` absorbed the duplicated `--limit 0` check from both arms, beyond
   the design's `page_offset` extraction — same edge, one site.
 
+- `listing.rs` is a leaf (no `crate::memory` edge), so the notice formatter
+  takes pre-scrubbed text; the scrub lives in the one retrieve-side caller.
+- `query_bare_query_keeps_all_active_ranked_lexically` pinned SL-008 D20's
+  keep-all; renamed and its count flipped to 1 under DEC-348 (ordering witness
+  kept). The only pre-existing test the floor changed.
+
+### Verification (agent)
+- PHASE-02 VA-1: MCP `memory_search` description + `query`/`limit` schema text
+  read against design sec-4 — states free text floored to lexical/exact-key
+  evidence, empty rows = no match, selectors alone browse in severity order,
+  default page 20. Pass.
+
 ### Open
-- MCP tool description reads "Default page: 20 rows." as an interim; the
-  find/browse contract text is PHASE-02 EX-5.
 
 ## Design review passes
 

@@ -105,6 +105,15 @@ impl QueryContext {
             || !self.commands.is_empty()
             || !self.tags.is_empty()
     }
+
+    /// Whether the request is a *find* (floored) rather than a *browse*: the
+    /// free-text query yields at least one token under the lexer BM25 uses, so
+    /// punctuation-only or blank text browses (SL-275 DEC-348).
+    pub(crate) fn has_free_text(&self) -> bool {
+        self.query
+            .as_deref()
+            .is_some_and(|s| !crate::lexical::tokenize(s).is_empty())
+    }
 }
 
 /// The frozen partition coordinates a query runs against (design § 5.3). `repo`
@@ -460,6 +469,12 @@ impl<'a> Candidate<'a> {
             exact_key: exact_key_match(m, q),
         }
     }
+
+    /// Whether the row answers the free text: a lexical score or an exact-key
+    /// hit. A scope match narrows candidates; it is not evidence (DEC-348).
+    pub(crate) fn has_evidence(&self) -> bool {
+        self.lexical > 0 || self.exact_key
+    }
 }
 
 /// The 9-key total-order sort key (design § 5.2 table), `today` frozen by the
@@ -629,7 +644,27 @@ pub(crate) fn query<'a>(
             Candidate::new(m, scope_match, q, facts, &snap.today, lexical)
         })
         .collect();
+    // The retrieval floor (DEC-348/350): a find keeps only rows with evidence; a
+    // browse is unfloored. BM25 has already fit over the full active set.
+    let cands = if q.has_free_text() {
+        cands.into_iter().filter(Candidate::has_evidence).collect()
+    } else {
+        cands
+    };
     rank(cands, &snap.today)
+}
+
+/// The table-mode zero-evidence notice: `Some` iff the request is a find and the
+/// floor left no candidates (SL-275 DEC-349). Scrubs the query text here, where
+/// the memory scrubber is in reach.
+fn no_match_notice(q: &QueryContext, no_candidates: bool) -> Option<String> {
+    let query = q
+        .query
+        .as_deref()
+        .filter(|_| no_candidates && q.has_free_text())?;
+    Some(crate::listing::format_no_match_notice(
+        &crate::memory::scrub_line(query),
+    ))
 }
 
 /// A serde row for `memory search --json`, mirroring the search table columns.
@@ -880,6 +915,7 @@ pub(crate) fn run_search(
     // BM25 is the hard default on both surfaces — no user-facing selector (D5).
     let ranker = Bm25Ranker;
     let ranked = query(&mems, &q, &snap, include_draft, &root, &ranker);
+    let no_match = no_match_notice(&q, ranked.is_empty());
     // Total = all candidates (holdback-exempt for find — D6).
     let total = ranked.len();
     let visible: Vec<Candidate<'_>> = ranked.into_iter().skip(offset).take(limit).collect();
@@ -904,6 +940,9 @@ pub(crate) fn run_search(
         }
     };
     parts.push(body);
+    if format == crate::listing::Format::Table {
+        parts.extend(no_match);
+    }
     // Truncation notice: table mode only, when results are truncated or offset exceeds total.
     if format == crate::listing::Format::Table && shown < total {
         parts.push(crate::listing::format_truncation_notice(
@@ -1311,6 +1350,8 @@ pub(crate) fn run_retrieve(
     // BM25 is the hard default on both surfaces — no user-facing selector (D5).
     let ranker = Bm25Ranker;
     let ranked = query(&mems, &q, &snap, include_draft, &root, &ranker);
+    // Keyed before holdback: held-back evidence is not "no match" (RV-410 F-7).
+    let no_match = no_match_notice(&q, ranked.is_empty());
 
     let floor = holdback_floor(min_trust);
     // Holdback filter first, THEN count total, THEN offset + limit.
@@ -1363,6 +1404,7 @@ pub(crate) fn run_retrieve(
                     upper_pct,
                 ));
             }
+            parts.extend(no_match);
             // Truncation notice: suppressed under --json (D4).
             if shown < total {
                 parts.push(crate::listing::format_truncation_notice(
@@ -1702,6 +1744,37 @@ weight = {weight}
             paths: paths.iter().map(|s| (*s).to_owned()).collect(),
             ..Default::default()
         }
+    }
+
+    // -- find/browse predicates (SL-275 PHASE-02) ----------------------------
+
+    #[test]
+    fn has_free_text_iff_query_tokenizes() {
+        let text = |s: Option<&str>| QueryContext {
+            query: s.map(str::to_owned),
+            ..Default::default()
+        };
+        assert!(text(Some("auth bug")).has_free_text());
+        assert!(
+            !text(Some("!!!")).has_free_text(),
+            "punctuation-only browses"
+        );
+        assert!(!text(Some("   ")).has_free_text(), "blank browses");
+        assert!(!text(None).has_free_text());
+        assert!(!q(&["src"]).has_free_text(), "a selector is not free text");
+    }
+
+    /// RV-410 F-6: evidence is lexical OR exact-key; an exact-key hit with a zero
+    /// lexical score is kept.
+    #[test]
+    fn has_evidence_keeps_exact_key_with_zero_lexical() {
+        let m = memory(&Fixture::default());
+        assert!(cand(&m, 0, true, None).has_evidence());
+        assert!(cand(&m, 1, false, None).has_evidence());
+        assert!(
+            !cand(&m, 0, false, Some(Dimension::Paths)).has_evidence(),
+            "scope is not evidence"
+        );
     }
 
     // -- has_scope_constraints (EX-1) ---------------------------------------
@@ -2678,9 +2751,10 @@ weight = {weight}
     }
 
     #[test]
-    fn query_bare_query_keeps_all_active_ranked_lexically() {
+    fn query_bare_query_ranks_lexically_and_floors_misses() {
         let [u0, u1, _] = uids();
-        // u0 matches the query token, u1 does not — both kept (D20), u0 ranks first.
+        // u0 matches the query token, u1 does not — u1 is floored (SL-275 DEC-348
+        // supersedes D20's keep-all), u0 ranks first.
         let matchy = memory(&Fixture {
             uid: u0,
             title: "auth token",
@@ -2693,8 +2767,8 @@ weight = {weight}
         });
         let mems = vec![matchy, other];
         // Re-pointed through OverlapRanker (the retired overlap): this pins the
-        // pre-BM25 ordering, so its assertions are the behaviour-preservation
-        // witness and stay UNCHANGED across the seam extraction (EX-4).
+        // pre-BM25 ordering; its ordering assertion is the behaviour-preservation
+        // witness from the seam extraction (EX-4).
         let ranked = query(
             &mems,
             &with_query("auth"),
@@ -2703,8 +2777,129 @@ weight = {weight}
             Path::new("."),
             &crate::lexical::OverlapRanker,
         );
-        assert_eq!(ranked.len(), 2, "bare --query keeps all active");
+        assert_eq!(ranked.len(), 1, "no-evidence row floored (DEC-348)");
         assert_eq!(ranked[0].memory.uid, u0, "lexical hit ranks first");
+    }
+
+    /// SL-275 VT-2: a find drops rows without evidence; total counts matches.
+    #[test]
+    fn query_floor_drops_no_evidence_rows() {
+        let [u0, u1, u2] = uids();
+        let mems = vec![
+            memory(&Fixture {
+                uid: u0,
+                title: "auth token",
+                ..Default::default()
+            }),
+            memory(&Fixture {
+                uid: u1,
+                title: "unrelated",
+                ..Default::default()
+            }),
+            memory(&Fixture {
+                uid: u2,
+                title: "auth flow",
+                ..Default::default()
+            }),
+        ];
+        let ranked = query(
+            &mems,
+            &with_query("auth"),
+            &snap(None, None),
+            false,
+            Path::new("."),
+            &Bm25Ranker,
+        );
+        let got: Vec<&str> = ranked.iter().map(|c| c.memory.uid.as_str()).collect();
+        assert_eq!(got.len(), 2, "{got:?}");
+        assert!(!got.contains(&u1), "no-evidence row floored");
+    }
+
+    #[test]
+    fn query_floor_no_match_is_empty() {
+        let mems = vec![memory(&Fixture {
+            title: "auth token",
+            ..Default::default()
+        })];
+        let ranked = query(
+            &mems,
+            &with_query("zebra"),
+            &snap(None, None),
+            false,
+            Path::new("."),
+            &Bm25Ranker,
+        );
+        assert!(ranked.is_empty());
+        // Punctuation-only is not free text: it browses.
+        let ranked = query(
+            &mems,
+            &with_query("!!!"),
+            &snap(None, None),
+            false,
+            Path::new("."),
+            &Bm25Ranker,
+        );
+        assert_eq!(ranked.len(), 1, "punctuation-only browses");
+    }
+
+    /// SL-275 VT-2: selectors alone are unfloored — every scope hit, in order.
+    #[test]
+    fn query_selector_only_is_unfloored() {
+        let [u0, u1, _] = uids();
+        let mems = vec![
+            memory(&Fixture {
+                uid: u0,
+                paths: &["src/main.rs"],
+                severity: "low",
+                ..Default::default()
+            }),
+            memory(&Fixture {
+                uid: u1,
+                paths: &["src/main.rs"],
+                severity: "high",
+                ..Default::default()
+            }),
+        ];
+        let ranked = query(
+            &mems,
+            &q(&["src/main.rs"]),
+            &snap(None, None),
+            false,
+            Path::new("."),
+            &Bm25Ranker,
+        );
+        let got: Vec<&str> = ranked.iter().map(|c| c.memory.uid.as_str()).collect();
+        assert_eq!(got, vec![u1, u0], "both kept, severity leads");
+    }
+
+    /// SL-275 VT-2 (RV-410 F-6): under real BM25 an exact-key query returns its
+    /// memory first.
+    #[test]
+    fn query_floor_exact_key_ranks_first() {
+        let [u0, u1, _] = uids();
+        let mems = vec![
+            memory(&Fixture {
+                uid: u1,
+                title: "unrelated",
+                ..Default::default()
+            }),
+            memory(&Fixture {
+                uid: u0,
+                key: "mem.pattern.zzz",
+                title: "other",
+                ..Default::default()
+            }),
+        ];
+        let ranked = query(
+            &mems,
+            &with_query("mem.pattern.zzz"),
+            &snap(None, None),
+            false,
+            Path::new("."),
+            &Bm25Ranker,
+        );
+        assert_eq!(ranked[0].memory.uid, u0);
+        assert!(ranked[0].exact_key);
     }
 
     #[test]
@@ -3291,12 +3486,6 @@ weight = {weight}
             .args(["commit", "-q", "-m", "base"])
             .output()
             .unwrap();
-        // Seed the memories via run_record.
-        let sources: Vec<crate::memory::Provenance> = vec![];
-        let paths: Vec<String> = vec![];
-        let globs: Vec<String> = vec![];
-        let commands: Vec<String> = vec![];
-        let tags: Vec<String> = vec![];
         for i in 0..n {
             let (title, key) = if i == 0 {
                 (
@@ -3309,30 +3498,42 @@ weight = {weight}
                     format!("fact.seeded-{i:02}"),
                 )
             };
-            let args = crate::memory::RecordArgs {
-                title: &title,
-                memory_type: crate::memory::MemoryType::Fact,
-                key: Some(&key),
-                status: crate::memory::Status::Active,
-                summary: None,
-                tags: &tags,
-                repo: None,
-                lifespan: None,
-                review_by: None,
-                sources: &sources,
-                paths: &paths,
-                globs: &globs,
-                commands: &commands,
-                global: false,
-                body: None,
-                body_mode: None,
-                trust_level: None,
-                severity: None,
-            };
-            crate::memory::run_record(Some(root.path().to_path_buf()), &args, &mut std::io::sink())
-                .unwrap();
+            record_fact(&root, &title, &key, None, None);
         }
         root
+    }
+
+    /// Record one active fact into a fixture project, with optional trust and
+    /// severity (a `low`/`high` pair is held back on retrieve).
+    fn record_fact(
+        root: &tempfile::TempDir,
+        title: &str,
+        key: &str,
+        trust_level: Option<&str>,
+        severity: Option<&str>,
+    ) {
+        let args = crate::memory::RecordArgs {
+            title,
+            memory_type: crate::memory::MemoryType::Fact,
+            key: Some(key),
+            status: crate::memory::Status::Active,
+            summary: None,
+            tags: &[],
+            repo: None,
+            lifespan: None,
+            review_by: None,
+            sources: &[],
+            paths: &[],
+            globs: &[],
+            commands: &[],
+            global: false,
+            body: None,
+            body_mode: None,
+            trust_level,
+            severity,
+        };
+        crate::memory::run_record(Some(root.path().to_path_buf()), &args, &mut std::io::sink())
+            .unwrap();
     }
 
     /// VT-1: writer-capture — run_search with &mut Vec<u8> writes expected output.
@@ -3397,9 +3598,15 @@ weight = {weight}
         assert!(!output.is_empty(), "run_retrieve must write to buffer");
     }
 
-    /// Table-mode `run_search` over `root` with no selectors — the paging surface
-    /// under test, without the 16-argument call at every site.
-    fn search_table(root: &tempfile::TempDir, offset: usize, limit: usize) -> String {
+    /// `run_search` over `root` with at most a free-text query — the paging and
+    /// notice surface under test, without the 16-argument call at every site.
+    fn search_out(
+        root: &tempfile::TempDir,
+        query: Option<&str>,
+        format: crate::listing::Format,
+        offset: usize,
+        limit: usize,
+    ) -> String {
         let mut buf = Vec::new();
         run_search(
             &mut buf,
@@ -3410,17 +3617,96 @@ weight = {weight}
             vec![],
             vec![],
             None,
-            None,
+            query.map(str::to_owned),
             None,
             None,
             true,
-            crate::listing::Format::Table,
+            format,
             offset,
             limit,
             None,
         )
         .unwrap();
         String::from_utf8(buf).unwrap()
+    }
+
+    fn search_table(root: &tempfile::TempDir, offset: usize, limit: usize) -> String {
+        search_out(root, None, crate::listing::Format::Table, offset, limit)
+    }
+
+    /// `run_retrieve` over `root` with at most a free-text query.
+    fn retrieve_out(
+        root: &tempfile::TempDir,
+        query: Option<&str>,
+        format: crate::listing::Format,
+    ) -> String {
+        let mut buf = Vec::new();
+        run_retrieve(
+            &mut buf,
+            Some(root.path().to_path_buf()),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            None,
+            query.map(str::to_owned),
+            None,
+            None,
+            true,
+            RETRIEVE_LIMIT_DEFAULT,
+            None,
+            0,
+            format,
+            None,
+        )
+        .unwrap();
+        String::from_utf8(buf).unwrap()
+    }
+
+    /// SL-275 VT-3: a zero-evidence find says so in table mode, on search and
+    /// retrieve; the query text is scrubbed.
+    #[test]
+    fn no_match_notice_on_search_and_retrieve_tables() {
+        use crate::listing::Format;
+        let root = temp_project_with_one_memory();
+        let want = crate::listing::format_no_match_notice("zebra\\nquagga");
+        assert!(want.contains("no match for"), "{want}");
+        let q = Some("zebra\nquagga");
+        assert!(search_out(&root, q, Format::Table, 0, 20).ends_with(&want));
+        assert!(retrieve_out(&root, q, Format::Table).ends_with(&want));
+        // A hit carries no notice.
+        let hit = search_out(&root, Some("writer"), Format::Table, 0, 20);
+        assert!(!hit.contains("no match for"), "{hit}");
+    }
+
+    /// SL-275 VT-3: json is unchanged — a no-match find is byte-identical to an
+    /// empty result.
+    #[test]
+    fn no_match_json_is_an_empty_result() {
+        use crate::listing::Format;
+        let root = temp_project_with_one_memory();
+        let none = search_out(&root, Some("zebra"), Format::Json, 0, 20);
+        let empty = search_out(&root, None, Format::Json, 5, 20);
+        assert_eq!(none, empty);
+        assert!(!retrieve_out(&root, Some("zebra"), Format::Json).contains("no match for"));
+    }
+
+    /// SL-275 VT-3 (RV-410 F-7): evidence that exists but is all held back on
+    /// retrieve is not "no match" — no notice.
+    #[test]
+    fn retrieve_all_held_back_has_no_notice() {
+        use crate::listing::Format;
+        let root = temp_project_with_one_memory();
+        record_fact(
+            &root,
+            "Zebra hazard",
+            "fact.zebra-hazard",
+            Some("low"),
+            Some("high"),
+        );
+        let out = retrieve_out(&root, Some("zebra"), Format::Table);
+        assert!(!out.contains("no match for"), "{out}");
+        assert!(!out.contains("Zebra hazard"), "held back: {out}");
     }
 
     /// Number of seeded rows a `search_table` output shows (`fact.seeded-NN` or

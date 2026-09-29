@@ -957,6 +957,13 @@ pub(crate) fn format_truncation_notice(
     format!("{shown} of {total}; use {cont} for next or specify a higher --limit\n")
 }
 
+/// The zero-evidence notice for a table-mode find that matched nothing
+/// (SL-275 DEC-349). `query` must already be line-scrubbed by the caller — this
+/// leaf module does not know the memory scrubber.
+pub(crate) fn format_no_match_notice(query: &str) -> String {
+    format!("no match for \"{query}\"; drop the query to browse by scope\n")
+}
+
 /// Wrap kind-faithful row values in the shared envelope: `{ "kind": …, "rows":
 /// [ … ] }`. Each kind owns its row serde shape (a faithful mirror, D7); this
 /// just supplies the uniform outer frame.

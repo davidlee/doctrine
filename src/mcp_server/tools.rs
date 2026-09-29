@@ -292,11 +292,11 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "memory_search".to_owned(),
-            description: "Discovery tool — metadata only, no bodies. Use first to probe context. Holdback-exempt: rows may include memories suppressed by `memory_retrieve`. Do not treat high-risk rows as consumable knowledge; use `memory_show` for inspection then `memory_retrieve` for safe recall. Default page: 20 rows.\n\nReturns: { kind: 'memory_search', rows: [{ uid, key?, type, status, staleness, trust, severity, spec, title, held_back_on_retrieve }], total: int, offset: int, limit: int, next_offset: int|null }".to_owned(),
+            description: "Discovery tool — metadata only, no bodies. Use first to probe context. Holdback-exempt: rows may include memories suppressed by `memory_retrieve`. Do not treat high-risk rows as consumable knowledge; use `memory_show` for inspection then `memory_retrieve` for safe recall. Find vs browse: a free-text `query` returns only rows with lexical or exact-key evidence (empty `rows` = no match, not an empty corpus); selectors alone browse in severity order. Default page: 20 rows.\n\nReturns: { kind: 'memory_search', rows: [{ uid, key?, type, status, staleness, trust, severity, spec, title, held_back_on_retrieve }], total: int, offset: int, limit: int, next_offset: int|null }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "query": { "type": "string", "description": "Free-text search query" },
+                    "query": { "type": "string", "description": "Free-text search query; floored — rows without lexical or exact-key evidence are dropped" },
                     "path_scope": { "type": "array", "items": { "type": "string" }, "description": "Limit results to memories scoped to these paths" },
                     "glob": { "type": "array", "items": { "type": "string" }, "description": "Limit results to memories scoped to these glob patterns" },
                     "command": { "type": "array", "items": { "type": "string" }, "description": "Limit results to memories scoped to these commands" },
