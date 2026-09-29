@@ -1,0 +1,110 @@
+id    = 414
+slug  = "audit-of-sl-273-library-ownership-and-lib-citations"
+title = "audit of SL-273 — library ownership and lib: citations"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-273"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "I4: essentials.md exceeds its 88-line budget (89 lines)"
+detail = """
+Expected: design §7.1 I4 — `install/essentials.md` stays within 88 lines (PHASE-02 EX-4, VA-2).
+Observed: `wc -l install/essentials.md` = 89 at HEAD 0ec9904a9. PHASE-02 left it at 88 (272afe181, notes B4); PHASE-04's C- conversions at lines 44 and 48 each wrapped a line (2de4ead7a → 90), and C-024's clause deletion recovered one (f075ee860 → 89). No test pins I4 (VA only), so nothing caught the regression.
+"""
+disposition = "fix-now"
+response = """
+Fixed in the audit: lines 42–45 of install/essentials.md re-broken with no word change (`/record-memory`. now carries the next sentence's opener), 89 → 88 lines. Rebuilt, `doctrine boot` regenerated and `boot --check` clean; boot tests 203/203; `check commit` exit 0; sweep verifier `--through U4` still 0 violations (it compares whitespace-normalised text).
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Fixed in the audit: lines 42–45 of install/essentials.md re-broken with no word change (`/record-memory`. now carries the next sentence's opener), 89 → 88 lines. Rebuilt, `doctrine boot` regenerated and `boot --check` clean; boot tests 203/203; `check commit` exit 0; sweep verifier `--through U4` still 0 violations (it compares whitespace-normalised text).
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "wc -l install/essentials.md = 88; verifier and boot check re-run clean."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "PHASE-01 VT-2 fails verify-vt: its #[ignore keyword was removed by PHASE-04 EX-3"
+detail = """
+Expected: `slice verify-vt SL-273` all PASS.
+Observed: PHASE-01 VT-2 FAIL — keyword `#[ignore` absent from `src/lib_citation.rs`. PHASE-01 VT-2 pinned the ignored state of `no_bare_library_mention_in_shipped_text`; PHASE-04 EX-3 / VA-2 required the removal. The criterion was correct for its phase and is superseded, not violated. All other VTs pass.
+"""
+disposition = "tolerated"
+response = """
+PHASE-01 VT-2's `#[ignore` keyword pinned the phase-1 state of `no_bare_library_mention_in_shipped_text`; PHASE-04 EX-3 / VA-2 required its removal, and PHASE-04 VT-1 now pins the enforcing state (PASS). Plan criteria are immutable-append, so the superseded keyword cannot be edited out; the FAIL line is accepted as the recorded trace of the planned ignore → enforce transition. Gate runs both tests un-ignored: `every_shipped_lib_citation_resolves ... ok`, `no_bare_library_mention_in_shipped_text ... ok`.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "tolerated"
+response = """
+PHASE-01 VT-2's `#[ignore` keyword pinned the phase-1 state of `no_bare_library_mention_in_shipped_text`; PHASE-04 EX-3 / VA-2 required its removal, and PHASE-04 VT-1 now pins the enforcing state (PASS). Plan criteria are immutable-append, so the superseded keyword cannot be edited out; the FAIL line is accepted as the recorded trace of the planned ignore → enforce transition. Gate runs both tests un-ignored: `every_shipped_lib_citation_resolves ... ok`, `no_bare_library_mention_in_shipped_text ... ok`.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Superseded by PHASE-04 EX-3; enforcing state proven by gate output."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "minor"
+title = "Selector registry: stale src/lib.rs, exact src selectors shadowed by src/**, undeclared edits"
+detail = """
+Expected: `slice conformance SL-273` undelivered/undeclared cells explained by the design.
+Observed (registry mode):
+- undelivered `src/lib.rs` — the module was declared in `src/main.rs` (design §8.2 allows either); the selector names the wrong file.
+- undelivered src/boot.rs, commands/doctor.rs, commands/library.rs, doctor_checks.rs, finding.rs, lib_citation.rs, publication.rs — all edited; conformance attributes each to the broader `src/**` selector and reports the exact selector undelivered (tooling behaviour; observation recorded).
+- undelivered `.doctrine/slice/273/inventory-audit.toml` — the §6.4 re-pass has not run (separate finding).
+- undeclared: ADR-001 `layering.toml` (lib_citation module registration), `tests/e2e_claude_install.rs` (rename follow-through), ADR-005/ADR-024/SPEC-011 (REV-069 apply), REV-069, local-memory `.md` bodies (design 5.4 prose repair; selectors cover only `memory.toml`), IMP-500/IMP-502 bodies, observations, notes, `verify-sweep.nu`. All are design-sanctioned consequences or bookkeeping; none is scope creep.
+"""
+disposition = "design-wrong"
+response = """
+Registry fix delegated to /reconcile — see RV-414 § Reconciliation Brief, Per-slice: `doctrine slice selector rm SL-273 src/lib.rs` and `selector add` for `src/main.rs` (the file that declares the module), mirrored in design §8.2. The exact src selectors shadowed by `src/**` are delivered (all eight in git diff d804787d7..HEAD); the shadowing is conformance-tool behaviour, captured as an observation, not a slice defect. `inventory-audit.toml` is F-4's concern. Every undeclared path is a design-sanctioned consequence (REV-069 apply, rename repair, module registration) or bookkeeping — aligned.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Registry fix delegated to /reconcile — see RV-414 § Reconciliation Brief, Per-slice: `doctrine slice selector rm SL-273 src/lib.rs` and `selector add` for `src/main.rs` (the file that declares the module), mirrored in design §8.2. The exact src selectors shadowed by `src/**` are delivered (all eight in git diff d804787d7..HEAD); the shadowing is conformance-tool behaviour, captured as an observation, not a slice defect. `inventory-audit.toml` is F-4's concern. Every undeclared path is a design-sanctioned consequence (REV-069 apply, rename repair, module registration) or bookkeeping — aligned.
+"""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.
