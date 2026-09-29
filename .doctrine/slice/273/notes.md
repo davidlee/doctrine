@@ -46,12 +46,14 @@ a stale-binary session regenerates old boot.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-27 · design:inquiring · 200a9f1da
+fresh-as-of: 2026-09-29 · audit→reconcile · RV-414 concluded
 
 ### Produced
 - Upstream (RFC-033 descent): frame settled 2e02a6cd2; overview memory un-inlined d947dd363; REV-067 applied to ADR-005 + ADR-024 0cf1eaf21 (lib: form); SL-144 abandoned, DEC-010 accepted
 - SL-273 scoped c5a02411e; research round (gitignored `research/research.md`); triage above 9b4356984; design run at inquiring rev 10 (governance-confirmed, graph-reviewed recorded)
 - minted: ISS-497 — stale-binary `memory sync` rolls back the shipped corpus
+- implementation: PHASE-01..04 landed on capsule/SL-273/c32; REV-069 applied; IMP-502 captured
+- audit: RV-414 (done), RV-408 controls verified; `inventory-audit.toml`; minted IMP-505, ISS-505, ISS-506
 
 ### Learned
 - mem.pattern.research.pi-agents-need-tracked-background — detached pi agents die at tool-call end
@@ -61,6 +63,8 @@ fresh-as-of: 2026-09-27 · design:inquiring · 200a9f1da
 - QUE-228 — how tier-2 project governance overrides a pulled library rule
 - A1 (notes triage) — library addresses stable except deliberate retirements
 - design questions inq-1..inq-8 live in the design run, not here
+- IMP-505 — restate bar and the 71 re-pass leads; ISS-505 — three skill/owner contradictions; ISS-506 — prose_cite silent skips
+- RV-414 brief: selector registry fix for /reconcile
 
 ## Design review (reviewing, 2026-09-27)
 
@@ -878,3 +882,19 @@ the exemption is scoped to U4, not global.
 edit under U4 scope (0 violations, 1 plan-authorised, drift 31 unchanged),
 still a violation under any earlier scope or alongside any other change in
 `src/lib_citation.rs`, and every other row/violation class is untouched.**
+
+## Audit (RV-414, 2026-09-29)
+
+Run in the adopted capsule worktree `.worktrees/SL-273-c32` (generation 32).
+Ledger: `doctrine show RV-414` — five findings, all terminal; synthesis and
+reconciliation brief live there. RV-408's deferred controls (F-1..F-5)
+verified and RV-408 concluded.
+
+- F-1 fixed: `install/essentials.md` 89 → 88 lines (line breaks only).
+- F-4 re-pass (design §6.4): `inventory-audit.toml`. C- half scripted, clean.
+  R- half by a fresh Claude subagent (no DeepSeek keys outside the jail;
+  user chose this 2026-09-29): 71 leads, 58 unmatched, tolerated → IMP-505.
+- F-5: three skill/owner contradictions → ISS-505.
+- Phase-sheet harvest: `prose_cite_findings` silent skips (design §4.3) →
+  ISS-506. Sheet risks otherwise closed by the phases' own evidence
+  (verifier red control, subsumption by containment, pinned digest strings).

@@ -1,0 +1,856 @@
+# SL-273 design §6.4 audit re-pass (RV-414 F-4), landed tree at 8f667ed9a.
+# C- half: scripted (every bare token maps to a staying inventory row; 0 unexplained). R- half below:
+# fresh Claude subagent, PHASE-03 R- brief, blind to inventory.toml. A- ids; first_match = overlapping first-inventory R- rows at HEAD.
+
+[[row]]
+id = "A-001"
+file = "plugins/doctrine/skills/audit/SKILL.md"
+line = 19
+end_line = 22
+class = "owned-concept"
+owner = "lib:reference/review-ledger.md"
+owner_carries = true
+excerpt = "Findings are append-only to the ledger and field-owned. An unresolved **blocker** refuses the audit→reconcile and reconc"
+reason = "Append-only findings and the blocker close-gate on audit->reconcile/reconcile->done restate review-ledger §3/§6."
+first_match = ""
+
+[[row]]
+id = "A-002"
+file = "plugins/doctrine/skills/audit/SKILL.md"
+line = 61
+end_line = 65
+class = "owned-concept"
+owner = "lib:reference/review-ledger.md"
+owner_carries = true
+excerpt = "**Self-audit (the usual case).** When you are both reviewer and author, drive both roles with `--as <role>` — the raiser"
+reason = "Self-review role split (raiser raises/verifies/contests...; responder disposes/amends) restates the Acts and roles table and §4 caveat."
+first_match = ""
+
+[[row]]
+id = "A-003"
+file = "plugins/doctrine/skills/audit/SKILL.md"
+line = 83
+end_line = 89
+class = "owned-concept"
+owner = "lib:reference/review-ledger.md"
+owner_carries = true
+excerpt = "Then prime it (`lib:reference/review-ledger.md` §2): `review prime` derives the path-set from the slice's selectors, and"
+reason = "What review prime derives and hashes restates review-ledger §2 Prime; only the retired domain_map history is extra."
+first_match = ""
+
+[[row]]
+id = "A-004"
+file = "plugins/doctrine/skills/audit/SKILL.md"
+line = 91
+end_line = 96
+class = "owned-concept"
+owner = "lib:reference/review-ledger.md"
+owner_carries = true
+excerpt = "- prepare subject: do NOT switch the primary checkout's branch. An audit runs where the code is — the primary tree, a di"
+reason = "Where reviews run / worker refusal / one writer per RV restates review-ledger §6 nearly verbatim."
+first_match = ""
+
+[[row]]
+id = "A-005"
+file = "plugins/doctrine/skills/audit/SKILL.md"
+line = 101
+end_line = 106
+class = "flag-shape"
+owner = "--help:slice conformance"
+owner_carries = true
+excerpt = "- **undeclared** (highest signal) — paths edited but not in any `design-target` selector. Each is a finding candidate: s"
+reason = "The undeclared/undelivered/conformant cell definitions restate the verb's help; only the 'each is a finding candidate' lens clause is audit-specific."
+first_match = ""
+
+[[row]]
+id = "A-006"
+file = "plugins/doctrine/skills/audit/SKILL.md"
+line = 122
+end_line = 125
+class = "owned-concept"
+owner = "lib:reference/review-ledger.md"
+owner_carries = true
+excerpt = "reconciliation-brief link, and the raiser verifies once the brief entry exists; for code findings, do not pick **follow-"
+reason = "The generic anti-escape guardrails (follow-up for large fix, tolerated, blocker downgrade, /consult) restate review-ledger §4 Anti-escape guardrails."
+first_match = ""
+
+[[row]]
+id = "A-007"
+file = "plugins/doctrine/skills/close/SKILL.md"
+line = 20
+end_line = 22
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "- Phase exit criteria (`EX-`) and verification (`VT-`) are met. Confirm the rollup: `doctrine slice list` should show th"
+reason = "Explains slice list rollup markers (X/X complete, !N, ?N, em-dash); slice list --help does not document them."
+first_match = ""
+
+[[row]]
+id = "A-008"
+file = "plugins/doctrine/skills/close/SKILL.md"
+line = 45
+end_line = 50
+class = "owned-concept"
+owner = "lib:reference/review-ledger.md"
+owner_carries = true
+excerpt = "* The RV ledger is resolved (`done · await=none`): every finding terminal **and** the pass concluded (`review conclude R"
+reason = "Done = terminal + concluded, active·await=raiser for zero-finding ledger, blocker gates not status string restates review-ledger §6."
+first_match = ""
+
+[[row]]
+id = "A-009"
+file = "plugins/doctrine/skills/close/SKILL.md"
+line = 111
+end_line = 115
+class = "flag-shape"
+owner = "--help:dispatch sync"
+owner_carries = true
+excerpt = "(b) reads the trunk row's `planned_new_oid` from the committed `dispatch/<N>` journal — a tree-read, stable from this ch"
+reason = "Explains what --show-journal-trunk-oid reads (planned_new_oid of the trunk row); sync --help states this."
+first_match = ""
+
+[[row]]
+id = "A-010"
+file = "plugins/doctrine/skills/close/SKILL.md"
+line = 128
+end_line = 134
+class = "owned-concept"
+owner = "lib:reference/dispatch-mechanics.md"
+owner_carries = true
+excerpt = "Per `lib:reference/dispatch-mechanics.md` § Split lineage, `--record-integration` asserts the payload is already an ance"
+reason = "After citing § Split lineage, restates it: asserts ancestor, commits one Verified row, land via --no-ff not review/<N>."
+first_match = "R-016:amend/cut-to-lib"
+
+[[row]]
+id = "A-011"
+file = "plugins/doctrine/skills/close/SKILL.md"
+line = 154
+end_line = 170
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "When `slice status <id> done` refuses with *undischarged residual drift*, each flagged requirement needs an `accept` REC"
+reason = "Drift-discharge REC predicate (clauses a-c) duplicates memory mem.pattern.doctrine.close-drift-discharge-rec; no lib/help owner (rec new --help is bare)."
+first_match = ""
+
+[[row]]
+id = "A-012"
+file = "plugins/doctrine/skills/code-review/SKILL.md"
+line = 122
+end_line = 125
+class = "owned-concept"
+owner = "lib:reference/review-ledger.md"
+owner_carries = true
+excerpt = "- Open + prime the RV: `doctrine review prime` warms the cache from the target slice's selectors (the path-set the stale"
+reason = "Prime mechanics (warm cache from selectors, staleness hash, Brief) restate review-ledger §2."
+first_match = ""
+
+[[row]]
+id = "A-013"
+file = "plugins/doctrine/skills/code-review/SKILL.md"
+line = 159
+end_line = 164
+class = "owned-concept"
+owner = "lib:reference/review-ledger.md"
+owner_carries = true
+excerpt = "Then dispose and resolve every finding to a terminal state per `lib:reference/review-ledger.md` §4, holding the line on "
+reason = "Anti-escape guardrails restated after citing §4."
+first_match = ""
+
+[[row]]
+id = "A-014"
+file = "plugins/doctrine/skills/code-review/SKILL.md"
+line = 166
+end_line = 171
+class = "owned-concept"
+owner = "lib:reference/review-ledger.md"
+owner_carries = true
+excerpt = "End the pass as raiser with `doctrine review conclude RV-NNN --basis …` (or `review_conclude`), stating what the review "
+reason = "Conclude mechanics (after last raise/reopen, done = terminal+concluded) restate review-ledger §4 Conclude the pass/§6."
+first_match = ""
+
+[[row]]
+id = "A-015"
+file = "plugins/doctrine/skills/dispatch/SKILL.md"
+line = 13
+end_line = 16
+class = "flag-shape"
+owner = "--help:dispatch setup"
+owner_carries = false
+excerpt = "1. `dispatch setup --slice <N> --dir <path>` — create/resume coordination worktree. Under a Claude harness `--dir` MUST "
+reason = "Explains --dir placement constraint per harness; setup --help only says the dir must not exist."
+first_match = ""
+
+[[row]]
+id = "A-016"
+file = "plugins/doctrine/skills/dispatch/SKILL.md"
+line = 77
+end_line = 87
+class = "owned-concept"
+owner = "lib:reference/dispatch-mechanics.md"
+owner_carries = false
+excerpt = "| `kind` | what it prescribes | |---|---| | `spawn` | no funnel row yet — hand off to `/dispatch-spawn` (a script invoca"
+reason = "Funnel-oracle prescription-kind table; dispatch-mechanics owns the oracle but does not enumerate kinds, and dispatch next --help does not either."
+first_match = ""
+
+[[row]]
+id = "A-017"
+file = "plugins/doctrine/skills/dispatch/SKILL.md"
+line = 89
+end_line = 92
+class = "owned-concept"
+owner = "lib:reference/dispatch-mechanics.md"
+owner_carries = true
+excerpt = "Parallel file-disjoint phases stay single-prescription: red evidence anywhere triages first (the suite is coord-tree-glo"
+reason = "Red evidence global / waiting never starves / others named in detail restates dispatch-mechanics 'Two properties'."
+first_match = ""
+
+[[row]]
+id = "A-018"
+file = "plugins/doctrine/skills/dispatch/SKILL.md"
+line = 99
+end_line = 108
+class = "flag-shape"
+owner = "--help:check regression diff"
+owner_carries = false
+excerpt = """- **Verify's regression half.** At the verify beat also run `doctrine check regression diff --base "$B"` (suite @ S, the"""
+reason = "Exit semantics and new/changed/persistent classes; help carries only the exit rule, not persistent or baseline-warning semantics (partial)."
+first_match = ""
+
+[[row]]
+id = "A-019"
+file = "plugins/doctrine/skills/dispatch/SKILL.md"
+line = 109
+end_line = 114
+class = "owned-concept"
+owner = "lib:reference/dispatch-mechanics.md"
+owner_carries = true
+excerpt = "- **The import's prove gate.** `worktree import --from-worktree` is non-committing and runs the **reject-and-halt prove "
+reason = "Import is non-committing and runs the reject-and-halt prove gate (land-or-reject) restates dispatch-mechanics § worker returns a working tree."
+first_match = ""
+
+[[row]]
+id = "A-020"
+file = "plugins/doctrine/skills/dispatch/SKILL.md"
+line = 115
+end_line = 120
+class = "flag-shape"
+owner = "--help:slice record-delta"
+owner_carries = true
+excerpt = "- **The registry write.** After the code commit, `doctrine slice record-delta <SL> PHASE-NN --commit <S>` writes the com"
+reason = "Explains --commit <S> writes the [S^,S] row into the primary registry; record-delta --help states this."
+first_match = ""
+
+[[row]]
+id = "A-021"
+file = "plugins/doctrine/skills/dispatch/SKILL.md"
+line = 130
+end_line = 131
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "Hand over at a committed boundary: after `handover_after` batches (default 5) or `handover_delta` cumulative reviewed-de"
+reason = "handover_after/handover_delta config keys and defaults (doctrine.toml schema); not in doctrine.toml.example or any help."
+first_match = ""
+
+[[row]]
+id = "A-022"
+file = "plugins/doctrine/skills/dispatch/SKILL.md"
+line = 150
+end_line = 157
+class = "flag-shape"
+owner = "--help:slice verify-vt"
+owner_carries = true
+excerpt = "`slice verify-vt <id>` is the **VT existence/shape gate**: it reads the coord tree's `plan.toml` and checks every `VT`-m"
+reason = "verify-vt gate semantics (test_file/keywords, Fail halts, Uncheckable/Waived non-halting) restate the verb's help."
+first_match = ""
+
+[[row]]
+id = "A-023"
+file = "plugins/doctrine/skills/dispatch/SKILL.md"
+line = 164
+end_line = 169
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "`prepare-review` is the **enforced** conformance beat: before projecting refs it commits the boundaries ledger, **derive"
+reason = "prepare-review's ledger-commit/derive/completeness-gate mechanics; sync --help documents only ref creation."
+first_match = ""
+
+[[row]]
+id = "A-024"
+file = "plugins/doctrine/skills/dispatch-spawn/SKILL.md"
+line = 55
+end_line = 60
+class = "owned-concept"
+owner = "lib:reference/dispatch-mechanics.md"
+owner_carries = true
+excerpt = "1. **Import.** `doctrine worktree import --base <B> --from-worktree <DIR> --slice <N>` — gathers the tracked + untracked"
+reason = "Import gathers delta, runs classify_import belt and prove gate, red halts staged (land-or-reject) restates the cited section."
+first_match = "R-507:amend/cut-to-lib"
+
+[[row]]
+id = "A-025"
+file = "plugins/doctrine/skills/dispatch-spawn/SKILL.md"
+line = 63
+end_line = 69
+class = "flag-shape"
+owner = "--help:slice record-delta"
+owner_carries = true
+excerpt = "3. **Record the boundary.** `doctrine slice record-delta <N> PHASE-NN --commit <S>`, with `S` **pinned at the code commi"
+reason = "--commit pins S's own patch excluding trailing knowledge/refresh-base merges restates record-delta --help."
+first_match = ""
+
+[[row]]
+id = "A-026"
+file = "plugins/doctrine/skills/dispatch-spawn/SKILL.md"
+line = 73
+end_line = 76
+class = "flag-shape"
+owner = "--help:worktree gc"
+owner_carries = true
+excerpt = "5. **Reap** the spent fork: `doctrine worktree gc --fork <BRANCH>` — the unfunnelled-fork case its patch-id oracle is na"
+reason = "gc oracle narrowing and --dry-run behaviour restate gc --help and dispatch-mechanics § patch-id oracle."
+first_match = ""
+
+[[row]]
+id = "A-027"
+file = "plugins/doctrine/skills/elicit/SKILL.md"
+line = 22
+end_line = 30
+class = "flag-shape"
+owner = "--help:compare elicit"
+owner_carries = false
+excerpt = "Entries share a spine — `rank / kind / guaranteed_yield / guaranteed_impact / score / reasons / ask`. Two kinds, differe"
+reason = "JSON entry spine and per-kind yield semantics; help does not carry them, and help lists four --kind values (incl. sizing-probe, claim-reprobe) where the skill says two."
+first_match = "R-518:amend/cut-to-help R-519:amend/cut-to-help"
+
+[[row]]
+id = "A-028"
+file = "plugins/doctrine/skills/elicit/SKILL.md"
+line = 42
+end_line = 44
+class = "flag-shape"
+owner = "--help:compare record"
+owner_carries = true
+excerpt = '- Frame: `equal-effort` ("if effort were equal, which matters more?") is the default; `prefer-first` ("under a binding c'
+reason = "--frame equal-effort vs prefer-first semantics restate compare record --help's --frame text."
+first_match = ""
+
+[[row]]
+id = "A-029"
+file = "plugins/doctrine/skills/elicit/SKILL.md"
+line = 78
+end_line = 87
+class = "flag-shape"
+owner = "--help:compare elicit"
+owner_carries = false
+excerpt = "Re-run `elicit` after each batch — answers move bounds, the queue re-derives. State footer semantics, worth repeating to"
+reason = "State-footer vocabulary (candidates/stalled/stable) is output semantics not documented in help."
+first_match = ""
+
+[[row]]
+id = "A-030"
+file = "plugins/doctrine/skills/execute/SKILL.md"
+line = 29
+end_line = 35
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "- flip the phase to `in_progress` with `doctrine slice phase` (see `lib:reference/using-doctrine.md`). **This auto-recor"
+reason = "Flip-to-in_progress auto-stamps code_start_oid, self-skips in coord context; slice phase --help does not say so."
+first_match = ""
+
+[[row]]
+id = "A-031"
+file = "plugins/doctrine/skills/execute/SKILL.md"
+line = 59
+end_line = 64
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "phase to `completed` with `doctrine slice phase`. **This closes the conformance boundary** — the handler captures `code_"
+reason = "Flip-to-completed captures code_end_oid, guards and upserts the registry row; not in slice phase --help (record-delta help says 'automatic solo phase-binding' only)."
+first_match = ""
+
+[[row]]
+id = "A-032"
+file = "plugins/doctrine/skills/execute/SKILL.md"
+line = 90
+end_line = 95
+class = "owned-concept"
+owner = "lib:reference/dispatch-mechanics.md"
+owner_carries = true
+excerpt = "**Assert a clean direct-writer entry.** Solo `/execute` is its own orchestrator — worker mode is **never** used here (th"
+reason = "Worker-ness is a property of the process via DOCTRINE_WORKER, no on-disk state restates § Worker identity."
+first_match = ""
+
+[[row]]
+id = "A-033"
+file = "plugins/doctrine/skills/handover/SKILL.md"
+line = 53
+end_line = 55
+class = "flag-shape"
+owner = "--help:design resume"
+owner_carries = true
+excerpt = "It keys on the slice, not on a run id, so it stays true across runs. Add `--run <uid>` to have a mismatch refused rather"
+reason = "Explains --run refuses a mismatch; design resume --help says exactly this."
+first_match = ""
+
+[[row]]
+id = "A-034"
+file = "plugins/doctrine/skills/handover/SKILL.md"
+line = 144
+end_line = 146
+class = "flag-shape"
+owner = "--help:slice phase"
+owner_carries = true
+excerpt = "- **Next actions** — the literal `doctrine slice phase <ID> PHASE-NN --status in_progress` (status is the `--status` fla"
+reason = "Parenthetical explains status is the --status flag, not a positional; the help usage line shows it."
+first_match = ""
+
+[[row]]
+id = "A-035"
+file = "plugins/doctrine/skills/harvest/SKILL.md"
+line = 46
+end_line = 48
+class = "owned-concept"
+owner = "lib:reference/harvest.md"
+owner_carries = true
+excerpt = "- **open** — the decisions, questions, assumptions, and constraints the unit carries forward. This is the leg a produced"
+reason = "The 'open' leg description (dropped by a produced-only sweep; DEC/QUE/ASM/CON via /knowledge) restates harvest.md §2."
+first_match = ""
+
+[[row]]
+id = "A-036"
+file = "plugins/doctrine/skills/inquisition/SKILL.md"
+line = 32
+end_line = 40
+class = "owned-concept"
+owner = "lib:reference/review-ledger.md"
+owner_carries = true
+excerpt = "Loose conversation is no court of record. **An existing doctrine subject — a slice, a phase, a backlog item, a design or"
+reason = "Ledger-vs-prose trigger and target ladder (existing subject, backlog mint, throwaway prose) restate review-ledger §1."
+first_match = ""
+
+[[row]]
+id = "A-037"
+file = "plugins/doctrine/skills/inquisition/SKILL.md"
+line = 42
+end_line = 48
+class = "owned-concept"
+owner = "lib:reference/review-ledger.md"
+owner_carries = true
+excerpt = "**Facet by the aspect under trial.** Choose the facet that names the *lifecycle aspect* you interrogate — reviewing desi"
+reason = "Facet names lifecycle aspect, posture rides --raiser, never a bespoke facet restates review-ledger §2 Facet."
+first_match = ""
+
+[[row]]
+id = "A-038"
+file = "plugins/doctrine/skills/inquisition/SKILL.md"
+line = 128
+end_line = 137
+class = "owned-concept"
+owner = "lib:reference/review-ledger.md"
+owner_carries = true
+excerpt = "The Inquisition is **done** when every charge is terminal — verified or withdrawn — **and** the trial is concluded: the "
+reason = "Done = terminal+concluded, re-conclude after raise/reopen, where reviews run, one writer per RV restate review-ledger §4/§6."
+first_match = ""
+
+[[row]]
+id = "A-039"
+file = "plugins/doctrine/skills/plan/SKILL.md"
+line = 45
+end_line = 50
+class = "owned-concept"
+owner = "lib:reference/review-ledger.md"
+owner_carries = true
+excerpt = "finding whose `route` is `demonstrate`, `probe` or `control`. The table view of `review show` does not render the route "
+reason = "How to read a finding's route (JSON .review.finding[].route, MCP field, route: prefix) restates review-ledger Route axis."
+first_match = "R-503:amend/cut-to-lib"
+
+[[row]]
+id = "A-040"
+file = "plugins/doctrine/skills/plan/SKILL.md"
+line = 58
+end_line = 65
+class = "owned-concept"
+owner = "lib:reference/glossary.md"
+owner_carries = true
+excerpt = "- `id` is `PHASE-NN` (zero-padded), **immutable** and never reused — edits append, they never renumber. - `name` and `ob"
+reason = "PHASE-NN immutability and VT/VA/VH verification-mode meanings restate glossary reference forms / criteria ids."
+first_match = ""
+
+[[row]]
+id = "A-041"
+file = "plugins/doctrine/skills/plan/SKILL.md"
+line = 66
+end_line = 96
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "- **Structured VT mandate (NON-NEGOTIABLE).** Every `VT-n` row MUST carry at minimum `test_file` + `keywords` so the VT "
+reason = "plan.toml VT mandate schema (test_file/keywords/patterns/waived semantics); verify-vt --help names the fields but not their semantics."
+first_match = ""
+
+[[row]]
+id = "A-042"
+file = "plugins/doctrine/skills/plan/SKILL.md"
+line = 111
+end_line = 113
+class = "flag-shape"
+owner = "--help:slice phases"
+owner_carries = true
+excerpt = "10.  Materialise phase tracking: `doctrine slice phases <ID>` creates the per-phase sheets in the state tree from `plan."
+reason = "Explains --prune (removes orphan tracking, destructive); slice phases --help says the same."
+first_match = ""
+
+[[row]]
+id = "A-043"
+file = "plugins/doctrine/skills/preflight/SKILL.md"
+line = 83
+end_line = 88
+class = "owned-concept"
+owner = "lib:reference/using-doctrine.md"
+owner_carries = true
+excerpt = '- `doctrine search "<query>"` — the cheapest way to locate a thing whose owning artifact you cannot name: one ranked que'
+reason = "doctrine search scope (entities-only, excludes memories/library, default kinds omit POL/STD) restates using-doctrine § Finding things by text."
+first_match = ""
+
+[[row]]
+id = "A-044"
+file = "plugins/doctrine/skills/canon/SKILL.md"
+line = 24
+end_line = 27
+class = "owned-concept"
+owner = "lib:reference/using-doctrine.md"
+owner_carries = true
+excerpt = '- or jump straight to the ones bearing on your task: `doctrine search "<keywords>" -k governance`. Policies and standard'
+reason = "Policies/standards outside the default search kind set restates using-doctrine § Finding things by text."
+first_match = ""
+
+[[row]]
+id = "A-045"
+file = "plugins/doctrine/skills/reconcile/SKILL.md"
+line = 27
+end_line = 34
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "> **A brief item can name a surface you don't write.** `plan.toml` criteria > (`EN-/EX-/VT-`, `PHASE-NN`) are immutable-"
+reason = "Plan-criteria-off-surface and selector-registry guardrail duplicates audit/SKILL.md 155-165; no lib owner, conformance --help does not name the registry location."
+first_match = ""
+
+[[row]]
+id = "A-046"
+file = "plugins/doctrine/skills/reconcile/SKILL.md"
+line = 204
+end_line = 209
+class = "flag-shape"
+owner = "--help:revision apply"
+owner_carries = true
+excerpt = "- `approve` records the orthogonal approval — `apply` refuses without it (invoker-blind: a solo dev self-approves). - `a"
+reason = "approve-before-apply, auto-land status rows, surfaced row kinds and the from-guard restate revision apply --help."
+first_match = ""
+
+[[row]]
+id = "A-047"
+file = "plugins/doctrine/skills/record-memory/SKILL.md"
+line = 18
+end_line = 19
+class = "flag-shape"
+owner = "--help:memory record"
+owner_carries = true
+excerpt = "See `doctrine memory record --help` for the `--type` values: concept|fact|pattern|signpost|system|thread."
+reason = "Lists --type values; memory record --help lists the same enum."
+first_match = "R-509:amend/cut-to-help"
+
+[[row]]
+id = "A-048"
+file = "plugins/doctrine/skills/record-memory/SKILL.md"
+line = 21
+end_line = 25
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "⚠ **A `thread` is hidden from `find`/`retrieve` until verified**. If you want a working loop to resurface by scope, pref"
+reason = "Unverified thread hidden from find/retrieve (memory mechanics); no lib owner or help text; repeated at 103-107 and 124-125."
+first_match = "R-509:amend/cut-to-help R-510:accept/log"
+
+[[row]]
+id = "A-049"
+file = "plugins/doctrine/skills/record-memory/SKILL.md"
+line = 42
+end_line = 45
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "**Graph vs body links.** Use `[[relation]]` edges for durable graph structure (typed, machine-traversable); use `[[mem.…"
+reason = "Relation edges vs [[mem]] wikilinks and retrieve --expand behaviour (memory mechanics); no owner."
+first_match = ""
+
+[[row]]
+id = "A-050"
+file = "plugins/doctrine/skills/record-memory/SKILL.md"
+line = 47
+end_line = 59
+class = "flag-shape"
+owner = "--help:memory record"
+owner_carries = false
+excerpt = "**`--lifespan` selection.** Pick the narrowest lifespan that fits the knowledge, from most to least durable:  | Lifespan"
+reason = "--lifespan value table with decay ratios; help says only 'Lifespan classification'."
+first_match = "R-511:reject/cut-to-help"
+
+[[row]]
+id = "A-051"
+file = "plugins/doctrine/skills/record-memory/SKILL.md"
+line = 63
+end_line = 68
+class = "flag-shape"
+owner = "--help:memory record"
+owner_carries = false
+excerpt = "Scope a memory along four axes (the flags are in `--help`):  - **path** — exact file(s); strongest match. - **glob** — s"
+reason = "Scope axes map to --path-scope/--glob/--command/--tag (help carries); the strength/usage guidance is not in help (partial)."
+first_match = ""
+
+[[row]]
+id = "A-052"
+file = "plugins/doctrine/skills/record-memory/SKILL.md"
+line = 72
+end_line = 90
+class = "flag-shape"
+owner = "--help:memory record"
+owner_carries = false
+excerpt = '`record` defaults `[trust] trust_level = "medium"`, `[ranking] severity = "none"`, `weight = 0`. For risky or drift-pron'
+reason = "--trust/--severity defaults and value vocabularies; help names the flags but not values or defaults."
+first_match = "R-512:reject/cut-to-help"
+
+[[row]]
+id = "A-053"
+file = "plugins/doctrine/skills/record-memory/SKILL.md"
+line = 100
+end_line = 107
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "Stamps `verified_sha` against the working tree (refuses a dirty tree — no false attestation). Unattested memories read a"
+reason = "verify stamping and thread_expiry 14-day gating; verify --help carries only the dirty-tree refusal."
+first_match = "R-513:accept/log"
+
+[[row]]
+id = "A-054"
+file = "plugins/doctrine/skills/retrieve-memory/SKILL.md"
+line = 51
+end_line = 57
+class = "flag-shape"
+owner = "--help:memory retrieve"
+owner_carries = false
+excerpt = "- `doctrine memory retrieve --expand N` — expand the result graph by N hops along `[[relation]]` edges. Each hop pulls i"
+reason = "--expand and --lifespan semantics; help calls --lifespan a 'hard filter', contradicting the skill's at-or-above threshold claim."
+first_match = "R-516:reject/cut-to-help"
+
+[[row]]
+id = "A-055"
+file = "plugins/doctrine/skills/retrieve-memory/SKILL.md"
+line = 61
+end_line = 67
+class = "owned-concept"
+owner = "lib:reference/using-doctrine.md"
+owner_carries = true
+excerpt = '`doctrine memory search` reaches only the memory corpus. For a "where does this live / what is the right way here?" ques'
+reason = "doctrine search scope (entities-only, default kinds omit POL/STD) restates using-doctrine § Finding things by text."
+first_match = ""
+
+[[row]]
+id = "A-056"
+file = "plugins/doctrine/skills/retrieve-memory/SKILL.md"
+line = 75
+end_line = 77
+class = "flag-shape"
+owner = "--help:memory retrieve"
+owner_carries = true
+excerpt = "Glob-scoped memories still match path scopes — no separate flag needed. Scope probes are OR'd; type/status are AND hard "
+reason = "Scope probes OR'd vs type/status hard filters; help labels them 'probe' vs 'Hard filter'."
+first_match = ""
+
+[[row]]
+id = "A-057"
+file = "plugins/doctrine/skills/slice/SKILL.md"
+line = 48
+end_line = 52
+class = "owned-concept"
+owner = "lib:reference/using-doctrine.md"
+owner_carries = true
+excerpt = "data in prose. **Relations are written with `doctrine link`, not hand-authored rows** — it validates the pair against `R"
+reason = "link validates against RELATION_RULES with example labels restates using-doctrine § Relating entities."
+first_match = ""
+
+[[row]]
+id = "A-058"
+file = "plugins/doctrine/skills/spec-tech/SKILL.md"
+line = 13
+end_line = 24
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "> **Structural.** Doctrine manages specs as first-class entities — a tech spec is > the same **three coordinated writes*"
+reason = "Spec entity mechanics (three coordinated writes, toml/md split, members.toml, interactions verb, no CLI flag for spine); duplicated in spec-product 228-252; no lib owner."
+first_match = ""
+
+[[row]]
+id = "A-059"
+file = "plugins/doctrine/skills/spec-tech/SKILL.md"
+line = 33
+end_line = 41
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "**The relational spine** places every spec in the corpus tree (all hand-edited TOML, gated by `spec validate`):  - `desc"
+reason = "Relational spine field semantics (descends_from, parent, containment vs interactions) is spec.toml schema with no lib or help owner."
+first_match = "R-521:accept/log"
+
+[[row]]
+id = "A-060"
+file = "plugins/doctrine/skills/spec-product/SKILL.md"
+line = 137
+end_line = 141
+class = "flag-shape"
+owner = "--help:spec req add"
+owner_carries = true
+excerpt = "Functional requirements (the `FR-` label) define observable behaviours. Quality requirements (the `NF-` label) define qu"
+reason = "FR-/NF- label and --kind functional|quality mapping restate spec req add --help (quality-bar list is extra)."
+first_match = ""
+
+[[row]]
+id = "A-061"
+file = "plugins/doctrine/skills/spec-product/SKILL.md"
+line = 228
+end_line = 241
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "Doctrine manages specs as first-class entities. A product spec is **three coordinated writes** — see your own repo's pro"
+reason = "Spec three-write model and identity TOML field list duplicate spec-tech 13-24; no lib owner."
+first_match = ""
+
+[[row]]
+id = "A-062"
+file = "plugins/doctrine/skills/spec-product/SKILL.md"
+line = 248
+end_line = 252
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "`spec req add` reserves a `REQ-NNN` member with bare fields. **To make it render richly under `spec show`, hand-enrich t"
+reason = "Requirement TOML hand-enrichment (description, acceptance_criteria; no flag) is requirement schema with no owner."
+first_match = ""
+
+[[row]]
+id = "A-063"
+file = "plugins/doctrine/skills/spec-product/SKILL.md"
+line = 259
+end_line = 261
+class = "owned-concept"
+owner = "lib:reference/glossary.md"
+owner_carries = true
+excerpt = "* `FR-`/`NF-` are sticky **membership labels** recorded in `members.toml` (`FR-` functional, `NF-` quality); they are mo"
+reason = "FR-/NF- are mobile membership labels, cite REQ-NNN restates glossary reference forms."
+first_match = ""
+
+[[row]]
+id = "A-064"
+file = "plugins/doctrine/skills/worktree/SKILL.md"
+line = 60
+end_line = 74
+class = "flag-shape"
+owner = "--help:worktree coordinate"
+owner_carries = true
+excerpt = "It creates (or resumes) `dispatch/<slice>` in its own worktree off the **resolved trunk** — the funnel's sole write targ"
+reason = "create-or-resume, coordination-live refusal, markerless/orchestrator-classed restate coordinate --help; phase-sheet regeneration is extra."
+first_match = ""
+
+[[row]]
+id = "A-065"
+file = "plugins/doctrine/skills/worktree/SKILL.md"
+line = 107
+end_line = 126
+class = "flag-shape"
+owner = "--help:worktree fork"
+owner_carries = true
+excerpt = "`fork` is the **single create+provision+(mark)+emit verb**, atomic via compensating rollback (any failure after `git wor"
+reason = "fork's atomic rollback, stderr/stdout contract, binding conditions (--worker+--slice+--phase+coord dir) and orchestrator-class restate fork --help."
+first_match = ""
+
+[[row]]
+id = "A-066"
+file = "plugins/doctrine/skills/worktree/SKILL.md"
+line = 155
+end_line = 160
+class = "flag-shape"
+owner = "--help:worktree provision"
+owner_carries = false
+excerpt = "`fork` provisions automatically; **never run a second copier.** `doctrine worktree provision <fork>` exists as the stand"
+reason = "provision as sole copier with tier excluded is in help; .worktreeinclude reading and fail-closed on tier patterns are not (partial)."
+first_match = ""
+
+[[row]]
+id = "A-067"
+file = "plugins/doctrine/skills/worktree/SKILL.md"
+line = 162
+end_line = 173
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "### Honest invariant framing (do not overstate)  The copy-seam guarantee holds **because provision is the only copier.**"
+reason = "check-allowlist is a smell test vs select_copies guarantee (worktree isolation invariant); dispatch-mechanics names the guard but not this framing."
+first_match = ""
+
+[[row]]
+id = "A-068"
+file = "plugins/doctrine/skills/worktree/SKILL.md"
+line = 185
+end_line = 190
+class = "flag-shape"
+owner = "--help:worktree branch-point-check"
+owner_carries = true
+excerpt = "- **Branch-point check.** `fork` lands the worktree at `<base>` by construction; the **concurrency extension** is the ba"
+reason = "Exit 0/1 HEAD-stationarity, not merge-base restates branch-point-check --help."
+first_match = ""
+
+[[row]]
+id = "A-069"
+file = "plugins/doctrine/skills/worktree/SKILL.md"
+line = 221
+end_line = 223
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "Memory recorded inside a worktree branch is **orphaned by a squash-merge** (the content survives but the git anchor poin"
+reason = "Squash-merge orphans memory anchors (memory mechanics); no owner."
+first_match = ""
+
+[[row]]
+id = "A-070"
+file = "plugins/doctrine/skills/worktree/SKILL.md"
+line = 227
+end_line = 237
+class = "ownerless-concept"
+owner = "none"
+owner_carries = false
+excerpt = "Doctrine has no secrets / irreducible local files → its own default is **nothing to copy**, and the installer ships **no"
+reason = ".worktreeinclude file syntax (globs, no negation/anchoring); provision --help does not document it."
+first_match = ""
+
+[[row]]
+id = "A-071"
+file = "plugins/doctrine/skills/worktree/SKILL.md"
+line = 255
+end_line = 258
+class = "owned-concept"
+owner = "lib:reference/dispatch-mechanics.md"
+owner_carries = true
+excerpt = "| `worker` start | `export DOCTRINE_WORKER=1` (self-arm, fail-open) | | `worker` verify green | Commit ONE non-merge `S`"
+reason = "Worker self-arms DOCTRINE_WORKER and commits one S; contradicts dispatch-mechanics (identity set by spawn, worker cannot commit) - stale restatement (also 43-48, 268-269)."
+first_match = ""
+

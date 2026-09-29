@@ -30,3 +30,52 @@ Lines of attack:
 6. **Recorded deviations** — PHASE-04 ran as Claude capsule-workers, not the
    planned DeepSeek confined dispatch (user decision 2026-09-28).
 7. `doctrine check gate` green.
+
+## Synthesis
+
+SL-273 delivers what its design locked. The `lib:` form has one constant
+(`LIB_PREFIX`), a pure scanner/resolver in `src/lib_citation.rs`, and two
+callers: build-repo tests over the shipped roots and a doctor leg over client
+`.doctrine/**`. `library show` accepts the prefix verbatim. `routing-process.md`
+became `essentials.md` through REV-069, `boot-footer.md` is retired, and the
+sweep converted 120 inventory rows with every change checked per occurrence.
+
+Evidence on the landed tree:
+- `doctrine check gate` green (9165 passed, 0 failed). Both invariant tests
+  run by default and pass: `every_shipped_lib_citation_resolves` (I1) and
+  `no_bare_library_mention_in_shipped_text` (I2).
+- `verify-sweep.nu --through U4`: 0 violations; the only extra edit is the
+  plan-authorised `#[ignore]` removal (I5).
+- RV-408's five control findings (F-1 blocker, F-2..F-5) verified against
+  their tests and the recorded control runs; RV-408 concluded.
+- `slice verify-vt`: all pass except PHASE-01 VT-2, superseded by design (F-2).
+
+Fixed in the audit: `essentials.md` had drifted to 89 lines through PHASE-04's
+longer `lib:` citations; re-broken to 88 with no word change (F-1).
+
+Standing risks and accepted tradeoffs:
+- **I4 has no test.** The line budget is agent-verified only, which is how
+  PHASE-04 broke it unnoticed. Cheap to pin if it matters.
+- **Restate depth.** The fresh re-pass found 58 restate leads the first
+  inventory did not hold (F-4). Accepted here as a bar question for IMP-505;
+  until then skills still carry summary paragraphs beside `lib:` citations,
+  and three of them already contradict their owners (F-5, ISS-505).
+- **Process deviation.** PHASE-03/04 and the re-pass ran on Claude workers,
+  not the planned DeepSeek pi workers (no API keys outside the jail; user
+  decisions 2026-09-28 and 2026-09-29). Independence came from fresh
+  contexts and the per-occurrence verifier rather than a different model.
+- **Conformance tooling** attributes a path to the broadest matching
+  selector and reports the exact selectors undelivered (observation
+  recorded); read that cell by hand until fixed.
+
+## Reconciliation Brief
+
+### Per-slice (direct edit)
+- F-3 — selector registry: `doctrine slice selector rm SL-273 src/lib.rs`, then
+  `doctrine slice selector add SL-273 src/main.rs` (design-target; the file
+  that declares `mod lib_citation`). Mirror in design.md §8.2's code-impact row
+  "`src/lib.rs` or `src/main.rs`" → `src/main.rs`.
+
+### Governance/spec (REV)
+- None. REV-069 already carried the ADR-005 / ADR-024 / SPEC-011 changes and is
+  applied.

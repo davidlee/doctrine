@@ -10,6 +10,12 @@ raiser    = "raiser"
 responder = "responder"
 rounds_base = 0
 contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Audit of SL-273 on capsule/SL-273/c32: check gate, slice verify-vt, slice conformance (registry and --against d804787d7..HEAD), invariants I1–I6, the PHASE-04 sweep verifier re-run, RV-408's deferred controls, and the design §6.4 re-pass (scripted C- half, fresh-subagent R- half)."
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-273"
@@ -78,7 +84,7 @@ note = "Superseded by PHASE-04 EX-3; enforcing state proven by gate output."
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Selector registry: stale src/lib.rs, exact src selectors shadowed by src/**, undeclared edits"
 detail = """
@@ -105,6 +111,78 @@ disposition = "design-wrong"
 response = """
 Registry fix delegated to /reconcile — see RV-414 § Reconciliation Brief, Per-slice: `doctrine slice selector rm SL-273 src/lib.rs` and `selector add` for `src/main.rs` (the file that declares the module), mirrored in design §8.2. The exact src selectors shadowed by `src/**` are delivered (all eight in git diff d804787d7..HEAD); the shadowing is conformance-tool behaviour, captured as an observation, not a slice defect. `inventory-audit.toml` is F-4's concern. Every undeclared path is a design-sanctioned consequence (REV-069 apply, rename repair, module registration) or bookkeeping — aligned.
 """
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Brief entry written (Per-slice: selector rm/add, §8.2 mirror)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Design §6.4 audit re-pass: landed tree not yet re-inventoried"
+detail = """
+Expected: design §6.4 — a fresh pass of the PHASE-03 brief over the landed tree (`inventory-audit.toml`), flagging (a) any occurrence not in target form that was not a first-inventory `leave`, (b) any `lib:` occurrence at a first-inventory leave/reject location.
+Observed: not run; `inventory-audit.toml` absent (conformance undelivered). The planned DeepSeek worker has no API keys outside the jail.
+Method (user decision 2026-09-29, option 3): the C- half is scripted — re-enumerate the PHASE-03 token classes on HEAD and reconcile every occurrence against `inventory.toml` rows; (b) is already covered per occurrence by the PHASE-04 verifier (re-run, 0 violations). The R- half (restate offenders, judgement) goes to one fresh Claude subagent re-reading `plugins/doctrine/skills/**` with the PHASE-03 brief.
+"""
+disposition = "tolerated"
+response = """
+Re-pass run (user chose option 3, then disposition option 2, 2026-09-29). Output: `.doctrine/slice/273/inventory-audit.toml`.
+C- half, scripted: every bare `*.md` token under the shipped roots maps to a first-inventory row that stays; the 3 surplus occurrences sit inside approved R- replacement text (R-504, storage-tier amends) and name slice artefacts or placeholders; no class-2 path forms or `library show` stragglers; src and `--help` hits are artefact/client names or asset constants. Unauthorised conversions (§6.4 b) are covered per occurrence by the PHASE-04 verifier, re-run on HEAD: 0 violations.
+R- half, fresh subagent blind to inventory.toml: 71 blocks, 58 without a first-inventory counterpart. Spot-checks show most are summary paragraphs beside an existing `lib:` citation — a stricter bar than PHASE-03 adjudicated, and some are sanctioned (review-ledger.md: each skill restates the trigger in its own voice). Tolerated in this slice: PHASE-03's adjudicated scope is delivered and verified per occurrence; settling the bar and adjudicating the 71 leads is scope work, captured as IMP-505 with the row file.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "tolerated"
+response = """
+Re-pass run (user chose option 3, then disposition option 2, 2026-09-29). Output: `.doctrine/slice/273/inventory-audit.toml`.
+C- half, scripted: every bare `*.md` token under the shipped roots maps to a first-inventory row that stays; the 3 surplus occurrences sit inside approved R- replacement text (R-504, storage-tier amends) and name slice artefacts or placeholders; no class-2 path forms or `library show` stragglers; src and `--help` hits are artefact/client names or asset constants. Unauthorised conversions (§6.4 b) are covered per occurrence by the PHASE-04 verifier, re-run on HEAD: 0 violations.
+R- half, fresh subagent blind to inventory.toml: 71 blocks, 58 without a first-inventory counterpart. Spot-checks show most are summary paragraphs beside an existing `lib:` citation — a stricter bar than PHASE-03 adjudicated, and some are sanctioned (review-ledger.md: each skill restates the trigger in its own voice). Tolerated in this slice: PHASE-03's adjudicated scope is delivered and verified per occurrence; settling the bar and adjudicating the 71 leads is scope work, captured as IMP-505 with the row file.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Both halves run; residue captured in IMP-505 with the row file; rationale is scope, not size."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Three skills contradict their owners (worktree worker mode, elicit kinds, --lifespan)"
+detail = """
+Expected: skill text agrees with the owner it restates (ADR-005 restate rule).
+Observed (re-pass rows A-071, A-027, A-054, confirmed against the owners):
+- worktree SKILL.md: worker self-arms `DOCTRINE_WORKER=1` and commits one delta; dispatch-mechanics.md (and SL-254) — the spawn sets it, a worker cannot commit.
+- elicit SKILL.md: "Two kinds"; `compare elicit --help` lists four.
+- retrieve-memory SKILL.md: `--lifespan` "at or above threshold"; `--help`: "Hard filter by lifespan" (ambiguous, unconfirmed).
+All three predate SL-273 and sit outside its adjudicated inventory rows.
+"""
+disposition = "follow-up"
+response = "Pre-existing drift outside SL-273's adjudicated rows; editing it here would be an unadjudicated sweep edit (I5). Captured as ISS-505 with locations and the fix direction (cut to owner per DEC-345)."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "follow-up"
+response = "Pre-existing drift outside SL-273's adjudicated rows; editing it here would be an unadjudicated sweep edit (I5). Captured as ISS-505 with locations and the fix direction (cut to owner per DEC-345)."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "ISS-505 carries all three with owner evidence."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
