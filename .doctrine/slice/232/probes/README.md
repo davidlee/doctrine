@@ -147,3 +147,67 @@ separated), `126799cc…` (raw CRLF) versus `0eabd516…` (LF-normalised).
   `run_git|git_stdin|Command::new` and returned empty; `capture()` uses the
   `git_bytes`/`git_opt`/`git_text` wrappers, so the query was incapable of a
   positive. The real defect was one probe away and nearly shipped.
+
+## The post-park spike: does BYTE COMPARISON replace the three legs?
+
+`byte-compare.sh` — the handover's decision 3, run 2026-09-29 on git 2.54.0.
+
+**Hypothesis.** For each path in the claim surface, compare the raw worktree
+bytes (`git hash-object --no-filters`) against the HEAD blob
+(`git rev-parse HEAD:<path>`). If it holds, the whole `observe_dirt` / `Dirt` /
+`NORMATIVE_FLAGS` / `--attr-source` / `CON-002` apparatus — and RV-314 F-19/21/
+22/24/30/31/33/35/37/38/42 — collapses into one primitive.
+
+**Result: the hypothesis holds for CONTENT and fails to be sufficient on its
+own.** Every hazard arm reads *clean* on the three legs and *divergent* on raw
+bytes:
+
+| hazard | legs (tracked / untracked / cached rc) | bytes | finding |
+|---|---|---|---|
+| committed `text eol=crlf` | 0 / 0 / 0 | diverge | F-19 |
+| committed `clean` filter (arbitrary content) | 0 / 0 / 0 | diverge | F-19/F-21 |
+| `.git/info/attributes` clean filter | 0 / 0 / 0 | diverge | F-21/F-38 |
+| stat-cache, same size, mtime preserved | 0 / 0 / 0, tag `H` | diverge | F-33/F-42 |
+| `GIT_WORK_TREE` redirect | 0 / 0 / 0 | diverge | F-37 |
+
+The control (different-size content edit) reads dirty on both, so the arms
+discriminate. Three structural results the fixer must carry:
+
+- **The SET is not byte-derivable.** Bytes compare a *given* path; they do not
+  enumerate the surface. A deletion fails `hash-object` (rc 128) and must be
+  called divergent; an extra untracked file is in `--others` but has no HEAD
+  blob; a *staged add* is in `--cached`, **absent from `--others`** — so an
+  `--others`-only enumeration misses it. The set needs one call spanning
+  `--cached`, `--others` and HEAD. Byte comparison is index-free for *content*,
+  not for *set*.
+- **`hash-object` FOLLOWS symlinks** — measured: on `link -> f` it returns `f`'s
+  content oid, not the blob oid of the target string `f`. It also errors on a
+  dangling link (rc 128). So it is **not** the primitive for mode `120000`; a
+  link's equality must be `readlink` versus `cat-file blob HEAD:<path>`. With
+  3,398 symlinks under `.doctrine/**` on the live corpus, this is not a corner.
+- **The MODE bit is outside the byte claim.** A `100644 -> 100755` change reads
+  `tracked=51` on the legs while bytes are **identical**. Byte comparison alone
+  *regresses* here, so "replace the three legs" must mean **bytes + mode + set**,
+  not bytes alone.
+
+**Cost.** On a 1,700-path fixture (1,500 regular + 200 links, all dirty):
+`diff HEAD --binary` 25 ms; batched `hash-object --stdin-paths --no-filters`
+4 ms; per-file spawning 885 ms (~70x). Batched, the live `.doctrine/**`
+surface — **13,138 paths, 3,398 of them symlinks** — hashes in ~80 ms. Cost is
+not the constraint; set and symlink/mode correctness are.
+
+**Two falsifiers failed on the first run, and both were fixture bugs in the
+probe, not the hypothesis** — recorded because that is exactly the shape that
+stopped people looking in round 5:
+
+- **FAL-4 was mis-stated.** It asserted `hash-object` *fails* on a symlink. It
+  does not — it follows it. The falsifier was rewritten to assert the real
+  behaviour, which is a stronger finding than the one intended.
+- **FAL-6's "clean worktree" was an empty repo**, so the redirected legs read a
+  deletion and the arm looked dirty. Rebuilt as a plain directory holding the
+  committed bytes.
+
+**What the spike does NOT decide.** The *anchor* question (D1) is untouched: the
+probe measures claim paths against HEAD and says nothing about whether a dirty
+file no memory claims must still block. That is a design call for the operator.
+Re-run status: exit 0, and idempotent across two runs with timing normalised.

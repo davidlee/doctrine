@@ -51,6 +51,42 @@ findings answered-but-UNVERIFIED**) · ae3b275e
 defending a route the adversary could equally reach by editing the memory file
 directly. That lever decides how much of the open ledger survives.
 
+### Produced — post-park spike (byte comparison), 2026-09-29
+
+**The handover's decision-3 spike is now RUN, not deferred.** `probes/byte-compare.sh`
+(+ README section). Result: raw-byte comparison of the worktree against the HEAD
+blob **covers the whole content-conversion and freshness-suppression family** —
+committed `text eol=crlf`, committed `clean` filter, `.git/info/attributes`
+filter, stat-cache same-size/mtime-preserved, and `GIT_WORK_TREE` redirect all
+read clean on the three legs and divergent on bytes. That is F-19/21/22/24/33/
+37/38/42 on this evidence.
+
+**Three structural residuals, all measured:**
+
+- **The surface SET is not byte-derivable** — bytes compare a given path, they do
+  not enumerate it. Deletion fails `hash-object` (rc 128 → divergent); a staged
+  add is in `--cached` and *absent from `--others`*, so an `--others`-only
+  enumeration misses it. The set needs one call spanning `--cached` + `--others`
+  + HEAD. Byte comparison is index-free for *content*, not for *set*.
+- **`hash-object` FOLLOWS symlinks** (measured: `link -> f` returns `f`'s content
+  oid, not the target-string blob) and errors on a dangling link. So it is not
+  the primitive for mode `120000`; link equality must be `readlink` vs
+  `cat-file blob`. Live corpus: 3,398 symlinks under `.doctrine/**`.
+- **The MODE bit is outside the byte claim** — `100644 -> 100755` reads
+  `tracked=51` on the legs with identical bytes. Byte comparison alone
+  **regresses**; "replace the three legs" means **bytes + mode + set**.
+
+**Cost is not the constraint:** batched `hash-object --stdin-paths --no-filters`
+hashes the whole live `.doctrine/**` surface (13,138 paths, 3,398 links) in
+~80 ms; per-file spawning is ~70x slower. Two falsifiers failed on the first run
+and both were probe fixture bugs (an empty "clean" worktree; a mis-stated
+symlink expectation), corrected and recorded.
+
+**Still a design call, not a measurement: D1 — the anchor question.** The spike
+measures claim paths against HEAD; it says nothing about whether a dirty file no
+memory claims must still block. The operator is chewing on whether attestation
+needs the anchor at all.
+
 ### Produced — post-round-5 sweep (harness + governance)
 
 - **`probes/` repaired (F-41).** `index-tags.sh` read `tr`'s rc instead of
