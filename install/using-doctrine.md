@@ -20,7 +20,7 @@ reach-for-it map):
 |---|---|
 | read an entity (all tiers, synthesized) | `doctrine show <REF>` · `doctrine <kind> show <ID>` |
 | survey what exists | `doctrine <kind> list` |
-| find a thing by text, not knowing where it lives | `doctrine search <query>` · `doctrine memory search <query>` |
+| find a thing by text, not knowing where it lives | `doctrine search <query>` · `doctrine memory search <query>` (free text is floored; selectors alone browse) |
 | scope a change | `doctrine slice new` |
 | capture a unit of work intent | `doctrine backlog new <kind>` |
 | survey / inspect the backlog | `doctrine backlog list` · `doctrine backlog show <ID>` |
@@ -30,7 +30,7 @@ reach-for-it map):
 | capture friction as it happens | `doctrine observation record friction` |
 | read the friction corpus | `doctrine observation list` · `doctrine observation search` |
 | record a durable fact | `doctrine memory record` |
-| find / retrieve a memory | `doctrine memory search` · `doctrine memory retrieve` |
+| find / retrieve a memory | `doctrine memory search` · `doctrine memory retrieve` (free text is floored; selectors alone browse) |
 | regenerate the boot snapshot | `doctrine boot` |
 | check a slice's phase rollup | `doctrine slice list` |
 
@@ -45,7 +45,7 @@ but there are three corpora, and a bare query reaches exactly one of them:
 | corpus | verb | what it holds |
 |---|---|---|
 | entities | `doctrine search <query>` | slices, specs, product requirements docs, ADRs, RFCs, backlog items, knowledge records |
-| memories | `doctrine memory search <query>` | the durable memory corpus |
+| memories | `doctrine memory search <query>` | the durable memory corpus; free text is floored, selectors alone browse |
 | the library | `doctrine library tree` · `doctrine library show reference/<name>.md` | the published reference docs — read by address, **not** in any search index |
 
 Two scope facts `doctrine search` does not advertise:

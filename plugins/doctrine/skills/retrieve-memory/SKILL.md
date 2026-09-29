@@ -23,6 +23,13 @@ shell, and `memory_show` enriches results with resolved backlinks.
    least one selector (path, glob, tag, type, or free-text query). Metadata
    only, no bodies. Rows include a `held_back_on_retrieve` flag — do not
    treat high-risk memories as consumable knowledge.
+   - **Find vs browse.** Free text is floored: only memories with lexical or
+     exact-key evidence for the query come back; selectors alone browse
+     every scope match, severity first. Either way you get one page (20 by
+     default); page on with `offset` = `next_offset` (CLI: `--page`).
+   - **Empty is an answer.** An empty free-text result means "no match", not
+     "empty corpus" — reword with the memory's likely terms, or drop the
+     query and browse by scope.
 2. **`memory_retrieve`** — safe context recall for candidates identified in
    step 1. Trust holdback enforced; low-trust high-severity memories are
    suppressed automatically.
@@ -80,7 +87,7 @@ widen it.
    high|medium|low` raises the trust floor under high severity — it only *raises*
    the default `medium`, never lowers it.
 
-3. **Inspect risk.** If `find` shows risky or held-back memories relevant to the
+3. **Inspect risk.** If `search` shows risky or held-back memories relevant to the
    task, `show` them and judge — do not act blind to what `retrieve` withheld.
 
 4. **Make connections.** After retrieving, check the relations on key memories

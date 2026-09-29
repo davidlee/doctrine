@@ -121,7 +121,9 @@ or author a spec or ADR instead. Memory is a pointer/recipe layer, not canon.
 ## 7. Sanity-check surfaceability
 
 Run `doctrine memory search` scoped to the context a future agent will actually
-query (see `--help`), and confirm the memory appears.
+query (see `--help`), and confirm the memory appears. Search returns one page,
+so a scoped browse can page it out: confirm with a query that uses the memory's
+own terms (free text finds it by evidence), or page on with `--page`.
 
 Exception: an unverified `thread` will **not** appear here even when recorded
 correctly (§1/§5) — `verify` it first, or check `memory show` instead.

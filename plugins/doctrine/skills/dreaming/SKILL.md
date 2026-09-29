@@ -43,7 +43,8 @@ maintenance window. Run the procedure corpus-wide.
    - If there are orphans, focus on these - linking 20-30 records this run
    - If there aren't, explore the corpus and strengthen / prune connections 
      between existing memories
-     * use `memory search <keyword>` to find candidate memories for linking
+     * use `memory search <keyword>` to find candidate memories for linking;
+       it returns one page, so sweep with `--limit` / `--page`
    - Run `doctrine link` for high-confidence matches
 
 4. **Backlog grooming.** Findings that can't be fixed in this pass become

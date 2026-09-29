@@ -18,6 +18,11 @@ fresh-as-of: 2026-09-29 · PHASE-02 + RV-412 · 3544168c7
   `no_match_notice` (scrubs; keyed pre-holdback); MCP `memory_search`
   find/browse description; `record_fact` / `search_out` / `retrieve_out` test
   helpers. Live: `memory search bwrap` 565 → 10 rows.
+- PHASE-03: shipped guidance — `retrieve-memory` step 1 (find vs browse, empty =
+  no match, page 20 / `next_offset`), `record-memory` §7 (own terms or `--page`),
+  `dreaming` sweep (`--limit`/`--page`), `using-doctrine.md` rows 23/33/48
+  ("free text is floored; selectors alone browse"). Also fixed a stale `find`
+  → `search` in retrieve-memory procedure step 3.
 - RV-412 (code review PHASE-01/02, pi-research): concluded; 6 fixed
   (`a2bd4d332`), F-7 tolerated. ISS-503 filed (priority page-offset overflow).
 
@@ -38,9 +43,13 @@ fresh-as-of: 2026-09-29 · PHASE-02 + RV-412 · 3544168c7
   read against design sec-4 — states free text floored to lexical/exact-key
   evidence, empty rows = no match, selectors alone browse in severity order,
   default page 20. Pass.
+- PHASE-03 VA-1: the four guidance edits read against design sec-2 "Shipped
+  guidance" — each clause present and matching live behaviour (MCP param is
+  `offset`/`next_offset`, CLI `--page`). ADR-024 sweep: no entity ids in added
+  shipped lines. Pass.
 
 ### Open
-- PHASE-03 (shipped guidance) not started.
+- Slice ready for `/audit`.
 - ISS-503 — out of slice scope.
 - CHR-171 — deferred spec-text drift (design sec-5).
 
