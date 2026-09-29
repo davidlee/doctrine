@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 358
+slug = "jev-trial-arms-are-candidate-pool-by-ranker"
+title = "Jev trial arms are candidate pool by ranker"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-29"
+updated = "2026-09-29"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Third-party evidence shows listwise Choice outranking pointwise Noul on the same model, while our design only compared pointwise variants."
+choice = "Separate pool from ranker; add a listwise Choice ranker, two-stage over the snapshot; the point-vs-list comparison becomes a primary result."
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-277"

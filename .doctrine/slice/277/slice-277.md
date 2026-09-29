@@ -28,16 +28,23 @@ Build a replayable relevance evaluator, as a Rust workspace crate outside
 Three arms, each over the corpus as of the slice's pre-research commit: the
 parent of the commit that first added its scope file (leakage guard, DEC-354):
 
+An arm is a candidate pool paired with a ranker (DEC-358):
+
 | Arm | Candidates | Ranking |
 |---|---|---|
 | A | `doctrine search` BM25 top-N | BM25 (baseline) |
-| B | same pool | Jev per-section score |
-| C | whole snapshot (entity bodies; memories excluded, DEC-357) | Jev per-section score (recall ceiling) |
+| B-point | same pool | Jev pointwise: one Noul per section |
+| B-list | same pool | Jev listwise: one Choice over the pool's entities |
+| C-point | whole snapshot (entity bodies; memories excluded, DEC-357) | Jev pointwise (recall ceiling) |
+| C-point→list | whole snapshot | pointwise, then listwise over its top 100 |
 
-Arms B and C share one call shape (DEC-352): the query (the slice's scope body
-as first committed) is the state, and each candidate section is one Noul
-question with explicit true/false criteria (DEC-355), packed to the request
-budget.
+The query (the slice's scope body as first committed) is the state throughout.
+Pointwise packs one Noul per candidate section, with explicit true/false
+criteria, into each request (DEC-352, DEC-355). Listwise asks one Choice whose
+options are entities, with no "none of these" option, each option capped to fit
+the 32k budget (DEC-359). The point-versus-list comparison is a primary result,
+prompted by Hindsight's listwise result on the same model
+(`research/raw/hindsight-jev-reranker.md`).
 
 Components, kept small and reusable, since later trials such as repair
 propagation should inherit them:
@@ -63,8 +70,8 @@ propagation should inherit them:
 - **Egress**: an explicit corpus path allow-list (default `.doctrine/` entity
   bodies), plus a local log of what each run sent. The credential is read from
   `JEV_API_KEY` and never written to records, cache, or debug output.
-- **Report**: per-arm candidate recall, and recall at a fixed token budget, with
-  sample counts. Jev-surfaced entities that no one cited are listed for human
+- **Report**: per-arm entity recall@10 and @25 (headline), recall at a token
+  budget (secondary), with sample counts and intervals (DEC-359). Jev-surfaced entities that no one cited are listed for human
   judgment rather than scored wrong.
 
 Run sequence: a live probe of about 10 calls; the call-shape agreement check on
@@ -113,8 +120,8 @@ Risks and assumptions:
   pedantic and doc lint groups (see memory "New workspace member trips the cargo
   lint group").
 
-Design questions settled in the design run: DEC-352 to DEC-357 (call shape,
-labels, snapshot, rubric, crate, memories). Cache and run logs live under
+Design questions settled in the design run: DEC-352 to DEC-359 (call shape,
+labels, snapshot, rubric, crate, memories, pool × ranker arms, listwise sizing). Cache and run logs live under
 `.doctrine/state/jev/`; POL-002 does not reach a non-shipped crate.
 
 Verification and closure: offline tests cover the request/result contract,

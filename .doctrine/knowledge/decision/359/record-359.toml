@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 359
+slug = "jev-trial-listwise-options-are-capped-entities"
+title = "Jev trial listwise options are capped entities"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-29"
+updated = "2026-09-29"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "The listwise ranker must fit the pool as one Choice question inside the 32k budget, and recall must be comparable across rankers that emit entities or sections."
+choice = "Entity options with a per-call computed equal cap; pure list on B, point-then-list on C; entity recall@10/@25 headline."
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-277"
