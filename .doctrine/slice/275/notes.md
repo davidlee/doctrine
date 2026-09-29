@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-29 · PHASE-02 · (this commit)
+fresh-as-of: 2026-09-29 · PHASE-02 + RV-412 · 3544168c7
 
 ### Produced
 - PHASE-01: `SEARCH_LIMIT_DEFAULT`; `memory::resolve_limit` + `memory::page_offset`
@@ -18,6 +18,8 @@ fresh-as-of: 2026-09-29 · PHASE-02 · (this commit)
   `no_match_notice` (scrubs; keyed pre-holdback); MCP `memory_search`
   find/browse description; `record_fact` / `search_out` / `retrieve_out` test
   helpers. Live: `memory search bwrap` 565 → 10 rows.
+- RV-412 (code review PHASE-01/02, pi-research): concluded; 6 fixed
+  (`a2bd4d332`), F-7 tolerated. ISS-503 filed (priority page-offset overflow).
 
 ### Learned
 - `plan.toml` PHASE-01 header had been swallowed by a template comment; the plan
@@ -38,6 +40,9 @@ fresh-as-of: 2026-09-29 · PHASE-02 · (this commit)
   default page 20. Pass.
 
 ### Open
+- PHASE-03 (shipped guidance) not started.
+- ISS-503 — out of slice scope.
+- CHR-171 — deferred spec-text drift (design sec-5).
 
 ## Design review passes
 
