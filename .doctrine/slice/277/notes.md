@@ -73,12 +73,12 @@ adversarial pass is proposed beyond that verification.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-29 · design reviewing (run rev 31) · ea713441f
+fresh-as-of: 2026-09-29 · design locked (run rev 51)
 
 ### Produced
 
 - DEC-352, DEC-353, DEC-354, DEC-355, DEC-356, DEC-357, DEC-358, DEC-359, DEC-360
-- `design.md` (draft, sec-1..9, revised for RV-415); RV-415 (17 findings, answered)
+- `design.md` locked (sec-1..9 user-reviewed); RV-415 concluded (F-1..F-18; F-17 control-routed, verify after `slice phases`)
 
 ### Learned
 
@@ -87,4 +87,5 @@ fresh-as-of: 2026-09-29 · design reviewing (run rev 31) · ea713441f
 
 ### Open
 
-- RV-415: raiser verification + conclude; section reviews; design acceptance.
+- `/plan`: carry RV-415 F-17's criterion sketch (ledger) onto the transport/send-log phase.
+- Tooling: top-level `acceptance` in reviewing records a spurious `design-accepted` (observations 44/…, 30/…).
