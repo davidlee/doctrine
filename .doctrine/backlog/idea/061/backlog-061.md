@@ -44,10 +44,46 @@ relevant-source recall at a fixed token budget.
 - Toolchain: workspace `rust-version = 1.85`; `typesafe-sdk-rust` 0.1.1 needs
   1.98. No HTTP client crate in the tree today (tokio only).
 
+## Settled (design conversation, 2026-09-29)
+
+- **Eval first.** One code path, two drivers: rank one slice; replay many and
+  report. Verdict lands as an EVD record. No workflow integration until the
+  evidence justifies it. Rationale: feature-first costs ~2–4× and still needs the
+  eval; its integration spend is wasted on a negative result.
+- **Rust**, in a workspace crate outside `default-members` (like
+  `crates/doctrine-control`). User expects to adopt Jev in some form, so the
+  client, sectioner, and provenance should carry forward. Keeps the MSRV and HTTP
+  dependency off shipped users; no POL-002 capability to declare yet.
+- **Don't presume BM25 is the right home.** Three arms:
+  A BM25 pool + BM25 rank (baseline); B BM25 pool + Jev rank; C whole snapshot +
+  Jev rank (recall ceiling — is the BM25 pool the bottleneck?). Authored corpus
+  ≈ 32 MB / ~8M tokens → arm C ≈ $0.40 and ~30 s per query at documented
+  price/throughput.
+- **Leakage guard:** each slice's corpus is rebuilt as of its pre-research commit.
+
+- **Thin HTTP client** (`reqwest` + `serde`) over `POST /v1/systemone`, owning
+  the error typing: rate-limit vs infrastructure failure vs semantic abstention
+  are distinct; no failure becomes a zero score; raw probabilities retained for
+  replay. `typesafe-sdk-rust` is a wire-shape reference only, not a dependency.
+- **Silver labels:** entity ids cited in each slice's `research.md` +
+  `design.md`; user spot-checks ~5 slices before tuning. Citations measure what
+  was *found and used*, not what was *relevant* — the report lists Jev-surfaced
+  uncited entities (esp. arm C) for human judgment rather than scoring them wrong.
+
+- **Data egress:** sending the authored `.doctrine/` corpus is acceptable (user).
+  Still: explicit path allow-list (default `.doctrine/` entity bodies) and a
+  local log of what each run sent.
+- **Credentials:** env var `JEV_API_KEY`, forwarded into the jail by the user
+  (needs a harness restart to take effect). Never written to records, cache, or
+  debug output.
+- **Budget:** user is on the free tier for now; ~$20 acceptable if it comes to
+  that. Dry-run by default (planned requests, token + dollar estimate); live runs
+  take an explicit spend cap and abort before exceeding it, retries counted.
+  Free-tier rate limits are likely tighter than the documented 1,200 req/min —
+  the client must back off on rate-limit responses, never score through them.
+  Sequence: ~10-call live probe → one slice across arms A–C → full ~25 slices.
+
 ## Open forks
 
-1. Standalone evaluator (outside the shipped binary) vs opt-in cargo feature.
-2. Transport: Rust SDK port, thin HTTP adapter, or official Python SDK.
-3. Data egress: may corpus text go to the hosted API; credential source.
-4. Label adjudication: human, silver labels from research.md, or LLM-assisted.
-5. Spend / request budget for the first live run.
+None blocking. Next: promote to a slice → `/research` → `/design`; user
+spot-check of silver labels is a planned human step.
