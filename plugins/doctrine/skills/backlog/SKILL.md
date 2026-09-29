@@ -27,59 +27,34 @@ The CLI is the source of truth for exact flags: `doctrine backlog --help`
 ## Verbs
 
 
-| intent | verb |
-|---|---|
-| capture a new item | `doctrine backlog new <kind> [title]` |
-| survey items | `doctrine backlog list [--kind …] [--status …] [--tag …] [--all]` |
-| inspect one item | `doctrine backlog show <ID>` |
-| transition status | `doctrine backlog edit <ID> --status <STATUS> [--resolution <R>]` |
-| add/remove tags | `doctrine backlog tag <ID> <tag> … [--remove <tag>]` (adds positional; `--remove`/`-d` repeatable) |
-| record a hard dep | `doctrine backlog needs <ID> <DEP-ID> [<DEP-ID> …]` |
-| retract a hard dep | `doctrine backlog needs <ID> <DEP-ID> --remove` (one dep) |
-| record soft ordering | `doctrine backlog after <ID> <PREDECESSOR-ID>` |
+See `doctrine backlog --help` for the full verb list and flags.
 
 
 ## Kind membership
 
-- **issue** — a bug or defect
-- **improvement** — a tooling/UX gap or enhancement (no new feature)
-- **chore** — housekeeping, tech-debt, refactor
-- **risk** — unresolved work-risk (uncertain future harm needing mitigation,
-  acceptance, or expiry); NOT a general epistemic note
-- **idea** — a speculative proposal, not yet scoped or committed
-
-The **work-intake membership test** ([[mem.concept.backlog.work-intake-membership]]):
-a candidate that does not fit the work-status lifecycle
-(`open|triaged|started|resolved|closed`) is not a backlog item.
+See `lib:reference/using-doctrine.md` § Which home for which record for the
+backlog kinds and the work-intake membership test.
 
 ## Status lifecycle
 
-`open → triaged → started → resolved → closed`
-
-- Terminal statuses (`resolved`, `closed`) require a **resolution**, passed via
-  `--resolution` (`fixed|done|mitigated|accepted|expired|duplicate|wont-do|obsolete|promoted`).
-- Non-terminal statuses forbid a resolution (re-opening auto-clears it).
-- `doctrine backlog edit <ID> --status <STATUS>` transitions in-place. `--status`
-  is required; nothing is prompted. Terminal statuses also need `--resolution`.
+See `doctrine backlog edit --help` for the status/resolution values and their
+coupling.
 
 ## Tags
 
-Lowercased, `[a-z0-9_:-]`. Colon namespacing (e.g. `area:backlog`). Adds are
-positional, removes use `--remove`/`-d` — both in one call:
-`doctrine backlog tag <ID> area:cli --remove stale`.
+See `doctrine backlog tag --help` for the tag syntax and the `--remove` flag.
 
 ## Dependencies
 
-- **`needs`** — hard prerequisite; validates every ref exists, refuses a closing
-  dependency cycle (names the members; nothing written). Use for "X blocks Y."
-- **`after`** — soft sequencing preference; validates target exists, never rejects
-  a cycle (evicted at `order` time). Use for "do X before Y if convenient."
+See `doctrine backlog needs --help` and `doctrine backlog after --help` for the
+hard/soft dependency semantics.
 
 ## Rules
 
-- The id prefix (`ISS-`, `IMP-`, `CHR-`, `RSK-`, `IDE-`) auto-selects the kind —
-  no need to pass `--kind` to `show`/`edit`/`tag`/`needs`/`after`.
-- A risk admitted to the backlog must be *unresolved work-risk*, not a general note.
-- Don't hand-edit backlog TOML — use the verb. Prose (`*.md`) is hand-edited.
-- A terminal item is hidden from `list` by default; use `--all` or `--status closed`
-  to reveal.
+- See `doctrine backlog --help` — the id prefix auto-selects the kind.
+- See `lib:reference/using-doctrine.md` § Which home for which record — a risk
+  is admitted only as unresolved work-risk.
+- Don't hand-edit backlog TOML (`lib:reference/using-doctrine.md` § storage
+  tiers) — use the verb; prose (`*.md`) is hand-edited.
+- See `doctrine backlog list --help` — terminal items are hidden by default;
+  `--all` or an explicit `--status` reveals them.

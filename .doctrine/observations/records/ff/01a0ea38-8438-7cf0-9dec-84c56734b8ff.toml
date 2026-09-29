@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ea38-8438-7cf0-9dec-84c56734b8ff"
+recorded_at = "2026-09-28T22:52:47.544112151Z"
+kind = "friction"
+summary = "capsule-orchestrator (SL-273 PHASE-04): memory verify refuses on an unrelated untracked dir"
+detail = "memory verify refused because of an untracked .doctrine/workflows/ directory the charter forbade touching; had to use --allow-dirty (stamps checkout_state_id) to re-attest Project Orientation. Dirtiness check does not distinguish untracked unrelated paths."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

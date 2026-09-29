@@ -10,7 +10,7 @@ raiser    = "raiser"
 responder = "responder"
 rounds_base = 0
 contests_base = 0
-concluded = false
+concluded = true
 
 [[review.turn]]
 act = "conclude"
@@ -26,12 +26,17 @@ note = """
 Verified the responder's six SL-273 design repairs against the original findings, adjacent design sections, named tests, publication manifest, parser behavior, and revision diff. All six original findings are resolved. Raised F-7 for a new scanner-grammar regression introduced by the F-3 revision: ordinary exclamation punctuation after a formerly valid citation is now consumed as part of the address. This pass is concluded; F-7 awaits responder disposition.
 """
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Deferred control-routed findings F-1..F-5 closed after slice phases against the plan criteria they became (PHASE-01 EX-6..EX-9, PHASE-04 EN-2/EX-2), evidence from RV-414's audit gate run and verifier re-run."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-273"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Sweep verification permits edits to leave rows"
 detail = """
@@ -75,9 +80,14 @@ response = """
 Design repaired in sections 6.3 and 6.4 (per-occurrence check, leave rows unchanged, audit flags unauthorised conversions). Control: the concrete incorrect candidate is a phase 4 diff that converts a slice-artefact design.md mention adjudicated leave to a lib templates citation, in the same hunk as an authorised glossary conversion; the per-occurrence check must reject it. Criterion: the verification script reports that occurrence as unauthorised. Host phase constraint: the phase that applies the adjudicated inventory, run before its import is accepted.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Control met (PHASE-04 EN-2/EX-2): notes § PHASE-04 EN-2 control run — seeded C-087 leave-row conversion sharing a hunk with authorised C-091 reported UNAUTHORISED (exit 1), green overlay 0. Real diff re-run by RV-414 on HEAD 0ec9904a9 + audit fix: violations 0, plan-authorised 1 (EX-3 #[ignore] removal)."
+
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Shipped TOML citations escape the enforcing sweep test"
 detail = """
@@ -121,9 +131,14 @@ response = """
 Design repaired in section 4.2 (every file under the shipped roots). Control: the concrete incorrect candidate is a bare glossary.md mention placed in a comment of a shipped TOML template; the no-bare-mention test must fail on it, and an undeclared lib citation in the same file must fail the resolution test. Criterion: both tests fail on the seeded TOML fixture. Host phase constraint: the phase that builds the resolution check.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Control met (PHASE-01 EX-6): shipped_walk_fails_on_seeded_toml_fixture passes in RV-414's gate run."
+
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Scanner silently validates a truncated citation"
 detail = """
@@ -167,9 +182,14 @@ response = """
 Design repaired in section 3.1 (whole token kept, trailing punctuation trimmed). Control: the concrete incorrect candidate is the citation lib:reference/glossary.md#section; scan plus unresolved must report it undeclared, while lib:reference/glossary.md followed by an exclamation mark must pass. Criterion: core unit tests for both. Host phase constraint: the phase that builds the resolution check.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Control met (PHASE-01 EX-7): scan_keeps_inner_suffix_and_fails_it and scan_trims_trailing_bang pass in RV-414's gate run."
+
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Shipped citation test trusts the potentially stale embed"
 detail = """
@@ -213,9 +233,14 @@ response = """
 Design repaired in section 4.2 (build-repo test admits the manifest from disk). Control: the concrete incorrect candidate is a shipped citation to an address that the on-disk manifest no longer declares but a stale compiled embed still does; the build-repo test must fail. Criterion: a test feeding the disk-manifest path with the address removed observes the failure independent of the embed. Host phase constraint: the phase that builds the resolution check.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Control met (PHASE-01 EX-8): shipped_walk_uses_given_manifest_not_embed passes in RV-414's gate run."
+
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Doctor can report clean after an unreadable authored Markdown file"
 detail = """
@@ -258,6 +283,11 @@ route = "control"
 response = """
 Design repaired in section 4.3 (doctor discloses manifest, glob and per-file read failures). Control: the concrete incorrect candidate is a client .doctrine markdown file that cannot be read, beside a readable sibling holding an unresolved lib citation; doctor must emit a finding naming the unreadable file and still report the sibling. Criterion: doctor_checks test with an unreadable fixture. Host phase constraint: the phase that builds the doctor leg.
 """
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Control met (PHASE-01 EX-9): lib_citation_unreadable_file_disclosed_sibling_reported and lib_citation_manifest_not_admitted_disclosed pass in RV-414's gate run; glob-build failure disclosed at src/doctor_checks.rs:874-879."
 
 [[finding]]
 id = "F-6"

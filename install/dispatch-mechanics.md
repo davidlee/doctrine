@@ -1,6 +1,6 @@
 <!-- Shipped reference. Published, not projected: there is no copy on disk in an
-     installed project — read it with `doctrine library show
-     reference/dispatch-mechanics.md`. Explains the fork→land funnel and
+     installed project — read it as `lib:reference/dispatch-mechanics.md`.
+     Explains the fork→land funnel and
      its sharp edges — it never reproduces `doctrine --help`; ask the CLI for exact
      flags. -->
 

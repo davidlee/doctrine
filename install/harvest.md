@@ -1,6 +1,6 @@
 <!-- Shipped reference. Published, not projected: there is no copy on disk in an
-     installed project — read it with `doctrine library show
-     reference/harvest.md`. Owns the end-of-work harvest procedure once; consuming skills cite it and
+     installed project — read it as `lib:reference/harvest.md`. Owns the
+     end-of-work harvest procedure once; consuming skills cite it and
      carry only their own freshness check inline. -->
 
 # Harvest
@@ -28,7 +28,8 @@ Every harvest walks three legs; each leg routes to a durable sink.
 
 - **produced** — summarise the commits/refs into notes prose; route durable
   follow-up **work** to `backlog new`. The home arbitration (work vs knowledge vs
-  notes) is owned by `using-doctrine.md` (§ Which home) — **cite it; do not restate
+  notes) is owned by `lib:reference/using-doctrine.md` (§ Which home) —
+  **cite it; do not restate
   the boundary here**.
 - **learned** — reusable agent guidance goes to `/record-memory`; citable
   epistemic observations (evidence, concepts) become EVD / CPT via `/knowledge`.

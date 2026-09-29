@@ -58,6 +58,16 @@ they are scratch refs within one document, not entity ids.
 | `Q1`   | design question | design / slice |
 | `C1`   | charge | inquisition |
 
+**First use: qualify a doc-local id by its artefact.** A doc-local id means
+nothing outside the artefact that holds it, and your reader has not memorised
+that artefact. So the first time you use one in a message, introduce it
+qualified by the artefact's durable id: a slice's `OQ-1` is written as
+`SL-NNN`'s `OQ-1`, and a review's `F-4` as `RV-NNN`'s `F-4`. Add a one-line
+synopsis where the context does not supply one. This binds your own prose, not
+only what you quote. When the reader is a human, that first qualified mention
+also names the verb that opens the artefact (`doctrine show RV-NNN`, for
+example), for every kind, not only reviews.
+
 **Phase ids — `PHASE-01`** (2-digit, immutable; edits append, never renumber). The
 sheet *file* is `phase-01.md` (lowercase).
 

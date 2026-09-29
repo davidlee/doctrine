@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e9f9-a222-7a72-a40e-6738c2829829"
+recorded_at = "2026-09-28T21:44:06.434883203Z"
+kind = "friction"
+summary = "capsule-phase-planner (SL-273 PHASE-04): PHASE-03 replacement texts broke surrounding sentences"
+detail = "Six adjudicated R- replacement texts (R-005, R-500, R-501, R-504, R-507, R-523) were authored as single lines without the surrounding context and produce broken grammar or drop instructions when applied; within-field containment was wrong for C-141/C-214. Pushed repair and re-adjudication work into the apply phase."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e868-6c3f-7731-9b0d-bb95b8d25f70"
+recorded_at = "2026-09-28T14:25:52.70341387Z"
+kind = "friction"
+summary = "[capsule-phase-planner; SL-273 PHASE-03] no verb appends to a backlog item's body; backlog edit only transitions status"
+detail = "Logging ownerless-restatement locations to IMP-500 required hand-editing backlog-500.md."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

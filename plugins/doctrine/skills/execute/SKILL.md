@@ -27,7 +27,8 @@ Inputs:
    - first phase starting → move the slice: `doctrine slice status <id> started`
      (bare number), if not already there.
    - flip the phase to `in_progress` with `doctrine slice phase` (see
-     `using-doctrine.md`). **This auto-records the conformance boundary** — the
+     `lib:reference/using-doctrine.md`). **This auto-records the conformance
+     boundary** — the
      handler stamps `code_start_oid = HEAD` into the phase sheet. No extra call;
      the binding rides the transition you already issue. (It self-skips
      in a dispatch coordination context, where the funnel beat is the recorder
@@ -101,9 +102,9 @@ doctrine worktree land --fork slice/SL-NNN-slug   # merge --no-ff, ancestry pres
 doctrine worktree gc   --fork slice/SL-NNN-slug   # reap the spent fork once the oracle proves it landed
 ```
 
-`land` preserves the multi-commit TDD history via `git merge --no-ff` (it cannot
-express a squash); `gc` deletes only after the two-leg landed oracle certifies the
-fork — both fail closed with a distinct token, never auto-merge.
+See `lib:reference/dispatch-mechanics.md` §§ "The import severs ancestry — so
+"did it land?" needs a patch-id oracle" and "The squash blind spot", for why
+`land`/`gc` behave as they do.
 
 ## Outcomes
 

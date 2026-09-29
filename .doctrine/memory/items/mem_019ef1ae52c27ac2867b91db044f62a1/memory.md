@@ -53,7 +53,7 @@ Module layering (ADR-001): leaf ← engine ← command, no cycles.
   RustEmbed.
 - `.agents/skills/` — agent skill definitions (Markdown).
 - `install/` — templates and reference docs seeded by `doctrine install`
-  (glossary, using-doctrine, governance, routing-process, seed templates).
+  (glossary, using-doctrine, governance, essentials, seed templates).
 - `.doctrine/spec/` — product and tech specs (authored).
 - `.doctrine/adr/` — architectural decision records (authored).
 - `.doctrine/slice/` — active slices (authored scope + design + plan + phases).
@@ -117,8 +117,8 @@ Module layering (ADR-001): leaf ← engine ← command, no cycles.
   reading via `show`
 - `install/glossary.md` — entity kinds, ids, reference forms, verification
   taxonomy
-- `install/routing-process.md` — the routing table and core process (also
-  inlined in boot snapshot)
+- `install/essentials.md` — the boot onboarding summary: routing table, core
+  process, guardrails (inlined in the boot snapshot as "Essentials")
 - `install/governance.md` — project-local governance pointers
 - `install/review-ledger.md` — adversarial review protocol
 - `.agents/skills/` — agent skill definitions (route, execute, audit, etc.)

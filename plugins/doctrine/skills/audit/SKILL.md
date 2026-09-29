@@ -11,7 +11,8 @@ governance, and is every gap consciously dispositioned before reconciliation?
 The audit stage runs on a **review ledger** — the RV kind (`RV-NNN`). The
 shared ledger mechanics (open + prime, raise, dispose + resolve, the severity and
 disposition vocab, synthesis, the close-gate, where reviews run) live in
-`review-ledger.md` — **read it; this skill does not repeat the verbs.** 
+`lib:reference/review-ledger.md` — **read it; this skill does not repeat the
+verbs.**
 What follows is the audit *lens*: the facet, the modes, the scope, the evidence 
 the reconciliation loop demands, and the audit-specific harvest and closure tail.
 
@@ -36,15 +37,9 @@ Inputs:
 
 ## Tool preference
 
-If your harness supports MCP tools and doctrine's MCP server is connected
-(you see `review_new`, `review_raise`, `review_dispose`, `review_amend`,
-`review_verify`, `review_contest`, `review_reopen`, `review_withdraw`,
-`review_conclude`, `review_prime`, `review_list`, `review_show`,
-`review_status` in your tool list), **prefer these MCP tools over the CLI** —
-they return machine-parseable JSON text in the MCP content block, carry prose as
-structured fields with no shell quoting, and eliminate shell overhead. Every
-review verb has an MCP equivalent except `review unlock` and `review paths`,
-which stay CLI-only.
+Prefer the MCP review tools over the CLI when your harness has them
+(`lib:reference/review-ledger.md` § Passing prose); `review unlock` and
+`review paths` stay CLI-only.
 
 ## Audit lens
 
@@ -54,7 +49,8 @@ satisfied by definition (it gates the slice's `audit→reconcile→done`). Do no
 re-derive the subject — open the RV against the slice.
 
 **Facet is `reconciliation`.** That is the lifecycle aspect this stage
-interrogates. Posture, if any, rides `--raiser`, never a new facet (`review-ledger.md`
+interrogates. Posture, if any, rides `--raiser`, never a new facet
+(`lib:reference/review-ledger.md`
 §2).
 
 **Audit mode** — pick one:
@@ -66,18 +62,12 @@ interrogates. Posture, if any, rides `--raiser`, never a new facet (`review-ledg
 roles with `--as <role>` — the raiser raises, verifies, contests, reopens,
 withdraws and concludes; the responder disposes and amends. Roles belong to
 acts, not agents; `--as` is cooperative role assertion, not a security boundary
-(`review-ledger.md`, "Acts and roles").
+(`lib:reference/review-ledger.md`, "Acts and roles").
 
-**Disposition convention (audit-specific).** `--disposition` takes only the
-closed vocab (`review-ledger.md` §4). Audit uses `aligned` (observation correct,
-no change needed), `fix-now` (code fix within audit scope — never a spec or
-governance edit), `tolerated` (explicit accepted drift with rationale), and
-`design-wrong` for a spec/governance change delegated to `/reconcile`, with the
-reconciliation-brief link in `--response`. Audit must **never** use `follow-up`
-for spec/governance items — those belong to the reconcile write surface, not the
-backlog. Keep disposition and status apart: `verified` is a finding **status**,
-reached when the raiser runs `review verify`, never a `--disposition` value (the
-CLI refuses it). Every finding ends `verified` (the observation is confirmed; a
+**Disposition convention (audit-specific).** See the closed disposition vocab,
+`lib:reference/review-ledger.md` §4. Audit must **never** use `follow-up` for
+spec/governance items — those belong to the reconcile write surface, not the
+backlog. Every finding ends `verified` (the observation is confirmed; a
 delegated one once its brief entry exists); the *remediation* is reconcile's job
 and is recorded separately — do not mutate a finding to `fixed`/`remediated`.
 
@@ -86,10 +76,12 @@ and is recorded separately — do not mutate a finding to `fixed`/`remediated`.
 1. **Open the ledger for the slice** (replaces authoring `audit.md`): open a
    `reconciliation`-facet RV targeting the slice, then fill the ledger's `## Brief`
    with the lines of attack (what this audit probes and the invariants it holds the
-   slice to). Verbs and flags: `review-ledger.md` §1–§2. Loose notes are
+   slice to). Verbs and flags: `lib:reference/review-ledger.md` §1–§2. Loose
+   notes are
    insufficient for closure-grade work — findings belong in the ledger.
 
-   Then prime it (`review-ledger.md` §2): `review prime` derives the path-set
+   Then prime it (`lib:reference/review-ledger.md` §2): `review prime` derives
+   the path-set
    from the slice's selectors, and the ledger's staleness signal hashes it. What
    is **gone** is the old hand-curated `domain_map` (a dead authoring tax), not
    the `prime` verb. The mechanical drift signal from `slice conformance` (step
@@ -100,7 +92,8 @@ and is recorded separately — do not mutate a finding to `fixed`/`remediated`.
      runs where the code is — the primary tree, a dispatch coordination tree, a
      linked worktree, or an adopted capsule tree; audit and close there, then
      land. Only a dispatch worker process is refused review writes; one writer
-     per RV at a time (`review-ledger.md` §6, "Where reviews run").
+     per RV at a time (`lib:reference/review-ledger.md` §6, "Where reviews
+     run").
    - **Run `doctrine slice conformance <id>` and read the algebra** — the
      mechanical path-conformance delta between what `design.md` declared
      (`design-target` selectors) and what git actually touched (recorded
@@ -122,7 +115,8 @@ and is recorded separately — do not mutate a finding to `fixed`/`remediated`.
    - run the tests/checks the design and plan require, **plus `doctrine check gate`**;
    - inspect observed behaviour against `design.md` and the phase `VT-` criteria;
    - note where behaviour and design diverge — each divergence is a finding.
-3. **Raise + dispose every finding** on the ledger per `review-ledger.md` §3–§4.
+3. **Raise + dispose every finding** on the ledger per
+   `lib:reference/review-ledger.md` §3–§4.
    Hold the audit line on the **anti-escape pressure**: do not pick **follow-up**
    for spec/governance findings — dispose them `design-wrong` with the
    reconciliation-brief link, and the raiser verifies once the brief entry exists; for code findings, do not pick **follow-up** merely because the fix
@@ -186,7 +180,8 @@ and is recorded separately — do not mutate a finding to `fixed`/`remediated`.
    default and the human's verbal changes.
 6. **Harvest (audit tail).** Sweep durable risks, decisions, and gotchas from the
    disposable runtime **phase sheets** into `notes.md` — the audit-specific lens —
-   then drive the rest of the harvest (legs and sinks) per `harvest.md`.
+   then drive the rest of the harvest (legs and sinks) per
+   `lib:reference/harvest.md`.
 7. **Hand off to reconcile.** Once the reconciliation brief is written and every
    finding is terminal, conclude the pass as raiser —
    `doctrine review conclude RV-NNN --basis …` (or `review_conclude`), stating

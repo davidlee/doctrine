@@ -1,9 +1,9 @@
 id = 273
 slug = "library-ownership-lib-citations"
 title = "Library ownership and lib: citations"
-status = "ready"
+status = "done"
 created = "2026-09-27"
-updated = "2026-09-27"
+updated = "2026-09-29"
 tags = ["area:docs", "area:governance", "area:skills"]
 
 [relationships]
@@ -59,10 +59,6 @@ selector = "src/finding.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/lib.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "install/**"
 intent = "design-target"
 
@@ -102,6 +98,10 @@ note = "rename repair: memory scope paths (RV-408 F-6)"
 selector = ".doctrine/memory/items/mem_019ed43e279d70e3b55af747dfbfb54b/memory.toml"
 intent = "design-target"
 note = "rename repair: memory scope paths (RV-408 F-6)"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e814-261b-7b11-8c33-1eb91f5ab38e"
+recorded_at = "2026-09-28T12:53:49.723971907Z"
+kind = "friction"
+summary = "[capsule-worker; SL-273 PHASE-02] memory sync / install abort at y/N prompt when not run from a terminal"
+detail = "doctrine memory sync and doctrine install stop at an interactive y/N prompt and abort in a non-tty agent context; the phase sheet and project convention omit -y, so the worker had to discover the flag."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

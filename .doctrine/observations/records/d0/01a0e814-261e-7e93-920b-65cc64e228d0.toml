@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e814-261e-7e93-920b-65cc64e228d0"
+recorded_at = "2026-09-28T12:53:49.726958907Z"
+kind = "friction"
+summary = "[capsule-worker; SL-273 PHASE-02] memory edit silently clears verification"
+detail = "doctrine memory edit resets verification_state to unverified and clears verified_sha/reviewed without saying so; repairing a path scope on the Project Orientation memory (inlined into boot Onboarding) dropped its attestation. The phase sheet did not anticipate it, and re-attesting is a separate decision."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

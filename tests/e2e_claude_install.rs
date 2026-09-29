@@ -643,7 +643,7 @@ fn known_fragment_receipt_omits_body_stale_receipt_reemits() {
 // ── core-process guidance (SL-233 PHASE-08 EX-2 / EX-4 / EX-9) ─────────────
 
 /// The paragraph opener the core process is authored under, in the shipped asset
-/// (`install/routing-process.md`) and in every projection generated from it.
+/// (`install/essentials.md`) and in every projection generated from it.
 const CORE_PROCESS_MARKER: &str = "**Core process:**";
 
 /// The retired design-stage verb, in its INVOCATION form. Backticked on purpose:
@@ -689,7 +689,7 @@ fn guardrails_paragraph(text: &str, source: &str) -> String {
 
 /// Install into `dir`, regenerate the boot snapshot from the embed, return its
 /// text. This is the GENERATED surface: `doctrine boot` inlines
-/// `routing-process.md` out of the binary's own embed, so what it writes is what
+/// `essentials.md` out of the binary's own embed, so what it writes is what
 /// a project's agents actually read — not what the repo's working copy says.
 fn generated_boot_snapshot(dir: &Path) -> String {
     install(dir);

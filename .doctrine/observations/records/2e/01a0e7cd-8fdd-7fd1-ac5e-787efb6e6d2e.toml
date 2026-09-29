@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e7cd-8fdd-7fd1-ac5e-787efb6e6d2e"
+recorded_at = "2026-09-28T11:36:43.741868675Z"
+kind = "friction"
+summary = "capsule-phase-planner SL-273 PHASE-01: sibling doctor check prose_cite_findings violates STD-003 (silent glob/read skip), so no in-repo exemplar for disclosure"
+detail = "Planner found src/doctor_checks.rs prose_cite_findings returns empty on glob failure and silently skips unreadable files — the very pattern RV-408 F-5 forbids. New lib_citation leg cannot copy it; worker needs explicit guidance. Candidate follow-up chore. Also src/commands/doctor.rs numbered findings.extend comments skip #10 (cosmetic drift)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

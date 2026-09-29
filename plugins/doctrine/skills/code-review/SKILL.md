@@ -50,7 +50,8 @@ outcome** — say so plainly rather than manufacturing disappointment.
 Scale the ceremony to stakes × scope before starting, and say which you chose.
 A one-line fix warrants a quick pass and perhaps a single raise; a subsystem or
 pre-release audit warrants the full process below. The ledger-vs-prose trigger
-(`review-ledger.md` §1) decides where findings *land*; this dial decides how
+(`lib:reference/review-ledger.md` §1) decides where findings *land*; this dial
+decides how
 hard you *dig*.
 
 ## Cadence
@@ -84,7 +85,7 @@ escalates per-phase review to required even for an above-the-bar model:
   hot, before the phase concludes.
 - **pre-close** → the audit's reconciliation RV.
 - **ad-hoc** (a review with no active phase) → up the target ladder to the
-  nearest durable subject (`review-ledger.md` §1).
+  nearest durable subject (`lib:reference/review-ledger.md` §1).
 
 ## This review runs on the ledger
 
@@ -94,36 +95,23 @@ finding outlives the conversation as an append-only, field-owned, queryable rais
 instead of evaporating into chat scrollback. The shared ledger mechanics (subject
 and target ladder, open + prime, raise, dispose + resolve, severity and
 disposition vocab, synthesis, harvest, the close-gate, where reviews run)
-live in `review-ledger.md` — **read it; this skill does not repeat the verbs.**
+live in `lib:reference/review-ledger.md` — **read it; this skill does not
+repeat the verbs.**
 What follows is the *lens*: the voice, the axes, the review process, and how this
 skill's emoji severities and prose headings map onto the ledger.
 
 **Facet is always `code-review`.** That is the lifecycle aspect this review
 interrogates. An adversarial *posture* rides `--raiser <label>`, never a bespoke
-facet (`review-ledger.md` §2).
+facet (`lib:reference/review-ledger.md` §2).
 
 ### Where the findings land — subject before you start
 
-Pick the subject up the target ladder (`review-ledger.md` §1) before you raise a
-single thing; the closer the subject sits to a real entity, the more your
-findings can be queried, gated, and handed off:
+See `lib:reference/review-ledger.md` § the subject/target ladder.
 
-- An existing **slice / phase / design / plan** under review → open the RV against
-  it — except a design under a managed design run, which already holds its pass
-  RV (`doctrine design show <slice> --format prompt` names it as `review_pass`):
-  raise there, never on a second RV (`review-ledger.md` §2, *Open*). A **backlog
-  item** (`issue` / `improvement` / `chore` / `risk` / `idea`) is the typed home
-  for a durable diff with no slice yet — and if no proximate subject exists but
-  the review is durable, **mint one** (`backlog new <kind>`) and target that. Do
-  not skip to prose to dodge the mint.
-- **Prose is the last resort** — reserved for an explicitly throwaway one-shot with
-  no durable subject, no lifecycle gate, no handoff, and no finding worth keeping.
-  If you are reviewing code that matters, it has a home on the ledger; the cost
-  asymmetry favours opening it (`review-ledger.md` §1, the ledger-vs-prose trigger).
 - The **code/diff is the evidence, not the subject.** When the locus is a backlog
   item (or any non-code entity), the item is the RV's *locus* and the concrete code
   evidence — file, line, the offending construct — lives in each finding's
-  `--detail` (`review-ledger.md` §1). Never include any secrets,
+  `--detail` (`lib:reference/review-ledger.md` §1). Never include any secrets,
   credentials or API keys directly in the ledger.
 
 ## Process
@@ -134,7 +122,7 @@ findings can be queried, gated, and handed off:
    - Open + prime the RV: `doctrine review prime` warms the cache from the target
      slice's selectors (the path-set the staleness signal hashes; the hand-curated
      `domain_map` was retired), then seed the ledger's `## Brief` with
-     your lines of attack (`review-ledger.md` §2).
+     your lines of attack (`lib:reference/review-ledger.md` §2).
 2. **High-level review**
    - Architecture
    - Performance impact
@@ -163,22 +151,13 @@ not raises on this RV — capture them (`backlog new`) and move on.
 
 Every pathology you uncover is a `doctrine review raise` — framed *expected vs
 observed* with its evidence in `--detail`, fixed at raise (the ledger is
-append-only). The emoji severities map straight onto the shared severity axis
-(`review-ledger.md` §3); raise with the mapped `--severity`:
-
-| label | meaning | `--severity` |
-|---|---|---|
-| 🔴 | blocking | `blocker` |
-| 🟠 | important | `major` |
-| 🟡 | minor | `minor` |
-| 🔵 | optional suggestion | `nit` |
-
-Only **`blocker`** gates the target's close (`review-ledger.md` §3, §6) — reserve
-it for what must not ship unreconciled, and do not downgrade a true blocker to
-dodge the close-gate. **👍 good is not a finding** — praise (such as it is) goes
+append-only). The emoji severities map onto `lib:reference/review-ledger.md`'s
+severity vocab (🔴 blocker, 🟠 major, 🟡 minor, 🔵 nit); only `blocker`
+gates close. **👍 good is not a finding** — praise (such as it is) goes
 into the synthesis, not the ledger.
 
-Then dispose and resolve every finding to a terminal state per `review-ledger.md`
+Then dispose and resolve every finding to a terminal state per
+`lib:reference/review-ledger.md`
 §4, holding the line on the anti-escape guardrails: do not pick **follow-up**
 because the fix feels large, do not normalise **tolerated** without a real
 rationale. Ambiguous after reading the design and governance → stop and `/consult`,
@@ -187,7 +166,8 @@ do not improvise a disposition.
 End the pass as raiser with `doctrine review conclude RV-NNN --basis …` (or
 `review_conclude`), stating what the review examined — after the last raise or
 reopen, since either clears the conclusion. The ledger reads `done` only once
-every finding is terminal **and** the pass is concluded (`review-ledger.md` §4,
+every finding is terminal **and** the pass is concluded
+(`lib:reference/review-ledger.md` §4,
 "Conclude the pass").
 
 ## The prose → the synthesis
@@ -195,7 +175,8 @@ every finding is terminal **and** the pass is concluded (`review-ledger.md` §4,
 The narrative does not live in chat. When the findings are resolved, the prose
 this review would have spoken — the **Overall** verdict, the **Synopsis**, and the
 **Haiku** — is appended as the review's `## Synthesis` on `review-NNN.md`
-(`review-ledger.md` §5). The ledger holds the structured findings as raises; the
+(`lib:reference/review-ledger.md` §5). The ledger holds the structured findings
+as raises; the
 synthesis ties them together.
 
 **Synthesis shape:**
@@ -206,5 +187,6 @@ synthesis ties them together.
   raise).
 - **Haiku**: …
 
-Then **harvest** (judgment-gated) per `harvest.md`. A clean review harvests
+Then **harvest** (judgment-gated) per `lib:reference/harvest.md`. A clean review
+harvests
 nothing, and that is a valid outcome.

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ea38-8430-7b90-b68c-f5ada2fa919a"
+recorded_at = "2026-09-28T22:52:47.536302751Z"
+kind = "friction"
+summary = "capsule-worker (SL-273 PHASE-04 U2): word-diff verifier blind to comment/blockquote markers on rewrap"
+detail = "Rewrapping a lengthened TOML comment or markdown blockquote line needs the # or > marker repeated; verify-sweep's whitespace-normalised word diff passes a wrap that silently turns a TOML comment into live broken syntax, and flags the correct marker-repeating wrap as UNAUTHORISED. Worker left 4 lines over 80 cols instead."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

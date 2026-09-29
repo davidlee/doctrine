@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0eb29-8f25-7d62-abfb-e0af67791a82"
+recorded_at = "2026-09-29T03:16:04.517774624Z"
+kind = "friction"
+summary = "[audit; SL-273] slice conformance reports exact-path design-target selectors undelivered when a broader src/** selector claims the edited path"
+detail = "SL-273 declares src/lib_citation.rs, src/boot.rs, ... and also src/**. Every src path is attributed to src/** in 'conformant', and the 8 exact selectors are listed 'undelivered' although their files were edited. Cost: each undelivered line had to be checked by hand against git diff."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

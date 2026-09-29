@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! `doctrine doctor` — corpus health scan.
 //!
-//! Runs all eleven checks (id integrity, relation integrity, spec FK, memory health,
+//! Runs all twelve checks (id integrity, relation integrity, spec FK, memory health,
 //! lifecycle, raw label, TOML parse, prose citation, agent conformance, coord hook,
-//! inert facet key) over the corpus, renders them
+//! inert facet key, lib citation) over the corpus, renders them
 //! grouped by category with severity, and exits non-zero on any error-severity
 //! finding. The `--json` flag emits a flat JSON array of finding objects.
 
@@ -83,6 +83,11 @@ pub(crate) fn run_doctor(
     // key populated but inert at its record's kind is content nothing will ever
     // read. Reports; never refuses, never repairs.
     findings.extend(crate::doctor_checks::inert_facet_key_findings(&root));
+
+    // #13 — Lib Citation (Warning) — SL-273: a `lib:` citation in client prose
+    // must resolve against the embedded publication manifest. Degraded reads
+    // (manifest, glob, per-file) are disclosed as findings, never skipped.
+    findings.extend(crate::doctor_checks::lib_citation_findings(&root));
 
     if json {
         // Reuse the shared list envelope `{kind, rows}` (design §5.4 / F7) so the

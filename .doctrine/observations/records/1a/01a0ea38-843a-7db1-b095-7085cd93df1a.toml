@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ea38-843a-7db1-b095-7085cd93df1a"
+recorded_at = "2026-09-28T22:52:47.546618661Z"
+kind = "friction"
+summary = "capsule-worker (SL-273 PHASE-04 U4): sweep verifier had no notion of plan-authorised non-inventory edits"
+detail = "verify-sweep covered src/ but only knew inventory rows, so the plan-mandated EX-3 #[ignore] removal read as UNAUTHORISED; needed a follow-up unit (U4b) to add a narrowly-scoped plan-authorised exemption with controls. Planning the verifier should enumerate every non-row edit the phase makes."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

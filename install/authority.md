@@ -36,4 +36,4 @@ lower one; within a tier, the narrower and more recent source wins.
   task's bounds and your standing instructions. It returns proposals, and it
   never records a user act.
 
-Full elaboration and examples: `doctrine library show reference/authority-model.md`.
+Full elaboration and examples: `lib:reference/authority-model.md`.

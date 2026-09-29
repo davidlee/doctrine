@@ -520,7 +520,7 @@ inventory `leave` or `reject` row — a conversion nobody authorised.
 | `src/commands/library.rs` | `show_with` strips `LIB_PREFIX`; test |
 | `src/doctor_checks.rs`, `src/commands/doctor.rs`, `src/finding.rs` | `lib_citation_findings`; wiring; `Category::LibCitation` |
 | `src/boot.rs` | static source renamed to `essentials.md`, heading "Essentials"; test |
-| `src/lib.rs` or `src/main.rs` | module declaration |
+| `src/main.rs` | module declaration |
 | `publication/manifest.toml` | rename entry; remove `boot-footer.md` |
 | `install/routing-process.md` → `install/essentials.md` | rename, compactness pass, `lib:` rule, mandatory retrieval |
 | `install/glossary.md`, `install/using-doctrine.md`, `install/shipped-corpus-authoring.md` | owner map cuts; C5; publication section; `lib:` teaching |

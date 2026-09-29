@@ -103,14 +103,11 @@ enum SourceKind {
 /// governance prefix cache-warm.
 fn boot_sequence() -> Vec<(&'static str, SourceKind)> {
     vec![
-        // Frames every section after it — including routing, itself a framework
+        // Frames every section after it — including Essentials, itself a framework
         // rule — so it leads (IMP-466).
         ("Authority", SourceKind::Static("authority.md")),
-        (
-            "Routing & Process",
-            SourceKind::Static("routing-process.md"),
-        ),
-        // The dense command-map projection — placed immediately after routing so
+        ("Essentials", SourceKind::Static("essentials.md")),
+        // The dense command-map projection — placed immediately after Essentials so
         // the agent meets the command surface before governance (SL-150).
         ("Commands", SourceKind::CommandMap),
         ("Governance (project)", SourceKind::Governance),
@@ -3440,13 +3437,13 @@ mod tests {
                 .position(|x| *x == needle)
                 .unwrap_or_else(|| panic!("{needle} present"))
         };
-        let routing = pos("Routing & Process");
+        let essentials = pos("Essentials");
         let commands = pos("Commands");
         let governance = pos("Governance (project)");
         assert_eq!(
             commands,
-            routing + 1,
-            "Commands must sit immediately after Routing & Process"
+            essentials + 1,
+            "Commands must sit immediately after Essentials"
         );
         assert!(
             commands < governance,
@@ -3616,8 +3613,8 @@ mod tests {
         let exec = Path::new("/abs/target/debug/doctrine");
 
         let digest = produce(
-            "Routing & Process",
-            &SourceKind::Static("routing-process.md"),
+            "Essentials",
+            &SourceKind::Static("essentials.md"),
             root,
             exec,
             noop_map,
@@ -3629,14 +3626,14 @@ mod tests {
         );
 
         let missing = produce(
-            "Routing & Process",
+            "Essentials",
             &SourceKind::Static("no-such-asset.md"),
             root,
             exec,
             noop_map,
         );
         assert_eq!(
-            missing.body, "<!-- Routing & Process: not yet populated -->",
+            missing.body, "<!-- Essentials: not yet populated -->",
             "a missing embed asset is a marker, never a crash",
         );
     }
@@ -4462,12 +4459,51 @@ mod tests {
             "governance body (disk) projected:\n{snap}"
         );
         assert!(
-            !snap.contains("<!-- Routing & Process:"),
-            "routing marker replaced"
+            !snap.contains("<!-- Essentials:"),
+            "essentials marker replaced"
         );
         assert!(
             !snap.contains("<!-- Governance (project):"),
             "governance marker replaced"
+        );
+    }
+
+    // --- VT-1 (SL-273 PHASE-02): the renamed onboarding summary carries the
+    // `lib:` resolution rule and the mandatory-retrieval line, and the old
+    // "Routing & Process" heading is gone ---
+
+    #[test]
+    fn boot_essentials_carries_lib_rule() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+
+        let gov = root.join(GOVERNANCE_REL);
+        fs::create_dir_all(gov.parent().unwrap()).unwrap();
+        fs::write(
+            &gov,
+            "# Governance (project)\n\npoint at .doctrine/spec/tech/\n",
+        )
+        .unwrap();
+
+        assert!(regenerate(root, exec, noop_map).unwrap());
+        let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
+
+        assert!(
+            snap.contains("## Essentials"),
+            "the onboarding summary rides boot under its renamed heading:\n{snap}"
+        );
+        assert!(
+            snap.contains("doctrine library show <citation>"),
+            "the `lib:` resolution rule is carried by the summary:\n{snap}"
+        );
+        assert!(
+            snap.contains("mandatory, not optional reading"),
+            "the mandatory-retrieval line is carried by the summary:\n{snap}"
+        );
+        assert!(
+            !snap.contains("Routing & Process"),
+            "the old heading no longer appears anywhere in the snapshot:\n{snap}"
         );
     }
 

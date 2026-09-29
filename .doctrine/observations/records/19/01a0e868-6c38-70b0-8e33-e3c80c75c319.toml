@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e868-6c38-70b0-8e33-e3c80c75c319"
+recorded_at = "2026-09-28T14:25:52.69622823Z"
+kind = "friction"
+summary = "[capsule-orchestrator; SL-273 PHASE-03] phase-sheet size estimates ran ~2x low; W-C hit 232k tokens"
+detail = "The planner estimated W-C at 90-110k and W-R at 115-130k. W-C used 232k (near the 250k bound) and W-R batch R-a used 218k on 9 skills. The orchestrator pre-split the rest of R-b into two batches (215k and 165k)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

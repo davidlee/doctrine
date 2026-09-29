@@ -73,7 +73,8 @@ filtered to `active` only — an explicit boot predicate decoupled from the CLI
 `memory list` default (which keeps `draft` visible): boot is an agent-context
 *producer* and unreviewed `draft` memory must not leak into the snapshot. The
 `.doctrine/governance.md` body is the editable user-owned layer projected as the
-`Governance` section — distinct from the embedded `routing-process.md` digest.
+`Governance` section — distinct from the embedded `essentials.md` onboarding
+summary (the "Essentials" section).
 
 ### The content-diff cache key
 

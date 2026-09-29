@@ -10,7 +10,7 @@ What it does:
 - **Publishes** the shipped reference docs rather than copying them into the
   project — read them on demand with `doctrine library show reference/<name>.md`
   (`using-doctrine.md`, `glossary.md`, `doctrine.toml.example`,
-  `routing-process.md`, …). The eager projection base is deliberately minimal.
+  `essentials.md`, …). The eager projection base is deliberately minimal.
 - Wires the session startup hook so the boot snapshot is `@`-imported into your
   agent harness at session start — the mechanism that keeps the routing table,
   core process, and guardrails current.

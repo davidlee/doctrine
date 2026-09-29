@@ -61,7 +61,8 @@ Set by the user, else inferred, else defaults:
 7. **Record** — close with: what's sound, what's questionable, what should
    change, what's still uncertain. Then route what must outlive the session:
    changes worth making re-enter the change loop (below); everything else
-   harvests per `harvest.md`. A closing summary that lives only in chat
+   harvests per `lib:reference/harvest.md`. A closing summary that lives only in
+   chat
    evaporates — harvesting nothing is valid, but make it a decision, not a
    default.
 
@@ -103,5 +104,6 @@ Portable; ignore elsewhere. Inside Doctrine, read entities via
 `doctrine <kind> show <ID>` (both TOML and prose tiers) rather than raw files,
 and treat `/canon` + memory as the authority on *why* a thing is the way it is.
 Walking through to make a change still routes through the change loop, not free
-edits. Harvest per `harvest.md`; the walkthrough-specific route: closure-grade
+edits. Harvest per `lib:reference/harvest.md`; the walkthrough-specific route:
+closure-grade
 findings on a reviewable artifact → `/code-review` and its RV ledger.

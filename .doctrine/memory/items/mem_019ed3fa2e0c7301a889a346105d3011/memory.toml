@@ -2,14 +2,14 @@ memory_uid = "mem_019ed3fa2e0c7301a889a346105d3011"
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "Routing row must follow install: install skill before adding to routing-process.md"
+title = "Routing row must follow install: install skill before adding to essentials.md"
 summary = "When adding a skill to the routing table, install the skill (doctrine install) BEFORE adding the routing row — otherwise the boot snapshot points at a deferred skill, violating ADR-009 F14 shipped-not-reachable."
 created = "2026-06-17"
-updated = "2026-06-17"
+updated = "2026-09-28"
 
 [scope]
 paths = []
-globs = ["install/routing-process.md", ".agents/skills/**/SKILL.md"]
+globs = ["install/essentials.md", ".agents/skills/**/SKILL.md"]
 commands = []
 tags = ["routing", "adr-009", "skill-install"]
 workspace = "default"

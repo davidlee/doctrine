@@ -15,10 +15,8 @@ subsystem facts. Not conversational state.
 
 ## 1. Choose the narrowest type that fits
 
-`fact` (atomic checkable truth) · `pattern` (repeatable recipe / command
-sequence) · `system` (subsystem map + pointers, not a spec) · `concept` (stable
-mental model / terminology) · `signpost` ("start here" navigation) · `thread`
-(short-lived working set, expires fast).
+See `doctrine memory record --help` for the `--type` values:
+concept|fact|pattern|signpost|system|thread.
 
 ⚠ **A `thread` is hidden from `find`/`retrieve` until verified**.
 If you want a working loop to resurface by scope, prefer a durable type
@@ -29,7 +27,8 @@ ranking.
 ## 2. Record it
 
 Record with `doctrine memory record` (ask `--help` for the flags; see
-`using-doctrine.md` for the verb model). It scaffolds a TOML + body under
+`lib:reference/using-doctrine.md` for the verb model). It scaffolds a TOML +
+body under
 `.doctrine/memory/items/`; the **born git anchor is captured automatically** —
 do not hand-author it.
 
@@ -107,9 +106,8 @@ that is not `verified` AND `reviewed` within 14 days from `find`/`retrieve`.
 to scope ranking until you `verify` it — and `verify` refuses a dirty tree, so
 attest from a clean tree. Other types are never gated this way.
 
-**Holdback caution:** `retrieve` suppresses low-trust ∧ high-severity memories
-(non-bypassable). A high-severity claim you have not verified will be held back
-until you raise its trust by attesting it — by design. Set trust to match reality.
+See `doctrine memory retrieve --help`: retrieve applies the non-bypassable trust
+holdback (low-trust + high-severity suppressed).
 
 ## 6. Keep the body short and executable
 

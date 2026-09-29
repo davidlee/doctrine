@@ -53,5 +53,5 @@ One obligation the machine does not carry:
   improvise past them.
 - `/knowledge` — an open question → QUE, a locked choice → DEC, an assumption
   the design carries → ASM.
-- `doctrine library show reference/using-doctrine.md` — relations move via
+- `lib:reference/using-doctrine.md` — relations move via
   `doctrine link` and lifecycle via `doctrine slice status`, never by hand-edit.

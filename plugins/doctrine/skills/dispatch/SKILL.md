@@ -68,14 +68,8 @@ phase.
 
 ### The funnel oracle — for a bound fork only
 
-`doctrine dispatch next --slice <N>` reads the **committed funnel record** and
-prescribes exactly one action at a time. It is read-only, never heals, and always
-exits 0. But a funnel row exists only for a fork **bound at creation**
-(`fork --worker --slice N --phase PHASE-NN` under `<coord>/.worktrees/<name>`),
-and the shipped spawn path forks unbound — so on an ordinary drive `next` sits at
-`spawn` and prescribes nothing further. That is expected: you are the main-thread
-orchestrator, and the main-thread orchestrator never consults the funnel record.
-Read `next` as advisory, and drive the order above. Do not "heal" a missing row.
+See `lib:reference/dispatch-mechanics.md` § The funnel record, and when it is
+the driver.
 
 The machinery is retained and unchanged; what it prescribes when a row *does*
 exist:
@@ -97,14 +91,8 @@ triages first (the suite is coord-tree-global), an awaiting phase never
 suppresses a runnable one, and the other in-flight phases are named in `detail`
 at every rung.
 
-**Two altitudes.** `next` answers the *phase funnel* only. Everything past it —
-prepare-review, base freshness, candidates, admission, close — is `dispatch
-status`, which is where `all-reaped` sends you.
-
-**A refusal is the recovery procedure.** Every funnel verb that refuses prints
-``<verb> refused at position `<pos>` — <reason>; expected: <next>``. Read it and
-act on it. Do not improvise a repair, do not go digging for the state by hand,
-and do not re-drive around it — a refusal is a defect or a halt, never a detour.
+See `lib:reference/dispatch-mechanics.md` §§ "Two altitudes" and "A refusal is
+the recovery procedure".
 
 ### The batch-level beats
 
@@ -121,8 +109,8 @@ and do not re-drive around it — a refusal is a defect or a halt, never a detou
 - **The import's prove gate.** `worktree import --from-worktree` is
   non-committing and runs the **reject-and-halt prove gate** in-process
   (`doctrine check prove` on the post-import tree): an unformatted OR lint-red
-  delta HALTS the import (staged, NOT committed) and is reported — never
-  auto-fixed (sole-writer posture: land-or-reject, never rewrite). A red here is
+  delta halts the import per `lib:reference/dispatch-mechanics.md`
+  (land-or-reject, never rewrite). A red here is
   a WORKER-delta defect, distinct from the pre-spawn BASE defect above.
 - **The registry write.** After the code commit, `doctrine slice record-delta
   <SL> PHASE-NN --commit <S>` writes the commit-scoped `[S^,S]` row into the

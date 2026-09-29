@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0e7f9-ca66-7d12-b483-22d4d000dac2"
+recorded_at = "2026-09-28T12:25:02.310651434Z"
+kind = "friction"
+summary = "capsule-worker SL-273 PHASE-02: boot --check exits 0 when stale; revision show omits [[change]] rows"
+detail = "Worker found 'doctrine boot --check' reports stale but exits 0, so it cannot gate a script. 'revision show REV-069' renders prose only, so verifying the change rows needs the raw toml. Also: e2e_observation record_input_cannot_be_combined_with_the_per_field_flags hit a stdin broken-pipe race under parallel load, turning check commit red intermittently (passed alone and on rerun). Doctor re-flags lib: warnings quoted verbatim in notes.md evidence blocks."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

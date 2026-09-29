@@ -1,15 +1,17 @@
 <!-- Shipped reference. Published, not projected: there is no copy on disk in an
-     installed project — read it with `doctrine library show
-     reference/using-doctrine.md`. Names verbs and states discipline — it never reproduces
+     installed project — read it as `lib:reference/using-doctrine.md`. Names
+     verbs and states discipline — it never reproduces
      `doctrine --help`; ask the CLI for exact flags. -->
 
 # Using doctrine
 
 How to *operate* doctrine: which verb for which intent, how to read and edit the
 artifacts, and the rules that keep authored state coherent. For **vocabulary and
-ids** see `glossary.md`; for the **workflow** (route → slice → design → plan →
-execute → close) see the routing digest. For **exact command shapes and flags**,
-ask `doctrine <command> --help` — this doc names verbs, never their flag tables.
+ids** see `lib:reference/glossary.md`; for the **workflow** (route → slice →
+design → plan →
+execute → close) see `lib:reference/essentials.md`. For **exact command shapes
+and flags**, ask `doctrine <command> --help` — this doc names verbs, never their
+flag tables.
 
 ## Which verb for which intent
 
@@ -34,7 +36,8 @@ reach-for-it map):
 | regenerate the boot snapshot | `doctrine boot` |
 | check a slice's phase rollup | `doctrine slice list` |
 
-`<kind>` is `slice`, `spec`, `adr`, `memory`, `backlog`, … (see `glossary.md`).
+`<kind>` is `slice`, `spec`, `adr`, `memory`, `backlog`, … (see
+`lib:reference/glossary.md`).
 Ask `doctrine <kind> --help` for the subcommands and flags each verb takes.
 
 ### Finding things by text — three corpora, three verbs
@@ -188,11 +191,45 @@ Three tiers; know which one you are writing:
 `design.md`, `plan.toml`, `plan.md`, and `notes.md` are **authored** (committed,
 diffable). `handover.md` and the `phases/` symlink are **runtime** (gitignored) —
 they carry disposable context and phase tracking, never committed progress. See
-`glossary.md` for the full directory layout.
+`lib:reference/glossary.md` for the full directory layout.
 
 **Hand-edit vs verb.** Reach for a verb to create or transition an entity; hand-
 edit the TOML for fields no verb yet owns (cite the CLI gap if so). Prose is always
 hand-edited. Keep each datum on its correct side of the tier split.
+
+## Publication
+
+Doctrine's shipped material reaches a project in one of two ways, and they are
+separate decisions. One never implies the other.
+
+- **Projected** material is written into the project at a stable path because
+  something needs it there: configuration, managed files, harness adapters. It
+  is on disk, and you can open it.
+- **Published** material is embedded in the `doctrine` binary and read on demand
+  from the **library**: reference docs, templates, prompt fragments and
+  integration guides. It has no copy on disk to read, grep or glob for, and it
+  always matches the installed binary.
+
+`doctrine library tree` lists the library by logical address (`reference/`,
+`templates/`, and so on). `doctrine library show <address>` prints one entry.
+
+**Same-named files.** A logical address is not a path in your project, and some
+names exist in both places. `governance.md` is a library reference doc, and it
+is also your project's own `.doctrine/governance.md`, the governance layer you
+edit and boot loads. `design.md` is a library template, and it is also a slice's
+authored design. A bare filename cannot tell these apart.
+
+**The `lib:` citation form.** A citation of a library entry is the marker `lib:`
+followed by the entry's logical address, written in inline code:
+`lib:reference/glossary.md`. The general shape is `lib:<address>`.
+
+- Read it with `doctrine library show`, passing the citation verbatim. The
+  command accepts it with or without the marker.
+- An address has no anchors. To point at a section, name the section in prose
+  after the citation: `lib:reference/glossary.md` § reference forms.
+- A citation resolves only if `doctrine library tree` lists its address.
+  `doctrine doctor` reports a citation under `.doctrine/` that does not resolve.
+- A bare `<name>.md` is not a library citation.
 
 ## Relating entities
 
@@ -222,7 +259,8 @@ drift malformed and skip the legality check (`doctrine link` is the validated se
   (`EN-1`/`EX-1`/`VT-1`/`VA-1`/`VH-1`) are never renumbered or reused — **edits
   append**. The slug is never authoritative; cite the prefixed id.
 - **Cite the durable id**, never a mobile membership label (`FR-`/`NF-` move per
-  spec — cite the `REQ-NNN` they label). Reference forms: `glossary.md`.
+  spec — cite the `REQ-NNN` they label). Reference forms:
+  `lib:reference/glossary.md` § reference forms.
 - Preserve surrounding structure when hand-editing — match the file's existing
   shape rather than reformatting it.
 
@@ -295,5 +333,6 @@ decision that needed it.
 
 ## Pointers
 
-- `glossary.md` — kinds, ids, reference forms, verification taxonomy.
+- `lib:reference/essentials.md` — the register of reference docs, in its
+  "Reference docs" block.
 - `doctrine <command> --help` — the authoritative, self-documenting command shapes.

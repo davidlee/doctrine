@@ -29,3 +29,27 @@ concept tables in place and notes each one.
 Per gap: decide the owning library doc (new or existing), author it, cut the
 skill restatements to `lib:` citations. Split into separate items if they are
 taken up independently.
+
+## Ownerless restatements left in place (SL-273 restate audit)
+
+Located by SL-273's sweep inventory (`.doctrine/slice/273/inventory.toml`);
+each stays until its gap has an owner, then is cut to a `lib:` citation.
+
+- G2 memory mechanics — `plugins/doctrine/skills/record-memory/SKILL.md:23-27` (SL-273 inventory R-510)
+- G2 memory mechanics — `plugins/doctrine/skills/record-memory/SKILL.md:104-108` (SL-273 inventory R-513)
+- G5 spec authoring — `plugins/doctrine/skills/spec-tech/SKILL.md:33-63` (SL-273 inventory R-521)
+- Human-engagement default restated in
+  `plugins/doctrine/skills/audit/SKILL.md:173` (R-006) and
+  `plugins/doctrine/skills/reconcile/SKILL.md:68` (R-010), rejected under
+  SL-273 OQ-3: the text stays. Its owner is project-local
+  `governance.md`, which a client cannot reach through
+  `doctrine library show`, so no library owner exists (QUE-228). Proposed
+  gap G9.
+
+### Noted, not rowed
+
+- `plugins/doctrine/skills/plan/SKILL.md:67-97` — the VT-mandate TOML schema
+  restates `install/templates/plan.toml`'s own comment, which no `--help` or
+  reference doc owns.
+- `plugins/doctrine/skills/elicit/SKILL.md:79-87` — the "Refresh and stop"
+  footer vocabulary, which is skill-local and unowned.

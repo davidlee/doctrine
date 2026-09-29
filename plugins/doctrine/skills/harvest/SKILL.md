@@ -7,7 +7,8 @@ description: Use at the end of any coherent unit — a phase, task, review close
 
 The routed entry point for the end-of-unit **harvest** — the sweep of what the
 unit produced, learned, and left open into their durable sinks. The procedure,
-the three legs, and the sink table are **owned by `harvest.md`**; consult it
+the three legs, and the sink table are **owned by `lib:reference/harvest.md`**;
+consult it
 and follow it. Do not re-derive the routing here — point there.
 
 During execution, working notes belong in the **active runtime phase sheet**
@@ -19,7 +20,8 @@ never in authored files.
 
 If you don't know which slice owns the work, find it with `doctrine slice list`.
 **No governing slice** (an RFC, spec, or review close)? The harvest still
-happens — the legs route to their sinks per `harvest.md` §5; there is just no
+happens — the legs route to their sinks per `lib:reference/harvest.md` §5;
+there is just no
 `## Harvest` manifest to maintain.
 
 ## The three legs
@@ -40,17 +42,15 @@ happens — the legs route to their sinks per `harvest.md` §5; there is just no
   - whether the verification gate (`doctrine check gate`) has run successfully
     since code was last modified, or: outstanding errors
 - **learned** — reusable guidance and citable epistemic observations, routed to
-  their sinks per `harvest.md`.
+  their sinks per `lib:reference/harvest.md`.
 - **open** — the decisions, questions, assumptions, and constraints the unit
   carries forward. This is the leg a produced-only sweep silently drops: route
   it via **`/knowledge`** (→ DEC / QUE / ASM / CON).
 
-Each leg's sink is owned by `harvest.md`'s §2 table — cite it, don't restate it.
+Each leg's sink is owned by `lib:reference/harvest.md`'s §2 table — cite it,
+don't restate it.
 
 ## `## Harvest` maintenance
 
-At each pass, update the single-copy `## Harvest` section in the slice's
-`notes.md` per `harvest.md` §3: restamp the `fresh-as-of` line (date · lifecycle
-position · head commit), keep entries pointer-only (ids + one clause, never a
-status), and drop settled or superseded entries — git holds the history, so the
-section stays current rather than cumulative.
+Update the `## Harvest` section per `lib:reference/harvest.md` § Canonical
+output.

@@ -53,7 +53,7 @@ entries = [
   # crossed against this entry by `observation_publication_temps_are_ignored`.
   # Do NOT broaden this to the tree: that silently makes a client's corpus
   # local-only and forfeits correlation and audit history. A project that wants
-  # that tradeoff opts in explicitly — see the `using-doctrine.md` reference.
+  # that tradeoff opts in explicitly — see the `lib:reference/using-doctrine.md` reference.
   ".doctrine/observations/**/.tmp.*",
 ]
 

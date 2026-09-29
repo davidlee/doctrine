@@ -24,7 +24,8 @@ Inputs:
      every governance/spec finding is dispositioned, and the RV carries a
      `## Reconciliation Outcome` section. If the reconciliation brief was empty
      (no-op), the outcome confirms that explicitly.
-   - Durable findings from the slice are harvested per `harvest.md` before
+   - Durable findings from the slice are harvested per
+     `lib:reference/harvest.md` before
      closure — or **consciously rejected**. A clean slice may harvest nothing;
      the conscious-rejection gate is what closure checks.
    - `doctrine check gate` is green.
@@ -114,12 +115,9 @@ Inputs:
    integration did not land.
 
 3b. **Split lineage — the payload reached trunk out-of-band
-   (`--record-integration`).** If the reviewed code already sits on trunk by a
-   sanctioned route the dispatch journal never recorded — an operator direct-land,
-   a manual `--no-ff` merge of the payload, an external integration — then
-   `--integrate` (step 3a) **cannot** run: it advances trunk fast-forward-only, but
-   a landed payload is an *ancestor*, not a descendant, of the trunk merge tip
-   (non-ff → refused). The close gate still refuses `done` ("dispatched but no
+   (`--record-integration`).** See `lib:reference/dispatch-mechanics.md` §
+   Split lineage — record an already-landed payload, don't advance trunk.
+   The close gate still refuses `done` ("dispatched but no
    trunk row"). Record the earned row instead of hand-editing `journal.toml`:
 
    ```bash
@@ -127,11 +125,10 @@ Inputs:
    doctrine dispatch sync --slice <N> --record-integration --trunk "$trunk"
    ```
 
-   It resolves the earned trunk payload (phase-chain tip, or the admitted
-   `close_target` when a candidate workflow is active — **never** `review/<N>`, a
-   review surface that is forbidden as a trunk payload), asserts it is **already an
-   ancestor** of trunk, and commits a single **Verified** trunk row — mutating no
-   ref. Then `slice status <N> done` reads that row and passes. This is the
+   Per `lib:reference/dispatch-mechanics.md` § Split lineage,
+   `--record-integration` asserts the payload is already an ancestor of trunk
+   and commits a single Verified trunk row. Then `slice status <N> done` reads
+   that row and passes. This is the
    sanctioned replacement for a hand-written journal row; land the payload
    out-of-band as `git merge --no-ff phase/<N>-NN` (or
    the admitted candidate), not `review/<N>`.

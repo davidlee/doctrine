@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ea38-8432-7c32-a36c-47869c5c96f6"
+recorded_at = "2026-09-28T22:52:47.538942291Z"
+kind = "friction"
+summary = "capsule-worker (SL-273 PHASE-04 U3a-c): adjudicated R- replacements needed 31 contextual amends"
+detail = "Beyond the 6 defects the planner found, U3a/b/c amended 7+14+9 rows: dropped list markers, headings and bold leads at span start; dangling words at span end; cut code fences; 'see --help for X' where the help lacks X; a cited § heading that did not exist (R-701). PHASE-03 targets were written per-span without checking both ends or the cited target. Rule proposal: target replaces the whole span incl. markers/headings, and every 'see X for Y' is checked against X at adjudication."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

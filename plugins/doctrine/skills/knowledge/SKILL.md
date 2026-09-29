@@ -11,7 +11,7 @@ Records *shape* work; they are never work items themselves.
 
 Four homes, one line: work intent → backlog; epistemic state → knowledge
 record; architectural decision → ADR; agent guidance → memory. See
-`using-doctrine.md` § Which home for which record.
+`lib:reference/using-doctrine.md` § Which home for which record.
 
 The CLI is the source of truth for exact flags and each kind's status
 vocabulary: `doctrine knowledge --help`.
@@ -33,15 +33,10 @@ vocabulary: `doctrine knowledge --help`.
 
 ## Verbs
 
-| intent | verb |
-|---|---|
-| capture | `doctrine knowledge new <kind> [title]` |
-| survey | `doctrine knowledge list` |
-| read one | `doctrine knowledge show <ID>` |
-| settle / transition | `doctrine knowledge status <ID> <STATE>` |
-| relate to the work it shapes | `doctrine link <REC-ID> shapes <TARGET>` (`spawns` for work it caused) |
-| evidentiary edge | `doctrine link EVD-n supports <REC-ID>` (or `disputes`) |
-| replace with a successor | `doctrine supersede <NEW-ID> <OLD-ID>` |
+See `doctrine knowledge --help` (and `doctrine link --help` / `doctrine
+supersede --help`) for the verb list and flags. Link a record to the work it
+shapes with `shapes` (`spawns` for work it caused); an evidentiary edge is
+`supports` or `disputes`.
 
 ## Wrong home?
 
@@ -56,15 +51,13 @@ memory explains how to think or work.
 
 ## Gating — association is not gating
 
-`shapes` influences; it never blocks. To gate work on an unsettled record,
-the *dependent* work item authors the edge — `doctrine needs SL-42 QUE-7` —
-and settling the record (`knowledge status` to a terminal state) unblocks it;
-no unlink needed. Records never author `needs`/`after` themselves.
+See `lib:reference/using-doctrine.md` § Which home for which record for the
+knowledge-record gating mechanic (`needs`, settle-to-unblock).
 
 ## Rules
 
-- The id prefix (`ASM-`/`DEC-`/`QUE-`/`CON-`/`EVD-`/`HYP-`/`CPT-`) resolves
-  the kind on read and transition — no kind flag needed.
+- See `doctrine knowledge show --help` — the id prefix resolves the kind on read
+  and transition.
 - Capture seeds the kind's default state (held, proposed, open, active, …).
-- Don't hand-edit record TOML — use the verbs. The prose body (`*.md`) is
-  hand-edited.
+- Don't hand-edit record TOML (`lib:reference/using-doctrine.md` § storage
+  tiers) — use the verbs; the prose body (`*.md`) is hand-edited.

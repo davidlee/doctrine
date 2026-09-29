@@ -1,6 +1,6 @@
 <!-- Shipped reference. Published, not projected: there is no copy on disk in an
-     installed project — read it with `doctrine library show
-     reference/review-ledger.md`. Names verbs and states the invariant protocol — it never reproduces
+     installed project — read it as `lib:reference/review-ledger.md`. Names
+     verbs and states the invariant protocol — it never reproduces
      `doctrine review --help`; ask the CLI for exact flags. -->
 
 # The review ledger
@@ -14,8 +14,9 @@ voice and keeps its own lens and harvest tail — but the mechanics live here, o
 
 For **exact command shapes and flags**, ask `doctrine review <command> --help` —
 this doc names verbs, never their flag tables. For the work/knowledge/decision
-boundary, see `using-doctrine.md`; for ids and the verification taxonomy, see
-`glossary.md`.
+boundary, see `lib:reference/using-doctrine.md`; for ids and the verification
+taxonomy, see
+`lib:reference/glossary.md`.
 
 ## Acts and roles
 
@@ -292,7 +293,8 @@ the structured findings; the synthesis holds the prose that ties them together.
 
 Then **harvest** — the shared harvest procedure (the moment, the three legs
 and their sinks, the canonical `## Harvest` output, and the consumer contract)
-is owned once by `harvest.md`; drive it from there. A clean review harvests
+is owned once by `lib:reference/harvest.md`; drive it from there. A clean review
+harvests
 nothing — a valid outcome, not a skipped step.
 
 Generic review-harvest is thin by design; **skill-specific harvest tails stay in

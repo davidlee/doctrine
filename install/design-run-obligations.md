@@ -1,6 +1,6 @@
 <!-- Shipped reference. Published, not projected: there is no copy on disk in an
-     installed project — read it with
-     `doctrine library show reference/design-run-obligations.md`. It carries the
+     installed project — read it as `lib:reference/design-run-obligations.md`.
+     It carries the
      rationale for the design-run boundary obligations; the runbook that owns the
      inquiring boundary points here for it. -->
 
