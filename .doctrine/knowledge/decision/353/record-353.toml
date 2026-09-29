@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 353
+slug = "jev-trial-silver-labels-research-and-design-citations"
+title = "Jev trial silver labels: research and design citations"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-29"
+updated = "2026-09-29"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Only 39 slices carry a research.md; tuning on the eval set would overfit the rubric."
+choice = "research.md + design.md citations, source-tagged, snapshot-intersected; fixed ~10-slice tuning holdout; older design-only set deferred."
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-277"
