@@ -79,3 +79,31 @@ Standing risks and accepted tradeoffs:
 ### Governance/spec (REV)
 - None. REV-069 already carried the ADR-005 / ADR-024 / SPEC-011 changes and is
   applied.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- Selector registry (`slice-273.toml`): removed `src/lib.rs`; added
+  `src/main.rs` (design-target) — the file that declares `mod lib_citation`
+  (finding F-3).
+- design.md §8.2 code-impact row: "`src/lib.rs` or `src/main.rs`" →
+  "`src/main.rs`" (finding F-3).
+
+`slice conformance SL-273` no longer lists `src/lib.rs`. Remaining
+undelivered cells: the eight exact `src/*` selectors shadowed by `src/**`
+(conformance-tool behaviour, per F-3 disposition), and
+`.doctrine/slice/273/inventory-audit.toml`, which is committed at 94b434384
+but still reported undelivered — noted for /close, not re-audited here.
+
+### REVs completed
+- None needed. REV-069 (ADR-005 / ADR-024 / SPEC-011) was applied in PHASE-02
+  and is `done`.
+
+### Withdrawn / tolerated / follow-up
+- F-1: fixed during audit.
+- F-2: tolerated — PHASE-01 VT-2 checked the `#[ignore]` marker PHASE-04 was
+  planned to remove.
+- F-4: tolerated — restate-half inventory handed to IMP-505.
+- F-5: follow-up — pre-existing skill/owner contradictions handed to ISS-505.
+
+Reconcile pass complete — handoff to /close.
