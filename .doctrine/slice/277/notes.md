@@ -71,9 +71,18 @@ B-point-matched really isolates the ranker (same rubric, same truncated text),
 directories, and (d) new stale claims in the cost estimate. No fresh full
 adversarial pass is proposed beyond that verification.
 
+## Benched (2026-09-29)
+
+User decision: bench SL-277 before any build. Ten phases plus live spend is too
+much before knowing Jev is useful; lo-fi prototypes come first, starting with
+the jgrep known-answer probe (IDE-062), then IDE-063..IDE-067. Status left at
+`ready` (no benched state; `abandoned` is terminal): design locked, plan and
+phase sheets intact. Resume as is if the prototypes support it; re-slice if
+they point to a different adoption shape.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-29 · design locked (run rev 51)
+fresh-as-of: 2026-09-29 · benched at ready; plan + 10 phase sheets
 
 ### Produced
 
