@@ -915,7 +915,8 @@ fn grid_min_width(cols: usize) -> usize {
 }
 
 /// Format a pagination truncation notice for table-mode output when results are
-/// truncated or the offset exceeds the total. Returns `""` when `total == 0`
+/// truncated or the offset exceeds the total. The final page reads `end of
+/// results` with no continuation. Returns `""` when `total == 0`
 /// (empty result set — nothing to paginate) or `page_size == 0` (uncapped —
 /// the self-guard makes the shared surface robust regardless of caller discipline;
 /// D-review BLOCKER F7).
@@ -937,12 +938,23 @@ pub(crate) fn format_truncation_notice(
             "{shown} of {total}; no results at this offset; reduce --offset or --page\n"
         );
     }
-    #[expect(
-        clippy::integer_division,
-        reason = "floor division for 1-based page calc"
-    )]
-    let next_page = (offset / page_size) + 2; // 1-based
-    format!("{shown} of {total}; use --page {next_page} for next or specify a higher --limit\n")
+    // The continuation names the real next row: a page when the offset is
+    // page-aligned, else the offset itself (RV-410 F-1); none past the end (F-8).
+    let next = offset.saturating_add(shown);
+    if next >= total {
+        return format!("{shown} of {total}; end of results\n");
+    }
+    let cont = if offset.is_multiple_of(page_size) {
+        #[expect(
+            clippy::integer_division,
+            reason = "aligned offset: exact division for the 1-based page"
+        )]
+        let page = next / page_size + 1;
+        format!("--page {page}")
+    } else {
+        format!("--offset {next}")
+    };
+    format!("{shown} of {total}; use {cont} for next or specify a higher --limit\n")
 }
 
 /// Wrap kind-faithful row values in the shared envelope: `{ "kind": …, "rows":
@@ -982,6 +994,57 @@ pub(crate) fn strip_ansi(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -- truncation notice (SL-275 PHASE-01) --------------------------------
+
+    /// Aligned, non-final pages: byte-identical to the pre-SL-275 wording.
+    #[test]
+    fn truncation_notice_aligned_pages_unchanged() {
+        let hint = "; use --page {} for next or specify a higher --limit\n";
+        for (shown, total, offset, size, next) in
+            [(5, 12, 0, 5, 2), (5, 12, 5, 5, 3), (20, 65, 40, 20, 4)]
+        {
+            assert_eq!(
+                format_truncation_notice(shown, total, offset, size),
+                format!(
+                    "{shown} of {total}{}",
+                    hint.replace("{}", &next.to_string())
+                ),
+            );
+        }
+    }
+
+    /// RV-410 F-1: an unaligned offset names the real next row, not a page that
+    /// would repeat rows already shown.
+    #[test]
+    fn truncation_notice_unaligned_offset_hints_offset() {
+        assert_eq!(
+            format_truncation_notice(20, 65, 5, 20),
+            "20 of 65; use --offset 25 for next or specify a higher --limit\n"
+        );
+    }
+
+    /// RV-410 F-8: the final partial page reads "end of results" with no hint.
+    #[test]
+    fn truncation_notice_final_page_ends() {
+        assert_eq!(
+            format_truncation_notice(12, 32, 20, 20),
+            "12 of 32; end of results\n"
+        );
+        assert_eq!(
+            format_truncation_notice(13, 20, 7, 20),
+            "13 of 20; end of results\n"
+        );
+    }
+
+    #[test]
+    fn truncation_notice_offset_past_total_unchanged() {
+        assert_eq!(
+            format_truncation_notice(0, 32, 40, 20),
+            "0 of 32; no results at this offset; reduce --offset or --page\n"
+        );
+        assert_eq!(format_truncation_notice(0, 0, 0, 20), "");
+    }
 
     // -- band primitive + grouped (SL-150) ---------------------------------
 

@@ -292,7 +292,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "memory_search".to_owned(),
-            description: "Discovery tool — metadata only, no bodies. Use first to probe context. Holdback-exempt: rows may include memories suppressed by `memory_retrieve`. Do not treat high-risk rows as consumable knowledge; use `memory_show` for inspection then `memory_retrieve` for safe recall. Requires at least one selector or defaults to 20-row cap.\n\nReturns: { kind: 'memory_search', rows: [{ uid, key?, type, status, staleness, trust, severity, spec, title, held_back_on_retrieve }], total: int, offset: int, limit: int, next_offset: int|null }".to_owned(),
+            description: "Discovery tool — metadata only, no bodies. Use first to probe context. Holdback-exempt: rows may include memories suppressed by `memory_retrieve`. Do not treat high-risk rows as consumable knowledge; use `memory_show` for inspection then `memory_retrieve` for safe recall. Default page: 20 rows.\n\nReturns: { kind: 'memory_search', rows: [{ uid, key?, type, status, staleness, trust, severity, spec, title, held_back_on_retrieve }], total: int, offset: int, limit: int, next_offset: int|null }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -306,7 +306,7 @@ fn tools() -> Vec<McpTool> {
                     "lifespan": { "type": "string", "enum": ["semantic", "episodic", "procedural", "working", "identity"], "description": "Filter by lifespan threshold" },
                     "include_draft": { "type": "boolean", "description": "Include draft memories in results (default: false)" },
                     "offset": { "type": "integer", "description": "Pagination offset (default: 0)" },
-                    "limit": { "type": "integer", "description": "Max rows to return (no-selector default: 20; 0 rejected)" }
+                    "limit": { "type": "integer", "description": "Max rows to return (default: 20; 0 rejected)" }
                 },
                 "required": []
             }),
@@ -879,21 +879,12 @@ fn call_tool(
         }
         "memory_search" => {
             let fields = ExtractFields::from_value(arguments, &[]);
-            let limit = fields.opt_usize_field("limit");
-            let has_selectors = fields.opt_str_field("query").is_some()
-                || !fields.vec_str_field("path_scope").is_empty()
-                || !fields.vec_str_field("glob").is_empty()
-                || !fields.vec_str_field("command").is_empty()
-                || !fields.vec_str_field("tag").is_empty()
-                || fields.opt_str_field("type").is_some()
-                || fields.opt_str_field("status").is_some()
-                || fields.opt_str_field("lifespan").is_some();
-            // No selectors + no explicit limit → default cap of 20 (design §3)
-            let effective_limit = if !has_selectors && limit.is_none() {
-                Some(20usize)
-            } else {
-                limit
+            // One page size, resolved at the edge (SL-275 DEC-347; RV-410 F-3).
+            let limit = match fields.opt_usize_field("limit") {
+                Some(0) => anyhow::bail!("invalid arguments: limit must be >= 1"),
+                l => l.unwrap_or(retrieve::SEARCH_LIMIT_DEFAULT),
             };
+            let offset = fields.opt_usize_field("offset").unwrap_or(0);
             let result = retrieve::search_for_mcp(
                 Some(root.to_path_buf()),
                 fields.vec_str_field("path_scope"),
@@ -905,22 +896,17 @@ fn call_tool(
                 parse_memory_type(fields.opt_str_field("type"))?,
                 parse_status(fields.opt_str_field("status"))?,
                 fields.opt_bool_field("include_draft").unwrap_or(false),
-                fields.opt_usize_field("offset").unwrap_or(0),
-                effective_limit,
+                offset,
+                limit,
             )?;
-            let offset = fields.opt_usize_field("offset").unwrap_or(0);
-            let cap = effective_limit.unwrap_or(result.total);
-            let next_offset = if offset + cap < result.total {
-                Some(offset + cap)
-            } else {
-                None
-            };
+            // Overflow-safe continuation (RV-410 F-4).
+            let next_offset = offset.checked_add(limit).filter(|n| *n < result.total);
             Ok(serde_json::to_string_pretty(&json!({
                 "kind": "memory_search",
                 "rows": result.rows,
                 "total": result.total,
                 "offset": offset,
-                "limit": cap,
+                "limit": limit,
                 "next_offset": next_offset,
             }))?)
         }
@@ -2842,6 +2828,77 @@ mod tests {
         // The Skinny CLI memory should be in results
         let has_skinny = rows.iter().any(|r| r["uid"] == MEM_A);
         assert!(has_skinny, "should include Skinny CLI memory");
+    }
+
+    /// Seed `n` active facts beyond [`seed_memory_corpus`], so a result set can
+    /// exceed one default page.
+    fn seed_facts(root: &Path, n: usize) {
+        for i in 0..n {
+            let uid = format!("mem_{:032x}", 0x5eed_0000 + i);
+            let title = format!("Seeded fact {i:02}");
+            seed_memory(
+                root,
+                &uid,
+                None,
+                "fact",
+                "active",
+                "low",
+                &title,
+                "# seeded\n",
+            );
+        }
+    }
+
+    fn memory_search_page(root: &Path, args: Value) -> Value {
+        let result = memory_dispatch(root, "memory_search", args);
+        serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap()
+    }
+
+    /// SL-275 VT-4: the default page is SEARCH_LIMIT_DEFAULT with or without
+    /// selectors; `limit`/`next_offset` derive from it.
+    #[test]
+    fn memory_search_selectors_default_page() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        seed_memory_corpus(root);
+        seed_facts(root, crate::retrieve::SEARCH_LIMIT_DEFAULT + 5);
+        for args in [json!({}), json!({ "type": "fact" })] {
+            let page = memory_search_page(root, args.clone());
+            assert_eq!(page["rows"].as_array().unwrap().len(), 20, "{args}");
+            assert_eq!(page["limit"], 20, "{args}");
+            assert_eq!(page["next_offset"], 20, "{args}");
+        }
+        let last = memory_search_page(root, json!({ "type": "fact", "offset": 20 }));
+        assert_eq!(last["total"], 26, "25 seeded facts + corpus fact");
+        assert_eq!(last["rows"].as_array().unwrap().len(), 6);
+        assert!(last["next_offset"].is_null(), "final page has no next");
+    }
+
+    /// SL-275 VT-4 (RV-410 F-3): `limit: 0` is refused at the handler edge.
+    #[test]
+    fn memory_search_limit_zero_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        seed_memory_corpus(root);
+        let req = tools_call_req("memory_search", json!({ "limit": 0 }));
+        let resp = dispatch(&req, root, crate::commands::prompt::model_keys);
+        let err = resp.error.expect("limit 0 must be an error");
+        assert_eq!(err.code, -32602, "{}", err.message);
+    }
+
+    /// SL-275 VT-4 (RV-410 F-4): an offset near `usize::MAX` is an empty page,
+    /// not an overflow panic.
+    #[test]
+    fn memory_search_huge_offset_no_panic() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        seed_memory_corpus(root);
+        let page = memory_search_page(root, json!({ "offset": usize::MAX }));
+        assert!(page["rows"].as_array().unwrap().is_empty());
+        assert!(page["next_offset"].is_null());
     }
 
     // VT-8: memory_list defaults to 50 rows; limit: 0 returns all

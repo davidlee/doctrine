@@ -861,11 +861,11 @@ pub(crate) fn run_search(
     include_draft: bool,
     format: crate::listing::Format,
     offset: usize,
-    limit: Option<usize>,
+    limit: usize,
     columns: Option<&[String]>,
 ) -> Result<()> {
     // Validate limit (moved from CLI).
-    if let Some(0) = limit {
+    if limit == 0 {
         anyhow::bail!("--limit must be >= 1");
     }
     let Loaded {
@@ -882,14 +882,7 @@ pub(crate) fn run_search(
     let ranked = query(&mems, &q, &snap, include_draft, &root, &ranker);
     // Total = all candidates (holdback-exempt for find — D6).
     let total = ranked.len();
-    // Paginate: skip(offset).take(limit). The `.min(len)` clamp is load-bearing —
-    // `get(offset..end)` returns None (→ empty) when end > len, so without the clamp
-    // the common `--limit`-unset case (end == usize::MAX) yields no rows. (RV-206 F-5
-    // proposed removing this; reverted — the redundancy claim was wrong.)
-    let end = ranked
-        .len()
-        .min(offset.saturating_add(limit.unwrap_or(usize::MAX)));
-    let visible = ranked.get(offset..end).unwrap_or(&[]);
+    let visible: Vec<Candidate<'_>> = ranked.into_iter().skip(offset).take(limit).collect();
     let shown = visible.len();
     let mut parts: Vec<String> = Vec::new();
     let body = match format {
@@ -897,7 +890,7 @@ pub(crate) fn run_search(
             let cols = search_columns();
             let sel = crate::listing::select_columns(&cols, SEARCH_DEFAULT, columns)?;
             crate::listing::render_columns(
-                visible,
+                &visible,
                 &sel,
                 crate::listing::RenderOpts {
                     color,
@@ -913,11 +906,8 @@ pub(crate) fn run_search(
     parts.push(body);
     // Truncation notice: table mode only, when results are truncated or offset exceeds total.
     if format == crate::listing::Format::Table && shown < total {
-        // No `--limit` on search means "show all"; the effective page size is the
-        // number actually shown, not the retrieve surface's default (F-2, RV-206).
-        let page_size = limit.unwrap_or(shown);
         parts.push(crate::listing::format_truncation_notice(
-            shown, total, offset, page_size,
+            shown, total, offset, limit,
         ));
     }
     let output = parts.concat();
@@ -935,6 +925,10 @@ pub(crate) fn run_search(
 pub(crate) const RETRIEVE_LIMIT_DEFAULT: usize = 5;
 /// `--limit` cap — a single query cannot flood the context (D17).
 pub(crate) const RETRIEVE_LIMIT_MAX: usize = 20;
+/// `memory search` page size when `--limit` is unset (CLI and MCP). Distinct from
+/// [`RETRIEVE_LIMIT_DEFAULT`]: a search row is one metadata line, a retrieve row a
+/// framed body in agent context (SL-275 DEC-347). An explicit limit is uncapped.
+pub(crate) const SEARCH_LIMIT_DEFAULT: usize = 20;
 
 /// Validate a `--min-trust` value at the CLI edge (clap `value_parser`). Only the
 /// three trust tiers are floors; anything else is a hard error, never a silent
@@ -1196,7 +1190,7 @@ pub(crate) fn search_for_mcp(
     status_f: Option<Status>,
     include_draft: bool,
     offset: usize,
-    limit: Option<usize>,
+    limit: usize,
 ) -> Result<SearchForMcp> {
     let loaded = load_query(
         path, paths, globs, commands, tags, lifespan, free_query, type_f, status_f,
@@ -1211,12 +1205,10 @@ pub(crate) fn search_for_mcp(
         &ranker,
     );
     let total = ranked.len();
-    // None = unbounded (handler applies its own cap); 0 = rejected.
-    if limit == Some(0) {
+    if limit == 0 {
         anyhow::bail!("--limit must be >= 1");
     }
-    let cap = limit.unwrap_or(usize::MAX);
-    let visible: Vec<&Candidate<'_>> = ranked.iter().skip(offset).take(cap).collect();
+    let visible: Vec<&Candidate<'_>> = ranked.iter().skip(offset).take(limit).collect();
     let floor = holdback_floor(None);
     let rows: Vec<serde_json::Value> = visible
         .iter()
@@ -3258,6 +3250,13 @@ weight = {weight}
     /// Helper: init a git dir with a `.doctrine/` marker, seed one memory, and
     /// return the tempdir handle.
     fn temp_project_with_one_memory() -> tempfile::TempDir {
+        temp_project_with_memories(1)
+    }
+
+    /// Helper: as [`temp_project_with_one_memory`], seeding `n` memories. The
+    /// first is always `fact.writer-capture-test`; the rest are
+    /// `fact.seeded-NN`, so paging tests can exceed a default page.
+    fn temp_project_with_memories(n: usize) -> tempfile::TempDir {
         let root = tempfile::tempdir().unwrap();
         // Minimal git init so root::find resolves and anchoring works.
         std::process::Command::new("git")
@@ -3292,38 +3291,47 @@ weight = {weight}
             .args(["commit", "-q", "-m", "base"])
             .output()
             .unwrap();
-        // Seed one memory via run_record.
+        // Seed the memories via run_record.
         let sources: Vec<crate::memory::Provenance> = vec![];
         let paths: Vec<String> = vec![];
         let globs: Vec<String> = vec![];
         let commands: Vec<String> = vec![];
         let tags: Vec<String> = vec![];
-        let args = crate::memory::RecordArgs {
-            title: "Writer capture test",
-            memory_type: crate::memory::MemoryType::Fact,
-            key: Some("fact.writer-capture-test"),
-            status: crate::memory::Status::Active,
-            summary: None,
-            tags: &tags,
-            repo: None,
-            lifespan: None,
-            review_by: None,
-            sources: &sources,
-            paths: &paths,
-            globs: &globs,
-            commands: &commands,
-            global: false,
-            body: None,
-            body_mode: None,
-            trust_level: None,
-            severity: None,
-        };
-        crate::memory::run_record(
-            Some(root.path().to_path_buf()),
-            &args,
-            &mut std::io::stdout(),
-        )
-        .unwrap();
+        for i in 0..n {
+            let (title, key) = if i == 0 {
+                (
+                    "Writer capture test".to_owned(),
+                    "fact.writer-capture-test".to_owned(),
+                )
+            } else {
+                (
+                    format!("Seeded memory {i:02}"),
+                    format!("fact.seeded-{i:02}"),
+                )
+            };
+            let args = crate::memory::RecordArgs {
+                title: &title,
+                memory_type: crate::memory::MemoryType::Fact,
+                key: Some(&key),
+                status: crate::memory::Status::Active,
+                summary: None,
+                tags: &tags,
+                repo: None,
+                lifespan: None,
+                review_by: None,
+                sources: &sources,
+                paths: &paths,
+                globs: &globs,
+                commands: &commands,
+                global: false,
+                body: None,
+                body_mode: None,
+                trust_level: None,
+                severity: None,
+            };
+            crate::memory::run_record(Some(root.path().to_path_buf()), &args, &mut std::io::sink())
+                .unwrap();
+        }
         root
     }
 
@@ -3347,7 +3355,7 @@ weight = {weight}
             true,
             crate::listing::Format::Table,
             0,
-            None,
+            SEARCH_LIMIT_DEFAULT,
             None,
         )
         .unwrap();
@@ -3389,7 +3397,73 @@ weight = {weight}
         assert!(!output.is_empty(), "run_retrieve must write to buffer");
     }
 
-    /// EX-5: run_search rejects limit=Some(0).
+    /// Table-mode `run_search` over `root` with no selectors — the paging surface
+    /// under test, without the 16-argument call at every site.
+    fn search_table(root: &tempfile::TempDir, offset: usize, limit: usize) -> String {
+        let mut buf = Vec::new();
+        run_search(
+            &mut buf,
+            false,
+            Some(root.path().to_path_buf()),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            None,
+            None,
+            None,
+            None,
+            true,
+            crate::listing::Format::Table,
+            offset,
+            limit,
+            None,
+        )
+        .unwrap();
+        String::from_utf8(buf).unwrap()
+    }
+
+    /// Number of seeded rows a `search_table` output shows (`fact.seeded-NN` or
+    /// the writer-capture row).
+    fn shown_rows(out: &str) -> usize {
+        out.lines()
+            .filter(|l| l.contains("Seeded memory") || l.contains("Writer capture test"))
+            .count()
+    }
+
+    /// SL-275 VT-3: an unset `--limit` is one page of [`SEARCH_LIMIT_DEFAULT`],
+    /// resolved exactly as the `Search` arm resolves it.
+    #[test]
+    fn run_search_default_page() {
+        let root = temp_project_with_memories(SEARCH_LIMIT_DEFAULT + 5);
+        let limit = crate::memory::resolve_limit(None, SEARCH_LIMIT_DEFAULT, usize::MAX).unwrap();
+        let out = search_table(&root, 0, limit);
+        assert_eq!(shown_rows(&out), SEARCH_LIMIT_DEFAULT, "{out}");
+        assert!(out.contains("20 of 25; use --page 2 for next"), "{out}");
+    }
+
+    /// SL-275 VT-3: `--page 2` without `--limit` shows rows 21-40 and names page 3
+    /// — not the page it is already on.
+    #[test]
+    fn run_search_page_two_without_limit() {
+        let root = temp_project_with_memories(2 * SEARCH_LIMIT_DEFAULT + 5);
+        let limit = crate::memory::resolve_limit(None, SEARCH_LIMIT_DEFAULT, usize::MAX).unwrap();
+        let offset = crate::memory::page_offset(Some(2), 0, limit).unwrap();
+        let out = search_table(&root, offset, limit);
+        assert_eq!(shown_rows(&out), SEARCH_LIMIT_DEFAULT, "{out}");
+        assert!(out.contains("20 of 45; use --page 3 for next"), "{out}");
+        // The page is disjoint from page 1.
+        let first = search_table(&root, 0, limit);
+        let row_keys = |o: &str| -> Vec<String> {
+            o.lines()
+                .filter(|l| l.contains("Seeded memory"))
+                .map(str::to_owned)
+                .collect()
+        };
+        assert!(row_keys(&out).iter().all(|r| !row_keys(&first).contains(r)));
+    }
+
+    /// EX-5: run_search rejects limit=0.
     #[test]
     fn run_search_rejects_limit_zero() {
         let root = temp_project_with_one_memory();
@@ -3409,7 +3483,7 @@ weight = {weight}
             true,
             crate::listing::Format::Table,
             0,
-            Some(0),
+            0,
             None,
         )
         .unwrap_err();
@@ -3736,7 +3810,7 @@ weight = {weight}
             None,
             true, // include_draft
             0,
-            Some(20),
+            SEARCH_LIMIT_DEFAULT,
         )
         .unwrap();
         assert_eq!(result.total, 1, "one seeded memory");
@@ -3769,7 +3843,7 @@ weight = {weight}
             None,
             true,
             0,
-            Some(0),
+            0,
         )
         .unwrap_err();
         assert!(

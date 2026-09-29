@@ -506,6 +506,37 @@ pub(crate) enum SyncCommand {
     },
 }
 
+/// Resolve a `--limit` once, at the command edge: unset takes `default`, an
+/// explicit value is clamped to `cap`, and `0` is rejected. The result is the
+/// one page size the arm pages, slices and footers by (SL-275 DEC-347).
+pub(crate) fn resolve_limit(
+    limit: Option<usize>,
+    default: usize,
+    cap: usize,
+) -> anyhow::Result<usize> {
+    match limit {
+        Some(0) => anyhow::bail!("--limit must be >= 1"),
+        l => Ok(l.unwrap_or(default).min(cap)),
+    }
+}
+
+/// The one `--page` → offset arithmetic: `--page N` starts at row
+/// `(N-1)·page_size` and wins over `--offset`; `--page 0` and an overflowing page
+/// are rejected. `page_size` must be the size the arm actually renders.
+pub(crate) fn page_offset(
+    page: Option<usize>,
+    offset: usize,
+    page_size: usize,
+) -> anyhow::Result<usize> {
+    match page {
+        None => Ok(offset),
+        Some(0) => anyhow::bail!("--page must be >= 1"),
+        Some(p) => (p - 1)
+            .checked_mul(page_size)
+            .ok_or_else(|| anyhow::anyhow!("--page {p} is out of range")),
+    }
+}
+
 pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
     match cmd {
         MemoryCommand::Record {
@@ -611,19 +642,12 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
                 }
                 (q, None) | (None, q) => q,
             };
-            // Validate --limit.
-            if args.limit == Some(0) {
-                anyhow::bail!("--limit must be >= 1");
-            }
-            // Resolve offset: page sugar or explicit.
-            let page_size = args
-                .limit
-                .unwrap_or(crate::retrieve::RETRIEVE_LIMIT_DEFAULT);
-            let offset = match args.page {
-                Some(0) => anyhow::bail!("--page must be >= 1"),
-                Some(p) => (p - 1) * page_size,
-                None => args.offset,
-            };
+            let limit = resolve_limit(
+                args.limit,
+                crate::retrieve::SEARCH_LIMIT_DEFAULT,
+                usize::MAX,
+            )?;
+            let offset = page_offset(args.page, args.offset, limit)?;
             let resolved_format = if args.json { Format::Json } else { args.format };
             crate::retrieve::run_search(
                 &mut io::stdout(),
@@ -640,28 +664,18 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
                 args.include_draft,
                 resolved_format,
                 offset,
-                args.limit,
+                limit,
                 args.columns.as_deref(),
             )
         }
         MemoryCommand::Retrieve { args, min_trust } => {
-            // Validate --limit.
-            if args.limit == Some(0) {
-                anyhow::bail!("--limit must be >= 1");
-            }
-            let retrieve_limit = args
-                .limit
-                .unwrap_or(crate::retrieve::RETRIEVE_LIMIT_DEFAULT)
-                .min(crate::retrieve::RETRIEVE_LIMIT_MAX);
-            // Resolve offset: page sugar or explicit.
-            let page_size = args
-                .limit
-                .unwrap_or(crate::retrieve::RETRIEVE_LIMIT_DEFAULT);
-            let offset = match args.page {
-                Some(0) => anyhow::bail!("--page must be >= 1"),
-                Some(p) => (p - 1) * page_size,
-                None => args.offset,
-            };
+            // Page by the capped limit — the size actually rendered (RV-410 F-2).
+            let retrieve_limit = resolve_limit(
+                args.limit,
+                crate::retrieve::RETRIEVE_LIMIT_DEFAULT,
+                crate::retrieve::RETRIEVE_LIMIT_MAX,
+            )?;
+            let offset = page_offset(args.page, args.offset, retrieve_limit)?;
             let resolved_format = if args.json { Format::Json } else { args.format };
             crate::retrieve::run_retrieve(
                 &mut io::stdout(),
@@ -4348,6 +4362,56 @@ fn run_paths(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -- page-size contract (SL-275 PHASE-01) --------------------------------
+
+    #[test]
+    fn page_offset_table() {
+        assert_eq!(
+            page_offset(None, 7, 20).unwrap(),
+            7,
+            "no --page: explicit offset"
+        );
+        assert_eq!(
+            page_offset(Some(1), 7, 20).unwrap(),
+            0,
+            "--page wins over --offset"
+        );
+        assert_eq!(page_offset(Some(3), 0, 20).unwrap(), 40);
+        assert!(page_offset(Some(0), 0, 20).is_err(), "--page 0 rejected");
+        assert!(
+            page_offset(Some(usize::MAX), 0, 20).is_err(),
+            "overflow rejected, no panic"
+        );
+    }
+
+    #[test]
+    fn resolve_limit_table() {
+        use crate::retrieve::{RETRIEVE_LIMIT_DEFAULT, RETRIEVE_LIMIT_MAX, SEARCH_LIMIT_DEFAULT};
+        assert_eq!(
+            resolve_limit(None, SEARCH_LIMIT_DEFAULT, usize::MAX).unwrap(),
+            20
+        );
+        assert_eq!(
+            resolve_limit(Some(500), SEARCH_LIMIT_DEFAULT, usize::MAX).unwrap(),
+            500
+        );
+        assert_eq!(
+            resolve_limit(None, RETRIEVE_LIMIT_DEFAULT, RETRIEVE_LIMIT_MAX).unwrap(),
+            5
+        );
+        assert!(resolve_limit(Some(0), SEARCH_LIMIT_DEFAULT, usize::MAX).is_err());
+    }
+
+    /// RV-410 F-2: retrieve pages by the size it renders — the capped limit —
+    /// so `--limit 30 --page 2` starts at row 21, not 31.
+    #[test]
+    fn page_offset_uses_capped_retrieve_limit() {
+        use crate::retrieve::{RETRIEVE_LIMIT_DEFAULT, RETRIEVE_LIMIT_MAX};
+        let limit = resolve_limit(Some(30), RETRIEVE_LIMIT_DEFAULT, RETRIEVE_LIMIT_MAX).unwrap();
+        assert_eq!(limit, 20);
+        assert_eq!(page_offset(Some(2), 0, limit).unwrap(), 20);
+    }
 
     // A valid uid for fixtures (32 lowercase hex after `mem_`).
     const UID: &str = "mem_018f3a1b2c3d4e5f60718293a4b5c6d7";

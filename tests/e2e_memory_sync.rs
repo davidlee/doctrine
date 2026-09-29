@@ -417,7 +417,9 @@ fn each_new_shipped_memory_searches_by_scoped_search_and_has_shipped_signature()
 
         // Verify findable via scoped search — drives `memory find` with the
         // same scope args that the memory's TOML declares.
-        let mut args = vec!["memory", "find", "-p", &p];
+        // An explicit `--limit` well above any scope's candidate count: this
+        // asserts reachability by scope, not rank within the default page.
+        let mut args = vec!["memory", "find", "-p", &p, "--limit", "10000"];
         args.extend_from_slice(scope_args);
         let (ok, stdout) = run(repo.path(), &args);
         assert!(ok, "find for {key} (uid {uid}) must exit 0: {stdout}");
