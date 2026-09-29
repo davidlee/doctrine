@@ -11,16 +11,24 @@ needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
-selector = "crates/jev*/**"
-intent = "scope-relevant"
-
-[[selector]]
 selector = "Cargo.toml"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "justfile"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "Cargo.lock"
+intent = "design-target"
+
+[[selector]]
+selector = "crates/doctrine-jev/**"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/knowledge/evidence/**"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"

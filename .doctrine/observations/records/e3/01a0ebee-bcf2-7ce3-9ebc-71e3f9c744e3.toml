@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ebee-bcf2-7ce3-9ebc-71e3f9c744e3"
+recorded_at = "2026-09-29T06:51:26.834599854Z"
+kind = "friction"
+summary = "design SL-277: sufficiency-accepted survives a drafting→inquiring reopen"
+detail = "Stepping back to inquiring and adding inq-10/inq-11 invalidated graph-reviewed, but sufficiency-accepted (given before the new evidence) stayed live, so inquiring→drafting reported ready without the user re-accepting the changed picture. The agent had to judge whether the prior act still covered it (here the user approved each change explicitly). Either invalidate sufficiency on node creation, or document that it is cumulative."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
