@@ -10,6 +10,14 @@ raiser    = "raiser"
 responder = "responder"
 rounds_base = 0
 contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+This two-round adversarial design pass examined SL-277's scope and full design, the Jev API and model research, DEC-352 through DEC-360, the catalog scanner, and the latest design revision. It checked request limits and TooLong handling, spend and rate estimates, pool size and identifier cues, citation-label quality and degraded snapshots, matched-text and shared-rubric comparisons, batching fallback and C-subsample reporting, position order, completeness, and verification criteria. F-1 through F-16 and F-18 are verified after responder revisions; F-17 remains answered on its control route for verification after phases exist.
+"""
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-277"
@@ -46,7 +54,7 @@ The design reserves 64k input tokens before every attempt and keeps that reserva
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Estimator cannot prove Jev context limits"
 detail = """
@@ -80,6 +88,13 @@ role = "responder"
 disposition = "fix-now"
 route = "review"
 response = "Contest accepted. A TooLong on a single-question request halves that section and resends; at most two TooLong retries per question, then Unanswered, each step counted. A query too long to leave room for any question is refused at planning with zero sends and the slice reported skipped. New VT boundary: a dense base64 section under a fake returning the context-limit 422 above a byte threshold walks split, halve, Unanswered; an over-long query is refused with zero transport calls. design.md Client table, Client, Verification."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+design.md:101 and :150-157 now define bounded TooLong handling for a single question and a planning refusal for an oversized query. The pathological-input fake and zero-send boundary checks are specified at design.md:385-388.
+"""
 
 [[finding]]
 id = "F-3"
@@ -173,7 +188,7 @@ The revision audits random eval labels as well as tune labels at design.md:209-2
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Point versus list changes the evidence shown"
 detail = """
@@ -208,6 +223,13 @@ disposition = "fix-now"
 route = "review"
 response = "Contest accepted. Point, point-matched and list prompts are all built from one RELEVANCE_CRITERION constant, so the rankers ask the same relevance question and differ only in answer shape; VT rubric asserts all three request bodies contain it. DEC-360 now states the shared criterion as the condition for isolating the ranker primitive. design.md Rubric text, Verification."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+design.md:133-165 now requires matched option text and one shared relevance criterion in the point, point-matched and list request bodies. The rubric check at design.md:389-390 and DEC-360 bind the comparison to that criterion.
+"""
+
 [[finding]]
 id = "F-7"
 status = "verified"
@@ -240,7 +262,7 @@ Design.md:281-282 reports BM25 pool coverage as the A and B ceiling, while :323-
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "DEC-352 disagreement fallback is absent"
 detail = """
@@ -274,6 +296,13 @@ role = "responder"
 disposition = "fix-now"
 route = "review"
 response = "Contest accepted. Under the fallback, the full eval runs A and the B arms on every eval slice and the C arms only on 3 to 5 eval slices drawn with the recorded seed; C deltas are computed over the subsample only, reported with that n, and the verdict treats any C conclusion as provisional. design.md Run sequence steps 3 and 6."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+design.md:315-326 now applies the DEC-352 disagreement gate to the run sequence: A and B run on the full eval set, C runs on a seeded 3 to 5 slice subsample, C paired deltas use only that subsample and state its n, and the verdict treats C conclusions as provisional.
+"""
 
 [[finding]]
 id = "F-9"
@@ -479,7 +508,7 @@ Design.md:336 and :342 place fixture I/O in main and pure extraction in labels, 
 
 [[finding]]
 id = "F-16"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Unreadable snapshot entities are mistaken for absent labels"
 detail = """
@@ -514,6 +543,13 @@ disposition = "fix-now"
 route = "review"
 response = "Contest accepted; mapping replaced. A cited id outside the scan's entities is unreadable iff catalog scan reported an Error diagnostic whose entity_key is that id (scan.rs emits one for every walked entity it cannot read, verified in its JSON output), absent otherwise. No learned prefix mapping, so a wholly unreadable kind is still classified correctly; the labels VT covers that case. Residual in Risks: a directory the scan never walks yields no diagnostic. design.md Labels, Verification, Risks."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+design.md:210-213 classifies a missing scan entity as unreadable from an Error diagnostic with its entity_key; src/catalog/scan.rs:178-203 emits such a keyed diagnostic for each walked entity that fails hydration. The wholly unreadable-kind case is tested at design.md:396-402, and degraded slices are separately reported at :304-308. The unwalked-directory residual is disclosed at :437-442.
+"""
+
 [[finding]]
 id = "F-17"
 status = "answered"
@@ -539,7 +575,7 @@ response = "Accepted. Design change: the send log records one line per attempt, 
 
 [[finding]]
 id = "F-18"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Run estimates retain the pre-headroom request count"
 detail = """
@@ -557,6 +593,13 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = "Accepted. Estimates recalculated and labelled pre-plan: C about 450 to 600 point requests per slice at 80 percent packing, about 4M tokens, about 0.20 USD; B arms a few dozen requests; 4 list requests per slice; full eval about 6 to 12 USD; the dry-run plan supersedes them. design.md Budget; slice scope Risks."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+design.md:240-243 and slice-277.md:123-126 replace the stale C request and cost figures with estimates using 80 percent packing and two-order list calls. They label those figures as preceding and superseded by the dry-run plan; the revised full-eval range is 6 to 12 USD.
+"""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
