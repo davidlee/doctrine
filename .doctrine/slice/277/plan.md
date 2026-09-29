@@ -32,8 +32,9 @@ and PHASE-10 are the live trial, each live step under a cap the user approves.
   commands (PHASE-08). Everything PHASE-09 runs — the probe, section-as-state
   point scoring and the C-arm subsample — exists and is tested offline first,
   so the live phases operate code rather than write it. PHASE-07 is the
-  largest phase; its parts share one candidate type, so it stays whole. The dry-run plan at the end of PHASE-08 replaces the design's
-  pre-plan cost estimate before any money is spent.
+  largest phase; its parts share one candidate type, so it stays whole. The
+  dry-run plan at the end of PHASE-08 replaces the design's pre-plan cost
+  estimate before any money is spent.
 - **Live last, split in two (PHASE-09, PHASE-10).** The probe must calibrate
   the estimator and fix how a context-limit 422 is recognised (the docs don't
   describe one), and the agreement check picks batched or section-as-state
