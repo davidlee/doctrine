@@ -6,7 +6,7 @@ status = "active"
 title = "An unpaged result set makes the row count query-invariant — a count is not a ranking signal"
 summary = "A CLI listing with no default --limit emits every filter survivor, so unrelated queries report the same count; readers misread that invariance as 'the query was ignored' and diagnosed a ranker bug that did not exist"
 created = "2026-09-27"
-updated = "2026-09-27"
+updated = "2026-09-29"
 
 [scope]
 paths = ["src/retrieve.rs", "src/search.rs", "src/observation/query.rs"]

@@ -5,10 +5,10 @@ id = 465
 slug = "memory-search-no-default-page-no-relevance-floor-no-zero-hit-signal"
 title = "memory search: no default page, no relevance floor, no zero-hit signal"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-09-19"
-updated = "2026-09-27"
+updated = "2026-09-29"
 tags = ["area:cli", "area:memory", "area:ux", "cluster:memory-system"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

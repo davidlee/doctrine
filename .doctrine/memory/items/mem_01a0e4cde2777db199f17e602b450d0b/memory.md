@@ -37,3 +37,10 @@ corpus (565 rows) into a context window, burying the ranking it was meant to exp
 - `src/search.rs`, `src/observation/query.rs` — the sibling read surfaces; the
   observation matcher is Boolean and unranked, so it has the count symptom without
   even a ranker to blame.
+
+## Status of the original case
+
+`SL-275` fixed `memory search`: an unset `--limit` is now a 20-row page, free text
+is floored to rows with lexical/exact-key evidence, and a zero-evidence query says
+`no match for "<q>"` (JSON/MCP: empty `rows`). The pattern still applies to any
+other ranked-but-unpaged surface.
