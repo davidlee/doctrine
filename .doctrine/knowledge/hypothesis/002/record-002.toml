@@ -1,0 +1,24 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 2
+slug = "byte-mode-set-comparison-replaces-the-three-legs-for-the-claim-question"
+title = "Raw byte+mode+set comparison against HEAD replaces the three legs for the claim question"
+record_kind = "hypothesis"
+status = "proposed"
+created = "2026-09-29"
+updated = "2026-09-29"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+proposition = ""
+predicts    = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0eb7e-dcf5-7c53-a4e1-4e30a9553447"
+recorded_at = "2026-09-29T04:49:14.997935253Z"
+kind = "friction"
+summary = "close: backlog id collision on landing (IMP-502 minted on capsule branch and on edge)"
+detail = "SL-273 capsule worktree minted IMP-502 on 2026-09-28; edge independently minted IMP-502 on 2026-09-29 (CHR-172/RV-411). Merge surfaced add/add conflict; resolved by hand-renumbering the branch item to IMP-506 and rewriting references. Worktree-local id minting has no cross-branch reservation for backlog ids; commit messages keep the stale id."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
