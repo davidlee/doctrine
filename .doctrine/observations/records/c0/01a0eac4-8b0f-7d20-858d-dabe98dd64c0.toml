@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0eac4-8b0f-7d20-858d-dabe98dd64c0"
+recorded_at = "2026-09-29T01:25:44.335842642Z"
+kind = "friction"
+summary = "phase-plan; SL-275: plan.toml whose first [[phase]] header was commented out loaded silently as 2 phases"
+detail = "plan.toml line '# One [[phase]]' (truncated template comment) swallowed PHASE-01's table header; its keys became top-level orphans. slice phases reported 'Phases up to date' and materialised only PHASE-02/03. Plan loader accepts unknown top-level keys without disclosure (STD-003 no-silent-skip)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

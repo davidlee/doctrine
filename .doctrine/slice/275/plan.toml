@@ -18,7 +18,7 @@ collaborators = []
 targets      = []
 dependencies = []
 
-# One [[phase]]
+[[phase]]
 id        = "PHASE-01"
 name      = "One page-size contract"
 objective = "Resolve the search page size once (SEARCH_LIMIT_DEFAULT = 20) and derive offset, row slice, footer and MCP limit/next_offset from it; fix the continuation hint (unaligned offsets, final page) and retrieve's uncapped --page offset (DEC-347; design sec Page size; RV-410 F-1..F-5, F-8)."
