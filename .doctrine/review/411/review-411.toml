@@ -1,0 +1,368 @@
+id    = 411
+slug  = "code-review-review-of-chr-172"
+title = "code-review review of CHR-172"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Sample-based test-quality audit (CHR-172). Measured baseline: full `cargo test -p doctrine` with libtest --report-time (9,039 executions, per-test timings, duplicate-execution count). Stratified sample read in full by eight reviewers: src/memory.rs, src/review/tests.rs, src/git.rs + src/test_support.rs + tests/common, src/boot.rs, src/priority/graph.rs + tests/architecture_layering.rs, tests/e2e_design_state.rs + tests/e2e_review_golden.rs, the measured-slow stratum (e2e_show_equivalence, e2e_codex_install, e2e_claude_install, e2e_doctor_golden), crates/doctrine-control/src/conformance.rs. Candidate findings verified by the lead against the cited lines before raise; two production defects reproduced and filed (ISS-500, ISS-501).
+"""
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "CHR-172"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "major"
+title = "Draft-expiry health check: expected a test of the check, observed a test of its date helper only — masks inverted-sign bug (ISS-500)"
+detail = """
+Expected: `memory_health_findings` check 3 (draft past review_by) is exercised with past / today / future `review_by`.
+Observed: `draft_expiry_validation_detects_past_review_by` (src/memory.rs ~10104) calls only `retrieve::days_between`, already tested at src/retrieve.rs:2013. The check itself (src/memory.rs:3508-3511) fires on `days_between(review_by, today) < 0`, i.e. future dates — inverted. Reproduced: review_by 2020-01-01 → no finding; 2099-01-01 → "expired … (26392 days ago)". Filed as ISS-500.
+Check 2 (stale verification on scoped paths, :3491-3505) has no test anywhere.
+Direction: table-test `memory_health_findings` per check with a fixed `today`.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "major"
+title = "Git test fixtures: expected hermetic from host git config/env, observed user config, global hooks and DOCTRINE_* env leak in"
+detail = """
+Expected: scratch-repo fixtures are independent of the developer's git config and doctrine env.
+Observed: `git.rs` `ScratchRepo::git`, `BareRemote`, `common::git`, `LinkedTrees`, the four memory.rs git fixtures (GitScratch ~6009, temp_project_with_* ~9191/10268, temp_root_seeded ~11258) and review/tests.rs git closures (~1532, ~3591, ~3674) pin only commit dates; production `run_git_env` (src/git.rs:503) forwards the whole process env.
+Evidence (reviewer runs): injecting `commit.gpgsign=true` via GIT_CONFIG_COUNT fails 91/130 git::tests; `DOCTRINE_TRUNK_REF` set fails 4 `trunk_entity_ids_*`; `DOCTRINE_AGENT_ID` fails `resolve_holder_falls_back_to_git_config_identity`. Host `core.hookspath` runs the user's global post-commit hook on every fixture commit (that hook already special-cases temp repos). memory.rs fixtures call `.output().unwrap()` without checking exit status, so a refused commit passes silently.
+Only src/dispatch.rs:11098 isolates GIT_CONFIG_GLOBAL.
+Direction: one hermetic scratch-repo type in src/test_support.rs (shared by bin + integration tests) and a `.cargo/config.toml` `[env]` block (GIT_CONFIG_GLOBAL=/dev/null, GIT_CONFIG_NOSYSTEM=1, LC_ALL=C) — reaches production spawns that fixture-side `.env()` cannot. Pass DOCTRINE_AGENT_ID into resolve_holder as an input, like trunk_ladder.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "major"
+title = "Git CAS/oid tests: expected object-format-agnostic, observed sha1 pinned — masks ZERO_OID defect (ISS-501)"
+detail = """
+Expected: CAS (compare-and-swap) ref creation and merge-tree tests hold on sha1 and sha256 repos.
+Observed: literal widths in src/git.rs tests (`tree.len() == 40`, `s.oid.len() == 40` ~5308/5343; `"0".repeat(40)` ~4668/5118). With GIT_DEFAULT_HASH=sha256, 10 tests fail — including because production `ZERO_OID` (src/git.rs:1167) is sha1-only; git refuses it ("not a valid old SHA1", reproduced). Used by src/reserve.rs:166/215 and src/dispatch.rs ref creation. Filed as ISS-501 (sibling of ISS-262).
+Direction: run CAS/push tests under both formats (`with_object_format` exists); assert width by format.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "major"
+title = "Layering gate (ADR-001): expected any upward edge to fail, observed macro-embedded paths and sub-tier rows evade it"
+detail = """
+Expected: tests/architecture_layering.rs fails on a real leaf←engine←command violation.
+Observed:
+- `extract_edges` records edges only from `use` trees and expression/type paths; `crate::x` inside macro bodies (vec!/format!/matches!), struct-literal/pattern paths, `impl crate::x::T for`, trait bounds, and `super::` across top-level modules are invisible. Live miss: src/coverage_verify.rs:257 `vec![crate::slice::parse_ref(s)?]` (engine → command) is not in `accepted_violation` and the gate is green. Reviewer text-scan vs syn diff: 32 edges missing.
+- Files `syn` fails to parse are skipped silently (~line 185) — contrary to STD-003 (no silent skip).
+- A `module::sub` tier row only exempts its umbrella from upward-edge and mixed-umbrella checks (~697-716, 747); the sub-tier is never enforced. `"priority::graph" = "engine"` while graph.rs imports command-tier `relation_graph` and `catalog`. Adding a sub-row is an unratcheted silencer.
+- Command-tier tangle baseline 76 vs measured 70: ratchet never tightens.
+Direction: visit every `syn::Path` plus macro token streams for `crate::` idents; panic on parse failure; key edges by longest-matching file unit and enforce sub-tiers; tighten the baseline to measured. Relates IMP-198.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "major"
+title = "#[path]-included modules: expected unit suites to compile and run once, observed design_run tests ×10 binaries and test_support tests ×106"
+detail = """
+Expected: each unit test compiles and executes once per `cargo test`.
+Observed (measured 2026-09-29): 10 tests/e2e_design_*.rs crates `#[path]`-include src/design_run/mod.rs, whose `#[cfg(test)] mod tests` (6,720-line src/design_run/tests.rs, ~126 tests + submodule tests) rides along: e2e_design_state --list shows 279 of 342 tests are design_run::*. tests/common/mod.rs includes src/test_support.rs, whose 3 tests run in all 106 integration binaries. 440 test names execute more than once; ~1,700 redundant executions. Cost is compile/link (e2e_design_state binary 94MB vs 26MB comparable) and noise — one unit failure reports ~11 times and "e2e_design_state passed" is not a layer signal.
+Also: `under_worker_marker_reads_the_doctrine_worker_variable` restates the implementation (asserts `under_worker_marker() == var_os("DOCTRINE_WORKER").is_some()`).
+Direction: move test_support's `mod tests` behind a file declared only from main.rs; for design_run, include only the needed leaf modules or gate its test module on a cfg includers don't set; longer term consolidate the 10 design e2e crates into one `tests/e2e_design/main.rs` (fewer link steps) or give design_run a lib/crate boundary.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-6"
+status = "open"
+severity = "major"
+title = "Codex install tests: expected offline local MCP-leg tests, observed a real networked npx skills add per call (~24s, unbounded)"
+detail = """
+Expected: tests/e2e_codex_install.rs exercises the MCP config leg locally and fast; helper doc (`:32`) claims "--skill code-review keeps the install small and offline".
+Observed: consolidated `install --agent codex` shells `npx skills add davidlee/doctrine --agent codex …` (src/install.rs RUNNER_NPX, ~1682-1760): GitHub fetch plus remote security assessments, 3-5s per call; 4 tests ≈24s serial (6-10.6s each in the parallel run). Offline, npx fails non-fatally so tests pass either way — the network buys no assertion, and nothing times out a stalled npx. npx TUI output is mixed into stdout that later gets `!contains` checks.
+Also `codex_install_foreign_entry_repeat_output_is_stable` (:187-196) compares `fallback(&first) == fallback(&second)`, true when both are None — a silent skip of the foreign entry passes.
+Direction: drive the four through `boot install` (reaches the MCP leg in ~5ms; `codex_notice_does_not_fire_when_only_the_mcp_entry_refreshed` already does); keep one smoke test with a fake `npx` first on PATH in the tempdir; assert `fallback(&first).is_some()`. Lift the four copies of the `install` helper (codex/claude/skills_symlink/prompt_def_expansion) into tests/common.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-7"
+status = "open"
+severity = "major"
+title = "doctor_is_superset_of_validate: expected to catch doctor dropping a validate check, observed it asserts nothing while the corpus is clean"
+detail = """
+Expected: tests/e2e_doctor_golden.rs `doctor_is_superset_of_validate` (:105-162) fails if doctor stops running one of validate's checks.
+Observed: it runs both commands on the live repo; `validate` prints "corpus clean" (confirmed today), so `validate_lines` is empty, the `for` loop never runs and the count check is skipped. Clean is the enforced norm (`just validate`), so steady-state the test is vacuous and costs ~2-3s. Uncaught mutation: remove `validate_relations` from `run_doctor` (src/commands/doctor.rs:29-40). Root risk: doctor hand-copies validate's check list (parallel implementation).
+Sibling tests VT-1/VT-2 (:42-101) only check what the live repo's current warnings happen to exercise; VT-1's header check is `contains('[')`.
+Direction: seeded tempdir fixture with one violation per validate category plus an anti-vacuity floor (`!validate_lines.is_empty()`); better, have doctor compose validate's check list so the superset holds by construction. Reuse the hermetic dirty fixture from `doctor_exits_nonzero_on_id_integrity_error` (:185).
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-8"
+status = "open"
+severity = "major"
+title = "Show router equivalence: expected a cheap routing check, observed 21.6s over the live corpus pinned to live entity ids"
+detail = """
+Expected: tests/e2e_show_equivalence.rs proves `show <REF>` ≡ `<kind> show <REF>` cheaply and independent of corpus content.
+Observed: 24 rows × 2 spawns per format against the live repo; `show_matches_the_kind_verb_in_table` 19.3s (suite's slowest test by 2×), json 2.7s. Rows pin live ids (REQ-197, RSK-232, IDE-007, ISS-008, IMP-012 …), so deleting or renumbering any unrelated entity fails it. Both sides call the same `run_show`; only the prefix→Route mapping and forwarded args can differ (src/commands/show.rs:87-121). The unit test `every_kinds_row_routes` (show.rs:125-141) asserts only `is_some()`, so a POL→Route::Adr mis-map passes it.
+Side observation: table `show` on the live repo costs 0.5-1.3s per call (~27k openat, incl. .doctrine/comparisons) — product performance, out of this RV's scope.
+Direction: make the unit test assert the exact Route per KINDS row; keep byte-equality e2e over a small hermetic one-entity-per-kind corpus (or one representative per Route).
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-9"
+status = "open"
+severity = "major"
+title = "Boot governance filter: expected negative asserts to catch leaked out-of-force rows, observed they search slugs the table never prints"
+detail = """
+Expected: src/boot.rs snapshot tests prove non-accepted ADRs / non-required policies / standards are filtered out.
+Observed: negative checks match slugs — `!snap.contains("adopt-ci")` (:4051), `["branch-hygiene","old-rule","dead-rule"]` (:4134), `["a-draft-rule","an-old-rule","a-dead-rule"]` (:4220), `"just-a-draft"` (:4250). The default governance columns are `GOV_DEFAULT = ["id","status","title"]` (src/governance.rs:153, "slug-free"), so a leaked row renders as `ADR-002 │ proposed │ Adopt CI` and never contains the slug. The filter could admit every status and these stay green; the comment at :4150 ("a one-char edit dropping a status … turns this red") holds only for the positive half.
+Direction: assert absence of the rejected ids (scoped to the section body), or of titles.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-10"
+status = "open"
+severity = "major"
+title = "Priority optionality / mint-order tests: expected fixtures that exercise consequence, observed they seed a label SL-176 removed — pass with the pass stubbed"
+detail = """
+Expected: src/priority/graph.rs tests pin one-hop optionality over consequence labels and mint-order blindness to consequence.
+Observed: `optionality_flows_in_edges_over_consequence_labels_one_hop` (~1937) and `dangling_target_contributes_zero` (~1983) seed a `slices` edge; `CONSEQUENCE_LABELS` (~363) no longer contains `Slices` (SL-176 PHASE-03, verified). `ref_optionality_is_one_hop_no_transitive_accumulation` (~2158) seeds no edges despite its comment. Deleting the one-hop optionality pass keeps all three green. `mint_order_is_blind_to_consequence_topology` (~1386) uses the same dead label, and its scores would order identically anyway.
+Fossils: `est_facets(_lower,_upper)` (~3264) ignores its args and returns empty facets; `facet_9` is empty and its scan result discarded, so "prior beats facet" assertions compare against nothing. `authored_est_cost_formula_site` (~3095) never calls `authored_est_cost`, which is kept alive in production only by `expect(dead_code, reason="used in tests")` (~138). Docstrings contradict bodies at ~3591 and ~3655.
+Direction: rebuild on `references`/`parent`/`members` edges with non-zero bases and a real A→B→C chain; delete rung fossils and the dead production fn.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-11"
+status = "open"
+severity = "major"
+title = "Review golden: expected skipped tests to report as skipped, observed 32/48 return early as ok under DOCTRINE_WORKER — on a dead premise"
+detail = """
+Expected: a test that cannot run in a context reports that visibly (STD-003 spirit), and skips only when the premise holds.
+Observed: tests/e2e_review_golden.rs `skip_under_worker_marker` (:100-107), called 33×; under DOCTRINE_WORKER=1 the run ends "51 passed … 0.01s" with 32 skip lines in captured (invisible) stderr. The premise is dead: `common::doctrine_cmd` (tests/common/mod.rs:67-71) already `env_remove("DOCTRINE_WORKER")` on the child, so the child is never guard-refused. `amend_and_reopen_note_refusals` (:2211) skips mid-test. The same `// SL-225 #2: skip in a worker fork` early-return appears 5× in tests/e2e_claude_install.rs.
+Direction: delete the skip helper and its call sites; where a real skip is needed, fail or report it visibly.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-12"
+status = "open"
+severity = "major"
+title = "Memory paths/validate tests: expected to exercise the verbs they name, observed they copy the production body or assert their own setup"
+detail = """
+Expected: tests named for `run_paths` / `run_validate` fail when those functions break.
+Observed:
+- Seven `paths_*` tests (src/memory.rs ~9603-9772) never call `run_paths` (grep: 0 occurrences); they re-inline its body (entity_dir, identity_toml/md, crate::paths::*). `paths_multi_uid_splat_preserves_order` checks the order of the test's own loop. Root cause: `run_paths` writes straight to `io::stdout()` (~4344).
+- `memory_validate_clean_corpus_no_issues` (~10058-10102) records a memory and asserts its fields; never calls the validator. `…detects_dangling_relations_integration` (~9992) calls only `validate_relation_target`, already covered at ~9858; its fixture writes `body.md` where `memory.md` is meant.
+- Weaker kin: `apply_edit_glob/command_replaces_array` (~8531-8556) assert `len()==1` where the fixture already has one; `missing_trust_block_defaults_to_medium` (~4506) asserts the fixture's own value; `show_rejects_a_traversal_arg_before_touching_disk` (~7250) calls only `MemoryRef::parse`; `run_status_active_to_draft_and_back` (~8187) never goes back.
+Direction: give `run_paths` a writer (or extract pure `paths_lines`) and table-test it; call `memory_health_findings` in validate tests; assert new values, not fixture values.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-13"
+status = "open"
+severity = "major"
+title = "Capsule conformance suite: expected green on a conforming host, observed 5 red on the owner's host (ambient PATH) and nothing runs it"
+detail = """
+Expected: crates/doctrine-control/src/conformance.rs rows prove on any conforming host, and some gate runs them.
+Observed (reviewer run, NixOS host, bwrap 0.12.0): 172 passed, 5 FAILED, 9 ignored, 92s. Failing: `bounded_input_set_is_proven`, `a_binary_is_executed_from_each_bound_path`, `a_write_through_every_readable_mount_fails`, `every_shipped_rows_control_is_seen_to_fail`, `the_shipped_backend_is_admitted_on_this_host` — rows 2/9 payloads walk the ambient `$PATH` (incl. /path-not-set, $HOME, flatpak dirs) as bound roots, so they cannot prove here.
+Also: three early-return "vacuous here" passes (~7153, ~7342, ~6667) whose eprintln is swallowed by libtest capture, and the `#[ignore`-only source audit (~11163) can't see them; `the_shipped_backend_is_admitted_on_this_host` runs row 10 in-process despite the file documenting the fd-sweep race in the multi-threaded binary (~11836); row 13 uses CAPSULE_UID=GID=1000, indistinguishable from the default first user on Debian/Ubuntu/Fedora; ~2.5 min wall dominated by 30s FIXTURE_TIMEOUT rows.
+Gate: `capsule-check` is in no default recipe or CI; Cargo.toml says the capsule programme is stopped and the crate pending triage — so the rot was unobservable. Severity major not blocker for that reason.
+Direction: fold into the crate's triage; synthesize PATH for the capsule; convert early returns to disclosed outcomes; child re-exec for the admission test.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-14"
+status = "open"
+severity = "minor"
+title = "Review-ledger CLI goldens: expected a template edit to change one expectation, observed ~23 full-template copies and pinned clap/OS/std text"
+detail = """
+Expected: tests/e2e_review_golden.rs pins review behaviour, not incidental output.
+Observed: `fresh_ledger()` … `chain_step11_*()` (:189-1016) carry 13 full template copies plus ~10 inline escaped ledgers; one template comment edit → ~23 hand edits. Goldens were captured by pasting output with bugs "pinned as-is" (header :18-22), so they prove "unchanged", not "correct". Pinned incidental text: clap usage lines incl. harness-injected `--path <PATH> --color <COLOR>` (:2130, 2160, 2205); OS "No such file or directory (os error 2)" (:2493); std ParseIntError text (:2300); reservation stderr (:1039). `--json` compared as pretty strings (:2414, 2456, 2612). `new_with_phase_and_labels_omits_blank_line_before_findings_comment` (:1055) turns a template quirk into contract.
+Direction: one full golden for `new`; per-step deltas parsed as TOML; parse JSON; assert exit code + missing flag + ledger unchanged for usage errors.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-15"
+status = "open"
+severity = "minor"
+title = "Review engine tests: expected prime-recompute and clears_concluded to be pinned, observed a first-compute test and positive rows only"
+detail = """
+Expected: src/review/tests.rs proves prime replaces a stale baseline and pins every row of `Act::clears_concluded`.
+Observed: `prime_recomputes_hashes_from_the_resolved_fileset` (:3773-3791) primes once on a fresh fixture — no stale value exists; "keep existing [hashes]" passes it. `clears_concluded` (src/review_ledger/transition.rs:70, `matches!(self, Raise | Reopen)`) is tested only for raise/reopen (clears) and dispose/verify (keeps); no conclude→contest/withdraw/amend test, so adding `Contest` passes. Vacuous leftovers: `status_is_silent_about_an_unprimed_cache` (:3830) asserts setup then `unwrap()`; `with_turn_accepts_non_unit_closure_return` (:3882) never calls `with_turn`. `can_*` (:18-69) re-spot-checks the engine's own exhaustive table test; enum "drift canaries" (:73-138) list variants by hand.
+Direction: prime→edit→prime; one table test over every act on a concluded ledger; delete the vacuous pair; move role cases next to the transition test.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-16"
+status = "open"
+severity = "minor"
+title = "Boot snapshot tests: expected equality to the embedded source, observed contains() on shipped-doc phrases"
+detail = """
+Expected: tests of the Static section source assert section == embedded asset (the file already does this at :3718, :3736).
+Observed: phrase checks on shipped prose — "Route before you act" (:3626, :4447), "Reference forms"/"Reference docs"/"using-doctrine.md" (:4453), "universal"/"hymns"/"prompt resolve --role <role> --band model" over the whole snapshot (:3682-3687). Any copy edit to install/routing-process.md or model-band.md reds a unit test; "universal"/"hymns" can match in any section. Also pinned: a code comment in generated TS (:7563) and `child.stdin` (:8671), both already covered behaviourally by the node-driven tests (:8816-8896). `published_plugin_carries_explicit_claude_surface_command` (:8473) reads live plugins/ via repo_root() — a drift check, belongs in tests/. Node tests `expect("node must be available")`.
+Direction: keep the equality form, drop the phrase and implementation-detail checks.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-17"
+status = "open"
+severity = "minor"
+title = "Shared fixtures: expected one fixture per concept, observed widespread hand-rolled copies that bypass the shared helpers"
+detail = """
+Expected: tests use shared helpers (tests/common, src/test_support.rs) so hermeticity and shape are fixed in one place.
+Observed:
+- git repos: 16 integration files define their own `fn init_repo` (8 identical to `common::init_repo`), 30 define their own `fn git`; `common::git`/`init_repo` have 2 users. In-binary: `git.rs` ScratchRepo, `worktree/gc.rs` ScratchRepo, `worktree/test_helpers.rs::init_repo`, state.rs/dispatch.rs/coverage_verify.rs `init_repo`, 4 memory.rs fixtures, 3 review/tests.rs variants.
+- memory.rs: three identical `&[&str]→Vec<String>` helpers (`tags` ~4902, `strings` ~6059, `s` ~7718); `write_memory_fixture` ≡ `write_memory_dir`; ~9 hand-written memory TOML blocks, four spelling a non-key `repo_confidence` that is silently dropped; ~8 full `RecordArgs{…}` literals despite `record_args()`+`..`; 12 ten-arg `render_show(…)` calls.
+- review/tests.rs: `Some(root.to_path_buf())` ×146, 57 six-line `run_raise` blocks; existing fixtures hard-code Severity::Major so tests re-roll raise→dispose by hand; `vt5b` (~1221) edits TOML by `text.replace` though `hand_edit_finding` exists.
+- priority/graph.rs: 20-field `comparison::Judgement` literal ×5.
+- e2e_design_state.rs: local `Fixture` + run/fail (:112-325) re-implement `design_fixture::DesignRun`, and have drifted — its `run` does not put the built binary first on PATH, so a test reaching a runbook verifier would run the host's installed doctrine (latent non-hermetic). Five more e2e_design_* crates carry their own Fixture.
+Direction: host the hermetic repo fixture (F-2) in test_support and migrate; per-module builders (`record_args`, `draft`, a `Ledger` wrapper, `Judgement` base); extend DesignRun via local impl blocks as its doc prescribes.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-18"
+status = "open"
+severity = "minor"
+title = "Near-duplicate tests: expected table-driven cases, observed long runs of hand-written near-identical tests"
+detail = """
+Expected: one table test per rule with rows for its cases.
+Observed: boot.rs — three pi-extension suites (pi :7486-7616, mcp :7657-7790, surface :8681-8780) driving the same generic `plan_extension`/`install_extension` (~30 tests → ~9), with exact duplicates (`*_no_file_is_generate` ≡ `*_missing_dir_is_generate`); four section-order tests (:3415-3530). memory.rs — ~25 `apply_edit_*` tests (~8274-8595). review/tests.rs — `contest_/amend_/reopen_requires_note`, `amend_/reopen_refused_outside_*`, six `golden_print_*`. architecture_layering.rs — 7 `check_*` bite tests with ~20 lines of identical setup; the root gate runs 3×. priority/graph.rs — burndown lifecycle doc lists 9 states, 3 tested.
+Direction: collapse into tables; the tables also expose missing rows (e.g. burndown states).
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-19"
+status = "open"
+severity = "minor"
+title = "Git and design e2e: expected assertions that can fail, observed a tautological disjunction and derive/setup-only tests"
+detail = """
+Expected: each test can be failed by a plausible production mutation.
+Observed:
+- src/git.rs `list_worktrees_enumerates_primary_and_linked` (:5630-5636): `records[0].path.ends_with(name) || records[0].branch.is_some()` — both worktrees have a branch, always true; `len() >= 2` weaker than `== 2`. Reversed ordering passes; `primary_worktree` relies on that ordering.
+- `frame_carries_anchor_and_identity` reads back a struct literal; `frame_variants_are_distinct` tests `#[derive(PartialEq)]`.
+- Pure parsers reached only via live git or untested: `parse_porcelain_status_z` has no rename/copy case (deleting the `_orig` consume passes); `parse_merge_tree_z` error arms, `parse_ref_row` empty subject untested.
+- tests/e2e_design_state.rs: loop in `every_readable_event_token_round_trips_through_serde` (:1448-1461) is, per its own doc, "true by construction"; `checkpoint_annotation_spelling_is_refused` (:2267, 2275) accepts any refusal. Seven pure-model tests live in the e2e crate (:1382, 1447, 1741, 1977, 2026-2049, 2429, 2472).
+- git.rs error asserts on git message text (`"File exists" || "Unable to create"`) are locale/version dependent.
+Direction: assert exact order/count; delete derive tests; table-test the parsers as pure functions (the porcelain-worktree table is the pattern); move pure tests to src/design_run/tests.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-20"
+status = "open"
+severity = "minor"
+title = "claude-install blast-radius sweep: expected to scan shipped files, observed it walks gitignored node_modules twice"
+detail = """
+Expected: tests/e2e_claude_install.rs sweep (:443-496, :503-560) covers "everything a release could carry".
+Observed: `CONSUMER_DOMAIN` contains 762 tracked files plus ~6,970 untracked/ignored (web/map/node_modules 121MB, docs/claude); `files_mentioning` walks and reads the whole domain once per needle. 0.08s warm alone, 7.3s in the parallel run. A stray npm package mentioning the needle fails the test on one host and not another.
+Direction: enumerate once with `git ls-files -- <dirs>`, scan both needles in one pass.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-21"
+status = "open"
+severity = "nit"
+title = "Test naming and comments: expected behaviour statements, observed criterion ids and slice archaeology, with stale counts"
+detail = """
+Expected: test names and doc comments state the rule pinned; module headers stay true.
+Observed (systemic across the sample): names like `vt1_…`/`vt5a_…` (reused across slices for different claims), `phase07_tests`, `iss232_…`, `phase06_…`, `claude_hook_unchanged_after_dry_refactor`; doc comments lead with SL-/RV-/DEC-/PHASE- ids. Stale headers: review/tests.rs claims "97 … 105" tests (133); e2e_design_state.rs "Twenty-three black-box behaviours" (64) and "Every test below drives the built binary" (false); git.rs "pure logic only (no git, no disk)"; test_support.rs cites a shared CARGO_TARGET_DIR (reversed by SL-156) and `worker_commit` (deleted by SL-254); conformance.rs "Nothing here executes a capsule"; boot.rs "still no hook" above an assert of 2 hooks (:7303); stream-of-consciousness comments (priority/graph.rs ~1782, architecture_layering.rs ~1114). `for step in 0..40` ×5 in e2e_design_state instead of deriving from CHANGE_LOG_REVISIONS (STD-001).
+Direction: rename to behaviour; move provenance to commit messages; drop test counts from headers.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.
