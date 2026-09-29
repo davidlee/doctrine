@@ -42,3 +42,13 @@ hardest to get right. Separating the two keeps each phase's failure surface smal
 - The retrieve MCP path reuses the table renderer (`tools.rs` memory_retrieve).
   PHASE-02's notice must be checked there too (named as a residual probe in
   `notes.md`).
+- **Path correction at plan time.** `design.md` (§Supersession and guidance, §Code
+  impact) names `.agents/skills/...`; that tree is an untracked install
+  projection. The shipped source is `plugins/doctrine/skills/...`, and the
+  selectors were corrected to it. The locked design's intent is unchanged.
+- MCP `memory_retrieve` renders table output, so it carries the no-match notice.
+  The design's "no wire change" applies to `--json` and MCP `memory_search`.
+- Paging tests need more than 20 memories. The existing `run_search` tests seed one
+  memory through `temp_project_with_one_memory` (`run_record`). PHASE-01 EX-8
+  generalises that helper instead of adding a parallel one; seeding 21+ memories
+  through `run_record` is slower, but it is the real write path.

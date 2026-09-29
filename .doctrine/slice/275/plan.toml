@@ -34,6 +34,7 @@ exit_criteria = [
   { id = "EX-5", text = "MCP handler rejects limit 0 at the edge (RV-410 F-3); next_offset uses checked_add and is null past total (RV-410 F-4); limit schema text no longer says 'no-selector default' (RV-410 F-5)." },
   { id = "EX-6", text = "tests/e2e_memory_sync.rs reachability assertion passes an explicit --limit with a comment; MCP VT-1 no-args browse stays green unchanged." },
   { id = "EX-7", text = "doctrine check gate green; existing ranking/sort_key suites unchanged." },
+  { id = "EX-8", text = "Test fixture: temp_project_with_one_memory (src/retrieve.rs tests) is generalised to an N-memory helper rather than duplicated, so paging tests can seed > SEARCH_LIMIT_DEFAULT memories." },
 ]
 verification = [
   { id = "VT-1", expects = "unit table for the continuation hint: aligned byte-identical, unaligned --offset hint, final partial page end of results, offset >= total unchanged", test_file = "src/listing.rs", keywords = ["truncation_notice_unaligned_offset_hints_offset", "truncation_notice_final_page_ends", "end of results"], waived = false },
@@ -56,7 +57,7 @@ exit_criteria = [
   { id = "EX-1", text = "QueryContext::has_free_text() is true iff the free-text query tokenizes (lexical::tokenize) to >= 1 token." },
   { id = "EX-2", text = "Candidate::has_evidence() is lexical > 0 || exact_key; query() filters on it only when has_free_text(), after candidate assembly and before rank; BM25 still fits over the full active set." },
   { id = "EX-3", text = "A zero-evidence free-text query returns zero rows on memory search, MCP memory_search and memory retrieve; selector-only queries return the same rows in the same order as before." },
-  { id = "EX-4", text = "Table output (search and retrieve) prints format_no_match_notice (query scrubbed) when has_free_text() and query() returned nothing; all-held-back evidence on retrieve prints no notice (RV-410 F-7); --json output unchanged." },
+  { id = "EX-4", text = "Table output (search and retrieve) prints format_no_match_notice (query scrubbed) when has_free_text() and query() returned nothing; all-held-back evidence on retrieve prints no notice (RV-410 F-7); --json and MCP memory_search output unchanged. MCP memory_retrieve renders the table format (tools.rs memory_retrieve arm), so it carries the notice too — intended, same text." },
   { id = "EX-5", text = "MCP memory_search tool description states the find/browse contract and default page 20." },
   { id = "EX-6", text = "Surface hook (retrieve_rows) suites green unchanged; behaviour preservation: queries with lexical hits return the same ordered top-N for the same --limit; gate green." },
 ]
@@ -81,10 +82,10 @@ exit_criteria = [
   { id = "EX-2", text = "record-memory section 7 tells the agent to confirm surfaceability with the memory's own terms or --page." },
   { id = "EX-3", text = "dreaming's memory search sweep uses --limit/--page." },
   { id = "EX-4", text = "install/using-doctrine.md memory search rows carry the free-text-floored clause." },
-  { id = "EX-5", text = "doctrine install refreshes installed skills; gate green (validate/doctor clean)." },
+  { id = "EX-5", text = "Edits land in the shipped source plugins/doctrine/skills/ (not the untracked .agents/skills projection); cargo build + doctrine install refresh the projections; gate green (validate/doctor clean)." },
 ]
 verification = [
-  { id = "VT-1", expects = "retrieve-memory skill carries the contract wording", test_file = ".agents/skills/retrieve-memory/SKILL.md", keywords = ["selectors alone browse", "no match"], waived = false },
+  { id = "VT-1", expects = "retrieve-memory skill carries the contract wording", test_file = "plugins/doctrine/skills/retrieve-memory/SKILL.md", keywords = ["selectors alone browse", "no match"], waived = false },
   { id = "VT-2", expects = "using-doctrine carries the floored clause", test_file = "install/using-doctrine.md", keywords = ["floored"], waived = false },
   { id = "VA-1", expects = "Agent reviews all four guidance edits against design sec Supersession and guidance and the shipped-corpus-authoring rules (no repo-private ids in shipped text, ADR-024)." },
 ]

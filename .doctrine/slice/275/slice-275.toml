@@ -31,19 +31,20 @@ selector = "tests/e2e_memory_sync.rs"
 intent = "design-target"
 
 [[selector]]
-selector = ".agents/skills/retrieve-memory/SKILL.md"
-intent = "design-target"
-
-[[selector]]
-selector = ".agents/skills/record-memory/SKILL.md"
-intent = "design-target"
-
-[[selector]]
-selector = ".agents/skills/dreaming/SKILL.md"
-intent = "design-target"
-
-[[selector]]
 selector = "install/using-doctrine.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/retrieve-memory/SKILL.md"
+intent = "design-target"
+note = "shipped source; design.md cites the .agents/skills projection path (corrected at plan, 2026-09-29)"
+
+[[selector]]
+selector = "plugins/doctrine/skills/record-memory/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/dreaming/SKILL.md"
 intent = "design-target"
 
 [[relation]]
