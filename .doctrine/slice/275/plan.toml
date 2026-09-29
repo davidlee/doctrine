@@ -1,0 +1,92 @@
+# Implementation plan for SL-275 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-275"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]]
+id        = "PHASE-01"
+name      = "One page-size contract"
+objective = "Resolve the search page size once (SEARCH_LIMIT_DEFAULT = 20) and derive offset, row slice, footer and MCP limit/next_offset from it; fix the continuation hint (unaligned offsets, final page) and retrieve's uncapped --page offset (DEC-347; design sec Page size; RV-410 F-1..F-5, F-8)."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (DEC-347..350, RV-410 concluded); slice status plan/ready." },
+  { id = "EN-2", text = "Baseline green: doctrine check gate passes on the starting commit." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "SEARCH_LIMIT_DEFAULT = 20 is the single named default for CLI memory search and MCP memory_search; the tools.rs literal 20 and has_selectors branch are gone." },
+  { id = "EX-2", text = "run_search and search_for_mcp take limit: usize; the .min(len) clamp and its RV-206/RV-207 comment are deleted; the footer page size is the resolved limit." },
+  { id = "EX-3", text = "page_offset(page, offset, page_size) is the one --page arithmetic, called by the Search arm with its resolved limit and the Retrieve arm with its capped limit (RV-410 F-2)." },
+  { id = "EX-4", text = "format_truncation_notice: aligned non-final pages byte-identical to today; unaligned offsets hint --offset {offset+shown} (RV-410 F-1); final page reads 'end of results' with no hint (RV-410 F-8)." },
+  { id = "EX-5", text = "MCP handler rejects limit 0 at the edge (RV-410 F-3); next_offset uses checked_add and is null past total (RV-410 F-4); limit schema text no longer says 'no-selector default' (RV-410 F-5)." },
+  { id = "EX-6", text = "tests/e2e_memory_sync.rs reachability assertion passes an explicit --limit with a comment; MCP VT-1 no-args browse stays green unchanged." },
+  { id = "EX-7", text = "doctrine check gate green; existing ranking/sort_key suites unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "unit table for the continuation hint: aligned byte-identical, unaligned --offset hint, final partial page end of results, offset >= total unchanged", test_file = "src/listing.rs", keywords = ["truncation_notice_unaligned_offset_hints_offset", "truncation_notice_final_page_ends", "end of results"], waived = false },
+  { id = "VT-2", expects = "page_offset unit table: page none/1/N, page 0 rejected; retrieve --limit 30 --page 2 offsets by the capped 20", test_file = "src/memory.rs", keywords = ["fn page_offset", "page_offset_uses_capped_retrieve_limit"], waived = false },
+  { id = "VT-3", expects = "CLI search without --limit returns SEARCH_LIMIT_DEFAULT rows; --page 2 without --limit returns the second page with a footer naming page 3", test_file = "src/retrieve.rs", keywords = ["SEARCH_LIMIT_DEFAULT", "run_search_default_page", "run_search_page_two_without_limit"], waived = false },
+  { id = "VT-4", expects = "MCP memory_search: default 20 with and without selectors; limit 0 rejected at the handler; offset usize::MAX gives empty rows, next_offset null, no panic", test_file = "src/mcp_server/tools.rs", keywords = ["memory_search_selectors_default_page", "memory_search_limit_zero_rejected", "memory_search_huge_offset_no_panic"], waived = false },
+  { id = "VT-5", expects = "e2e reachability assertion carries an explicit --limit", test_file = "tests/e2e_memory_sync.rs", keywords = ["\"--limit\""], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Retrieval floor and zero-evidence signal"
+objective = "Floor no-evidence rows under a free-text query in the shared query() pipeline, reaching search, MCP search and retrieve but not the surface hook; emit the table-mode no-match notice keyed before holdback (DEC-348, DEC-349, DEC-350; design secs Retrieval floor, Zero-evidence signal; RV-410 F-6, F-7)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete and committed; gate green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "QueryContext::has_free_text() is true iff the free-text query tokenizes (lexical::tokenize) to >= 1 token." },
+  { id = "EX-2", text = "Candidate::has_evidence() is lexical > 0 || exact_key; query() filters on it only when has_free_text(), after candidate assembly and before rank; BM25 still fits over the full active set." },
+  { id = "EX-3", text = "A zero-evidence free-text query returns zero rows on memory search, MCP memory_search and memory retrieve; selector-only queries return the same rows in the same order as before." },
+  { id = "EX-4", text = "Table output (search and retrieve) prints format_no_match_notice (query scrubbed) when has_free_text() and query() returned nothing; all-held-back evidence on retrieve prints no notice (RV-410 F-7); --json output unchanged." },
+  { id = "EX-5", text = "MCP memory_search tool description states the find/browse contract and default page 20." },
+  { id = "EX-6", text = "Surface hook (retrieve_rows) suites green unchanged; behaviour preservation: queries with lexical hits return the same ordered top-N for the same --limit; gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "pure predicates: has_free_text (words, punctuation-only, blank, None); has_evidence with exact_key and lexical 0 kept (RV-410 F-6)", test_file = "src/retrieve.rs", keywords = ["fn has_free_text", "fn has_evidence", "has_evidence_keeps_exact_key_with_zero_lexical"], waived = false },
+  { id = "VT-2", expects = "query() floor: subset match returns only matches with total = matches; no-match returns empty; punctuation-only browses; selector-only unchanged; exact-key query ranks its memory first under real BM25", test_file = "src/retrieve.rs", keywords = ["query_floor_drops_no_evidence_rows", "query_floor_no_match_is_empty", "query_selector_only_is_unfloored"], waived = false },
+  { id = "VT-3", expects = "no-match notice rendered by search and retrieve tables; absent for all-held-back retrieve evidence; json byte-identical to an empty result", test_file = "src/retrieve.rs", keywords = ["format_no_match_notice", "retrieve_all_held_back_has_no_notice"], waived = false },
+  { id = "VA-1", expects = "Agent reads the MCP memory_search description and limit schema text against design sec Zero-evidence signal and confirms they state the find/browse contract." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Shipped guidance"
+objective = "Restate the find/browse contract and paging in the shipped skills and reference doc (design sec Supersession and guidance)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete and committed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "retrieve-memory progressive-disclosure step 1 states: free text is floored, selectors alone browse, empty free-text result means no match." },
+  { id = "EX-2", text = "record-memory section 7 tells the agent to confirm surfaceability with the memory's own terms or --page." },
+  { id = "EX-3", text = "dreaming's memory search sweep uses --limit/--page." },
+  { id = "EX-4", text = "install/using-doctrine.md memory search rows carry the free-text-floored clause." },
+  { id = "EX-5", text = "doctrine install refreshes installed skills; gate green (validate/doctor clean)." },
+]
+verification = [
+  { id = "VT-1", expects = "retrieve-memory skill carries the contract wording", test_file = ".agents/skills/retrieve-memory/SKILL.md", keywords = ["selectors alone browse", "no match"], waived = false },
+  { id = "VT-2", expects = "using-doctrine carries the floored clause", test_file = "install/using-doctrine.md", keywords = ["floored"], waived = false },
+  { id = "VA-1", expects = "Agent reviews all four guidance edits against design sec Supersession and guidance and the shipped-corpus-authoring rules (no repo-private ids in shipped text, ADR-024)." },
+]
+specs        = []
+requirements = []
