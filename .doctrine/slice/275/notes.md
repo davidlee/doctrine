@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-09-29 · PHASE-02 + RV-412 · 3544168c7
+fresh-as-of: 2026-09-29 · PHASE-03 + RV-413 audit · b889d3b66
 
 ### Produced
 - PHASE-01: `SEARCH_LIMIT_DEFAULT`; `memory::resolve_limit` + `memory::page_offset`
@@ -49,7 +49,9 @@ fresh-as-of: 2026-09-29 · PHASE-02 + RV-412 · 3544168c7
   shipped lines. Pass.
 
 ### Open
-- Slice ready for `/audit`.
+- RV-413 (audit, reconciliation): done. F-1 design.md sec-6 names `.agents/skills`
+  → reconcile direct edit; F-2 aligned. Phase sheets swept: nothing unharvested.
+- Next: `/reconcile` against RV-413's brief.
 - ISS-503 — out of slice scope.
 - CHR-171 — deferred spec-text drift (design sec-5).
 

@@ -1,0 +1,102 @@
+id    = 413
+slug  = "reconciliation-review-of-sl-275"
+title = "reconciliation review of SL-275"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Conformance audit of SL-275 PHASE-01..03 against design.md (sec-1 contracts, sec-2 supersession/guidance, sec-7 verification): live CLI probes of paging, floor, notice and JSON; slice conformance (9/9, 0 undelivered); verify-vt (10/10 PASS); check gate green at afd1ef32c; ADR-024 id sweep over shipped guidance.
+"""
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-275"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "design.md sec-6 names .agents/skills guidance targets; the shipped source is plugins/doctrine/skills"
+detail = """
+Expected: design.md sec-6 "Code impact" names the files the slice changes.
+Observed: its guidance row lists `.agents/skills/retrieve-memory/SKILL.md`,
+`.agents/skills/record-memory/SKILL.md`, `.agents/skills/dreaming/SKILL.md`. The
+edits landed (correctly, per plan PHASE-03 EX-5) in the shipped masters
+`plugins/doctrine/skills/{retrieve-memory,record-memory,dreaming}/SKILL.md`;
+`.agents/skills` is a mirror fetched from the published repo, not an edit target.
+The selector registry is already right (`slice conformance 275`: the three
+plugins/ paths conformant, 0 undelivered), so only the human-readable prose is stale.
+"""
+disposition = "design-wrong"
+response = """
+The design prose is the defect, not the delivery. Delegated to /reconcile as a
+per-slice direct edit of design.md sec-6 — see RV-413 "## Reconciliation Brief"
+(Per-slice) F-1. No selector change: the registry already matches.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+The design prose is the defect, not the delivery. Delegated to /reconcile as a
+per-slice direct edit of design.md sec-6 — see RV-413 "## Reconciliation Brief"
+(Per-slice) F-1. No selector change: the registry already matches.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Brief entry exists (## Reconciliation Brief, Per-slice F-1)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "conformance reports 2 undeclared paths: the slice's own notes.md and slice-275.toml"
+detail = """
+Expected: no undeclared paths, or each explained.
+Observed: `slice conformance 275` undeclared = `.doctrine/slice/275/notes.md`,
+`.doctrine/slice/275/slice-275.toml`. Both are the slice's own lifecycle
+bookkeeping (harvest notes, status flip), committed inside recorded phase ranges.
+No source or governance file is undeclared.
+"""
+disposition = "aligned"
+response = """
+Expected noise: a slice's own notes/status toml are not design targets and should
+not be declared as such. Conformance on source paths is 9/9 with 0 undelivered.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "aligned"
+response = """
+Expected noise: a slice's own notes/status toml are not design targets and should
+not be declared as such. Conformance on source paths is 9/9 with 0 undelivered.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.
