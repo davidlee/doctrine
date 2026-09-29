@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0eaad-134b-7882-a769-bc6562b08478"
+recorded_at = "2026-09-29T01:00:06.347236636Z"
+kind = "friction"
+summary = "design: lock gate demands a route on severe findings only after they are verified"
+detail = "SL-275 RV-410: codex dispositioned via review dispose without --route; after the raiser verified all 8, the reviewing->locked gate refused 'severe findings carry no route'. review amend refuses verified findings; the only path is raiser reopen -> responder dispose --route -> raiser verify, per finding (15 CLI turns for 5 findings) and the responder agent has to proxy the raiser role. The route requirement is not surfaced at dispose time for design reviews."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
