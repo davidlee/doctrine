@@ -16,7 +16,7 @@ ref   = "SL-277"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Estimated tokens cannot enforce the spend cap"
 detail = """
@@ -37,6 +37,13 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted. Each attempt, retries included, now reserves the documented per-request worst case (64k input tokens, about 0.0027 USD) before sending; an attempt whose worst case exceeds the remaining cap is not sent; reported usage replaces the reservation, an attempt with no usage stays charged at the worst case. Spend cannot exceed the cap. design.md Budget, Budget VT; slice scope Budget."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+The design reserves 64k input tokens before every attempt and keeps that reservation when usage is unavailable. The documented model limit is 64k per request at research/raw/jev-models.md:15-20; design.md:224-230 and the budget VT at :388-390 address overshoot across retries.
+"""
+
 [[finding]]
 id = "F-2"
 status = "answered"
@@ -47,7 +54,7 @@ Section sec-3 calls bytes/3 deliberately conservative and sec-8 tests only that 
 """
 disposition = "fix-now"
 route = "review"
-response = "Accepted. Requests pack to 80 percent of each limit (PACK_HEADROOM), list option caps likewise; a 422 naming the context limit is a distinct TooLong outcome that splits a point request or halves list caps, counted; the probe records the 422 body and calibrates bytes/3 against reported usage including dense ASCII (hashes, base64). The claim that bytes/3 is conservative is withdrawn. design.md Client, Rankers, client and packer VTs, Risks."
+response = "Contest accepted. A TooLong on a single-question request halves that section and resends; at most two TooLong retries per question, then Unanswered, each step counted. A query too long to leave room for any question is refused at planning with zero sends and the slice reported skipped. New VT boundary: a dense base64 section under a fake returning the context-limit 422 above a byte threshold walks split, halve, Unanswered; an over-long query is refused with zero transport calls. design.md Client table, Client, Verification."
 
 [[finding.turn]]
 act = "raise"
@@ -60,9 +67,23 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted. Requests pack to 80 percent of each limit (PACK_HEADROOM), list option caps likewise; a 422 naming the context limit is a distinct TooLong outcome that splits a point request or halves list caps, counted; the probe records the 422 body and calibrates bytes/3 against reported usage including dense ASCII (hashes, base64). The claim that bytes/3 is conservative is withdrawn. design.md Client, Rankers, client and packer VTs, Risks."
 
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+The 80 percent headroom is still an estimate, and design.md:101 says a context-limit 422 splits a point request in two. A request containing one question cannot be split in two, and no terminal handling is specified if that question or the query alone exceeds the actual 32k limit. The packer VT at design.md:371-373 covers only the longest measured query, not the pathological-input boundary requested by F-2. Add a single-question exhaustion outcome and a pathological input test.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Contest accepted. A TooLong on a single-question request halves that section and resends; at most two TooLong retries per question, then Unanswered, each step counted. A query too long to leave room for any question is refused at planning with zero sends and the slice reported skipped. New VT boundary: a dense base64 section under a fake returning the context-limit 422 above a byte threshold walks split, halve, Unanswered; an over-long query is refused with zero transport calls. design.md Client table, Client, Verification."
+
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Fix and bound the BM25 pool size"
 detail = """
@@ -83,9 +104,16 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted as DEC-360: BM25 pool fixed at N = 50 (POOL_SIZE), recorded per run; 25 <= N <= 255 by construction. Packer VT covers 1, 50 and 100 options. design.md What changes, Pipeline step 5, Rankers."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+POOL_SIZE is fixed at 50 and recorded per run at design.md:73-75. It is within the recall@25 and Choice limits, and the packer VT covers 50 and 100 options at :371-373.
+"""
+
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Entity IDs give Jev an unequal exact-match cue"
 detail = """
@@ -106,9 +134,16 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted as DEC-360: Choice option keys are opaque (o1, o2, ...) mapped back locally; section prefixes are title plus heading path with no id; the headline is also reported over labels the query does not already name. VT list asserts no option key or prefix carries an id."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Opaque Choice keys and id-free section prefixes are specified at design.md:136-143 and :167-170. The headline also excludes labels already named by the query at :279-280, addressing the unequal exact-id cue.
+"""
+
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Cited IDs are noisy relevance labels"
 detail = """
@@ -129,6 +164,13 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted, modified. Recall is broken down per label kind, and the VH label spot-check adds 5 random eval slices (labels only, rubric not shown) beside 5 tune slices. No citation-context eligibility rule: it would add a heuristic the audit and breakdown can test instead. design.md Labels, Report, Risks; scope Risks."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+The revision audits random eval labels as well as tune labels at design.md:209-213, breaks recall down by label kind at :277-280, and explicitly treats the labels as noisy citations rather than comprehensive relevance at :431-434 and slice-277.md:115-118.
+"""
+
 [[finding]]
 id = "F-6"
 status = "answered"
@@ -139,7 +181,7 @@ The primary B-list minus B-point comparison is presented as a ranker comparison,
 """
 disposition = "fix-now"
 route = "review"
-response = "Accepted as DEC-360: new arm B-point-matched scores each pool entity with one Noul over exactly its B-list option text. B-list minus B-point-matched isolates the ranker primitive; B-point minus B-point-matched isolates text and best-section effects. C-point-to-list minus C-point is reported as a pipeline comparison only."
+response = "Contest accepted. Point, point-matched and list prompts are all built from one RELEVANCE_CRITERION constant, so the rankers ask the same relevance question and differ only in answer shape; VT rubric asserts all three request bodies contain it. DEC-360 now states the shared criterion as the condition for isolating the ranker primitive. design.md Rubric text, Verification."
 
 [[finding.turn]]
 act = "raise"
@@ -152,9 +194,23 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted as DEC-360: new arm B-point-matched scores each pool entity with one Noul over exactly its B-list option text. B-list minus B-point-matched isolates the ranker primitive; B-point minus B-point-matched isolates text and best-section effects. C-point-to-list minus C-point is reported as a pipeline comparison only."
 
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+B-point-matched uses the point rubric and B-list uses separate Choice instructions, per design.md:133-159. The text is matched, but the design never requires those instructions to express the same relevance criterion before design.md:289-291 calls their delta an isolated ranker-primitive effect. Make the common relevance rubric explicit and verify both request shapes present it; otherwise describe the delta as a pipeline comparison.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Contest accepted. Point, point-matched and list prompts are all built from one RELEVANCE_CRITERION constant, so the rankers ask the same relevance question and differ only in answer shape; VT rubric asserts all three request bodies contain it. DEC-360 now states the shared criterion as the condition for isolating the ranker primitive. design.md Rubric text, Verification."
+
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Whole-snapshot point arm is not a recall ceiling"
 detail = """
@@ -175,6 +231,13 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted. Recall-ceiling wording dropped for C-point. The report adds BM25 pool coverage (labels present in the top 50) as the ceiling for A and B arms, and the verdict reads a C win as a retriever signal only where pool coverage shows the pool missing labels C ranks in."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Design.md:281-282 reports BM25 pool coverage as the A and B ceiling, while :323-324 limits a C win to a retriever signal when C ranks labels absent from that pool. C-point is no longer called a recall ceiling.
+"""
+
 [[finding]]
 id = "F-8"
 status = "answered"
@@ -185,7 +248,7 @@ Section sec-6 performs the one-slice packing agreement check but gives no materi
 """
 disposition = "fix-now"
 route = "review"
-response = "Accepted as DEC-360: batching is kept iff Kendall tau between batched and section-as-state point scores on one tuning slice's pool is at least 0.8 and recall@10 differs by at most 0.05; otherwise DEC-352's fallback (section-as-state, C on a 3 to 5 slice subsample). Run sequence step 3."
+response = "Contest accepted. Under the fallback, the full eval runs A and the B arms on every eval slice and the C arms only on 3 to 5 eval slices drawn with the recorded seed; C deltas are computed over the subsample only, reported with that n, and the verdict treats any C conclusion as provisional. design.md Run sequence steps 3 and 6."
 
 [[finding.turn]]
 act = "raise"
@@ -198,9 +261,23 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted as DEC-360: batching is kept iff Kendall tau between batched and section-as-state point scores on one tuning slice's pool is at least 0.8 and recall@10 differs by at most 0.05; otherwise DEC-352's fallback (section-as-state, C on a 3 to 5 slice subsample). Run sequence step 3."
 
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+The agreement gate and threshold are specified at design.md:307-311, but the fallback there restricts C to a 3 to 5 slice subsample while step 6 at design.md:315 still commands the full eval set across all arms. The run sequence and report do not state how the subsampled C observation is treated in paired deltas or the verdict. Resolve this contradiction before the fallback can prevent an invalid full-run comparison.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Contest accepted. Under the fallback, the full eval runs A and the B arms on every eval slice and the C arms only on 3 to 5 eval slices drawn with the recorded seed; C deltas are computed over the subsample only, reported with that n, and the verdict treats any C conclusion as provisional. design.md Run sequence steps 3 and 6."
+
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Partial Jev answers can be scored as a complete arm"
 detail = """
@@ -221,9 +298,16 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted. In eval the missing questions are retried once; an arm-slice is complete only if every candidate is then answered; incomplete arm-slices are excluded from paired deltas and counted. New VT completeness covers retry-success and retry-failure."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Design.md:114-116 retries missing questions once; :292-294 requires every candidate answer for an arm-slice to enter paired deltas; :391-393 tests both retry success and persistent omission.
+"""
+
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "One reversed list call cannot settle position bias"
 detail = """
@@ -244,9 +328,16 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted as DEC-360: every list question is sent forward and reversed, option probabilities averaged, order from the mean; per-call forward-vs-reversed Kendall tau reported as a diagnostic. Replaces the single reversed call on one slice."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Every list question is sent forward and reversed with per-option probabilities averaged at design.md:136-141. The per-call order agreement is reported at :296-297, and the list VT checks reversal and averaging at :374-376.
+"""
+
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Memory-drop count has no extractor"
 detail = """
@@ -265,9 +356,16 @@ role = "responder"
 disposition = "fix-now"
 response = "Accepted. A separate matcher counts dotted mem. keys and mem_ uids; the labels VT includes both forms with a positive count."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Design.md:198-199 adds a separate recognizer for dotted memory keys and uids, and :379-384 requires a positive-count fixture for both forms.
+"""
+
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Choice distribution validation is underspecified"
 detail = """
@@ -288,9 +386,16 @@ disposition = "fix-now"
 route = "review"
 response = "Accepted. A Choice answer is well formed only with exactly the requested key set, each probability finite in [0, 1], sum 1 +/- 0.01, choice among the keys; otherwise the whole question is Unanswered and not cached. Client VT cases added."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Design.md:106-109 requires an exact Choice key set, bounded finite probabilities summing to one within tolerance, and a valid chosen key. Malformed answers are not cached per :243-244, with client VT at :362-368.
+"""
+
 [[finding]]
 id = "F-13"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Recall-at-budget prefix rule is undefined"
 detail = """
@@ -309,9 +414,16 @@ role = "responder"
 disposition = "fix-now"
 response = "Accepted. Entity cost is min(estimated body tokens, 1k); empty-body entities are left out; the budget prefix walks rank order and ends at the first entity that does not fit. Metrics VT includes both edge cases."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Design.md:283-286 defines the shared estimated body-token cost, excludes empty bodies, and ends the prefix on the first non-fitting entity. The metrics VT at :394-397 covers both edge cases.
+"""
+
 [[finding]]
 id = "F-14"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Rank provenance promises a section for entity rankers"
 detail = """
@@ -330,9 +442,16 @@ role = "responder"
 disposition = "fix-now"
 response = "Accepted. Rank packet provenance is entity, snapshot commit, arm and ranker score; point rankers also name the scoring section, bm25 and list name none."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Design.md:11-13 now gives every rank item entity, snapshot, arm and score provenance, and names a section only for point rankers. The scope mirrors this at slice-277.md:23-25.
+"""
+
 [[finding]]
 id = "F-15"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Pure-layer placement contradicts fixture I/O"
 detail = """
@@ -351,6 +470,13 @@ role = "responder"
 disposition = "fix-now"
 response = "Accepted. labels.rs is pure (extraction, memory-key count, classification, intersection); fixture read and write move to the main.rs shell."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Design.md:336 and :342 place fixture I/O in main and pure extraction in labels, consistent with the pure and impure split at :351-354.
+"""
+
 [[finding]]
 id = "F-16"
 status = "answered"
@@ -361,7 +487,7 @@ Section sec-4 intersects citation IDs with hydrated catalog-scan keys and labels
 """
 disposition = "fix-now"
 route = "review"
-response = "Accepted. A cited id outside the scan is unreadable if the export holds its directory (prefix-to-directory mapping learned from the scan's own hydrated entries), absent otherwise. Unreadable labels leave the denominator and are disclosed per slice; the headline is also shown over slices with no unreadable labels. Labels VT covers both classes."
+response = "Contest accepted; mapping replaced. A cited id outside the scan's entities is unreadable iff catalog scan reported an Error diagnostic whose entity_key is that id (scan.rs emits one for every walked entity it cannot read, verified in its JSON output), absent otherwise. No learned prefix mapping, so a wholly unreadable kind is still classified correctly; the labels VT covers that case. Residual in Risks: a directory the scan never walks yields no diagnostic. design.md Labels, Verification, Risks."
 
 [[finding.turn]]
 act = "raise"
@@ -373,6 +499,20 @@ role = "responder"
 disposition = "fix-now"
 route = "review"
 response = "Accepted. A cited id outside the scan is unreadable if the export holds its directory (prefix-to-directory mapping learned from the scan's own hydrated entries), absent otherwise. Unreadable labels leave the denominator and are disclosed per slice; the headline is also shown over slices with no unreadable labels. Labels VT covers both classes."
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+Design.md:204-207 learns prefix-to-directory paths only from hydrated scan entries before classifying a missing cited id. If every entry of one prefix fails hydration, there is no entry from which to learn that prefix path; an entity present in the export is then classified absent and removed from the denominator. The scan code already emits a diagnostic with entity key and file path on each read failure at src/catalog/scan.rs:178-200. Use that evidence or another authoritative mapping, and test a wholly unreadable prefix, not only one unreadable id beside a hydrated sibling.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Contest accepted; mapping replaced. A cited id outside the scan's entities is unreadable iff catalog scan reported an Error diagnostic whose entity_key is that id (scan.rs emits one for every walked entity it cannot read, verified in its JSON output), absent otherwise. No learned prefix mapping, so a wholly unreadable kind is still classified correctly; the labels VT covers that case. Residual in Risks: a directory the scan never walks yields no diagnostic. design.md Labels, Verification, Risks."
 
 [[finding]]
 id = "F-17"
@@ -396,6 +536,27 @@ role = "responder"
 disposition = "fix-now"
 route = "control"
 response = "Accepted. Design change: the send log records one line per attempt, written before the attempt is sent (design.md Egress). Criterion (stays on this ledger for planning): with a fake transport, a question sourced from a path outside the snapshot's .doctrine, one reached through a symlink escaping it, and one from a memory entity are each refused before the transport is called, with zero transport calls; and every attempt the fake receives has a matching send-log line written before it. The incorrect candidate the check must reject is an egress guard that validates only the declared source path string, so a symlinked or memory-kind source passes. Host phase constraint: the phase that builds the transport boundary and send log, not a later one."
+
+[[finding]]
+id = "F-18"
+status = "answered"
+severity = "minor"
+title = "Run estimates retain the pre-headroom request count"
+detail = """
+The revision reduces point packing to 80 percent of the 64k request limit at design.md:125-130, adds B-point-matched at :25-27, and doubles every list call at :136-141. Yet design.md:234-235 still projects about 400 C-point requests and 5 to 10 USD for the full eval, while slice-277.md:124-125 still says 400 requests, 4M tokens and about 0.17 USD per slice. DEC-352's earlier 30 to 40 sections per call at the full 64k budget and the measured roughly 14.3k sections imply about 24 to 32 sections per call with 80 percent headroom, or roughly 450 to 600 C-point calls before retries. Recalculate the dry-run cost and request estimates for all six arms using the new cap and two-order list calls, or label the figures as superseded until the dry run produces a plan.
+"""
+disposition = "fix-now"
+response = "Accepted. Estimates recalculated and labelled pre-plan: C about 450 to 600 point requests per slice at 80 percent packing, about 4M tokens, about 0.20 USD; B arms a few dozen requests; 4 list requests per slice; full eval about 6 to 12 USD; the dry-run plan supersedes them. design.md Budget; slice scope Risks."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Accepted. Estimates recalculated and labelled pre-plan: C about 450 to 600 point requests per slice at 80 percent packing, about 4M tokens, about 0.20 USD; B arms a few dozen requests; 4 list requests per slice; full eval about 6 to 12 USD; the dry-run plan supersedes them. design.md Budget; slice scope Risks."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.

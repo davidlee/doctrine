@@ -121,8 +121,9 @@ Risks and assumptions:
   recall denominator (STD-003).
 - **Stale snapshots.** A long scope-to-research gap ages the snapshot; the
   labels it drops are disclosed per slice (DEC-354).
-- **Free-tier rate limits are unknown.** Batched, arm C is about 400 requests
-  and 4M tokens (about $0.17) per slice; the request rate, not cost, binds.
+- **Free-tier rate limits are unknown.** Batched, arm C is about 450–600
+  requests and 4M tokens (about $0.20) per slice, before any dry-run plan; the
+  request rate, not cost, binds.
 - **Small pool.** 39 label-bearing slices leave wide error bars; an older
   design-only eval set is a deferred option (DEC-353).
 - **Jev's documented weaknesses** include irrelevant context and sensitivity to

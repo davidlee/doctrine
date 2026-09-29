@@ -98,7 +98,7 @@ Outcomes are typed per request and per question, and none becomes a score:
 | 200, answer present and well formed | `Answered` | used and cached |
 | 200, answer missing, wrong type, non-finite or out of range | `Unanswered` | that candidate is unscored; counted in the report |
 | 401 | `Unauthorized` | run aborts |
-| 422 naming the context limit | `TooLong` | a point request is split in two, a list call's option caps are halved; resent and counted |
+| 422 naming the context limit | `TooLong` | a point request is split in two; a single-question request has that section halved; a list call's option caps are halved; resent and counted, at most twice per question, then `Unanswered` |
 | other 422 | `Rejected(body)` | run aborts; our request is wrong |
 | 429, 529, transport error | `Retryable` | exponential backoff, honouring `retry-after`; bounded attempts; each attempt reserves against the spend cap |
 | other status | `Failed(status)` | run aborts |
@@ -147,6 +147,9 @@ Transport sits behind a small trait, so every test runs against a fake.
     queries.
     Every truncation is counted.
 
+A query too long to leave room for any question under the estimate is refused
+at planning, before any send, and the slice is reported as skipped.
+
 Token counts before sending are estimates: bytes ÷ 3. The tokenizer is
 unpublished, so no estimate is a proven upper bound. The 80% headroom and
 `TooLong` handling absorb the error. The probe compares the estimate with
@@ -156,7 +159,10 @@ adjusted before any full run.
 ### Rubric text
 
 The Noul question and criteria, and the Choice instructions, live in one module
-as named constants, with a `RUBRIC_VERSION` that feeds the cache key.
+as named constants, with a `RUBRIC_VERSION` that feeds the cache key. Both are
+built from one `RELEVANCE_CRITERION` constant, so point, point-matched and list
+ask the same relevance question and differ only in answer shape. Without that,
+B-list − B-point-matched would not isolate the ranker primitive.
 Wording is tuned only on the held-out tuning slices (DEC-353).
 
 <!-- doctrine:section sec-4 -->
@@ -201,9 +207,9 @@ Extraction:
   snapshot's `catalog scan` keys. The intersection removes doc-local ids (`OQ-`,
   `PHASE-`, `FR-`, …), entities minted after the snapshot, and the slice itself,
   with no per-kind rules and no local prefix table.
-- A candidate outside the scan is *unreadable* if the export holds its
-  directory, the prefix → directory mapping being learned from the scan's own
-  hydrated entries, and *absent* otherwise. An unreadable label leaves the
+- A candidate outside the scan's entities is *unreadable* if the scan reported
+  an error diagnostic whose `entity_key` is that id (the scan emits one for every
+  entity it walks but cannot read), and *absent* otherwise. An unreadable label leaves the
   recall denominator and is disclosed per slice (STD-003).
 
 Eval set: the slices with a `research.md` (39 on 2026-09-29), excluding SL-277.
@@ -231,8 +237,10 @@ charged at the worst case. Spend therefore never exceeds the cap.
 Requests are paced client-side (`--rps`, default 2), since the free-tier limit
 is undocumented and "adjusting dynamically" (`raw/jev-models.md:24`).
 
-Expected (2026-09-29 corpus): arm C about 400 point requests plus 2 list requests
-per slice, about $0.17; the full eval set about $5–10.
+Expected (2026-09-29 corpus, before any plan): arm C about 450–600 point
+requests per slice at 80% packing, about 4M input tokens, about $0.20; the B
+arms a few dozen requests; 4 list requests (two questions, two orders). The
+full eval set is about $6–12. The dry-run plan supersedes these figures.
 
 ### Cache and replay
 
@@ -307,12 +315,15 @@ unreadable labels.
 3. **Agreement check** (DEC-352, DEC-360), on one tuning slice's BM25 pool:
    batched point against section-as-state point. Batching is kept if Kendall τ
    between the two score orders is ≥ 0.8 and recall@10 differs by at most
-   0.05. Otherwise DEC-352's fallback applies: section-as-state, with C run on
-   a 3–5 slice subsample.
+   0.05. Otherwise DEC-352's fallback applies: section-as-state, with the C
+   arms run on 3–5 `eval` slices drawn with the recorded seed.
 4. **One tuning slice across all six arms.**
 5. **User spot-check** of 5 `tune` and 5 `eval` slices' labels; rubric tuning
    on `tune` only.
-6. **Full eval set**, all arms, one capped run.
+6. **Full eval set**, one capped run: all arms, or under the fallback A and
+   the B arms, plus the C arms on their subsample. C deltas are then computed
+   only over the subsample's slices, reported with that n, and the verdict
+   treats any C conclusion as provisional.
 
 ### Verdict
 
@@ -371,6 +382,12 @@ TDD, red first, behaviour-level, with no network in any test:
 - **VT packer:** no request exceeds either budget under the estimator; order is
   deterministic; an oversized section is split and counted; list caps sum within
   80% of the budget for 1, 50 and 100 options and the longest measured query.
+- **VT boundary:** a dense-ASCII (base64) section under a fake that returns the
+  context-limit 422 above a byte threshold is split, then halved, then
+  `Unanswered`, with each step counted; an over-long query is refused at
+  planning with zero transport calls.
+- **VT rubric:** point, point-matched and list request bodies all contain
+  `RELEVANCE_CRITERION`.
 - **VT list:** no option key or section prefix contains an entity id; the
   reversed question is the forward one with its options reversed; averaging
   and tie order match a hand-worked case.
@@ -380,8 +397,9 @@ TDD, red first, behaviour-level, with no network in any test:
   post-snapshot id, the slice's own id and memory keys, each yielding the
   specified label set and dropped counts; a known-positive control id is present
   (`mem.pattern.install.shipped-corpus-citation-grep-prefix-set`); dotted and
-  uid memory keys are counted; an id whose directory is in the export but not in
-  the scan is unreadable, one with no directory is absent.
+  uid memory keys are counted; an id with an error diagnostic but no scan entity is
+  unreadable, including when every entity of its kind fails; one with neither
+  is absent.
 - **VT cache:** a changed rubric, sectioner or packer version, or reordered
   questions, misses; a failure is never stored; replay from a populated cache
   makes zero transport calls and yields a byte-identical report.
@@ -419,7 +437,9 @@ for the root package, which stays untouched.
 - **Old snapshots under a current binary.** `catalog scan` on SL-229's snapshot
   reported 20 diagnostics (2026-09-29). Unhydratable entities drop out of the
   pool; as labels they are unreadable, not absent, leave the denominator and
-  are disclosed per slice (STD-003).
+  are disclosed per slice (STD-003). A directory the scan does not walk at all
+  gives no diagnostic, so its entity would read as absent; the per-slice
+  counts make such a gap visible.
 - **`catalog scan` is a debug verb** with no stable output contract. Acceptable
   for a trial; an adoption slice must use a stable surface (DEC-356).
 - **Token estimate.** An under-estimate risks 422s near the budget. The 80%
