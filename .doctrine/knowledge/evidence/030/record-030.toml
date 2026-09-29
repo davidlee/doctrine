@@ -5,21 +5,30 @@ id = 30
 slug = "byte-comparison-detects-content-conversion-and-freshness-suppression"
 title = "Byte comparison detects every content-conversion and freshness-suppression route the three legs miss"
 record_kind = "evidence"
-status = "captured"
+status = "confirmed"
 created = "2026-09-29"
 updated = "2026-09-29"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-datum        = ""
-provenance   = ""               # inspection | experiment | reproduction | citation
-confidence   = ""               # low | medium | high
+datum = "Raw worktree bytes (git hash-object --no-filters) diverge from the HEAD blob (git rev-parse HEAD:<path>) on every route the three-leg capture() reading is blind to: a committed .gitattributes `text eol=crlf`; a committed `clean` filter exposing arbitrary content; a .git/info/attributes `clean` filter; a same-size mtime-preserved edit the stat cache trusts (core.trustctime=false, index tag H); and a GIT_WORK_TREE-redirected worktree. On each, the three legs read tracked=0 / untracked=0 / cached_rc=0 while the bytes diverge. Measured by .doctrine/slice/232/probes/byte-compare.sh on git 2.54.0; the control arm (different-size edit) reads dirty on both instruments; all seven registered falsifiers held — two after correcting probe fixtures, not the hypothesis. Three structural limits, also measured: (1) bytes do not enumerate the set — a deletion fails hash-object (rc 128), and a staged add is in --cached and absent from --others, so the surface needs one call spanning --cached + --others + HEAD; (2) git hash-object FOLLOWS symlinks (link -> f returns f's content oid, not the blob oid of the target string) and errors on a dangling link, so it is not the mode-120000 primitive; (3) a mode-only 100644 -> 100755 change reads tracked=51 on the legs with byte-identical content, so byte comparison alone regresses there. Cost: batched hash-object --stdin-paths --no-filters over the live .doctrine/** surface (13,138 paths, 3,398 symlinks) is ~80ms; per-file spawning ~70x slower."
+provenance = "experiment"
+confidence = "high"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
 contradicts = []
-notes       = []
+notes       = ["probe: .doctrine/slice/232/probes/byte-compare.sh (exit 0; idempotent across two runs with timing normalised)", "absolute byte counts are fixture-dependent; the durable claim is the discrimination (zero vs non-zero, exit 0 vs 1)", "live corpus counts are context, not a fixture claim, and must be re-measured before quoting"]
 
 [relationships]                 # verb-written edges (set by doctrine supersede)
 supersedes    = []   # record ids this one replaces (set by doctrine supersede)
 superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "RFC-035"
+
+[[relation]]
+label = "supports"
+target = "HYP-002"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ebe0-fb1f-7e40-b431-850cbaa97158"
+recorded_at = "2026-09-29T06:36:25.248000753Z"
+kind = "friction"
+summary = "just commit-doctrine sweeps the whole .doctrine/ tree, discarding per-path staging"
+detail = "The justfile recipe 'commit-doctrine' (justfile:294-295) is 'git reset && git add .doctrine/ && git ci -m doctrine' — a pathless, whole-tree commit with a content-free message. It directly contradicts the repo's own stated discipline (AGENTS.md: 'git add specifies paths, don't use -A', 'path-limit the commit itself'). Cost this session: freshly-scaffolded entities (RFC-035, EVD-030, HYP-002) were committed mid-authoring by another agent's invocation as '6ef6ae303 doctrine', alongside that agent's observation record. Diagnosing why new files showed as tracked-and-modified (M) rather than untracked (??) cost a detour through a foreign commit's stat. Skill: none."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

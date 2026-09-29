@@ -11,8 +11,8 @@ updated = "2026-09-29"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-proposition = ""
-predicts    = ""
+proposition = "For verify's claim question — is the claim's evidence committed? — comparing raw worktree bytes, plus the mode bit and an explicitly enumerated set, against the HEAD blob is sufficient, and it subsumes the three-leg git-semantic dirt observation (diff HEAD --binary, ls-files --others, diff-index --cached) together with everything the parked SL-232 design layers on it to keep that observation faithful: NORMATIVE_FLAGS, DEC-089's attribute-source partition, DEC-090's unmeasurable refusals, and CON-002's git-2.40 floor. The reasoning is polarity: the three legs answer 'is git satisfied?', while I6 claims 'the attested commit contains these bytes', and every design mechanism exists because those two can be separated — content conversion on one axis, freshness suppression on the other. Comparing the bytes directly has no separation to repair."
+predicts    = "Sufficient-and-subsuming predicts: (P1) every RV-314 F-19/21/22/24/33/37/38/42 fixture flips from false-clean to detected under bytes+mode+set — TESTED, held (EVD-030); (P2) the surviving failures are exactly the three measured structural residuals (the set: deletion and staged add; symlinks: hash-object follows; the mode bit) and no conversion or freshness hazard survives — partly tested, the residuals are measured but their exhaustiveness is an argument from the mechanism's shape, not a census; (P3) the anchor question and --allow-dirty become separable from claim measurement, so the apparatus serving them can be deleted rather than amended — UNTESTED, a design decision this RFC frames. Falsified by any conversion or freshness route byte comparison reads clean on, or by a claim surface whose correct set or symlink equality cannot be recovered from one ls-files(--cached, --others) + ls-tree(HEAD) enumeration."
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
@@ -22,3 +22,8 @@ notes       = []
 [relationships]                 # verb-written edges (set by doctrine supersede)
 supersedes    = []   # record ids this one replaces (set by doctrine supersede)
 superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "RFC-035"
