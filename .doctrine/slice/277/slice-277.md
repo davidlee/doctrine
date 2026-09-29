@@ -25,14 +25,19 @@ Build a replayable relevance evaluator, as a Rust workspace crate outside
 - **eval** — replay many completed slices and report recall at a fixed token
   budget, per arm.
 
-Three arms, each over the corpus as of the slice's pre-research commit
-(leakage guard):
+Three arms, each over the corpus as of the slice's pre-research commit: the
+parent of the commit that first added its scope file (leakage guard, DEC-354):
 
 | Arm | Candidates | Ranking |
 |---|---|---|
 | A | `doctrine search` BM25 top-N | BM25 (baseline) |
 | B | same pool | Jev per-section score |
-| C | whole snapshot | Jev per-section score (recall ceiling) |
+| C | whole snapshot (entity bodies; memories excluded, DEC-357) | Jev per-section score (recall ceiling) |
+
+Arms B and C share one call shape (DEC-352): the query (the slice's scope body
+as first committed) is the state, and each candidate section is one Noul
+question with explicit true/false criteria (DEC-355), packed to the request
+budget.
 
 Components, kept small and reusable, since later trials such as repair
 propagation should inherit them:
@@ -41,12 +46,13 @@ propagation should inherit them:
   error typing: rate-limit, infrastructure failure, and semantic abstention are
   distinct, and none of them becomes a zero score. Raw probabilities are
   retained. `typesafe-sdk-rust` is a wire-shape reference only.
-- **Sectioner**: heading-bounded sections of entity bodies. An entity's rank is
-  its best section's score.
+- **Sectioner**: heading-bounded sections of entity bodies, size-capped against
+  the request budget. An entity's rank is its best section's score.
 - **Snapshot builder**: the corpus at a given commit (`git archive`), queried
-  with `doctrine search -p`.
+  with `doctrine search -p` and enumerated with `doctrine catalog scan --root`.
 - **Labels**: silver labels, meaning the entity ids cited in each slice's
-  `research.md` and `design.md`.
+  `research.md` and `design.md`, source-tagged and intersected with the
+  snapshot's ids, extracted once into a committed fixture (DEC-353).
 - **Cache/replay**: keyed on the full semantic input (model id, ordered state,
   questions, rubric, preprocessing version). Raw output is stored apart from
   threshold decisions, and a failure is never cached as a negative.
@@ -61,9 +67,11 @@ propagation should inherit them:
   sample counts. Jev-surfaced entities that no one cited are listed for human
   judgment rather than scored wrong.
 
-Run sequence: a live probe of about 10 calls, then one slice across all three
-arms, then about 25 slices. The user spot-checks the silver labels of about 5
-slices before any rubric tuning. The verdict is recorded as an EVD record.
+Run sequence: a live probe of about 10 calls; the call-shape agreement check on
+one slice's BM25 pool (DEC-352); one slice across all three arms; then the eval
+set. The pool is the 39 slices with a `research.md`; about 10 are held out for
+the user's label spot-check (about 5) and rubric tuning, and the rest (about 29)
+are the eval set (DEC-353). The verdict is recorded as an EVD record.
 
 ## Non-Goals
 
@@ -80,7 +88,8 @@ slices before any rubric tuning. The verdict is recorded as an EVD record.
 
 Affected surface:
 
-- New crate `crates/<name>/` (name settled in design).
+- New crate `crates/doctrine-jev/`, standalone over CLI subprocess boundaries,
+  `reqwest` with rustls (DEC-356).
 - `Cargo.toml` workspace `members`: added, but not `default-members`.
 - `justfile`: a dedicated recipe. New members are not auto-gated (see memory
   "just gate runs a named-package test gate").
@@ -91,11 +100,12 @@ Risks and assumptions:
 - **Silver labels measure what research found and used, not what was
   relevant.** That biases arm C's precision downwards, which is why uncited hits
   are listed for review.
-- **Pre-research commit detection.** Mapping each slice to a clean corpus
-  snapshot may be ambiguous, since research and scope can land in one commit.
-  Design must pick a rule.
-- **Free-tier rate limits are unknown.** Arm C's volume (about 8M tokens per
-  query) may be slow under them.
+- **Stale snapshots.** A long scope-to-research gap ages the snapshot; the
+  labels it drops are disclosed per slice (DEC-354).
+- **Free-tier rate limits are unknown.** Batched, arm C is about 400 requests
+  and 4M tokens (about $0.17) per slice; the request rate, not cost, binds.
+- **Small pool.** 39 label-bearing slices leave wide error bars; an older
+  design-only eval set is a deferred option (DEC-353).
 - **Jev's documented weaknesses** include irrelevant context and sensitivity to
   question phrasing. Rubric wording matters, and the live probe checks
   repeatability on a small sample.
@@ -103,15 +113,9 @@ Risks and assumptions:
   pedantic and doc lint groups (see memory "New workspace member trips the cargo
   lint group").
 
-Open questions for design:
-
-- The crate name and the CLI shape of rank and eval.
-- Rubric wording: separate applicability and contribution signals (Noul
-  versus Score).
-- The token budget used for recall-at-budget.
-- Section size limits against Jev's 32k state-plus-question limit.
-- Where cache and run logs live under `.doctrine/state/`, and whether they fall
-  within POL-002's reach at all, given the crate does not ship.
+Design questions settled in the design run: DEC-352 to DEC-357 (call shape,
+labels, snapshot, rubric, crate, memories). Cache and run logs live under
+`.doctrine/state/jev/`; POL-002 does not reach a non-shipped crate.
 
 Verification and closure: offline tests cover the request/result contract,
 missing answers, the failure-not-zero rule, cache-key invalidation,
@@ -126,3 +130,5 @@ sample counts.
 - An adoption slice, whose shape depends on the verdict (B wins: reranker; C
   wins: retriever).
 - Trial 2 (repair propagation), reusing the client, sectioner, and provenance.
+- Conditional: an older design-only eval set (DEC-353); a memory arm
+  (DEC-357); a separate applicability/contribution split (DEC-355).
