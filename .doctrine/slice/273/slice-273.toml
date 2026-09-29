@@ -1,7 +1,7 @@
 id = 273
 slug = "library-ownership-lib-citations"
 title = "Library ownership and lib: citations"
-status = "reconcile"
+status = "done"
 created = "2026-09-27"
 updated = "2026-09-29"
 tags = ["area:docs", "area:governance", "area:skills"]
