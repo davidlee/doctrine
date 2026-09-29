@@ -1,0 +1,220 @@
+# Implementation plan for SL-277 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-277"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Crate scaffold and Jev codec"
+objective = "crates/doctrine-jev exists as a lib+bin workspace member outside default-members, gated by just jev-check, with a pure Jev codec: Noul and Choice request build, response decode into the design's typed outcomes, the Choice invariant, and the rubric constants."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-277 design locked (design run rev 51); DEC-352..DEC-360 accepted." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Cargo.toml members gains crates/doctrine-jev; default-members stays [\".\"]; crate Cargo.toml has publish = false, [lints] workspace = true, repository, readme, keywords, categories, and only the dependencies its own use statements need." },
+  { id = "EX-2", text = "Crate has src/lib.rs (modules) and src/main.rs (clap shell), so tests/ suites can link the library; README.md states usage, spend and egress posture." },
+  { id = "EX-3", text = "justfile recipe jev-check runs cargo clippy -p doctrine-jev and cargo test -p doctrine-jev; zero warnings." },
+  { id = "EX-4", text = "src/jev.rs: wire types; pure Noul request build (local keys s0, s1, ...) and Choice request build (opaque keys o1, o2, ...); JEV_MODEL = jev-1.13.0 constant; pure decode of status + body into Answered / Unanswered / Unauthorized / TooLong / Rejected / Retryable / Failed per design sec-3; TooLong recognition is one function over one named constant, provisional until PHASE-09 records a real context-limit body." },
+  { id = "EX-5", text = "Choice answer well-formed only with exactly the requested keys, each probability finite in [0, 1], sum 1 +/- 0.01, choice among the keys; otherwise the whole question is Unanswered." },
+  { id = "EX-6", text = "src/rubric.rs: RELEVANCE_CRITERION, the Noul question and criteria and the Choice instructions all built from it, RUBRIC_VERSION." },
+  { id = "EX-7", text = "doctrine check gate green; no file under src/ of the root package changes." },
+]
+verification = [
+  { id = "VT-1", expects = "Noul and Choice request JSON match the documented shapes; Choice keys are opaque", test_file = "crates/doctrine-jev/src/jev.rs", keywords = ["noul_request_matches_documented_shape", "choice_request_matches_documented_shape"], waived = false },
+  { id = "VT-2", expects = "each status row maps to its outcome; missing, wrong-type, non-finite and out-of-range answers are Unanswered, never 0", test_file = "crates/doctrine-jev/src/jev.rs", keywords = ["status_rows_map_to_outcomes", "malformed_answer_is_unanswered"], waived = false },
+  { id = "VT-3", expects = "Choice with a missing key, extra key, sum outside 1 +/- 0.01, or choice outside its keys is Unanswered", test_file = "crates/doctrine-jev/src/jev.rs", keywords = ["choice_invariant_rejects_missing_key", "choice_invariant_rejects_extra_key", "choice_invariant_rejects_bad_sum", "choice_invariant_rejects_foreign_choice"], waived = false },
+  { id = "VT-4", expects = "point and list request bodies both contain RELEVANCE_CRITERION", test_file = "crates/doctrine-jev/src/jev.rs", keywords = ["request_bodies_share_relevance_criterion"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Jev client"
+objective = "A Transport trait with a reqwest (blocking, rustls, no default features) implementation and a test fake; a client that owns the credential, retry/backoff and the model pin."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Transport trait in src/jev.rs; reqwest transport with default-features = false and rustls; a fake transport usable by every later test; Cargo.lock gains only reqwest and its rustls closure." },
+  { id = "EX-2", text = "The key is read once from JEV_API_KEY into a type whose Debug and Display print <redacted>; it is never written anywhere." },
+  { id = "EX-3", text = "Retryable (429, 529, transport error): exponential backoff honouring retry-after, bounded by a named attempt constant." },
+  { id = "EX-4", text = "A response whose model differs from JEV_MODEL aborts the run." },
+]
+verification = [
+  { id = "VT-1", expects = "retry-after honoured; attempts bounded; model mismatch aborts", test_file = "crates/doctrine-jev/src/jev.rs", keywords = ["retry_after_is_honoured", "retry_attempts_are_bounded", "model_mismatch_aborts"], waived = false },
+  { id = "VT-2", expects = "Debug and Display of the key show <redacted>", test_file = "crates/doctrine-jev/src/jev.rs", keywords = ["api_key_debug_is_redacted"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Attempt boundary: spend cap, egress guard, send log"
+objective = "Every attempt passes one boundary before the transport: egress check, worst-case spend reservation, send-log line; the run directory and run.toml exist."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "One attempt function in order: egress check -> reserve 64k-token worst case (about 0.0027 USD) and refuse if it exceeds the remaining cap -> append send-log line -> send -> replace the reservation with reported usage.input_tokens (no usage: stays at worst case). Spend never exceeds --cap-usd." },
+  { id = "EX-2", text = "Egress allow-list: a question's source must canonicalise to a path under the snapshot's .doctrine and be a non-memory entity, or be the query." },
+  { id = "EX-3", text = "src/runlog.rs creates .doctrine/state/jev/runs/<run-id>/ with run.toml (state root = invoking tree's git top level, doctrine binary version, POOL_SIZE, seed) and sent.jsonl (cache key, entity and section ids, bytes; no section text, never the credential)." },
+  { id = "EX-4", text = "RV-415 F-17: with a fake transport, a question sourced from a path outside the snapshot's .doctrine, one reached through a symlink escaping it, and one from a memory entity are each refused before the transport is called, with zero transport calls; every attempt the fake receives has a matching send-log line written before it. The check must reject a guard that validates only the declared source path string, so that a symlinked or memory-kind source would pass." },
+]
+verification = [
+  { id = "VT-1", expects = "attempt whose worst case exceeds the remaining cap is not sent; usage above the estimate never takes spend past the cap; no-usage attempt stays charged at worst case", test_file = "crates/doctrine-jev/src/budget.rs", keywords = ["worst_case_over_remaining_cap_is_not_sent", "reported_usage_never_exceeds_cap", "missing_usage_charged_worst_case"], waived = false },
+  { id = "VT-2", expects = "RV-415 F-17 negative controls: outside path, symlink escape and memory kind refused with zero transport calls; send-log line precedes every attempt", test_file = "crates/doctrine-jev/tests/egress.rs", keywords = ["refuses_path_outside_snapshot", "refuses_symlink_escape", "refuses_memory_kind", "send_log_line_precedes_attempt"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Corpus access"
+objective = "src/corpus.rs resolves a slice's scope and snapshot commits, exports the snapshot, reads the query, and parses catalog scan and search output through the git and doctrine CLIs."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete (independent of PHASE-02/03)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Scope commit = git log --diff-filter=A on slice-NNN.toml; snapshot = its parent; export via git archive <snapshot> .doctrine | tar -x into .doctrine/state/jev/snapshots/<commit>/, once per commit; query = git show <scope-commit>:.doctrine/slice/NNN/slice-NNN.md." },
+  { id = "EX-2", text = "doctrine resolved as DOCTRINE_BIN else PATH; version captured. catalog scan --root parsed into non-memory entities and Error diagnostics keyed by entity_key; search -p <snap> -k all -f json --limit 50 (POOL_SIZE) parsed into an ordered pool." },
+]
+verification = [
+  { id = "VT-1", expects = "temp git repo with a scope-add commit resolves the parent correctly and exports only .doctrine", test_file = "crates/doctrine-jev/tests/snapshot.rs", keywords = ["resolves_snapshot_parent", "exports_only_doctrine"], waived = false },
+  { id = "VT-2", expects = "recorded scan and search JSON parse; memory entities dropped; Error diagnostics keyed by entity", test_file = "crates/doctrine-jev/src/corpus.rs", keywords = ["scan_drops_memory_entities", "scan_keys_error_diagnostics", "search_pool_keeps_order"], waived = false },
+  { id = "VA-1", expects = "against the real repo, one research slice yields a snapshot, a 50-entity pool and an entity list; noted in slice notes" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Sectioner and packer"
+objective = "Pure sectioner and packer: heading sections with id-free prefixes; point packing at 80% headroom; list option keying, capping and reversal."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/section.rs per design sec-4: split at ATX headings outside fences, prefix title and heading path with no id, fold under 64 estimated tokens, split over 4k at paragraphs (single paragraph cut and counted), TOML never sent, SECTIONER_VERSION." },
+  { id = "EX-2", text = "src/pack.rs: estimator bytes / 3 behind one named ratio; point packing in fixed order within PACK_HEADROOM (80%) of 64k per request and 32k state + longest question; list options keyed o1.., capped at (80% of 32k - query - overhead) / count, with a reversed twin; a query too long to leave room for any question is refused at planning; PACKER_VERSION." },
+]
+verification = [
+  { id = "VT-1", expects = "fenced headings do not split; tiny sections fold; prefix carries title and heading path and no id; oversized split and counted", test_file = "crates/doctrine-jev/src/section.rs", keywords = ["fenced_heading_does_not_split", "tiny_section_folds", "prefix_has_path_and_no_id", "oversized_section_splits_and_counts"], waived = false },
+  { id = "VT-2", expects = "no request exceeds either budget; order deterministic; list caps within 80% for 1, 50, 100 options and the longest measured query; reversed is forward reversed; no key or prefix holds an id; over-long query refused", test_file = "crates/doctrine-jev/src/pack.rs", keywords = ["packed_requests_within_budgets", "packing_is_deterministic", "list_caps_fit_for_1_50_100", "reversed_twin_reverses_options", "no_option_key_holds_id", "overlong_query_refused"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Labels and fixture"
+objective = "Pure label extraction and classification, the labels command, and the committed fixture over the real corpus."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/labels.rs (pure): id pattern excluding three-part DEC-x-y; separate matcher counting dotted mem. keys and mem_ uids; canonical normalisation; intersection with scan entities; outside ids classed unreadable if an Error diagnostic carries that entity_key, else absent; the slice's own id removed; sources research / design kept." },
+  { id = "EX-2", text = "labels command (fixture I/O in main.rs): research.md from the working tree, design.md at HEAD via git show; writes crates/doctrine-jev/fixtures/labels.json with header (extraction commit, date, seed) and per slice: id, scope and snapshot commits, labels with sources, absent / unreadable / memory counts, role tune (every fourth by id) or eval; SL-277 excluded." },
+  { id = "EX-3", text = "Fixture generated on the real corpus and committed." },
+]
+verification = [
+  { id = "VT-1", expects = "doc-local ids, three-part DEC-x-y, post-snapshot id, own id and memory keys each yield the specified labels and counts; a known-positive control id is present; dotted and uid memory keys counted; unreadable vs absent including a wholly unreadable kind", test_file = "crates/doctrine-jev/src/labels.rs", keywords = ["excludes_doc_local_ids", "excludes_three_part_dec", "drops_post_snapshot_and_own_id", "counts_memory_keys_both_forms", "known_positive_control_present", "unreadable_when_error_diagnostic", "wholly_unreadable_kind_is_unreadable"], waived = false },
+  { id = "VA-1", expects = "fixture sanity: slice count, tune/eval split and per-slice dropped counts recorded in slice notes" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-07"
+name      = "Rankers, cache and rank"
+objective = "The four rankers over one candidate type, TooLong recovery, completeness, the content-addressed cache, and the rank command."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03, PHASE-05 and PHASE-06 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/rank.rs: bm25 (search order); point (entity = best section probability); point-matched (point rubric over each entity's B-list option text); list (forward and reversed, mean probability, ties keep input order); unscored candidates sort last, never 0." },
+  { id = "EX-2", text = "TooLong recovery: point request split in two; single-question request halves its section; list halves option caps; at most two per question, then Unanswered; every step counted." },
+  { id = "EX-3", text = "Completeness: missing questions retried once; an arm-slice is complete only if every candidate is then answered." },
+  { id = "EX-4", text = "src/cache.rs: key = SHA-256 of canonical JSON over endpoint, model, state, ordered questions, RUBRIC_VERSION, SECTIONER_VERSION, PACKER_VERSION; value = raw body + time, returned model, usage; only a 200 whose answers all decode and are well formed is stored." },
+  { id = "EX-5", text = "rank SL-NNN --arm <arm> emits a packet: entity, snapshot commit, arm, ranker score, and section for point rankers only; dry run unless --live --cap-usd N." },
+]
+verification = [
+  { id = "VT-1", expects = "list order from mean of forward and reversed; ties keep input order; unscored last; point-matched uses option text", test_file = "crates/doctrine-jev/src/rank.rs", keywords = ["list_order_is_mean_of_both_orders", "ties_keep_input_order", "unscored_sorts_last", "point_matched_uses_option_text"], waived = false },
+  { id = "VT-2", expects = "dense base64 section under a fake returning the context-limit 422 above a byte threshold is split, then halved, then Unanswered, each step counted", test_file = "crates/doctrine-jev/src/rank.rs", keywords = ["toolong_splits_then_halves_then_unanswered"], waived = false },
+  { id = "VT-3", expects = "fake omits answers then answers the retry: complete; omits again: incomplete and counted", test_file = "crates/doctrine-jev/src/rank.rs", keywords = ["retry_completes_arm", "second_omission_marks_incomplete"], waived = false },
+  { id = "VT-4", expects = "changed rubric, sectioner or packer version, or reordered questions, miss; a failure is never stored", test_file = "crates/doctrine-jev/src/cache.rs", keywords = ["version_change_misses", "reordered_questions_miss", "failure_never_cached"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-08"
+name      = "Report, eval and dry-run plan"
+objective = "Pure spend plan and metrics, the eval command, and a dry-run plan of the full eval set."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-07 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/budget.rs plan (pure): requests, estimated tokens and dollars at PRICE_PER_MTOK_USD = 0.042; a dry run prints the plan and makes zero transport calls." },
+  { id = "EX-2", text = "src/report.rs (pure) per design sec-6: recall@10/@25 over all labels and over labels the query does not name; pool coverage; recall at 4k/8k/16k/32k (cost min(est body, 1k), empty bodies left out, prefix ends at first non-fitting entity); per label source and kind; bootstrap 95% intervals with a recorded seed and in-crate PRNG; paired deltas as listed; incomplete arm-slices left out and counted; per-slice dropped, truncation, unscored and order-agreement counts; top five uncited hits; headline also over slices with no unreadable labels; C deltas over a subsample when the DEC-352 fallback applies." },
+  { id = "EX-3", text = "eval writes results.jsonl and report.md under the run directory." },
+]
+verification = [
+  { id = "VT-1", expects = "recall@k, unnamed subset, pool coverage and recall-at-budget on a hand-worked table incl. non-fitting and empty-body entities; deterministic bootstrap; incomplete arm-slice excluded", test_file = "crates/doctrine-jev/src/report.rs", keywords = ["recall_at_k_hand_worked", "unnamed_label_subset", "pool_coverage_hand_worked", "budget_prefix_stops_at_non_fitting", "empty_body_left_out", "bootstrap_is_deterministic", "incomplete_arm_slice_excluded"], waived = false },
+  { id = "VT-2", expects = "full fake eval writes no file containing the key; replay from a populated cache makes zero transport calls and a byte-identical report; dry run makes zero calls", test_file = "crates/doctrine-jev/tests/fake_run.rs", keywords = ["fake_run_never_writes_key", "replay_is_byte_identical_with_zero_calls", "dry_run_makes_zero_calls"], waived = false },
+  { id = "VA-1", expects = "dry-run plan for the full eval set recorded in slice notes against the design's pre-plan estimate" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-09"
+name      = "Probe and calibration (live)"
+objective = "Live probe, estimator and TooLong calibration, the batching agreement check, and one tuning slice across all six arms."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-08 complete; JEV_API_KEY available; the user approves each live step's --cap-usd." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Probe (about 10 calls, cap 0.05 USD): answer shape, model echo, estimated vs reported tokens including dense ASCII, repeatability, and a deliberate context-limit 422 whose body fixes the TooLong constant; estimator ratio adjusted if needed." },
+  { id = "EX-2", text = "Agreement check on one tune slice's pool: Kendall tau and recall@10 delta, batched vs section-as-state; batching kept iff tau >= 0.8 and |delta| <= 0.05, else DEC-352 fallback selected (C on 3-5 seeded eval slices)." },
+  { id = "EX-3", text = "One tune slice across all six arms; report inspected." },
+]
+verification = [
+  { id = "VA-1", expects = "probe findings, calibration changes and spend recorded in slice notes" },
+  { id = "VA-2", expects = "agreement statistic, outcome and chosen path recorded in slice notes" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-10"
+name      = "Full eval and verdict"
+objective = "Label spot-check, rubric tuning on tune only, the capped full eval, and the verdict EVD."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-09 complete; the user approves the full run's --cap-usd from the dry-run plan." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "User spot-checks labels of 5 tune and 5 seeded random eval slices; any rubric change is tuned on tune only and bumps RUBRIC_VERSION." },
+  { id = "EX-2", text = "Full eval in one capped run; report.md produced." },
+  { id = "EX-3", text = "EVD record: datum = headline table in one line, provenance experiment, confidence from the intervals, status captured; body Observation / Supported disposition / Limits (precedent EVD-004), including run id, run.toml values and report hash so an audit can re-derive it." },
+]
+verification = [
+  { id = "VH-1", expects = "user's label spot-check of 5 tune and 5 random eval slices" },
+  { id = "VA-1", expects = "from a clean checkout with JEV_API_KEY, eval reproduces the report (live, or from a restored cache); outcome recorded in slice notes" },
+  { id = "VH-2", expects = "user reads the EVD verdict and its disposition" },
+]
+specs        = []
+requirements = []
