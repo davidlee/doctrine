@@ -41,13 +41,35 @@ copies the `Retrieve` arm (`src/memory.rs:648-658`):
   not selectors are present. The `has_selectors` branch goes away. `search_for_mcp`
   takes `limit: usize`, and the handler's `limit`/`next_offset` derive from that same
   value, not from `result.total`.
-- `--limit 0` stays rejected at the edge. The duplicate engine-side check in
-  `run_search` goes, since a concrete value has already been validated.
+- `--limit 0` is rejected at every edge: the CLI arms (as today) **and the MCP
+  handler**, which gains its own check before resolving (RV-410 `F-3`).
+  `search_for_mcp` and `run_search` keep a defensive `limit == 0` bail — they are
+  `pub(crate)` entry points, and the check is one line.
+- MCP continuation arithmetic is overflow-safe: `next_offset =
+  offset.checked_add(limit).filter(|n| *n < total)` (RV-410 `F-4`; today's
+  unchecked `offset + cap` panics in debug on `offset` near `usize::MAX`).
 
 `--page` → offset arithmetic appears in both the `Search` and `Retrieve` arms.
 Extract it into one pure helper (`page_offset(page, offset, page_size) ->
 Result<usize>`) that both arms call. It is small, it removes a copy, and it is the
-place a unit test pins the arithmetic.
+place a unit test pins the arithmetic. **Each arm passes the page size it actually
+renders**: search its resolved limit, retrieve its *capped* limit
+(`.min(RETRIEVE_LIMIT_MAX)`). Today retrieve computes the offset from the uncapped
+request, so `--limit 30 --page 2` starts at row 31 and rows 21-30 are never shown
+(RV-410 `F-2`, a live defect this fixes).
+
+**The continuation hint names the real next row** (RV-410 `F-1`).
+`format_truncation_notice` (`src/listing.rs:926`) today computes
+`next_page = offset / page_size + 2`, so an unaligned `--offset 5 --limit 20`
+(rows 6-25) points at `--page 2` (rows 21-40) and repeats five rows. It becomes:
+`next = offset + shown`. If `next >= total` there is no next page, so the notice
+reads `{shown} of {total}; end of results` with no continuation (RV-410 `F-8`:
+the final partial page must not point at itself, and today's formula points past
+the end). Otherwise, if `offset % page_size == 0` the hint is
+`--page {next / page_size + 1}`, else `--offset {next}`. The `offset >= total`
+branch is unchanged. Output for aligned non-final pages is byte-identical to today,
+so the third caller (`src/priority/render.rs:291`) only gains correctness for
+unaligned offsets and final pages.
 
 **An explicit `--limit` is honoured, uncapped**, on CLI and MCP search. Retrieve
 keeps `.min(RETRIEVE_LIMIT_MAX)`.
@@ -94,14 +116,19 @@ selectors only) and `memory show`, and the floor touches neither.
 ## Zero-evidence signal
 
 - **Table (`memory search`, `memory retrieve` text output):** when
-  `has_free_text()` and the post-floor total is 0, print one stdout line where the
+  `has_free_text()` and the floor left **no candidates** (`ranked.is_empty()` straight
+  out of `query()`, before retrieve's holdback), print one stdout line where the
   truncation notice goes:
   `no match for "<query>"; drop the query to browse by scope`. The rendering is a
   pure function in `src/listing.rs`, beside `format_truncation_notice`; the query
   text is passed through `scrub_line`.
 - **`--json` and MCP:** no wire change. `rows: []`, with `total: 0` on MCP, under a
   free-text query *is* the signal (`DEC-349`).
-- **MCP tool description** (`tools.rs:295`): replace "Requires at least one selector
+  Evidence that exists but is entirely held back on retrieve is *not* "no match":
+  that path keeps today's output, with no notice (RV-410 `F-7`; REQ-152 unchanged).
+- **MCP descriptions:** the tool description (`tools.rs:295`) and the `limit`
+  input-schema field (`tools.rs:309`, "no-selector default: 20", RV-410 `F-5`).
+  In the tool description, replace "Requires at least one selector
   or defaults to 20-row cap" with the find/browse contract: a free-text query
   returns only rows with lexical or exact-key evidence; selectors alone browse
   in severity order; the default page is 20.
@@ -168,14 +195,24 @@ TDD, red first, behaviour-level:
   without `--limit` returns rows 21-40, and the footer names page 3. The same holds
   for MCP (`limit` = 20, `next_offset` = 20 on a > 20 set, with or without
   selectors). `page_offset` gets a unit table (page none/1/N, page 0 rejected).
+  Retrieve `--limit 30 --page 2` starts at row 21, the capped page size (`F-2`).
+  `format_truncation_notice` gets its first unit table: aligned offsets give
+  byte-identical output to today, and an unaligned `--offset 5 --limit 20` hints
+  `--offset 25` (`F-1`); 32 rows at `--offset 20 --limit 20` show 12 with
+  `end of results` and no hint (`F-8`). MCP: `limit: 0` is rejected at the handler (`F-3`), and
+  `offset = usize::MAX` gives an empty page with `next_offset: null` and no panic
+  (`F-4`).
 - **VT floor:** fixtures where the query matches a subset: only matching rows are
-  returned, and `total` counts them. An exact-key query with zero lexical overlap
-  still returns the key. A no-match query returns 0 rows on search, retrieve and
+  returned, and `total` counts them. `Candidate::has_evidence` is unit-tested
+  directly (exact-key with `lexical == 0` → kept). A real exact-key hit always has
+  lexical overlap, because `lex_doc` indexes the key, so the BM25 integration case
+  asserts only that an exact-key query returns its memory first (`F-6`). A no-match query returns 0 rows on search, retrieve and
   MCP. A punctuation-only query browses. A selector-only query is unchanged (same
   rows, same order as today).
 - **VT hook:** `retrieve_rows` output is unchanged for a path probe (the existing
   surface suite stays green unchanged).
-- **VT notice:** table output for a no-match query carries the notice; `--json`
+- **VT notice:** table output for a no-match query carries the notice. A retrieve
+  query whose only evidence is held back carries no notice (`F-7`); `--json`
   carries `rows: []`, byte-identical to an empty result today.
 - **Behaviour preservation:** a query with lexical hits returns the same ordered
   top-N as today for the same `--limit`. The existing ranking and `sort_key`

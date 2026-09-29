@@ -8,9 +8,222 @@ title = "design review of SL-275"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Rechecked F-8 against SL-275 Page size and Verification, listing::format_truncation_notice, and all three call sites. Covered empty sets, out-of-range offsets, zero shown, aligned and unaligned offsets, and final pages. All eight findings verified; no new defects found."
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-275"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Footer repeats results after a nonaligned --offset"
+detail = """
+Expected: SL-275 objective 2 requires the footer's continuation hint to advance from the rows actually shown. The design only changes the argument passed to `format_truncation_notice` to the resolved limit (.doctrine/slice/275/design.md:36-39), leaving its `next_page = (offset / page_size) + 2` calculation and unconditional `--page` advice intact (src/listing.rs:926-945). `--offset` accepts any usize (src/memory.rs:94-100). Concrete case: `memory search --offset 5 --limit 20` shows ranked rows 6-25 and says `use --page 2`; page 2 starts at row 21, repeating five rows. I verified five overlapping UIDs between those two live CLI requests. Resolving the page size once does not repair this continuation; for an unaligned offset the hint must advance to `offset + shown` (or otherwise identify the actual next position), with a verification case for it.
+"""
+disposition = "fix-now"
+response = "Verified (src/listing.rs:944). design.md sec-2 (Page size) now specifies next = offset + shown; an aligned offset hints --page, an unaligned one hints --offset. Aligned output is byte-identical, so the priority caller (src/priority/render.rs:291) is unaffected. sec-7 adds the helper's first unit table."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Verified (src/listing.rs:944). design.md sec-2 (Page size) now specifies next = offset + shown; an aligned offset hints --page, an unaligned one hints --offset. Aligned output is byte-identical, so the priority caller (src/priority/render.rs:291) is unaffected. sec-7 adds the helper's first unit table."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Shared page helper leaves a gap when retrieve caps --limit"
+detail = """
+The design extracts the Search/Retrieve page calculation into `page_offset(page, offset, page_size)` (.doctrine/slice/275/design.md:47-50) while preserving retrieve's 20-row cap (:52-53), but never requires the retrieve call to use its capped `retrieve_limit` as `page_size`. Today the Retrieve arm calculates `retrieve_limit = min(requested, 20)` (src/memory.rs:652-655), yet computes `--page` offset from the uncapped request (src/memory.rs:656-663); `run_retrieve` uses only 20 rows (src/retrieve.rs:1310,1331). Concrete case: `memory retrieve --limit 30 --page 1` returns 20 rows, then page 2 starts at offset 30, permanently skipping ranked rows 21-30. A live comparison of `--limit 30 --page 2` with `--limit 20 --page 2` confirmed the former starts ten rows later. Merely extracting the existing arithmetic preserves the defect and makes the footer's page-size contract false. Specify that the helper receives the capped retrieve limit and pin page 2 with an explicit limit above RETRIEVE_LIMIT_MAX.
+"""
+disposition = "fix-now"
+response = "Verified (src/memory.rs:652-663 uses the uncapped request for the offset). sec-2: each arm passes page_offset the page size it renders, which for retrieve is the capped limit. sec-7 pins retrieve --limit 30 --page 2 starting at row 21."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Verified (src/memory.rs:652-663 uses the uncapped request for the offset). sec-2: each arm passes page_offset the page size it renders, which for retrieve is the capped limit. sec-7 pins retrieve --limit 30 --page 2 starting at row 21."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "MCP zero-limit rejection has no specified edge check"
+detail = """
+The design says `--limit 0` remains rejected at the edge while converting `search_for_mcp` to a concrete `usize` (.doctrine/slice/275/design.md:40-45), but only names removal of run_search's check and adds no MCP handler validation or verification case (:167-170). The MCP `memory_search` handler presently reads and forwards `limit` without rejecting zero (src/mcp_server/tools.rs:880-910); rejection currently lives inside `search_for_mcp` (src/retrieve.rs:1214-1218), and a unit test pins only that engine call (src/retrieve.rs:3757-3777). If concrete-limit conversion drops or overlooks that guard as the edge-validation instruction implies, `{ "limit": 0 }` produces no rows despite positive `total`, and the handler's `next_offset` remains equal to `offset` (src/mcp_server/tools.rs:912-924), yielding a non-advancing continuation. State the MCP edge validation explicitly and test the tool handler with `limit: 0`; retaining a guard in `search_for_mcp` as defense is also compatible with the contract.
+"""
+disposition = "fix-now"
+response = "sec-2: the MCP handler rejects limit 0 at the edge; search_for_mcp and run_search keep a defensive bail. sec-7 adds a handler-level limit:0 case."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "sec-2: the MCP handler rejects limit 0 at the edge; search_for_mcp and run_search keep a defensive bail. sec-7 adds a handler-level limit:0 case."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "MCP next_offset addition can overflow on a valid request"
+detail = """
+The design requires MCP `limit` and `next_offset` to derive from one resolved size (.doctrine/slice/275/design.md:40-43) but leaves the metadata calculation at src/mcp_server/tools.rs:911-924, which uses unchecked `offset + cap` twice. `offset` is accepted as a usize by the handler (:908, :911) and the new default cap is 20. A request with `offset = usize::MAX` and omitted `limit` is therefore valid at the input boundary; `search_for_mcp` safely returns an empty page via `iter().skip(offset).take(cap)` (src/retrieve.rs:1218-1219), but metadata calculation panics in debug builds or wraps in release builds. The same occurs for any offset above `usize::MAX - cap`. Define checked/saturating continuation arithmetic or return no `next_offset` when already beyond `total`, and verify this boundary in the MCP test plan.
+"""
+disposition = "fix-now"
+response = "sec-2: next_offset = offset.checked_add(limit).filter(|n| n < total). sec-7 adds an offset=usize::MAX case (empty page, next_offset null, no panic)."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "sec-2: next_offset = offset.checked_add(limit).filter(|n| n < total). sec-7 adds an offset=usize::MAX case (empty page, next_offset null, no panic)."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "MCP limit field keeps the obsolete selector-dependent default"
+detail = """
+DEC-347 and .doctrine/slice/275/design.md:40-43 require a 20-row MCP search default with or without selectors. The design's guidance update names only the tool-level description at src/mcp_server/tools.rs:295 (.doctrine/slice/275/design.md:104-107,155). The same tool's `limit` input-schema field at src/mcp_server/tools.rs:309 independently tells clients `Max rows to return (no-selector default: 20; 0 rejected)`. After the planned handler change, an agent inspecting the schema will still infer that selector-bearing searches are uncapped, which is precisely the divergence this slice fixes. Update this field description and include it in the guidance verification.
+"""
+disposition = "fix-now"
+response = "sec-4: the limit input-schema description at tools.rs:309 is updated alongside the tool description."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "sec-4: the limit input-schema description at tools.rs:309 is updated alongside the tool description."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Exact-key zero-overlap fixture is impossible with the real ranker"
+detail = """
+The verification plan requires an "exact-key query with zero lexical overlap" to prove the `exact_key` side of the floor (.doctrine/slice/275/design.md:171-174). `exact_key_match` requires the normalized query to equal the memory key (src/retrieve.rs:289-297), while `lex_doc` always includes that same key in the BM25 document text (src/retrieve.rs:270-285); the query and document use the same tokenizer (src/lexical.rs:20-25,220-223,250-265). Therefore an exact-key hit cannot have zero token overlap in a real `query()`/BM25 fixture. A fixture that tries to create one will either cease to be an exact-key hit or have lexical overlap, so it will not prove that `Candidate::has_evidence` keeps an exact-key hit whose quantized lexical score is zero. Use a controlled LexicalRanker returning zero for that candidate, or test the pure evidence predicate directly, and keep a separate real-BM25 exact-key integration case.
+"""
+disposition = "fix-now"
+response = "Correct: lex_doc indexes the key, so a real exact-key hit always overlaps lexically. sec-7 unit-tests Candidate::has_evidence directly, and the BM25 integration case asserts only that an exact-key query ranks its memory first."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Correct: lex_doc indexes the key, so a real exact-key hit always overlaps lexically. sec-7 unit-tests Candidate::has_evidence directly, and the BM25 integration case asserts only that an exact-key query ranks its memory first."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "No-match notice needs an all-held-back verification case"
+detail = """
+The design conditions the new retrieve-table notice on a post-floor zero count (.doctrine/slice/275/design.md:96-103) but its VT checks only a query with no matches (:171-179). In `run_retrieve`, the local `total` is computed AFTER the trust holdback (src/retrieve.rs:1321-1331), whereas the pre-holdback `ranked` set holds the actual lexical evidence. A query matching only a low-trust high-severity memory is a concrete distinct state: the memory has evidence, but `held_back` removes it (src/retrieve.rs:951-965), leaving `total == 0`. If the new notice tests that existing `total`, it falsely says `no match` instead of respecting the holdback distinction; the MCP retrieve path also calls this table renderer (src/mcp_server/tools.rs:967-990). Specify and verify the no-notice outcome for all-held-back evidence using `ranked.is_empty()` or an equivalent pre-holdback count, while preserving REQ-152's holdback.
+"""
+disposition = "fix-now"
+response = "sec-4: the notice keys on the floor leaving no candidates (ranked.is_empty() from query(), before holdback). Evidence that is all held back keeps today's output with no notice. sec-7 adds that case."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "sec-4: the notice keys on the floor leaving no candidates (ranked.is_empty() from query(), before holdback). Evidence that is all held back keeps today's output with no notice. sec-7 adds that case."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "blocker"
+title = "Final partial page still receives a false continuation hint"
+detail = """
+Expected: SL-275 objective 2 says the footer's continuation hint must follow the rows actually shown. Once the final page reaches total, it must not advertise another page; an out-of-range offset may retain its separate diagnostic.
+
+Observed: the revised Page size section changes format_truncation_notice to compute next = offset + shown, but it leaves the callers' `shown < total` guard unaddressed (src/retrieve.rs:916-922 and :1374-1379; src/priority/render.rs:289-295). That condition remains true on a partial final page because shown is a page count, not a cumulative position. A live `doctrine memory search --limit 20 --offset 20` against 32 rows shows 12 rows and emits a footer. Under the revised aligned-offset formula, next = 32 and the hint is `--page 2`, the very page just shown. With `--offset 27 --limit 20`, it would hint `--offset 32`, which is empty. The current footer already mishandles this tail; the revision introduces the same-page advice while claiming aligned output is byte-identical.
+
+Specify that the footer is suppressed when offset < total and offset + shown >= total, while preserving the existing out-of-range-offset diagnostic. Add aligned and unaligned final-partial-page cases to the footer verification table, and check all three callers.
+"""
+disposition = "fix-now"
+response = "Valid, and introduced by the F-1 revision: the aligned branch computed next/page_size+1 even when next >= total. sec-2 now emits '{shown} of {total}; end of results' with no hint when offset+shown >= total; the continuation branches apply only when rows remain. sec-7 pins the 32-row, offset-20, limit-20 case."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Valid, and introduced by the F-1 revision: the aligned branch computed next/page_size+1 even when next >= total. sec-2 now emits '{shown} of {total}; end of results' with no hint when offset+shown >= total; the continuation branches apply only when rows remain. sec-7 pins the 32-row, offset-20, limit-20 case."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Accepted: the formatter handles offset >= total first, then offset + shown >= total as end of results. The callers invoke it on partial final pages; aligned and unaligned tails therefore have no continuation hint. Empty sets suppress the footer."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
