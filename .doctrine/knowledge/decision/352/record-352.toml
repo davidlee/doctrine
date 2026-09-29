@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 352
+slug = "jev-trial-batches-candidate-sections-as-questions"
+title = "Jev trial batches candidate sections as questions"
+record_kind = "decision"
+status = "accepted"
+created = "2026-09-29"
+updated = "2026-09-29"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Arm C over the whole snapshot is request-bound under the section-as-state cookbook shape."
+choice = "Batch candidates as structured questions against a query state, gated on a one-slice agreement check against the cookbook shape."
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-277"

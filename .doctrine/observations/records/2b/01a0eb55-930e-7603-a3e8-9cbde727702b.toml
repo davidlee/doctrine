@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0eb55-930e-7603-a3e8-9cbde727702b"
+recorded_at = "2026-09-29T04:04:09.102248132Z"
+kind = "friction"
+summary = "research SL-277: research.md census miscounts via slug symlinks"
+detail = "Scout reported 43 research.md files, a naive glob gave 78; actual 39. Title-slug symlinks under .doctrine/slice/ double every glob over slice dirs, and the scout's figure was simply wrong. Cost two re-checks; any corpus census needs to dedupe symlinks or use numeric dirs only."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
